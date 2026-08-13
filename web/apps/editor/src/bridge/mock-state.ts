@@ -440,19 +440,6 @@ export function duplicateEmitter(
   if (source === null) return null;
 
   let nextId = maxIdIn(tree) + 1;
-  const newRootId = nextId;
-  const reassign = (n: EmitterTreeNode): EmitterTreeNode => {
-    const idForThis = nextId++;
-    return {
-      ...n,
-      id: idForThis,
-      role: "root",   // top-level — legacy duplicates land as roots
-      children: n.children.map((c) => ({
-        ...cloneNode(c),
-        id: nextId++,
-      })),
-    };
-  };
   // Build the duplicate subtree with fresh ids. Walk via depth-first
   // so id assignment matches the visit order. A duplicate is a NEW
   // emitter → fresh stableId too (mirrors the C++ copy-ctor rule).
@@ -475,10 +462,7 @@ export function duplicateEmitter(
       children: [...tree.root.children, clone],
     },
   };
-  // Note: reassign() helper above is unused — kept inline reassignAll
-  // for clarity; the void reference here satisfies lint.
-  void reassign;
-  return { tree: newTree, newId: newRootId };
+  return { tree: newTree, newId: clone.id };
 }
 
 /** Delete the emitter at `id` (and its subtree). Returns the new tree

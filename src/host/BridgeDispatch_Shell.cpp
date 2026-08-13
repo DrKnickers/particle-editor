@@ -25,12 +25,12 @@ using nlohmann::json;
 
 namespace host {
 
-bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx, const std::string& kind)
+bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
 {
     // DispatchInternal-local aliases so the moved ladder blocks below stay
     // verbatim (plan #3A transforms only).
     const json&        params = ctx.params;
-    const std::string& id     = ctx.id;
+    const std::string& kind   = ctx.kind;
 
     // -------- layout/viewport-rect --------
     if (kind == "layout/viewport-rect")

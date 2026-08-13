@@ -15,12 +15,12 @@ using nlohmann::json;
 
 namespace host {
 
-bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx, const std::string& kind)
+bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
 {
     // DispatchInternal-local aliases so the moved ladder blocks below stay
     // verbatim (plan #3A transforms only).
     const json&        params = ctx.params;
-    const std::string& id     = ctx.id;
+    const std::string& kind   = ctx.kind;
 
     // Internal native-test seam: hold the real Engine device-work gate while
     // production actions queue work, then release through the normal frame

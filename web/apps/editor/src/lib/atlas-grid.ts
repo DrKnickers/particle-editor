@@ -47,10 +47,3 @@ export function fitGridLayout(n: number, w: number, gap: number, min: number, ma
   const cell = Math.max(min, Math.min(max, Math.floor((w - (cols - 1) * gap) / cols)));
   return { cols, cell };
 }
-export type SelectionKind = "none" | "single" | "multi-same" | "multi-diff";
-// `frame` = shared floor(value) when 1 key or N share a floor(value), else null.
-export function classifySelection(keyTimes: number[], frame: number | null): SelectionKind {
-  if (keyTimes.length === 0) return "none";
-  if (keyTimes.length === 1) return "single";
-  return frame === null ? "multi-diff" : "multi-same";
-}

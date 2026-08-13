@@ -120,7 +120,7 @@ export function AtlasPickerPanel({
   const interpolation = useAtlasContext((c) => c.interpolation);
   const frame         = useAtlasContext((c) => c.selection.frame);
   const keyTimes      = useAtlasContext((c) => c.selection.keyTimes);
-  const stack         = useModStack();
+  const stack         = useModStack((s) => s.stack);
   const stackKey      = stack.join("|");
   const textureEpoch  = useTextureEpoch((s) => s.epoch); // re-fetch preview on a texture reload
 
@@ -855,7 +855,7 @@ export function AtlasPickerPanel({
   const showMeta = eligible && !tooLarge && !!colorTexture;
 
   return (
-    <ToolPanel title="Atlas Frames" onClose={onClose} variant="docked" closing={closing} bodyScroll={false}>
+    <ToolPanel title="Atlas Frames" onClose={onClose} closing={closing} bodyScroll={false}>
       {/* Full-height flex column that negates ToolPanel's body padding so
           the pinned preview and scrollable grid can fill the available space. */}
       <div className="-m-3 flex h-full flex-col overflow-hidden">

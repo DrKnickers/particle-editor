@@ -50,9 +50,7 @@ struct Entry
     uint64_t     lastUsedNs;      // QueryPerformanceCounter snapshot; recents LRU sort key
 };
 
-// Capacity caps. Hard-coded for v1; raising them is a one-line change.
-// MUST match THUMBS_PER_ROW * SECTION_ROWS in TexturePalette.cpp so
-// every stored entry has a visible cell to occupy.
+// Capacity caps for the PaletteStore. Raising either limit is a one-line change.
 static const size_t MAX_PINS    = 12;
 static const size_t MAX_RECENTS = 12;
 

@@ -336,12 +336,12 @@ private:
     // DispatchInternal calls all six in sequence; kinds are exact-match and
     // mutually exclusive, so call order carries no semantics.
     friend struct BridgeRequestContext;   // RequireEngine/MarkDirty need privates
-    bool TryDispatchEngine  (BridgeRequestContext& ctx, const std::string& kind);
-    bool TryDispatchEmitters(BridgeRequestContext& ctx, const std::string& kind);  // + linkGroups/*
-    bool TryDispatchFile    (BridgeRequestContext& ctx, const std::string& kind);  // + autosave/undo
-    bool TryDispatchAssets  (BridgeRequestContext& ctx, const std::string& kind);  // textures/mods
-    bool TryDispatchShell   (BridgeRequestContext& ctx, const std::string& kind);  // window/layout/viewport/host/app/debug/stats/…
-    bool TryDispatchSpawner (BridgeRequestContext& ctx, const std::string& kind);  // + settings
+    bool TryDispatchEngine  (BridgeRequestContext& ctx);
+    bool TryDispatchEmitters(BridgeRequestContext& ctx);  // + linkGroups/*
+    bool TryDispatchFile    (BridgeRequestContext& ctx);  // + autosave/undo
+    bool TryDispatchAssets  (BridgeRequestContext& ctx);  // textures/mods
+    bool TryDispatchShell   (BridgeRequestContext& ctx);  // window/layout/viewport/host/app/debug/stats/…
+    bool TryDispatchSpawner (BridgeRequestContext& ctx);  // + settings
 
     // Emits a `dirty/changed` event with the current m_dirty value.
     void EmitDirtyChanged();

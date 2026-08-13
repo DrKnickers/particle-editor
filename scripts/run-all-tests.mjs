@@ -21,6 +21,7 @@
 //   msbuild-release   x64 Release (drive-smoke hard-requires the Release exe)
 //   render-goldens    deterministic --capture scenes vs checked-in goldens
 //                     (ffmpeg SSIM ≥ 0.9995 — see scripts/render-goldens.mjs)
+//   record-smoke      headless --record timeline produces renderable frames
 //   drive-smoke       tasks/drive-smoke.ps1 — real-pixel non-black --drive smoke
 //                     + the oracle-step scenarios (assert-state / nonblack /
 //                     production-wire bridge-selftest)

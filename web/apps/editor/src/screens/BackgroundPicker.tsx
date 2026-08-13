@@ -1,4 +1,4 @@
-// BackgroundPicker — right-side panel that picks the engine background.
+// BackgroundPicker — picker content for the engine background.
 //
 // Two ways to set the background:
 //   1. Game dome — a real in-game/in-mod skydome chosen by GameObject
@@ -35,13 +35,6 @@ import type {
   SkydomeSlotStatus,
 } from "@particle-editor/bridge-schema";
 import { colorrefToHex, hexToColorref } from "@/lib/colorref";
-import { ToolPanel } from "@/components/ToolPanel";
-
-type Props = {
-  bridge: Bridge;
-  onClose: () => void;
-};
-
 type BodyProps = {
   bridge: Bridge;
 };
@@ -50,8 +43,7 @@ const NONE = ""; // empty Name = no dome in that slot
 
 /**
  * BackgroundPickerBody — the picker content (game-dome section + solid-colour
- * fallback). Extracted so both the legacy default-export wrapper and the
- * BackgroundDropdown popover mount the same markup.
+ * fallback). Mounted by BackgroundDropdown.
  */
 export function BackgroundPickerBody({ bridge }: BodyProps) {
   const [snapshot, setSnapshot] = useState<EngineStateDto | null>(null);
@@ -298,20 +290,5 @@ export function BackgroundPickerBody({ bridge }: BodyProps) {
         />
       </section>
     </div>
-  );
-}
-
-/**
- * BackgroundPicker — thin <ToolPanel> wrapper around BackgroundPickerBody,
- * kept as the default export for the existing slide-in callsite + spec.
- */
-export function BackgroundPicker({ bridge, onClose }: Props) {
-  return (
-    <ToolPanel
-      title="Background picker"
-      onClose={onClose}
-    >
-      <BackgroundPickerBody bridge={bridge} />
-    </ToolPanel>
   );
 }

@@ -579,12 +579,8 @@ struct HostWindowImpl
     std::unique_ptr<ParticleSystem> particleSystem;
     std::unique_ptr<SpawnerDriver>  spawnerDriver;
 
-    // Undo / redo stack. Task 2.4: constructed here so BridgeDispatcher
-    // can service `undo/perform` requests. Captures are not yet wired
-    // through the new-UI bridge surface (emitter work), so the
-    // stack stays empty for now and `undo/perform` resolves with
-    // `applied: false`. The plumbing exists so later work wraps the
-    // engine setter handlers in Capture() without re-touching this file.
+    // Undo / redo stack used by BridgeDispatcher to service `undo/perform`
+    // requests and record emitter edits.
     UndoStack                          undoStack;
 
     LayoutBroker                       layout;
@@ -2848,11 +2844,8 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
         // WebView2 visual. On failure, log
         // and continue with composition mode intact: chrome works,
         // viewport area stays empty (explicit
-        // no-chain-into-HWND-mode). The per-frame
-        // CompositeEngineFrame call site is wired later; until then this attach
-        // is functionally "load the engine visual into the tree
-        // but don't Present it" — its smoke matches the
-        // chrome-only output.
+        // no-chain-into-HWND-mode). The per-frame render loop composites a
+        // successful attachment; an unsuccessful one leaves the viewport empty.
         if (engine && engine->GetSharedTextureHandle())
         {
             HANDLE sharedTex = engine->GetSharedTextureHandle();
@@ -4209,9 +4202,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
     // rotate (full-window-width drag ≈ 180°), distance/1000 for
     // MOVE multiplier, sqrt(olddist)-based scaling for ZOOM.
     //
-    // Scope: camera only. The shift-click-to-spawn path
-    // (legacy 2956) depends on the MouseCursor Object3D port and is
-    // explicitly deferred. The status-bar mouse-coord push
+    // Scope: camera controls and the shift-click-to-spawn path. The status-bar mouse-coord push
     // (legacy 3041) is a polish item.
     //
     // Engine state emission: SetCamera bypasses the dispatcher

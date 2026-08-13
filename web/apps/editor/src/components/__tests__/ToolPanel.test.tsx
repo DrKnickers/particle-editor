@@ -1,16 +1,10 @@
 // Vitest unit tests for the shared ToolPanel shell.
 // Verifies the compound API renders correctly and the close glyph
-// fires onClose. The single-open-panel host behaviour (mutual
-// exclusion between panels) is covered by an integration assertion at
-// the bottom using the Zustand atom directly.
+// fires onClose.
 
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ToolPanel } from "../ToolPanel";
-import {
-  setOpenToolPanel,
-  useToolPanelStore,
-} from "@/lib/tool-panel";
 
 describe("ToolPanel", () => {
   it("renders the title in the header", () => {
@@ -35,24 +29,9 @@ describe("ToolPanel", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("switching the openToolPanel atom from 'background' to 'ground' causes background to clear", () => {
-    // The atom enforces single-open semantics: setting one value
-    // replaces the previous one. The PanelLayout host renders the matching
-    // overlay by reading this atom; the unit-level proof is just that
-    // the atom value transitions and never holds two ids at once.
-    // (Lighting + Bloom left this store in session 11 — they're a docked
-    // pane in lib/right-dock now; only Background + Ground remain here.)
-    setOpenToolPanel("background");
-    expect(useToolPanelStore.getState().open).toBe("background");
-    setOpenToolPanel("ground");
-    expect(useToolPanelStore.getState().open).toBe("ground");
-    setOpenToolPanel(null);
-    expect(useToolPanelStore.getState().open).toBeNull();
-  });
-
-  it("variant='docked' fills its column (h-full w-full, not absolute overlay)", () => {
+  it("fills its dock column (h-full w-full, not absolute overlay)", () => {
     render(
-      <ToolPanel title="Lighting" onClose={() => {}} variant="docked">
+      <ToolPanel title="Lighting" onClose={() => {}}>
         body
       </ToolPanel>,
     );
@@ -62,19 +41,9 @@ describe("ToolPanel", () => {
     expect(dialog.className).not.toContain("absolute");
   });
 
-  it("default (overlay) variant is absolute-positioned", () => {
-    render(
-      <ToolPanel title="Background" onClose={() => {}}>
-        body
-      </ToolPanel>,
-    );
-    const dialog = screen.getByRole("dialog", { name: "Background" });
-    expect(dialog.className).toContain("absolute");
-  });
-
   it("default body scrolls and reserves a scrollbar gutter", () => {
     render(
-      <ToolPanel title="Lighting" onClose={() => {}} variant="docked">
+      <ToolPanel title="Lighting" onClose={() => {}}>
         body
       </ToolPanel>,
     );
@@ -89,7 +58,7 @@ describe("ToolPanel", () => {
     // body must NOT reserve a gutter — that wasted right strip pushes the
     // centred grid off-centre in the panel.
     render(
-      <ToolPanel title="Atlas Frames" onClose={() => {}} variant="docked" bodyScroll={false}>
+      <ToolPanel title="Atlas Frames" onClose={() => {}} bodyScroll={false}>
         body
       </ToolPanel>,
     );
@@ -108,7 +77,7 @@ describe("ToolPanel", () => {
     // detaching Close button and hangs. data-state='closing' takes it out of
     // `[role="dialog"]:not([data-state])`. See PanelLayout's `dockClosing`.
     const { rerender } = render(
-      <ToolPanel title="Lighting" onClose={() => {}} variant="docked">
+      <ToolPanel title="Lighting" onClose={() => {}}>
         body
       </ToolPanel>,
     );
@@ -118,7 +87,7 @@ describe("ToolPanel", () => {
     ).toBe(false);
 
     rerender(
-      <ToolPanel title="Lighting" onClose={() => {}} variant="docked" closing>
+      <ToolPanel title="Lighting" onClose={() => {}} closing>
         body
       </ToolPanel>,
     );

@@ -6,7 +6,6 @@ import { KEYBOARD_SURFACES, seedCanonicalUiState } from "./helpers/a11y-surfaces
 import "./helpers/toMatchJSONGolden";
 
 const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-const COMPOSITION_MODE = process.env.ALO_HOSTING_MODE !== "legacy";
 // ESM-equivalent of __dirname (package is "type": "module").
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE_PATH = path.resolve(__dirname, "fixtures/a11y-base-state.alo");
@@ -15,7 +14,6 @@ let browser: Browser;
 let page: Page;
 
 test.beforeAll(async () => {
-  if (!COMPOSITION_MODE) return;
   browser = await chromium.connectOverCDP(CDP_ENDPOINT);
   const context = browser.contexts()[0];
   if (!context) throw new Error("CDP: no browser contexts attached");
@@ -29,7 +27,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  if (page && COMPOSITION_MODE) {
+  if (page) {
     await page.evaluate(async () => {
       const bridge = (window as { bridge?: { request: (req: { kind: string; params: unknown }) => Promise<unknown> } }).bridge;
       if (bridge) {
@@ -43,17 +41,7 @@ test.afterAll(async () => {
   }
 });
 
-test.beforeEach(async ({}, testInfo) => {
-  if (!COMPOSITION_MODE) {
-    testInfo.annotations.push({
-      type: "skip-reason",
-      description:
-        "ALO_HOSTING_MODE == 'legacy' (composition mode inactive) — composition-mode " +
-        "DOM-snapshot specs only run when the editor is in composition mode. " +
-        "Use a11y-keyboard.spec.ts (Win32 UIA) for the default HWND lane."
-    });
-    test.skip();
-  }
+test.beforeEach(async () => {
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
   await page.mouse.move(0, 0);

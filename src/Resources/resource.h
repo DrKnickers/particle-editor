@@ -16,20 +16,7 @@
 // bundle the proprietary vanilla EaW textures; they load W_TEMPGRND00 /
 // W_SAND00 / W_SNOW_RGH from the user's game install at runtime (see
 // engine.cpp kGroundTextureGameLeaf), so IDs 142-144 are retired and NOT
-// reused. IDB_GROUND_METAL/GREY were never wired to a resource — vestigial
-// reserved IDs, kept to avoid renumbering (separate cleanup).
-#define IDB_GROUND_METAL                145
-#define IDB_GROUND_GREY                 146
-
-// Texture-palette button glyph (16x16 24-bit BMP, painter's
-// palette icon). Used as the BS_BITMAP image for IDC_BUTTON_PALETTE
-// in the Textures groupbox header on the Appearance tab.
-#define IDB_PALETTE_GLYPH               147
-
-// Hover-pin badge (24x48 24-bit BMP, vertical strip).
-// Top half (y=0..23) = empty/hover state; bottom half (y=24..47) =
-// filled/pinned state. Blitted onto each cell when the user hovers.
-#define IDB_PIN_BADGE                   148
+// reused.
 
 // Skydome equirectangular shader. Samples an environment texture
 // onto a UV sphere rendered from inside.

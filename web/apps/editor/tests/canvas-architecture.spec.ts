@@ -9,11 +9,8 @@
 // pins the bridge surface so a regression in renderer-side listener
 // attachment, encoder logic, or TYPING_TAGS guard is caught in CI.
 //
-// Skip-handling: when the host is launched WITHOUT
-// the non-legacy hosting mode, the canvas isn't mounted and
-// the listeners aren't attached — every test in this file skips. Once
-// canvas-jpeg becomes the default, the skip turns into a
-// hard requirement automatically.
+// The canvas is mounted in the native suite's composition host. Tests still
+// skip when it is unavailable so a transport failure is reported precisely.
 
 import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
 
@@ -84,7 +81,7 @@ async function archCEnabled(p: Page): Promise<boolean> {
 
 test.beforeEach(async () => {
   const enabled = await archCEnabled(page);
-  test.skip(!enabled, "canvas-jpeg transport not active — set ALO_HOSTING_MODE != legacy (default)");
+  test.skip(!enabled, "canvas-jpeg transport not active");
   await installBridgeProxy(page);
 });
 

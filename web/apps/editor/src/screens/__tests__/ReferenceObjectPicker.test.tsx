@@ -10,7 +10,7 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, act, within } from "@testing-library/react";
-import { ReferenceObjectPicker } from "../ReferenceObjectPicker";
+import { ReferenceObjectPickerBody } from "../ReferenceObjectPicker";
 import { MockBridge } from "@/bridge/mock";
 import { useMockEngineState, makeDefaultEngineState } from "@/bridge/mock-state";
 import { __resetPickerStateCacheForTests } from "@/lib/picker-state";
@@ -29,7 +29,7 @@ beforeEach(() => {
 describe("ReferenceObjectPicker — selection + status", () => {
   it("enumerates objects into Heroes/Ground/Space sections and dispatches on click-select", async () => {
     const bridge = new MockBridge();
-    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    render(<ReferenceObjectPickerBody bridge={bridge as unknown as Bridge} />);
 
     const tree = await screen.findByRole("tree", { name: "Reference object" });
     await waitFor(() => {
@@ -53,7 +53,7 @@ describe("ReferenceObjectPicker — selection + status", () => {
 
   it("tags each tree leaf with a ref-unit:<name> testid for clip-cursor targeting", async () => {
     const bridge = new MockBridge();
-    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    render(<ReferenceObjectPickerBody bridge={bridge as unknown as Bridge} />);
     await screen.findByRole("tree", { name: "Reference object" });
     await waitFor(() =>
       expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument(),
@@ -79,7 +79,7 @@ describe("ReferenceObjectPicker — selection + status", () => {
     };
     try {
       const bridge = new MockBridge();
-      render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+      render(<ReferenceObjectPickerBody bridge={bridge as unknown as Bridge} />);
       await screen.findByRole("tree", { name: "Reference object" });
       await waitFor(() => expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument());
       expect(screen.getByRole("treeitem", { name: "AT_ST_Walker" })).toBeInTheDocument();
@@ -100,7 +100,7 @@ describe("ReferenceObjectPicker — selection + status", () => {
 
   it("collapses a section to hide its items, and expands it again", async () => {
     const bridge = new MockBridge();
-    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    render(<ReferenceObjectPickerBody bridge={bridge as unknown as Bridge} />);
     await screen.findByRole("tree", { name: "Reference object" });
     await waitFor(() => expect(screen.getByRole("treeitem", { name: "Star_Destroyer" })).toBeInTheDocument());
 
@@ -137,7 +137,7 @@ describe("ReferenceObjectPicker — selection + status", () => {
       });
     try {
       const bridge = new MockBridge();
-      render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+      render(<ReferenceObjectPickerBody bridge={bridge as unknown as Bridge} />);
       await screen.findByRole("tree", { name: "Reference object" });
       await waitFor(() => expect(screen.getByRole("treeitem", { name: "Star_Destroyer" })).toBeInTheDocument());
 
@@ -160,7 +160,7 @@ describe("ReferenceObjectPicker — selection + status", () => {
 
   it("lists an unrecognised-tag unit under Ground ▸ Other (the missing-units fix)", async () => {
     const bridge = new MockBridge();
-    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    render(<ReferenceObjectPickerBody bridge={bridge as unknown as Bridge} />);
     await screen.findByRole("tree", { name: "Reference object" });
     // bucket "Other" header + the item both render (Imperial_Bunker_Capturable is Ground/Unit/Other).
     expect(await screen.findByRole("treeitem", { name: /Other/ })).toBeInTheDocument();
@@ -169,7 +169,7 @@ describe("ReferenceObjectPicker — selection + status", () => {
 
   it("shows the skinned-unsupported note for a skinned object", async () => {
     const bridge = new MockBridge();
-    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    render(<ReferenceObjectPickerBody bridge={bridge as unknown as Bridge} />);
     await screen.findByRole("tree", { name: "Reference object" });
     await waitFor(() => {
       expect(screen.getByRole("treeitem", { name: "Stormtrooper_Squad" })).toBeInTheDocument();
@@ -182,7 +182,7 @@ describe("ReferenceObjectPicker — selection + status", () => {
 
   it("shows the model-missing note for an object whose file is absent", async () => {
     const bridge = new MockBridge();
-    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    render(<ReferenceObjectPickerBody bridge={bridge as unknown as Bridge} />);
     await screen.findByRole("tree", { name: "Reference object" });
     await waitFor(() => {
       expect(screen.getByRole("treeitem", { name: "Sensor_Array_NoModel" })).toBeInTheDocument();
@@ -195,7 +195,7 @@ describe("ReferenceObjectPicker — selection + status", () => {
 
   it("commits a position-X change through the transform dispatch", async () => {
     const bridge = new MockBridge();
-    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    render(<ReferenceObjectPickerBody bridge={bridge as unknown as Bridge} />);
 
     const posX = await screen.findByLabelText("Position X");
     fireEvent.change(posX, { target: { value: "12.5" } });
@@ -208,7 +208,7 @@ describe("ReferenceObjectPicker — selection + status", () => {
 
   it("surfaces a selected name absent from the enumerated list (mod-only object)", async () => {
     const bridge = new MockBridge();
-    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    render(<ReferenceObjectPickerBody bridge={bridge as unknown as Bridge} />);
     await screen.findByRole("tree", { name: "Reference object" });
     await bridge.request({ kind: "engine/set/reference-object", params: { name: "Mod_Only_Object" } });
     // The picker shows it as a standalone selected row, not snapping back to None.
@@ -218,7 +218,7 @@ describe("ReferenceObjectPicker — selection + status", () => {
 
   it("reflects snapEnabled and dispatches engine/set/snap-enabled on toggle", async () => {
     const bridge = new MockBridge();
-    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    render(<ReferenceObjectPickerBody bridge={bridge as unknown as Bridge} />);
 
     const snap = await screen.findByRole("checkbox", { name: "Snap to grid" });
     expect((snap as HTMLInputElement).checked).toBe(false); // mock default
@@ -233,7 +233,7 @@ describe("ReferenceObjectPicker — selection + status", () => {
 
   it("a single-axis transform edit preserves the other axes + rotation", async () => {
     const bridge = new MockBridge();
-    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    render(<ReferenceObjectPickerBody bridge={bridge as unknown as Bridge} />);
     await screen.findByLabelText("Position X");
     await bridge.request({
       kind: "engine/set/reference-object-transform",
@@ -288,7 +288,7 @@ describe("ReferenceObjectPicker — async build + search", () => {
 
   it("shows 'Loading objects…' while building, then renders the list when the build finishes", async () => {
     const { bridge, finishBuild } = makeBuildingBridge();
-    render(<ReferenceObjectPicker bridge={bridge} onClose={() => {}} />);
+    render(<ReferenceObjectPickerBody bridge={bridge} />);
 
     expect(await screen.findByText(/loading objects/i)).toBeInTheDocument();
     expect(screen.queryByRole("tree", { name: "Reference object" })).not.toBeInTheDocument();
@@ -322,7 +322,7 @@ describe("ReferenceObjectPicker — async build + search", () => {
         return () => {};
       },
     } as unknown as Bridge;
-    render(<ReferenceObjectPicker bridge={bridge} onClose={() => {}} />);
+    render(<ReferenceObjectPickerBody bridge={bridge} />);
     await screen.findByRole("tree", { name: "Reference object" });
     const afterLoad = listCalls;
 
@@ -341,7 +341,7 @@ describe("ReferenceObjectPicker — async build + search", () => {
 
   it("a mod-switch rebuild (building flips true again) re-loads the list", async () => {
     const { bridge, finishBuild, startRebuild } = makeBuildingBridge();
-    render(<ReferenceObjectPicker bridge={bridge} onClose={() => {}} />);
+    render(<ReferenceObjectPickerBody bridge={bridge} />);
     act(() => finishBuild());
     await screen.findByRole("tree", { name: "Reference object" });
 
@@ -356,7 +356,7 @@ describe("ReferenceObjectPicker — async build + search", () => {
 
   it("search narrows the listed objects (case-insensitive substring on Name)", async () => {
     const bridge = new MockBridge();
-    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    render(<ReferenceObjectPickerBody bridge={bridge as unknown as Bridge} />);
     await screen.findByRole("tree", { name: "Reference object" });
     await waitFor(() =>
       expect(screen.getByRole("treeitem", { name: "Star_Destroyer" })).toBeInTheDocument()
@@ -378,7 +378,7 @@ describe("ReferenceObjectPicker — async build + search", () => {
 describe("ReferenceObjectPicker — lock", () => {
   it("reflects referenceObjectLocked and dispatches engine/set/reference-object-lock on toggle", async () => {
     const bridge = new MockBridge();
-    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    render(<ReferenceObjectPickerBody bridge={bridge as unknown as Bridge} />);
     await screen.findByRole("tree", { name: "Reference object" });
     await waitFor(() =>
       expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument()
@@ -397,7 +397,7 @@ describe("ReferenceObjectPicker — lock", () => {
 
   it("disables the Transform spinners + Reset when locked", async () => {
     const bridge = new MockBridge();
-    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    render(<ReferenceObjectPickerBody bridge={bridge as unknown as Bridge} />);
     await screen.findByRole("tree", { name: "Reference object" });
     await waitFor(() =>
       expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument()
@@ -421,7 +421,7 @@ describe("ReferenceObjectPicker — lock", () => {
 
   it("disables the Lock checkbox when no object is selected", async () => {
     const bridge = new MockBridge();
-    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    render(<ReferenceObjectPickerBody bridge={bridge as unknown as Bridge} />);
     await screen.findByRole("tree", { name: "Reference object" });
     // Default mock has no reference object selected (name === NONE) -> Lock disabled.
     const lock = await screen.findByRole("checkbox", { name: "Lock object" });
@@ -432,7 +432,7 @@ describe("ReferenceObjectPicker — lock", () => {
   // disabled={locked} would regress this without the lock->unlock round-trip).
   it("re-enables the Transform inputs after unlock", async () => {
     const bridge = new MockBridge();
-    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    render(<ReferenceObjectPickerBody bridge={bridge as unknown as Bridge} />);
     await screen.findByRole("tree", { name: "Reference object" });
     await waitFor(() =>
       expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument()
@@ -459,7 +459,7 @@ describe("ReferenceObjectPicker — lock", () => {
   // mock from silently encoding the wrong contract.
   it("drops a transform request while locked (bridge-level freeze)", async () => {
     const bridge = new MockBridge();
-    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    render(<ReferenceObjectPickerBody bridge={bridge as unknown as Bridge} />);
     await screen.findByLabelText("Position X");
     // Seed a known transform, lock, then attempt to move it via the bridge.
     await bridge.request({
@@ -480,7 +480,7 @@ describe("ReferenceObjectPicker — lock", () => {
 describe("ReferenceObjectPicker — keyboard navigation + persisted-selection expand", () => {
   const ready = async () => {
     const bridge = new MockBridge();
-    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    render(<ReferenceObjectPickerBody bridge={bridge as unknown as Bridge} />);
     await screen.findByRole("tree", { name: "Reference object" });
     await waitFor(() => expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument());
     return bridge;
@@ -547,7 +547,7 @@ describe("ReferenceObjectPicker — keyboard navigation + persisted-selection ex
 describe("ReferenceObjectPicker — faction filter chips", () => {
   const ready = async () => {
     const bridge = new MockBridge();
-    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    render(<ReferenceObjectPickerBody bridge={bridge as unknown as Bridge} />);
     await screen.findByRole("tree", { name: "Reference object" });
     await waitFor(() => expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument());
     return bridge;
@@ -593,7 +593,7 @@ describe("ReferenceObjectPicker — props + templates", () => {
     localStorage.removeItem("alo:refpicker:v1");
     __resetPickerStateCacheForTests();
     const bridge = new MockBridge();
-    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    render(<ReferenceObjectPickerBody bridge={bridge as unknown as Bridge} />);
     await screen.findByRole("tree", { name: "Reference object" });
     await waitFor(() => expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument());
     return bridge;

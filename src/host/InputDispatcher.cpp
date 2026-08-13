@@ -82,8 +82,8 @@ bool InputDispatcher::Dispatch(const nlohmann::json& params)
         int buttons = params.value("buttons", 0);
         int deltaY  = params.value("deltaY", 0);
         // wParam layout for WM_MOUSEWHEEL: HIWORD = wheel delta,
-        // LOWORD = key/button MK_* bitmask. The engine handler at
-        // HostWindow.cpp:1356 reads `(SHORT)HIWORD(wp) / WHEEL_DELTA`
+        // LOWORD = key/button MK_* bitmask. The engine handler reads
+        // `(SHORT)HIWORD(wp) / WHEEL_DELTA`
         // for the notch count, so passing the renderer's quantised
         // (±WHEEL_DELTA per notch) delta directly is correct.
         WPARAM wp = MAKEWPARAM(static_cast<WORD>(buttons),
@@ -101,8 +101,8 @@ bool InputDispatcher::Dispatch(const nlohmann::json& params)
         int vk = params.value("vk", 0);
         bool repeat = params.value("repeat", false);
         // lParam: bit 0 (repeat count = 1), bit 30 (previous state = 1
-        // if this is a repeat). The engine's WM_KEYDOWN guard at
-        // HostWindow.cpp:1296 reads bit 30 and skips on repeat, so the
+        // if this is a repeat). The engine's WM_KEYDOWN guard reads bit 30
+        // and skips on repeat, so the
         // semantic is "first press" = bit 30 clear.
         LPARAM lp = repeat ? static_cast<LPARAM>(0x40000001)
                            : static_cast<LPARAM>(0x00000001);

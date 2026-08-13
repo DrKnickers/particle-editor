@@ -46,9 +46,7 @@
 // retained as resilience; this spec encodes the positive backbone
 // reachability claim.
 //
-// Auto-skips under default HWND mode (the backbone in HWND mode
-// includes `AloHostViewport` and a deeper wrapper chain; the
-// composition-specific assertions don't fit).
+// The composition-specific assertions require the standard native host tree.
 //
 // If THIS spec ever starts failing — composition mode's host HWND
 // stops exposing one of the asserted backbone nodes — READ THIS
@@ -62,14 +60,12 @@ import { captureUIA, discoverHostHwnd } from "./helpers/uia";
 import type { UIANode } from "./helpers/a11y-normalizer";
 
 const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-const COMPOSITION_MODE = process.env.ALO_HOSTING_MODE !== "legacy";
 
 let browser: Browser;
 let page: Page;
 let hostHwnd: bigint;
 
 test.beforeAll(async () => {
-  if (!COMPOSITION_MODE) return;
   browser = await chromium.connectOverCDP(CDP_ENDPOINT);
   const context = browser.contexts()[0];
   if (!context) throw new Error("CDP: no browser contexts attached");
@@ -88,18 +84,6 @@ test.afterAll(async () => {
   // .mjs.
 });
 
-test.beforeEach(async ({}, testInfo) => {
-  if (!COMPOSITION_MODE) {
-    testInfo.annotations.push({
-      type: "skip-reason",
-      description:
-        "ALO_HOSTING_MODE == 'legacy' (composition mode inactive) — the composition-mode " +
-        "UIA backbone is composition-specific (HWND mode has an extra " +
-        "AloHostViewport Pane + deeper wrapper chain)."
-    });
-    test.skip();
-  }
-});
 
 // Walk the subtree, return the first node matching `pred`, or
 // undefined if none.

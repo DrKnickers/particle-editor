@@ -1,8 +1,7 @@
-// GroundTexturePanel — modeless tool window for the ground plane:
-// show/hide master toggle plus a grid of texture slots. Ported from the
-// native `GroundTexturePickerProc` in the legacy main.cpp; the Win32 dialog
-// and the `--legacy-ui` opt-out were removed, so this React panel
-// is now the sole ground-texture surface.
+// GroundTexturePanel — picker content for the ground plane: a show/hide master
+// toggle plus a grid of texture slots. Ported from the native
+// `GroundTexturePickerProc` in the legacy main.cpp, it is the editor's sole
+// ground-texture surface.
 //
 // Slot layout (mirrors Engine::kGroundTextureCount=8 / kGroundSolidColorSlot=4):
 //   - Slot 0: Dirt   (bundled, default)
@@ -33,13 +32,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
 import { Spinner } from "@/primitives/Spinner";
-import { ToolPanel } from "@/components/ToolPanel";
 import { colorrefToHex, hexToColorref } from "@/lib/colorref";
-
-type Props = {
-  bridge: Bridge;
-  onClose: () => void;
-};
 
 type BodyProps = {
   bridge: Bridge;
@@ -68,13 +61,10 @@ function basename(path: string): string {
   const i = norm.lastIndexOf("/");
   return i >= 0 ? norm.slice(i + 1) : norm;
 }
-
 /**
  * GroundTexturePanelBody — the slot-grid + solid-colour-picker markup
- * that used to live inside <ToolPanel>. Extracted so both the legacy
- * default-export wrapper and the new GroundDropdown popover can mount
- * the same content. No onClose: the host (popover or ToolPanel) handles
- * its own dismissal.
+ * that is mounted by GroundDropdown. No onClose: the popover handles
+ * dismissal.
  */
 export function GroundTexturePanelBody({ bridge }: BodyProps) {
   const [snapshot, setSnapshot] = useState<EngineStateDto | null>(null);
@@ -387,24 +377,5 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
         />
       </div>
     </>
-  );
-}
-
-/**
- * GroundTexturePanel — thin <ToolPanel> wrapper around
- * GroundTexturePanelBody. Kept as the default export so the existing
- * vitest spec (GroundTexturePanel.test.tsx) and any remaining slide-in
- * callsite still compile. The new toolbar dropdown (GroundDropdown)
- * mounts GroundTexturePanelBody directly inside a Radix Popover and
- * never reaches this wrapper.
- */
-export function GroundTexturePanel({ bridge, onClose }: Props) {
-  return (
-    <ToolPanel
-      title="Ground Texture"
-      onClose={onClose}
-    >
-      <GroundTexturePanelBody bridge={bridge} />
-    </ToolPanel>
   );
 }

@@ -11,12 +11,12 @@ using nlohmann::json;
 
 namespace host {
 
-bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx, const std::string& kind)
+bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
 {
     // DispatchInternal-local aliases so the moved ladder blocks below stay
     // verbatim (plan #3A transforms only).
     const json&        params = ctx.params;
-    const std::string& id     = ctx.id;
+    const std::string& kind   = ctx.kind;
 
     // -------- settings/lighting (get) --------------------------------
     //

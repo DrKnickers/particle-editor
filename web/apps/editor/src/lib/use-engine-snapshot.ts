@@ -76,15 +76,6 @@ function getEngineSnapshotStore(bridge: Bridge): EngineSnapshotStore {
   return store;
 }
 
-export function useEngineSnapshot(bridge: Bridge): EngineStateDto | null {
-  const store = getEngineSnapshotStore(bridge);
-  return useSyncExternalStore(
-    store.subscribe,
-    () => store.getSnapshot() ?? null,
-    () => null,
-  );
-}
-
 /**
  * Select a narrow value from the cached engine snapshot. The hook returns
  * undefined until the first snapshot or broadcast arrives. Selectors that

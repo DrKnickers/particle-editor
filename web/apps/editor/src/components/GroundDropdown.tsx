@@ -1,5 +1,5 @@
-// GroundDropdown — toolbar button + Radix Popover replacing the
-// GroundTexturePanel slide-in ToolPanel. Mirrors BackgroundDropdown
+// GroundDropdown — toolbar button + Radix Popover for the
+// GroundTexturePanel body. Mirrors BackgroundDropdown
 // from Task 2.2: a trigger with a preview swatch + ChevronDown opens
 // a popover containing the existing picker body markup.
 

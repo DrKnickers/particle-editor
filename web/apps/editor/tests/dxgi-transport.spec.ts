@@ -37,17 +37,13 @@
 //     without a preceding [COMP-engine-resize] → silent texture swap)
 //   - Any failure path firing (D3D11 device creation, OpenSharedResource,
 //     swapchain create, Present1 — all emit [COMP-engine-fail])
-//
-// Skip behaviour: each test no-ops with a clear message when
-// ALO_HOSTING_MODE == "legacy" (composition mode inactive). Running the harness without
-// the env var (HWND-mode baseline) silently skips this file.
+// The native suite always exercises the composition transport.
 
 import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-const COMPOSITION_MODE = process.env.ALO_HOSTING_MODE !== "legacy";
 
 // Host.log path — written by the host's Log() macro, see HostWindow.cpp.
 // Path mirrors what the [host] WebView2 user-data folder line points at.
@@ -77,15 +73,6 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(({}, testInfo) => {
-  if (!COMPOSITION_MODE) {
-    testInfo.annotations.push({
-      type: "skip-reason",
-      description:
-        "ALO_HOSTING_MODE == 'legacy' (composition mode inactive) — DXGI transport gate not " +
-        "applicable to this run. Set ALO_HOSTING_MODE != legacy (default) to enable.",
-    });
-    test.skip();
-  }
   if (!HOST_LOG_PATH) {
     testInfo.annotations.push({
       type: "skip-reason",

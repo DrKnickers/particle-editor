@@ -2,9 +2,7 @@
 //
 // The composition-hosting work swapped WebView2 from HWND-mode hosting
 // (CreateCoreWebView2Controller) to composition hosting
-// (CreateCoreWebView2CompositionController), gated on the env-var
-// pair `ALO_HOSTING_MODE != legacy (default)` + `ALO_VIEWPORT_TRANSPORT=
-// canvas-jpeg`. Under composition the host HWND owns Win32 focus +
+// (CreateCoreWebView2CompositionController). The host HWND owns Win32 focus +
 // input; mouse/keyboard reach WebView2 only through host-side
 // forwarding (SendMouseInput, MoveFocus). The 96-baseline native
 // suite runs under either hosting mode and proves the bridge layer
@@ -40,16 +38,11 @@
 //     registered)
 //   - Regression in Compositor::AttachWebView2 (e.g. tree commit
 //     fails -> no React rendering -> every spec times out)
-//
-// Skip behaviour: each test no-ops with a clear message when
-// ALO_HOSTING_MODE == "legacy" (composition mode inactive). Running the harness
-// without the env var (HWND-mode baseline) silently skips this
-// file; running WITH it gates the composition path.
+// The composition path is the native suite default.
 
 import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
 
 const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-const COMPOSITION_MODE = process.env.ALO_HOSTING_MODE !== "legacy";
 
 let browser: Browser;
 let page: Page;
@@ -72,32 +65,12 @@ test.afterAll(async () => {
   await browser?.close();
 });
 
-test.beforeEach(({}, testInfo) => {
-  if (!COMPOSITION_MODE) {
-    testInfo.annotations.push({
-      type: "skip-reason",
-      description:
-        "ALO_HOSTING_MODE == 'legacy' (composition mode inactive) — composition-mode gate not " +
-        "applicable to this run. Set ALO_HOSTING_MODE != legacy (default) to enable.",
-    });
-    test.skip();
-  }
-});
-
-test("env-var pair signalling composition mode is set in process env", () => {
-  // Sanity check: the test process inherits env from PowerShell where
-  // the user (or run-native-tests harness) set the pair. The host
-  // process inherits from the test process via spawn() without env
-  // override (run-native-tests.mjs:49 spawns with default env).
-  // If the host log shows the composition path actually ran, this
-  // env-var sighting is the cause.
-  expect(process.env.ALO_HOSTING_MODE).not.toBe("legacy"); // default = composition
-  // ALO_VIEWPORT_TRANSPORT retired; canvas-jpeg path is now coupled to ALO_HOSTING_MODE
+test("native composition suite runs with no ALO_HOSTING_MODE override", () => {
+  expect(process.env.ALO_HOSTING_MODE).toBeUndefined();
 });
 
 test("click on Background toolbar dropdown opens the popover (click routing under composition)", async () => {
-  // Mirrors the existing tools.spec.ts:166 test but explicitly gated
-  // on composition mode. If composition-controller wiring regresses
+  // Mirrors the existing tools.spec.ts:166 test. If composition-controller wiring regresses
   // (e.g. RootVisualTarget binding fails silently), this would fail
   // because React's onClick wouldn't fire.
   await page.keyboard.press("Escape").catch(() => {});

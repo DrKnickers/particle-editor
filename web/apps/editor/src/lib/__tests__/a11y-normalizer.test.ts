@@ -13,7 +13,7 @@
 // case to ensure descendant nodes get the same treatment as the root.
 
 import { describe, it, expect } from "vitest";
-import { normalize } from "@/lib/a11y-normalizer";
+import { normalize } from "../../../tests/helpers/a11y-normalizer";
 import allowlist from "../../../tests/helpers/a11y-allowlist.json";
 
 describe("a11y-normalizer", () => {

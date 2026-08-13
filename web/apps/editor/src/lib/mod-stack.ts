@@ -25,14 +25,7 @@ interface ModStackState {
 const useStore = create<ModStackState>(() => ({ stack: [] }));
 
 /** React hook: subscribe to the mod stack (re-renders on change). */
-export function useModStack(): string[] {
-  return useStore((s) => s.stack);
-}
-
-/** Imperative read — safe outside React (e.g. in the preview-fetch callback). */
-export function getModStack(): string[] {
-  return useStore.getState().stack;
-}
+export const useModStack = useStore;
 
 /**
  * Seed the mod-stack store from mods/list and subscribe to engine/state/changed

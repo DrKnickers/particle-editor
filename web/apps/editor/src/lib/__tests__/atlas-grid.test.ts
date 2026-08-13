@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { ATLAS_MAX_SIDE, gridSide, frameCount, isAtlasEligible, isAtlasTooLarge,
-  resolveFrame, wrapFrame, cellRect, classifySelection, fitGridLayout } from "../atlas-grid";
+  resolveFrame, wrapFrame, cellRect, fitGridLayout } from "../atlas-grid";
 
 describe("gridSide mirrors floor(sqrt(max(1,n)))", () => {
   it.each([[1,1],[2,1],[3,1],[4,2],[5,2],[9,3],[16,4],[20,4],[25,5],[0,1],[-7,1]])(
@@ -64,15 +64,6 @@ describe("cellRect per-axis source crop", () => {
   it("first/last", () => {
     expect(cellRect(0,4,400,400)).toEqual({ left:0, top:0, width:100, height:100 });
     expect(cellRect(15,4,400,400)).toEqual({ left:300, top:300, width:100, height:100 });
-  });
-});
-describe("classifySelection", () => {
-  it("kinds", () => {
-    expect(classifySelection([], null)).toBe("none");
-    expect(classifySelection([0.1], 5)).toBe("single");
-    expect(classifySelection([0.1], 99)).toBe("single");
-    expect(classifySelection([0.1,0.5], 7)).toBe("multi-same");
-    expect(classifySelection([0.1,0.5], null)).toBe("multi-diff");
   });
 });
 describe("fitGridLayout (width-only, ~sqrt(n) columns, dense floor)", () => {

@@ -1111,9 +1111,9 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     // former 4,800-line kind ladder; tasks/2026-07-06-heavyweight-refactor-
     // plan.md). Kinds are exact-match and mutually exclusive, so the call
     // order carries no semantics.
-    if (TryDispatchEngine(ctx, kind) || TryDispatchEmitters(ctx, kind) ||
-        TryDispatchFile(ctx, kind)   || TryDispatchAssets(ctx, kind)   ||
-        TryDispatchShell(ctx, kind)  || TryDispatchSpawner(ctx, kind))
+    if (TryDispatchEngine(ctx) || TryDispatchEmitters(ctx) ||
+        TryDispatchFile(ctx)   || TryDispatchAssets(ctx)   ||
+        TryDispatchShell(ctx)  || TryDispatchSpawner(ctx))
     {
         return ctx.res;
     }

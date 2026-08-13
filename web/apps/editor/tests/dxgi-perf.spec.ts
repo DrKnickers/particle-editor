@@ -27,12 +27,11 @@
 // extend via layout/viewport-rect which DOES change the engine RT
 // size, but that doesn't shift the host window outer rect).
 //
-// Skip behaviour: gates on ALO_HOSTING_MODE != legacy (default).
+// The native suite always exercises the composition performance path.
 
 import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
 
 const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-const COMPOSITION_MODE = process.env.ALO_HOSTING_MODE !== "legacy";
 
 // Tuneable thresholds. The mean-FPS gate is intentionally generous
 // — local dev rigs vary, CI machines (if this spec ever runs on CI)
@@ -60,18 +59,6 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await browser?.close();
-});
-
-test.beforeEach(({}, testInfo) => {
-  if (!COMPOSITION_MODE) {
-    testInfo.annotations.push({
-      type: "skip-reason",
-      description:
-        "ALO_HOSTING_MODE == 'legacy' (composition mode inactive) — DXGI perf gate not " +
-        "applicable to HWND-mode runs.",
-    });
-    test.skip();
-  }
 });
 
 test("mean engine FPS over 10s exceeds the regression floor under composition mode", async () => {

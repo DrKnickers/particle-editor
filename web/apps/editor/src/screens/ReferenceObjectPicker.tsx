@@ -31,14 +31,8 @@ import type {
   Vec3,
 } from "@particle-editor/bridge-schema";
 import { Spinner } from "@/primitives/Spinner";
-import { ToolPanel } from "@/components/ToolPanel";
 import { loadPickerState, resolveFaction, savePickerState } from "@/lib/picker-state";
 import { parseSetPickerCollapseMessage, parseSetPickerSearchMessage } from "@/lib/record-focus-bridge";
-
-type Props = {
-  bridge: Bridge;
-  onClose: () => void;
-};
 
 type BodyProps = {
   bridge: Bridge;
@@ -115,11 +109,9 @@ function buildSections(objects: ReferenceObjectEntry[], matches: (n: string) => 
   if (templates.length) sections.push(flatSection("Templates", "Templates", templates));
   return sections;
 }
-
 /**
  * ReferenceObjectPickerBody — the picker content (collapsible object tree +
- * status + numeric transform + grid controls). Extracted so both the ToolPanel
- * wrapper and the toolbar dropdown mount the same markup.
+ * status + numeric transform + grid controls). Mounted by the toolbar dropdown.
  */
 export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
   const [snapshot, setSnapshot] = useState<EngineStateDto | null>(null);
@@ -732,20 +724,5 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
         </label>
       </section>
     </div>
-  );
-}
-
-/**
- * ReferenceObjectPicker — thin <ToolPanel> wrapper around the body, kept as the
- * default slide-in form (parallels BackgroundPicker).
- */
-export function ReferenceObjectPicker({ bridge, onClose }: Props) {
-  return (
-    <ToolPanel
-      title="Reference object"
-      onClose={onClose}
-    >
-      <ReferenceObjectPickerBody bridge={bridge} />
-    </ToolPanel>
   );
 }

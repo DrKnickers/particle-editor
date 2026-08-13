@@ -273,44 +273,26 @@ async function main() {
       "tests/splitters.spec.ts",
       "tests/d3d9ex.spec.ts",
       "tests/alpha-compositor-snapshot.spec.ts",
-      // DOM-event → viewport/input bridge wiring
-      // under this architecture (canvas-in-DOM viewport). Skips with a
-      // clear annotation when ALO_HOSTING_MODE == "legacy",
-      // so runs WITHOUT the env var are a no-op. Included in the
-      // harness so the moment canvas-jpeg becomes the default the
-      // bridge surface is gated automatically.
+      // DOM-event → viewport/input bridge wiring under the canvas-in-DOM
+      // viewport. The spec self-skips only when its native transport is
+      // unavailable, reporting that precise host failure.
       "tests/canvas-architecture.spec.ts",
-      // Composition-hosting A/B parity
-      // gate. Tests skip with a clear annotation when
-      // ALO_HOSTING_MODE == "legacy" (composition mode inactive), so running the
-      // harness WITHOUT the env var (HWND-mode baseline) is a no-op
-      // for this file. Running WITH the env-var pair gates the
-      // composition path's bridge layer.
+      // Composition-hosting integration gate for the standard native host.
       "tests/composition-hosting.spec.ts",
-      // DXGI transport / resize-stress /
-      // perf gates. All three specs skip when ALO_WEBVIEW2_HOSTING
-      // != "composition". Composition mode requires BOTH env vars
-      // (canvas-jpeg + composition) plus a dist/ built with VITE_*
-      // counterparts to be a meaningful gate. (The dxgi-vs-
-      // jpeg SSIM check was deferred from this list — Playwright's DOM-only
-      // screenshots can't see DXGI engine pixels under composition;
-      // manual visual smoke is the irreducible gate.)
+      // DXGI transport, resize-stress, and performance gates. Playwright's
+      // DOM-only screenshots cannot see DXGI engine pixels; manual visual
+      // smoke remains the irreducible gate.
       "tests/dxgi-transport.spec.ts",
       "tests/dxgi-resize-stress.spec.ts",
       "tests/dxgi-perf.spec.ts",
-      // Scene-rect transform gate. Skips
-      // when ALO_HOSTING_MODE == "legacy" (composition mode inactive) (LayoutBroker's
-      // new wiring is composition-mode-only).
-      // Asserts [COMP-engine-transform] log lines fire on
+      // Scene-rect transform gate. Asserts [COMP-engine-transform] log lines fire on
       // layout/scene-rect dispatch with the expected absolute clip.
       "tests/dxgi-scene-rect.spec.ts",
       // Composition-mode a11y DOM-snapshot specs.
       // (The HWND/UIA `[hwnd]` quartet + their `.golden.json` goldens
       // were removed along with the legacy `--legacy` lane.)
       // Mirror the HWND quartet but capture via
-      // page.accessibility.snapshot() (CDP) instead of Win32 UIA.
-      // Auto-skip under default HWND mode (the UIA lane covers that);
-      // active only when ALO_HOSTING_MODE != legacy (default). Reuse the
+      // page.accessibility.snapshot() (CDP) instead of Win32 UIA. Reuse the
       // surface-driver arrays from the golden lanes unchanged.
       "tests/a11y-chrome-composition.spec.ts",
       "tests/a11y-dialogs-composition.spec.ts",
@@ -322,7 +304,6 @@ async function main() {
       // → React menubar all the way down via Win32 UIA. Catches the
       // case where Blink's lazy a11y regresses (would leave
       // composition users with no screen-reader access to React).
-      // Auto-skips under default HWND mode.
       "tests/a11y-uia-composition-reachable.spec.ts",
       // Preview overload guard regression. Bombs the
       // live preview with rate=1e9 and asserts the engine plateaus at

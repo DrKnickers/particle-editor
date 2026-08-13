@@ -27,17 +27,13 @@
 //     screenshot DComp content (CDP captures DOM only). Manual smoke
 //     is the irreducible visual gate; this spec is the
 //     log-evidence regression gate for the wiring path.
-//
-// Skip behaviour: each test no-ops with a clear annotation when
-// ALO_HOSTING_MODE == "legacy" (composition mode inactive). HWND-mode baseline runs
-// silently skip.
+// The native suite always exercises the composition scene rectangle.
 
 import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-const COMPOSITION_MODE = process.env.ALO_HOSTING_MODE !== "legacy";
 const HOST_LOG_PATH = process.env.LOCALAPPDATA
   ? join(process.env.LOCALAPPDATA, "AloParticleEditor", "host.log")
   : "";
@@ -63,16 +59,6 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(({}, testInfo) => {
-  if (!COMPOSITION_MODE) {
-    testInfo.annotations.push({
-      type: "skip-reason",
-      description:
-        "ALO_HOSTING_MODE == 'legacy' (composition mode inactive) — scene-rect transform " +
-        "gate is composition-mode-only (LayoutBroker.SetSceneRect's " +
-        "new wiring is gated on m_dcompCompositor presence).",
-    });
-    test.skip();
-  }
   if (!HOST_LOG_PATH) {
     testInfo.annotations.push({
       type: "skip-reason",

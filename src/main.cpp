@@ -466,10 +466,10 @@ public:
 	}
 };
 
-// MouseCursor + GetCursorPos3D were factored out to src/MouseCursor.h so
-// the --new-ui host can reuse them. The header is included alongside
-// ParticleSystemInstance.h above (line 23 brings in engine.h transitively;
-// MouseCursor.h re-includes engine.h with its own guard).
+// MouseCursor + GetCursorPos3D live in src/MouseCursor.h for the host's
+// cursor-bound preview path. The header is included alongside
+// ParticleSystemInstance.h above; MouseCursor.h re-includes engine.h with its
+// own guard.
 #include "MouseCursor.h"
 
 

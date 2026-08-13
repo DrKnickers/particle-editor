@@ -1,5 +1,5 @@
-// BackgroundDropdown — toolbar button + Radix Popover replacing the
-// BackgroundPicker slide-in ToolPanel.
+// BackgroundDropdown — toolbar button + Radix Popover for the
+// BackgroundPicker body.
 //
 // Trigger: "Background:" label + preview swatch (background colour or
 // active skydome's swatch) + chevron. Click opens the popover beneath.

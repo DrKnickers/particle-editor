@@ -34,7 +34,7 @@ The codebase has been around since 2008 and inherits Mike.NL's GlyphX-era style.
 - Win32 + D3D9 + C++. No new dependencies without prior discussion.
 - Plain `LTEXT` / `BUTTON` / `STATIC` controls in the `.rc`s. New custom controls go under `src/UI/`.
 - Resource IDs are clustered by feature — `IDC_SPAWNER_*` in the 1300s, `IDC_BLOOM_*` in the 1400s, etc. Pick the next sequential ID in the right cluster.
-- German (`.de.rc`) and English (`.en.rc`) resources must stay in sync. UTF-8 with BOM, no exceptions — the file encoding has historically been a source of mojibake bugs.
+- `ParticleEditor.rc` is the hand-authored application resource source; `EmbeddedWebAssets.rc` is generated. Keep `.rc` files UTF-8 with BOM, no exceptions — the encoding has historically been a source of mojibake bugs.
 
 ### What goes where in docs
 
@@ -59,7 +59,7 @@ See [`README.md`](README.md) for runtime details.
 node scripts/run-all-tests.mjs
 ```
 
-That is the whole verification recipe: it runs every automated layer in dependency order — web typecheck, Vitest (~1,230 tests), the web bundle build, script tests, mock-browser Playwright, all standalone C++ unit tests (`tests/test_*.cpp`, built via their `build_*.bat`s), both MSBuild configs, the native Playwright suite against the real `ParticleEditor.exe`, render-golden image comparisons (`scripts/render-goldens.mjs`; bless intentional rendering changes with `--update`), and the `--drive` pixel smoke with its assertion scenarios — and exits nonzero if anything fails, with a per-lane summary. Expect the full run to take minutes (it rebuilds everything on purpose; a green gate on stale binaries is worse than a slow one).
+That is the whole verification recipe: it runs every automated layer in dependency order — web typecheck, Vitest (~1,230 tests), the web bundle build, script tests, mock-browser Playwright, static-site Playwright, all standalone C++ unit tests (`tests/test_*.cpp`, built via their `build_*.bat`s), both MSBuild configs, the native Playwright suite against the real `ParticleEditor.exe`, render-golden image comparisons (`scripts/render-goldens.mjs`; bless intentional rendering changes with `--update`), the `--record` frame smoke, and the `--drive` pixel smoke with its assertion scenarios — and exits nonzero if anything fails, with a per-lane summary. Expect the full run to take minutes (it rebuilds everything on purpose; a green gate on stale binaries is worse than a slow one).
 
 Useful flags: `--list` (lane names), `--lane vitest,cpp-unit` (subset), `--allow-missing drive-smoke` (downgrade a missing prereq to a visible SKIP on machines without the game install), `--skip-build` (unsafe, for iterating). Individual lanes remain available directly: `pnpm --filter ./apps/editor test` / `test:web` / `test:native`, and `node scripts/run-native-unit-tests.mjs --filter <name>` for a single C++ test.
 

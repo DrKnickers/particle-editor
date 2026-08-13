@@ -1,9 +1,6 @@
 // EmitterPropertyTabs — lower-left quadrant of the four-quadrant layout.
-// Three tabs (Basic / Appearance / Physics)
-// driven by Radix Tabs. The Basic tab is fully wired this batch — 18
-// form fields commit via `emitters/set-properties { id, patch: { ... } }`.
-// Appearance + Physics tabs render "coming soon"
-// placeholders; the schema-side DTO carries every field they need.
+// Three tabs (Basic / Appearance / Physics) driven by Radix Tabs. Their form
+// fields commit through `emitters/set-properties { id, patch: { ... } }`.
 //
 // Replaces the legacy `src/UI/Emitter.cpp` modal (873 LOC, ~150 control
 // IDs). Mirrors the legacy tab structure 1:1: Basic / Appearance /

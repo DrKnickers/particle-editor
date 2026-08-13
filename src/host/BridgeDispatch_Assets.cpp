@@ -19,12 +19,12 @@ using nlohmann::json;
 
 namespace host {
 
-bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx, const std::string& kind)
+bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
 {
     // DispatchInternal-local aliases so the moved ladder blocks below stay
     // verbatim (plan #3A transforms only).
     const json&        params = ctx.params;
-    const std::string& id     = ctx.id;
+    const std::string& kind   = ctx.kind;
 
     // -------- mods/list, mods/refresh, mods/set-layers --------
     //

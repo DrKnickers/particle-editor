@@ -13,7 +13,7 @@
 
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { GroundTexturePanel } from "../GroundTexturePanel";
+import { GroundTexturePanelBody } from "../GroundTexturePanel";
 import { hexToColorref } from "@/lib/colorref";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
@@ -86,7 +86,7 @@ function makeStubBridge(
 describe("GroundTexturePanel", () => {
   it("clicking a bundled slot dispatches engine/set/ground-texture with the correct slot", () => {
     const bridge = makeStubBridge();
-    render(<GroundTexturePanel bridge={bridge} onClose={() => {}} />);
+    render(<GroundTexturePanelBody bridge={bridge} />);
     // Click the Grass tile (slot 1).
     const grass = screen.getByRole("button", { name: "Grass" });
     fireEvent.click(grass);
@@ -101,7 +101,7 @@ describe("GroundTexturePanel", () => {
     const bridge = makeStubBridge({
       groundSlotAvailable: [true, false, true, false, true, true, true, true],
     });
-    render(<GroundTexturePanel bridge={bridge} onClose={() => {}} />);
+    render(<GroundTexturePanelBody bridge={bridge} />);
 
     // Wait for the (async) snapshot to land so availability is applied.
     // Unavailable tiles get a distinct label, are disabled, and don't dispatch.
@@ -128,7 +128,7 @@ describe("GroundTexturePanel", () => {
 
   it("toggles the unit grid (relocated here from the Reference picker, S48)", () => {
     const bridge = makeStubBridge();
-    render(<GroundTexturePanel bridge={bridge} onClose={() => {}} />);
+    render(<GroundTexturePanelBody bridge={bridge} />);
     fireEvent.click(screen.getByRole("checkbox", { name: "Grid visible" }));
     const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
     const setGrid = calls.find((c) => c.kind === "engine/set/grid-visible");
@@ -138,7 +138,7 @@ describe("GroundTexturePanel", () => {
 
   it("clicking an empty Custom slot dispatches file/pick-open with filter:\"ground\"", async () => {
     const bridge = makeStubBridge({ fileOpen: { ok: false, error: "browser-mode" } });
-    render(<GroundTexturePanel bridge={bridge} onClose={() => {}} />);
+    render(<GroundTexturePanelBody bridge={bridge} />);
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Custom slot 1 \(empty\)/ })).toBeInTheDocument();
     });
@@ -157,7 +157,7 @@ describe("GroundTexturePanel", () => {
 
   it("on a resolved path the chain dispatches set-ground-slot-custom-path then set-ground-texture", async () => {
     const bridge = makeStubBridge({ fileOpen: { ok: true, path: "C:/textures/dirt.dds" } });
-    render(<GroundTexturePanel bridge={bridge} onClose={() => {}} />);
+    render(<GroundTexturePanelBody bridge={bridge} />);
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Custom slot 1 \(empty\)/ })).toBeInTheDocument();
     });
@@ -187,7 +187,7 @@ describe("GroundTexturePanel", () => {
       fileOpen: { ok: true, path: "\\\\attacker\\share\\ground.dds" },
       groundSlotPathError: new Error("ground slot path rejected"),
     });
-    render(<GroundTexturePanel bridge={bridge} onClose={() => {}} />);
+    render(<GroundTexturePanelBody bridge={bridge} />);
     fireEvent.click(
       await screen.findByRole("button", { name: /Custom slot 1 \(empty\)/ }),
     );
@@ -222,7 +222,7 @@ describe("GroundTexturePanel", () => {
         fileOpen: { ok: true, path: "C:/textures/corrupt.dds" },
         groundTextureResult,
       });
-      render(<GroundTexturePanel bridge={bridge} onClose={() => {}} />);
+      render(<GroundTexturePanelBody bridge={bridge} />);
       fireEvent.click(
         await screen.findByRole("button", { name: /Custom slot 1 \(empty\)/ }),
       );
@@ -244,7 +244,7 @@ describe("GroundTexturePanel", () => {
 
   it("changing the Height spinner dispatches engine/set/ground-z", () => {
     const bridge = makeStubBridge();
-    render(<GroundTexturePanel bridge={bridge} onClose={() => {}} />);
+    render(<GroundTexturePanelBody bridge={bridge} />);
     // Spinner commits on blur, not keystroke.
     const height = screen.getByRole("textbox", { name: "Ground height" });
     fireEvent.change(height, { target: { value: "5" } });
@@ -257,7 +257,7 @@ describe("GroundTexturePanel", () => {
 
   it("clicking the Solid colour tile selects slot 4; the native colour input dispatches engine/set/ground-solid-color", () => {
     const bridge = makeStubBridge();
-    const { container } = render(<GroundTexturePanel bridge={bridge} onClose={() => {}} />);
+    const { container } = render(<GroundTexturePanelBody bridge={bridge} />);
 
     // The prominent wide tile both selects the solid-colour slot (4) and
     // (in the host) pops the OS picker via the hidden native input.

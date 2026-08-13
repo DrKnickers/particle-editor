@@ -1,11 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import {
-  MSAA_QUALITY_CHANGED_EVENT,
   readMsaaLevel,
   writeMsaaLevel,
   applyMsaaLevel,
   queryMsaaLevels,
-  type MsaaLevel,
 } from "../msaa-quality";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
@@ -39,14 +37,6 @@ describe("msaa-quality", () => {
   it("survives corrupt / missing localStorage with the default", () => {
     localStorage.removeItem("alo:msaa-quality");
     expect(readMsaaLevel()).toBe(4);
-  });
-
-  it("writeMsaaLevel dispatches the change event", () => {
-    const seen = vi.fn();
-    window.addEventListener(MSAA_QUALITY_CHANGED_EVENT, seen);
-    writeMsaaLevel(2 as MsaaLevel);
-    expect(seen).toHaveBeenCalledTimes(1);
-    window.removeEventListener(MSAA_QUALITY_CHANGED_EVENT, seen);
   });
 
   it("applyMsaaLevel sends the level over the bridge, fire-and-forget", () => {

@@ -16,15 +16,13 @@
 //   4. CompositeEngineFrame keeps running through the stress (composite
 //      count continues to grow).
 //
-// Skip behaviour: gates on ALO_HOSTING_MODE != legacy (default), same
-// pattern as composition-hosting.spec.ts.
+// The native suite always exercises the composition resize path.
 
 import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-const COMPOSITION_MODE = process.env.ALO_HOSTING_MODE !== "legacy";
 const HOST_LOG_PATH = process.env.LOCALAPPDATA
   ? join(process.env.LOCALAPPDATA, "AloParticleEditor", "host.log")
   : "";
@@ -50,15 +48,6 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(({}, testInfo) => {
-  if (!COMPOSITION_MODE) {
-    testInfo.annotations.push({
-      type: "skip-reason",
-      description:
-        "ALO_HOSTING_MODE == 'legacy' (composition mode inactive) — DXGI resize stress not " +
-        "applicable to HWND-mode runs.",
-    });
-    test.skip();
-  }
   if (!HOST_LOG_PATH) {
     testInfo.annotations.push({
       type: "skip-reason",

@@ -15,10 +15,6 @@ const DEFAULT_LEVEL: MsaaLevel = 4;
 
 const KEY = "alo:msaa-quality";
 
-// Same-tab change signal for consumers — the `storage` event only fires in
-// OTHER tabs, and the editor is a single WebView anyway.
-export const MSAA_QUALITY_CHANGED_EVENT = "alo:msaa-quality-changed";
-
 /** Read the persisted MSAA level, returning DEFAULT_LEVEL (4) when absent,
  *  corrupt, or not one of {0, 2, 4, 8}. */
 export function readMsaaLevel(): MsaaLevel {
@@ -33,10 +29,9 @@ export function readMsaaLevel(): MsaaLevel {
   }
 }
 
-/** Persist `level` to localStorage and dispatch the same-tab change event. */
+/** Persist `level` to localStorage. */
 export function writeMsaaLevel(level: MsaaLevel): void {
   localStorage.setItem(KEY, String(level));
-  window.dispatchEvent(new CustomEvent(MSAA_QUALITY_CHANGED_EVENT));
 }
 
 /** Push the saved MSAA level to the engine — fire-and-forget so a failed

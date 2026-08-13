@@ -71,8 +71,6 @@ public:
         return (m_parent != NULL) ? m_parent->GetVelocity() + m_velocity : m_velocity;
     }
 
-	const D3DXVECTOR3& GetRelativeVelocity() const { return m_velocity; }
-	const D3DXVECTOR3& GetRelativePosition() const { return m_position; }
 
     bool Detached() const { return m_parent == NULL; }
 
@@ -204,7 +202,6 @@ public:
 	// changing the instance-list size (KillParticleSystem cleanup).
 	void InvalidatePausedIdleSkip() { m_lastUpdatedSimTime = -1.0f; }
 
-	const D3DXMATRIX& GetProjectionMatrix()   const { return m_projection; }
 	// Combined view*projection (recomputed wherever view or projection
 	// changes — SetCamera, SetSceneViewport). Used to project the gizmo origin to
 	// the React overlay for the in-drag readout pill.
@@ -220,13 +217,11 @@ public:
 	bool     GetGround() const		{ return m_showGround; }
 	// [shadow] "Model shadows" render preference (default on). Pure view toggle —
 	// never marks the document dirty. Persisted web-side (localStorage).
-	bool     GetModelShadows() const { return m_modelShadowsEnabled; }
 	void     SetModelShadows(bool enable) { m_modelShadowsEnabled = enable; }
 	// [soft-shadows] "Soft shadows" render preference (default on). Pure view
 	// toggle — never marks the document dirty. Persisted web-side (localStorage).
 	// Only meaningful when model shadows are on; falls back to the hard darken
 	// path when off, or when the blur effect / mask RT is unavailable.
-	bool     GetSoftShadows() const { return m_softShadowsEnabled; }
 	void     SetSoftShadows(bool enable) { m_softShadowsEnabled = enable; }
 
 	// [shadow-leak hunt] Env-gated diagnostic: dump a COMPREHENSIVE D3D9
@@ -525,11 +520,7 @@ public:
 	const D3DXVECTOR3& GetWind() const    { return m_wind; }
     Effect* GetShader(int i) const        { return m_pShaders[i]; }
 
-	// read-only access to lighting state for the Lighting dialog's
-	// startup seed and WM_USER reseed-from-engine path after Reset View
-	// Settings. The dialog itself owns the UI representation (RGB +
-	// intensity + angles); these getters are used only to read back what
-	// was last pushed.
+	// Read-only lighting state used by BridgeDispatcher to build snapshots.
 	const Light&       GetLight(LightType which) const;
 	const D3DXVECTOR4& GetAmbient() const { return m_ambient; }
 	const D3DXVECTOR4& GetShadow()  const { return m_shadow;  }

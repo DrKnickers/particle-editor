@@ -4,7 +4,7 @@
 // event handlers on the in-DOM <canvas>, decodes the discriminated
 // `type` payload into a Win32 message, and PostMessages it to the
 // (hidden) viewport popup HWND. The engine's existing viewport
-// WNDPROC (HostWindow.cpp:1075-1371) consumes the synthetic messages
+// WNDPROC consumes the synthetic messages
 // unchanged — it reads modifiers exclusively from wParam MK_* bits
 // and decodes coords from MAKEPOINTS(lParam), so the host-side
 // reconstruction is mechanical.
@@ -18,7 +18,7 @@
 // queue; the popup WNDPROC drains it on the next pump iteration.
 //
 // Note on hidden HWND + SetFocus: WM_RBUTTONDOWN's handler calls
-// SetFocus(hwnd) at HostWindow.cpp:1156. SetFocus on a hidden window
+// SetFocus(hwnd). SetFocus on a hidden window
 // fails silently and the handler doesn't check the return value, so
 // this is accepted — no fix needed. Focus stays on the WebView
 // throughout, which is what keyboard forwarding from the renderer

@@ -59,7 +59,7 @@ Serve the folder over HTTP (a `file://` open also works, but a server matches pr
 node web/apps/editor/tests-site/serve.mjs   # serves site/ on http://localhost:5175
 ```
 
-By default the page loads posters/clips from the `site-media` release URLs. To preview with
+By default the page loads posters/clips from the site's `media/` directory. To preview with
 **local placeholder media**, drop files into `site/media-local/` (gitignored) — the page
 references `hero.mp4`, `faith.mp4`, `f02.mp4` (atlas picker), `f02-reorder.mp4` (F2 emitter
 reorder), and `f04.mp4` (F4 mod stack), each with a matching `*-poster.jpg`, plus the paired

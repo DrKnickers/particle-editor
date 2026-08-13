@@ -12,7 +12,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
-import { BackgroundPicker } from "../BackgroundPicker";
+import { BackgroundPickerBody } from "../BackgroundPicker";
 import { MockBridge } from "@/bridge/mock";
 import { useMockEngineState, makeDefaultEngineState } from "@/bridge/mock-state";
 import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
@@ -55,7 +55,7 @@ function makeSnapshotBridge(partial: Partial<EngineStateDto>): Bridge {
 describe("BackgroundPicker — game dome", () => {
   it("populates the primary selector from skydome-list and dispatches on change", async () => {
     const bridge = new MockBridge();
-    render(<BackgroundPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    render(<BackgroundPickerBody bridge={bridge as unknown as Bridge} />);
 
     // Default context is Space → the mock returns Stars_* primaries.
     const primary = await screen.findByRole("combobox", { name: "Primary dome" });
@@ -73,7 +73,7 @@ describe("BackgroundPicker — game dome", () => {
 
   it("switching context to Land re-enumerates the lists", async () => {
     const bridge = new MockBridge();
-    render(<BackgroundPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    render(<BackgroundPickerBody bridge={bridge as unknown as Bridge} />);
     await screen.findByRole("combobox", { name: "Primary dome" });
 
     fireEvent.click(screen.getByRole("button", { name: "land" }));
@@ -90,7 +90,7 @@ describe("BackgroundPicker — skydome load status", () => {
       skydomePrimaryName: "Stars_Low",
       skydomePrimaryStatus: "ok",
     });
-    render(<BackgroundPicker bridge={bridge} onClose={() => {}} />);
+    render(<BackgroundPickerBody bridge={bridge} />);
 
     const indicator = await screen.findByRole("status", { name: "Active background" });
     // The indicator renders at mount as "Solid colour" and flips to "Game dome" only
@@ -106,7 +106,7 @@ describe("BackgroundPicker — skydome load status", () => {
       skydomePrimaryName: "Broken_Sky",
       skydomePrimaryStatus: "load-failed",
     });
-    render(<BackgroundPicker bridge={bridge} onClose={() => {}} />);
+    render(<BackgroundPickerBody bridge={bridge} />);
 
     // The chosen Name still shows in the dropdown (controlled by the name)...
     const primary = await screen.findByRole("combobox", { name: "Primary dome" });
@@ -124,7 +124,7 @@ describe("BackgroundPicker — skydome load status", () => {
       skydomeSecondaryName: "Broken_Sky",
       skydomeSecondaryStatus: "load-failed",
     });
-    render(<BackgroundPicker bridge={bridge} onClose={() => {}} />);
+    render(<BackgroundPickerBody bridge={bridge} />);
 
     const secondary = await screen.findByRole("combobox", { name: "Secondary dome" });
     await screen.findByText("Couldn't load this dome's model.");
@@ -138,7 +138,7 @@ describe("BackgroundPicker — skydome load status", () => {
       skydomeSecondaryName: "Nebula_Field_Blue",
       skydomeSecondaryStatus: "ok",
     });
-    render(<BackgroundPicker bridge={bridge} onClose={() => {}} />);
+    render(<BackgroundPickerBody bridge={bridge} />);
 
     const indicator = await screen.findByRole("status", { name: "Active background" });
     await within(indicator).findByText("Game dome");
@@ -149,7 +149,7 @@ describe("BackgroundPicker — skydome load status", () => {
     // Regression guard: dropping the skydomeSlot read would make the indicator
     // claim "Solid colour" while the engine still renders the legacy texture.
     const bridge = makeSnapshotBridge({ skydomeSlot: 9 });
-    render(<BackgroundPicker bridge={bridge} onClose={() => {}} />);
+    render(<BackgroundPickerBody bridge={bridge} />);
 
     const indicator = await screen.findByRole("status", { name: "Active background" });
     await within(indicator).findByText("Custom texture");
@@ -161,7 +161,7 @@ describe("BackgroundPicker — skydome load status", () => {
 
   it("end-to-end: a missing dome dispatched through the mock surfaces load-failed", async () => {
     const bridge = new MockBridge();
-    render(<BackgroundPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    render(<BackgroundPickerBody bridge={bridge as unknown as Bridge} />);
     await screen.findByRole("combobox", { name: "Primary dome" });
 
     // Drive the dispatch directly (awaiting it drains the initial-snapshot
@@ -182,7 +182,7 @@ describe("BackgroundPicker — skydome load status", () => {
 describe("BackgroundPicker — no custom texture slots", () => {
   it("renders no Browse... custom-slot tiles", async () => {
     const bridge = new MockBridge();
-    render(<BackgroundPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    render(<BackgroundPickerBody bridge={bridge as unknown as Bridge} />);
     // Wait for the body to mount.
     await screen.findByRole("combobox", { name: "Primary dome" });
     expect(screen.queryByRole("button", { name: /Custom slot/ })).toBeNull();

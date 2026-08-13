@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   initModStack,
-  getModStack,
+  useModStack,
   refreshModStack,
   __setModStackForTests,
   __resetModStackForTests,
@@ -53,15 +53,15 @@ function makeFakeBridge(initialStack: string[] = ["A", "B"]) {
 }
 
 describe("mod-stack store", () => {
-  it("__setModStackForTests + getModStack round-trips", () => {
+  it("__setModStackForTests updates the hook store", () => {
     __setModStackForTests(["A", "B"]);
-    expect(getModStack()).toEqual(["A", "B"]);
+    expect(useModStack.getState().stack).toEqual(["A", "B"]);
   });
 
   it("__resetModStackForTests clears the stack", () => {
     __setModStackForTests(["X"]);
     __resetModStackForTests();
-    expect(getModStack()).toEqual([]);
+    expect(useModStack.getState().stack).toEqual([]);
   });
 });
 
@@ -70,7 +70,7 @@ describe("initModStack", () => {
     const bridge = makeFakeBridge(["C", "D"]);
     initModStack(bridge as never);
     // mods/list is async — wait for microtasks
-    await vi.waitFor(() => expect(getModStack()).toEqual(["C", "D"]));
+    await vi.waitFor(() => expect(useModStack.getState().stack).toEqual(["C", "D"]));
   });
 
   it("registers an engine/state/changed handler", () => {
@@ -82,19 +82,19 @@ describe("initModStack", () => {
   it("refreshes the stack when engine/state/changed fires", async () => {
     const bridge = makeFakeBridge(["A"]);
     initModStack(bridge as never);
-    await vi.waitFor(() => expect(getModStack()).toEqual(["A"]));
+    await vi.waitFor(() => expect(useModStack.getState().stack).toEqual(["A"]));
 
     // Simulate a mod switch: mutate stackRef so bridge returns a new stack.
     bridge.stackRef.current = ["B", "A"];
     bridge.fire("engine/state/changed");
 
-    await vi.waitFor(() => expect(getModStack()).toEqual(["B", "A"]));
+    await vi.waitFor(() => expect(useModStack.getState().stack).toEqual(["B", "A"]));
   });
 
   it("does not request mods/list when activeModPath is unchanged", async () => {
     const bridge = makeFakeBridge(["A"]);
     initModStack(bridge as never);
-    await vi.waitFor(() => expect(getModStack()).toEqual(["A"]));
+    await vi.waitFor(() => expect(useModStack.getState().stack).toEqual(["A"]));
 
     bridge.fire("engine/state/changed", { activeModPath: "A" });
     await vi.waitFor(() => expect(bridge.request).toHaveBeenCalledTimes(2));
@@ -109,7 +109,7 @@ describe("initModStack", () => {
   it("requests mods/list once when activeModPath changes", async () => {
     const bridge = makeFakeBridge(["A"]);
     initModStack(bridge as never);
-    await vi.waitFor(() => expect(getModStack()).toEqual(["A"]));
+    await vi.waitFor(() => expect(useModStack.getState().stack).toEqual(["A"]));
 
     bridge.fire("engine/state/changed", { activeModPath: "A" });
     await vi.waitFor(() => expect(bridge.request).toHaveBeenCalledTimes(2));
@@ -119,7 +119,7 @@ describe("initModStack", () => {
     bridge.fire("engine/state/changed", { activeModPath: "B" });
 
     expect(bridge.request).toHaveBeenCalledTimes(1);
-    await vi.waitFor(() => expect(getModStack()).toEqual(["B", "A"]));
+    await vi.waitFor(() => expect(useModStack.getState().stack).toEqual(["B", "A"]));
   });
 
   it("calls invalidatePreviewCache when engine/state/changed fires with a CHANGED stack", async () => {
@@ -164,14 +164,14 @@ describe("initModStack", () => {
   it("refreshModStack forces a mods/list fetch even when activeModPath is unchanged", async () => {
     const bridge = makeFakeBridge(["A", "B"]);
     initModStack(bridge as never);
-    await vi.waitFor(() => expect(getModStack()).toEqual(["A", "B"]));
+    await vi.waitFor(() => expect(useModStack.getState().stack).toEqual(["A", "B"]));
 
     bridge.request.mockClear();
     bridge.stackRef.current = ["A", "C"]; // front unchanged, tail edited
     refreshModStack();
 
     expect(bridge.request).toHaveBeenCalledTimes(1);
-    await vi.waitFor(() => expect(getModStack()).toEqual(["A", "C"]));
+    await vi.waitFor(() => expect(useModStack.getState().stack).toEqual(["A", "C"]));
   });
 
   it("refreshModStack is a no-op after dispose", () => {

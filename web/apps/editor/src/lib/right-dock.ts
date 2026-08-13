@@ -2,10 +2,8 @@
 //
 // The right column holds EITHER the Spawner OR the Lighting pane
 // (mutually exclusive), or nothing. This replaces lib/spawner-visibility.ts:
-// the Spawner used to be the only docked right column and Lighting was a
-// floating `ToolPanel` overlay. Lighting is now promoted to a
-// docked pane that shares one slot with the Spawner — opening one closes
-// the other.
+// the Spawner used to be the only docked right column. Lighting now shares
+// that slot with the Spawner — opening one closes the other.
 //
 // Persists to localStorage('alo:right-dock') as "spawner" | "lighting" |
 // "atlas" | "none". Migrates the legacy 'alo:spawner-visible' boolean on first read
@@ -14,8 +12,7 @@
 //
 // The Toolbar's Spawner toggle, the View menu's Spawner (F7) + Lighting
 // entries, the SpawnerPanel's X-close, and PanelLayout's column all read +
-// write through this single store so they stay in sync. Mirrors the pattern
-// in lib/tool-panel.ts.
+// write through this single store so they stay in sync.
 
 import { create } from "zustand";
 

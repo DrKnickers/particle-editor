@@ -1,23 +1,19 @@
-// ToolPanel — shared shell for the modeless tool
-// windows (Lighting, Bloom Settings, Ground Texture, Background).
+// ToolPanel — shared shell for docked tool panes.
 //
 // Lives under `components/` (app-shell-style), not `primitives/`,
-// because it owns layout positioning (absolute-right, full-height of
-// the main row) and is opinionated about chrome — not a reusable atom
+// because it owns the right-column layout and is opinionated about chrome — not a reusable atom
 // like Spinner or ColorButton.
 //
 // Compound API:
-//   <ToolPanel title="Lighting" onClose={() => setOpenToolPanel(null)}>
+//   <ToolPanel title="Lighting" onClose={closeLighting}>
 //     <ToolPanel.Section title="Sun">...</ToolPanel.Section>
 //     ...
 //   </ToolPanel>
 //
-// Chrome cues borrowed from BackgroundPicker (the pre-existing
-// reference implementation): 320 px wide, dark surface, 48 px header
+// Chrome uses the established panel treatment: 320 px wide, dark surface, 48 px header
 // with title + `×` close glyph, scrollable body. The 48 px header height
 // matches the shared Modal so the eye reads them as the same family
-// even though one is portalled overlay and the other slides over the
-// main row.
+// even though one is a modal and the other is a docked pane.
 //
 // The host is non-modal: the user can interact with the viewport,
 // menus, and other UI freely while a ToolPanel is open. Esc and
@@ -32,10 +28,6 @@ type ToolPanelProps = {
   title: string;
   onClose: () => void;
   children?: ReactNode;
-  /** "overlay" (default) floats over the viewport, absolute-right, 320px.
-   *  "docked" fills its parent layout column (the right-dock slot, shared
-   *  with the Spawner). */
-  variant?: "overlay" | "docked";
   /** True while the dock is sliding shut (logically closed but still mounted
    *  for the exit animation). Stamps data-state="closing" on the dialog so it
    *  no longer matches the "open ToolPanel" selector
@@ -59,12 +51,9 @@ export function ToolPanel({
   title,
   onClose,
   children,
-  variant = "overlay",
   closing = false,
   bodyScroll = true,
 }: ToolPanelProps) {
-  const docked = variant === "docked";
-
   // Focus management (design pass, B4). Non-modal dialog, so no trap — just:
   // (1) INITIAL FOCUS, only for explicit chrome-triggered opens: if the
   //     element focused at mount lives in the toolbar or menubar (the panel
@@ -74,8 +63,8 @@ export function ToolPanel({
   //     the curve editor) don't match and never steal focus.
   // (2) FOCUS RETURN at the LOGICAL close — `closing` flips ~260ms before
   //     the docked unmount (the slot goes inert for the slide-out), so the
-  //     restore must run then, not at unmount; the overlay variant unmounts
-  //     directly, so a cleanup covers it. Restores to the recorded opener
+  //     restore must run then, not at unmount. A cleanup also covers a dock
+  //     swap. Restores to the recorded opener
   //     only if focus is still INSIDE the panel (never yanks focus the user
   //     moved elsewhere) and the opener is still connected. A dock-to-dock
   //     swap runs the old panel's cleanup before the new panel's mount
@@ -116,7 +105,7 @@ export function ToolPanel({
       if (opener && opener.isConnected) opener.focus();
     };
     if (closing) restore();
-    return restore; // unmount path (overlay variant / dock swap)
+    return restore; // unmount path (dock swap)
   }, [closing]);
 
   return (
@@ -128,11 +117,7 @@ export function ToolPanel({
         const to = e.relatedTarget as Node | null;
         if (to !== null && !e.currentTarget.contains(to)) ownedFocusRef.current = false;
       }}
-      className={
-        docked
-          ? "flex h-full w-full flex-col border-l border-border bg-bg text-text outline-none"
-          : "absolute right-0 top-0 bottom-0 z-10 flex w-80 flex-col border-l border-border bg-bg text-text outline-none"
-      }
+      className="flex h-full w-full flex-col border-l border-border bg-bg text-text outline-none"
       role="dialog"
       aria-label={title}
       data-state={closing ? "closing" : undefined}

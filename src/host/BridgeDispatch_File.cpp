@@ -68,12 +68,12 @@ static void CorruptRecoveryCandidateForTest(bool testHost,
 #endif
 }
 
-bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx, const std::string& kind)
+bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
 {
     // DispatchInternal-local aliases so the moved ladder blocks below stay
     // verbatim (plan #3A transforms only).
     const json&        params = ctx.params;
-    const std::string& id     = ctx.id;
+    const std::string& kind   = ctx.kind;
 
     // Native-only budget seam. It intentionally queries the bound UndoStack
     // instance rather than echoing UndoStack::MAX_TOTAL_BYTES, so the native
@@ -235,15 +235,9 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx, const std::str
 
     // -------- file/* ----------------------
     //
-    // The new-UI host doesn't yet own a ParticleSystem* (emitter / file-
-    // load wiring is later work). So the file handlers
-    // perform the *editor-level* side of the operation — currentFilePath
-    // tracking, dirty flag, recent-files registry, native picker
-    // round-trip — but skip the engine-level ParticleSystem read/write
-    // until that pointer exists. Same forward-compatible no-op pattern
-    // as engine/action/rescale-system. (The legacy `DoNewFile` /
-    // `DoOpenFile` / `DoSaveFile` handlers in src/main.cpp were since
-    // removed; these bridge handlers are now the only file-operation path.)
+    // File handlers own the editor-level operation — currentFilePath tracking,
+    // dirty flag, recent-files registry, and native picker round-trips — then
+    // update the host ParticleSystem through the bound state.
 
     // -------- file/new --------
     // replace the host-owned ParticleSystem with a fresh empty

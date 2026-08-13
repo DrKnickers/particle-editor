@@ -320,7 +320,7 @@ export function LightingPanel({ bridge, onClose, closing }: Props) {
 
   const handleForceAlignToggle = (enabled: boolean) => {
     setForceAlign(enabled);
-    // Persist to the registry so the flag syncs with the legacy UI.
+    // Persist the preference so it survives editor restarts.
     // Fire-and-forget; the in-memory state is the source of truth for
     // the rest of the session. (Host no-ops the write under --test-host.)
     void bridge.request({
@@ -428,7 +428,7 @@ export function LightingPanel({ bridge, onClose, closing }: Props) {
   };
 
   return (
-    <ToolPanel title="Lighting" onClose={onClose} variant="docked" closing={closing}>
+    <ToolPanel title="Lighting" onClose={onClose} closing={closing}>
       <ToolPanel.Section title="Sun" defaultOpen>
         <ToolPanel.Row label="Intensity">
           <Spinner
