@@ -11,7 +11,7 @@ cl /nologo /EHsc /std:c++17 /MDd /Zi ^
    /I "libs\expat-2.2.0\include" /I "%DXSDK_DIR%Include" /I "src" ^
    /Fe:tests\dump_fire_emitter.exe /Fo:tests\obj\ ^
    tests\dump_fire_emitter.cpp ^
-   src\ParticleSystem.cpp src\ChunkReader.cpp src\ChunkWriter.cpp ^
+   src\ParticleSystem.cpp src\ParticleSystemSerialization.cpp src\ChunkReader.cpp src\ChunkWriter.cpp ^
    src\crc32.cpp src\files.cpp src\utils.cpp src\LinkGroup.cpp ^
    /link /LIBPATH:"%DXSDK_DIR%Lib\x64" d3d9.lib d3dx9.lib shlwapi.lib ole32.lib oleaut32.lib advapi32.lib user32.lib
 set ERR=%errorlevel%

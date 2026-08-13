@@ -1,7 +1,8 @@
 @echo off
 REM Build the production-linked autosave filesystem/recovery contract test.
-REM Links Autosave.cpp plus the exact ParticleSystem serializer/parser TUs used
-REM by the editor. AUTOSAVE_TESTING exposes only the pre-commit corruption hook;
+REM Links Autosave.cpp plus the exact ParticleSystem.cpp +
+REM ParticleSystemSerialization.cpp serializer/parser TUs used by the editor.
+REM AUTOSAVE_TESTING exposes only the pre-commit corruption hook;
 REM directory selection still flows through production GetTempPathW and
 REM ScanForOrphan.
 setlocal
@@ -19,7 +20,7 @@ cl /nologo /EHsc /std:c++17 /MDd /Zi ^
    /I "packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\include" ^
    /Fe:tests\test_autosave_recover.exe /Fo:tests\obj\ ^
    tests\test_autosave_recover.cpp src\Autosave.cpp ^
-   src\ParticleSystem.cpp src\ChunkReader.cpp src\ChunkWriter.cpp ^
+   src\ParticleSystem.cpp src\ParticleSystemSerialization.cpp src\ChunkReader.cpp src\ChunkWriter.cpp ^
    src\crc32.cpp src\files.cpp src\utils.cpp src\LinkGroup.cpp ^
    /link /LIBPATH:"%DXSDK_DIR%Lib\x64" d3d9.lib d3dx9.lib ^
    shlwapi.lib shell32.lib ole32.lib oleaut32.lib advapi32.lib user32.lib

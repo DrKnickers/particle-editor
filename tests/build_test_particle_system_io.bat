@@ -4,7 +4,7 @@ REM console exe. The wrapper bodies (LoadParticleSystem/SaveParticleSystem)
 REM live in src\main.cpp inside the composed-app TU, so this test links the
 REM exact machinery they wrap instead: PhysicalFile + ParticleSystem(IFile*)
 REM + ParticleSystem::write, over the same data-model TU set as
-REM test_alo_roundtrip (ParticleSystem + ChunkReader + ChunkWriter + crc32 +
+REM test_alo_roundtrip (ParticleSystem + ParticleSystemSerialization + ChunkReader + ChunkWriter + crc32 +
 REM files + utils + LinkGroup). ParticleSystem.cpp transitively includes
 REM xml.h, so the expat include path is needed to compile; no XML symbol is
 REM exercised, so the expat lib is NOT linked.
@@ -22,7 +22,7 @@ cl /nologo /EHsc /std:c++17 /MDd /Zi ^
    /I "packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\include" ^
    /Fe:tests\test_particle_system_io.exe /Fo:tests\obj\ ^
    tests\test_particle_system_io.cpp ^
-   src\ParticleSystem.cpp src\ChunkReader.cpp src\ChunkWriter.cpp ^
+   src\ParticleSystem.cpp src\ParticleSystemSerialization.cpp src\ChunkReader.cpp src\ChunkWriter.cpp ^
    src\crc32.cpp src\files.cpp src\utils.cpp src\LinkGroup.cpp ^
    /link /LIBPATH:"%DXSDK_DIR%Lib\x64" d3d9.lib d3dx9.lib shlwapi.lib ole32.lib oleaut32.lib advapi32.lib user32.lib
 

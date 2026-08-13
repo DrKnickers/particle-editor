@@ -215,6 +215,9 @@
     <ClCompile Include="ParticleSystem.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ParticleSystemSerialization.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="ParticleSystemInstance.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

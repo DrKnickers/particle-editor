@@ -179,6 +179,7 @@
     <ClCompile Include="ModManager.cpp" />
     <ClCompile Include="MegaFiles.cpp" />
     <ClCompile Include="ParticleSystem.cpp" />
+    <ClCompile Include="ParticleSystemSerialization.cpp" />
     <ClCompile Include="ParticleSystemInstance.cpp" />
     <ClCompile Include="Rescale.cpp" />
     <ClCompile Include="Autosave.cpp" />
