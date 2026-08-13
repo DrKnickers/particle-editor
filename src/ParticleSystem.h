@@ -436,6 +436,14 @@ public:
                                               const LinkExemptFlags&  flags);
 
 private:
+    // Reassemble m_emitters so roots appear in `newRoots` order, each root's
+    // subtree collected in current m_emitters order (handles non-contiguous
+    // subtrees), then reassign index = position and rewrite parent spawn-field
+    // indices. `roots` is the CURRENT root order (index into it via each root's
+    // stored ->index). Shared by moveEmitterToRootIndex and reorderManyRootsToIndex.
+    void reassembleByRootOrder(const std::vector<Emitter*>& roots,
+                               const std::vector<Emitter*>& newRoots);
+
 	bool			 	                       m_leaveParticles;
 	std::string                                m_name;
 	std::vector<Emitter*>                      m_emitters;

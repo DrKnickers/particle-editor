@@ -60,6 +60,37 @@ static void buildRepro(Repro& r)
     ASSERT_EQ(r.P->spawnOnDeath,    r.C2->index);
 }
 
+// Build the same P subtree with Q interleaved between its children:
+// m_emitters = [P, C1, Q, C2]. This guards against a DFS or contiguous-slice
+// reassembly, either of which would lose the current vector ordering.
+static void buildReproInterleaved(Repro& r)
+{
+    r.P  = r.ps.addRootEmitter();
+    r.C1 = r.ps.addLifetimeEmitter(r.P);   // P.spawnDuringLife = C1->index
+    r.Q  = r.ps.addRootEmitter();          // lands between C1 and C2
+    r.C2 = r.ps.addDeathEmitter(r.P);      // P.spawnOnDeath    = C2->index
+    // Sanity: the interleaved repro is wired as expected before any reorder.
+    ASSERT_EQ(r.P->spawnDuringLife, r.C1->index);
+    ASSERT_EQ(r.P->spawnOnDeath,    r.C2->index);
+}
+
+static void assertInterleavedReorder(const Repro& r)
+{
+    // P's interleaved subtree must be reunited after Q, preserving its slots.
+    ASSERT_EQ(r.P->spawnDuringLife, r.C1->index);
+    ASSERT_EQ(r.P->spawnOnDeath,    r.C2->index);
+    ASSERT_EQ(r.C1->parent, r.P);
+    ASSERT_EQ(r.C2->parent, r.P);
+
+    ASSERT_EQ(r.ps.getEmitters().size(), 4);
+    ASSERT_EQ(&r.ps.getEmitter(0), r.Q);
+    ASSERT_EQ(&r.ps.getEmitter(1), r.P);
+    ASSERT_EQ(&r.ps.getEmitter(2), r.C1);
+    ASSERT_EQ(&r.ps.getEmitter(3), r.C2);
+    for (size_t i = 0; i < r.ps.getEmitters().size(); i++)
+        ASSERT_EQ(r.ps.getEmitter(i).index, i);
+}
+
 // reorder-many: drag P below Q. New layout [Q, P, C1, C2] aliases C2's new
 // index (3) with... actually aliases C1.new(2)==C2.old(2): the exact trigger.
 static void test_reorder_many_preserves_slots()
@@ -94,11 +125,33 @@ static void test_move_to_root_index_preserves_slots()
     ASSERT_EQ(r.P->spawnOnDeath,    r.C2->index);
 }
 
+// reorder-many must collect P's non-contiguous subtree from vector order,
+// rather than treating the range from P to the next root as its subtree.
+static void test_reorder_many_reunites_interleaved_subtree()
+{
+    Repro r; buildReproInterleaved(r);
+    std::vector<Emitter*> sel = { r.P };
+    std::vector<size_t> out;
+    bool ok = r.ps.reorderManyRootsToIndex(sel, 2 /* after last root */, out);
+    ASSERT_EQ(ok, true);
+    assertInterleavedReorder(r);
+}
+
+static void test_move_to_root_index_reunites_interleaved_subtree()
+{
+    Repro r; buildReproInterleaved(r);
+    bool ok = r.ps.moveEmitterToRootIndex(r.P, 2 /* after last root */);
+    ASSERT_EQ(ok, true);
+    assertInterleavedReorder(r);
+}
+
 int main()
 {
     test_reorder_many_preserves_slots();
     test_move_emitter_preserves_slots();
     test_move_to_root_index_preserves_slots();
+    test_reorder_many_reunites_interleaved_subtree();
+    test_move_to_root_index_reunites_interleaved_subtree();
     std::printf("\n=== Results: %d passed, %d failed ===\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;
 }

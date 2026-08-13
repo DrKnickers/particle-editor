@@ -1521,6 +1521,65 @@ void rewriteParentSpawnIndices(const std::vector<ParticleSystem::Emitter*>& move
 
 } // namespace
 
+void ParticleSystem::reassembleByRootOrder(const std::vector<Emitter*>& roots,
+                                           const std::vector<Emitter*>& newRoots)
+{
+    // Collect each root's subtree in m_emitters vector order. Iterating
+    // m_emitters preserves intra-subtree ordering (matches the convention
+    // moveEmitter already established for adjacent swaps); pre-order via
+    // spawn-field traversal would also work but produces a different
+    // ordering when a subtree's emitters aren't contiguous in m_emitters.
+    auto rootOf = [this](Emitter* e) -> Emitter* {
+        while (e->parent != NULL) e = e->parent;
+        return e;
+    };
+
+    std::vector<std::vector<Emitter*>> subtrees(roots.size());
+    std::vector<size_t> rootOrderIdx(m_emitters.size(), (size_t)-1);
+    for (size_t i = 0; i < roots.size(); i++) rootOrderIdx[roots[i]->index] = i;
+
+    for (size_t i = 0; i < m_emitters.size(); i++)
+    {
+        Emitter* e = m_emitters[i];
+        Emitter* r = rootOf(e);
+        size_t   k = rootOrderIdx[r->index];
+        subtrees[k].push_back(e);
+    }
+
+    // Reassemble m_emitters by walking the new root order and concatenating
+    // each root's subtree.
+    std::vector<Emitter*> reordered;
+    reordered.reserve(m_emitters.size());
+    std::vector<size_t>   oldIndices;
+    oldIndices.reserve(m_emitters.size());
+    for (Emitter* r : newRoots)
+    {
+        // Find the original index of this root in `roots` so we can copy
+        // its already-collected subtree.
+        for (size_t k = 0; k < roots.size(); k++)
+        {
+            if (roots[k] == r)
+            {
+                for (Emitter* e : subtrees[k])
+                {
+                    oldIndices.push_back(e->index);
+                    reordered.push_back(e);
+                }
+                break;
+            }
+        }
+    }
+
+    // Install the new layout and reassign indices.
+    m_emitters = reordered;
+    for (size_t i = 0; i < m_emitters.size(); i++) m_emitters[i]->index = i;
+
+    // Rewrite parent spawn-field indices that referenced any moved emitter.
+    // The parent pointer is stable across this operation; only the integer
+    // index it stored has shifted. (Two-pass; see rewriteParentSpawnIndices.)
+    rewriteParentSpawnIndices(reordered, oldIndices);
+}
+
 bool ParticleSystem::moveEmitter(Emitter* emitter, int direction)
 {
     if (emitter == NULL || emitter->parent != NULL) return false;
@@ -1655,60 +1714,7 @@ bool ParticleSystem::moveEmitterToRootIndex(Emitter* emitter, size_t targetRootI
     size_t insertAt = (targetRootIndex > sourceRootIdx) ? targetRootIndex - 1 : targetRootIndex;
     newRoots.insert(newRoots.begin() + insertAt, emitter);
 
-    // Collect each root's subtree in m_emitters vector order. Iterating
-    // m_emitters preserves intra-subtree ordering (matches the convention
-    // moveEmitter already established for adjacent swaps); pre-order via
-    // spawn-field traversal would also work but produces a different
-    // ordering when a subtree's emitters aren't contiguous in m_emitters.
-    auto rootOf = [this](Emitter* e) -> Emitter* {
-        while (e->parent != NULL) e = e->parent;
-        return e;
-    };
-
-    std::vector<std::vector<Emitter*>> subtrees(roots.size());
-    std::vector<size_t> rootOrderIdx(m_emitters.size(), (size_t)-1);
-    for (size_t i = 0; i < roots.size(); i++) rootOrderIdx[roots[i]->index] = i;
-
-    for (size_t i = 0; i < m_emitters.size(); i++)
-    {
-        Emitter* e = m_emitters[i];
-        Emitter* r = rootOf(e);
-        size_t   k = rootOrderIdx[r->index];
-        subtrees[k].push_back(e);
-    }
-
-    // Reassemble m_emitters by walking the new root order and concatenating
-    // each root's subtree.
-    std::vector<Emitter*> reordered;
-    reordered.reserve(m_emitters.size());
-    std::vector<size_t>   oldIndices;
-    oldIndices.reserve(m_emitters.size());
-    for (Emitter* r : newRoots)
-    {
-        // Find the original index of this root in `roots` so we can copy
-        // its already-collected subtree.
-        for (size_t k = 0; k < roots.size(); k++)
-        {
-            if (roots[k] == r)
-            {
-                for (Emitter* e : subtrees[k])
-                {
-                    oldIndices.push_back(e->index);
-                    reordered.push_back(e);
-                }
-                break;
-            }
-        }
-    }
-
-    // Install the new layout and reassign indices.
-    m_emitters = reordered;
-    for (size_t i = 0; i < m_emitters.size(); i++) m_emitters[i]->index = i;
-
-    // Rewrite parent spawn-field indices that referenced any moved emitter.
-    // The parent pointer is stable across this operation; only the integer
-    // index it stored has shifted. (Two-pass; see rewriteParentSpawnIndices.)
-    rewriteParentSpawnIndices(reordered, oldIndices);
+    reassembleByRootOrder(roots, newRoots);
 
     return true;
 }
@@ -1768,48 +1774,8 @@ bool ParticleSystem::reorderManyRootsToIndex(
     newRoots.insert(newRoots.end(), block.begin(), block.end());
     newRoots.insert(newRoots.end(), rest.begin() + insertAt, rest.end());
 
-    // 5. Reassemble m_emitters by subtree + reassign indices + rewrite parent
-    //    spawn fields. Copied from moveEmitterToRootIndex (KEEP IN SYNC):
-    //    collect each root's subtree in m_emitters order, concatenate per the
-    //    new root order, reassign index = position, fix spawnDuringLife /
-    //    spawnOnDeath references that pointed at a moved emitter.
-    auto rootOf = [this](Emitter* e) -> Emitter* {
-        while (e->parent != NULL) e = e->parent;
-        return e;
-    };
-    std::vector<std::vector<Emitter*>> subtrees(N);
-    std::vector<size_t> rootOrderIdx(m_emitters.size(), (size_t)-1);
-    for (size_t i = 0; i < N; i++) rootOrderIdx[roots[i]->index] = i;
-    for (size_t i = 0; i < m_emitters.size(); i++)
-    {
-        Emitter* e = m_emitters[i];
-        Emitter* r = rootOf(e);
-        size_t   k = rootOrderIdx[r->index];
-        subtrees[k].push_back(e);
-    }
-    std::vector<Emitter*> reordered;
-    reordered.reserve(m_emitters.size());
-    std::vector<size_t> oldIndices;
-    oldIndices.reserve(m_emitters.size());
-    for (Emitter* r : newRoots)
-    {
-        for (size_t k = 0; k < N; k++)
-        {
-            if (roots[k] == r)
-            {
-                for (Emitter* e : subtrees[k])
-                {
-                    oldIndices.push_back(e->index);
-                    reordered.push_back(e);
-                }
-                break;
-            }
-        }
-    }
-    m_emitters = reordered;
-    for (size_t i = 0; i < m_emitters.size(); i++) m_emitters[i]->index = i;
-    // Two-pass spawn-field rewrite (see rewriteParentSpawnIndices).
-    rewriteParentSpawnIndices(reordered, oldIndices);
+    // 5. Reassembly shared via reassembleByRootOrder.
+    reassembleByRootOrder(roots, newRoots);
 
     // 6. newIds = the block roots' final positional indices (contiguous run,
     //    in the block's tree order).
