@@ -16,7 +16,7 @@
 //   6. focusedTrack !== "index"  → "Select keys on the index channel…"
 //   happy path                  → grid + preview box
 
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { useAtlasContext } from "@/lib/atlas-context";
 import { ToolPanel } from "@/components/ToolPanel";
@@ -26,7 +26,6 @@ import {
   frameCount,
   isAtlasTooLarge,
   resolveFrame,
-  cellRect,
   fitGridLayout,
 } from "@/lib/atlas-grid";
 import { useDockAnim } from "@/lib/dock-anim";
@@ -39,7 +38,6 @@ import { runWhenIdle } from "@/lib/run-after-paint";
 // narrow one fewer — see fitGridLayout. The width is FROZEN during the dock
 // slide (see the ResizeObserver's animating-guard below) so it lays out at the
 // settled width, never the narrow mid-slide width.
-const GRID_GAP = 4;
 const GRID_MIN_CELL = 44;
 const GRID_MAX_CELL = 160;
 // Stable empty dead-cell set so the "no dead cells" state never churns identity (React
@@ -50,6 +48,9 @@ import { computeDeadCells } from "@/lib/atlas-dead-cells";
 import { useModStack } from "@/lib/mod-stack";
 import { emitPerfTrace, makePerfSpanId } from "@/lib/perf-trace";
 import { requestTreeRefetch } from "@/lib/tree-refetch";
+import { AtlasFrameGrid } from "./atlas/AtlasFrameGrid";
+import { drawHero, GRID_GAP } from "./atlas/atlas-canvas";
+import { useDecodedImage } from "./atlas/useDecodedImage";
 
 // Module-level cache of the last settled grid width. The panel UNMOUNTS when the
 // dock closes, so component state is lost; persisting the width here lets a
@@ -469,7 +470,7 @@ export function AtlasPickerPanel({
   // drawImage from the full-res `preview` image (one paint, no per-cell DOM and
   // no giant CSS data-URI). So the old downscale/`--atlas-url` machinery is gone
   // — the canvas grid takes the full-res preview directly (null while loading).
-  const okPreview: OkPreviewState | null = preview.kind === "ok" ? preview : null;
+  const okPreview = preview.kind === "ok" ? preview : null;
 
   // Warm the browser's image DECODE cache for BOTH modes as soon as their data
   // URIs load. The data is already prefetched, but the browser only decodes a
@@ -912,348 +913,6 @@ function Placeholder({ children }: { children: React.ReactNode }) {
   );
 }
 
-function useRenderCount(): number {
-  const count = useRef(0);
-  count.current += 1;
-  return count.current;
-}
-
-type OkPreviewState = Extract<PreviewState, { kind: "ok" }>;
-type AtlasGridLayout = ReturnType<typeof fitGridLayout>;
-
-// Resolve a CSS custom property (or plain computed style) off a live element,
-// with a fallback for jsdom / a missing token. Canvas draws need concrete color
-// strings, not `var(--x)`. Only ever called once a 2d context exists (real
-// browser), so getComputedStyle is safe.
-function cssVar(el: Element, name: string, fallback: string): string {
-  const v = getComputedStyle(el).getPropertyValue(name).trim();
-  return v || fallback;
-}
-
-interface DrawOpts {
-  cols: number;
-  cell: number;
-  side: number;
-  totalCells: number;
-  highlight: number | null;
-  rovingTarget: number;
-  deadCells: ReadonlySet<number>;
-  focusVisible: boolean;
-}
-
-/** [#572] Paint the WHOLE atlas onto the grid canvas in ONE pass: every frame
- *  via a single drawImage, a dark scrim washing dead cells toward the panel
- *  gray, an always-on frame-index badge, the amber selection ring on
- *  `highlight`, and the blue focus outline on `rovingTarget` (when focused).
- *  Internal resolution = CSS size × min(dpr, 2). No-ops gracefully with no 2d
- *  context (jsdom) or before the image has loaded (the canvas's own bg-bg-2
- *  shows through until then). */
-function drawGrid(canvas: HTMLCanvasElement, img: HTMLImageElement | null, o: DrawOpts) {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return; // jsdom / no 2d context — no-op
-  const { cols, cell, side, totalCells, highlight, rovingTarget, deadCells, focusVisible } = o;
-  const step = cell + GRID_GAP;
-  const rows = Math.ceil(totalCells / cols);
-  const cssW = cols * cell + (cols - 1) * GRID_GAP;
-  const cssH = rows > 0 ? rows * cell + (rows - 1) * GRID_GAP : 0;
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const W = Math.max(1, Math.round(cssW * dpr));
-  const H = Math.max(1, Math.round(cssH * dpr));
-  if (canvas.width !== W) canvas.width = W;
-  if (canvas.height !== H) canvas.height = H;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // draw in CSS px; the backing is dpr-scaled
-  ctx.clearRect(0, 0, cssW, cssH); // transparent → the canvas's bg-bg-2 shows through
-
-  const amber = cssVar(canvas, "--atlas-selected", "#ffb000");
-  const focusColor = cssVar(canvas, "--accent", "#4ea3ff");
-  const scrimBg = cssVar(canvas, "--overlay-scrim", "rgba(0,0,0,0.55)");
-  const scrimFg = cssVar(canvas, "--overlay-scrim-fg", "#ececec");
-  const panelGray = getComputedStyle(canvas).backgroundColor || "rgb(30,30,30)";
-
-  const at = (k: number) => ({ x: (k % cols) * step, y: Math.floor(k / cols) * step });
-
-  // 1) Frames.
-  if (img) {
-    ctx.imageSmoothingEnabled = true;
-    const iw = img.naturalWidth, ih = img.naturalHeight;
-    for (let k = 0; k < totalCells; k++) {
-      const { x, y } = at(k);
-      const r = cellRect(k, side, iw, ih);
-      try { ctx.drawImage(img, r.left, r.top, r.width, r.height, x, y, cell, cell); } catch { /* skip */ }
-    }
-  }
-
-  // 2) Per-cell overlays: dead scrim + the always-on index badge.
-  ctx.textBaseline = "top";
-  ctx.font = "9px system-ui, -apple-system, sans-serif";
-  for (let k = 0; k < totalCells; k++) {
-    const { x, y } = at(k);
-    const selected = k === highlight;
-    if (deadCells.has(k)) {
-      ctx.save();
-      ctx.globalAlpha = 0.6;
-      ctx.fillStyle = panelGray;
-      ctx.fillRect(x, y, cell, cell);
-      ctx.restore();
-    }
-    const label = String(k);
-    const tw = Math.ceil(ctx.measureText(label).width);
-    const bw = tw + 6, bh = 12, bx = x + 2, by = y + cell - bh - 2;
-    ctx.fillStyle = selected ? amber : scrimBg;
-    ctx.fillRect(bx, by, bw, bh);
-    ctx.fillStyle = selected ? "#000000" : scrimFg;
-    ctx.fillText(label, bx + 3, by + 2);
-  }
-
-  // 3) Selection ring (amber) on the assigned frame.
-  if (highlight !== null && highlight >= 0 && highlight < totalCells) {
-    const { x, y } = at(highlight);
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = amber;
-    ctx.strokeRect(x + 1, y + 1, cell - 2, cell - 2);
-  }
-  // 4) Focus outline (blue) on the roving cell while the grid holds focus.
-  if (focusVisible && rovingTarget >= 0 && rovingTarget < totalCells) {
-    const { x, y } = at(rovingTarget);
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = focusColor;
-    ctx.strokeRect(x + 2, y + 2, cell - 4, cell - 4);
-  }
-}
-
-const AtlasFrameGrid = memo(function AtlasFrameGrid({
-  gridRef,
-  okPreview,
-  totalCells,
-  side,
-  highlight,
-  rovingTarget,
-  deadCells,
-  layout,
-  onGridKeyDown,
-  onFocusCapture,
-  onBlurCapture,
-  onHover,
-  onClick,
-}: {
-  gridRef: React.RefObject<HTMLCanvasElement | null>;
-  okPreview: OkPreviewState | null;
-  totalCells: number;
-  side: number;
-  highlight: number | null;
-  rovingTarget: number;
-  deadCells: ReadonlySet<number>;
-  layout: AtlasGridLayout;
-  onGridKeyDown: (e: React.KeyboardEvent<HTMLElement>) => void;
-  onFocusCapture: () => void;
-  onBlurCapture: (e: React.FocusEvent<HTMLElement>) => void;
-  onHover: (k: number | null) => void;
-  onClick: (k: number) => void;
-}) {
-  const renderCount = useRenderCount();
-  const cols = Math.max(1, layout.cols);
-  const cell = layout.cell;
-  const rows = Math.ceil(totalCells / cols);
-  const contentH = rows > 0 ? rows * cell + (rows - 1) * GRID_GAP : 0;
-  const innerW = cols * cell + (cols - 1) * GRID_GAP;
-
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const overlayRef = useRef<HTMLDivElement | null>(null);
-  const imgRef = useRef<HTMLImageElement | null>(null);
-  const imgUriRef = useRef<string | null>(null); // dataUri the loaded img belongs to
-  const [imgReady, setImgReady] = useState(false);
-  const [focused, setFocused] = useState(false);
-
-  // Store the canvas on BOTH the local ref (draw/hit-test) and the parent's
-  // gridRef (focus + scroll-into-view live in the parent).
-  const setCanvas = useCallback((el: HTMLCanvasElement | null) => {
-    canvasRef.current = el;
-    gridRef.current = el;
-  }, [gridRef]);
-
-  // Load the active preview's dataUri into an HTMLImageElement once per dataUri
-  // (cached via imgUriRef so an alpha toggle / selection change doesn't reload).
-  const dataUri = okPreview?.dataUri ?? null;
-  useEffect(() => {
-    if (!dataUri) { imgRef.current = null; imgUriRef.current = null; setImgReady(false); return; }
-    if (imgUriRef.current === dataUri && imgRef.current) { setImgReady(true); return; }
-    let live = true;
-    setImgReady(false);
-    const img = new Image();
-    img.src = dataUri;
-    const ready = () => { if (!live) return; imgRef.current = img; imgUriRef.current = dataUri; setImgReady(true); };
-    if (typeof img.decode === "function") img.decode().then(ready).catch(() => { /* fall back to onload */ });
-    img.onload = ready;
-    return () => { live = false; };
-  }, [dataUri]);
-
-  // [design pass] The canvas samples tokens via getComputedStyle at draw time,
-  // so a theme flip would leave it painted in the OLD palette. Watch
-  // <html data-theme> and bump a revision: once immediately (custom properties
-  // flip in the same frame), and once after the ~220ms theme-transition window
-  // (theme.ts) — getComputedStyle(canvas).backgroundColor transitions during
-  // the flip, so the settle redraw picks up the final panel gray.
-  const [themeRev, setThemeRev] = useState(0);
-  useEffect(() => {
-    // Settle-timer is tracked so rapid flips coalesce and unmount can't
-    // leak a pending setState (pre-PR review).
-    let settleTimer: number | undefined;
-    const mo = new MutationObserver(() => {
-      setThemeRev((n) => n + 1);
-      window.clearTimeout(settleTimer);
-      settleTimer = window.setTimeout(() => setThemeRev((n) => n + 1), 260);
-    });
-    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    return () => {
-      mo.disconnect();
-      window.clearTimeout(settleTimer);
-    };
-  }, []);
-
-  // Redraw whenever the image, layout, selection, roving target, dead set,
-  // focus, or theme changes. Scrolling does NOT change any of these → no
-  // redraw on scroll.
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    drawGrid(canvas, imgReady ? imgRef.current : null, {
-      cols, cell, side, totalCells, highlight, rovingTarget, deadCells, focusVisible: focused,
-    });
-  }, [imgReady, okPreview, cols, cell, side, totalCells, highlight, rovingTarget, deadCells, focused, themeRev]);
-
-  // Hit-test: map a pointer position to a frame index, or null when the point is
-  // outside the grid or lands in an inter-cell gap.
-  const frameFromEvent = (e: React.MouseEvent): number | null => {
-    const canvas = canvasRef.current;
-    if (!canvas) return null;
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    if (x < 0 || y < 0) return null;
-    const step = cell + GRID_GAP;
-    const col = Math.floor(x / step);
-    const row = Math.floor(y / step);
-    if (col < 0 || col >= cols || row < 0) return null;
-    if (x - col * step >= cell || y - row * step >= cell) return null; // in the gap
-    const k = row * cols + col;
-    return k >= 0 && k < totalCells ? k : null;
-  };
-
-  const handleClick = (e: React.MouseEvent) => {
-    const k = frameFromEvent(e);
-    if (k !== null) onClick(k);
-  };
-  const handleMove = (e: React.MouseEvent) => {
-    const k = frameFromEvent(e);
-    onHover(k); // drives the hero preview (via hoverRef; no re-render)
-    const ov = overlayRef.current;
-    if (!ov) return;
-    // [design pass] Opacity (not display) so the highlight fades via the
-    // .atlas-hover-fade transition instead of popping; the position jump
-    // between cells stays instant (only opacity transitions).
-    if (k === null || deadCells.has(k)) { ov.style.opacity = "0"; return; }
-    const step = cell + GRID_GAP;
-    ov.style.opacity = "1";
-    ov.style.left = `${(k % cols) * step}px`;
-    ov.style.top = `${Math.floor(k / cols) * step}px`;
-    ov.style.width = `${cell}px`;
-    ov.style.height = `${cell}px`;
-  };
-  const handleLeave = () => {
-    onHover(null);
-    if (overlayRef.current) overlayRef.current.style.opacity = "0";
-  };
-
-  const optId = `atlas-opt-${rovingTarget}`;
-  const activeDead = deadCells.has(rovingTarget);
-
-  return (
-    // Fixed-size box (width = the grid's columns, height = ALL rows) centred in
-    // the scroll panel via mx-auto. Holds the single <canvas> listbox, the
-    // imperatively-positioned hover highlight, and the one active a11y option.
-    <div
-      data-testid="atlas-grid-box"
-      className="relative mx-auto"
-      style={{ width: `${innerW}px`, height: `${contentH}px` }}
-    >
-      <canvas
-        ref={setCanvas}
-        role="listbox"
-        aria-label="Atlas frames"
-        aria-multiselectable={false}
-        aria-activedescendant={optId}
-        aria-owns={optId}
-        tabIndex={0}
-        data-testid="atlas-canvas"
-        data-atlas-cols={cols}
-        data-atlas-cell={cell}
-        data-atlas-gap={GRID_GAP}
-        data-atlas-total={totalCells}
-        data-render-count={renderCount}
-        className="block h-full w-full rounded-[var(--radius-sm)] bg-bg-2 focus-ring"
-        onKeyDown={onGridKeyDown}
-        onFocus={() => { setFocused(true); onFocusCapture(); }}
-        onBlur={(e) => { setFocused(false); onBlurCapture(e); }}
-        onClick={handleClick}
-        onMouseMove={handleMove}
-        onMouseLeave={handleLeave}
-      />
-      {/* Hover highlight, positioned imperatively on mousemove so a hover never
-          triggers a React re-render (the atlas grid stays put). */}
-      <div
-        ref={overlayRef}
-        aria-hidden
-        data-testid="atlas-hover-overlay"
-        className="atlas-hover-fade pointer-events-none absolute rounded-[var(--radius-sm)] border-2 border-[var(--overlay-hover)]"
-        style={{ opacity: 0 }}
-      />
-      {/* The ONE active option, referenced by aria-activedescendant (+ aria-owns)
-          so a screen reader announces "Frame N of totalCells" — and "empty" for a
-          dead frame — without one option element per frame. */}
-      <div
-        role="option"
-        id={optId}
-        data-testid="atlas-active-option"
-        aria-selected={rovingTarget === highlight}
-        aria-disabled={activeDead || undefined}
-        aria-label={activeDead ? `Frame ${rovingTarget}, empty` : `Frame ${rovingTarget}`}
-        aria-posinset={rovingTarget + 1}
-        aria-setsize={totalCells}
-        className="sr-only"
-      />
-    </div>
-  );
-});
-
-/** Paint frame `frame`'s crop of the atlas image onto the hero canvas at its
- *  display size — drawing ONLY the one frame (vs the old CSS background that
- *  rasterized the whole atlas upscaled to `side × hero`). The canvas is left
- *  TRANSPARENT where the frame isn't drawn (clearRect, no backing fill), so the
- *  hero element's own bg-bg-2 shows through transparent frame pixels — matching
- *  the cells' uniform gray in both modes (no checkerboard).
- *  No-ops gracefully if there's no 2d context (jsdom) or no image yet. */
-function drawHero(
-  canvas: HTMLCanvasElement,
-  img: HTMLImageElement,
-  frame: number,
-  side: number,
-) {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return; // jsdom has no real 2d context — no-op
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const cssW = canvas.clientWidth || canvas.width;
-  const cssH = canvas.clientHeight || canvas.height;
-  const w = Math.max(1, Math.round(cssW * dpr));
-  const h = Math.max(1, Math.round(cssH * dpr));
-  if (canvas.width !== w) canvas.width = w;
-  if (canvas.height !== h) canvas.height = h;
-  ctx.clearRect(0, 0, w, h); // transparent → reveals the hero element's bg-bg-2
-  // Source rect = frame's cell in the atlas (same maths as the CSS crop).
-  const r = cellRect(frame, side, img.naturalWidth, img.naturalHeight);
-  ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(img, r.left, r.top, r.width, r.height, 0, 0, w, h);
-}
-
 function PreviewBox({
   preview,
   side,
@@ -1277,33 +936,12 @@ function PreviewBox({
   const badgeRef = useRef<HTMLSpanElement | null>(null);
   const captionRef = useRef<HTMLSpanElement | null>(null);
   const placeholderRef = useRef<HTMLSpanElement | null>(null);
-  const imgRef = useRef<HTMLImageElement | null>(null);
-  const imgUriRef = useRef<string | null>(null); // dataUri the loaded img belongs to
-  const [imgReady, setImgReady] = useState(false);
-
   const dataUri = preview.kind === "ok" ? preview.dataUri : null;
+  const { imageRef: imgRef, imageReady: imgReady } = useDecodedImage(dataUri);
   const displayFrame = hoverFrameRef.current ?? frame;
   const placeholderText = rawFrame === null
     ? "Hover or select a frame"
     : `Frame ${rawFrame} — outside the ${side}×${side} atlas (in-game sampling is off-grid)`;
-
-  // Load the active preview's dataUri into an HTMLImageElement once per dataUri
-  // (cached via imgUriRef so the same atlas isn't reloaded on a frame / alpha
-  // toggle). decode() resolves when the bitmap is ready to draw.
-  useEffect(() => {
-    if (!dataUri) { imgRef.current = null; imgUriRef.current = null; setImgReady(false); return; }
-    if (imgUriRef.current === dataUri && imgRef.current) { setImgReady(true); return; }
-    let live = true;
-    setImgReady(false);
-    const img = new Image();
-    img.src = dataUri;
-    const ready = () => { if (!live) return; imgRef.current = img; imgUriRef.current = dataUri; setImgReady(true); };
-    if (typeof img.decode === "function") {
-      img.decode().then(ready).catch(() => { /* fall back to onload below */ });
-    }
-    img.onload = ready;
-    return () => { live = false; };
-  }, [dataUri]);
 
   const paintDisplay = useCallback(() => {
     const nextFrame = hoverFrameRef.current ?? frame;
@@ -1388,3 +1026,4 @@ function PreviewBox({
     </div>
   );
 }
+
