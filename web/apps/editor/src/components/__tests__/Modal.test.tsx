@@ -4,6 +4,7 @@
 
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { BridgeContext } from "@/lib/bridge-context";
 import { Modal } from "../Modal";
@@ -15,6 +16,18 @@ function makeStubBridge() {
   return { request, on } as unknown as Bridge & {
     request: ReturnType<typeof vi.fn>;
   };
+}
+
+function SecondaryActionFixture({ onClick }: { onClick: () => void }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <Modal open={open} onOpenChange={setOpen} title="Secondary action">
+      <Modal.Body>body</Modal.Body>
+      <Modal.Footer>
+        <Modal.OkButton variant="secondary" onClick={onClick}>Keep open</Modal.OkButton>
+      </Modal.Footer>
+    </Modal>
+  );
 }
 
 describe("Modal", () => {
@@ -32,6 +45,26 @@ describe("Modal", () => {
     expect(screen.getByText("Test Modal")).toBeInTheDocument();
     expect(screen.getByText("body-content")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "OK" })).toBeInTheDocument();
+  });
+
+  it("secondary OkButton does not wrap Dialog.Close", () => {
+    const onClick = vi.fn();
+    render(<SecondaryActionFixture onClick={onClick} />);
+    fireEvent.click(screen.getByRole("button", { name: "Keep open" }));
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(screen.getByRole("dialog", { name: "Secondary action" })).toBeInTheDocument();
+  });
+
+  it("forwards a caller's data-testid over the default OkButton selector", () => {
+    render(
+      <Modal open onOpenChange={() => {}} title="Forwarded props">
+        <Modal.Footer>
+          <Modal.OkButton data-testid="unique-action">Act</Modal.OkButton>
+        </Modal.Footer>
+      </Modal>,
+    );
+    expect(screen.getByTestId("unique-action")).toHaveTextContent("Act");
+    expect(screen.queryByTestId("modal-ok")).toBeNull();
   });
 
   it("Esc key fires onOpenChange(false)", () => {

@@ -39,12 +39,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
-import { usePresence } from "@/lib/use-presence";
+import { SLOW_EXIT_MS, usePresence } from "@/lib/use-presence";
 import { fmtCount } from "@/lib/chain-load";
 
-// EXIT_MS must equal --motion-slow-out (tokens.css). The +50ms slack
+// SLOW_EXIT_MS matches --motion-slow-out (tokens.css). The +50ms slack
 // lives inside usePresence.
-const EXIT_MS = 150;
 
 // REFUSAL_MS: how long the transient refusal banner stays visible.
 // A second refusal event during this window restarts the timer.
@@ -144,7 +143,7 @@ export function OverloadBanner({ bridge }: { bridge: Bridge }) {
   // A null frozen value is valid: it means the latch copy (not a refusal)
   // was on screen when the exit began, so the body renders the latch copy.
   const shownRefusal = visible ? refusal : lastShownRef.current;
-  const { mounted, state, onAnimationEnd } = usePresence(visible, EXIT_MS);
+  const { mounted, state, onAnimationEnd } = usePresence(visible, SLOW_EXIT_MS);
   if (!mounted) return null;
   return (
     <OverloadBannerBody

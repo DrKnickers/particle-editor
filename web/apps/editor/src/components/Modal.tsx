@@ -24,7 +24,7 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
-import { useEffect, useState, type ReactNode, type MouseEventHandler } from "react";
+import { useEffect, useState, type ComponentPropsWithoutRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useBridge } from "@/lib/bridge-context";
 import { useModalOpen } from "@/lib/modal-open";
@@ -258,13 +258,16 @@ function ModalFooter({ children }: { children: ReactNode }) {
   );
 }
 
-type ButtonProps = {
-  children?: ReactNode;
-  onClick?: MouseEventHandler<HTMLButtonElement>;
-  disabled?: boolean;
+type ButtonProps = ComponentPropsWithoutRef<"button">;
+type OkButtonVariant = "primary" | "danger" | "secondary";
+
+const OK_BUTTON_CLASS: Record<OkButtonVariant, string> = {
+  primary: "bg-accent-strong text-white hover:bg-accent-strong-hover",
+  danger: "bg-danger-strong text-white hover:bg-danger-strong-hover",
+  secondary: "border border-border-2 bg-panel-2 text-text hover:bg-panel-3",
 };
 
-function ModalCancelButton({ children = "Cancel", onClick, disabled }: ButtonProps) {
+function ModalCancelButton({ children = "Cancel", className, ...buttonProps }: ButtonProps) {
   // Wrap the button in Dialog.Close so clicking it always closes the modal
   // via Radix (firing onOpenChange(false)). Callers can attach onClick for
   // any extra side-effects (e.g. resetting a draft form). asChild forwards
@@ -273,9 +276,8 @@ function ModalCancelButton({ children = "Cancel", onClick, disabled }: ButtonPro
     <Dialog.Close asChild>
       <button
         type="button"
-        onClick={onClick}
-        disabled={disabled}
-        className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 focus-ring disabled:cursor-not-allowed disabled:opacity-40"
+        {...buttonProps}
+        className={`rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 focus-ring disabled:cursor-not-allowed disabled:opacity-40${className ? ` ${className}` : ""}`}
       >
         {children}
       </button>
@@ -283,7 +285,12 @@ function ModalCancelButton({ children = "Cancel", onClick, disabled }: ButtonPro
   );
 }
 
-function ModalOkButton({ children = "OK", onClick, disabled }: ButtonProps) {
+function ModalOkButton({
+  children = "OK",
+  variant = "primary",
+  className,
+  ...buttonProps
+}: ButtonProps & { variant?: OkButtonVariant }) {
   // OK button does NOT auto-close. Callers fire their commit action in
   // onClick and then call onOpenChange(false) themselves. This lets a
   // caller keep the modal open on error (e.g. "rescale failed, show
@@ -292,9 +299,8 @@ function ModalOkButton({ children = "OK", onClick, disabled }: ButtonProps) {
     <button
       type="button"
       data-testid="modal-ok"
-      onClick={onClick}
-      disabled={disabled}
-      className="rounded bg-accent-strong px-3 py-1 text-xs font-medium text-white hover:bg-accent-strong-hover focus-ring disabled:cursor-not-allowed disabled:opacity-40"
+      {...buttonProps}
+      className={`rounded px-3 py-1 text-xs${variant === "secondary" ? "" : " font-medium"} ${OK_BUTTON_CLASS[variant]} focus-ring disabled:cursor-not-allowed disabled:opacity-40${className ? ` ${className}` : ""}`}
     >
       {children}
     </button>

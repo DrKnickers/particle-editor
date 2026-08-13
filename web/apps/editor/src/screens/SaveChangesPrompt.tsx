@@ -17,6 +17,7 @@ import type { Bridge } from "@particle-editor/bridge-schema";
 import { Modal } from "@/components/Modal";
 import { useFileStateStore } from "@/lib/file-state";
 import { runFileOp } from "@/lib/file-op";
+import { basename } from "@/lib/paths";
 
 type Props = {
   bridge: Bridge;
@@ -26,19 +27,13 @@ type Props = {
  *  on the last `/` or `\\`. Falls back to the whole string for paths
  *  without a separator. Used in the body copy ("Save changes to
  *  foo.alo?"). */
-function basename(path: string | null): string {
-  if (!path) return "this particle system";
-  const idx = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
-  return idx >= 0 ? path.slice(idx + 1) : path;
-}
-
 export function SaveChangesPrompt({ bridge }: Props) {
   const pendingAction = useFileStateStore((s) => s.pendingAction);
   const currentFilePath = useFileStateStore((s) => s.currentFilePath);
   const setPendingAction = useFileStateStore((s) => s.setPendingAction);
 
   const open = pendingAction !== null;
-  const fileLabel = basename(currentFilePath);
+  const fileLabel = currentFilePath ? basename(currentFilePath) : "this particle system";
 
   /** Run the pending closure and clear the slot. */
   const runPending = async () => {
@@ -92,16 +87,9 @@ export function SaveChangesPrompt({ bridge }: Props) {
         </p>
       </Modal.Body>
       <Modal.Footer>
-        <button
-          type="button"
-          onClick={handleCancel}
-          aria-label="Cancel"
-          className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 focus-ring"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
+        <Modal.CancelButton onClick={handleCancel} aria-label="Cancel">Cancel</Modal.CancelButton>
+        <Modal.OkButton
+          variant="secondary"
           onClick={() =>
             // "Don't Save" runs the parked action (Ctrl+O/Ctrl+N), which may
             // reject; runFileOp already surfaces file failures, so swallow to
@@ -111,18 +99,12 @@ export function SaveChangesPrompt({ bridge }: Props) {
             )
           }
           aria-label="Don't Save"
-          className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 focus-ring"
         >
           Don&apos;t Save
-        </button>
-        <button
-          type="button"
-          onClick={() => void handleSave()}
-          aria-label="Save"
-          className="rounded bg-accent-strong px-3 py-1 text-xs font-medium text-white hover:bg-accent-strong-hover focus-ring"
-        >
+        </Modal.OkButton>
+        <Modal.OkButton onClick={() => void handleSave()} aria-label="Save">
           Save
-        </button>
+        </Modal.OkButton>
       </Modal.Footer>
     </Modal>
   );

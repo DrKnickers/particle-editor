@@ -33,7 +33,8 @@ import { promptSaveChanges, useFileState } from "@/lib/file-state";
 import { runFileOp, useFileOpErrorStore } from "@/lib/file-op";
 import { runWhenIdle } from "@/lib/run-after-paint";
 import { useEngineField } from "@/lib/use-engine-snapshot";
-import { refreshModStack } from "@/lib/mod-stack";
+import { moveItemToGap, refreshModStack } from "@/lib/mod-stack";
+import { basename, eqPath } from "@/lib/paths";
 import { requestDeleteEmitters } from "@/lib/delete-emitters";
 import { announceWhenOk } from "@/lib/status-feedback";
 import { bumpTextureEpoch } from "@/lib/atlas-preview-cache";
@@ -121,11 +122,6 @@ function findTreeNode(node: EmitterTreeNode, id: number): EmitterTreeNode | null
 /** Extract the basename from a full path for the Recent Files submenu
  *  labels. Splits on the last `/` or `\\`; falls back to the whole
  *  string. */
-function basename(path: string): string {
-  const idx = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
-  return idx >= 0 ? path.slice(idx + 1) : path;
-}
-
 export function MenuBar({
   bridge,
   onOpenImportEmittersDialog,
@@ -165,8 +161,6 @@ export function MenuBar({
     }
   };
   // Compare canonical paths case-insensitively, ignoring trailing slashes.
-  const eqPath = (a: string, b: string) =>
-    a.replace(/[\\/]+$/, "").toLowerCase() === b.replace(/[\\/]+$/, "").toLowerCase();
   const setLayerStack = async (paths: string[]) => {
     // Surface a failed apply instead of silently proceeding as if it worked
     // (release-audit #5). On failure the host did NOT persist the stack; we still
@@ -216,12 +210,8 @@ export function MenuBar({
   // each reorder (the menu IS the editor; the modal is the "Expand" fallback). No
   // scroll container (the dropdown list is short; big stacks use Expand).
   const reorderStack = (from: number, target: number) => {
-    if (from < 0 || from >= stack.length || from === target) return;
-    const n = stack.slice();
-    const [m] = n.splice(from, 1);
-    const t = from < target ? target - 1 : target;
-    n.splice(Math.max(0, Math.min(t, n.length)), 0, m);
-    void setLayerStack(n);
+    const next = moveItemToGap(stack, from, target);
+    if (next !== stack) void setLayerStack(next);
   };
   // --record only: a posed (frozen) drag for the mod stack, driven by ui/pose-drag.
   const [posedStackDrag, setPosedStackDrag] = useState<{ from: number; gap: number } | null>(null);
@@ -1082,20 +1072,8 @@ export function MenuBar({
         </p>
       </Modal.Body>
       <Modal.Footer>
-        <button
-          type="button"
-          onClick={() => setResetViewOpen(false)}
-          className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 focus-ring"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={() => void handleResetViewConfirm()}
-          className="rounded bg-accent-strong px-3 py-1 text-xs font-medium text-white hover:bg-accent-strong-hover focus-ring"
-        >
-          Reset
-        </button>
+        <Modal.CancelButton>Cancel</Modal.CancelButton>
+        <Modal.OkButton onClick={() => void handleResetViewConfirm()}>Reset</Modal.OkButton>
       </Modal.Footer>
     </Modal>
     </>

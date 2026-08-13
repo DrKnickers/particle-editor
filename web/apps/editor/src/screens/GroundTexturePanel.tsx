@@ -33,6 +33,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
 import { Spinner } from "@/primitives/Spinner";
 import { colorrefToHex, hexToColorref } from "@/lib/colorref";
+import { basename } from "@/lib/paths";
 
 type BodyProps = {
   bridge: Bridge;
@@ -55,12 +56,6 @@ export const BUNDLED_GROUND_SLOTS: readonly BundledSlot[] = [
 
 const CUSTOM_SLOTS: readonly number[] = [5, 6, 7];
 
-function basename(path: string): string {
-  if (!path) return "";
-  const norm = path.replace(/\\/g, "/");
-  const i = norm.lastIndexOf("/");
-  return i >= 0 ? norm.slice(i + 1) : norm;
-}
 /**
  * GroundTexturePanelBody — the slot-grid + solid-colour-picker markup
  * that is mounted by GroundDropdown. No onClose: the popover handles

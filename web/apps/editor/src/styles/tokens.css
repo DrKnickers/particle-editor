@@ -89,7 +89,7 @@
   --motion-fast-in: 130ms;
   --motion-fast-out: 110ms;
   --motion-slow-in: 180ms;
-  --motion-slow-out: 150ms; /* mirrored by EXIT_MS in OverloadBanner.tsx — keep in sync */
+  --motion-slow-out: 150ms; /* mirrored by SLOW_EXIT_MS in use-presence.ts — keep in sync */
   --ease-entrance: ease-out;
   --ease-exit: ease-in;
   --slip-tooltip: 4px;

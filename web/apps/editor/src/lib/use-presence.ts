@@ -9,6 +9,9 @@
 
 import { useEffect, useRef, useState } from "react";
 
+/** Matches the shared `--motion-slow-out` CSS token. */
+export const SLOW_EXIT_MS = 150;
+
 export function usePresence(visible: boolean, exitMs: number): {
   mounted: boolean;
   state: "open" | "closed";

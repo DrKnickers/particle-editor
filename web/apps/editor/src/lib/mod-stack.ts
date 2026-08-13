@@ -27,6 +27,16 @@ const useStore = create<ModStackState>(() => ({ stack: [] }));
 /** React hook: subscribe to the mod stack (re-renders on change). */
 export const useModStack = useStore;
 
+/** Move an item to an insertion gap (where `items.length` means append). */
+export function moveItemToGap<T>(items: T[], from: number, target: number): T[] {
+  if (from < 0 || from >= items.length || from === target) return items;
+  const next = items.slice();
+  const [item] = next.splice(from, 1);
+  const insertionIndex = from < target ? target - 1 : target;
+  next.splice(Math.max(0, Math.min(insertionIndex, next.length)), 0, item!);
+  return next;
+}
+
 /**
  * Seed the mod-stack store from mods/list and subscribe to engine/state/changed
  * so the store refreshes (and the preview cache is invalidated) on every state

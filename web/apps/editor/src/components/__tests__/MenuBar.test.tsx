@@ -168,6 +168,18 @@ describe("MenuBar — top-level structure", () => {
     expect(screen.queryByRole("menuitem", { name: /Bloom/ })).toBeNull();
   });
 
+  it("Reset View Settings keeps the Cancel and Reset button roles and names", async () => {
+    const bridge = makeStubBridge();
+    renderMenuBar(bridge);
+    const trigger = screen.getByRole("menuitem", { name: "View" });
+    fireEvent.pointerDown(trigger, { button: 0, pointerType: "mouse" });
+    fireEvent.click(trigger);
+    const resetViewSettings = await screen.findByRole("menuitem", { name: "Reset View Settings" });
+    fireEvent.click(resetViewSettings);
+    expect(await screen.findByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reset" })).toBeInTheDocument();
+  });
+
   it("View > Reset panel layout fires the onResetPanelLayout callback", async () => {
     const bridge = makeStubBridge();
     const onResetPanelLayout = vi.fn();

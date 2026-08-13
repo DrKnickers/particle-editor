@@ -11,6 +11,13 @@
 /** stableId → offsetTop (px, content space). */
 export type FlipPositions = Map<number, number>;
 
+/** FLIP animation durations shared by the emitter-tree drag presentation. */
+export const DRAG_FEEL = {
+  dragMs: 120,
+  settleMs: 200,
+  recordDragMs: 800,
+} as const;
+
 /** Rows present in BOTH maps whose position changed: stableId → (prev - next),
  *  i.e. the translateY that visually puts the row back where it was. Rows
  *  only in `next` (newly created) or only in `prev` (deleted) don't glide. */

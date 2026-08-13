@@ -3,10 +3,9 @@
 // from Task 2.2: a trigger with a preview swatch + ChevronDown opens
 // a popover containing the existing picker body markup.
 
-import * as Popover from "@radix-ui/react-popover";
 import { ChevronDown } from "lucide-react";
 import type { Bridge } from "@particle-editor/bridge-schema";
-import { AnimatedPopover } from "@/components/AnimatedPopover";
+import { ToolbarPickerPopover } from "@/components/ToolbarPickerPopover";
 import { useEngineField } from "@/lib/use-engine-snapshot";
 import {
   GroundTexturePanelBody,
@@ -32,8 +31,9 @@ export function GroundDropdown({ bridge }: Props) {
       : { backgroundColor: "var(--bg-3)" }; // custom slot — no thumbnail yet
 
   return (
-    <Popover.Root>
-      <Popover.Trigger asChild>
+    <ToolbarPickerPopover
+      panelClassName="bg-panel border border-border-2 rounded-token shadow-[var(--shadow-soft)] p-3 min-w-[280px] z-50"
+      trigger={
         <button
           type="button"
           className="tb-btn"
@@ -47,16 +47,9 @@ export function GroundDropdown({ bridge }: Props) {
           />
           <ChevronDown className="size-3.5" aria-hidden="true" />
         </button>
-      </Popover.Trigger>
-      <Popover.Portal>
-        <AnimatedPopover
-          align="end"
-          sideOffset={6}
-          className="bg-panel border border-border-2 rounded-token shadow-[var(--shadow-soft)] p-3 min-w-[280px] z-50"
-        >
-          <GroundTexturePanelBody bridge={bridge} />
-        </AnimatedPopover>
-      </Popover.Portal>
-    </Popover.Root>
+      }
+    >
+      <GroundTexturePanelBody bridge={bridge} />
+    </ToolbarPickerPopover>
   );
 }

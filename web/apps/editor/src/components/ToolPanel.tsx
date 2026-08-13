@@ -21,8 +21,9 @@
 // the `×` glyph or by re-toggling the launcher (e.g. clicking the
 // Background pill again, picking a different Tools-menu entry).
 
-import { ChevronDown, X } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { X } from "lucide-react";
+import { useEffect, useRef, type ReactNode } from "react";
+import { Section } from "@/components/Section";
 
 type ToolPanelProps = {
   title: string;
@@ -195,7 +196,7 @@ function ToolPanelSection({
   // details toggles content instantly and can't tween. Header matches
   // Section.tsx (div role=button) so both controlled disclosures expose
   // the same a11y shape + chevron behaviour.
-  return <CollapsibleSection title={title} defaultOpen={defaultOpen} unit={unit}>{children}</CollapsibleSection>;
+  return <Section title={title} defaultOpen={defaultOpen} unit={unit}>{children}</Section>;
 }
 
 // Shared section-header label: title + optional muted unit annotation.
@@ -208,48 +209,6 @@ function SectionTitle({ title, unit }: { title: string; unit?: string }) {
       <span>{title}</span>
       {unit && <span className="font-normal normal-case tracking-normal text-text-3" aria-hidden="true">{unit}</span>}
     </span>
-  );
-}
-
-function CollapsibleSection({
-  title,
-  defaultOpen,
-  unit,
-  children,
-}: {
-  title: string;
-  defaultOpen: boolean;
-  unit?: string;
-  children?: ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  const toggle = () => setOpen((o) => !o);
-  return (
-    <section className="panel-section" data-open={open}>
-      <div
-        className="panel-section-header"
-        role="button"
-        tabIndex={0}
-        onClick={toggle}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            toggle();
-          }
-        }}
-        aria-expanded={open}
-      >
-        <SectionTitle title={title} unit={unit} />
-        <ChevronDown className="chev size-3" />
-      </div>
-      <div className="collapse-anim" data-open={open}>
-        {/* padding-free clip div so collapse reaches a true 0 (the body's
-            vertical padding would otherwise leave a sliver). */}
-        <div>
-          <div className="panel-section-body">{children}</div>
-        </div>
-      </div>
-    </section>
   );
 }
 

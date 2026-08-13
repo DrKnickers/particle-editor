@@ -117,33 +117,29 @@ export function AutosaveRecoveryView({ orphan, nowMs, onChoose, onDismiss, error
         </div>
       </Modal.Body>
       <Modal.Footer>
-        <button
-          type="button"
+        <Modal.OkButton
+          variant="secondary"
           onClick={() => onChoose("discard")}
           data-testid="autosave-discard"
-          className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 focus-ring"
         >
           Discard
-        </button>
+        </Modal.OkButton>
         {hasStable && (
-          <button
-            type="button"
+          <Modal.OkButton
+            variant="secondary"
             onClick={() => onChoose("stable")}
             data-testid="autosave-restore-stable"
-            className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 focus-ring"
           >
             Restore stable
-          </button>
+          </Modal.OkButton>
         )}
         {hasRecent && (
-          <button
-            type="button"
+          <Modal.OkButton
             onClick={() => onChoose("recent")}
             data-testid="autosave-restore-recent"
-            className="rounded bg-accent-strong px-3 py-1 text-xs font-medium text-white hover:bg-accent-strong-hover focus-ring"
           >
             Restore recent
-          </button>
+          </Modal.OkButton>
         )}
         {/* Stable-only: the single restore action is the primary button. */}
         {!hasRecent && hasStable && null}

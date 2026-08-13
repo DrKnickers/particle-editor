@@ -3,6 +3,7 @@ import {
   initModStack,
   useModStack,
   refreshModStack,
+  moveItemToGap,
   __setModStackForTests,
   __resetModStackForTests,
 } from "../mod-stack";
@@ -53,6 +54,12 @@ function makeFakeBridge(initialStack: string[] = ["A", "B"]) {
 }
 
 describe("mod-stack store", () => {
+  it("moves an item to the requested insertion gap without mutating the input", () => {
+    const order = ["A", "B", "C"];
+    expect(moveItemToGap(order, 0, 3)).toEqual(["B", "C", "A"]);
+    expect(order).toEqual(["A", "B", "C"]);
+  });
+
   it("__setModStackForTests updates the hook store", () => {
     __setModStackForTests(["A", "B"]);
     expect(useModStack.getState().stack).toEqual(["A", "B"]);

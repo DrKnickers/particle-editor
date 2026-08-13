@@ -83,7 +83,7 @@ import {
 import { markEmittersCopied, useEmitterClipboardHasContent } from "@/lib/emitter-clipboard";
 import { rectFromPoints, emittersInMarquee, mergeMarqueeSelection, type Rect } from "@/lib/marquee";
 import { computeAutoscrollDelta } from "@/lib/drag-autoscroll";
-import { computeFlipDeltas, pickFlipDuration, type FlipPositions } from "@/lib/flip";
+import { computeFlipDeltas, DRAG_FEEL, pickFlipDuration, type FlipPositions } from "@/lib/flip";
 import { useRecording } from "@/lib/record-mode";
 import { announceWhenOk } from "@/lib/status-feedback";
 import {
@@ -184,18 +184,13 @@ type DropIndicator =
 const CHIP_PULL = 0.6;
 const CHIP_SPRING = 0.25;
 
-// [glide] FLIP durations: mid-drag reflows track the pointer, so they run
-// snappier than the post-drop settle.
-const FLIP_DRAG_MS = 120;
-const FLIP_SETTLE_MS = 200;
 // --record only, active-drag glide (see pickFlipDuration in lib/flip.ts): the FLIP
 // glide is a wall-clock CSS transition, but the capture loop grabs each frame only
 // after a slow paint+PrintWindow (tens of ms of REAL time per frame). At
-// FLIP_DRAG_MS the transition finishes between captures, so the reorder is never
+// At the short live-drag duration, the transition finishes between captures, so the reorder is never
 // caught mid-glide and the rows snap in the recorded clip. This value is
 // EMPIRICALLY TUNED to the capture cadence (≈800ms spans ~8 captured frames) — not
 // an animation-feel choice; re-verify against a --record clip before changing it.
-const FLIP_RECORD_MS = 800;
 
 // [glide] Chip despawn: on release the chip flies into the landing gap (or
 // the reparent target row) while fading; cancels/no-ops fade in place.
@@ -1618,8 +1613,8 @@ export function EmitterTree({ bridge }: Props) {
   // BEFORE paint, diff against the previous layout, add any in-flight
   // transform residual (an interrupted glide restarts from the row's current
   // VISUAL position, so rapid gap hops stay continuous), apply the inverted
-  // translateY, then transition to zero — snappier mid-drag (FLIP_DRAG_MS)
-  // than on settle (FLIP_SETTLE_MS). The dragged block's own rows glide the
+  // translateY, then transition to zero — snappier mid-drag than on settle.
+  // The dragged block's own rows glide the
   // same way when the gap crosses their footprint. Resolution math is
   // unaffected: gap/onto targets come from the drag-activation geometry
   // snapshot, never from the animated DOM.
@@ -1750,12 +1745,10 @@ export function EmitterTree({ bridge }: Props) {
       return;
     }
     // Long wall-clock transition only for the --record active-drag glide (so it
-    // spans multiple slow captures); the settle keeps FLIP_SETTLE_MS to stay in
+    // spans multiple slow captures); the settle keeps DRAG_FEEL.settleMs to stay in
     // step with the drag-chip despawn. See pickFlipDuration.
     const durationMs = pickFlipDuration(recording, draggingId !== null, {
-      dragMs: FLIP_DRAG_MS,
-      settleMs: FLIP_SETTLE_MS,
-      recordDragMs: FLIP_RECORD_MS,
+      ...DRAG_FEEL,
     });
     for (const [stableId, dy] of computeFlipDeltas(prev, next)) {
       const el = els.get(stableId);

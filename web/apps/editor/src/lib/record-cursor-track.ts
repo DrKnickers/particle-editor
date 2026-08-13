@@ -1,3 +1,5 @@
+import { coerceMessage } from "@/lib/coerce-message";
+
 export type CursorElementRef =
   | `curve-key:${string}:${string}`
   | `atlas-tile:${string}`
@@ -44,17 +46,6 @@ export interface RecordCursorKey {
 export interface RecordCursorTick {
   t: number;
   frame: number;
-}
-
-function coerceMessage(data: unknown): Record<string, unknown> | null {
-  if (typeof data === "string") {
-    try {
-      return JSON.parse(data) as Record<string, unknown>;
-    } catch {
-      return null;
-    }
-  }
-  return data && typeof data === "object" ? (data as Record<string, unknown>) : null;
 }
 
 function isFiniteNumber(value: unknown): value is number {

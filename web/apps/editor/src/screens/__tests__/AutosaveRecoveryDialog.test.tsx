@@ -154,4 +154,34 @@ describe("AutosaveRecoveryDialog (container)", () => {
     expect(await screen.findByTestId("autosave-recover-error")).toBeInTheDocument();
     expect(screen.getByTestId("autosave-restore-recent")).toBeInTheDocument();
   });
+
+  it("a FAILED Restore stable keeps the dialog open and surfaces an error", async () => {
+    const bridge = {
+      request: vi.fn().mockImplementation((req: { kind: string }) => {
+        if (req.kind === "autosave/check-recovery") return Promise.resolve({ orphan: orphan() });
+        if (req.kind === "autosave/recover") return Promise.resolve({ status: "failed", reason: "load_error" });
+        return Promise.resolve({});
+      }),
+      on: vi.fn().mockReturnValue(() => {}),
+    } as unknown as Bridge;
+    render(<AutosaveRecoveryDialog bridge={bridge} />);
+    fireEvent.click(await screen.findByTestId("autosave-restore-stable"));
+    expect(await screen.findByTestId("autosave-recover-error")).toBeInTheDocument();
+    expect(screen.getByTestId("autosave-restore-stable")).toBeInTheDocument();
+  });
+
+  it("a FAILED Discard keeps the dialog open and surfaces an error", async () => {
+    const bridge = {
+      request: vi.fn().mockImplementation((req: { kind: string }) => {
+        if (req.kind === "autosave/check-recovery") return Promise.resolve({ orphan: orphan() });
+        if (req.kind === "autosave/recover") return Promise.resolve({ status: "failed", reason: "discard_error" });
+        return Promise.resolve({});
+      }),
+      on: vi.fn().mockReturnValue(() => {}),
+    } as unknown as Bridge;
+    render(<AutosaveRecoveryDialog bridge={bridge} />);
+    fireEvent.click(await screen.findByTestId("autosave-discard"));
+    expect(await screen.findByTestId("autosave-recover-error")).toBeInTheDocument();
+    expect(screen.getByTestId("autosave-discard")).toBeInTheDocument();
+  });
 });

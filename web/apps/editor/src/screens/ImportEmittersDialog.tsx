@@ -32,6 +32,7 @@ import type {
 } from "@particle-editor/bridge-schema";
 import { Check, ChevronRight, File, Minus } from "lucide-react";
 import { Modal } from "@/components/Modal";
+import { basename } from "@/lib/paths";
 
 type Props = {
   bridge: Bridge;
@@ -48,11 +49,6 @@ function descendantIds(node: EmitterTreeNode): number[] {
     out.push(...descendantIds(child));
   }
   return out;
-}
-
-function basename(path: string): string {
-  const idx = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
-  return idx >= 0 ? path.slice(idx + 1) : path;
 }
 
 type BranchState = "none" | "partial" | "all";

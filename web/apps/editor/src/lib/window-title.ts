@@ -13,6 +13,8 @@
 //   - Clean, untitled : `Untitled.alo — Particle Editor`
 //   - Dirty, untitled : `● Untitled.alo — Particle Editor`
 
+import { basename } from "@/lib/paths";
+
 export const APP_NAME = "Particle Editor";
 export const UNTITLED_DOC = "Untitled.alo";
 
@@ -22,11 +24,4 @@ export function formatWindowTitle(
 ): string {
   const doc = currentFilePath ? basename(currentFilePath) : UNTITLED_DOC;
   return `${dirty ? "● " : ""}${doc} — ${APP_NAME}`;
-}
-
-// Same split MenuBar's Recent Files uses; duplicated 3-liner rather than
-// exporting from a component module.
-function basename(path: string): string {
-  const idx = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
-  return idx >= 0 ? path.slice(idx + 1) : path;
 }

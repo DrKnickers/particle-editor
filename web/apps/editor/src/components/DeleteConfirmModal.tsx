@@ -38,21 +38,8 @@ export function DeleteConfirmModal({ bridge }: { bridge: Bridge }) {
         <p className="text-sm text-text-2">{pending ? bodyText(pending.ids, pending.impact) : ""}</p>
       </Modal.Body>
       <Modal.Footer>
-        <button
-          type="button"
-          autoFocus
-          onClick={clear}
-          className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 focus-ring"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={onDelete}
-          className="rounded bg-danger-strong px-3 py-1 text-xs font-medium text-white hover:bg-danger-strong-hover focus-ring"
-        >
-          Delete
-        </button>
+        <Modal.CancelButton autoFocus onClick={clear}>Cancel</Modal.CancelButton>
+        <Modal.OkButton variant="danger" onClick={onDelete}>Delete</Modal.OkButton>
       </Modal.Footer>
     </Modal>
   );

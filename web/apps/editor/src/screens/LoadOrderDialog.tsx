@@ -10,19 +10,13 @@ import type { Bridge, LayerRef } from "@particle-editor/bridge-schema";
 import { Modal } from "@/components/Modal";
 import { cn } from "@/lib/utils";
 import { useStackReorder } from "@/lib/use-stack-reorder";
-import { refreshModStack } from "@/lib/mod-stack";
+import { moveItemToGap, refreshModStack } from "@/lib/mod-stack";
+import { basename, eqPath } from "@/lib/paths";
 
 type Props = { bridge: Bridge; open: boolean; onOpenChange: (open: boolean) => void; onApplied?: () => void };
 
-const eqPath = (a: string, b: string) =>
-  a.replace(/[\\/]+$/, "").toLowerCase() === b.replace(/[\\/]+$/, "").toLowerCase();
 // Last non-empty path segment (splits on / and \). Used as the label fallback
 // for an in-stack path absent from the catalog (matches MenuBar's basename).
-const basename = (p: string): string => {
-  const parts = p.split(/[\\/]+/).filter((s) => s.length > 0);
-  return parts.length > 0 ? parts[parts.length - 1] : p;
-};
-
 export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props) {
   const [catalog, setCatalog] = useState<LayerRef[]>([]);
   const [order, setOrder] = useState<string[]>([]);   // working stack (paths, front = top)
@@ -31,8 +25,8 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
   const [applyError, setApplyError] = useState<string | null>(null);
 
   // An unresolved in-stack path (absent from the catalog) falls back to its
-  // basename rather than the full path, matching MenuBar's labelFor.
-  const labelFor = (p: string) => catalog.find((l) => eqPath(l.path, p))?.label ?? basename(p);
+  // normalized basename rather than the full path, so trailing separators do not blank the fallback label.
+  const labelFor = (p: string) => catalog.find((l) => eqPath(l.path, p))?.label ?? basename(p, { normalizeSeparators: true });
   const inStack = (p: string) => order.some((o) => eqPath(o, p));
   const add = (p: string) => setOrder((o) => (inStack(p) ? o : [...o, p]));
   const remove = (i: number) => setOrder((o) => o.filter((_, j) => j !== i));
@@ -42,12 +36,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
   });
   // Move `from` to insertion gap `target` (target === order.length → append).
   const reorder = (from: number, target: number) => setOrder((o) => {
-    if (from < 0 || from >= o.length || from === target) return o;
-    const n = o.slice();
-    const [m] = n.splice(from, 1);
-    const t = from < target ? target - 1 : target;
-    n.splice(Math.max(0, Math.min(t, n.length)), 0, m);
-    return n;
+    return moveItemToGap(o, from, target);
   });
 
   // Shared drag/glide engine (also powers the Mods dropdown's in-place reorder).
