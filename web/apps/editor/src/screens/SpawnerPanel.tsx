@@ -37,8 +37,8 @@ import type {
 } from "@particle-editor/bridge-schema";
 import { Spinner } from "@/primitives/Spinner";
 import { ToolPanel } from "@/components/ToolPanel";
-import { makeDefaultSpawnerParams } from "@/bridge/mock-state";
 import { setDock } from "@/lib/right-dock";
+import { makeDefaultSpawnerParams } from "@/lib/spawner-defaults";
 
 type Props = {
   bridge: Bridge;

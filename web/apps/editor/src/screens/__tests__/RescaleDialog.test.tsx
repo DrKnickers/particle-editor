@@ -2,21 +2,14 @@
 // Verifies that clicking OK fires the `engine/action/rescale-system`
 // bridge call with the current spinner values.
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { RescaleDialog } from "../RescaleDialog";
-import type { Bridge } from "@particle-editor/bridge-schema";
-
-function makeStubBridge(): Bridge & { request: ReturnType<typeof vi.fn> } {
-  return {
-    request: vi.fn().mockResolvedValue({}),
-    on: vi.fn().mockReturnValue(() => {}),
-  } as unknown as Bridge & { request: ReturnType<typeof vi.fn> };
-}
+import { makeBridgeStub } from "./bridge-stub";
 
 describe("RescaleDialog", () => {
   it("clicking OK fires engine/action/rescale-system with current spinner values", () => {
-    const bridge = makeStubBridge();
+    const bridge = makeBridgeStub();
     render(
       <RescaleDialog bridge={bridge} open onOpenChange={() => {}} />
     );

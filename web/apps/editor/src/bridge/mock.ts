@@ -15,8 +15,8 @@
 //   - layout/scene-rect                      accepted as a no-op
 //   - animate-scene-rect                     accepted as a no-op
 //   - host/backing-color                     accepted as a no-op
-// Everything else (emitters/*, file/*, undo/*, spawner/*) rejects with
-// a "not implemented" error — those land later.
+// The remaining schema requests are implemented, explicitly rejected where
+// browser mode cannot model them, or accepted as intentional no-ops.
 
 import type {
   Bridge,

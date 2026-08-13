@@ -19,32 +19,13 @@ import type {
   GroupDto,
   InterpolationType,
   LightDto,
-  SpawnerParamsDto,
   TrackDto,
   TrackKey,
   TrackName,
 } from "@particle-editor/bridge-schema";
 import { TRACK_NAMES, ZERO_SPAWN } from "@particle-editor/bridge-schema";
-
-/** Defaults mirror `SpawnerConfig()` at [src/SpawnerDriver.h:18]:
- *  Auto mode + disabled + burst 1 + 0 s spacing + 10 s interval + origin
- *  + 5 s lifetime + zero jitter. */
-export function makeDefaultSpawnerParams(): SpawnerParamsDto {
-  return {
-    mode: "auto",
-    enabled: false,
-    burstSize: 1,
-    spacingSec: 0,
-    intervalSec: 10,
-    position: [0, 0, 0],
-    velocity: [0, 0, 0],
-    maxLifetimeSec: 5,
-    jitterPosition: [0, 0, 0],
-    acceleration: [0, 0, 0],
-    squiggleAmplitude: [0, 0, 0],
-    squiggleFrequency: 1,
-  };
-}
+import { isOwnFootprint } from "@/lib/multi-drag";
+import { makeDefaultSpawnerParams } from "@/lib/spawner-defaults";
 
 export const GROUND_SLOT_COUNT = 8;       // matches Engine::kGroundTextureCount
 export const SKYDOME_SLOT_COUNT = 12;     // matches Engine::kSkydomeSlotCount
@@ -871,9 +852,8 @@ export function reorderManyRoots(
   }
   if (idxs.length === 0) return null;
   idxs.sort((a, b) => a - b);
-  const M = idxs.length;
-  const first = idxs[0]!, last = idxs[M - 1]!;
-  if (last - first + 1 === M && rootIndex >= first && rootIndex <= last + 1) {
+  // Shared with geometric drag resolution so both paths recognize the same no-op.
+  if (isOwnFootprint(idxs, rootIndex)) {
     return null;
   }
   const selSet = new Set(idxs);

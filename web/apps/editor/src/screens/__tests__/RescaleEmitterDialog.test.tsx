@@ -2,18 +2,11 @@
 // Verifies that OK fires `engine/action/rescale-emitter` with the
 // current spinner values.
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { RescaleEmitterDialog } from "../RescaleEmitterDialog";
 import { useTreeContextStore } from "@/lib/tree-context";
-import type { Bridge } from "@particle-editor/bridge-schema";
-
-function makeStubBridge(): Bridge & { request: ReturnType<typeof vi.fn> } {
-  return {
-    request: vi.fn().mockResolvedValue({}),
-    on: vi.fn().mockReturnValue(() => {}),
-  } as unknown as Bridge & { request: ReturnType<typeof vi.fn> };
-}
+import { makeBridgeStub } from "./bridge-stub";
 
 beforeEach(() => {
   useTreeContextStore.getState().close();
@@ -21,7 +14,7 @@ beforeEach(() => {
 
 describe("RescaleEmitterDialog", () => {
   it("clicking OK fires engine/action/rescale-emitter with default 100/100", () => {
-    const bridge = makeStubBridge();
+    const bridge = makeBridgeStub();
     useTreeContextStore.getState().openDialog("rescale", 4);
     render(<RescaleEmitterDialog bridge={bridge} />);
 

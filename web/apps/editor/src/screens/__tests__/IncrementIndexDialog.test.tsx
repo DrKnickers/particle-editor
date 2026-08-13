@@ -2,18 +2,11 @@
 // Verifies that the modal renders the delta + repeat spinners and OK fires
 // `emitters/duplicate-with-index-increment-many` with both values (#575).
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { IncrementIndexDialog } from "../IncrementIndexDialog";
 import { useTreeContextStore } from "@/lib/tree-context";
-import type { Bridge } from "@particle-editor/bridge-schema";
-
-function makeStubBridge(): Bridge & { request: ReturnType<typeof vi.fn> } {
-  return {
-    request: vi.fn().mockResolvedValue({}),
-    on: vi.fn().mockReturnValue(() => {}),
-  } as unknown as Bridge & { request: ReturnType<typeof vi.fn> };
-}
+import { makeBridgeStub } from "./bridge-stub";
 
 // The Spinner commits on blur/Enter, not on keystroke — set the text then blur.
 function setSpinner(label: string, value: string): void {
@@ -28,7 +21,7 @@ beforeEach(() => {
 
 describe("IncrementIndexDialog", () => {
   it("renders both spinners and OK fires the batch request with default delta + count", () => {
-    const bridge = makeStubBridge();
+    const bridge = makeBridgeStub();
     useTreeContextStore.getState().openDialog("increment", 3);
     render(<IncrementIndexDialog bridge={bridge} />);
 
@@ -44,7 +37,7 @@ describe("IncrementIndexDialog", () => {
   });
 
   it("passes the chosen delta and repeat count", () => {
-    const bridge = makeStubBridge();
+    const bridge = makeBridgeStub();
     useTreeContextStore.getState().openDialog("increment", 7);
     render(<IncrementIndexDialog bridge={bridge} />);
 
@@ -59,7 +52,7 @@ describe("IncrementIndexDialog", () => {
   });
 
   it("rounds a fractional repeat count so the sent value matches the displayed integer", () => {
-    const bridge = makeStubBridge();
+    const bridge = makeBridgeStub();
     useTreeContextStore.getState().openDialog("increment", 1);
     render(<IncrementIndexDialog bridge={bridge} />);
 

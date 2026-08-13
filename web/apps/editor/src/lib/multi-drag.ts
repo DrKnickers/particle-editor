@@ -33,9 +33,8 @@ export function isMultiDrag(
 }
 
 /** Own-footprint no-op test: a CONTIGUOUS block dropped anywhere inside
- *  [first, last+1] lands exactly where it already is. Mirrors the guard in
- *  mock-state.ts::reorderManyRoots — keep in sync. */
-function isOwnFootprint(blockRootIdxs: number[], gap: number): boolean {
+ *  [first, last+1] lands exactly where it already is. */
+export function isOwnFootprint(blockRootIdxs: number[], gap: number): boolean {
   const first = blockRootIdxs[0]!;
   const last = blockRootIdxs[blockRootIdxs.length - 1]!;
   return last - first + 1 === blockRootIdxs.length && gap >= first && gap <= last + 1;

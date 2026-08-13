@@ -12,7 +12,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
 import { SpawnerPanel } from "../SpawnerPanel";
-import { makeDefaultEngineState, makeDefaultSpawnerParams } from "@/bridge/mock-state";
+import { makeDefaultEngineState } from "@/bridge/mock-state";
+import { makeDefaultSpawnerParams } from "@/lib/spawner-defaults";
 import {
   useRightDock,
   __resetRightDockForTests,
