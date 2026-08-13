@@ -10,6 +10,7 @@
 #include "AlphaCompositor.h"   // CaptureSnapshotToFile
 #include "CaptureGoldenProfile.h"
 #include "HostRunUtil.h"       // PerfQpcNow/PerfQpcFreq/QpcMs/DeriveSibling
+#include "SettingsRegistry.h"
 #include "WindowCapture.h"     // host::CaptureWindowToPng
 
 #include "../ModManager.h"
@@ -260,7 +261,7 @@ void CaptureRunner::Init()
                 // terrain-through-transparency otherwise contaminates the read.
                 {
                     HKEY hKey; DWORD gval = 1, gsz = sizeof(gval), gtype = 0;
-                    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\AloParticleEditor",
+                    if (RegOpenKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath,
                                       0, KEY_READ, &hKey) == ERROR_SUCCESS)
                     {
                         if (RegQueryValueExW(hKey, L"ShowGround", NULL, &gtype,
@@ -282,7 +283,7 @@ void CaptureRunner::Init()
                     HKEY hKey; DWORD raw, gsz, gtype;
                     int yawC = 0, pitchC = 0; DWORD distR = 0;
                     bool haveYaw = false, havePitch = false, haveDist = false;
-                    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\AloParticleEditor",
+                    if (RegOpenKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath,
                                       0, KEY_READ, &hKey) == ERROR_SUCCESS)
                     {
                         gsz = sizeof(raw);

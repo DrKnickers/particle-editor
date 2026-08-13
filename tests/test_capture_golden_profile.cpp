@@ -144,11 +144,16 @@ int main()
     }
 
     // --- 4. HOST PRODUCTION BINDING. The predicate must directly contain the
-    // persisted bloom/view/lighting restore block, not sit unused nearby.
+    // extracted reader + applier, not sit unused nearby; cross-file checks pin
+    // the value reads and ambient push at their new production homes.
     {
+        const std::filesystem::path root = std::filesystem::current_path();
         const std::string source = ReadSource(
-            std::filesystem::current_path() / "src" / "host" /
-            "HostWindow.cpp");
+            root / "src" / "host" / "HostWindow.cpp");
+        const std::string restoredSource = ReadSource(
+            root / "src" / "host" / "RestoredSettings.cpp");
+        const std::string lightingSource = ReadSource(
+            root / "src" / "host" / "LightingSettings.h");
         const std::string compact = WithoutWhitespace(source);
         const std::string call =
             "ShouldRestorePersistedViewSettings(";
@@ -162,13 +167,17 @@ int main()
                   "useTestHost,m_captureGoldenProfile)){") !=
                   std::string::npos,
               "persisted restore is directly controlled by the production predicate");
-        CHECK(block.find("BloomEnabled") != std::string::npos &&
-              block.find("ShowGround") != std::string::npos &&
-              block.find("SkydomeIndex") != std::string::npos,
-              "predicate contains the persisted bloom and view registry reads");
-        CHECK(block.find("LightSunIntensity") != std::string::npos &&
-              block.find("engine->SetAmbient") != std::string::npos,
-              "predicate contains the persisted lighting restore");
+        CHECK(block.find("ReadRestoredSettings(") != std::string::npos &&
+              block.find("ApplyRestoredSettings(") != std::string::npos,
+              "predicate directly drives the extracted reader and applier");
+        CHECK(restoredSource.find("BloomEnabled") != std::string::npos &&
+              restoredSource.find("ShowGround") != std::string::npos &&
+              restoredSource.find("SkydomeIndex") != std::string::npos,
+              "extracted reader contains the persisted bloom and view reads");
+        CHECK(lightingSource.find("LightSunIntensity") != std::string::npos,
+              "central lighting schema contains the persisted sun key");
+        CHECK(source.find("engine->SetAmbient") != std::string::npos,
+              "extracted HostWindow applier still pushes restored ambient");
     }
 
     // --- 5. CAPTURE PRODUCTION BINDING. Both ShowGround and CaptureCam* must

@@ -42,6 +42,7 @@
 #include "WebView2EnvironmentOptions.h"
 
 #include <algorithm>   // [resize-perf] per-kind bridge-probe sort
+#include <array>
 #include <atomic>
 #include <cstdarg>
 #include <cmath>       // roundf for drag-time grid/angle snap
@@ -64,7 +65,10 @@
 #include "StringConv.h"     // host::Utf8ToWide / WideToUtf8 (consolidated, DRY audit cpp-host-0)
 #include "generated/EmbeddedWebAssets.h"  // embedded React bundle manifest (RCDATA) served on app.local
 #include "CaptureGoldenProfile.h"
+#include "LightingSettings.h"
 #include "PerfTrace.h"
+#include "RestoredSettings.h"
+#include "SettingsRegistry.h"
 #include "WebViewModalPolicy.h"
 #include "WebMessageIngressPolicy.h"   // ShouldAcceptWebMessage (bridge ingress cap)
 #include "ModulePath.h"               // host::ModuleDirectory (grow-until-it-fits module path)
@@ -3072,6 +3076,171 @@ static void InsetForAutoHideTaskbar(RECT& client)
     }
 }
 
+static void ApplyRestoredSettings(Engine* engine, const host::RestoredSettings& s)
+{
+    if (s.bloomEnabled)  engine->SetBloom(*s.bloomEnabled);
+    if (s.bloomStrength) engine->SetBloomStrength(*s.bloomStrength);
+    if (s.bloomCutoff)   engine->SetBloomCutoff(*s.bloomCutoff);
+    if (s.bloomSize)     engine->SetBloomSize(*s.bloomSize);
+
+    if (s.backgroundColor) engine->SetBackground(*s.backgroundColor);
+    if (s.showGround)      engine->SetGround(*s.showGround);
+    engine->SetGroundZ(0.0f);
+
+    // Ground texture: per-slot custom paths BEFORE the selected index, so
+    // SetGroundTexture can find the right source for a custom slot (ordering is
+    // load-bearing).
+    for (const auto& slot : s.groundSlotPaths)
+        engine->SetGroundSlotCustomPath(slot.first, slot.second);
+    if (s.groundSolidColor) engine->SetGroundSolidColor(*s.groundSolidColor);
+    if (s.groundTexture)    engine->SetGroundTexture(*s.groundTexture);
+
+    // Skydome: custom paths first so SetSkydomeSlot can reload a previously-active
+    // custom slot.
+    for (const auto& slot : s.skydomeCustomPaths)
+        engine->SetSkydomeCustomPath(slot.first, slot.second);
+    if (s.skydomeSlot) engine->SetSkydomeSlot(*s.skydomeSlot);
+
+    // Game-dome environment: battle context + the two chosen GameObject Names.
+    // This restore block runs after the device is up, so SetSkydomeEnvironment
+    // resolves + uploads the meshes now (the only place the new UI re-resolves a
+    // name-based selection).
+    if (s.hasSkydomeEnv)
+    {
+        engine->SetSkydomeEnvironment(
+            s.skydomeContextRaw == 0 ? SkydomeContext::Land : SkydomeContext::Space,
+            WideToAnsi(s.skydomePrimaryName), WideToAnsi(s.skydomeSecondaryName));
+    }
+
+    // Imported reference object + unit grid. At startup the catalog isn't built
+    // yet, so SetReferenceObject DEFERS: it kicks the off-thread catalog build
+    // and the mesh resolves/uploads a frame or more later, once Update() harvests
+    // the catalog and reruns the deferred rebuild (so a restored object isn't on
+    // the first frame). Transform / grid spacing are REG_BINARY floats;
+    // visibility / grid toggle / snap toggle are REG_DWORD.
+    if (s.refTransform)
+    {
+        const std::array<float, 6>& xform = *s.refTransform;
+        engine->SetReferenceObjectTransform(
+            D3DXVECTOR3(xform[0], xform[1], xform[2]),
+            D3DXVECTOR3(xform[3], xform[4], xform[5]));
+    }
+    if (s.refVisible)   engine->SetReferenceObjectVisible(*s.refVisible);
+    if (s.gridVisible)  engine->SetGridVisible(*s.gridVisible);
+    if (s.gridSpacing)  engine->SetGridSpacing(*s.gridSpacing);
+    // Persistent gizmo snap toggle (REG_DWORD, like GridVisible).
+    if (s.snapEnabled)  engine->SetSnapEnabled(*s.snapEnabled);
+    // Restore the persisted lock so a frozen object comes back frozen. (Ordering
+    // vs. the Name read isn't load-bearing: the silent restore force-deselects
+    // below regardless, so the object lands deselected either way — the lock flag
+    // just needs to be set before the user can interact.)
+    if (s.refLocked) engine->SetReferenceLocked(*s.refLocked);
+    // Name LAST so the mesh loads once with the transform in place; guard on
+    // non-empty so an unset selection doesn't clobber a debug
+    // ALO_LT7_TEST_OBJECT env-hook mesh.
+    //
+    // In headless --capture mode NEVER restore the persisted reference object:
+    // the capture supplies its own object (the ALO_LT7_TEST_OBJECT env hook, or
+    // --capture-ref via SetReferenceObject below), and restoring here would both
+    // clobber that mesh AND force the capture script to mutate the registry to
+    // suppress it — which, if the script is interrupted, wipes the user's saved
+    // selection. Skipping makes captures registry-inert and crash-safe by
+    // construction.
+    if (s.refName)
+    {
+        engine->SetReferenceObject(WideToAnsi(*s.refName));
+        // A silent startup restore is NOT a pick -- load the object inert so the
+        // gizmo + selection box appear only when the user clicks its body
+        // (honours the selection-gating).
+        engine->SetReferenceObjectSelected(false);
+    }
+
+    // [lighting-restore, session 12] Restore the persisted lighting (sun /
+    // fill1 / fill2 angles + colours + intensities, ambient, shadow) so the
+    // new-UI viewport opens with the user's saved lights instead of engine ctor
+    // defaults. Mirrors the legacy `PushLightingToEngine` (native Win32 UI,
+    // since removed) field-for-field, including the Force-Align fill-angle
+    // computation: when the LightingForceFillAlignment flag is ON the fill
+    // azimuths are derived from the sun (sun.z + 120° / + 210°, both at -10°
+    // tilt); when OFF the persisted free-edit angles feed the engine directly.
+    // Floats are REG_BINARY (readF), colours + the flag are REG_DWORD. Same
+    // !useTestHost gate as the rest of this block (the engine snapshot the
+    // dialog-lighting a11y golden seeds from must show ctor defaults under
+    // --test-host). Intensity is folded into the diffuse/specular channels
+    // exactly as the legacy `MakeLight` (native Win32 UI, since removed) did;
+    // fills pass specular=black.
+    auto makeLight = [](float zDeg, float tiltDeg, COLORREF diffuse,
+                        COLORREF specular, float intensity) -> Engine::Light {
+        Engine::Light L = {};
+        const float zr = D3DXToRadian(zDeg);
+        const float tr = D3DXToRadian(tiltDeg);
+        const float c  = cosf(tr);
+        L.Position  = D3DXVECTOR4(c * cosf(zr), c * sinf(zr), sinf(tr), 0.0f);
+        L.Direction = D3DXVECTOR4(0, 0, 0, 0);
+        L.Diffuse   = D3DXVECTOR4(GetRValue(diffuse)  / 255.0f * intensity,
+                                  GetGValue(diffuse)  / 255.0f * intensity,
+                                  GetBValue(diffuse)  / 255.0f * intensity, 1.0f);
+        L.Specular  = D3DXVECTOR4(GetRValue(specular) / 255.0f * intensity,
+                                  GetGValue(specular) / 255.0f * intensity,
+                                  GetBValue(specular) / 255.0f * intensity, 1.0f);
+        return L;
+    };
+    // Ambient pushes alpha w=1 — game-faithful. The engine folds scene ambient
+    // into its SPH lighting as ambient.xyz * ambient.w
+    // (src/SphericalHarmonics.cpp:76), so w gates the per-vertex mesh ambient
+    // floor; per Petroglyph's shaders (reference/foc-shaders/AlamoEngine.fxh)
+    // production Mesh*/RSkin* light ambient ONLY via that SPH path, so w=1
+    // reproduces the game's mesh brightness. This and the React
+    // `ambientToVec4` (LightingPanel.tsx) push the same w=1, so load == Reset
+    // (keep both in lockstep).
+    auto ambientToVec4 = [](COLORREF c) -> D3DXVECTOR4 {
+        return D3DXVECTOR4(GetRValue(c) / 255.0f, GetGValue(c) / 255.0f,
+                           GetBValue(c) / 255.0f, 1.0f);
+    };
+    // Shadow keeps w=0: m_shadow.xyz drives the reference-model shadow darken
+    // tint (Engine::RenderReferenceShadows), so it IS sampled at render time.
+    // The alpha (w) is unused by the darken — only .xyz is read.
+    auto colorToVec4 = [](COLORREF c) -> D3DXVECTOR4 {
+        return D3DXVECTOR4(GetRValue(c) / 255.0f, GetGValue(c) / 255.0f,
+                           GetBValue(c) / 255.0f, 0.0f);
+    };
+
+    // Force-align fill angles (verbatim from the legacy dialog).
+    const host::FillAngles fills = host::ForceAlignFillAngles(
+        s.forceAlign, s.sunZ, s.fill1Zp, s.fill1Tiltp, s.fill2Zp, s.fill2Tiltp);
+    engine->SetLight(Engine::LT_SUN,
+        makeLight(s.sunZ, s.sunTilt, s.sunDiffuse, s.sunSpecular, s.sunIntensity));
+    engine->SetLight(Engine::LT_FILL1,
+        makeLight(fills.fill1Z, fills.fill1Tilt, s.fill1Diffuse, RGB(0, 0, 0),
+                  s.fill1Intensity));
+    engine->SetLight(Engine::LT_FILL2,
+        makeLight(fills.fill2Z, fills.fill2Tilt, s.fill2Diffuse, RGB(0, 0, 0),
+                  s.fill2Intensity));
+    engine->SetAmbient(ambientToVec4(s.sunAmbient));
+    engine->SetShadow (colorToVec4(s.sunShadow));
+
+    // The standing no-user verification channel for the lighting restore —
+    // distinct from [view-restore] above. Prints the inputs that drove the
+    // engine writes.
+    g_self->Log("[lighting-restore] sunZ=%.1f sunTilt=%.1f forceAlign=%d "
+                "fill1Z=%.1f fill2Z=%.1f sunDiffuse=0x%06X\n",
+                s.sunZ, s.sunTilt, s.forceAlign ? 1 : 0, fills.fill1Z, fills.fill2Z,
+                static_cast<unsigned>(s.sunDiffuse));
+
+    // Dump restored view-settings to host.log. This is the ONLY no-user
+    // verification channel for this restore: the --test-host CDP bridge can't
+    // observe it (the whole block is gated off under --test-host), so a faithful
+    // non-test-host launch + this log line is how parity is confirmed (host.log
+    // is trusted under this architecture; agent screenshots are not).
+    g_self->Log("[view-restore] bg=0x%06X showGround=%d groundTex=%d "
+                "groundSolid=0x%06X skydome=%d\n",
+                static_cast<unsigned>(engine->GetBackground()),
+                engine->GetGround() ? 1 : 0,
+                engine->GetGroundTexture(),
+                static_cast<unsigned>(engine->GetGroundSolidColor()),
+                engine->GetSkydomeSlot());
+}
+
 LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg)
@@ -3139,311 +3308,18 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             // dev machine has saved in the registry.
             if (ShouldRestorePersistedViewSettings(useTestHost, m_captureGoldenProfile))
             {
-                // Open MAY fail -- on the very first launch ever the key does
-                // not exist yet. That must NOT skip this block: every read
-                // helper below falls back to its default when RegQueryValueExW
-                // fails (a null hKey fails every query), and the block's
-                // UNCONDITIONAL pushes -- the lighting SetLight/SetAmbient(w=1)/
-                // SetShadow -- are load-bearing. Gating the block on a
-                // successful open left a true first run on raw engine ctor
-                // state (ambient w=0 -> the default-on ground mesh rendered
-                // UNLIT, a black viewport) while every later launch looked
-                // fine because closing the app persists the key. Caught by
-                // scripts/cold-launch-check.ps1 on a truly clean profile.
-                HKEY hKey = nullptr;
-                RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\AloParticleEditor",
-                              0, KEY_READ, &hKey);
-                {
-                    DWORD en = 0, type = 0, size = sizeof(en);
-                    if (RegQueryValueExW(hKey, L"BloomEnabled", nullptr, &type,
-                                         reinterpret_cast<LPBYTE>(&en), &size) == ERROR_SUCCESS
-                        && type == REG_DWORD)
-                        engine->SetBloom(en != 0);
-
-                    // REG_BINARY float; reject NaN/Inf so a corrupt blob can't
-                    // drive bloom into a silly state (matches legacy's check).
-                    auto readF = [&](const wchar_t* name, float fallback) -> float {
-                        float v = 0.0f; DWORD t = 0, s = sizeof(v);
-                        if (RegQueryValueExW(hKey, name, nullptr, &t,
-                                             reinterpret_cast<LPBYTE>(&v), &s) == ERROR_SUCCESS
-                            && t == REG_BINARY && s == sizeof(v)
-                            && v == v && (v - v) == 0.0f)
-                            return v;
-                        return fallback;
-                    };
-                    engine->SetBloomStrength(readF(L"BloomStrength", engine->GetBloomStrength()));
-                    engine->SetBloomCutoff  (readF(L"BloomCutoff",   engine->GetBloomCutoff()));
-                    engine->SetBloomSize    (readF(L"BloomSize",     engine->GetBloomSize()));
-
-                    // [view-settings-restore, session 11] Mirror legacy
-                    // main.cpp's startup restore so the
-                    // new-UI viewport opens with the user's persisted
-                    // background / ground / skydome instead of engine ctor
-                    // defaults. Same value names/types legacy reads, so
-                    // settings round-trip between the two UIs. Same
-                    // !useTestHost gate as bloom: the a11y goldens (e.g.
-                    // dialog-lighting's "Show ground" toggle) must see
-                    // deterministic ctor defaults. GroundZ is intentionally
-                    // NOT restored — legacy resets it to 0 each launch by
-                    // design.
-                    auto readDword = [&](const wchar_t* name, DWORD& out) -> bool {
-                        DWORD t = 0, s = sizeof(out);
-                        return RegQueryValueExW(hKey, name, nullptr, &t,
-                                                reinterpret_cast<LPBYTE>(&out), &s) == ERROR_SUCCESS
-                               && t == REG_DWORD && s == sizeof(out);
-                    };
-                    // REG_SZ two-pass sized read (mirrors ReadGroundSlotPath:
-                    // the stored value may omit the trailing NUL).
-                    auto readSz = [&](const wchar_t* name) -> std::wstring {
-                        DWORD t = 0, cb = 0;
-                        if (RegQueryValueExW(hKey, name, nullptr, &t, nullptr, &cb) != ERROR_SUCCESS
-                            || t != REG_SZ || cb < sizeof(wchar_t))
-                            return std::wstring();
-                        std::vector<wchar_t> buf(cb / sizeof(wchar_t) + 1, 0);
-                        if (RegQueryValueExW(hKey, name, nullptr, &t,
-                                             reinterpret_cast<LPBYTE>(buf.data()), &cb) != ERROR_SUCCESS)
-                            return std::wstring();
-                        buf.back() = 0;
-                        return std::wstring(buf.data());
-                    };
-
-                    DWORD dw = 0;
-                    if (readDword(L"BackgroundColor", dw))
-                        engine->SetBackground(static_cast<COLORREF>(dw));
-                    if (readDword(L"ShowGround", dw))
-                        engine->SetGround(dw != 0);
-                    engine->SetGroundZ(0.0f);
-
-                    // Ground texture: per-slot custom paths BEFORE the
-                    // selected index, so SetGroundTexture can find the right
-                    // source for a custom slot (ordering is load-bearing).
-                    for (int slot = 0; slot < Engine::kGroundTextureCount; ++slot)
-                    {
-                        wchar_t name[32];
-                        swprintf_s(name, L"GroundTextureSlot%d", slot);
-                        std::wstring path = readSz(name);
-                        if (!path.empty())
-                            engine->SetGroundSlotCustomPath(slot, path);
-                    }
-                    if (readDword(L"GroundSolidColor", dw))
-                        engine->SetGroundSolidColor(static_cast<COLORREF>(dw));
-                    if (readDword(L"GroundTexture", dw)
-                        && dw < static_cast<DWORD>(Engine::kGroundTextureCount))
-                        engine->SetGroundTexture(static_cast<int>(dw));
-
-                    // Skydome: custom paths first so SetSkydomeSlot can reload
-                    // a previously-active custom slot.
-                    for (int s = Engine::kSkydomeFirstCustomSlot;
-                         s < Engine::kSkydomeSlotCount; ++s)
-                    {
-                        wchar_t name[64];
-                        swprintf_s(name, L"SkydomeCustomSlot%d", s);
-                        engine->SetSkydomeCustomPath(s, readSz(name));
-                    }
-                    if (readDword(L"SkydomeIndex", dw)
-                        && static_cast<int>(dw) < Engine::kSkydomeSlotCount)
-                        engine->SetSkydomeSlot(static_cast<int>(dw));
-
-                    // Game-dome environment: battle context + the two chosen
-                    // GameObject Names. This restore block runs after the device is
-                    // up, so SetSkydomeEnvironment resolves + uploads the meshes now
-                    // (the only place the new UI re-resolves a name-based selection).
-                    {
-                        std::wstring primW = readSz(L"SkydomePrimaryName");
-                        std::wstring secW  = readSz(L"SkydomeSecondaryName");
-                        if (!primW.empty() || !secW.empty())
-                        {
-                            DWORD ctxDw = 1;   // default Space
-                            readDword(L"SkydomeContext", ctxDw);
-                            engine->SetSkydomeEnvironment(
-                                ctxDw == 0 ? SkydomeContext::Land : SkydomeContext::Space,
-                                WideToAnsi(primW), WideToAnsi(secW));
-                        }
-                    }
-
-                    // Imported reference object + unit grid. At
-                    // startup the catalog isn't built yet, so SetReferenceObject DEFERS:
-                    // it kicks the off-thread catalog build and the mesh resolves/uploads
-                    // a frame or more later, once Update() harvests the catalog and reruns
-                    // the deferred rebuild (so a restored object isn't on the first frame).
-                    // Transform / grid spacing are REG_BINARY floats; visibility / grid
-                    // toggle / snap toggle are REG_DWORD.
-                    {
-                        auto readFloats = [&](const wchar_t* name, float* out, DWORD count) -> bool {
-                            DWORD t = 0, cb = count * sizeof(float);
-                            if (RegQueryValueExW(hKey, name, nullptr, &t,
-                                    reinterpret_cast<BYTE*>(out), &cb) != ERROR_SUCCESS
-                                || t != REG_BINARY || cb != count * sizeof(float))
-                                return false;
-                            // Reject NaN/Inf so a corrupt blob can't poison the
-                            // transform matrix (mirrors the bloom readF guard above).
-                            for (DWORD i = 0; i < count; ++i)
-                                if (!(out[i] == out[i] && (out[i] - out[i]) == 0.0f))
-                                    return false;
-                            return true;
-                        };
-                        float xform[6] = { 0, 0, 0, 0, 0, 0 };
-                        if (readFloats(L"ReferenceObjectTransform", xform, 6))
-                            engine->SetReferenceObjectTransform(
-                                D3DXVECTOR3(xform[0], xform[1], xform[2]),
-                                D3DXVECTOR3(xform[3], xform[4], xform[5]));
-                        if (readDword(L"ReferenceObjectVisible", dw))
-                            engine->SetReferenceObjectVisible(dw != 0);
-                        if (readDword(L"GridVisible", dw))
-                            engine->SetGridVisible(dw != 0);
-                        float spacing = 0.0f;
-                        if (readFloats(L"GridSpacing", &spacing, 1))
-                            engine->SetGridSpacing(spacing);
-                        // Persistent gizmo snap toggle (REG_DWORD, like GridVisible).
-                        if (readDword(L"SnapEnabled", dw))
-                            engine->SetSnapEnabled(dw != 0);
-                        // Restore the persisted lock so a frozen
-                        // object comes back frozen. (Ordering vs. the Name read isn't
-                        // load-bearing: the silent restore force-deselects below
-                        // regardless, so the object lands deselected either way — the
-                        // lock flag just needs to be set before the user can interact.)
-                        if (readDword(L"ReferenceObjectLocked", dw))
-                            engine->SetReferenceLocked(dw != 0);
-                        // Name LAST so the mesh loads once with the transform in
-                        // place; guard on non-empty so an unset selection doesn't
-                        // clobber a debug ALO_LT7_TEST_OBJECT env-hook mesh.
-                        //
-                        // In headless --capture mode NEVER restore the persisted
-                        // reference object: the capture supplies its own object (the
-                        // ALO_LT7_TEST_OBJECT env hook, or --capture-ref via
-                        // SetReferenceObject below), and restoring here would both
-                        // clobber that mesh AND force the capture script to mutate the
-                        // registry to suppress it — which, if the script is interrupted,
-                        // wipes the user's saved selection. Skipping makes captures
-                        // registry-inert and crash-safe by construction.
-                        const bool inCaptureMode = !m_captureAlo.empty() || !m_captureRef.empty();
-                        std::wstring nameW = inCaptureMode ? std::wstring()
-                                                           : readSz(L"ReferenceObjectName");
-                        if (!nameW.empty())
-                        {
-                            engine->SetReferenceObject(WideToAnsi(nameW));
-                            // A silent startup restore is NOT a pick -- load the
-                            // object inert so the gizmo + selection box appear only when
-                            // the user clicks its body (honours the selection-gating).
-                            engine->SetReferenceObjectSelected(false);
-                        }
-                    }
-
-                    // [lighting-restore, session 12] Restore the persisted
-                    // lighting (sun / fill1 / fill2 angles + colours +
-                    // intensities, ambient, shadow) so the new-UI viewport
-                    // opens with the user's saved lights instead of engine
-                    // ctor defaults. Mirrors the legacy `PushLightingToEngine`
-                    // (native Win32 UI, since removed) field-for-field, including the
-                    // Force-Align fill-angle computation: when the
-                    // LightingForceFillAlignment flag is ON the fill azimuths
-                    // are derived from the sun (sun.z + 120° / + 210°, both at
-                    // -10° tilt); when OFF the persisted free-edit angles feed
-                    // the engine directly. Floats are REG_BINARY (readF),
-                    // colours + the flag are REG_DWORD. Same !useTestHost gate
-                    // as the rest of this block (the engine snapshot the
-                    // dialog-lighting a11y golden seeds from must show ctor
-                    // defaults under --test-host). Intensity is folded into the
-                    // diffuse/specular channels exactly as the legacy `MakeLight`
-                    // (native Win32 UI, since removed) did; fills pass specular=black.
-                    auto readColor = [&](const wchar_t* name, COLORREF def) -> COLORREF {
-                        DWORD v = 0;
-                        return readDword(name, v) ? static_cast<COLORREF>(v) : def;
-                    };
-                    auto makeLight = [](float zDeg, float tiltDeg, COLORREF diffuse,
-                                        COLORREF specular, float intensity) -> Engine::Light {
-                        Engine::Light L = {};
-                        const float zr = D3DXToRadian(zDeg);
-                        const float tr = D3DXToRadian(tiltDeg);
-                        const float c  = cosf(tr);
-                        L.Position  = D3DXVECTOR4(c * cosf(zr), c * sinf(zr), sinf(tr), 0.0f);
-                        L.Direction = D3DXVECTOR4(0, 0, 0, 0);
-                        L.Diffuse   = D3DXVECTOR4(GetRValue(diffuse)  / 255.0f * intensity,
-                                                  GetGValue(diffuse)  / 255.0f * intensity,
-                                                  GetBValue(diffuse)  / 255.0f * intensity, 1.0f);
-                        L.Specular  = D3DXVECTOR4(GetRValue(specular) / 255.0f * intensity,
-                                                  GetGValue(specular) / 255.0f * intensity,
-                                                  GetBValue(specular) / 255.0f * intensity, 1.0f);
-                        return L;
-                    };
-                    // Ambient pushes alpha w=1 — game-faithful. The engine folds
-                    // scene ambient into its SPH lighting as ambient.xyz * ambient.w
-                    // (src/SphericalHarmonics.cpp:76), so w gates the per-vertex mesh
-                    // ambient floor; per Petroglyph's shaders (reference/foc-shaders/
-                    // AlamoEngine.fxh) production Mesh*/RSkin* light ambient ONLY via
-                    // that SPH path, so w=1 reproduces the game's mesh brightness.
-                    // This and the React `ambientToVec4` (LightingPanel.tsx) push the
-                    // same w=1, so load == Reset (keep both in lockstep).
-                    auto ambientToVec4 = [](COLORREF c) -> D3DXVECTOR4 {
-                        return D3DXVECTOR4(GetRValue(c) / 255.0f, GetGValue(c) / 255.0f,
-                                           GetBValue(c) / 255.0f, 1.0f);
-                    };
-                    // Shadow keeps w=0: m_shadow.xyz drives the reference-model shadow
-                    // darken tint (Engine::RenderReferenceShadows), so it IS sampled at
-                    // render time. The alpha (w) is unused by the darken — only .xyz is read.
-                    auto colorToVec4 = [](COLORREF c) -> D3DXVECTOR4 {
-                        return D3DXVECTOR4(GetRValue(c) / 255.0f, GetGValue(c) / 255.0f,
-                                           GetBValue(c) / 255.0f, 0.0f);
-                    };
-
-                    const float    sunIntensity = readF(L"LightSunIntensity", 0.50f);
-                    const float    sunZ         = readF(L"LightSunZAngle",    0.0f);
-                    const float    sunTilt      = readF(L"LightSunTilt",      45.0f);
-                    const COLORREF sunAmbient   = readColor(L"LightSunAmbientColor",  RGB(40, 40, 50));
-                    const COLORREF sunSpecular  = readColor(L"LightSunSpecularColor", RGB(190, 190, 200));
-                    const COLORREF sunDiffuse   = readColor(L"LightSunDiffuseColor",  RGB(180, 180, 190));
-                    const COLORREF sunShadow    = readColor(L"LightSunShadowColor",   RGB(100, 100, 110));
-                    DWORD faDw = 0;
-                    const bool forceAlign = readDword(L"LightingForceFillAlignment", faDw)
-                                                ? (faDw != 0) : true;  // kLightForceAlignDefault
-                    const float    fill1Intensity = readF(L"LightFill1Intensity", 0.50f);
-                    const float    fill1Zp        = readF(L"LightFill1ZAngle",    120.0f);
-                    const float    fill1Tiltp     = readF(L"LightFill1Tilt",      -10.0f);
-                    const COLORREF fill1Diffuse   = readColor(L"LightFill1DiffuseColor", RGB(60, 80, 160));
-                    const float    fill2Intensity = readF(L"LightFill2Intensity", 0.50f);
-                    const float    fill2Zp        = readF(L"LightFill2ZAngle",    210.0f);
-                    const float    fill2Tiltp     = readF(L"LightFill2Tilt",      -10.0f);
-                    const COLORREF fill2Diffuse   = readColor(L"LightFill2DiffuseColor", RGB(60, 80, 160));
-
-                    // Force-align fill angles (verbatim from the legacy dialog).
-                    const float fill1Z    = forceAlign ? (sunZ + 120.0f) : fill1Zp;
-                    const float fill1Tilt = forceAlign ? -10.0f          : fill1Tiltp;
-                    const float fill2Z    = forceAlign ? (sunZ + 210.0f) : fill2Zp;
-                    const float fill2Tilt = forceAlign ? -10.0f          : fill2Tiltp;
-
-                    engine->SetLight(Engine::LT_SUN,
-                        makeLight(sunZ, sunTilt, sunDiffuse, sunSpecular, sunIntensity));
-                    engine->SetLight(Engine::LT_FILL1,
-                        makeLight(fill1Z, fill1Tilt, fill1Diffuse, RGB(0, 0, 0), fill1Intensity));
-                    engine->SetLight(Engine::LT_FILL2,
-                        makeLight(fill2Z, fill2Tilt, fill2Diffuse, RGB(0, 0, 0), fill2Intensity));
-                    engine->SetAmbient(ambientToVec4(sunAmbient));
-                    engine->SetShadow (colorToVec4(sunShadow));
-
-                    // The standing no-user verification channel for the
-                    // lighting restore — distinct from [view-restore]
-                    // above. Prints the inputs that drove the engine writes.
-                    Log("[lighting-restore] sunZ=%.1f sunTilt=%.1f forceAlign=%d "
-                        "fill1Z=%.1f fill2Z=%.1f sunDiffuse=0x%06X\n",
-                        sunZ, sunTilt, forceAlign ? 1 : 0, fill1Z, fill2Z,
-                        static_cast<unsigned>(sunDiffuse));
-
-                    // Dump restored view-settings to host.log. This is the
-                    // ONLY no-user verification channel for this restore: the
-                    // --test-host CDP bridge can't observe it (the whole block
-                    // is gated off under --test-host), so a faithful
-                    // non-test-host launch + this log line is how parity is
-                    // confirmed (host.log is trusted under this architecture; agent
-                    // screenshots are not).
-                    Log("[view-restore] bg=0x%06X showGround=%d groundTex=%d "
-                        "groundSolid=0x%06X skydome=%d\n",
-                        static_cast<unsigned>(engine->GetBackground()),
-                        engine->GetGround() ? 1 : 0,
-                        engine->GetGroundTexture(),
-                        static_cast<unsigned>(engine->GetGroundSolidColor()),
-                        engine->GetSkydomeSlot());
-                    if (hKey) RegCloseKey(hKey);
-                }
+                // Open MAY fail on the very first launch (key absent). That must NOT skip
+                // the restore: ReadRestoredSettings fail-softs every read to its default on
+                // a null key, and the apply phase's UNCONDITIONAL lighting pushes
+                // (SetLight/SetAmbient(w=1)/SetShadow) are load-bearing — gating on a
+                // successful open once left a true first run unlit (ambient w=0 → black
+                // viewport). Caught by scripts/cold-launch-check.ps1 on a clean profile.
+                const bool inCaptureMode = !m_captureAlo.empty() || !m_captureRef.empty();
+                HKEY hKey = host::OpenSettingsKeyForRead();
+                const host::RestoredSettings restored =
+                    host::ReadRestoredSettings(hKey, inCaptureMode);
+                if (hKey) RegCloseKey(hKey);
+                ApplyRestoredSettings(engine.get(), restored);
             }
             else if (m_captureGoldenProfile)
             {

@@ -117,6 +117,7 @@ type LightFormState = {
 // Defaults preserved from the legacy Win32 lighting dialog's constants
 // (e.g. its sun-intensity default). These drive the Reset button and also
 // serve as the seed when the engine snapshot hasn't arrived yet.
+// Native schema/defaults: src/host/LightingSettings.h; keep both in lockstep.
 const SUN_DEFAULTS: LightFormState = {
   intensity: 0.5,
   az: 0,

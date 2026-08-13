@@ -114,6 +114,15 @@
     <ClInclude Include="host\BridgeRequestContext.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="host\LightingSettings.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\RestoredSettings.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\SettingsRegistry.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
     <ClInclude Include="host\CaptureGoldenProfile.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
@@ -246,6 +255,9 @@
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\BridgeDispatch_Spawner.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\RestoredSettings.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\HostBridgeProxy.cpp">

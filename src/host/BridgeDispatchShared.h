@@ -17,6 +17,7 @@
 
 #include <windows.h>          // COLORREF (self-contained; don't rely on include order)
 
+#include "SettingsRegistry.h"
 #include "third_party/nlohmann/json.hpp"
 
 #include "../engine.h"        // Engine::Camera/Light/LightType, ReferenceObjectStatus, SkydomeSlotStatus, D3DX types
@@ -34,55 +35,6 @@ extern std::string GenerateDuplicateName(const ParticleSystem* system,
 bool ParseCssColorToColorRef(const std::string& in, COLORREF& out);
 
 namespace host {
-
-// HKCU key under which ALL editor state persists (recent files, view state,
-// spawner config, lighting). Mirrors legacy main.cpp's registry layout.
-constexpr const wchar_t* kRegistryKeyPath = L"Software\\AloParticleEditor";
-
-// One-value registry writers for the settings key above. Every Persist* used
-// to hand-open/write/close the key with the identical RegCreateKeyExW
-// boilerplate (14 copies across three files); these own the open flags in one
-// place. Failure is deliberately silent, matching the old blocks: a failed
-// settings write must never interrupt an edit. Empty string => delete the
-// value (mirror legacy: clearing a slot deletes it).
-inline HKEY OpenSettingsKeyForWrite()
-{
-    HKEY hKey = nullptr;
-    RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
-                    REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr);
-    return hKey;   // nullptr on failure; the writers below no-op
-}
-inline void WriteRegDword(const wchar_t* name, DWORD v)
-{
-    if (HKEY k = OpenSettingsKeyForWrite())
-    {
-        RegSetValueExW(k, name, 0, REG_DWORD,
-                       reinterpret_cast<const BYTE*>(&v), sizeof(v));
-        RegCloseKey(k);
-    }
-}
-inline void WriteRegSz(const wchar_t* name, const std::wstring& s)
-{
-    if (HKEY k = OpenSettingsKeyForWrite())
-    {
-        if (s.empty())
-            RegDeleteValueW(k, name);
-        else
-            RegSetValueExW(k, name, 0, REG_SZ,
-                           reinterpret_cast<const BYTE*>(s.c_str()),
-                           static_cast<DWORD>((s.size() + 1) * sizeof(wchar_t)));
-        RegCloseKey(k);
-    }
-}
-inline void WriteRegBinary(const wchar_t* name, const void* data, DWORD bytes)
-{
-    if (HKEY k = OpenSettingsKeyForWrite())
-    {
-        RegSetValueExW(k, name, 0, REG_BINARY,
-                       static_cast<const BYTE*>(data), bytes);
-        RegCloseKey(k);
-    }
-}
 
 // Raw response-envelope builders (async Dispatch path).
 std::string BuildOkResponse(const std::string& id, const nlohmann::json& data);
