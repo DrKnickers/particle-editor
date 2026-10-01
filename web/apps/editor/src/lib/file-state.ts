@@ -75,6 +75,10 @@ export function useFileState(): {
 
 // ─── Event subscription hook ─────────────────────────────────────────
 
+/** The bridge the mounted useSeedFileState mirrors (null when unmounted).
+ *  promptSaveChanges re-reads the host's dirty bit through it — see there. */
+let seededBridge: Bridge | null = null;
+
 /** Mount once at app root. Wires the atom to the bridge's snapshot +
  *  the three relevant events. Returns nothing — the atom is the
  *  external state container.
@@ -87,6 +91,7 @@ export function useFileState(): {
 export function useSeedFileState(bridge: Bridge): void {
   useEffect(() => {
     let cancelled = false;
+    seededBridge = bridge;
 
     // 1. Seed from snapshot — the snapshot DTO carries currentFilePath
     //    + dirty as top-level fields.
@@ -135,6 +140,7 @@ export function useSeedFileState(bridge: Bridge): void {
 
     return () => {
       cancelled = true;
+      if (seededBridge === bridge) seededBridge = null;
       cancelRecent();
       offDirty();
       offRecent();
@@ -158,9 +164,32 @@ export function useSeedFileState(bridge: Bridge): void {
  *
  *  The closure is stored in a Zustand slot rather than passed to the
  *  prompt as a prop because the prompt is mounted at app-level and
- *  driven from anywhere — see App.tsx's `<SaveChangesPrompt />`. */
+ *  driven from anywhere — see App.tsx's `<SaveChangesPrompt />`.
+ *
+ *  While useSeedFileState is mounted, the decision reads the HOST's dirty
+ *  bit from a fresh engine/state/snapshot rather than the mirror: the
+ *  mirror trails the host by one dirty/changed event, so a New / Open
+ *  right after an edit could otherwise beat the event and discard the
+ *  edit unprompted. Requests are handled in order, so the snapshot sees
+ *  every edit sent before it. The mirror is the fallback when no bridge
+ *  is seeded or the snapshot fails / lacks the field. */
 export function promptSaveChanges(action: () => void | Promise<void>): void {
-  const dirty = useFileStateStore.getState().dirty;
+  const bridge = seededBridge;
+  if (bridge === null) {
+    decideSaveChanges(useFileStateStore.getState().dirty, action);
+    return;
+  }
+  bridge
+    .request({ kind: "engine/state/snapshot", params: {} })
+    .then(
+      (s) => (typeof s?.dirty === "boolean" ? s.dirty : useFileStateStore.getState().dirty),
+      () => useFileStateStore.getState().dirty,
+    )
+    .then((dirty) => decideSaveChanges(dirty, action))
+    .catch((err) => console.warn("[file-state] pending action failed:", err));
+}
+
+function decideSaveChanges(dirty: boolean, action: () => void | Promise<void>): void {
   if (!dirty) {
     // Fire-and-forget: the action may be a file op that rejects (runFileOp
     // re-throws after surfacing the error). Swallow so it never escapes as an

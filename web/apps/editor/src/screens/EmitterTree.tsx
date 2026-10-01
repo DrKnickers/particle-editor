@@ -1375,7 +1375,7 @@ export function EmitterTree({ bridge }: Props) {
   // composition visual with no HWND for the OS drag loop.)
   const draggedRef = useRef(false);
 
-  // While a pointer drag is active this holds a function that
+  // While a pointer drag is armed or active this holds a function that
   // ABORTS it (tears down dims/gap/chip + listeners, commits nothing). The
   // emitters/tree/changed subscription calls it before refetching, so a host-
   // side structural change mid-drag — undo/redo/paste reach the accelerators
@@ -1708,7 +1708,8 @@ export function EmitterTree({ bridge }: Props) {
   // drop indicator). The hovered row is found from the move event's
   // target (its `[data-emitter-id]`); on pointerup the resolved
   // `emitters/drop` is dispatched. Closures capture the tree snapshot at
-  // drag-start — safe because the tree doesn't mutate mid-gesture.
+  // drag-start — safe because a tree/changed aborts the gesture (armed or
+  // active) via activeDragCancelRef.
   const startDrag = (source: EmitterTreeNode, e: React.PointerEvent) => {
     if (e.button !== 0) return;               // primary button only
     if (editingRef.current !== null) return;  // not while inline-renaming
@@ -1926,11 +1927,8 @@ export function EmitterTree({ bridge }: Props) {
         // the row context menu. Start the autoscroll loop.
         document.addEventListener("keydown", onKey, true);
         document.addEventListener("contextmenu", onCtx, true);
-        // Expose the abort hook only while active, so a mid-
-        // drag tree mutation cancels the gesture before it commits stale ids.
         // Tear down on focus loss (alt-tab / window blur / tab hide)
         // so the drag can't get stranded with no pointerup ever arriving.
-        activeDragCancelRef.current = () => finish(false);
         window.addEventListener("blur", onBlur);
         document.addEventListener("visibilitychange", onVis);
         rafId = requestAnimationFrame(tick);
@@ -2033,6 +2031,11 @@ export function EmitterTree({ bridge }: Props) {
     document.addEventListener("pointermove", onMove);
     document.addEventListener("pointerup", onUp);
     document.addEventListener("pointercancel", onCancel);
+    // Expose the abort hook from ARMING, not activation: the closures above
+    // captured the tree at pointerdown, so a tree/changed that lands before
+    // the 4px threshold must disarm the gesture too — otherwise the later
+    // activation resolves (and commits) positional ids against a stale tree.
+    activeDragCancelRef.current = () => finish(false);
   };
 
   // Hovering a LINKED row lights up its whole group — member rows

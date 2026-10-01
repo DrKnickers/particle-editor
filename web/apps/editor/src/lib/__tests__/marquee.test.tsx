@@ -123,4 +123,33 @@ describe("marquee geometry", () => {
 
     fireEvent.pointerUp(document, { button: 0, ctrlKey: true, clientX: 4, clientY: 23 });
   });
+
+  it("pointercancel disarms the marquee — box cleared, later moves no longer select", async () => {
+    const bridge = makeStubBridge(marqueeFlatRootsTree());
+    renderWithTooltips(<EmitterTree bridge={bridge} />);
+    await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
+
+    const scroll = document.querySelector(".emitter-tree-scroll") as HTMLElement;
+    const smoke = screen.getByText("Smoke").closest("[data-emitter-id]") as HTMLElement;
+    const sparks = screen.getByText("Sparks").closest("[data-emitter-id]") as HTMLElement;
+    const flash = screen.getByText("Flash").closest("[data-emitter-id]") as HTMLElement;
+    stubRect(scroll, { left: 0, top: 0, right: 200, bottom: 120 });
+    stubRect(smoke, { left: 0, top: 0, right: 180, bottom: 24 });
+    stubRect(sparks, { left: 0, top: 24, right: 180, bottom: 48 });
+    stubRect(flash, { left: 0, top: 48, right: 180, bottom: 72 });
+
+    // Sweep Smoke only, then the OS cancels the pointer (no pointerup).
+    fireEvent.pointerDown(scroll, { button: 0, clientX: 190, clientY: 4 });
+    fireEvent.pointerMove(document, { button: 0, clientX: 4, clientY: 20 });
+    expect(screen.getByTestId("emitter-marquee")).toBeInTheDocument();
+    expect(screen.getByTestId("emitter-tree")).toHaveAttribute("data-selected-count", "1");
+
+    fireEvent.pointerCancel(document, { button: 0, clientX: 4, clientY: 20 });
+    expect(screen.queryByTestId("emitter-marquee")).toBeNull();
+
+    // A stray move after the cancel must not keep sweeping (listeners detached).
+    fireEvent.pointerMove(document, { button: 0, clientX: 4, clientY: 70 });
+    expect(screen.queryByTestId("emitter-marquee")).toBeNull();
+    expect(screen.getByTestId("emitter-tree")).toHaveAttribute("data-selected-count", "1");
+  });
 });

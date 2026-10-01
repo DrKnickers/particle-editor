@@ -49,6 +49,10 @@ beforeEach(() => {
   // The multi-select atom is module-scoped; reset between tests so
   // state mutations from prior cases don't leak.
   useEmitterSelectionStore.getState().clear();
+  // Same for the lifted tree store: the delete-gating helper tests seed it
+  // with stableId-less nodes, and EmitterTree paints whatever it holds
+  // before its own emitters/list lands (keyless rows → React key warning).
+  useEmitterTreeStore.setState({ tree: null });
 });
 
 /** Stub bridge whose served tree can be swapped and whose tree/changed
@@ -545,6 +549,27 @@ describe("EmitterTree", () => {
     expect(screen.getByTestId("emitter-row:1")).toHaveAttribute("data-primary", "true");
   });
 
+  it("tree keys are ignored while typing in a textarea / contenteditable inside the tree", async () => {
+    const bridge = makeStubBridge();
+    renderWithTooltips(<EmitterTree bridge={bridge} />);
+    await waitFor(() => {
+      expect(screen.getByText("Smoke")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText("Smoke"));
+    const tree = screen.getByTestId("emitter-tree");
+    // Any typing surface (not only <input>) owns its keys — the shared
+    // isTypingTarget rule the viewport and curve editor use.
+    const textarea = document.createElement("textarea");
+    const editable = document.createElement("div");
+    editable.setAttribute("contenteditable", "true");
+    tree.append(textarea, editable);
+    fireEvent.keyDown(textarea, { key: "ArrowDown" });
+    fireEvent.keyDown(editable, { key: "ArrowDown" });
+    expect(tree).toHaveAttribute("data-primary-id", "0");
+    textarea.remove();
+    editable.remove();
+  });
+
   // ─── Ctrl+C clipboard dispatch ───────────────────────────────────
 
   it("Ctrl+C on the tree dispatches emitters/copy with the current selection ids", async () => {
@@ -1006,13 +1031,23 @@ describe("chain-load warning glyph", () => {
   });
 
   it("renders no glyph at fixture-default spawn values", async () => {
-    renderWithTooltips(<EmitterTree bridge={new MockBridge()} />);
-    await waitFor(() => {
-      expect(screen.getByText("Smoke")).toBeInTheDocument();
-    });
-    // Fixture defaults (10/s × 1-5 s lifetime) estimate far below the
-    // 10,000 threshold — no row warns.
-    expect(screen.queryAllByTestId(/^emitter-chain-warning-/)).toHaveLength(0);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      renderWithTooltips(<EmitterTree bridge={new MockBridge()} />);
+      await waitFor(() => {
+        expect(screen.getByText("Smoke")).toBeInTheDocument();
+      });
+      // Fixture defaults (10/s × 1-5 s lifetime) estimate far below the
+      // 10,000 threshold — no row warns.
+      expect(screen.queryAllByTestId(/^emitter-chain-warning-/)).toHaveLength(0);
+      // Rows key by stableId (the reorder glide); no React key warning.
+      const keyWarnings = errorSpy.mock.calls.filter((args) =>
+        args.some((a) => typeof a === "string" && a.includes('unique "key"')),
+      );
+      expect(keyWarnings).toEqual([]);
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   it("shows the glyph with a breakdown tooltip when an emitter crosses the threshold", async () => {

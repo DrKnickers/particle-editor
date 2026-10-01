@@ -56,13 +56,18 @@ export function useAppAccelerators(bridge: Bridge): void {
   const stateRef = useRef<EngineStateDto | null>(null);
   useEffect(() => {
     let cancelled = false;
+    // Set by the first engine/state/changed: a broadcast is newer than the
+    // in-flight mount snapshot, so a late snapshot must not overwrite it (the
+    // same guard useEngineField's shared store applies).
+    let changedSeen = false;
     bridge
       .request({ kind: "engine/state/snapshot", params: {} })
       .then((s) => {
-        if (!cancelled) stateRef.current = s;
+        if (!cancelled && !changedSeen) stateRef.current = s;
       })
       .catch(() => {});
     const off = bridge.on("engine/state/changed", (e) => {
+      changedSeen = true;
       stateRef.current = e.payload;
     });
     return () => {

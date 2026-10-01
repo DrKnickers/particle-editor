@@ -86,6 +86,10 @@ export function SpawnerPanel({ bridge }: Props) {
 
   useEffect(() => {
     let cancelled = false;
+    // Set by the first engine/state/changed: a broadcast is newer than the
+    // in-flight mount snapshot, so a late snapshot must not overwrite it (the
+    // same guard useEngineField's shared store applies).
+    let changedSeen = false;
     bridge
       .request({ kind: "engine/state/snapshot", params: {} })
       .then((s) => {
@@ -94,7 +98,11 @@ export function SpawnerPanel({ bridge }: Props) {
         // contract is that `config` is never undefined (useState note
         // above). Latent until B3's useSyncExternalStore store made
         // React flush the queued undefined synchronously.
-        if (!cancelled && s?.spawner) setConfig(s.spawner);
+        // A local commit made before the snapshot resolved is newer too
+        // (its echo is skipped below, so a stale seed would stick).
+        if (!cancelled && !changedSeen && lastCommitted.current === null && s?.spawner) {
+          setConfig(s.spawner);
+        }
       })
       .catch((err) => console.warn("[SpawnerPanel] snapshot failed:", err));
 
@@ -103,6 +111,7 @@ export function SpawnerPanel({ bridge }: Props) {
       // and applying it back into the same store is wasteful.
       const inbound = e.payload?.spawner;
       if (!inbound) return; // same shape guard as the seed above
+      changedSeen = true;
       if (
         lastCommitted.current &&
         JSON.stringify(lastCommitted.current) === JSON.stringify(inbound)

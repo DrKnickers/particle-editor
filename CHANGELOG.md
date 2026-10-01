@@ -15,6 +15,9 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 - Pressing Delete on an emitter no longer also deletes the curve keys selected in the curve editor, and Delete with a dialog open no longer deletes keys behind it
 - After an undo, the curve editor's Value and Time fields show the restored value, so the next nudge starts from it instead of re-applying the undone edit
 - Dragging a curve key while the selected emitter changes no longer moves a key on the newly selected emitter
+- Starting to drag an emitter just as an undo or paste changes the tree no longer moves the wrong emitters
+- New and Open right after an edit now always ask to save the unsaved change
+- The Bloom and Spawner panels no longer briefly revert to older settings when they open while the scene is changing
 
 ## [0.4.1] - 2026-08-12
 

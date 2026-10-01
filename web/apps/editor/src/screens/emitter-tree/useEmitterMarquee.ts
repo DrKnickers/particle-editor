@@ -139,6 +139,7 @@ export function useEmitterMarquee({ orderedIds }: UseEmitterMarqueeOptions) {
       const cleanup = () => {
         document.removeEventListener("pointermove", onMove);
         document.removeEventListener("pointerup", onUp);
+        document.removeEventListener("pointercancel", onUp);
         document.removeEventListener("keydown", onKey, true);
         marqueeRef.current = null;
         setMarqueeBox(null);
@@ -157,6 +158,9 @@ export function useEmitterMarquee({ orderedIds }: UseEmitterMarqueeOptions) {
       };
       document.addEventListener("pointermove", onMove);
       document.addEventListener("pointerup", onUp);
+      // A cancelled pointer (OS gesture, focus loss) never sends pointerup —
+      // end the sweep the same way so no listeners stay armed.
+      document.addEventListener("pointercancel", onUp);
       document.addEventListener("keydown", onKey, true);
     },
     [],

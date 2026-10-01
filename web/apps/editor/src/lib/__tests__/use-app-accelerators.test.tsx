@@ -214,6 +214,26 @@ describe("useAppAccelerators — uncovered dispatch + guard paths", () => {
     expect(b.request).toHaveBeenCalledWith({ kind: "engine/set/heat-debug", params: { enabled: false } });
   });
 
+  it("a late engine/state/snapshot does not overwrite a newer engine/state/changed", async () => {
+    const b = makeFakeBridge();
+    let resolveSnapshot: (s: unknown) => void = () => {};
+    b.request.mockImplementation((req: { kind: string }) => {
+      if (req.kind === "engine/state/snapshot") {
+        return new Promise((resolve) => { resolveSnapshot = resolve as (s: unknown) => void; });
+      }
+      return Promise.resolve({});
+    });
+    render(<Harness bridge={b} />);
+    // The newer broadcast lands first (ground on), then the stale mount
+    // snapshot (ground off) resolves — the toggle must read the broadcast.
+    b.emitState({ ground: true, paused: false, heatDebug: false });
+    resolveSnapshot({ ground: false, paused: false, heatDebug: false });
+    await flush();
+    b.request.mockClear();
+    b.fire("Ctrl+G");
+    expect(b.request).toHaveBeenCalledWith({ kind: "engine/set/ground", params: { enabled: false } });
+  });
+
   it("Ctrl+L is guarded: no reference object → NO dispatch; loaded object → lock toggles", () => {
     const b = makeFakeBridge();
     render(<Harness bridge={b} />);

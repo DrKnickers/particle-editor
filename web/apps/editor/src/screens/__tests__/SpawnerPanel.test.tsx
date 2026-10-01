@@ -9,7 +9,7 @@
 //      new value embedded in the params.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
 import { SpawnerPanel } from "../SpawnerPanel";
 import { makeDefaultEngineState } from "@/bridge/mock-state";
@@ -47,6 +47,64 @@ function makeStubBridge(modeOverride: "manual" | "auto" = "manual"): Bridge & {
 }
 
 describe("SpawnerPanel", () => {
+  it("a late engine/state/snapshot does not overwrite a newer engine/state/changed", async () => {
+    const bridge = makeStubBridge("manual");
+    const base: EngineStateDto = {
+      ...makeDefaultEngineState(),
+      spawner: { ...makeDefaultSpawnerParams(), mode: "manual", burstSize: 2 },
+    };
+    let resolveSnapshot: (s: unknown) => void = () => {};
+    const captured: { onChanged?: (e: { payload: unknown }) => void } = {};
+    bridge.request.mockImplementation((req: { kind: string }) => {
+      if (req.kind === "engine/state/snapshot") {
+        return new Promise((resolve) => { resolveSnapshot = resolve; });
+      }
+      return Promise.resolve({});
+    });
+    bridge.on.mockImplementation((kind: string, h: (e: { payload: unknown }) => void) => {
+      if (kind === "engine/state/changed") captured.onChanged = h;
+      return () => {};
+    });
+    render(<SpawnerPanel bridge={bridge} />);
+
+    // The newer broadcast (burst 7) lands first, then the stale mount
+    // snapshot (burst 2) resolves — the panel must keep the broadcast.
+    act(() => captured.onChanged?.({ payload: { ...base, spawner: { ...base.spawner, burstSize: 7 } } }));
+    await act(async () => {
+      resolveSnapshot(base);
+      await Promise.resolve();
+    });
+    expect(Number((screen.getByLabelText("Burst size") as HTMLInputElement).value)).toBe(7);
+  });
+
+  it("a late engine/state/snapshot does not overwrite a local commit made before it resolved", async () => {
+    const bridge = makeStubBridge("manual");
+    const base: EngineStateDto = {
+      ...makeDefaultEngineState(),
+      spawner: { ...makeDefaultSpawnerParams(), mode: "manual", burstSize: 2 },
+    };
+    let resolveSnapshot: (s: unknown) => void = () => {};
+    bridge.request.mockImplementation((req: { kind: string }) => {
+      if (req.kind === "engine/state/snapshot") {
+        return new Promise((resolve) => { resolveSnapshot = resolve; });
+      }
+      return Promise.resolve({});
+    });
+    render(<SpawnerPanel bridge={bridge} />);
+
+    // The user commits burst 5 before the mount snapshot (taken before the
+    // commit) resolves; its echo is skipped by lastCommitted, so a stale
+    // snapshot applied now would stick.
+    const burst = screen.getByLabelText("Burst size") as HTMLInputElement;
+    fireEvent.change(burst, { target: { value: "5" } });
+    fireEvent.blur(burst);
+    await act(async () => {
+      resolveSnapshot(base);
+      await Promise.resolve();
+    });
+    expect(Number((screen.getByLabelText("Burst size") as HTMLInputElement).value)).toBe(5);
+  });
+
   it("renders at least 5 Spinners (burst size, spacing, position xyz, lifetime)", async () => {
     const bridge = makeStubBridge("manual");
     render(<SpawnerPanel bridge={bridge} />);

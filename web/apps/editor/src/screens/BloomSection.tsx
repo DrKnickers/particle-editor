@@ -34,19 +34,24 @@ export function BloomSection({ bridge, defaultOpen = false }: Props) {
 
   useEffect(() => {
     let cancelled = false;
+    // Set by the first engine/state/changed: a broadcast is newer than the
+    // in-flight mount seeds, so a late seed must not overwrite it (the same
+    // guard useEngineField's shared store applies).
+    let changedSeen = false;
     bridge
       .request({ kind: "engine/state/snapshot", params: {} })
       .then((s) => {
-        if (!cancelled) setSnapshot(s);
+        if (!cancelled && !changedSeen) setSnapshot(s);
       })
       .catch((err) => console.warn("[BloomSection] snapshot failed:", err));
     bridge
       .request({ kind: "engine/query/bloom-available", params: {} })
       .then((v) => {
-        if (!cancelled) setAvailable(v);
+        if (!cancelled && !changedSeen) setAvailable(v);
       })
       .catch((err) => console.warn("[BloomSection] bloom-available failed:", err));
     const off = bridge.on("engine/state/changed", (e) => {
+      changedSeen = true;
       setSnapshot(e.payload);
       // Re-derive availability from the snapshot; the dedicated query
       // fires once on mount, subsequent changes ride the state event.

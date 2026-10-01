@@ -243,6 +243,24 @@ describe("promptSaveChanges", () => {
     expect(useFileStateStore.getState().pendingAction).toBe(action);
   });
 
+  it("re-reads the host's dirty bit before deciding — an edit whose dirty/changed hasn't landed still prompts", async () => {
+    const snapshot = { currentFilePath: null, dirty: false };
+    const { bridge } = makeFakeBridge({ snapshot });
+    const { unmount } = renderHook(() => useSeedFileState(bridge));
+    await waitFor(() => expect(bridge.request).toHaveBeenCalledWith({ kind: "engine/state/snapshot", params: {} }));
+    await act(async () => { await Promise.resolve(); });
+    expect(useFileStateStore.getState().dirty).toBe(false);
+
+    // The host is now dirty (an edit just landed) but its dirty/changed
+    // event hasn't reached the mirror yet — the gate must still prompt.
+    snapshot.dirty = true;
+    const action = vi.fn();
+    promptSaveChanges(action);
+    await waitFor(() => expect(useFileStateStore.getState().pendingAction).toBe(action));
+    expect(action).not.toHaveBeenCalled();
+    unmount();
+  });
+
   it("dirty → Save: file/save succeeds, then the pending action runs and the slot clears", async () => {
     useFileStateStore.getState().setDirty(true);
     const { bridge } = makeFakeBridge();

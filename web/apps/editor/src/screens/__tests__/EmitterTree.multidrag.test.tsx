@@ -301,6 +301,73 @@ describe("EmitterTree multi-drag preview", () => {
     expect(calls.find((c) => c.kind === "emitters/drop")).toBeUndefined();
   });
 
+  it("aborts an armed drag when the host mutates the tree BEFORE the activation threshold — no stale-id commit", async () => {
+    // The gesture captures its positional ids at pointerdown, but only goes
+    // active after a 4px move. A tree/changed landing in that window (host
+    // reorder: positional ids now name different emitters) must disarm the
+    // gesture too, or the later activation resolves against the stale tree.
+    let tree = flatRootsTree();
+    const handlers = new Map<string, (e: unknown) => void>();
+    const bridge = {
+      request: vi.fn().mockImplementation((req: { kind: string; params?: unknown }) => {
+        if (req.kind === "emitters/list") return Promise.resolve(tree);
+        if (req.kind === "engine/state/snapshot") return Promise.resolve({ selectedEmitterId: null });
+        if (req.kind === "emitters/reorder-many") {
+          const ids = (req.params as { ids: number[] }).ids;
+          return Promise.resolve({ ok: true, newIds: ids });
+        }
+        return Promise.resolve({});
+      }),
+      on: vi.fn().mockImplementation((kind: string, h: (e: unknown) => void) => {
+        handlers.set(kind, h);
+        return () => handlers.delete(kind);
+      }),
+    } as unknown as Bridge & { request: ReturnType<typeof vi.fn> };
+
+    renderWithTooltips(<EmitterTree bridge={bridge} />);
+    await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText("Flash"));
+    const flashBtn = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
+
+    // Arm (pointerdown) — below the activation threshold, nothing active yet.
+    fireEvent.pointerDown(flashBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 0 });
+
+    // Host reorders the roots (Flash moves to the front, positional ids
+    // reshuffle; stableIds follow the emitters) → tree/changed + refetch.
+    const [smoke, sparks, flash] = tree.root.children;
+    tree = {
+      root: {
+        ...tree.root,
+        children: [
+          { ...flash!, id: 0 },
+          { ...smoke!, id: 3 },
+          { ...sparks!, id: 5 },
+        ],
+      },
+    };
+    await act(async () => {
+      handlers.get("emitters/tree/changed")?.({ payload: null });
+    });
+
+    const smokeBtn  = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
+    const sparksBtn = screen.getByText("Sparks").closest<HTMLElement>("[data-emitter-id]")!;
+    const flashNow  = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
+    stubRect(flashNow, 0, 24);
+    stubRect(smokeBtn, 24, 24);
+    stubRect(sparksBtn, 48, 24);
+
+    // The same pointer now crosses the threshold and releases: the gesture was
+    // disarmed, so no drag activates and nothing commits.
+    fireEvent.pointerMove(flashNow, { pointerType: "mouse", clientX: 40, clientY: 50 });
+    expect(screen.queryByTestId(/^drop-gap-at-/)).toBeNull();
+    expect(screen.queryByTestId("drag-chip")).toBeNull();
+    fireEvent.pointerUp(flashNow, { button: 0, pointerType: "mouse", clientX: 40, clientY: 50 });
+    const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
+    expect(calls.find((c) => c.kind === "emitters/reorder-many")).toBeUndefined();
+    expect(calls.find((c) => c.kind === "emitters/drop")).toBeUndefined();
+  });
+
   // ── Phase 0: the EmitterTree drag must also abort on window blur
   // (alt-tab) and tab-hide (visibilitychange) — same teardown the tree/changed
   // case proves, via the focus-loss listeners attached on activation. Each pairs

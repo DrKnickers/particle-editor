@@ -4,12 +4,12 @@
 // changing Strength dispatches engine/set/bloom-strength with the new value.
 
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import { BloomSection } from "../BloomSection";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
-function makeStubBridge(): Bridge & { request: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn> } {
-  const snapshot = {
+function makeSnapshot() {
+  return {
     ground: false,
     groundZ: 0,
     groundTexture: 0,
@@ -36,6 +36,10 @@ function makeStubBridge(): Bridge & { request: ReturnType<typeof vi.fn>; on: Ret
     wind: [0, 0, 0],
     gravity: [0, 0, 0],
   };
+}
+
+function makeStubBridge(): Bridge & { request: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn> } {
+  const snapshot = makeSnapshot();
   return {
     request: vi.fn().mockImplementation((req: { kind: string }) => {
       if (req.kind === "engine/state/snapshot") return Promise.resolve(snapshot);
@@ -54,6 +58,34 @@ describe("BloomSection", () => {
     expect(screen.getByLabelText("Bloom strength")).toBeInTheDocument();
     expect(screen.getByLabelText("Bloom cutoff")).toBeInTheDocument();
     expect(screen.getByLabelText("Bloom size")).toBeInTheDocument();
+  });
+
+  it("a late engine/state/snapshot does not overwrite a newer engine/state/changed", async () => {
+    const bridge = makeStubBridge();
+    const base = makeSnapshot();
+    let resolveSnapshot: (s: unknown) => void = () => {};
+    const captured: { onChanged?: (e: { payload: unknown }) => void } = {};
+    bridge.request.mockImplementation((req: { kind: string }) => {
+      if (req.kind === "engine/state/snapshot") {
+        return new Promise((resolve) => { resolveSnapshot = resolve; });
+      }
+      if (req.kind === "engine/query/bloom-available") return Promise.resolve(true);
+      return Promise.resolve({});
+    });
+    bridge.on.mockImplementation((kind: string, h: (e: { payload: unknown }) => void) => {
+      if (kind === "engine/state/changed") captured.onChanged = h;
+      return () => {};
+    });
+    render(<BloomSection bridge={bridge} defaultOpen />);
+
+    // The newer broadcast (strength 3) lands first, then the stale mount
+    // snapshot (strength 1.5) resolves — the panel must keep the broadcast.
+    act(() => captured.onChanged?.({ payload: { ...base, bloomStrength: 3 } }));
+    await act(async () => {
+      resolveSnapshot({ ...base, bloomStrength: 1.5 });
+      await Promise.resolve();
+    });
+    expect(Number((screen.getByLabelText("Bloom strength") as HTMLInputElement).value)).toBe(3);
   });
 
   it("changing Strength dispatches engine/set/bloom-strength", () => {

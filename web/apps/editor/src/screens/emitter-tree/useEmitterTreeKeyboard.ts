@@ -4,6 +4,7 @@ import { useEmitterSelectionStore } from "@/lib/emitter-selection";
 import { markEmittersCopied } from "@/lib/emitter-clipboard";
 import { requestDeleteEmitters } from "@/lib/delete-emitters";
 import { announceWhenOk } from "@/lib/status-feedback";
+import { isTypingTarget } from "@/lib/viewport-input";
 import type { RenameEditingState } from "./useEmitterRename";
 
 type KeyboardRow = {
@@ -41,8 +42,7 @@ export function useEmitterTreeKeyboard({
     (e: ReactKeyboardEvent<HTMLDivElement>) => {
       // Never steal keystrokes when the focus is in a text input
       // (inline-rename, spinners, modal text fields that might bubble).
-      const target = e.target as HTMLElement | null;
-      if (target !== null && target.tagName === "INPUT") return;
+      if (isTypingTarget(e.target)) return;
       // Editing mode disables the global keyboard nav so the input
       // owns all keys. (The input's onKeyDown stops propagation too;
       // belt + braces.)
