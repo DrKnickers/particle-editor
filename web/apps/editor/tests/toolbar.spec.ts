@@ -3,22 +3,12 @@
 // The three viewport toggles (ground / bloom / leave-particles) moved here
 // from the deleted ViewportPill; Undo/Redo and Reload-* live in the menubar
 // (see menu-bar.spec.ts). CDP-attach harness matches sibling app-shell.spec.ts.
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 test("Toolbar renders the 2026 button set", async () => {
@@ -54,8 +44,7 @@ test("Toolbar renders the 2026 button set", async () => {
 
 test("engine/set/paused mutates state and flips Play/Pause button", async () => {
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const bridge = (window as any).bridge;
+    const bridge = window.bridge!;
     await bridge.request({ kind: "engine/set/paused", params: { paused: true } });
     await new Promise((r) => setTimeout(r, 150));
     const snap = await bridge.request({ kind: "engine/state/snapshot", params: {} });
@@ -75,15 +64,13 @@ test("engine/set/paused mutates state and flips Play/Pause button", async () => 
 
   // Cleanup — un-pause for the next test.
   await page.evaluate(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (window as any).bridge.request({ kind: "engine/set/paused", params: { paused: false } });
+    return window.bridge!.request({ kind: "engine/set/paused", params: { paused: false } });
   });
 });
 
 test("engine/action/step-frames is dispatched without error", async () => {
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const bridge = (window as any).bridge;
+    const bridge = window.bridge!;
     // Pause first so step-frames isn't a complete no-op host-side.
     await bridge.request({ kind: "engine/set/paused", params: { paused: true } });
     const r = await bridge.request({ kind: "engine/action/step-frames", params: { frames: 1 } });

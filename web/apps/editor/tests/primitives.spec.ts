@@ -10,25 +10,12 @@
 // loads as file:/// in debug mode, so we use page.evaluate to update
 // window.location.search and wait for the gallery to appear.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 }
-  );
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 
   // Navigate to the demo route. Replacing the query param causes a React
   // re-render without a full page reload because Vite's SPA build serves
@@ -50,7 +37,6 @@ test.afterAll(async () => {
   await page.evaluate(() => {
     window.location.href = window.location.href.split("?")[0];
   }).catch(() => {});
-  await browser?.close();
 });
 
 // ── 1. Gallery page loads ────────────────────────────────────────────────────

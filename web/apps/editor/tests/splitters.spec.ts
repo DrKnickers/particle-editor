@@ -32,22 +32,12 @@
 // All assertions are percentage-based with ±1 % tolerance so the
 // spec is window-size-agnostic.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 // Reset persistence + reload to a known clean state before each test.

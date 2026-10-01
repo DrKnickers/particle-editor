@@ -8,29 +8,17 @@
 //    emitters/set-properties — a subsequent get-properties reflects
 //    the new value, confirming the round-trip.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 test("selecting an emitter shows property tabs (lower-left) + track editor (lower-right)", async () => {
   await page.evaluate(async () => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
     const list = await bridge.request({ kind: "emitters/list", params: {} }) as {
       root: { children: { id: number }[] };
@@ -63,9 +51,7 @@ test("selecting an emitter shows property tabs (lower-left) + track editor (lowe
 test("editing the Lifetime spinner in the Basic tab fires emitters/set-properties and round-trips via get-properties", async () => {
   // Re-select to ensure the panel is mounted.
   const firstId = await page.evaluate(async () => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
     const list = await bridge.request({ kind: "emitters/list", params: {} }) as {
       root: { children: { id: number }[] };
@@ -91,9 +77,7 @@ test("editing the Lifetime spinner in the Basic tab fires emitters/set-propertie
   // assert the round-trip (the spinner's commit semantics are covered
   // by Vitest).
   await page.evaluate(async (id: number) => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     await bridge!.request({
       kind: "emitters/set-properties",
       params: { id, patch: { lifetime: 7.5 } },
@@ -102,9 +86,7 @@ test("editing the Lifetime spinner in the Basic tab fires emitters/set-propertie
 
   // Round-trip via get-properties.
   const result = await page.evaluate(async (id: number) => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     return await bridge!.request({
       kind: "emitters/get-properties",
       params: { id },
@@ -117,9 +99,7 @@ test("editing the Lifetime spinner in the Basic tab fires emitters/set-propertie
 test("switching to Physics tab and changing gravity round-trips via get-properties", async () => {
   // Re-select to ensure the panel is mounted.
   const firstId = await page.evaluate(async () => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
     const list = await bridge.request({ kind: "emitters/list", params: {} }) as {
       root: { children: { id: number }[] };
@@ -143,9 +123,7 @@ test("switching to Physics tab and changing gravity round-trips via get-properti
   // bridge directly to assert round-trip; per-keystroke spinner
   // semantics are covered by Vitest.
   await page.evaluate(async (id: number) => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     await bridge!.request({
       kind: "emitters/set-properties",
       params: { id, patch: { gravity: -9.81 } },
@@ -153,9 +131,7 @@ test("switching to Physics tab and changing gravity round-trips via get-properti
   }, firstId);
 
   const result = await page.evaluate(async (id: number) => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     return await bridge!.request({
       kind: "emitters/get-properties",
       params: { id },
@@ -167,9 +143,7 @@ test("switching to Physics tab and changing gravity round-trips via get-properti
 
 test("Physics group type change round-trips via get-properties", async () => {
   const firstId = await page.evaluate(async () => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
     const list = await bridge.request({ kind: "emitters/list", params: {} }) as {
       root: { children: { id: number }[] };
@@ -192,13 +166,11 @@ test("Physics group type change round-trips via get-properties", async () => {
   // automation under CDP is flaky enough that we mirror the spinner /
   // blend-mode pattern from the Appearance + Lifetime tests.
   const patchedGroups = await page.evaluate(async (id: number) => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     const before = await bridge!.request({
       kind: "emitters/get-properties",
       params: { id },
-    }) as { properties: { groups: { type: number }[] } };
+    });
     const next = before.properties.groups.map((g, i) =>
       i === 0 ? { ...g, type: 3 } : g,
     );
@@ -209,7 +181,7 @@ test("Physics group type change round-trips via get-properties", async () => {
     const after = await bridge!.request({
       kind: "emitters/get-properties",
       params: { id },
-    }) as { properties: { groups: { type: number }[] } };
+    });
     return after.properties.groups;
   }, firstId);
 
@@ -219,9 +191,7 @@ test("Physics group type change round-trips via get-properties", async () => {
 test("switching to Appearance tab and changing blendMode emits engine/state/changed with the patched value", async () => {
   // Re-select to ensure the panel is mounted.
   const firstId = await page.evaluate(async () => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
     const list = await bridge.request({ kind: "emitters/list", params: {} }) as {
       root: { children: { id: number }[] };
@@ -248,9 +218,7 @@ test("switching to Appearance tab and changing blendMode emits engine/state/chan
   // Vitest specs already. Here we assert the round-trip: a change to
   // blendMode is reflected back via get-properties.
   await page.evaluate(async (id: number) => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     await bridge!.request({
       kind: "emitters/set-properties",
       params: { id, patch: { blendMode: 11 } },
@@ -258,9 +226,7 @@ test("switching to Appearance tab and changing blendMode emits engine/state/chan
   }, firstId);
 
   const result = await page.evaluate(async (id: number) => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     return await bridge!.request({
       kind: "emitters/get-properties",
       params: { id },
@@ -285,9 +251,7 @@ test("switching to Appearance tab and changing blendMode emits engine/state/chan
 test("Basic tab Generation radios commit via UI and round-trip; Minimum lifetime shows the inverted percent", async () => {
   // Re-select to ensure the panel is mounted.
   const firstId = await page.evaluate(async () => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
     const list = await bridge.request({ kind: "emitters/list", params: {} }) as {
       root: { children: { id: number }[] };
@@ -323,9 +287,7 @@ test("Basic tab Generation radios commit via UI and round-trip; Minimum lifetime
   await expect
     .poll(async () =>
       page.evaluate(async (id: number) => {
-        const bridge = (window as Window & { bridge?: {
-          request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-        } }).bridge;
+        const bridge = window.bridge;
         const r = await bridge!.request({
           kind: "emitters/get-properties",
           params: { id },
@@ -340,9 +302,7 @@ test("Basic tab Generation radios commit via UI and round-trip; Minimum lifetime
   await expect
     .poll(async () =>
       page.evaluate(async (id: number) => {
-        const bridge = (window as Window & { bridge?: {
-          request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-        } }).bridge;
+        const bridge = window.bridge;
         const r = await bridge!.request({
           kind: "emitters/get-properties",
           params: { id },
@@ -357,9 +317,7 @@ test("Basic tab Generation radios commit via UI and round-trip; Minimum lifetime
   // which triggers the panel's authoritative re-fetch, so the spinner
   // updates without re-selecting.
   await page.evaluate(async (id: number) => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     await bridge!.request({
       kind: "emitters/set-properties",
       params: { id, patch: { randomLifetimePerc: 0.25 } },
@@ -370,9 +328,7 @@ test("Basic tab Generation radios commit via UI and round-trip; Minimum lifetime
 
   // The bridge keeps the RAW ratio, not the displayed integer.
   const raw = await page.evaluate(async (id: number) => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     const r = await bridge!.request({
       kind: "emitters/get-properties",
       params: { id },
@@ -383,9 +339,7 @@ test("Basic tab Generation radios commit via UI and round-trip; Minimum lifetime
   } finally {
     // Restore the seed defaults so later specs see a clean emitter.
     await page.evaluate(async (id: number) => {
-      const bridge = (window as Window & { bridge?: {
-        request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-      } }).bridge;
+      const bridge = window.bridge;
       await bridge!.request({
         kind: "emitters/set-properties",
         params: {
@@ -411,9 +365,7 @@ test("Basic tab Generation radios commit via UI and round-trip; Minimum lifetime
 test("Appearance tab Rotation/Scale: checkbox commits via UI; inverted + scaled spinners map display to raw", async () => {
   // Re-select to ensure the panel is mounted.
   const firstId = await page.evaluate(async () => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
     const list = await bridge.request({ kind: "emitters/list", params: {} }) as {
       root: { children: { id: number }[] };
@@ -426,9 +378,7 @@ test("Appearance tab Rotation/Scale: checkbox commits via UI; inverted + scaled 
 
   // Known starting state for the fields under test (seed defaults).
   await page.evaluate(async (id: number) => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     await bridge!.request({
       kind: "emitters/set-properties",
       params: { id, patch: { randomRotation: false, randomScalePerc: 0, randomRotationAverage: 0 } },
@@ -453,9 +403,7 @@ test("Appearance tab Rotation/Scale: checkbox commits via UI; inverted + scaled 
   await expect
     .poll(async () =>
       page.evaluate(async (id: number) => {
-        const bridge = (window as Window & { bridge?: {
-          request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-        } }).bridge;
+        const bridge = window.bridge;
         const r = await bridge!.request({
           kind: "emitters/get-properties",
           params: { id },
@@ -469,9 +417,7 @@ test("Appearance tab Rotation/Scale: checkbox commits via UI; inverted + scaled 
   // Inverted percent (Minimum scale): raw 0.25 ↔ display 75.
   // displayScale ×360 (Rotation average): raw 0.25 ↔ display 90°.
   await page.evaluate(async (id: number) => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     await bridge!.request({
       kind: "emitters/set-properties",
       params: { id, patch: { randomScalePerc: 0.25, randomRotationAverage: 0.25 } },
@@ -483,9 +429,7 @@ test("Appearance tab Rotation/Scale: checkbox commits via UI; inverted + scaled 
 
   // The bridge keeps the RAW ratios for both fields.
   const raws = await page.evaluate(async (id: number) => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     const r = await bridge!.request({
       kind: "emitters/get-properties",
       params: { id },
@@ -497,9 +441,7 @@ test("Appearance tab Rotation/Scale: checkbox commits via UI; inverted + scaled 
   } finally {
     // Restore the seed defaults.
     await page.evaluate(async (id: number) => {
-      const bridge = (window as Window & { bridge?: {
-        request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-      } }).bridge;
+      const bridge = window.bridge;
       await bridge!.request({
         kind: "emitters/set-properties",
         params: { id, patch: { randomRotation: false, randomScalePerc: 0, randomRotationAverage: 0 } },

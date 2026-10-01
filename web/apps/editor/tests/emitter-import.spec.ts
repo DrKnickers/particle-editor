@@ -18,35 +18,20 @@
 // NOTE: helper funcs are defined INSIDE each page.evaluate — that body runs in
 // the browser/host page context, where module-scope helpers don't exist.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
 
 // Host accepts forward slashes on Windows; avoids backslash-escaping noise.
 const SOURCE_ALO = resolve(__dirname, "fixtures", "a11y-base-state.alo").replace(/\\/g, "/");
 const BAD_ALO = resolve(__dirname, "fixtures", "does-not-exist.alo").replace(/\\/g, "/");
 
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 test("preview-from-file returns the source file's emitter tree", async () => {
@@ -56,12 +41,9 @@ test("preview-from-file returns the source file's emitter tree", async () => {
       (node?.children ?? []).reduce((n, c) => n + 1 + countNodes(c), 0);
     // Keep the bridge object — request() relies on `this` (its pending-id
     // map); destructuring the method loses the binding.
-    const bridge = (window as unknown as {
-      bridge: { request: (r: { kind: string; params: unknown }) =>
-        Promise<{ ok?: boolean; tree?: TreeNode }> };
-    }).bridge;
+    const bridge = window.bridge!;
     const r = await bridge.request({ kind: "emitters/preview-from-file", params: { path } });
-    return { ok: r.ok === true, count: countNodes(r.tree) };
+    return { ok: r.ok === true, count: r.ok ? countNodes(r.tree) : 0 };
   }, SOURCE_ALO);
   expect(ok).toBe(true);
   expect(count).toBeGreaterThan(0);
@@ -70,21 +52,18 @@ test("preview-from-file returns the source file's emitter tree", async () => {
 test("full import re-nests the imported subtree (shape, not just count)", async () => {
   const result = await page.evaluate(async (path) => {
     type TreeNode = { id: number; name: string; role?: string; children?: TreeNode[] };
-    type Resp = { ok?: boolean; imported?: number; tree?: TreeNode; root?: TreeNode; error?: string };
     const countNodes = (node: TreeNode | undefined): number =>
       (node?.children ?? []).reduce((n, c) => n + 1 + countNodes(c), 0);
     const collectIds = (node: TreeNode | undefined): number[] =>
       (node?.children ?? []).flatMap((c) => [c.id, ...collectIds(c)]);
     const topIds = (root: TreeNode | undefined): Set<number> =>
       new Set((root?.children ?? []).map((c) => c.id));
-    const bridge = (window as unknown as {
-      bridge: { request: (r: { kind: string; params: unknown }) => Promise<Resp> };
-    }).bridge;
+    const bridge = window.bridge!;
     const list = async () => (await bridge.request({ kind: "emitters/list", params: {} })).root;
 
     // Preview → import every source index.
     const preview = await bridge.request({ kind: "emitters/preview-from-file", params: { path } });
-    const selected = collectIds(preview.tree);
+    const selected = preview.ok ? collectIds(preview.tree) : [];
 
     const before = await list();
     const beforeCount = countNodes(before);
@@ -132,25 +111,22 @@ test("full import re-nests the imported subtree (shape, not just count)", async 
 test("partial import (root only) drops the non-picked child links", async () => {
   const result = await page.evaluate(async (path) => {
     type TreeNode = { id: number; name: string; role?: string; children?: TreeNode[] };
-    type Resp = { ok?: boolean; imported?: number; tree?: TreeNode; root?: TreeNode };
     const topIds = (root: TreeNode | undefined): Set<number> =>
       new Set((root?.children ?? []).map((c) => c.id));
-    const bridge = (window as unknown as {
-      bridge: { request: (r: { kind: string; params: unknown }) => Promise<Resp> };
-    }).bridge;
+    const bridge = window.bridge!;
     const list = async () => (await bridge.request({ kind: "emitters/list", params: {} })).root;
 
     // Select ONLY the source root (first top-level node) — its children are
     // NOT picked, so the rebind must drop those links → a childless root.
     const preview = await bridge.request({ kind: "emitters/preview-from-file", params: { path } });
-    const rootId = preview.tree?.children?.[0]?.id;
+    const rootId = preview.ok ? preview.tree.children[0]?.id : undefined;
 
     const before = await list();
     const beforeTop = topIds(before);
 
     const imp = await bridge.request({
       kind: "emitters/import-from-file",
-      params: { path, selected: [rootId] },
+      params: { path, selected: rootId === undefined ? [] : [rootId] },
     });
 
     const after = await list();
@@ -176,21 +152,18 @@ test("partial import (root only) drops the non-picked child links", async () => 
 test("a failed import rejects, mutates nothing, and pushes no undo entry", async () => {
   const result = await page.evaluate(async ({ path, badPath }) => {
     type TreeNode = { id: number; children?: TreeNode[] };
-    type Resp = { ok?: boolean; imported?: number; tree?: TreeNode; root?: TreeNode };
     const countNodes = (node: TreeNode | undefined): number =>
       (node?.children ?? []).reduce((n, c) => n + 1 + countNodes(c), 0);
     const collectIds = (node: TreeNode | undefined): number[] =>
       (node?.children ?? []).flatMap((c) => [c.id, ...collectIds(c)]);
-    const bridge = (window as unknown as {
-      bridge: { request: (r: { kind: string; params: unknown }) => Promise<Resp> };
-    }).bridge;
+    const bridge = window.bridge!;
     const count = async () => countNodes((await bridge.request({ kind: "emitters/list", params: {} })).root);
 
     const baseline = await count();
 
     // A valid import first (so there's a known undoable mutation on the stack).
     const preview = await bridge.request({ kind: "emitters/preview-from-file", params: { path } });
-    const selected = collectIds(preview.tree);
+    const selected = preview.ok ? collectIds(preview.tree) : [];
     await bridge.request({ kind: "emitters/import-from-file", params: { path, selected } });
     const afterImport = await count();
 

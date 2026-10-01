@@ -2,22 +2,12 @@
 // stats/tick delivery from the C++ host at 4 Hz. Sibling of
 // bridge-native.spec.ts and background-picker.spec.ts — same CDP-attach
 // harness, same window.bridge host-object channel.
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 test("StatusBar renders the 4 stat columns", async () => {
@@ -34,7 +24,7 @@ test("stats/tick event reaches the React StatusBar within 1.5s", async () => {
   const final = await page.evaluate(async () => {
     return new Promise<{ text: string; receivedTick: boolean }>((resolve) => {
       let receivedTick = false;
-      const off = (window as any).bridge.on("stats/tick", () => {
+      const off = window.bridge!.on("stats/tick", () => {
         receivedTick = true;
       });
       setTimeout(() => {

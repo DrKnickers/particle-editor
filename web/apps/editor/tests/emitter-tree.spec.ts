@@ -10,22 +10,12 @@
 // All specs talk to the host's real ParticleSystem via window.bridge —
 // no seeding mocks; the native host owns the live system.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 test("sidebar renders the emitter tree from the live particle system", async () => {
@@ -50,9 +40,7 @@ test("clicking a row updates snapshot.selectedEmitterId", async () => {
   // on the snapshot value rather than DOM state to keep this spec
   // independent of pixel-level styling.
   const result = await page.evaluate(async () => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     if (!bridge) return { error: "bridge missing" };
 
     // Fetch the list to find a valid id (host's seed is id=0 for the
@@ -79,9 +67,7 @@ test("emitters/list nodes carry spawn params", async () => {
   // (commit a5bec9c). Assert the first root child carries all six
   // spawn keys with the right primitive types.
   const result = await page.evaluate(async () => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     if (!bridge) return { error: "bridge missing" };
 
     const list = await bridge.request({ kind: "emitters/list", params: {} }) as {

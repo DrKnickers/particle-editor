@@ -12,31 +12,12 @@
 // the host-object channel is on a separate
 // marshalling path and is unaffected. Events (host → page) still flow
 // over postMessage and are wired up by TestHostBridge.on().
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-
-  // The WebView2 navigation is async vs. the host launch; wait until
-  // `window.bridge` is attached by App.tsx before any spec runs.
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 }
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 test("CDP connect + window.bridge is attached (smoke)", async () => {
@@ -45,7 +26,7 @@ test("CDP connect + window.bridge is attached (smoke)", async () => {
   // attached the bridge to window. Catches every regression except the
   // postMessage-from-CDP one that .fixme'd specs cover.
   const probe = await page.evaluate(() => {
-    const b = (window as { bridge?: { constructor: { name: string } } }).bridge;
+    const b = window.bridge;
     return {
       hasBridge: typeof b !== "undefined",
       hasRequest: typeof (b as { request?: unknown })?.request === "function",
@@ -61,8 +42,7 @@ test("CDP connect + window.bridge is attached (smoke)", async () => {
 
 test("engine/state/snapshot returns a valid EngineStateDto shape", async () => {
   const dto = (await page.evaluate(async () => {
-    const b = (window as { bridge?: { request(r: { kind: string; params: object }): Promise<unknown> } })
-      .bridge;
+    const b = window.bridge;
     if (!b) throw new Error("window.bridge not attached");
     return b.request({ kind: "engine/state/snapshot", params: {} });
   })) as Record<string, unknown>;
@@ -82,11 +62,7 @@ test("engine/state/snapshot returns a valid EngineStateDto shape", async () => {
 
 test("engine/set/ground-z mutates state and fires engine/state/changed", async () => {
   const result = await page.evaluate(async () => {
-    type AnyBridge = {
-      request(r: { kind: string; params: object }): Promise<unknown>;
-      on(kind: string, h: (e: { payload: unknown }) => void): () => void;
-    };
-    const b = (window as { bridge?: AnyBridge }).bridge;
+    const b = window.bridge;
     if (!b) throw new Error("window.bridge not attached");
 
     return new Promise<{
@@ -133,11 +109,7 @@ test("setter burst: coalesced state events still deliver the final value (B1)", 
   //      (the idle-branch flush), so the web can't be left stale;
   //   3. at least one event fired (leading edge intact).
   const result = await page.evaluate(async () => {
-    type AnyBridge = {
-      request(r: { kind: string; params: object }): Promise<unknown>;
-      on(kind: string, h: (e: { payload: unknown }) => void): () => void;
-    };
-    const b = (window as { bridge?: AnyBridge }).bridge;
+    const b = window.bridge;
     if (!b) throw new Error("window.bridge not attached");
 
     const seen: number[] = [];
@@ -160,7 +132,7 @@ test("setter burst: coalesced state events still deliver the final value (B1)", 
   // Restore the baseline groundZ BEFORE asserting, so a failed assertion
   // can't leak mutated state into later specs on the shared page.
   await page.evaluate(async () => {
-    const b = (window as { bridge?: { request(r: object): Promise<unknown> } }).bridge!;
+    const b = window.bridge!;
     await b.request({ kind: "engine/set/ground-z", params: { z: 0 } });
   });
 
@@ -171,8 +143,7 @@ test("setter burst: coalesced state events still deliver the final value (B1)", 
 
 test("engine/set/background round-trips a COLORREF", async () => {
   const result = await page.evaluate(async () => {
-    const b = (window as { bridge?: { request(r: { kind: string; params: object }): Promise<unknown> } })
-      .bridge;
+    const b = window.bridge;
     if (!b) throw new Error("window.bridge not attached");
     // Capture and RESTORE. Native specs share one host process and one page, so
     // a test that mutates engine state and walks away leaves every later test
@@ -206,8 +177,7 @@ test("engine/set/background round-trips a COLORREF", async () => {
 
 test("engine/query/ground-slot-empty returns boolean", async () => {
   const r = await page.evaluate(async () => {
-    const b = (window as { bridge?: { request(r: { kind: string; params: object }): Promise<unknown> } })
-      .bridge;
+    const b = window.bridge;
     if (!b) throw new Error("window.bridge not attached");
     return b.request({ kind: "engine/query/ground-slot-empty", params: { slot: 0 } });
   });

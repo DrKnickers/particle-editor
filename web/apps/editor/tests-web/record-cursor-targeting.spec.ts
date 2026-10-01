@@ -25,7 +25,9 @@ test.describe("record cursor semantic targeting", () => {
   test("resolves element target centers with non-zero browser rects", async ({ page }) => {
     await seedTargets(page);
     const result = await page.evaluate(async () => {
-      const mod = await import("/src/lib/record-cursor-eval.ts");
+      // Vite serves the modules at these URLs; tsc types them from the source.
+      const modUrl = "/src/lib/record-cursor-eval.ts";
+      const mod: typeof import("../src/lib/record-cursor-eval") = await import(modUrl);
       return {
         curve: mod.resolveTargetCenter({ kind: "element", ref: "curve-key:red:0" }),
         row: mod.resolveTargetCenter({ kind: "element", ref: "channel-row:alpha" }),
@@ -44,8 +46,11 @@ test.describe("record cursor semantic targeting", () => {
   test("reports absent refs and unsettled atlas tiles as unresolved", async ({ page }) => {
     await seedTargets(page);
     const result = await page.evaluate(async () => {
-      const mod = await import("/src/lib/record-cursor-eval.ts");
-      const dock = await import("/src/lib/dock-anim.ts");
+      // Vite serves the modules at these URLs; tsc types them from the source.
+      const modUrl = "/src/lib/record-cursor-eval.ts";
+      const mod: typeof import("../src/lib/record-cursor-eval") = await import(modUrl);
+      const dockUrl = "/src/lib/dock-anim.ts";
+      const dock: typeof import("../src/lib/dock-anim") = await import(dockUrl);
       const absent = mod.resolveTargetCenter({ kind: "element", ref: "curve-key:red:404" });
       dock.useDockAnim.getState().setAtlasGridMounted(true);
       dock.useDockAnim.getState().setAnimating(true);
@@ -62,8 +67,11 @@ test.describe("record cursor semantic targeting", () => {
   test("resolves atlas tiles only after the atlas grid is settled", async ({ page }) => {
     await seedTargets(page);
     const resolved = await page.evaluate(async () => {
-      const mod = await import("/src/lib/record-cursor-eval.ts");
-      const dock = await import("/src/lib/dock-anim.ts");
+      // Vite serves the modules at these URLs; tsc types them from the source.
+      const modUrl = "/src/lib/record-cursor-eval.ts";
+      const mod: typeof import("../src/lib/record-cursor-eval") = await import(modUrl);
+      const dockUrl = "/src/lib/dock-anim.ts";
+      const dock: typeof import("../src/lib/dock-anim") = await import(dockUrl);
       dock.useDockAnim.getState().setAtlasGridMounted(true);
       dock.useDockAnim.getState().setAnimating(false);
       const atlas = mod.resolveTargetCenter({ kind: "element", ref: "atlas-tile:3" });

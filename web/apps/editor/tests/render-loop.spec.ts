@@ -13,29 +13,12 @@
 // render-loop ticking. Render-loop specs inherently need time-based
 // waits; that's a normal Playwright pattern.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 test.beforeEach(async () => {
@@ -44,8 +27,7 @@ test.beforeEach(async () => {
   // host-owned system and notifies the engine via
   // Clear + OnParticleSystemChanged.
   await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     await b.request({ kind: "file/new", params: {} });
   });
 });
@@ -58,13 +40,10 @@ test("spawner/active-count event fires from real engine state when a burst is tr
   // 3. Fire spawner/trigger.
   // 4. Poll up to 2s for at least one event with count >= 1.
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const log: Array<{ count: number }> = [];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const off = b.on("spawner/active-count", (e: any) => {
+    const off = b.on("spawner/active-count", (e) => {
       log.push({ count: e.payload.count });
     });
 

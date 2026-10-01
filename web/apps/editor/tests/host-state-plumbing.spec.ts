@@ -10,29 +10,20 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
+// Page-side recorders this spec installs on window.
+declare global {
+  interface Window {
+    __rescaleTreeEvents?: number;
+    __rescaleTreeUnsub?: () => void;
+  }
+}
 
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 test.beforeEach(async () => {
@@ -41,8 +32,7 @@ test.beforeEach(async () => {
   // just clearing bookkeeping, so this is load-bearing for the
   // rescale spec (it needs a non-empty emitter list).
   await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     await b.request({ kind: "file/new", params: {} });
   });
 });
@@ -56,8 +46,7 @@ test("file/save with a path writes a non-zero-byte .alo to disk", async () => {
   // to a non-empty file because of headers + the single root emitter
   // — but it's a more realistic exercise.)
   const result = await page.evaluate(async (p) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     await b.request({ kind: "engine/set/ground-z", params: { z: 17 } });
     const r = await b.request({ kind: "file/save", params: { path: p } });
     return r;
@@ -81,8 +70,7 @@ test("file/open after file/save reads the file back; snapshot reflects the path"
 
   // Save first so we have something to open.
   await page.evaluate(async (p) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     await b.request({ kind: "engine/set/ground-z", params: { z: 23 } });
     await b.request({ kind: "file/save", params: { path: p } });
     // Reset back to "untitled" so the open path is the only thing
@@ -91,8 +79,7 @@ test("file/open after file/save reads the file back; snapshot reflects the path"
   }, filePath);
 
   const result = await page.evaluate(async (p) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     const r = await b.request({ kind: "file/open", params: { path: p } });
     const snap = await b.request({ kind: "engine/state/snapshot", params: {} });
     return { r, currentFilePath: snap.currentFilePath, dirty: snap.dirty };
@@ -115,18 +102,15 @@ test("file/open after file/save reads the file back; snapshot reflects the path"
 test("engine/action/rescale-system fires emitters/tree/changed", async () => {
   // Subscribe BEFORE firing the action so the event isn't missed.
   await page.evaluate(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = window as any;
-    if (w.__rescaleTreeUnsub) w.__rescaleTreeUnsub();
-    w.__rescaleTreeEvents = 0;
-    w.__rescaleTreeUnsub = w.bridge.on("emitters/tree/changed", () => {
-      w.__rescaleTreeEvents += 1;
+    window.__rescaleTreeUnsub?.();
+    window.__rescaleTreeEvents = 0;
+    window.__rescaleTreeUnsub = window.bridge!.on("emitters/tree/changed", () => {
+      window.__rescaleTreeEvents = (window.__rescaleTreeEvents ?? 0) + 1;
     });
   });
 
   await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     await b.request({
       kind: "engine/action/rescale-system",
       params: { durationScalePercent: 200, sizeScalePercent: 100 },
@@ -137,8 +121,7 @@ test("engine/action/rescale-system fires emitters/tree/changed", async () => {
   await page.waitForTimeout(150);
 
   const count = await page.evaluate(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    () => (window as any).__rescaleTreeEvents as number,
+    () => window.__rescaleTreeEvents,
   );
   expect(count).toBeGreaterThanOrEqual(1);
 });
@@ -152,8 +135,7 @@ test("held Shift survives clear then file/new without a stale-instance crash", a
     await page.keyboard.down("Shift");
 
     await expect.poll(async () => page.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const b = (window as any).bridge;
+      const b = window.bridge!;
       const live = await b.request({
         kind: "engine/query/live-instances",
         params: {},
@@ -162,8 +144,7 @@ test("held Shift survives clear then file/new without a stale-instance crash", a
     })).toBeGreaterThanOrEqual(1);
 
     const result = await page.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const b = (window as any).bridge;
+      const b = window.bridge!;
       await b.request({ kind: "engine/action/clear", params: {} });
       const afterClear = await b.request({
         kind: "engine/query/live-instances",
@@ -194,8 +175,7 @@ test("held Shift survives clear then file/new without a stale-instance crash", a
 
 test("record preview valid place and kill consume their handles", async () => {
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     await b.request({ kind: "file/new", params: {} });
 
     await b.request({ kind: "preview/attach", params: { x: 200, y: 200 } });

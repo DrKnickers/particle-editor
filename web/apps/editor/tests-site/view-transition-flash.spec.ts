@@ -13,6 +13,13 @@
 import { test, expect, type Page } from "@playwright/test";
 import { inflateSync } from "node:zlib";
 
+// Exposed by page.exposeFunction below.
+declare global {
+  interface Window {
+    __vtSeen?: (had: boolean) => void;
+  }
+}
+
 // Default sized for the routine site lane (~15s); crank VT_ITERATIONS (e.g. 24+) with
 // VT_STYLE_DELAY_MS/VT_CPU_THROTTLE for a dedicated flash hunt.
 const ITERATIONS   = Number(process.env.VT_ITERATIONS ?? 6);
@@ -92,7 +99,9 @@ test("cross-page view transition never paints a light frame", async ({ page, con
   const vtActivated: boolean[] = [];
   await page.exposeFunction("__vtSeen", (had: boolean) => vtActivated.push(had));
   await page.addInitScript(() => {
-    addEventListener("pagereveal", (e: any) => (window as any).__vtSeen?.(!!e.viewTransition));
+    // "pagereveal" is not in WindowEventMap, so the listener is typed by hand.
+    addEventListener("pagereveal", (e: Event & { viewTransition?: ViewTransition | null }) =>
+      window.__vtSeen?.(!!e.viewTransition));
   });
 
   // Stress: disable cache + throttle CPU so the transition path is fragile and the flash surfaces.

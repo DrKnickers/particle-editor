@@ -5,6 +5,13 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 
+// site/main.js + site/guide-media.js read this override (tests point media at /media-local/).
+declare global {
+  interface Window {
+    __MEDIA_BASE__?: string;
+  }
+}
+
 // ---- placeholder media (gitignored, never committed) -------------------------------
 // ESM context (package is "type":"module") → use import.meta.url, NOT __dirname.
 // Stems must match the data-clip/data-poster names in site/index.html (and global-setup.mjs).
@@ -20,7 +27,7 @@ const HAS_MEDIA = REQUIRED.every((p) => existsSync(p));
 
 // Point MEDIA_BASE at the locally-served placeholder media, before any page script runs.
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => { (window as any).__MEDIA_BASE__ = "/media-local/"; });
+  await page.addInitScript(() => { window.__MEDIA_BASE__ = "/media-local/"; });
 });
 
 test("structure: hero, 7 ordered features, footer; no uncaught JS errors", async ({ page }) => {

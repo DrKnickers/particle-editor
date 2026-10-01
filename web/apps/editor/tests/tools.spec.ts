@@ -16,29 +16,20 @@
 //   5. Clicking a bundled ground slot in the popover updates the
 //      snapshot's groundTexture.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
+// Page-side recorders this spec installs on window.
+declare global {
+  interface Window {
+    __bloomChanges?: boolean[];
+    __bloomUnsub?: () => void;
+  }
+}
 
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 // Helper — open a menu by name and click an item by its visible text.
@@ -125,18 +116,16 @@ test("Toggling Enable Bloom fires engine/set/bloom (observed via state/changed)"
   // each payload. The React panel commits Enable changes directly to
   // the bridge; the host emits state/changed in response.
   await page.evaluate(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = window as any;
-    if (w.__bloomUnsub) w.__bloomUnsub();
-    w.__bloomChanges = [] as boolean[];
-    w.__bloomUnsub = w.bridge.on("engine/state/changed", (e: { payload: { bloom: boolean } }) => {
-      w.__bloomChanges.push(e.payload.bloom);
+    window.__bloomUnsub?.();
+    const changes: boolean[] = [];
+    window.__bloomChanges = changes;
+    window.__bloomUnsub = window.bridge!.on("engine/state/changed", (e) => {
+      changes.push(e.payload.bloom);
     });
   });
 
   const before = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     const snap = await b.request({ kind: "engine/state/snapshot", params: {} });
     return snap.bloom as boolean;
   });
@@ -148,16 +137,14 @@ test("Toggling Enable Bloom fires engine/set/bloom (observed via state/changed)"
   await page.waitForTimeout(300);
 
   const changes = await page.evaluate(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    () => (window as any).__bloomChanges as boolean[],
+    () => window.__bloomChanges,
   );
   // At least one event with the flipped value should have arrived.
   expect(changes).toContain(!before);
 
   // Restore previous state to keep the test idempotent.
   await page.evaluate(async (orig) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     await b.request({ kind: "engine/set/bloom", params: { enabled: orig } });
   }, before);
 
@@ -194,8 +181,7 @@ test("Clicking a bundled ground slot in the popover updates groundTexture", asyn
   await closeAnyPanel(page);
 
   const before = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     const s = await b.request({ kind: "engine/state/snapshot", params: {} });
     return s.groundTexture as number;
   });
@@ -218,8 +204,7 @@ test("Clicking a bundled ground slot in the popover updates groundTexture", asyn
   await page.waitForTimeout(300);
 
   const after = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     const s = await b.request({ kind: "engine/state/snapshot", params: {} });
     return s.groundTexture as number;
   });
@@ -227,8 +212,7 @@ test("Clicking a bundled ground slot in the popover updates groundTexture", asyn
 
   // Restore.
   await page.evaluate(async (orig) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     await b.request({ kind: "engine/set/ground-texture", params: { slot: orig } });
   }, before);
 

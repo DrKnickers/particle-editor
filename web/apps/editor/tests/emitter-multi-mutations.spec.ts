@@ -12,41 +12,19 @@
 // Talks to the host's real ParticleSystem via window.bridge — no
 // seeding mocks; the native host owns the live system.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 // ── 1. Add Lifetime Child via the bridge ─────────────────────────────
 
 test("emitters/add-lifetime-child via the bridge adds a lifetime child to the parent", async () => {
   const result = await page.evaluate(async () => {
-    const bridge = (window as Window & {
-      bridge?: {
-        request: (req: { kind: string; params: unknown }) =>
-          Promise<{ newId?: number; root?: { children: unknown[] } }>;
-      };
-    }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
 
     // Find a parent whose lifetime slot is currently empty. We pick
@@ -95,11 +73,7 @@ test("emitters/add-lifetime-child via the bridge adds a lifetime child to the pa
     // future file/new anyway.
     if (typeof result.newId === "number" && result.newId >= 0) {
       await page.evaluate(async (id) => {
-        const bridge = (window as Window & {
-          bridge?: {
-            request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-          };
-        }).bridge;
+        const bridge = window.bridge;
         if (bridge) await bridge.request({ kind: "emitters/delete", params: { id } });
       }, result.newId);
     }
@@ -110,12 +84,7 @@ test("emitters/add-lifetime-child via the bridge adds a lifetime child to the pa
 
 test("emitters/move via the bridge swaps adjacent roots", async () => {
   const result = await page.evaluate(async () => {
-    const bridge = (window as Window & {
-      bridge?: {
-        request: (req: { kind: string; params: unknown }) =>
-          Promise<{ newId?: number; root?: { children: unknown[] } }>;
-      };
-    }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
 
     // Seed: most host particle systems have just one root, so duplicate
@@ -187,12 +156,7 @@ test("Ctrl+click on a second emitter row updates data-selected-count to 2", asyn
   // Make sure the tree has at least two rows. Seed an extra root if
   // there's only one — we'll delete it at the end.
   const seededId = await page.evaluate(async () => {
-    const bridge = (window as Window & {
-      bridge?: {
-        request: (req: { kind: string; params: unknown }) =>
-          Promise<{ newId?: number; root?: { children: unknown[] } }>;
-      };
-    }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
     const list = await bridge.request({
       kind: "emitters/list",
@@ -231,11 +195,7 @@ test("Ctrl+click on a second emitter row updates data-selected-count to 2", asyn
   await firstRow.click();
   if (seededId >= 0) {
     await page.evaluate(async (id) => {
-      const bridge = (window as Window & {
-        bridge?: {
-          request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-        };
-      }).bridge;
+      const bridge = window.bridge;
       if (bridge) await bridge.request({ kind: "emitters/delete", params: { id } });
     }, seededId);
   }
@@ -252,12 +212,7 @@ test("Ctrl+click on a second emitter row updates data-selected-count to 2", asyn
 
 test("emitters/paste-as-child via the bridge attaches a lifetime child", async () => {
   const result = await page.evaluate(async () => {
-    const bridge = (window as Window & {
-      bridge?: {
-        request: (req: { kind: string; params: unknown }) =>
-          Promise<{ newId?: number; root?: { children: unknown[] } }>;
-      };
-    }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
 
     const before = await bridge.request({
@@ -310,11 +265,7 @@ test("emitters/paste-as-child via the bridge attaches a lifetime child", async (
   // Cleanup: drop the pasted child.
   if (typeof result.newId === "number" && result.newId >= 0) {
     await page.evaluate(async (id) => {
-      const bridge = (window as Window & {
-        bridge?: {
-          request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-        };
-      }).bridge;
+      const bridge = window.bridge;
       if (bridge) await bridge.request({ kind: "emitters/delete", params: { id } });
     }, result.newId);
   }

@@ -12,29 +12,23 @@
 // The canvas is mounted in the native suite's composition host. Tests still
 // skip when it is unavailable so a transport failure is reported precisely.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import type { E2ERequest } from "./helpers/bridge-request";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
-test.afterAll(async () => {
-  await browser?.close();
-});
+type ViewportInputRequest = Extract<E2ERequest, { kind: "viewport/input" }>;
+
+declare global {
+  interface Window {
+    __viewportInputCalls?: ViewportInputRequest[];
+    __bridgeProxyInstalled?: boolean;
+  }
+}
 
 // Install a proxy around window.bridge.request that records every
 // `viewport/input` call into window.__viewportInputCalls for the
@@ -42,35 +36,26 @@ test.afterAll(async () => {
 // second call replaces the proxy with itself).
 async function installBridgeProxy(p: Page): Promise<void> {
   await p.evaluate(() => {
-    type Req = { kind: string; params: Record<string, unknown> };
-    const w = window as unknown as {
-      bridge: { request: (r: Req) => Promise<unknown> };
-      __viewportInputCalls?: Req[];
-      __bridgeProxyInstalled?: boolean;
-    };
-    if (w.__bridgeProxyInstalled) {
-      w.__viewportInputCalls = [];
+    const bridge = window.bridge!;
+    if (window.__bridgeProxyInstalled) {
+      window.__viewportInputCalls = [];
       return;
     }
-    w.__viewportInputCalls = [];
-    const original = w.bridge.request.bind(w.bridge);
-    w.bridge.request = (req: Req): Promise<unknown> => {
-      if (req?.kind === "viewport/input") {
-        w.__viewportInputCalls?.push(req);
+    window.__viewportInputCalls = [];
+    const original = bridge.request.bind(bridge);
+    bridge.request = (req) => {
+      const r: E2ERequest = req;
+      if (r.kind === "viewport/input") {
+        window.__viewportInputCalls?.push(r);
       }
       return original(req);
     };
-    w.__bridgeProxyInstalled = true;
+    window.__bridgeProxyInstalled = true;
   });
 }
 
-async function readCalls(p: Page): Promise<Array<{ kind: string; params: Record<string, unknown> }>> {
-  return p.evaluate(() => {
-    const w = window as unknown as {
-      __viewportInputCalls?: Array<{ kind: string; params: Record<string, unknown> }>;
-    };
-    return w.__viewportInputCalls ?? [];
-  });
+async function readCalls(p: Page): Promise<ViewportInputRequest[]> {
+  return p.evaluate(() => window.__viewportInputCalls ?? []);
 }
 
 async function archCEnabled(p: Page): Promise<boolean> {

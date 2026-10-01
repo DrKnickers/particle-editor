@@ -15,29 +15,12 @@
 // and shift bookkeeping; bridge-driven gives us a deterministic
 // gate. The React-side Ctrl+C/X/V wiring is exercised by Vitest.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 // ── 1. F2 enters inline rename mode ──────────────────────────────────
@@ -45,9 +28,7 @@ test.afterAll(async () => {
 test("F2 on focused tree row enters inline rename (input appears)", async () => {
   // Ensure at least one root exists.
   const seed = await page.evaluate(async () => {
-    const bridge = (window as Window & {
-      bridge?: { request: (req: { kind: string; params: unknown }) => Promise<unknown> };
-    }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
     const tree = await bridge.request({
       kind: "emitters/list",
@@ -84,9 +65,7 @@ test("Delete key on focused tree fires emitters/delete on the selection", async 
   // Seed a duplicate root so we have something safe to delete (the
   // host seed's only root may be one tests downstream rely on).
   const seed = await page.evaluate(async () => {
-    const bridge = (window as Window & {
-      bridge?: { request: (req: { kind: string; params: unknown }) => Promise<unknown> };
-    }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
     const before = await bridge.request({
       kind: "emitters/list",
@@ -107,9 +86,7 @@ test("Delete key on focused tree fires emitters/delete on the selection", async 
   }
 
   const before = await page.evaluate(async () => {
-    const bridge = (window as Window & {
-      bridge?: { request: (req: { kind: string; params: unknown }) => Promise<unknown> };
-    }).bridge!;
+    const bridge = window.bridge!;
     const tree = await bridge.request({ kind: "emitters/list", params: {} }) as {
       root: { children: { id: number }[] };
     };
@@ -125,9 +102,7 @@ test("Delete key on focused tree fires emitters/delete on the selection", async 
   // Allow the tree-changed round trip to flush.
   await page.waitForFunction(
     ({ countBefore }) => {
-      const bridge = (window as Window & {
-        bridge?: { request: (req: { kind: string; params: unknown }) => Promise<unknown> };
-      }).bridge;
+      const bridge = window.bridge;
       if (!bridge) return false;
       return bridge
         .request({ kind: "emitters/list", params: {} })
@@ -141,9 +116,7 @@ test("Delete key on focused tree fires emitters/delete on the selection", async 
   );
 
   const after = await page.evaluate(async () => {
-    const bridge = (window as Window & {
-      bridge?: { request: (req: { kind: string; params: unknown }) => Promise<unknown> };
-    }).bridge!;
+    const bridge = window.bridge!;
     const tree = await bridge.request({ kind: "emitters/list", params: {} }) as {
       root: { children: { id: number }[] };
     };
@@ -156,9 +129,7 @@ test("Delete key on focused tree fires emitters/delete on the selection", async 
 
 test("emitters/copy + paste round-trip via the bridge creates a new root", async () => {
   const result = await page.evaluate(async () => {
-    const bridge = (window as Window & {
-      bridge?: { request: (req: { kind: string; params: unknown }) => Promise<unknown> };
-    }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
 
     const before = await bridge.request({

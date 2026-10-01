@@ -1,30 +1,20 @@
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { captureDomA11y } from "./helpers/a11y-dom-snapshot";
 import { CHROME_SURFACES, seedCanonicalUiState } from "./helpers/a11y-surfaces";
 import "./helpers/toMatchJSONGolden";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
 // Absolute path because the editor's CWD is repo-root (per run-native-tests.mjs:66),
 // not the tests dir — see the matching comment in a11y-chrome.spec.ts (HWND lane).
 // ESM-equivalent of __dirname (package is "type": "module").
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE_PATH = path.resolve(__dirname, "fixtures/a11y-base-state.alo");
 
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  page = context.pages()[0] ?? (await context.waitForEvent("page"));
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 }
-  );
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
   await seedCanonicalUiState(page); // pin canonical UI state (light theme + Spawner visible)
 });
 
@@ -34,7 +24,7 @@ test.afterAll(async () => {
   // process don't see contamination from this lane's beforeEach.
   if (page) {
     await page.evaluate(async () => {
-      const bridge = (window as { bridge?: { request: (req: { kind: string; params: unknown }) => Promise<unknown> } }).bridge;
+      const bridge = window.bridge;
       if (bridge) {
         await bridge.request({ kind: "stats/set-frozen", params: { frozen: false } });
         // beforeEach pauses the preview clock; revert it or every later
@@ -44,8 +34,7 @@ test.afterAll(async () => {
       }
     });
   }
-  // Don't close the CDP connection — see the matching comment in
-  // a11y-chrome.spec.ts (HWND lane).
+  // The CDP connection is worker-scoped and owned by ./helpers/cdp.
 });
 
 test.beforeEach(async () => {
@@ -60,7 +49,7 @@ test.beforeEach(async () => {
   // this spec's __dirname (see FIXTURE_PATH comment above).
   await page.evaluate(
     async (fixturePath) => {
-      const bridge = (window as { bridge: { request: (req: { kind: string; params: unknown }) => Promise<unknown> } }).bridge;
+      const bridge = window.bridge!;
       await bridge.request({ kind: "file/open", params: { path: fixturePath } });
       // Pause the particle simulation so live values don't leak into the
       // snapshot. See a11y-chrome.spec.ts (HWND lane) for full reasoning.

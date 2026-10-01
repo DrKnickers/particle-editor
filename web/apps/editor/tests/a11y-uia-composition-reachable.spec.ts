@@ -55,26 +55,15 @@
 // hosting, and the cause should be understood before normalizing it
 // away.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 import { captureUIA, discoverHostHwnd } from "./helpers/uia";
 import type { UIANode } from "./helpers/a11y-normalizer";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-
-let browser: Browser;
 let page: Page;
 let hostHwnd: bigint;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  page = context.pages()[0] ?? (await context.waitForEvent("page"));
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 }
-  );
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
   hostHwnd = await discoverHostHwnd();
 });
 

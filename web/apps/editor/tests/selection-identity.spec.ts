@@ -5,41 +5,26 @@
 // Document replacement must likewise publish the reset selection in its first
 // state snapshot, not merely repair the final scalar after a stale event.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import type { E2ERequest } from "./helpers/bridge-request";
+import { test, expect, type Page } from "./helpers/cdp";
 import { copyFile, mkdtemp, rm } from "node:fs/promises";
 import { resolve, dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
 
 type DeletionKind = "emitters/delete" | "emitters/delete-many" | "emitters/cut";
 
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 test.beforeEach(async () => {
   await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (window as any).bridge.request({ kind: "file/new", params: {} });
+    await window.bridge!.request({ kind: "file/new", params: {} });
   });
 });
 
@@ -55,21 +40,12 @@ for (const deletionKind of [
         stableId: number;
         children: TreeNode[];
       };
-      type Bridge = {
-        request<T>(request: { kind: string; params: object }): Promise<T>;
-        on(
-          kind: string,
-          handler: (event: { payload: { id: number | null } }) => void,
-        ): () => void;
-      };
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const b = (window as any).bridge as Bridge;
+      const b = window.bridge!;
       const sleep = (ms: number) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
       const list = () =>
-        b.request<{ root: TreeNode }>({ kind: "emitters/list", params: {} });
+        b.request({ kind: "emitters/list", params: {} });
       const snapshot = () =>
-        b.request<{ selectedEmitterId: number | null }>({
+        b.request({
           kind: "engine/state/snapshot",
           params: {},
         });
@@ -87,7 +63,7 @@ for (const deletionKind of [
       };
       const addRoots = async (count: number) => {
         for (let i = 0; i < count; i++) {
-          await b.request<{ newId: number }>({
+          await b.request({
             kind: "emitters/add-root",
             params: {},
           });
@@ -132,7 +108,7 @@ for (const deletionKind of [
       await b.request({ kind: "file/new", params: {} });
       const ancestorRoot = (await list()).root.children[0];
       if (!ancestorRoot) throw new Error("ancestor fixture needs a root");
-      const childResult = await b.request<{ newId: number }>({
+      const childResult = await b.request({
         kind: "emitters/add-lifetime-child",
         params: { parentId: ancestorRoot.id },
       });
@@ -232,8 +208,7 @@ const expectedReplacementEvents: ReplacementEvent[] = [
 
 async function selectSecondEmitter(path: string) {
   await page.evaluate(async (fixturePath) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     await b.request({ kind: "file/open", params: { path: fixturePath } });
     const tree = await b.request({ kind: "emitters/list", params: {} });
     const second = tree.root?.children?.[1];
@@ -245,17 +220,9 @@ async function selectSecondEmitter(path: string) {
   }, path);
 }
 
-async function captureReplacementEvents(request: {
-  kind: string;
-  params: object;
-}) {
+async function captureReplacementEvents(request: E2ERequest) {
   return page.evaluate(async (replacementRequest) => {
-    type Bridge = {
-      request<T>(request: { kind: string; params: object }): Promise<T>;
-      on(kind: string, handler: (event: { payload: unknown }) => void): () => void;
-    };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge as Bridge;
+    const b = window.bridge!;
     const seen: ReplacementEvent[] = [];
     const offState = b.on("engine/state/changed", (event) => {
       seen.push({
@@ -274,11 +241,11 @@ async function captureReplacementEvents(request: {
       });
     });
 
-    const response = await b.request<unknown>(replacementRequest);
+    const response = await b.request(replacementRequest);
     await new Promise((resolveWait) => setTimeout(resolveWait, 50));
     // A follow-up dispatch forces any incorrectly coalesced events to flush
     // while the listeners are still attached.
-    const snapshot = await b.request<{ selectedEmitterId: number | null }>({
+    const snapshot = await b.request({
       kind: "engine/state/snapshot",
       params: {},
     });
@@ -325,8 +292,7 @@ test("autosave/recover uses the same ordered replacement notification", async ()
     await copyFile(fixturePath, recoveryPath);
     await selectSecondEmitter(fixturePath);
     await page.evaluate(async (path) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const b = (window as any).bridge;
+      const b = window.bridge!;
       await b.request({
         kind: "debug/seed-autosave-recovery",
         params: { path, originalFilename: "" },

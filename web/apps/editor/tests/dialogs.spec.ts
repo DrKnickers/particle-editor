@@ -3,29 +3,20 @@
 // menu triggers render the React modal and that the rescale OK click
 // dispatches the new `engine/action/rescale-system` bridge call.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
+// Page-side recorders this spec installs on window.
+declare global {
+  interface Window {
+    __stateChangedCount?: number;
+    __stateChangedUnsub?: () => void;
+  }
+}
 
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 }
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 // ── 1. Help → About renders modal with version text ─────────────────────────
@@ -104,18 +95,15 @@ test("engine/action/rescale-system dispatched directly fires engine/state/change
   // sensitivity. The host contract under test (rescale-system fires
   // state/changed) is identical.
   await page.evaluate(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = window as any;
-    w.__stateChangedCount = 0;
-    if (w.__stateChangedUnsub) w.__stateChangedUnsub();
-    w.__stateChangedUnsub = w.bridge.on("engine/state/changed", () => {
-      w.__stateChangedCount += 1;
+    window.__stateChangedCount = 0;
+    window.__stateChangedUnsub?.();
+    window.__stateChangedUnsub = window.bridge!.on("engine/state/changed", () => {
+      window.__stateChangedCount = (window.__stateChangedCount ?? 0) + 1;
     });
   });
 
   await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     await b.request({
       kind: "engine/action/rescale-system",
       params: { durationScalePercent: 100, sizeScalePercent: 100 },
@@ -124,8 +112,7 @@ test("engine/action/rescale-system dispatched directly fires engine/state/change
 
   await page.waitForTimeout(150);
   const afterCount = await page.evaluate(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    () => (window as any).__stateChangedCount as number
+    () => window.__stateChangedCount
   );
   expect(afterCount).toBeGreaterThanOrEqual(1);
 });

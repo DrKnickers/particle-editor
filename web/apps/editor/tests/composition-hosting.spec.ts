@@ -40,29 +40,20 @@
 //     fails -> no React rendering -> every spec times out)
 // The composition path is the native suite default.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import type { CameraDto } from "@particle-editor/bridge-schema";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
+// Page-side recorders this spec installs on window.
+declare global {
+  interface Window {
+    __lastClickShift?: boolean | null;
+  }
+}
 
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 test("native composition suite runs with no ALO_HOSTING_MODE override", () => {
@@ -100,12 +91,9 @@ test("click coords land at the expected DOM element under composition", async ()
   await page.keyboard.press("Escape");
 });
 
-// CameraDto's Vec3 is a TUPLE on the wire ([x, y, z]), not {x,y,z}.
-type Vec3Tuple = readonly [number, number, number];
-type CameraSnapshot = { position: Vec3Tuple; target: Vec3Tuple };
-
 // Distance from the camera eye to its target — the scalar a zoom moves.
-function camDistance(cam: CameraSnapshot): number {
+// CameraDto's Vec3 is a TUPLE on the wire ([x, y, z]), not {x,y,z}.
+function camDistance(cam: CameraDto): number {
   const dx = cam.position[0] - cam.target[0];
   const dy = cam.position[1] - cam.target[1];
   const dz = cam.position[2] - cam.target[2];
@@ -135,10 +123,9 @@ test("wheel over the viewport canvas zooms the engine camera under composition",
 
   const readCamera = () =>
     page.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const b = (window as any).bridge;
+      const b = window.bridge!;
       const s = await b.request({ kind: "engine/state/snapshot", params: {} });
-      return s.camera as CameraSnapshot;
+      return s.camera;
     });
 
   const before = await readCamera();
@@ -163,10 +150,9 @@ test("wheel over the viewport canvas zooms the engine camera under composition",
   // Restore, so later cases in this file inherit the camera they expected
   // (2026-07 audit — shared engine state must not leak between cases).
   await page.evaluate(async (cam) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     await b.request({ kind: "engine/set/camera", params: cam });
-  }, before as unknown as Record<string, unknown>);
+  }, before);
 });
 
 test("wheel over the viewport canvas is preventDefault'd so the parent does not scroll", async () => {
@@ -209,13 +195,11 @@ test("modifier keys round-trip via React event system under composition", async 
 
   // Capture the most recent click event's shiftKey value.
   await page.evaluate(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = window as any;
-    w.__lastClickShift = null;
+    window.__lastClickShift = null;
     document.addEventListener(
       "click",
       (e) => {
-        w.__lastClickShift = e.shiftKey;
+        window.__lastClickShift = e.shiftKey;
       },
       { capture: true, once: true },
     );
@@ -225,8 +209,7 @@ test("modifier keys round-trip via React event system under composition", async 
   await trigger.click({ modifiers: ["Shift"] });
 
   const observedShift = await page.evaluate(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    () => (window as any).__lastClickShift,
+    () => window.__lastClickShift,
   );
   expect(observedShift).toBe(true);
   await page.keyboard.press("Escape").catch(() => {});
@@ -239,23 +222,20 @@ test("bridge round-trip preserved under composition (engine/set/bloom snapshot)"
   // tools.spec.ts:118 pattern but as a focused composition gate
   // rather than a Bloom-panel-UI-flow test.
   const before = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     const s = await b.request({ kind: "engine/state/snapshot", params: {} });
     return s.bloom as boolean;
   });
 
   await page.evaluate(async (orig) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     await b.request({ kind: "engine/set/bloom", params: { enabled: !orig } });
   }, before);
 
   await page.waitForTimeout(150);
 
   const after = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     const s = await b.request({ kind: "engine/state/snapshot", params: {} });
     return s.bloom as boolean;
   });
@@ -263,8 +243,7 @@ test("bridge round-trip preserved under composition (engine/set/bloom snapshot)"
 
   // Restore.
   await page.evaluate(async (orig) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     await b.request({ kind: "engine/set/bloom", params: { enabled: orig } });
   }, before);
 });
@@ -309,8 +288,7 @@ test("keyboard input via CDP reaches focused React input under composition", asy
   // Find the Enable bloom checkbox; toggling via keyboard (Space)
   // should fire engine/set/bloom + the snapshot should reflect it.
   const before = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     const s = await b.request({ kind: "engine/state/snapshot", params: {} });
     return s.bloom as boolean;
   });
@@ -321,8 +299,7 @@ test("keyboard input via CDP reaches focused React input under composition", asy
   await page.waitForTimeout(200);
 
   const after = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     const s = await b.request({ kind: "engine/state/snapshot", params: {} });
     return s.bloom as boolean;
   });
@@ -330,8 +307,7 @@ test("keyboard input via CDP reaches focused React input under composition", asy
 
   // Restore + close.
   await page.evaluate(async (orig) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     await b.request({ kind: "engine/set/bloom", params: { enabled: orig } });
   }, before);
   const closeBtn = page
@@ -357,8 +333,7 @@ test("composition mode does not break the test-host bridge proxy (postMessage re
   // response, not an error. We already do bridge.request() above;
   // this test just makes the contract explicit + named.
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     return await b.request({ kind: "engine/state/snapshot", params: {} });
   });
   expect(result).toBeDefined();

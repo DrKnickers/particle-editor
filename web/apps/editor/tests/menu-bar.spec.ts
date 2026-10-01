@@ -1,21 +1,11 @@
 // Contract tests: React menu bar DOM presence and
 // selected bridge dispatches. Same CDP-attach harness as toolbar.spec.ts.
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 // ── 1. All 6 triggers present in legacy order ──────────────────────────
@@ -40,8 +30,7 @@ test("All 6 menu triggers render in the menubar in legacy order [File, Edit, Emi
 test("Edit > Clear All Particles dispatches engine/action/clear", async () => {
   const result = await page.evaluate(async () => {
     return new Promise<boolean>((resolve) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const b = (window as any).bridge;
+      const b = window.bridge!;
       let fired = false;
       const off = b.on("engine/state/changed", () => {
         fired = true;
@@ -68,8 +57,7 @@ test("Edit > Clear All Particles dispatches engine/action/clear", async () => {
 
 test("engine/set/bloom flips bloom state", async () => {
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     const before = await b.request({ kind: "engine/state/snapshot", params: {} });
     await b.request({
       kind: "engine/set/bloom",
@@ -91,8 +79,7 @@ test("engine/set/bloom flips bloom state", async () => {
 
 test("View > Pause dispatches engine/set/paused and flips state", async () => {
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     const before = await b.request({ kind: "engine/state/snapshot", params: {} });
     await b.request({
       kind: "engine/set/paused",
@@ -120,8 +107,7 @@ test("Emitters > New Emitter > Root Emitter dispatches emitters/add-root", async
   // through the Radix submenu portal is brittle in headed CDP — we
   // exercise the same handler the menu item calls.
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     const before = await b.request({ kind: "emitters/list", params: {} });
     const rootsBefore = before.root.children.length;
     const r = await b.request({ kind: "emitters/add-root", params: {} });

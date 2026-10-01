@@ -29,33 +29,18 @@
 //     log-evidence regression gate for the wiring path.
 // The native suite always exercises the composition scene rectangle.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
 const HOST_LOG_PATH = process.env.LOCALAPPDATA
   ? join(process.env.LOCALAPPDATA, "AloParticleEditor", "host.log")
   : "";
 
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 test.beforeEach(({}, testInfo) => {
@@ -114,8 +99,7 @@ test("layout/scene-rect dispatch produces a matching [COMP-engine-transform] lin
   const expectedB = targetY + targetH;
 
   await page.evaluate(async ({ x, y, w, h }) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     await b.request({ kind: "layout/scene-rect", params: { x, y, w, h } });
   }, { x: targetX, y: targetY, w: targetW, h: targetH });
 
@@ -154,8 +138,7 @@ test("three sequential scene-rect dispatches produce three transform lines in or
 
   for (const d of dispatches) {
     await page.evaluate(async (rect) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const b = (window as any).bridge;
+      const b = window.bridge!;
       await b.request({ kind: "layout/scene-rect", params: rect });
       // Tiny per-dispatch settle so each transform gets queued + applied
       // before the next dispatch overwrites the pending queue.

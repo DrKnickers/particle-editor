@@ -9,29 +9,20 @@
 //      with the new `spawner.burstSize` value.
 //   3. File → Import Emitters opens the Import Emitters modal.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
+// Page-side recorders this spec installs on window.
+declare global {
+  interface Window {
+    __spawnerBurstChanges?: number[];
+    __spawnerUnsub?: () => void;
+  }
+}
 
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 async function openMenuItem(p: Page, menu: string, item: string) {
@@ -121,15 +112,14 @@ test("Changing Burst size fires engine/state/changed with new spawner.burstSize"
 
   // Subscribe to engine/state/changed and capture each spawner.burstSize.
   await page.evaluate(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = window as any;
-    if (w.__spawnerUnsub) w.__spawnerUnsub();
-    w.__spawnerBurstChanges = [] as number[];
-    w.__spawnerUnsub = w.bridge.on(
+    window.__spawnerUnsub?.();
+    const changes: number[] = [];
+    window.__spawnerBurstChanges = changes;
+    window.__spawnerUnsub = window.bridge!.on(
       "engine/state/changed",
-      (e: { payload: { spawner?: { burstSize: number } } }) => {
+      (e) => {
         if (e.payload.spawner) {
-          w.__spawnerBurstChanges.push(e.payload.spawner.burstSize);
+          changes.push(e.payload.spawner.burstSize);
         }
       },
     );
@@ -147,16 +137,14 @@ test("Changing Burst size fires engine/state/changed with new spawner.burstSize"
   await page.waitForTimeout(300);
 
   const changes = await page.evaluate(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    () => (window as any).__spawnerBurstChanges as number[],
+    () => window.__spawnerBurstChanges,
   );
   expect(changes).toContain(4);
 
   // Restore by snapping back to 1 (the default) so the next test starts
   // from a clean spawner config.
   await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     const snap = await b.request({ kind: "engine/state/snapshot", params: {} });
     await b.request({
       kind: "spawner/start",

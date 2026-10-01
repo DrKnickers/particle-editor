@@ -4,6 +4,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
+// site/main.js + site/guide-media.js read this override (tests point media at /media-local/).
+declare global {
+  interface Window {
+    __MEDIA_BASE__?: string;
+  }
+}
+
 // Derive the guide's pages, order, and section count from nav.json — the SAME single
 // source of truth build-guide.mjs renders the sidebar from — so this spec can't silently
 // drift when a page is added or removed (as it did between #593 and #599: 15 → 19 pages).
@@ -246,7 +253,7 @@ test("guide media: anchors expand to the exact manifest clips/stills, in order",
 });
 
 test("guide media resolver: clips and stills join MEDIA_BASE at runtime", async ({ page }) => {
-  await page.addInitScript(() => { (window as any).__MEDIA_BASE__ = "/media-local/"; });
+  await page.addInitScript(() => { window.__MEDIA_BASE__ = "/media-local/"; });
   await page.goto(guidePath("01-make-a-hardpoint-damage-effect-obvious"));
 
   // Posters/still src are set synchronously from data-poster for the whole page.
@@ -557,7 +564,7 @@ test("guide returning GlyphX users: old-to-new workflows and verified departures
 });
 
 test("guide returning-user reveal shares one accessible comparison state", async ({ page }) => {
-  await page.addInitScript(() => { (window as any).__MEDIA_BASE__ = "/media-local/"; });
+  await page.addInitScript(() => { window.__MEDIA_BASE__ = "/media-local/"; });
   const transparentPng = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
     "base64",

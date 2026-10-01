@@ -13,41 +13,19 @@
 // notoriously flaky for sub-row drop-zone positioning; bridge-driven
 // verification gives us a deterministic gate.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 // ── 1. Reorder via the bridge ────────────────────────────────────────
 
 test("emitters/drop reorder via the bridge swaps adjacent root positions", async () => {
   const result = await page.evaluate(async () => {
-    const bridge = (window as Window & {
-      bridge?: {
-        request: (req: { kind: string; params: unknown }) =>
-          Promise<{ ok?: boolean; newId?: number; root?: { children: unknown[] } }>;
-      };
-    }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
 
     // Seed: duplicate the first root so we have two adjacent roots to
@@ -122,12 +100,7 @@ test("emitters/drop reorder via the bridge swaps adjacent root positions", async
 
 test("emitters/drop reparent via the bridge attaches the source as a child of target", async () => {
   const result = await page.evaluate(async () => {
-    const bridge = (window as Window & {
-      bridge?: {
-        request: (req: { kind: string; params: unknown }) =>
-          Promise<{ ok?: boolean; newId?: number; root?: { children: unknown[] } }>;
-      };
-    }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
 
     // Seed two roots: duplicate the first root so we have a source +

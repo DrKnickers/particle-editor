@@ -15,7 +15,8 @@
 // Talks to the host's real ParticleSystem via window.bridge — no
 // seeding mocks; the native host owns the live system.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { bridgeRequest } from "./helpers/bridge-request";
+import { test, expect, type Page } from "./helpers/cdp";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -23,27 +24,10 @@ import { fileURLToPath } from "node:url";
 // is `"type": "module"` so __dirname isn't available directly.
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 // ── 1. Right-click an emitter row opens the context menu ─────────────
@@ -87,12 +71,7 @@ test("delete via the context menu removes the emitter from the tree", async () =
   // duplicate the first emitter, then delete the duplicate.
   await page.keyboard.press("Escape").catch(() => {});
   const newId = await page.evaluate(async () => {
-    const bridge = (window as Window & {
-      bridge?: {
-        request: (req: { kind: string; params: unknown }) =>
-          Promise<{ ok?: boolean; newId?: number }>;
-      };
-    }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
     const list = await bridge.request({
       kind: "emitters/list",
@@ -104,7 +83,7 @@ test("delete via the context menu removes the emitter from the tree", async () =
       kind: "emitters/duplicate",
       params: { id: firstId },
     });
-    return dup.newId ?? -1;
+    return dup.ok ? dup.newId : -1;
   });
   expect(newId).toBeGreaterThanOrEqual(0);
 
@@ -119,11 +98,7 @@ test("delete via the context menu removes the emitter from the tree", async () =
   // (The context-menu open path is exercised in test 1; this spec
   // asserts the delete result.)
   await page.evaluate(async (id) => {
-    const bridge = (window as Window & {
-      bridge?: {
-        request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-      };
-    }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
     await bridge.request({ kind: "emitters/delete", params: { id } });
   }, newId);
@@ -141,13 +116,7 @@ test("emitters/duplicate-with-index-increment via the bridge appends a new emitt
   // the post-mutation event. Done in-page so the subscription survives
   // the round-trip.
   const result = await page.evaluate(async () => {
-    const bridge = (window as Window & {
-      bridge?: {
-        request: (req: { kind: string; params: unknown }) =>
-          Promise<{ newId?: number }>;
-        on: (kind: string, h: (e: unknown) => void) => () => void;
-      };
-    }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
 
     let treeEvents = 0;
@@ -196,11 +165,7 @@ test("emitters/duplicate-with-index-increment via the bridge appends a new emitt
 
   // Cleanup the duplicate so subsequent specs see a fresh tree.
   await page.evaluate(async (id) => {
-    const bridge = (window as Window & {
-      bridge?: {
-        request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-      };
-    }).bridge;
+    const bridge = window.bridge;
     if (bridge) await bridge.request({ kind: "emitters/delete", params: { id } });
   }, result.newId);
 });
@@ -209,13 +174,7 @@ test("emitters/duplicate-with-index-increment via the bridge appends a new emitt
 
 test("emitters/duplicate-with-index-increment-many chains N copies in one call and fires one tree burst", async () => {
   const result = await page.evaluate(async () => {
-    const bridge = (window as Window & {
-      bridge?: {
-        request: (req: { kind: string; params: unknown }) =>
-          Promise<{ newIds?: number[] }>;
-        on: (kind: string, h: (e: unknown) => void) => () => void;
-      };
-    }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
 
     let treeEvents = 0;
@@ -269,11 +228,7 @@ test("emitters/duplicate-with-index-increment-many chains N copies in one call a
 
   // Cleanup: delete the copies (highest id first so lower ids stay valid).
   await page.evaluate(async (ids) => {
-    const bridge = (window as Window & {
-      bridge?: {
-        request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-      };
-    }).bridge;
+    const bridge = window.bridge;
     if (!bridge) return;
     for (const id of [...ids].sort((a, b) => b - a)) {
       await bridge.request({ kind: "emitters/delete", params: { id } });
@@ -290,12 +245,7 @@ test("linkGroups/list-exempt-fields returns the v1 default exempt set for a fres
   // the spec is independent of whether the host seed exposes a linked
   // emitter; the modal mount is covered by the Vitest spec.
   const fields = await page.evaluate(async () => {
-    const bridge = (window as Window & {
-      bridge?: {
-        request: (req: { kind: string; params: unknown }) =>
-          Promise<{ fields: string[] }>;
-      };
-    }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
     const r = await bridge.request({
       kind: "linkGroups/list-exempt-fields",
@@ -321,14 +271,7 @@ test("linkGroups/list-exempt-fields returns the v1 default exempt set for a fres
 test("leaving a 2-member link group demotes the survivor to linkGroup=0", async () => {
   await page.keyboard.press("Escape").catch(() => {});
   const result = await page.evaluate(async () => {
-    const bridge = (window as Window & {
-      bridge?: {
-        request: (req: { kind: string; params: unknown }) =>
-          Promise<{ ok?: boolean; newId?: number; root?: {
-            children: { id: number; linkGroup: number; children: unknown[] }[];
-          }}>;
-      };
-    }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
 
     // Get the seeded root emitter; duplicate it so we have two.
@@ -342,7 +285,7 @@ test("leaving a 2-member link group demotes the survivor to linkGroup=0", async 
       kind: "emitters/duplicate",
       params: { id: firstId },
     });
-    const dupId = dup.newId;
+    const dupId = dup.ok ? dup.newId : undefined;
     if (typeof dupId !== "number" || dupId < 0) {
       throw new Error("duplicate failed");
     }
@@ -417,15 +360,7 @@ test("undo restores the pre-mutation linkGroups (atomicity of capture + sweep)",
   // POST-mutation cursor invariant.
   await page.keyboard.press("Escape").catch(() => {});
   const result = await page.evaluate(async () => {
-    const bridge = (window as Window & {
-      bridge?: {
-        request: (req: { kind: string; params: unknown }) =>
-          Promise<{ ok?: boolean; applied?: boolean; newId?: number;
-                    root?: {
-            children: { id: number; linkGroup: number }[];
-          }}>;
-      };
-    }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
 
     // Set up: 2 emitters in group 99 (positive id picked to avoid
@@ -440,7 +375,7 @@ test("undo restores the pre-mutation linkGroups (atomicity of capture + sweep)",
       kind: "emitters/duplicate",
       params: { id: firstId },
     });
-    const dupId = dup.newId;
+    const dupId = dup.ok ? dup.newId : undefined;
     if (typeof dupId !== "number" || dupId < 0) {
       throw new Error("duplicate failed");
     }
@@ -482,7 +417,7 @@ test("undo restores the pre-mutation linkGroups (atomicity of capture + sweep)",
     // linkGroup=99.
     const undoResult = await bridge.request({
       kind: "undo/perform",
-      params: {},
+      params: { direction: "undo" },
     });
 
     const postUndo = await bridge.request({
@@ -541,16 +476,7 @@ test("load-time sweep — opening a legacy .alo with a singleton group auto-demo
   const fixturePath = resolve(__dirname, "fixtures/singleton-emitter.alo");
 
   const result = await page.evaluate(async (path) => {
-    const bridge = (window as Window & {
-      bridge?: {
-        request: (req: { kind: string; params: unknown }) => Promise<{
-          ok?: boolean;
-          path?: string;
-          root?: { children: { id: number; linkGroup: number }[] };
-          dirty?: boolean;
-        }>;
-      };
-    }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
 
     // Stash current state so we restore-or-bail cleanly.
@@ -594,11 +520,7 @@ test("load-time sweep — opening a legacy .alo with a singleton group auto-demo
 
   // Reset to file/new so subsequent specs see a fresh tree.
   await page.evaluate(async () => {
-    const bridge = (window as Window & {
-      bridge?: {
-        request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-      };
-    }).bridge;
+    const bridge = window.bridge;
     if (bridge) await bridge.request({ kind: "file/new", params: {} });
   });
 });
@@ -606,14 +528,7 @@ test("load-time sweep — opening a legacy .alo with a singleton group auto-demo
 test("deleting one member of a 2-member link group demotes the survivor", async () => {
   await page.keyboard.press("Escape").catch(() => {});
   const result = await page.evaluate(async () => {
-    const bridge = (window as Window & {
-      bridge?: {
-        request: (req: { kind: string; params: unknown }) =>
-          Promise<{ ok?: boolean; newId?: number; root?: {
-            children: { id: number; linkGroup: number }[];
-          }}>;
-      };
-    }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
 
     // Set up: get seed + duplicate to 2 emitters; assign both to a
@@ -628,7 +543,7 @@ test("deleting one member of a 2-member link group demotes the survivor", async 
       kind: "emitters/duplicate",
       params: { id: firstId },
     });
-    const dupId = dup.newId;
+    const dupId = dup.ok ? dup.newId : undefined;
     if (typeof dupId !== "number" || dupId < 0) {
       throw new Error("duplicate failed");
     }
@@ -675,8 +590,7 @@ test("deleting one member of a 2-member link group demotes the survivor", async 
 // rendering.
 test("adding a root emitter reaches an already-placed instance", async () => {
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
 
     // A previous spec may have left a cursor-bound preview attached;
     // preview/attach refuses when one exists. Best-effort clear.
@@ -724,8 +638,7 @@ test("adding a root emitter reaches an already-placed instance", async () => {
 // survive, but the source's stale root-level instance must not.
 test("reparenting a root removes only its stale root instance from an already-placed effect", async () => {
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
 
     try { await b.request({ kind: "preview/kill", params: {} }); } catch { /* none attached */ }
     await b.request({ kind: "file/new", params: {} });
@@ -818,8 +731,7 @@ test("file/open resets the selection instead of inheriting the previous document
   const fixturePath = resolve(__dirname, "fixtures/singleton-emitter.alo");
 
   const result = await page.evaluate(async (path) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
 
     // Start from a known document and select a NON-root emitter.
     await b.request({ kind: "file/open", params: { path } });
@@ -879,20 +791,6 @@ type ExpectedLiveState = {
   samples: LiveParticleSample[];
 };
 
-async function liveBridgeRequest<T>(
-  kind: string,
-  params: Record<string, unknown> = {},
-): Promise<T> {
-  return page.evaluate(
-    async ({ requestKind, requestParams }) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const bridge = (window as any).bridge;
-      return bridge.request({ kind: requestKind, params: requestParams });
-    },
-    { requestKind: kind, requestParams: params },
-  ) as Promise<T>;
-}
-
 // ── Spawn-schedule production call-site behavior ─────────────────────
 //
 // The pure SpawnSchedule predicate is covered by its C++ unit. These cases
@@ -905,20 +803,6 @@ type SpawnLiveState = {
   emitters: number;
   particles: number;
 };
-
-async function spawnBridgeRequest<T>(
-  kind: string,
-  params: Record<string, unknown> = {},
-): Promise<T> {
-  return page.evaluate(
-    async ({ requestKind, requestParams }) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const bridge = (window as any).bridge;
-      return bridge.request({ kind: requestKind, params: requestParams });
-    },
-    { requestKind: kind, requestParams: params },
-  ) as Promise<T>;
-}
 
 function normalizeLiveState(state: LiveInstanceState): ExpectedLiveState {
   return {
@@ -966,7 +850,7 @@ function expectedLiveState(
 async function waitForLiveState(expected: ExpectedLiveState): Promise<void> {
   await expect.poll(
     async () => normalizeLiveState(
-      await liveBridgeRequest<LiveInstanceState>("engine/query/live-instances"),
+      await bridgeRequest(page, { kind: "engine/query/live-instances", params: {} }),
     ),
     {
       message: "waiting for the native render path to publish its cached live samples",
@@ -980,61 +864,71 @@ async function resetLiveInvalidationFixture(): Promise<void> {
   // Clear while still paused first. Under a deliberately broken rescale
   // invalidation the live cursors point into the rebuilt key map; unpausing
   // before Clear would turn the intended stale-value assertion into a crash.
-  await liveBridgeRequest("file/new").catch(() => {});
-  await liveBridgeRequest("engine/set/paused", { paused: false }).catch(() => {});
+  await bridgeRequest(page, { kind: "file/new", params: {} }).catch(() => {});
+  await bridgeRequest(page, { kind: "engine/set/paused", params: { paused: false } }).catch(() => {});
 }
 
 async function seedHalfwayLiveFixture(): Promise<{ targetId: number; controlId: number }> {
   await resetLiveInvalidationFixture();
 
-  const list = await liveBridgeRequest<{ root: { children: { id: number }[] } }>(
-    "emitters/list",
-  );
+  const list = await bridgeRequest(page, { kind: "emitters/list", params: {} });
   const targetId = list.root.children[0]?.id;
   if (targetId === undefined) throw new Error("file/new did not create a root emitter");
 
-  const added = await liveBridgeRequest<{ newId: number }>("emitters/add-root");
+  const added = await bridgeRequest(page, { kind: "emitters/add-root", params: {} });
   const controlId = added.newId;
   if (controlId < 0) throw new Error("emitters/add-root failed");
 
   for (const id of [targetId, controlId]) {
-    await liveBridgeRequest("emitters/set-properties", {
-      id,
-      patch: {
-        lifetime: 1,
-        initialDelay: 0,
-        useBursts: false,
-        nParticlesPerSecond: 1,
-        randomLifetimePerc: 0,
-        randomScalePerc: 0,
-        hasTail: false,
+    await bridgeRequest(page, {
+      kind: "emitters/set-properties",
+      params: {
+        id,
+        patch: {
+          lifetime: 1,
+          initialDelay: 0,
+          useBursts: false,
+          nParticlesPerSecond: 1,
+          randomLifetimePerc: 0,
+          randomScalePerc: 0,
+          hasTail: false,
+        },
       },
     });
-    await liveBridgeRequest("emitters/set-track-key", {
-      id,
-      track: "scale",
-      oldTime: 0,
-      newTime: 0,
-      newValue: 0,
+    await bridgeRequest(page, {
+      kind: "emitters/set-track-key",
+      params: {
+        id,
+        track: "scale",
+        oldTime: 0,
+        newTime: 0,
+        newValue: 0,
+      },
     });
-    await liveBridgeRequest("emitters/set-track-key", {
-      id,
-      track: "scale",
-      oldTime: 100,
-      newTime: 100,
-      newValue: 1,
+    await bridgeRequest(page, {
+      kind: "emitters/set-track-key",
+      params: {
+        id,
+        track: "scale",
+        oldTime: 100,
+        newTime: 100,
+        newValue: 1,
+      },
     });
-    await liveBridgeRequest("emitters/set-track-interpolation", {
-      id,
-      track: "scale",
-      interpolation: "linear",
+    await bridgeRequest(page, {
+      kind: "emitters/set-track-interpolation",
+      params: {
+        id,
+        track: "scale",
+        interpolation: "linear",
+      },
     });
   }
 
-  await liveBridgeRequest("engine/set/paused", { paused: true });
-  await liveBridgeRequest("preview/attach", { x: 200, y: 200 });
-  await liveBridgeRequest("preview/place");
-  await liveBridgeRequest("engine/action/step-frames", { frames: 30 });
+  await bridgeRequest(page, { kind: "engine/set/paused", params: { paused: true } });
+  await bridgeRequest(page, { kind: "preview/attach", params: { x: 200, y: 200 } });
+  await bridgeRequest(page, { kind: "preview/place", params: {} });
+  await bridgeRequest(page, { kind: "engine/action/step-frames", params: { frames: 30 } });
 
   await waitForLiveState(expectedLiveState(targetId, 0.5, controlId, 0.5));
   return { targetId, controlId };
@@ -1043,9 +937,12 @@ async function seedHalfwayLiveFixture(): Promise<{ targetId: number; controlId: 
 test("live invalidation: system rescale updates paused samples without respawning", async () => {
   try {
     const { targetId, controlId } = await seedHalfwayLiveFixture();
-    await liveBridgeRequest("engine/action/rescale-system", {
-      durationScalePercent: 100,
-      sizeScalePercent: 200,
+    await bridgeRequest(page, {
+      kind: "engine/action/rescale-system",
+      params: {
+        durationScalePercent: 100,
+        sizeScalePercent: 200,
+      },
     });
 
     await waitForLiveState(expectedLiveState(targetId, 1, controlId, 1));
@@ -1057,10 +954,13 @@ test("live invalidation: system rescale updates paused samples without respawnin
 test("live invalidation: emitter rescale updates only its paused target sample", async () => {
   try {
     const { targetId, controlId } = await seedHalfwayLiveFixture();
-    await liveBridgeRequest("engine/action/rescale-emitter", {
-      id: targetId,
-      durationScalePercent: 100,
-      sizeScalePercent: 200,
+    await bridgeRequest(page, {
+      kind: "engine/action/rescale-emitter",
+      params: {
+        id: targetId,
+        durationScalePercent: 100,
+        sizeScalePercent: 200,
+      },
     });
 
     await waitForLiveState(expectedLiveState(targetId, 1, controlId, 0.5));
@@ -1072,10 +972,13 @@ test("live invalidation: emitter rescale updates only its paused target sample",
 test("live invalidation: Linear to Step repaints a paused halfway particle", async () => {
   try {
     const { targetId, controlId } = await seedHalfwayLiveFixture();
-    await liveBridgeRequest("emitters/set-track-interpolation", {
-      id: targetId,
-      track: "scale",
-      interpolation: "step",
+    await bridgeRequest(page, {
+      kind: "emitters/set-track-interpolation",
+      params: {
+        id: targetId,
+        track: "scale",
+        interpolation: "step",
+      },
     });
 
     await waitForLiveState(expectedLiveState(targetId, 0, controlId, 0.5));
@@ -1085,7 +988,7 @@ test("live invalidation: Linear to Step repaints a paused halfway particle", asy
 });
 
 async function spawnLiveState(): Promise<SpawnLiveState> {
-  return spawnBridgeRequest<SpawnLiveState>("engine/query/live-instances");
+  return bridgeRequest(page, { kind: "engine/query/live-instances", params: {} });
 }
 
 async function expectSpawnLiveState(
@@ -1110,13 +1013,13 @@ async function expectSpawnLiveState(
 }
 
 async function resetSpawnScheduleFixture(): Promise<void> {
-  await spawnBridgeRequest("file/new");
-  await spawnBridgeRequest("engine/set/paused", { paused: false });
+  await bridgeRequest(page, { kind: "file/new", params: {} });
+  await bridgeRequest(page, { kind: "engine/set/paused", params: { paused: false } });
 }
 
 async function cleanupSpawnScheduleFixture(): Promise<void> {
-  await spawnBridgeRequest("file/new").catch(() => {});
-  await spawnBridgeRequest("engine/set/paused", { paused: false }).catch(() => {});
+  await bridgeRequest(page, { kind: "file/new", params: {} }).catch(() => {});
+  await bridgeRequest(page, { kind: "engine/set/paused", params: { paused: false } }).catch(() => {});
 }
 
 async function seedSpawnScheduleFixture(
@@ -1124,30 +1027,31 @@ async function seedSpawnScheduleFixture(
   particlesPerSecond: number,
 ): Promise<number> {
   await resetSpawnScheduleFixture();
-  await spawnBridgeRequest("engine/set/paused", { paused: true });
+  await bridgeRequest(page, { kind: "engine/set/paused", params: { paused: true } });
 
-  const list = await spawnBridgeRequest<{
-    root: { children: Array<{ id: number }> };
-  }>("emitters/list");
+  const list = await bridgeRequest(page, { kind: "emitters/list", params: {} });
   const emitterId = list.root.children[0]?.id;
   if (emitterId === undefined) throw new Error("file/new did not create a root emitter");
 
-  await spawnBridgeRequest("emitters/set-properties", {
-    id: emitterId,
-    patch: {
-      lifetime: 10,
-      initialDelay,
-      useBursts: false,
-      nParticlesPerSecond: particlesPerSecond,
-      randomLifetimePerc: 0,
-      freezeTime: 0,
-      skipTime: 0,
-      isWeatherParticle: false,
-      hasTail: false,
+  await bridgeRequest(page, {
+    kind: "emitters/set-properties",
+    params: {
+      id: emitterId,
+      patch: {
+        lifetime: 10,
+        initialDelay,
+        useBursts: false,
+        nParticlesPerSecond: particlesPerSecond,
+        randomLifetimePerc: 0,
+        freezeTime: 0,
+        skipTime: 0,
+        isWeatherParticle: false,
+        hasTail: false,
+      },
     },
   });
-  await spawnBridgeRequest("preview/attach", { x: 200, y: 200 });
-  await spawnBridgeRequest("preview/place");
+  await bridgeRequest(page, { kind: "preview/attach", params: { x: 200, y: 200 } });
+  await bridgeRequest(page, { kind: "preview/place", params: {} });
   return emitterId;
 }
 
@@ -1160,20 +1064,21 @@ test("spawn schedule: a steady-state rate increase pulls the real next round in"
       particles: 1,
     });
 
-    await spawnBridgeRequest("emitters/set-properties", {
-      id: emitterId,
-      patch: { nParticlesPerSecond: 100 },
+    await bridgeRequest(page, {
+      kind: "emitters/set-properties",
+      params: {
+        id: emitterId,
+        patch: { nParticlesPerSecond: 100 },
+      },
     });
-    await spawnBridgeRequest("engine/action/step-frames", { frames: 1 });
+    await bridgeRequest(page, { kind: "engine/action/step-frames", params: { frames: 1 } });
 
     const after = await expectSpawnLiveState({
       instances: 1,
       emitters: 1,
       particles: 2,
     });
-    const tree = await spawnBridgeRequest<{
-      root: { children: Array<{ id: number }> };
-    }>("emitters/list");
+    const tree = await bridgeRequest(page, { kind: "emitters/list", params: {} });
 
     expect(before.instances).toBe(after.instances);
     expect(before.emitters).toBe(after.emitters);
@@ -1194,11 +1099,14 @@ test("spawn schedule: unrelated edits preserve initialDelay before emission begi
 
     // This is deliberately unrelated to rate or timing. The broken
     // unconditional reconcile scheduled a round at now + 0.1 seconds.
-    await spawnBridgeRequest("emitters/set-properties", {
-      id: emitterId,
-      patch: { gravity: 0.25 },
+    await bridgeRequest(page, {
+      kind: "emitters/set-properties",
+      params: {
+        id: emitterId,
+        patch: { gravity: 0.25 },
+      },
     });
-    await spawnBridgeRequest("engine/action/step-frames", { frames: 7 });
+    await bridgeRequest(page, { kind: "engine/action/step-frames", params: { frames: 7 } });
     const wrongWindow = await expectSpawnLiveState({
       instances: 1,
       emitters: 1,
@@ -1207,15 +1115,13 @@ test("spawn schedule: unrelated edits preserve initialDelay before emission begi
 
     // Total stepped time is now 301/60 seconds: just beyond the authored five
     // seconds, but before a second 10/s round. Exactly one particle must exist.
-    await spawnBridgeRequest("engine/action/step-frames", { frames: 294 });
+    await bridgeRequest(page, { kind: "engine/action/step-frames", params: { frames: 294 } });
     const afterDelay = await expectSpawnLiveState({
       instances: 1,
       emitters: 1,
       particles: 1,
     });
-    const tree = await spawnBridgeRequest<{
-      root: { children: Array<{ id: number }> };
-    }>("emitters/list");
+    const tree = await bridgeRequest(page, { kind: "emitters/list", params: {} });
 
     expect(before.instances).toBe(wrongWindow.instances);
     expect(wrongWindow.instances).toBe(afterDelay.instances);

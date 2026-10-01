@@ -44,51 +44,14 @@
 // waiting for CDP. The harness already captures that path via
 // `Host process exited before CDP came up` in run-native-tests.mjs.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import type { EngineStateDto } from "@particle-editor/bridge-schema";
+import type { DeviceRecoveryWorkParams, DeviceRecoveryWorkState } from "./helpers/bridge-request";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-
-type EngineStateDto = {
-  ground: boolean;
-  groundZ: number;
-  groundTexture: number;
-  skydomeSlot: number;
-  background: { r: number; g: number; b: number };
-};
-
-type DeviceRecoveryWorkState = {
-  pending: boolean;
-  reloadCount: number;
-  authoredApplyCount: number;
-  deviceProbeCount: number;
-  composedFramePrepareCount: number;
-  endFrameQueryCreateCount: number;
-  endFrameQueryFailureCount: number;
-  endFrameQueryTimeoutCount: number;
-  endFrameQueryOverrideConsumedCount: number;
-  endFrameQueryOverrideRemaining: number;
-  frameReady: boolean;
-};
-
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 test("bridge attached ⇒ D3D9Ex init + DPOOL_DEFAULT skydome mesh succeeded", async () => {
@@ -98,7 +61,7 @@ test("bridge attached ⇒ D3D9Ex init + DPOOL_DEFAULT skydome mesh succeeded", a
   // reaching CDP, so this spec executing AT ALL implies both succeeded.
   // The explicit probe here documents the implicit contract.
   const probe = await page.evaluate(() => {
-    const b = (window as { bridge?: { request: unknown; on: unknown } }).bridge;
+    const b = window.bridge;
     return {
       hasBridge: typeof b !== "undefined",
       hasRequest: typeof b?.request === "function",
@@ -116,10 +79,9 @@ test("ground texture cycle through bundled slots (device-lost regression)", asyn
   // Cycle through them, assert each mutation lands. Failure mode would
   // be groundTexture stuck at 0 — the literal incident symptom.
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     const snapshot = async () =>
-      (await b.request({ kind: "engine/state/snapshot", params: {} })) as EngineStateDto;
+      await b.request({ kind: "engine/state/snapshot", params: {} });
     const set = async (slot: number) => {
       await b.request({ kind: "engine/set/ground-texture", params: { slot } });
       return (await snapshot()).groundTexture;
@@ -147,13 +109,12 @@ test("solid-colour ground (slot 4) ⇒ CreateSolidColorTexture under D3DPOOL_DEF
   // (wrong usage flags, lock failure), setting the slot would fail and
   // groundTexture would stay at its prior value.
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     // Color is a packed COLORREF number (Win32 0x00BBGGRR), not an
     // {r,g,b} object. 0x2050C8 = B=32, G=80, R=200 — orange-ish.
     await b.request({ kind: "engine/set/ground-solid-color", params: { rgb: 0x2050C8 } });
     await b.request({ kind: "engine/set/ground-texture", params: { slot: 4 } });
-    const dto = (await b.request({ kind: "engine/state/snapshot", params: {} })) as EngineStateDto;
+    const dto = await b.request({ kind: "engine/state/snapshot", params: {} });
     return dto.groundTexture;
   });
   expect(result).toBe(4);
@@ -166,10 +127,9 @@ test("skydome cycle through bundled slots ⇒ implicit Reset exercise", async ()
   // first with RCDATA fallback. Failure would indicate the skydome
   // texture path itself broke.
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     const get = async () =>
-      ((await b.request({ kind: "engine/state/snapshot", params: {} })) as EngineStateDto).skydomeSlot;
+      (await b.request({ kind: "engine/state/snapshot", params: {} })).skydomeSlot;
     const set = async (slot: number) => {
       await b.request({ kind: "engine/set/skydome-slot", params: { slot } });
       return get();
@@ -195,8 +155,7 @@ test("10× resize cycle ⇒ Engine::Reset survives the new D3DPOOL_DEFAULT relea
   // Success: snapshot still responds after all 10 cycles AND
   // groundTexture/skydomeSlot survive intact.
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
 
     // Seed a non-default state so we can verify it survives the cycles.
     await b.request({ kind: "engine/set/ground-texture", params: { slot: 2 } });
@@ -213,10 +172,10 @@ test("10× resize cycle ⇒ Engine::Reset survives the new D3DPOOL_DEFAULT relea
     for (let cycle = 0; cycle < 2; ++cycle) {
       for (const s of sizes) {
         await b.request({ kind: "layout/viewport-rect", params: s });
-        lastSnapshot = (await b.request({
+        lastSnapshot = await b.request({
           kind: "engine/state/snapshot",
           params: {},
-        })) as EngineStateDto;
+        });
       }
     }
     return lastSnapshot;
@@ -241,8 +200,7 @@ test("polluter pair + ground set ⇒ engine accepts mutation after spawner+modal
   // (fixed 2026-05-20) and the new D3DPOOL_DEFAULT VB/IB/textures
   // also go through Release/Recreate.
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
 
     // 1. Emulate the polluter pair by exercising resize + skydome
     //    swap + ground swap repeatedly.
@@ -257,10 +215,10 @@ test("polluter pair + ground set ⇒ engine accepts mutation after spawner+modal
     // 2. The regression check: set ground to a non-zero slot and verify it
     //    actually lands. Pre-fix this returned with state still at 0.
     await b.request({ kind: "engine/set/ground-texture", params: { slot: 3 } });
-    const dto = (await b.request({
+    const dto = await b.request({
       kind: "engine/state/snapshot",
       params: {},
-    })) as EngineStateDto;
+    });
     return dto.groundTexture;
   });
   expect(result).toBe(3);
@@ -268,13 +226,12 @@ test("polluter pair + ground set ⇒ engine accepts mutation after spawner+modal
 
 test("blocked full texture reload replays once without duplicating authored work", async () => {
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     const debug = async (action: "arm" | "release" | "query") =>
-      (await b.request({
+      b.request({
         kind: "debug/device-recovery-work",
         params: { action },
-      })) as DeviceRecoveryWorkState;
+      });
     const authoredChange = async (track: number) => {
       await b.request({
         kind: "engine/action/on-particle-system-changed",
@@ -363,13 +320,12 @@ test("blocked full texture reload replays once without duplicating authored work
 
 test("healthy composed frames use the production admission door without probing", async () => {
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     const debug = async (action: "release" | "query") =>
-      (await b.request({
+      b.request({
         kind: "debug/device-recovery-work",
         params: { action },
-      })) as DeviceRecoveryWorkState;
+      });
 
     await debug("release");
     const before = await debug("query");
@@ -390,13 +346,12 @@ test("healthy composed frames use the production admission door without probing"
 
 test("failed production event query schedules one probe and recreates once", async () => {
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
-    const debug = async (params: Record<string, unknown>) =>
-      (await b.request({
+    const b = window.bridge!;
+    const debug = async (params: DeviceRecoveryWorkParams) =>
+      b.request({
         kind: "debug/device-recovery-work",
         params,
-      })) as DeviceRecoveryWorkState;
+      });
     const waitFor = async (
       predicate: (state: DeviceRecoveryWorkState) => boolean,
     ) => {
@@ -462,13 +417,12 @@ test("failed production event query schedules one probe and recreates once", asy
 
 test("S_OK and one pending S_FALSE do not schedule recovery", async () => {
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
-    const debug = async (params: Record<string, unknown>) =>
-      (await b.request({
+    const b = window.bridge!;
+    const debug = async (params: DeviceRecoveryWorkParams) =>
+      b.request({
         kind: "debug/device-recovery-work",
         params,
-      })) as DeviceRecoveryWorkState;
+      });
     const exercise = async (queryResult: "s-ok" | "s-false") => {
       const before = await debug({ action: "query" });
       await debug({
@@ -529,13 +483,12 @@ test("S_OK and one pending S_FALSE do not schedule recovery", async () => {
 test("the exact 100001-poll S_FALSE timeout stays degraded, not lost", async () => {
   test.setTimeout(120_000);
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
-    const debug = async (params: Record<string, unknown>) =>
-      (await b.request({
+    const b = window.bridge!;
+    const debug = async (params: DeviceRecoveryWorkParams) =>
+      b.request({
         kind: "debug/device-recovery-work",
         params,
-      })) as DeviceRecoveryWorkState;
+      });
 
     await debug({ action: "release" });
     await debug({ action: "clear-query-result" });
@@ -591,13 +544,12 @@ test("the exact 100001-poll S_FALSE timeout stays degraded, not lost", async () 
 
 test("blocked shader and layer actions fail without moving roots; healthy reload succeeds", async () => {
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     const debug = async (action: "arm" | "release") =>
-      (await b.request({
+      b.request({
         kind: "debug/device-recovery-work",
         params: { action },
-      })) as DeviceRecoveryWorkState;
+      });
     const list = async () =>
       (await b.request({
         kind: "mods/list",

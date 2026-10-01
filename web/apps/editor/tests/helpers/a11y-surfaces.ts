@@ -69,7 +69,7 @@ export async function seedCanonicalUiState(page: Page): Promise<void> {
   });
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
+    () => typeof window.bridge !== "undefined",
     null,
     { timeout: 15_000 },
   );

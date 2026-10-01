@@ -19,6 +19,7 @@
 // any uniform doubling visible rather than assumed.
 
 import { test, expect } from "@playwright/test";
+import type { E2EBridge } from "../tests/helpers/bridge-request";
 
 type Aggregate = {
   commits: number;
@@ -98,7 +99,7 @@ test("react re-render audit: per-component commit counts under scripted interact
   await page.waitForFunction(() => typeof window.__profilerAudit?.dump === "function");
   // window.bridge is set by AppShell (synchronously in useMemo + corrected in an
   // effect); wait for it so the synthetic-event drivers have a live bridge.
-  await page.waitForFunction(() => typeof (window as { bridge?: unknown }).bridge !== "undefined");
+  await page.waitForFunction(() => typeof window.bridge !== "undefined");
   // Mock boots roots 0/3/5 selected on 0; wait for the tree to actually render.
   await page.locator('[data-testid^="emitter-row:"]').first().waitFor();
 
@@ -212,8 +213,10 @@ test("react re-render audit: per-component commit counts under scripted interact
   // --- Diagnostic: is the synthetic-emit path wired? (window.bridge is the live
   //     MockBridge; one emit should produce a StatusBar Profiler row.) ---
   const diag = await page.evaluate(async () => {
-    /* eslint-disable @typescript-eslint/no-explicit-any */
-    const b = window.bridge as any;
+    // MockBridge internals (TS-private), read only for this diagnostic.
+    const b = window.bridge as
+      | (E2EBridge & { listeners?: Map<string, Set<unknown>>; emit?: unknown })
+      | undefined;
     const cursorListeners = b?.listeners?.get?.("cursor/position-3d")?.size ?? null;
     const statsListeners = b?.listeners?.get?.("stats/tick")?.size ?? null;
     window.__profilerAudit!.reset();
@@ -228,7 +231,6 @@ test("react re-render audit: per-component commit counts under scripted interact
       statsListeners,
       rowsAfterOneCursorEmit: window.__profilerAudit!.rows(),
     };
-    /* eslint-enable @typescript-eslint/no-explicit-any */
   });
 
   // --- Emit the ranked table ---
@@ -237,14 +239,10 @@ test("react re-render audit: per-component commit counts under scripted interact
     for (const id of PROFILED_IDS) row[id] = dump[id]?.commits ?? 0;
     return row;
   });
-  // eslint-disable-next-line no-console
   console.log("\n=== React re-render audit (commits per Profiled region) ===");
-  // eslint-disable-next-line no-console
   console.table(ranked);
-  // eslint-disable-next-line no-console
   console.log("[diag]", JSON.stringify(diag));
   if (!curveMeasured) {
-    // eslint-disable-next-line no-console
     console.log("[skip] curve-key-drag: no .curve-key-marker present — not measured");
   }
   await testInfo.attach("profiler-audit.json", {

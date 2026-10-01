@@ -13,6 +13,13 @@
 // Appearance tab → palette button — and its geometry measured.
 import { test, expect, type Page } from "@playwright/test";
 
+// Mirrors PaletteTestApi in src/dev/palette-test-seam.ts.
+declare global {
+  interface Window {
+    __paletteTest?: { seedPalette: (opts?: { pinned?: number; recent?: number }) => void };
+  }
+}
+
 const POPOVER = '[aria-label="Texture palette"]';
 // The issue's repro used a ~900×571 window; 520 of height makes overflow
 // certain with 12 pinned + 16 recent seeded entries (7 grid rows + chrome).

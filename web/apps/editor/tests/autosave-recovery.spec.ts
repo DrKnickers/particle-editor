@@ -8,7 +8,7 @@
 //      path proves verified handoff-before-delete, PID-reuse identity, failure
 //      retention/retry, and explicit discard without touching user autosaves.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 import {
   access,
   copyFile,
@@ -23,36 +23,20 @@ import {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
 const AUTOSAVE_TEST_DIR = process.env.PE_AUTOSAVE_TEST_DIR;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE_A = path.resolve(__dirname, "fixtures/a11y-base-state.alo");
 const FIXTURE_B = path.resolve(__dirname, "fixtures/singleton-emitter.alo");
 
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-  await page.waitForFunction(
-    () => typeof (window as unknown as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 test("autosave/check-recovery returns no orphan under ordinary --test-host", async () => {
   const r = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     return await b.request({ kind: "autosave/check-recovery", params: {} });
   });
   expect(r).toEqual({ orphan: null });
@@ -60,8 +44,7 @@ test("autosave/check-recovery returns no orphan under ordinary --test-host", asy
 
 test("autosave/recover{discard} is a safe no-op with no pending orphan", async () => {
   const { result, dirtyBefore, dirtyAfter } = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     const before = await b.request({ kind: "engine/state/snapshot", params: {} });
     const res = await b.request({ kind: "autosave/recover", params: { choice: "discard" } });
     const after = await b.request({ kind: "engine/state/snapshot", params: {} });
@@ -93,8 +76,7 @@ async function pathExists(candidate: string) {
 
 async function emitterCount() {
   return await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     const list = await b.request({ kind: "emitters/list", params: {} });
     const count = (nodes: Array<{ children?: unknown[] }>): number =>
       nodes.reduce(
@@ -130,8 +112,7 @@ test("real recovery establishes a verified session handoff before old-tier delet
   await page.evaluate(async () => {
     // Ensure hasCurrentFile=false so the non-test suppression predicates do not
     // mask the explicitly isolated scanner call.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (window as any).bridge.request({ kind: "file/new", params: {} });
+    await window.bridge!.request({ kind: "file/new", params: {} });
   });
 
   const deadPid = 4294967294;
@@ -144,8 +125,7 @@ test("real recovery establishes a verified session handoff before old-tier delet
   try {
     await plantAutosave(FIXTURE_A, firstOld);
     const firstCheck = await page.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return await (window as any).bridge.request({
+      return await window.bridge!.request({
         kind: "autosave/check-recovery",
         params: { __testAllowRecovery: true },
       });
@@ -153,8 +133,7 @@ test("real recovery establishes a verified session handoff before old-tier delet
     expect(firstCheck.orphan).not.toBeNull();
 
     const firstRecover = await page.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return await (window as any).bridge.request({
+      return await window.bridge!.request({
         kind: "autosave/recover",
         params: { choice: "recent" },
       });
@@ -188,8 +167,7 @@ test("real recovery establishes a verified session handoff before old-tier delet
     );
     await plantAutosave(FIXTURE_B, secondOld);
     const secondCheck = await page.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return await (window as any).bridge.request({
+      return await window.bridge!.request({
         kind: "autosave/check-recovery",
         params: { __testAllowRecovery: true },
       });
@@ -203,8 +181,7 @@ test("real recovery establishes a verified session handoff before old-tier delet
     // merely proving the helper in isolation.
     const currentBeforeVerificationFault = await readFile(replacementPath);
     const rejectedUnparseableHandoff = await page.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return await (window as any).bridge.request({
+      return await window.bridge!.request({
         kind: "autosave/recover",
         params: {
           choice: "recent",
@@ -230,8 +207,7 @@ test("real recovery establishes a verified session handoff before old-tier delet
     await mkdir(replacementPath);
     blockedDestination = replacementPath;
     const failedHandoff = await page.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return await (window as any).bridge.request({
+      return await window.bridge!.request({
         kind: "autosave/recover",
         params: { choice: "recent" },
       });
@@ -248,8 +224,7 @@ test("real recovery establishes a verified session handoff before old-tier delet
     await rmdir(replacementPath);
     blockedDestination = null;
     const retry = await page.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return await (window as any).bridge.request({
+      return await window.bridge!.request({
         kind: "autosave/recover",
         params: { choice: "recent" },
       });
@@ -269,16 +244,14 @@ test("real recovery establishes a verified session handoff before old-tier delet
     );
     await plantAutosave(FIXTURE_A, discardOld);
     const discardCheck = await page.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return await (window as any).bridge.request({
+      return await window.bridge!.request({
         kind: "autosave/check-recovery",
         params: { __testAllowRecovery: true },
       });
     });
     expect(discardCheck.orphan).not.toBeNull();
     const discarded = await page.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return await (window as any).bridge.request({
+      return await window.bridge!.request({
         kind: "autosave/recover",
         params: { choice: "discard" },
       });
@@ -291,8 +264,7 @@ test("real recovery establishes a verified session handoff before old-tier delet
       await rmdir(blockedDestination).catch(() => {});
     }
     await page.evaluate(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (window as any).bridge.request({ kind: "file/new", params: {} });
+      await window.bridge!.request({ kind: "file/new", params: {} });
     }).catch(() => {});
   }
 });

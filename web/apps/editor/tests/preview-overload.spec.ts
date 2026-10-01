@@ -20,42 +20,15 @@
 // visible-rate scenarios unreachable. The gate specs below prove the
 // over-budget cases are prevented up front.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import type { SpawnerParamsDto } from "@particle-editor/bridge-schema";
+import { bridgeRequest } from "./helpers/bridge-request";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-  await page.waitForFunction(
-    () => typeof (window as unknown as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
-
-test.afterAll(async () => {
-  await browser?.close();
-});
-
-// Bridge request helper evaluated in the page. Kept as a string-free
-// page.evaluate per the house CDP idiom (see emitter-tree.spec.ts).
-async function bridgeRequest<T>(kind: string, params: unknown): Promise<T> {
-  return page.evaluate(
-    async ({ kind, params }) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const b = (window as any).bridge;
-      return b.request({ kind, params });
-    },
-    { kind, params },
-  ) as Promise<T>;
-}
 
 // Best-effort cleanup wrapper for finally blocks: if the host died or
 // wedged, a throwing cleanup call would REPLACE the original assertion
@@ -91,17 +64,15 @@ async function waitForRefusal(timeoutMs: number): Promise<Refusal | null> {
   return page.evaluate(
     ({ timeoutMs }) =>
       new Promise<Refusal | null>((resolve) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const b = (window as any).bridge;
+        const b = window.bridge!;
         const timer = setTimeout(() => {
           off();
           resolve(null);
         }, timeoutMs);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const off = b.on("engine/overload/refused", (e: any) => {
+        const off = b.on("engine/overload/refused", (e) => {
           clearTimeout(timer);
           off();
-          resolve(e.payload as Refusal);
+          resolve(e.payload);
         });
       }),
     { timeoutMs },
@@ -116,10 +87,8 @@ async function countRefusals(windowMs: number): Promise<number> {
   return page.evaluate(
     ({ windowMs }) =>
       new Promise<number>((resolve) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const b = (window as any).bridge;
+        const b = window.bridge!;
         let count = 0;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const off = b.on("engine/overload/refused", () => {
           count += 1;
         });
@@ -140,17 +109,15 @@ async function readInstanceCount(timeoutMs: number): Promise<number> {
   return page.evaluate(
     ({ timeoutMs }) =>
       new Promise<number>((resolve) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const b = (window as any).bridge;
+        const b = window.bridge!;
         const timer = setTimeout(() => {
           off();
           resolve(-1);
         }, timeoutMs);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const off = b.on("stats/tick", (e: any) => {
+        const off = b.on("stats/tick", (e) => {
           clearTimeout(timer);
           off();
-          resolve(e.payload.instances as number);
+          resolve(e.payload.instances);
         });
       }),
     { timeoutMs },
@@ -161,7 +128,7 @@ async function readInstanceCount(timeoutMs: number): Promise<number> {
 // trigger places exactly one instance, no auto interval (enabled:false,
 // manual mode), no lifetime cap (maxLifetimeSec:0) so clears are
 // attributable to the gate, not lifetime expiry.
-const MANUAL_SPAWNER_1 = {
+const MANUAL_SPAWNER_1: SpawnerParamsDto = {
   mode: "manual",
   enabled: false,
   burstSize: 1,
@@ -196,29 +163,29 @@ const MANUAL_SPAWNER_1 = {
 
 test("cumulative spawn gate refuses the over-cap placement and clears the preview", async () => {
   test.setTimeout(120_000);
-  await bridgeRequest("stats/set-frozen", { frozen: false });
-  await bridgeRequest("engine/set/paused", { paused: false });
-  await bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 1_000 });
+  await bridgeRequest(page, { kind: "stats/set-frozen", params: { frozen: false } });
+  await bridgeRequest(page, { kind: "engine/set/paused", params: { paused: false } });
+  await bridgeRequest(page, { kind: "engine/set/overload-guard", params: { enabled: true, maxParticles: 1_000 } });
   // estimate 400: 1×400=400 ok, 2×400=800 ok, 3×400=1200 > 1000 → refuse.
-  await bridgeRequest("engine/set/estimated-load", { perInstance: 400 });
+  await bridgeRequest(page, { kind: "engine/set/estimated-load", params: { perInstance: 400 } });
   // Known-zero baseline: a live instance leaked by an earlier spec file would
   // shift the refusal to an earlier trigger — before the waiter is armed.
-  await bridgeRequest("engine/action/clear", {});
+  await bridgeRequest(page, { kind: "engine/action/clear", params: {} });
   expect(await readInstanceCount(5_000), "expected a clean 0-instance baseline").toBe(0);
 
-  const snapshot = await bridgeRequest<{ spawner: unknown }>("engine/state/snapshot", {});
+  const snapshot = await bridgeRequest(page, { kind: "engine/state/snapshot", params: {} });
   const origSpawner = snapshot.spawner;
 
   try {
-    await bridgeRequest("spawner/start", MANUAL_SPAWNER_1);
+    await bridgeRequest(page, { kind: "spawner/start", params: MANUAL_SPAWNER_1 });
     // Two placements: 1×400 then 2×400 — both within the 1k cap.
-    await bridgeRequest("spawner/trigger", {});
-    await bridgeRequest("spawner/trigger", {});
+    await bridgeRequest(page, { kind: "spawner/trigger", params: {} });
+    await bridgeRequest(page, { kind: "spawner/trigger", params: {} });
 
     // The third placement is refused: 3×400 = 1200 > 1000. Arm the waiter
     // BEFORE the trigger so the one-shot event isn't missed.
     const refusalP = waitForRefusal(30_000);
-    await bridgeRequest("spawner/trigger", {});
+    await bridgeRequest(page, { kind: "spawner/trigger", params: {} });
     const refusal = await refusalP;
     expect(refusal, "expected an engine/overload/refused event on the 3rd placement").not.toBeNull();
     expect(refusal!.estimated).toBeGreaterThan(1_000);
@@ -229,49 +196,49 @@ test("cumulative spawn gate refuses the over-cap placement and clears the previe
     expect(instances, "expected the preview cleared to 0 instances after refusal").toBe(0);
 
     // The editor is alive: a follow-up bridge request resolves.
-    const list = await bridgeRequest<{ root: unknown }>("emitters/list", {});
+    const list = await bridgeRequest(page, { kind: "emitters/list", params: {} });
     expect(list).toBeTruthy();
   } finally {
-    await cleanupStep("spawner-stop", () => bridgeRequest("spawner/stop", {}));
+    await cleanupStep("spawner-stop", () => bridgeRequest(page, { kind: "spawner/stop", params: {} }));
     if (origSpawner) {
-      await cleanupStep("spawner-restore", () => bridgeRequest("spawner/start", origSpawner));
+      await cleanupStep("spawner-restore", () => bridgeRequest(page, { kind: "spawner/start", params: origSpawner }));
     }
     await cleanupStep("estimate-reset", () =>
-      bridgeRequest("engine/set/estimated-load", { perInstance: 0 }),
+      bridgeRequest(page, { kind: "engine/set/estimated-load", params: { perInstance: 0 } }),
     );
-    await cleanupStep("engine-clear", () => bridgeRequest("engine/action/clear", {}));
+    await cleanupStep("engine-clear", () => bridgeRequest(page, { kind: "engine/action/clear", params: {} }));
     await cleanupStep("guard-restore", () =>
-      bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 10_000 }),
+      bridgeRequest(page, { kind: "engine/set/overload-guard", params: { enabled: true, maxParticles: 10_000 } }),
     );
   }
 });
 
 test("edit-time estimate push over the cap clears the already-placed preview", async () => {
   test.setTimeout(120_000);
-  await bridgeRequest("stats/set-frozen", { frozen: false });
-  await bridgeRequest("engine/set/paused", { paused: false });
-  await bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 1_000 });
-  await bridgeRequest("engine/set/estimated-load", { perInstance: 400 });
+  await bridgeRequest(page, { kind: "stats/set-frozen", params: { frozen: false } });
+  await bridgeRequest(page, { kind: "engine/set/paused", params: { paused: false } });
+  await bridgeRequest(page, { kind: "engine/set/overload-guard", params: { enabled: true, maxParticles: 1_000 } });
+  await bridgeRequest(page, { kind: "engine/set/estimated-load", params: { perInstance: 400 } });
   // Known-zero baseline (see the cumulative spec above): leftover instances
   // would change which trigger crosses the cap.
-  await bridgeRequest("engine/action/clear", {});
+  await bridgeRequest(page, { kind: "engine/action/clear", params: {} });
   expect(await readInstanceCount(5_000), "expected a clean 0-instance baseline").toBe(0);
 
-  const snapshot = await bridgeRequest<{ spawner: unknown }>("engine/state/snapshot", {});
+  const snapshot = await bridgeRequest(page, { kind: "engine/state/snapshot", params: {} });
   const origSpawner = snapshot.spawner;
 
   try {
-    await bridgeRequest("spawner/start", MANUAL_SPAWNER_1);
+    await bridgeRequest(page, { kind: "spawner/start", params: MANUAL_SPAWNER_1 });
     // Two placements at estimate 400 → 2×400 = 800, within the 1k cap,
     // no refusal.
-    await bridgeRequest("spawner/trigger", {});
-    await bridgeRequest("spawner/trigger", {});
+    await bridgeRequest(page, { kind: "spawner/trigger", params: {} });
+    await bridgeRequest(page, { kind: "spawner/trigger", params: {} });
 
     // A parameter edit raises the estimate to 600: 2×600 = 1200 > 1000.
     // The edit-time check inside SetEstimatedLoad clears the preview and
     // records the refusal. Arm the waiter before the push.
     const refusalP = waitForRefusal(30_000);
-    await bridgeRequest("engine/set/estimated-load", { perInstance: 600 });
+    await bridgeRequest(page, { kind: "engine/set/estimated-load", params: { perInstance: 600 } });
     const refusal = await refusalP;
     expect(refusal, "expected an engine/overload/refused event from the edit-time check").not.toBeNull();
     expect(refusal!.estimated).toBeGreaterThan(1_000);
@@ -280,91 +247,94 @@ test("edit-time estimate push over the cap clears the already-placed preview", a
     const instances = await readInstanceCount(5_000);
     expect(instances, "expected the preview cleared to 0 after the edit-time check").toBe(0);
   } finally {
-    await cleanupStep("spawner-stop", () => bridgeRequest("spawner/stop", {}));
+    await cleanupStep("spawner-stop", () => bridgeRequest(page, { kind: "spawner/stop", params: {} }));
     if (origSpawner) {
-      await cleanupStep("spawner-restore", () => bridgeRequest("spawner/start", origSpawner));
+      await cleanupStep("spawner-restore", () => bridgeRequest(page, { kind: "spawner/start", params: origSpawner }));
     }
     await cleanupStep("estimate-reset", () =>
-      bridgeRequest("engine/set/estimated-load", { perInstance: 0 }),
+      bridgeRequest(page, { kind: "engine/set/estimated-load", params: { perInstance: 0 } }),
     );
-    await cleanupStep("engine-clear", () => bridgeRequest("engine/action/clear", {}));
+    await cleanupStep("engine-clear", () => bridgeRequest(page, { kind: "engine/action/clear", params: {} }));
     await cleanupStep("guard-restore", () =>
-      bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 10_000 }),
+      bridgeRequest(page, { kind: "engine/set/overload-guard", params: { enabled: true, maxParticles: 10_000 } }),
     );
   }
 });
 
 test("a single instance over the cap is refused on every retry (no lock-out)", async () => {
   test.setTimeout(120_000);
-  await bridgeRequest("stats/set-frozen", { frozen: false });
-  await bridgeRequest("engine/set/paused", { paused: false });
-  await bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 1_000 });
+  await bridgeRequest(page, { kind: "stats/set-frozen", params: { frozen: false } });
+  await bridgeRequest(page, { kind: "engine/set/paused", params: { paused: false } });
+  await bridgeRequest(page, { kind: "engine/set/overload-guard", params: { enabled: true, maxParticles: 1_000 } });
   // 1×1500 = 1500 > 1000 → even a single placement is refused.
-  await bridgeRequest("engine/set/estimated-load", { perInstance: 1_500 });
+  await bridgeRequest(page, { kind: "engine/set/estimated-load", params: { perInstance: 1_500 } });
 
-  const snapshot = await bridgeRequest<{ spawner: unknown }>("engine/state/snapshot", {});
+  const snapshot = await bridgeRequest(page, { kind: "engine/state/snapshot", params: {} });
   const origSpawner = snapshot.spawner;
 
   try {
-    await bridgeRequest("spawner/start", MANUAL_SPAWNER_1);
+    await bridgeRequest(page, { kind: "spawner/start", params: MANUAL_SPAWNER_1 });
 
     // First trigger → refused. (After a clear-on-refusal the count is 0,
     // so the next trigger re-checks 0+1 from scratch — proving there is
     // no persistent locked state.)
     const r1P = waitForRefusal(30_000);
-    await bridgeRequest("spawner/trigger", {});
+    await bridgeRequest(page, { kind: "spawner/trigger", params: {} });
     const r1 = await r1P;
     expect(r1, "expected the first over-cap placement to be refused").not.toBeNull();
     expect(r1!.estimated).toBeGreaterThan(1_000);
 
     // Second trigger → refused AGAIN (a distinct event). No lock-out.
     const r2P = waitForRefusal(30_000);
-    await bridgeRequest("spawner/trigger", {});
+    await bridgeRequest(page, { kind: "spawner/trigger", params: {} });
     const r2 = await r2P;
     expect(r2, "expected the retry to be refused again (no lock-out state)").not.toBeNull();
     expect(r2!.estimated).toBeGreaterThan(1_000);
   } finally {
-    await cleanupStep("spawner-stop", () => bridgeRequest("spawner/stop", {}));
+    await cleanupStep("spawner-stop", () => bridgeRequest(page, { kind: "spawner/stop", params: {} }));
     if (origSpawner) {
-      await cleanupStep("spawner-restore", () => bridgeRequest("spawner/start", origSpawner));
+      await cleanupStep("spawner-restore", () => bridgeRequest(page, { kind: "spawner/start", params: origSpawner }));
     }
     await cleanupStep("estimate-reset", () =>
-      bridgeRequest("engine/set/estimated-load", { perInstance: 0 }),
+      bridgeRequest(page, { kind: "engine/set/estimated-load", params: { perInstance: 0 } }),
     );
-    await cleanupStep("engine-clear", () => bridgeRequest("engine/action/clear", {}));
+    await cleanupStep("engine-clear", () => bridgeRequest(page, { kind: "engine/action/clear", params: {} }));
     await cleanupStep("guard-restore", () =>
-      bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 10_000 }),
+      bridgeRequest(page, { kind: "engine/set/overload-guard", params: { enabled: true, maxParticles: 10_000 } }),
     );
   }
 });
 
 test("an auto spawner refused over-cap fires one banner and self-disables", async () => {
   test.setTimeout(120_000);
-  await bridgeRequest("stats/set-frozen", { frozen: false });
-  await bridgeRequest("engine/set/paused", { paused: false });
-  await bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 1_000 });
-  await bridgeRequest("engine/set/estimated-load", { perInstance: 1_500 });
+  await bridgeRequest(page, { kind: "stats/set-frozen", params: { frozen: false } });
+  await bridgeRequest(page, { kind: "engine/set/paused", params: { paused: false } });
+  await bridgeRequest(page, { kind: "engine/set/overload-guard", params: { enabled: true, maxParticles: 1_000 } });
+  await bridgeRequest(page, { kind: "engine/set/estimated-load", params: { perInstance: 1_500 } });
 
-  const snapshot = await bridgeRequest<{ spawner: unknown }>("engine/state/snapshot", {});
+  const snapshot = await bridgeRequest(page, { kind: "engine/state/snapshot", params: {} });
   const origSpawner = snapshot.spawner;
 
   try {
     // Auto/interval spawner with a SHORT interval: without the churn stop
     // it would refuse-and-clear every interval, producing one banner per
     // cycle. The driver must self-disable after the FIRST refusal.
-    await bridgeRequest("spawner/start", {
-      mode: "auto",
-      enabled: true,
-      burstSize: 1,
-      spacingSec: 0,
-      intervalSec: 0.25,
-      position: [0, 0, 0],
-      velocity: [0, 0, 0],
-      maxLifetimeSec: 0,
-      jitterPosition: [0, 0, 0],
-      acceleration: [0, 0, 0],
-      squiggleAmplitude: [0, 0, 0],
-      squiggleFrequency: 1,
+    await bridgeRequest(page, {
+      kind: "spawner/start",
+      params: {
+        mode: "auto",
+        enabled: true,
+        burstSize: 1,
+        spacingSec: 0,
+        intervalSec: 0.25,
+        position: [0, 0, 0],
+        velocity: [0, 0, 0],
+        maxLifetimeSec: 0,
+        jitterPosition: [0, 0, 0],
+        acceleration: [0, 0, 0],
+        squiggleAmplitude: [0, 0, 0],
+        squiggleFrequency: 1,
+      },
     });
 
     // Observe across many intervals (3s ≫ 0.25s interval): exactly one
@@ -373,45 +343,42 @@ test("an auto spawner refused over-cap fires one banner and self-disables", asyn
     expect(count, "expected EXACTLY one refusal across the multi-interval window").toBe(1);
 
     // The driver self-disabled: the snapshot's spawner reports enabled:false.
-    const after = await bridgeRequest<{ spawner: { enabled: boolean } }>(
-      "engine/state/snapshot",
-      {},
-    );
+    const after = await bridgeRequest(page, { kind: "engine/state/snapshot", params: {} });
     expect(after.spawner.enabled, "expected the spawner to self-disable on refusal").toBe(false);
   } finally {
-    await cleanupStep("spawner-stop", () => bridgeRequest("spawner/stop", {}));
+    await cleanupStep("spawner-stop", () => bridgeRequest(page, { kind: "spawner/stop", params: {} }));
     if (origSpawner) {
-      await cleanupStep("spawner-restore", () => bridgeRequest("spawner/start", origSpawner));
+      await cleanupStep("spawner-restore", () => bridgeRequest(page, { kind: "spawner/start", params: origSpawner }));
     }
     await cleanupStep("estimate-reset", () =>
-      bridgeRequest("engine/set/estimated-load", { perInstance: 0 }),
+      bridgeRequest(page, { kind: "engine/set/estimated-load", params: { perInstance: 0 } }),
     );
-    await cleanupStep("engine-clear", () => bridgeRequest("engine/action/clear", {}));
+    await cleanupStep("engine-clear", () => bridgeRequest(page, { kind: "engine/action/clear", params: {} }));
     await cleanupStep("guard-restore", () =>
-      bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 10_000 }),
+      bridgeRequest(page, { kind: "engine/set/overload-guard", params: { enabled: true, maxParticles: 10_000 } }),
     );
   }
 });
 
 test("a disabled guard bypasses the estimate gate (instance placed, no refusal)", async () => {
   test.setTimeout(120_000);
-  await bridgeRequest("stats/set-frozen", { frozen: false });
-  await bridgeRequest("engine/set/paused", { paused: false });
+  await bridgeRequest(page, { kind: "stats/set-frozen", params: { frozen: false } });
+  await bridgeRequest(page, { kind: "engine/set/paused", params: { paused: false } });
   // Guard DISABLED: the hard gate is OFF regardless of the estimate
   // (#123 "uncapped is an explicit power-user choice").
-  await bridgeRequest("engine/set/overload-guard", { enabled: false, maxParticles: 1_000 });
+  await bridgeRequest(page, { kind: "engine/set/overload-guard", params: { enabled: false, maxParticles: 1_000 } });
   // A huge estimate that WOULD be refused if the guard were enabled.
-  await bridgeRequest("engine/set/estimated-load", { perInstance: 5_000 });
+  await bridgeRequest(page, { kind: "engine/set/estimated-load", params: { perInstance: 5_000 } });
 
-  const snapshot = await bridgeRequest<{ spawner: unknown }>("engine/state/snapshot", {});
+  const snapshot = await bridgeRequest(page, { kind: "engine/state/snapshot", params: {} });
   const origSpawner = snapshot.spawner;
 
   try {
-    await bridgeRequest("spawner/start", MANUAL_SPAWNER_1);
+    await bridgeRequest(page, { kind: "spawner/start", params: MANUAL_SPAWNER_1 });
 
     // Watch for a refusal while triggering — none should fire.
     const refusalP = waitForRefusal(4_000);
-    await bridgeRequest("spawner/trigger", {});
+    await bridgeRequest(page, { kind: "spawner/trigger", params: {} });
     const refusal = await refusalP;
     expect(refusal, "expected NO refusal while the guard is disabled").toBeNull();
 
@@ -419,16 +386,16 @@ test("a disabled guard bypasses the estimate gate (instance placed, no refusal)"
     const instances = await readInstanceCount(5_000);
     expect(instances, "expected an instance to be placed with the guard disabled").toBeGreaterThanOrEqual(1);
   } finally {
-    await cleanupStep("spawner-stop", () => bridgeRequest("spawner/stop", {}));
+    await cleanupStep("spawner-stop", () => bridgeRequest(page, { kind: "spawner/stop", params: {} }));
     if (origSpawner) {
-      await cleanupStep("spawner-restore", () => bridgeRequest("spawner/start", origSpawner));
+      await cleanupStep("spawner-restore", () => bridgeRequest(page, { kind: "spawner/start", params: origSpawner }));
     }
     await cleanupStep("estimate-reset", () =>
-      bridgeRequest("engine/set/estimated-load", { perInstance: 0 }),
+      bridgeRequest(page, { kind: "engine/set/estimated-load", params: { perInstance: 0 } }),
     );
-    await cleanupStep("engine-clear", () => bridgeRequest("engine/action/clear", {}));
+    await cleanupStep("engine-clear", () => bridgeRequest(page, { kind: "engine/action/clear", params: {} }));
     await cleanupStep("guard-restore", () =>
-      bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 10_000 }),
+      bridgeRequest(page, { kind: "engine/set/overload-guard", params: { enabled: true, maxParticles: 10_000 } }),
     );
   }
 });

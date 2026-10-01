@@ -22,29 +22,12 @@
 // Every test restores the state it mutates (mirrors the restore pattern
 // in tools.spec.ts / background-picker.spec.ts).
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 // Radix Modal content (portalled). The BackgroundPicker/ToolPanel
@@ -72,9 +55,7 @@ async function closePreferences() {
 // Helper — the engine's MSAA state through the same query the dialog uses.
 async function queryMsaa(): Promise<{ levels: number[]; current: number }> {
   return page.evaluate(async () => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
     return await bridge.request({
       kind: "engine/query/msaa-levels",
@@ -156,9 +137,7 @@ test("changing Antialiasing fires engine/set/msaa-level (observed via query `cur
     await page.evaluate(async (args: { stored: string | null; level: number }) => {
       if (args.stored === null) localStorage.removeItem("alo:msaa-quality");
       else localStorage.setItem("alo:msaa-quality", args.stored);
-      const bridge = (window as Window & { bridge?: {
-        request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-      } }).bridge;
+      const bridge = window.bridge;
       await bridge!.request({
         kind: "engine/set/msaa-level",
         params: { level: args.level },
@@ -209,9 +188,7 @@ test("Model shadows toggle persists across dialog reopen (localStorage-backed)",
     await page.evaluate(async (args: { stored: string | null; enabled: boolean }) => {
       if (args.stored === null) localStorage.removeItem("alo:model-shadows");
       else localStorage.setItem("alo:model-shadows", args.stored);
-      const bridge = (window as Window & { bridge?: {
-        request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-      } }).bridge;
+      const bridge = window.bridge;
       await bridge!.request({
         kind: "engine/set/model-shadows",
         params: { enabled: args.enabled },

@@ -28,30 +28,18 @@
 //      set-track-interpolation continue to round-trip through the
 //      bridge (host-side handlers unchanged).
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 test("CurveEditorPanel is always mounted; placeholder shows when no emitter is selected", async () => {
   // Ensure no selection.
   await page.evaluate(async () => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
     await bridge.request({ kind: "emitters/select", params: { id: null } });
   });
@@ -74,9 +62,7 @@ test("CurveEditorPanel is always mounted; placeholder shows when no emitter is s
 
 test("selecting an emitter swaps the placeholder for the multi-channel CurveEditor SVG", async () => {
   await page.evaluate(async () => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
     const list = await bridge.request({ kind: "emitters/list", params: {} }) as {
       root: { children: { id: number }[] };
@@ -99,9 +85,7 @@ test("selecting an emitter swaps the placeholder for the multi-channel CurveEdit
 
   // Tear down.
   await page.evaluate(async () => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     await bridge!.request({ kind: "emitters/select", params: { id: null } });
   });
 });
@@ -126,9 +110,7 @@ test("channel checkboxes default to R / G / B ON; Scale / Alpha / Rotation / Ind
 
 test("emitters/add-track-key via the bridge adds a key (host round-trip unchanged)", async () => {
   const selectedId = await page.evaluate(async () => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     const list = await bridge!.request({ kind: "emitters/list", params: {} }) as {
       root: { children: { id: number }[] };
     };
@@ -140,9 +122,7 @@ test("emitters/add-track-key via the bridge adds a key (host round-trip unchange
 
   // Add a key, fetch the tracks, and assert the new key is present.
   const result = await page.evaluate(async (id) => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     const r = await bridge!.request({
       kind: "emitters/add-track-key",
       params: { id, track: "green", time: 33.3, value: 0.42 },
@@ -168,18 +148,14 @@ test("emitters/add-track-key via the bridge adds a key (host round-trip unchange
 
   // Tear down.
   await page.evaluate(async () => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     await bridge!.request({ kind: "emitters/select", params: { id: null } });
   });
 });
 
 test("emitters/set-track-key via the bridge moves a key (host round-trip unchanged)", async () => {
   const selectedId = await page.evaluate(async () => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     const list = await bridge!.request({ kind: "emitters/list", params: {} }) as {
       root: { children: { id: number }[] };
     };
@@ -190,9 +166,7 @@ test("emitters/set-track-key via the bridge moves a key (host round-trip unchang
   });
 
   const out = await page.evaluate(async (id) => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     await bridge!.request({
       kind: "emitters/add-track-key",
       params: { id, track: "red", time: 0, value: 0 },
@@ -223,9 +197,7 @@ test("emitters/set-track-key via the bridge moves a key (host round-trip unchang
   }
 
   await page.evaluate(async () => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     await bridge!.request({ kind: "emitters/select", params: { id: null } });
   });
 });
@@ -249,9 +221,7 @@ test("edit toolbar surfaces Select/Insert + Linear/Smooth/Step + Lock-to + spinn
 test("clicking a channel row sets focus + only that channel renders interactive key circles", async () => {
   // Pick an emitter so the curve canvas mounts.
   await page.evaluate(async () => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
     const list = await bridge.request({ kind: "emitters/list", params: {} }) as {
       root: { children: { id: number }[] };
@@ -275,9 +245,7 @@ test("clicking a channel row sets focus + only that channel renders interactive 
 
   // Tear down.
   await page.evaluate(async () => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     await bridge!.request({ kind: "emitters/select", params: { id: null } });
   });
 });
@@ -297,9 +265,7 @@ test("Insert mode toggle flips data-mode on the panel", async () => {
 test("clicking the Smooth interpolation button fires set-track-interpolation via bridge", async () => {
   // Pick an emitter.
   const selectedId = await page.evaluate(async () => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     const list = await bridge!.request({ kind: "emitters/list", params: {} }) as {
       root: { children: { id: number }[] };
     };
@@ -320,9 +286,7 @@ test("clicking the Smooth interpolation button fires set-track-interpolation via
   await panel.locator('[data-testid="ce-interp-smooth"]').click();
   await page.waitForTimeout(200);
   const interp = await page.evaluate(async (id) => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     const tracks = await bridge!.request({
       kind: "emitters/get-tracks",
       params: { id },
@@ -333,9 +297,7 @@ test("clicking the Smooth interpolation button fires set-track-interpolation via
 
   // Tear down.
   await page.evaluate(async () => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     await bridge!.request({ kind: "emitters/select", params: { id: null } });
   });
 });

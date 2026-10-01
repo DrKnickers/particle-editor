@@ -14,35 +14,17 @@
 // that the rendered output is crisp; that's a manual smoke-test gate
 // noted in the dispatch handoff.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 test("host survives a sequence of layout/viewport-rect resizes and keeps snapshot responsive", async () => {
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
 
     const sizes = [
       { x: 0, y: 0, w: 320,  h: 240  },
@@ -50,8 +32,7 @@ test("host survives a sequence of layout/viewport-rect resizes and keeps snapsho
       { x: 0, y: 0, w: 1600, h: 1200 },
     ];
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const snapshots: Array<{ ok: boolean; size: any; error?: string }> = [];
+    const snapshots: Array<{ ok: boolean; size: (typeof sizes)[number]; error?: string }> = [];
 
     for (const s of sizes) {
       // Fire-and-forget by contract (host returns ok with empty data).

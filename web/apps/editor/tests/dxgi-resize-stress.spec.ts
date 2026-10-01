@@ -18,33 +18,18 @@
 //
 // The native suite always exercises the composition resize path.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
 const HOST_LOG_PATH = process.env.LOCALAPPDATA
   ? join(process.env.LOCALAPPDATA, "AloParticleEditor", "host.log")
   : "";
 
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 test.beforeEach(({}, testInfo) => {
@@ -103,8 +88,7 @@ test("50 layout/viewport-rect cycles keep host responsive + Compositor recovers 
   ];
 
   const results: Array<{ snapshot: boolean; size: typeof sizes[0]; cycle: number; error?: string }> = await page.evaluate(async (sizes) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     const r: Array<{ snapshot: boolean; size: typeof sizes[0]; cycle: number; error?: string }> = [];
     for (let i = 0; i < 50; i++) {
       const s = sizes[i % sizes.length];
@@ -194,8 +178,7 @@ test("layout/viewport-rect to known size produces an [COMP-engine-resize] line w
   const targetH = 950;
 
   await page.evaluate(async ({ w, h }) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     await b.request({ kind: "layout/viewport-rect", params: { x: 0, y: 0, w, h } });
     // Let the host's per-frame loop tick at least once so the lazy
     // detection runs.

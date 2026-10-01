@@ -1,61 +1,27 @@
 // leave-particles document-mutation contract. Drives the production bridge,
 // UndoStack, and snapshot paths against the live native host.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { bridgeRequest } from "./helpers/bridge-request";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-  await page.waitForFunction(
-    () => typeof (window as unknown as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
-test.afterAll(async () => {
-  await browser?.close();
-});
-
-type BridgeReq = { kind: string; params: unknown };
-type State = {
-  leaveParticles: boolean;
-  paused: boolean;
-  dirty: boolean;
-  canUndo: boolean;
-  canRedo: boolean;
-};
-
-async function req<T = unknown>(kind: string, params: unknown = {}): Promise<T> {
-  return page.evaluate(
-    ({ kind, params }: BridgeReq) =>
-      (window as unknown as {
-        bridge: { request: (request: BridgeReq) => Promise<unknown> };
-      }).bridge.request({ kind, params }),
-    { kind, params } as BridgeReq,
-  ) as Promise<T>;
-}
-
-const state = () => req<State>("engine/state/snapshot");
+const state = () => bridgeRequest(page, { kind: "engine/state/snapshot", params: {} });
 const setLeaveParticles = (enabled: boolean) =>
-  req("engine/set/leave-particles", { enabled });
+  bridgeRequest(page, { kind: "engine/set/leave-particles", params: { enabled } });
 const undo = () =>
-  req<{ applied: boolean }>("undo/perform", { direction: "undo" });
+  bridgeRequest(page, { kind: "undo/perform", params: { direction: "undo" } });
 const redo = () =>
-  req<{ applied: boolean }>("undo/perform", { direction: "redo" });
+  bridgeRequest(page, { kind: "undo/perform", params: { direction: "redo" } });
 
 test("leave-particles undo/redo restores exact values while paused stays view-only", async () => {
   const pausedBefore = (await state()).paused;
   try {
-    await req("file/new");
+    await bridgeRequest(page, { kind: "file/new", params: {} });
     const initial = await state();
     expect(initial.dirty).toBe(false);
     expect(initial.canUndo).toBe(false);
@@ -70,7 +36,7 @@ test("leave-particles undo/redo restores exact values while paused stays view-on
     // Paused is a toolbar/view-only toggle. If undo capture is broadened to
     // engine/set/* instead of staying on this serialized field, this undo lands
     // on a duplicate changedValue snapshot instead of the exact initial value.
-    await req("engine/set/paused", { paused: !pausedBefore });
+    await bridgeRequest(page, { kind: "engine/set/paused", params: { paused: !pausedBefore } });
     expect.soft(await undo()).toEqual({ applied: true });
     const undone = await state();
     expect.soft(undone.leaveParticles).toBe(initial.leaveParticles);
@@ -90,8 +56,8 @@ test("leave-particles undo/redo restores exact values while paused stays view-on
     expect.soft(redone.dirty).toBe(true);
     expect.soft(redone.paused).toBe(!pausedBefore);
   } finally {
-    await req("engine/set/paused", { paused: pausedBefore });
-    await req("file/new");
+    await bridgeRequest(page, { kind: "engine/set/paused", params: { paused: pausedBefore } });
+    await bridgeRequest(page, { kind: "file/new", params: {} });
   }
 });
 
@@ -99,7 +65,7 @@ test("a same-value leave-particles request creates no undo entry or dirty state"
   try {
     // A fresh document is both the saved-state baseline and an empty undo
     // stack, which makes capture-before-compare overreach observable.
-    await req("file/new");
+    await bridgeRequest(page, { kind: "file/new", params: {} });
     const initial = await state();
     await setLeaveParticles(initial.leaveParticles);
 
@@ -109,6 +75,6 @@ test("a same-value leave-particles request creates no undo entry or dirty state"
     expect.soft(afterNoOp.canUndo).toBe(false);
     expect.soft(await undo()).toEqual({ applied: false });
   } finally {
-    await req("file/new");
+    await bridgeRequest(page, { kind: "file/new", params: {} });
   }
 });

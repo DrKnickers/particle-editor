@@ -159,7 +159,6 @@ expect.extend({
 // .d.ts re-exports from "playwright/test" and never declares a `Matchers`
 // interface in its own module namespace.
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace PlaywrightTest {
     interface Matchers<R> {
       toMatchJSONGolden(

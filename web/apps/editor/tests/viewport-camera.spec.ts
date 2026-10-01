@@ -16,35 +16,17 @@
 // web/packages/bridge-schema/src/index.ts CameraDto) and returns
 // the camera under `state.camera` in `engine/state/snapshot`.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 test("engine/set/camera round-trips through the engine snapshot", async () => {
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
 
     // Pre-seed a known camera pose. The values are picked to avoid
     // colliding with the engine's default starting camera so the
@@ -68,8 +50,7 @@ test("engine/set/camera round-trips through the engine snapshot", async () => {
   // The snapshot returns a flat EngineStateDto (see BuildEngineStateSnapshot
   // in src/host/BridgeDispatcher.cpp). `camera` is a CameraDto with
   // lowercase keys.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const cam = (result as any).camera;
+  const cam = result.camera;
   const eps = 1e-4;
 
   expect(Math.abs(cam.position[0] - 10)).toBeLessThan(eps);

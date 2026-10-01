@@ -1,5 +1,12 @@
 import { test, expect } from "@playwright/test";
 
+// site/main.js + site/guide-media.js read this override (tests point media at /media-local/).
+declare global {
+  interface Window {
+    __MEDIA_BASE__?: string;
+  }
+}
+
 // Cross-page topbar invariants. styles.css hard-cuts the topbar out of the cross-document
 // view-transition fade, which only looks right if every page renders pixel-identical nav
 // geometry — same links, same order, and exactly one .motion-toggle slot per page. These
@@ -7,7 +14,7 @@ import { test, expect } from "@playwright/test";
 // they pin belong to the site, not to any one page.
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => { (window as any).__MEDIA_BASE__ = "/media-local/"; });
+  await page.addInitScript(() => { window.__MEDIA_BASE__ = "/media-local/"; });
 });
 
 test("topbar: landing and guide render the identical ordered nav; What's New is gone", async ({ page }) => {

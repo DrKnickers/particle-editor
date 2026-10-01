@@ -19,10 +19,9 @@
 // events, so TestHostBridge.on returns a no-op unsubscribe. Specs that
 // would otherwise wait on `engine/state/changed` instead poll a fresh
 // `engine/state/snapshot` after the mutation lands.
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
 const ONE_PIXEL_BMP = Buffer.from(
   "Qk06AAAAAAAAADYAAAAoAAAAAQAAAAEAAAABABgAAAAAAAQAAAATCwAAEwsAAAAAAAAAAAAAAAD/AA==",
   "base64",
@@ -33,25 +32,10 @@ const ONE_PIXEL_TGA = Buffer.from([
   0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 24, 0, 0, 0, 255,
 ]);
 
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 }
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 test("Background popover opens from the toolbar dropdown trigger", async () => {
@@ -80,10 +64,7 @@ test("Background popover opens from the toolbar dropdown trigger", async () => {
 
 test("engine/set/skydome-slot reports exact applied and actual slots for invalid, fallback, no-op, and bundled requests", async () => {
   const result = await page.evaluate(async () => {
-    type AnyBridge = {
-      request(r: { kind: string; params: object }): Promise<unknown>;
-    };
-    const b = (window as { bridge?: AnyBridge }).bridge;
+    const b = window.bridge;
     if (!b) throw new Error("window.bridge not attached");
     type SlotResult = { slot: number; applied: boolean };
     const setSlot = (slot: number) =>
@@ -148,8 +129,7 @@ test("engine/set/background round-trips a COLORREF (orange = 0x000088ff)", async
   // R=0xff, G=0x88, B=0x00 — verifies the dispatcher doesn't reorder
   // bytes on the way through.
   const after = await page.evaluate(async () => {
-    const b = (window as { bridge?: { request(r: { kind: string; params: object }): Promise<unknown> } })
-      .bridge;
+    const b = window.bridge;
     if (!b) throw new Error("window.bridge not attached");
     await b.request({ kind: "engine/set/background", params: { rgb: 0x000088ff } });
     const snap = (await b.request({
@@ -163,8 +143,7 @@ test("engine/set/background round-trips a COLORREF (orange = 0x000088ff)", async
 
 test("engine/set/skydome-custom-path persists across snapshots (slot 9)", async () => {
   const after = await page.evaluate(async () => {
-    const b = (window as { bridge?: { request(r: { kind: string; params: object }): Promise<unknown> } })
-      .bridge;
+    const b = window.bridge;
     if (!b) throw new Error("window.bridge not attached");
     await b.request({
       kind: "engine/set/skydome-custom-path",
@@ -185,8 +164,7 @@ test("custom slot paths accept local UNC hosts but still reject remote hosts", a
   const localPath = "\\\\wsl.localhost\\Ubuntu\\textures\\ground.dds";
   const remotePath = "\\\\attacker\\share\\ground.dds";
   const result = await page.evaluate(async ({ localPath, remotePath }) => {
-    const b = (window as { bridge?: { request(r: { kind: string; params: object }): Promise<unknown> } })
-      .bridge;
+    const b = window.bridge;
     if (!b) throw new Error("window.bridge not attached");
 
     let localResolved = true;
@@ -242,8 +220,7 @@ test("ground custom-path setter accepts a local path and rejects remote UNC with
 
   try {
     const result = await page.evaluate(async ({ localPath, remotePath }) => {
-      const b = (window as { bridge?: { request(r: { kind: string; params: object }): Promise<unknown> } })
-        .bridge;
+      const b = window.bridge;
       if (!b) throw new Error("window.bridge not attached");
 
       try {
@@ -304,8 +281,7 @@ test("ground texture selection reports corrupt custom fallback without rejecting
 
   try {
     const result = await page.evaluate(async ({ validPath, corruptPath }) => {
-      const b = (window as { bridge?: { request(r: { kind: string; params: object }): Promise<unknown> } })
-        .bridge;
+      const b = window.bridge;
       if (!b) throw new Error("window.bridge not attached");
       type SlotResult = { slot: number; applied: boolean };
       const setGroundSlot = (slot: number) =>
@@ -376,8 +352,7 @@ test("clearing an active custom skydome path succeeds without hiding real load f
 
   try {
     const result = await page.evaluate(async ({ texturePath, missingPath }) => {
-      const b = (window as { bridge?: { request(r: { kind: string; params: object }): Promise<unknown> } })
-        .bridge;
+      const b = window.bridge;
       if (!b) throw new Error("window.bridge not attached");
 
       try {
@@ -453,8 +428,7 @@ test("undo/perform dispatches end-to-end and resolves with a boolean `applied`",
   // run legitimately seed captures (e.g. atlas-picker.spec.ts commits
   // track-key edits), so `applied` is order-dependent by design.
   const r = await page.evaluate(async () => {
-    const b = (window as { bridge?: { request(r: { kind: string; params: object }): Promise<unknown> } })
-      .bridge;
+    const b = window.bridge;
     if (!b) throw new Error("window.bridge not attached");
     const undone = (await b.request({
       kind: "undo/perform",

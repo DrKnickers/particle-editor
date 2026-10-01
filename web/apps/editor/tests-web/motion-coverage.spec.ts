@@ -124,7 +124,9 @@ test("theme flip runs the scoped cross-fade class and settles clean", async ({ p
       if (root.classList.contains("theme-transition")) seen.cls = true;
     });
     mo.observe(root, { attributes: true, attributeFilter: ["class"] });
-    const themeMod = await import("/src/lib/theme.ts");
+    // Vite serves the module at this URL; tsc types it from the source.
+    const themeUrl = "/src/lib/theme.ts";
+    const themeMod: typeof import("../src/lib/theme") = await import(themeUrl);
     const prev = root.dataset.theme;
     themeMod.applyMode(prev === "dark" ? "light" : "dark");
     await new Promise((r) => setTimeout(r, 350));

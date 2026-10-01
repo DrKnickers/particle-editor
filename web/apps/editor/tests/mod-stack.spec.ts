@@ -13,56 +13,31 @@
 // Fixture layers are empty-but-present dirs (tests/fixtures/mods/mod-*).
 // Configured stacks may also retain an unavailable path, but only a present
 // path can become active; no Data content is required for stack mechanics.
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { bridgeRequest } from "./helpers/bridge-request";
+import { test, expect, type Page } from "./helpers/cdp";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
 const fixturesDir = resolve(dirname(fileURLToPath(import.meta.url)), "fixtures", "mods");
 const modAlpha = resolve(fixturesDir, "mod-alpha");
 const modBeta = resolve(fixturesDir, "mod-beta");
 
-type SetLayersResult = { ok: boolean; stack: string[] };
-type ModsList = { layers?: unknown; stack: string[]; activePath: string | null };
-
-let browser: Browser;
 let page: Page;
 
-type BridgeWindow = {
-  bridge: { request: (req: { kind: string; params: object }) => Promise<unknown> };
-};
-
-async function setLayers(paths: string[]): Promise<SetLayersResult> {
-  return page.evaluate(
-    (p) =>
-      (window as unknown as BridgeWindow).bridge.request({
-        kind: "mods/set-layers",
-        params: { paths: p },
-      }) as Promise<SetLayersResult>,
-    paths,
-  );
+// Every case here expects the applied stack back; the stack-less failure shape
+// of mods/set-layers throws with the host's error rather than a missing stack.
+async function setLayers(paths: string[]) {
+  const r = await bridgeRequest(page, { kind: "mods/set-layers", params: { paths } });
+  if (!("stack" in r)) throw new Error(`mods/set-layers failed: ${r.error}`);
+  return r;
 }
 
-async function modsList(): Promise<ModsList> {
-  return page.evaluate(
-    () =>
-      (window as unknown as BridgeWindow).bridge.request({
-        kind: "mods/list",
-        params: {},
-      }) as Promise<ModsList>,
-  );
+function modsList() {
+  return bridgeRequest(page, { kind: "mods/list", params: {} });
 }
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  page = context.pages()[0] ?? (await context.waitForEvent("page"));
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 test.afterAll(async () => {
@@ -74,7 +49,6 @@ test.afterAll(async () => {
     // can surface as confusing failures in LATER spec files.
     console.warn(`[mod-stack] afterAll reset failed (later specs may see layers): ${err}`);
   }
-  await browser?.close();
 });
 
 const endsWithDir = (p: string, dir: string) =>

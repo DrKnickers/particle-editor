@@ -32,29 +32,12 @@
 // composed path: real curve-editor clicks → atlas context → dock →
 // real host track mutation.
 
-import { test, expect, chromium, type Page, type Browser, type Locator } from "@playwright/test";
+import { test, expect, type Page, type Locator } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 // The picker mounts as a docked ToolPanel: role="dialog" with the title
@@ -69,9 +52,7 @@ const ATLAS_PANEL = '[role="dialog"][aria-label="Atlas Frames"]';
 // empty-alpha frame.
 async function selectFirstEmitter(): Promise<number> {
   return page.evaluate(async () => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
     const list = await bridge.request({ kind: "emitters/list", params: {} }) as {
       root: { children: { id: number }[] };
@@ -104,9 +85,7 @@ function skipUnlessTextureOk(previewStatus: string) {
 // texture; the grid only mounts on a status:"ok" preview.
 async function seedTexturePreviewStatus(): Promise<string> {
   return page.evaluate(async () => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     const ask = async () =>
       (await bridge!.request({
         kind: "textures/get-preview",
@@ -138,9 +117,7 @@ async function seedTexturePreviewStatus(): Promise<string> {
 // actually-inserted time (the host epsilon-bumps duplicates).
 async function addIndexKey(id: number, time: number, value: number): Promise<number> {
   return page.evaluate(async (args: { id: number; time: number; value: number }) => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     const r = await bridge!.request({
       kind: "emitters/add-track-key",
       params: { id: args.id, track: "index", time: args.time, value: args.value },
@@ -152,9 +129,7 @@ async function addIndexKey(id: number, time: number, value: number): Promise<num
 // Helper — read the index-track key value at (approximately) `time`.
 async function indexKeyValueAt(id: number, time: number): Promise<number | null> {
   return page.evaluate(async (args: { id: number; time: number }) => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     const tracks = await bridge!.request({
       kind: "emitters/get-tracks",
       params: { id: args.id },
@@ -185,9 +160,7 @@ async function focusIndexChannelFresh() {
 // auto-opened dock back to whatever it displaced), and deselect.
 async function cleanup(id: number, times: number[]) {
   await page.evaluate(async (args: { id: number; times: number[] }) => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     await bridge!.request({
       kind: "emitters/delete-track-keys",
       params: { id: args.id, track: "index", times: args.times },
@@ -197,9 +170,7 @@ async function cleanup(id: number, times: number[]) {
   await panel.locator('[data-testid="curve-channel-row-red"]').click();
   await expect(panel).toHaveAttribute("data-focus-channel", "red", { timeout: 5_000 });
   await page.evaluate(async () => {
-    const bridge = (window as Window & { bridge?: {
-      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
-    } }).bridge;
+    const bridge = window.bridge;
     await bridge!.request({ kind: "emitters/select", params: { id: null } });
   });
 }

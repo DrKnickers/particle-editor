@@ -29,9 +29,7 @@
 //
 // The native suite always exercises the composition performance path.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
-
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
+import { test, expect, type Page } from "./helpers/cdp";
 
 // Tuneable thresholds. The mean-FPS gate is intentionally generous
 // — local dev rigs vary, CI machines (if this spec ever runs on CI)
@@ -41,24 +39,10 @@ const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
 const MEAN_FPS_FLOOR = 30;
 const SAMPLE_DURATION_MS = 10_000;
 
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 test("mean engine FPS over 10s exceeds the regression floor under composition mode", async () => {
@@ -72,11 +56,9 @@ test("mean engine FPS over 10s exceeds the regression floor under composition mo
     (durationMs) =>
       new Promise<number[]>((resolve) => {
         const collected: number[] = [];
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const b = (window as any).bridge;
+        const b = window.bridge!;
         const unsubscribe = b.on(
           "stats/tick",
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (e: { payload?: { fps?: number } }) => {
             const fps = e.payload?.fps;
             if (typeof fps === "number" && fps > 0) {
@@ -122,7 +104,6 @@ test("mean engine FPS over 10s exceeds the regression floor under composition mo
   // Soft assertion — log the result so passing runs still publish
   // the measured number to test output (useful for tracking perf
   // drift over time even when the gate is comfortably met).
-  // eslint-disable-next-line no-console
   console.log(
     `[dxgi-perf] composition-mode mean FPS = ${mean.toFixed(1)} ` +
     `(min=${min.toFixed(1)}, max=${max.toFixed(1)}, n=${samples.length})`,

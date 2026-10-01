@@ -31,30 +31,15 @@
 // that's `dialogs.spec.ts` territory. This spec is purely the bridge
 // contract.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
 
 type SnapshotDto = { imageBase64: string; w: number; h: number };
 
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 // Decode a base64 JPEG in the page and report how much it actually VARIES.
@@ -127,8 +112,7 @@ test("first viewport/capture-snapshot after boot returns a valid, non-blank JPEG
   // populated lastRawDib under the old code; after the refactor that
   // step is a no-op in this architecture.
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     await b.request({
       kind: "layout/viewport-rect",
       params: { x: 0, y: 0, w: 1024, h: 768 },
@@ -181,8 +165,7 @@ test("two consecutive snapshots both succeed (readback path is re-entrant)", asy
   // D3DERR_INVALIDCALL and CaptureSnapshotPng would return false →
   // imageBase64 would be the empty string per the host fall-through.
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     const first = (await b.request({
       kind: "viewport/capture-snapshot",
       params: {},
@@ -208,8 +191,7 @@ test("snapshot dimensions follow viewport resize (readback uses current RT, not 
   // refreshed it; the new readback path reads directly from the new
   // surfaces, so the snapshot must reflect the new dims immediately.
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     await b.request({
       kind: "layout/viewport-rect",
       params: { x: 0, y: 0, w: 800, h: 600 },

@@ -16,40 +16,14 @@
 // Talks to the host's real ParticleSystem + UndoStack via window.bridge
 // (no mocks) over the --test-host CDP endpoint.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import type { TrackName } from "@particle-editor/bridge-schema";
+import { bridgeRequest } from "./helpers/bridge-request";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  // Pick the page that actually has window.bridge (skip DevTools targets).
-  let found: Page | null = null;
-  for (const p of pages) {
-    try {
-      if (await p.evaluate(() => typeof (window as { bridge?: unknown }).bridge !== "undefined")) {
-        found = p;
-        break;
-      }
-    } catch {
-      /* page not evaluable (e.g. devtools) — skip */
-    }
-  }
-  page = found ?? pages[0] ?? (await context.waitForEvent("page"));
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 // Property-edit coalescing is time-windowed (UndoStack COALESCE_WINDOW_MS =
@@ -61,51 +35,34 @@ test.beforeEach(async () => {
 });
 
 // Bridge helpers — all run inside the page against the real host.
-type BridgeReq = { kind: string; params: unknown };
-async function req<T = unknown>(kind: string, params: unknown = {}): Promise<T> {
-  return page.evaluate(
-    ({ kind, params }: BridgeReq) =>
-      (window as unknown as { bridge: { request: (r: BridgeReq) => Promise<unknown> } }).bridge.request({ kind, params }),
-    { kind, params } as BridgeReq,
-  ) as Promise<T>;
-}
 async function firstEmitterId(): Promise<number> {
-  const list = await req<{ root: { children: { id: number }[] } }>("emitters/list");
+  const list = await bridgeRequest(page, { kind: "emitters/list", params: {} });
   const id = list.root.children[0]?.id;
   if (id === undefined) throw new Error("no emitters in tree");
   return id;
 }
 async function getProps(id: number): Promise<{ lifetime: number; gravity: number }> {
-  const r = await req<{ properties: { lifetime: number; gravity: number } }>(
-    "emitters/get-properties",
-    { id },
-  );
+  const r = await bridgeRequest(page, { kind: "emitters/get-properties", params: { id } });
   return r.properties;
 }
 async function getLifetime(id: number): Promise<number> {
   return (await getProps(id)).lifetime;
 }
 const setLifetime = (id: number, v: number) =>
-  req("emitters/set-properties", { id, patch: { lifetime: v } });
+  bridgeRequest(page, { kind: "emitters/set-properties", params: { id, patch: { lifetime: v } } });
 const setProp = (id: number, patch: Record<string, number>) =>
-  req("emitters/set-properties", { id, patch });
-const undo = () => req<{ applied: boolean }>("undo/perform", { direction: "undo" });
-const redo = () => req<{ applied: boolean }>("undo/perform", { direction: "redo" });
-type UndoBudgetState = {
-  maxTotalBytes: number;
-  totalBytes: number;
-  depth: number;
-  cursor: number;
-};
-const queryUndoBudget = () => req<UndoBudgetState>("undo/test/budget");
+  bridgeRequest(page, { kind: "emitters/set-properties", params: { id, patch } });
+const undo = () => bridgeRequest(page, { kind: "undo/perform", params: { direction: "undo" } });
+const redo = () => bridgeRequest(page, { kind: "undo/perform", params: { direction: "redo" } });
+const queryUndoBudget = () => bridgeRequest(page, { kind: "undo/test/budget", params: {} });
 const setUndoBudget = (maxTotalBytes: number) =>
-  req<UndoBudgetState>("undo/test/budget", { maxTotalBytes });
+  bridgeRequest(page, { kind: "undo/test/budget", params: { maxTotalBytes } });
 
 test("production auto-cap preserves the PRE + LIVE pair at the byte frontier", async () => {
   // Isolate the host-owned production stack, then query its ACTUAL configured
   // member before lowering it. This catches both a changed default constant and
   // HostWindow bypassing that default at construction.
-  await req("file/new");
+  await bridgeRequest(page, { kind: "file/new", params: {} });
   const original = await queryUndoBudget();
 
   try {
@@ -121,7 +78,7 @@ test("production auto-cap preserves the PRE + LIVE pair at the byte frontier", a
     });
 
     const id = await firstEmitterId();
-    await req("emitters/select", { id });
+    await bridgeRequest(page, { kind: "emitters/select", params: { id } });
     const p0 = await getLifetime(id);
     const target = Number((p0 + 3).toFixed(3));
 
@@ -156,17 +113,17 @@ test("production auto-cap preserves the PRE + LIVE pair at the byte frontier", a
     // file/new clears history before both reconfiguration and handoff. The
     // safe-integer guard keeps cleanup sane under the intentional unbounded-
     // default mutant, whose precondition assertion fails before configuration.
-    await req("file/new");
+    await bridgeRequest(page, { kind: "file/new", params: {} });
     if (Number.isSafeInteger(original.maxTotalBytes)) {
       await setUndoBudget(original.maxTotalBytes);
     }
-    await req("file/new");
+    await bridgeRequest(page, { kind: "file/new", params: {} });
   }
 });
 
 test("a single edit undoes and redoes (auto-cap round-trip)", async () => {
   const id = await firstEmitterId();
-  await req("emitters/select", { id });
+  await bridgeRequest(page, { kind: "emitters/select", params: { id } });
   const p0 = await getLifetime(id);
   const target = Number((p0 + 3).toFixed(3));
 
@@ -186,7 +143,7 @@ test("a single edit undoes and redoes (auto-cap round-trip)", async () => {
 
 test("undo after a redo steps back to the pre-edit state (no spurious auto-cap)", async () => {
   const id = await firstEmitterId();
-  await req("emitters/select", { id });
+  await bridgeRequest(page, { kind: "emitters/select", params: { id } });
   const p0 = await getLifetime(id);
   const target = Number((p0 + 7).toFixed(3));
 
@@ -204,7 +161,7 @@ test("undo after a redo steps back to the pre-edit state (no spurious auto-cap)"
 
 test("a full undo/redo/undo cycle is stable across repeats", async () => {
   const id = await firstEmitterId();
-  await req("emitters/select", { id });
+  await bridgeRequest(page, { kind: "emitters/select", params: { id } });
   const p0 = await getLifetime(id);
   const target = Number((p0 + 2).toFixed(3));
 
@@ -222,7 +179,7 @@ test("a full undo/redo/undo cycle is stable across repeats", async () => {
 
 test("a rapid burst of same-emitter edits coalesces into ONE undo step (wheel scroll)", async () => {
   const id = await firstEmitterId();
-  await req("emitters/select", { id });
+  await bridgeRequest(page, { kind: "emitters/select", params: { id } });
   const p0 = await getLifetime(id);
 
   // Simulate a scroll-wheel gesture: 4 rapid edits to the same field. Each is
@@ -246,7 +203,7 @@ test("a rapid burst of same-emitter edits coalesces into ONE undo step (wheel sc
 
 test("rapid edits to DIFFERENT fields are SEPARATE undo steps (per-field coalescing)", async () => {
   const id = await firstEmitterId();
-  await req("emitters/select", { id });
+  await bridgeRequest(page, { kind: "emitters/select", params: { id } });
   const { lifetime: lt0, gravity: gv0 } = await getProps(id);
   const lt1 = Number((lt0 + 3).toFixed(3));
   const gv1 = Number((gv0 + 2).toFixed(3));
@@ -275,7 +232,7 @@ test("rapid edits to DIFFERENT fields are SEPARATE undo steps (per-field coalesc
 test("a same-field burst still coalesces under per-field keying", async () => {
   // The per-field key must stay stable across ticks of one field.
   const id = await firstEmitterId();
-  await req("emitters/select", { id });
+  await bridgeRequest(page, { kind: "emitters/select", params: { id } });
   const p0 = await getLifetime(id);
   for (let i = 1; i <= 3; i++) await setLifetime(id, Number((p0 + i).toFixed(3)));
   await undo();
@@ -296,10 +253,7 @@ test("a same-field burst still coalesces under per-field keying", async () => {
 
 type TrackKey = { time: number; value: number };
 async function getTrackKeys(id: number, trackName: string): Promise<TrackKey[]> {
-  const r = await req<{ tracks: { name: string; keys: TrackKey[] }[] }>(
-    "emitters/get-tracks",
-    { id },
-  );
+  const r = await bridgeRequest(page, { kind: "emitters/get-tracks", params: { id } });
   return r.tracks.find((t) => t.name === trackName)?.keys ?? [];
 }
 async function getTrackKeyValue(id: number, trackName: string, time: number): Promise<number> {
@@ -309,14 +263,14 @@ async function getTrackKeyValue(id: number, trackName: string, time: number): Pr
 }
 // Value-only move (newTime == oldTime): mirrors handleValueSpinner, keeps
 // oldTime stable across ticks. time defaults to the t=0 border key.
-const setTrackKeyValue = (id: number, track: string, time: number, newValue: number) =>
-  req("emitters/set-track-key", { id, track, oldTime: time, newTime: time, newValue });
-const addTrackKey = (id: number, track: string, time: number, value: number) =>
-  req("emitters/add-track-key", { id, track, time, value });
+const setTrackKeyValue = (id: number, track: TrackName, time: number, newValue: number) =>
+  bridgeRequest(page, { kind: "emitters/set-track-key", params: { id, track, oldTime: time, newTime: time, newValue } });
+const addTrackKey = (id: number, track: TrackName, time: number, value: number) =>
+  bridgeRequest(page, { kind: "emitters/add-track-key", params: { id, track, time, value } });
 
 test("a rapid value-spinner burst on ONE track key coalesces into ONE undo step", async () => {
   const id = await firstEmitterId();
-  await req("emitters/select", { id });
+  await bridgeRequest(page, { kind: "emitters/select", params: { id } });
   const v0 = await getTrackKeyValue(id, "scale", 0);
 
   // 4 rapid value moves (one per wheel notch), same track + emitter, in-window.
@@ -336,7 +290,7 @@ test("a rapid value-spinner burst on ONE track key coalesces into ONE undo step"
 
 test("value edits to DIFFERENT tracks are SEPARATE undo steps (per-track keying)", async () => {
   const id = await firstEmitterId();
-  await req("emitters/select", { id });
+  await bridgeRequest(page, { kind: "emitters/select", params: { id } });
   const s0 = await getTrackKeyValue(id, "scale", 0);
   const r0 = await getTrackKeyValue(id, "rotationSpeed", 0);
 
@@ -357,7 +311,7 @@ test("value edits to DIFFERENT tracks are SEPARATE undo steps (per-track keying)
 
 test("a structural add-track-key between two value edits breaks the fold", async () => {
   const id = await firstEmitterId();
-  await req("emitters/select", { id });
+  await bridgeRequest(page, { kind: "emitters/select", params: { id } });
   const s0 = await getTrackKeyValue(id, "scale", 0);
 
   await setTrackKeyValue(id, "scale", 0, s0 + 2);  // edit 1
@@ -381,7 +335,7 @@ test("a structural add-track-key between two value edits breaks the fold", async
 
 test("a same-track edit after an undo PUSHES (no mid-redo-branch coalesce)", async () => {
   const id = await firstEmitterId();
-  await req("emitters/select", { id });
+  await bridgeRequest(page, { kind: "emitters/select", params: { id } });
   const s0 = await getTrackKeyValue(id, "scale", 0);
 
   await setTrackKeyValue(id, "scale", 0, s0 + 3);  // edit A
@@ -400,7 +354,7 @@ test("a same-track edit after an undo PUSHES (no mid-redo-branch coalesce)", asy
 
 test("two same-track edits MORE than the window apart are SEPARATE undo steps", async () => {
   const id = await firstEmitterId();
-  await req("emitters/select", { id });
+  await bridgeRequest(page, { kind: "emitters/select", params: { id } });
   const s0 = await getTrackKeyValue(id, "scale", 0);
 
   await setTrackKeyValue(id, "scale", 0, s0 + 3);  // edit 1
@@ -431,7 +385,7 @@ test("two same-track edits MORE than the window apart are SEPARATE undo steps", 
 // reverted".
 test("a whole-system rescale is its own undo step and does not swallow the prior edit", async () => {
   const id = await firstEmitterId();
-  await req("emitters/select", { id });
+  await bridgeRequest(page, { kind: "emitters/select", params: { id } });
   const p0 = await getLifetime(id);
 
   // Seed a distinct, separately-captured undo entry.
@@ -443,9 +397,12 @@ test("a whole-system rescale is its own undo step and does not swallow the prior
   // DoRescaleEmitter does `emitter->lifetime *= timeScale` (src/Rescale.cpp:23),
   // so a 200% duration scale doubles it. sizeScale stays 1.0 to keep the
   // assertion on a single axis.
-  await req("engine/action/rescale-system", {
-    durationScalePercent: 200,
-    sizeScalePercent: 100,
+  await bridgeRequest(page, {
+    kind: "engine/action/rescale-system",
+    params: {
+      durationScalePercent: 200,
+      sizeScalePercent: 100,
+    },
   });
   expect(await getLifetime(id)).toBeCloseTo(seeded * 2, 3);
 
@@ -475,7 +432,7 @@ test("a whole-system rescale is its own undo step and does not swallow the prior
 // passes with and without the fix.
 
 async function rootIds(): Promise<number[]> {
-  const list = await req<{ root: { children: { id: number }[] } }>("emitters/list");
+  const list = await bridgeRequest(page, { kind: "emitters/list", params: {} });
   return list.root.children.map((c) => c.id);
 }
 
@@ -486,7 +443,7 @@ test("a multi-root delete is ONE undo step (every deleted root returns together)
   // point: the delete gesture must not inherit that per-item granularity.
   const added: number[] = [];
   for (let i = 0; i < 3; i++) {
-    const r = await req<{ newId: number }>("emitters/add-root", {});
+    const r = await bridgeRequest(page, { kind: "emitters/add-root", params: {} });
     added.push(r.newId);
   }
   expect(await rootIds()).toHaveLength(before.length + 3);
@@ -494,7 +451,7 @@ test("a multi-root delete is ONE undo step (every deleted root returns together)
 
   // The multi-select delete gesture. performDelete sorts descending before
   // sending, because an emitter id is a POSITION that shifts as siblings vanish.
-  await req("emitters/delete-many", { ids: [...added].sort((a, b) => b - a) });
+  await bridgeRequest(page, { kind: "emitters/delete-many", params: { ids: [...added].sort((a, b) => b - a) } });
   expect(await rootIds()).toEqual(before);
 
   // THE REGRESSION: with a captureUndo() per deleted root, ONE undo brings back
@@ -504,13 +461,13 @@ test("a multi-root delete is ONE undo step (every deleted root returns together)
   expect(await rootIds()).toHaveLength(before.length + 3);
 
   // Restore the shared host for later specs: re-delete in one step.
-  await req("emitters/delete-many", { ids: [...added].sort((a, b) => b - a) });
+  await bridgeRequest(page, { kind: "emitters/delete-many", params: { ids: [...added].sort((a, b) => b - a) } });
   expect(await rootIds()).toEqual(before);
 });
 
 test("a multi-key curve paste is ONE undo step and does not swallow the prior edit", async () => {
   const id = await firstEmitterId();
-  await req("emitters/select", { id });
+  await bridgeRequest(page, { kind: "emitters/select", params: { id } });
   const s0 = await getTrackKeyValue(id, "scale", 0);
 
   // Seed a distinct, separately-captured entry. Without it the assertion could
@@ -528,7 +485,7 @@ test("a multi-key curve paste is ONE undo step and does not swallow the prior ed
     { time: 40, value: 22 },
     { time: 60, value: 33 },
   ];
-  await req("emitters/add-track-keys", { id, track: "scale", keys: pasted });
+  await bridgeRequest(page, { kind: "emitters/add-track-keys", params: { id, track: "scale", keys: pasted } });
   for (const k of pasted) {
     expect(await getTrackKeyValue(id, "scale", k.time)).toBeCloseTo(k.value, 3);
   }

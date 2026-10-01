@@ -23,37 +23,19 @@
 //     file/new, so leftover dirty / currentFilePath from prior tests
 //     don't bleed.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/cdp";
 
-const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-
-let browser: Browser;
 let page: Page;
 
-test.beforeAll(async () => {
-  browser = await chromium.connectOverCDP(CDP_ENDPOINT);
-  const context = browser.contexts()[0];
-  if (!context) throw new Error("CDP: no browser contexts attached");
-  const pages = context.pages();
-  page = pages[0] ?? (await context.waitForEvent("page"));
-
-  await page.waitForFunction(
-    () => typeof (window as { bridge?: unknown }).bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
-});
-
-test.afterAll(async () => {
-  await browser?.close();
+test.beforeAll(async ({ cdpPage }) => {
+  page = cdpPage;
 });
 
 test.beforeEach(async () => {
   // Clean slate: every test starts with the editor in a known
   // dirty:false / currentFilePath:null state.
   await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     await b.request({ kind: "file/new", params: {} });
   });
 });
@@ -66,8 +48,7 @@ test("File → New on a clean system fires file/new (no prompt)", async () => {
   // response itself proves the round-trip happened, so we assert on
   // that + the absence of the SaveChangesPrompt in the DOM.
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     const r = await b.request({ kind: "file/new", params: {} });
     const snap = await b.request({
       kind: "engine/state/snapshot",
@@ -97,8 +78,7 @@ test("File → New on a dirty system shows the Save Changes prompt", async () =>
   // value-equivalent to default doesn't matter, the host marks dirty
   // on any setter call.
   await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     await b.request({
       kind: "engine/set/ground-z",
       params: { z: 42 },
@@ -107,8 +87,7 @@ test("File → New on a dirty system shows the Save Changes prompt", async () =>
 
   // Verify dirty is now true.
   const dirty = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     const s = await b.request({ kind: "engine/state/snapshot", params: {} });
     return s.dirty;
   });
@@ -146,8 +125,7 @@ test("File → New on a dirty system shows the Save Changes prompt", async () =>
 
 test("File → Save (with pre-seeded path) commits the path and clears dirty", async () => {
   const result = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     // Dirty the editor.
     await b.request({ kind: "engine/set/ground-z", params: { z: 12 } });
     const beforeSnap = await b.request({
@@ -187,8 +165,7 @@ test("File → Save (with pre-seeded path) commits the path and clears dirty", a
 test("File → Save stamps the internal system name from the filename", async () => {
   const savePath = "C:/Temp/File-Ops-NameStamp.ALO";
   const saveR = await page.evaluate(async (p) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     return await b.request({ kind: "file/save", params: { path: p } });
   }, savePath);
   expect(saveR.ok).toBe(true);
@@ -212,8 +189,7 @@ test("File → Save stamps the internal system name from the filename", async ()
 test("Window title reflects dirty + currentFilePath", async () => {
   // Pre-seed a path so the title's basename branch is exercised.
   await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     await b.request({
       kind: "file/save",
       params: { path: "C:/Temp/title-test.alo" },
@@ -235,8 +211,7 @@ test("Window title reflects dirty + currentFilePath", async () => {
 
   // Now mutate and assert the ● prefix appears.
   await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     await b.request({ kind: "engine/set/ground-z", params: { z: 5 } });
   });
   await page.waitForFunction(
@@ -256,8 +231,7 @@ test("Window title shows Untitled.alo after file/new", async () => {
   // without naming the doc here the assertion would pass vacuously on the
   // pre-existing untitled state.)
   await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     await b.request({
       kind: "file/save",
       params: { path: "C:/Temp/untitled-reset.alo" },
@@ -272,8 +246,7 @@ test("Window title shows Untitled.alo after file/new", async () => {
   // file/new clears the current path → the title returns to the
   // Untitled placeholder.
   await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
+    const b = window.bridge!;
     await b.request({ kind: "file/new", params: {} });
   });
   await page.waitForFunction(

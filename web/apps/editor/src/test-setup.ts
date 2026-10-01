@@ -36,7 +36,6 @@ if (!Element.prototype.scrollIntoView) {
 // jsdom doesn't implement window.PointerEvent fully. Radix Select uses
 // pointer events for its interaction model. Provide a basic stub.
 if (!globalThis.PointerEvent) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (globalThis as any).PointerEvent = class PointerEvent extends MouseEvent {
     public pointerId: number;
     constructor(type: string, params: PointerEventInit = {}) {
@@ -75,12 +74,10 @@ if (typeof HTMLCanvasElement !== "undefined") {
 // suites assert post-startup state without flushing. Tests that specifically
 // assert the DEFERRAL override these with a controllable queue + flush.
 if (typeof globalThis.requestIdleCallback === "undefined") {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (globalThis as any).requestIdleCallback = (cb: (d?: unknown) => void) => {
     cb({ didTimeout: false, timeRemaining: () => 0 });
     return 0;
   };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (globalThis as any).cancelIdleCallback = () => {};
 }
 
