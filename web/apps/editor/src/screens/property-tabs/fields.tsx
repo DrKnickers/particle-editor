@@ -174,23 +174,34 @@ export function FieldText({
   // Enter to avoid per-keystroke bridge spam.
   const [text, setText] = useState(value);
   const lastProp = useRef(value);
+  // Whether the user has typed since the last blur/Escape. Gates both the
+  // prop sync (never clobber an in-progress draft) and the blur commit (an
+  // untouched or cancelled field commits nothing).
+  const dirtyRef = useRef(false);
   // Sync from prop when external value changes (and we're not editing).
   if (lastProp.current !== value) {
     lastProp.current = value;
-    setText(value);
+    if (!dirtyRef.current) setText(value);
   }
   const input = (
     <input
       type="text"
       value={text}
-      onChange={(e) => setText(e.target.value)}
+      onChange={(e) => {
+        dirtyRef.current = true;
+        setText(e.target.value);
+      }}
       onBlur={() => {
-        if (text !== value) onCommit(text);
+        if (dirtyRef.current && text !== value) onCommit(text);
+        dirtyRef.current = false;
       }}
       onKeyDown={(e) => {
         if (e.key === "Enter") {
           (e.currentTarget as HTMLInputElement).blur();
         } else if (e.key === "Escape") {
+          // Clear dirty BEFORE blur: this render's onBlur closure still holds
+          // the edited text, so it must see the field as cancelled.
+          dirtyRef.current = false;
           setText(value);
           (e.currentTarget as HTMLInputElement).blur();
         }

@@ -57,12 +57,27 @@ export type SpinnerProps = {
   testId?: string;
 };
 
+// Plain decimal with optional sign, fraction and exponent ("-.5", "1e-3",
+// "2.5E4"). Rejects the other literals Number() accepts — hex/octal/binary
+// ("0x10"), "Infinity" — so a typo can't silently commit a surprise value.
+const DECIMAL_RE = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
+
 function parseValue(raw: string): number | null {
   // Handles scientific notation (1e-3, 2.5E4) and plain numbers.
   const trimmed = raw.trim();
-  if (trimmed === "" || trimmed === "-") return null;
+  if (!DECIMAL_RE.test(trimmed)) return null;
   const n = Number(trimmed);
-  return isFinite(n) ? n : null;
+  return isFinite(n) ? n : null; // "1e400" overflows to Infinity
+}
+
+// Decimal places in a step value's shortest representation (0.001 → 3,
+// 1e-7 → 7, 5 → 0).
+function decimalPlaces(n: number): number {
+  const s = String(Math.abs(n));
+  const exp = s.indexOf("e-");
+  const dot = s.indexOf(".");
+  if (exp >= 0) return Number(s.slice(exp + 2)) + (dot >= 0 ? exp - dot - 1 : 0);
+  return dot < 0 ? 0 : s.length - dot - 1;
 }
 
 function clamp(v: number, min?: number, max?: number): number {
@@ -173,23 +188,31 @@ export function Spinner({
   }, [value, onChange, min, max, fmt]);
 
   const adjustBy = useCallback((delta: number) => {
-    const next = clamp(value + delta, min, max);
+    // Round so a float step can't leave drift (0.2 + 0.1 = 0.30000000000000004)
+    // in the committed value — to the displayed precision, or the step's own
+    // precision when that is finer, so a Ctrl fine-step (0.001 on a 2dp field)
+    // still moves the value instead of rounding back to where it started.
+    const scale = 10 ** Math.min(10, Math.max(dp, decimalPlaces(delta)));
+    const next = clamp(Math.round((value + delta) * scale) / scale, min, max);
     setText(fmt(next));
     pendingBase.current = valueRef.current;
     onChange(next);
-  }, [value, onChange, min, max, fmt]);
+  }, [value, onChange, min, max, fmt, dp]);
 
-  // Keyboard: Enter commits; arrow keys increment/decrement.
+  // Keyboard: Enter commits; arrow keys increment/decrement. Shift = coarse
+  // (×10); Ctrl = fine (×0.1) on decimal fields only — whole-number fields
+  // ignore Ctrl so the arrows never yield a fraction (matches wheel + drag).
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    const fine = stepIsWhole ? step : step / 10;
     if (e.key === "Enter") {
       e.currentTarget.blur();
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      const s = e.shiftKey ? step * 10 : e.ctrlKey ? step / 10 : step;
+      const s = e.shiftKey ? step * 10 : e.ctrlKey ? fine : step;
       adjustBy(s);
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
-      const s = e.shiftKey ? step * 10 : e.ctrlKey ? step / 10 : step;
+      const s = e.shiftKey ? step * 10 : e.ctrlKey ? fine : step;
       adjustBy(-s);
     }
   };
@@ -266,6 +289,9 @@ export function Spinner({
   // `scrubbedRef` suppresses the trailing
   // click so a drag that ends on the button doesn't also step.
   const scrubbedRef = useRef(false);
+  // Teardown for the in-flight press gesture's document listeners (null when
+  // no gesture is active). See `detach` in handleArrowsMouseDown.
+  const detachGesture = useRef<(() => void) | null>(null);
   const clearHoldTimers = useCallback(() => {
     if (holdDelayTimer.current !== undefined) {
       clearTimeout(holdDelayTimer.current);
@@ -396,11 +422,7 @@ export function Spinner({
     const finish = (ev: Event | null, cancelled: boolean) => {
       if (!holdingRef.current) return;
       if (ev && foreignPointer(ev)) return; // a different pointer's up/cancel
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-      document.removeEventListener("pointermove", onMove as EventListener);
-      document.removeEventListener("pointerup", onUp);
-      document.removeEventListener("pointercancel", onCancel);
+      detach();
       clearHoldTimers();
       holdingRef.current = false;
       activePointerId.current = null;
@@ -419,6 +441,18 @@ export function Spinner({
     };
     const onUp = (ev?: Event) => finish(ev ?? null, false);
     const onCancel = (ev?: Event) => finish(ev ?? null, true);
+    // Removes this gesture's document listeners. Stashed in a ref so an
+    // unmount mid-gesture (the panel closing under a held arrow) can drop
+    // them too — finish() never runs in that case.
+    const detach = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.removeEventListener("pointermove", onMove as EventListener);
+      document.removeEventListener("pointerup", onUp);
+      document.removeEventListener("pointercancel", onCancel);
+      detachGesture.current = null;
+    };
+    detachGesture.current = detach;
 
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
@@ -437,8 +471,11 @@ export function Spinner({
     document.addEventListener("pointercancel", onCancel);
   };
 
-  // Clear any pending hold timers on unmount.
-  useEffect(() => clearHoldTimers, [clearHoldTimers]);
+  // Clear any pending hold timers and in-flight gesture listeners on unmount.
+  useEffect(() => () => {
+    clearHoldTimers();
+    detachGesture.current?.();
+  }, [clearHoldTimers]);
 
   // Keep text in sync when prop changes from outside (not while actively
   // editing). Effect runs post-commit so the displayed value reflects external

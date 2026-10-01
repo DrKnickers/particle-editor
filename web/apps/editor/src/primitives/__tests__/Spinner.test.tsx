@@ -278,4 +278,97 @@ describe("Spinner", () => {
       vi.useRealTimers();
     }
   });
+
+  // Ctrl fine-step is ignored on whole-number fields on the keyboard path too,
+  // matching the wheel and drag (Spinner.cpp:107-117).
+  it("Ctrl+ArrowUp stays whole on an integer field", () => {
+    const onChange = vi.fn();
+    render(<Spinner value={5} onChange={onChange} step={1} decimals={0} aria-label="s" />);
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "ArrowUp", ctrlKey: true });
+    expect(onChange).toHaveBeenLastCalledWith(6);
+  });
+
+  it("Ctrl+ArrowUp still steps fine on a decimal field", () => {
+    const onChange = vi.fn();
+    render(<Spinner value={5} onChange={onChange} step={0.1} aria-label="s" />);
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "ArrowUp", ctrlKey: true });
+    expect(onChange).toHaveBeenLastCalledWith(5.01);
+  });
+
+  // The rounding must not swallow a fine step finer than the display: 0.001 on
+  // a 2dp field still moves the value (GroundTexture/Bloom-style fields).
+  it("Ctrl+ArrowUp fine step survives rounding on a field whose display is coarser", () => {
+    const onChange = vi.fn();
+    render(<Spinner value={0.5} onChange={onChange} step={0.01} aria-label="s" />);
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "ArrowUp", ctrlKey: true });
+    expect(onChange).toHaveBeenLastCalledWith(0.501);
+  });
+
+  // A float step must not leave drift (0.2 + 0.1 = 0.30000000000000004).
+  it("arrow-key step result is rounded to the field's decimals", () => {
+    const onChange = vi.fn();
+    render(<Spinner value={0.2} onChange={onChange} step={0.1} decimals={1} aria-label="s" />);
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "ArrowUp" });
+    expect(onChange).toHaveBeenLastCalledWith(0.3);
+  });
+
+  it("a hex literal is rejected on blur and the text reverts", async () => {
+    const onChange = vi.fn();
+    render(<Spinner value={5} onChange={onChange} decimals={0} aria-label="s" />);
+    const input = screen.getByRole("textbox") as HTMLInputElement;
+    await userEvent.click(input);
+    await userEvent.clear(input);
+    await userEvent.type(input, "0x10");
+    fireEvent.blur(input);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(input.value).toBe("5");
+  });
+
+  it("an exponent that overflows to Infinity is rejected on blur", async () => {
+    const onChange = vi.fn();
+    render(<Spinner value={5} onChange={onChange} decimals={0} aria-label="s" />);
+    const input = screen.getByRole("textbox") as HTMLInputElement;
+    await userEvent.click(input);
+    await userEvent.clear(input);
+    await userEvent.type(input, "1e400");
+    fireEvent.blur(input);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(input.value).toBe("5");
+  });
+
+  it("negative decimals and leading-dot values still parse on blur", async () => {
+    const onChange = vi.fn();
+    render(<Spinner value={0} onChange={onChange} aria-label="s" />);
+    const input = screen.getByRole("textbox");
+    await userEvent.click(input);
+    await userEvent.clear(input);
+    await userEvent.type(input, "-.5");
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenLastCalledWith(-0.5);
+  });
+
+  // Unmounting mid-gesture (panel closes while an arrow is pressed) must not
+  // leave the gesture's document listeners attached.
+  it("unmount mid-arrow-scrub removes every document listener it added", () => {
+    const addSpy = vi.spyOn(document, "addEventListener");
+    const removeSpy = vi.spyOn(document, "removeEventListener");
+    try {
+      const { unmount } = render(<Spinner value={5} onChange={vi.fn()} step={1} aria-label="s" />);
+      const column = screen.getByLabelText("Increment").parentElement as HTMLElement;
+      addSpy.mockClear();
+      removeSpy.mockClear();
+      fireEvent.mouseDown(column, { clientY: 100, button: 0 });
+      fireEvent.mouseMove(document, { clientY: 80 });
+      const added = addSpy.mock.calls.map(([type, fn]) => [type, fn]);
+      expect(added.length).toBeGreaterThan(0);
+      unmount();
+      const removed = removeSpy.mock.calls.map(([type, fn]) => [type, fn]);
+      for (const [type, fn] of added) {
+        expect(removed).toContainEqual([type, fn]);
+      }
+    } finally {
+      addSpy.mockRestore();
+      removeSpy.mockRestore();
+    }
+  });
 });

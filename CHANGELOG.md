@@ -8,6 +8,11 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ## [Unreleased]
 
+### Fixed
+
+- Pressing Escape in an emitter's name or texture field now cancels the edit instead of applying it, and a change made elsewhere (undo, linked emitters) no longer wipes text you are still typing
+- Ctrl+Arrow in a whole-number field (such as the atlas Index) now steps by whole units instead of silently storing a fraction, and number fields reject typed hex or Infinity values
+
 ## [0.4.1] - 2026-08-12
 
 ### Fixed
