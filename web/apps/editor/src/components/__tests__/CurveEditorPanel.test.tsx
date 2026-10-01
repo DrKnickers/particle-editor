@@ -38,6 +38,7 @@ import {
 } from "@/lib/curve-key-clipboard";
 import { __resetAtlasContext } from "@/lib/atlas-context";
 import { __resetRightDockForTests } from "@/lib/right-dock";
+import { useModalOpen } from "@/lib/modal-open";
 
 function fixtureTracks(): TrackDto[] {
   return TRACK_NAMES.map((name) => ({
@@ -878,6 +879,98 @@ describe("CurveEditorPanel", () => {
         (call) => (call[0] as { kind: string }).kind === "emitters/delete-track-keys",
       );
       expect(match).toBeUndefined();
+    });
+
+    // One Delete keystroke must not delete BOTH the emitter-tree selection
+    // and the curve keys. Key selection survives an emitter switch, so a
+    // window-scoped handler that only checked "any keys selected?" also fired
+    // for a Delete aimed at a tree row (or a modal button) elsewhere.
+    async function selectScaleMiddleKey() {
+      selectChannel("scale");
+      await waitFor(() => {
+        expect(screen.getByTestId("curve-layer-scale")).toBeInTheDocument();
+      });
+      const middle = Array.from(
+        document.querySelectorAll("[data-testid='curve-key']"),
+      ).find((c) => c.getAttribute("data-key-time") === "50")!;
+      fireEvent.click(middle);
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("curve-editor-panel").getAttribute("data-selected-key-count"),
+        ).toBe("1");
+      });
+    }
+    const deleteCalls = (bridge: { request: ReturnType<typeof vi.fn> }) =>
+      bridge.request.mock.calls.filter(
+        (call) => (call[0] as { kind: string }).kind === "emitters/delete-track-keys",
+      );
+
+    it("Delete with focus on an element OUTSIDE the panel (a tree row) does NOT fire delete-track-keys", async () => {
+      const { bridge } = makeStubBridgeWithFocusInteriorKey(7);
+      render(
+        <>
+          <div data-testid="emitter-tree">
+            <button type="button" data-testid="tree-row-standin">Emitter 1</button>
+          </div>
+          <CurveEditorPanel bridge={bridge} />
+        </>,
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
+      });
+      await selectScaleMiddleKey();
+      const row = screen.getByTestId("tree-row-standin");
+      row.focus();
+      fireEvent.keyDown(row, { key: "Delete" });
+      await new Promise((r) => setTimeout(r, 20));
+      expect(deleteCalls(bridge)).toHaveLength(0);
+    });
+
+    it("Delete while a modal is open does NOT fire delete-track-keys (modal button or body)", async () => {
+      const { bridge } = makeStubBridgeWithFocusInteriorKey(7);
+      render(
+        <>
+          <div role="dialog">
+            <button type="button" data-testid="modal-ok-standin">OK</button>
+          </div>
+          <CurveEditorPanel bridge={bridge} />
+        </>,
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
+      });
+      await selectScaleMiddleKey();
+      act(() => { useModalOpen.getState().open(); });
+      try {
+        const ok = screen.getByTestId("modal-ok-standin");
+        ok.focus();
+        fireEvent.keyDown(ok, { key: "Delete" });
+        // Belt: even with nothing focused, an open modal owns the keyboard.
+        fireEvent.keyDown(document.body, { key: "Delete" });
+        await new Promise((r) => setTimeout(r, 20));
+        expect(deleteCalls(bridge)).toHaveLength(0);
+      } finally {
+        act(() => { useModalOpen.getState().close(); });
+      }
+    });
+
+    it("Delete with focus INSIDE the panel (the plot) still fires delete-track-keys", async () => {
+      const { bridge } = makeStubBridgeWithFocusInteriorKey(7);
+      render(<CurveEditorPanel bridge={bridge} />);
+      await waitFor(() => {
+        expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
+      });
+      await selectScaleMiddleKey();
+      const svg = screen.getByTestId("curve-editor-svg");
+      (svg as unknown as HTMLElement).focus();
+      fireEvent.keyDown(svg, { key: "Delete" });
+      await waitFor(() => {
+        const calls = deleteCalls(bridge);
+        expect(calls).toHaveLength(1);
+        expect(calls[0]![0]).toMatchObject({
+          params: { id: 7, track: "scale", times: [50] },
+        });
+      });
     });
   });
 
@@ -2829,5 +2922,180 @@ describe("CurveEditorPanel — late mutation completions are emitter-scoped", ()
       .getByTestId("ce-spinner-value-wrapper")
       .querySelector("input") as HTMLInputElement;
     expect(valueInput.value).not.toBe(String(VALUE_ON_0));
+  });
+
+  // A key drag must commit against the emitter + channel it STARTED on. The
+  // selection can change mid-drag (any host emitters/selected push), and a
+  // commit that read the live selectedId at pointer-up wrote the drag onto a
+  // key on the new emitter that the user never grabbed.
+  it("an emitter switch mid-drag commits no set-track-key onto the new emitter", async () => {
+    const h = makeSwitchableBridge();
+    render(<CurveEditorPanel bridge={h.bridge} />);
+    await waitFor(() => expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument());
+    selectChannel("scale");
+    await waitFor(() => expect(screen.getByTestId("curve-layer-scale")).toBeInTheDocument());
+
+    const svg = screen.getByTestId("curve-editor-svg");
+    svg.getBoundingClientRect = () => ({
+      x: 0, y: 0, top: 0, left: 0, right: 600, bottom: 300,
+      width: 600, height: 300, toJSON: () => ({}),
+    } as DOMRect);
+    const key = document.querySelector(
+      '[data-testid="curve-key"][data-key-time="50"][data-channel-id="scale"]',
+    )!;
+    const cx = Number(key.getAttribute("cx"));
+    const cy = Number(key.getAttribute("cy"));
+    fireEvent.pointerDown(key, { button: 0, pointerId: 90, clientX: cx, clientY: cy });
+    fireEvent.pointerMove(svg, { pointerId: 90, clientX: cx + 20, clientY: cy - 20 });
+
+    // The selection moves to emitter 1 while the pointer is still down.
+    await act(async () => { h.selectEmitter(1); });
+    await waitFor(() => {
+      const gets = h.bridge.request.mock.calls
+        .filter((c) => (c[0] as { kind: string }).kind === "emitters/get-tracks")
+        .map((c) => (c[0] as { params: { id?: number } }).params.id);
+      expect(gets).toContain(1);
+    });
+
+    fireEvent.pointerMove(svg, { pointerId: 90, clientX: cx + 30, clientY: cy - 30 });
+    fireEvent.pointerUp(svg, { pointerId: 90, clientX: cx + 30, clientY: cy - 30 });
+    await new Promise((r) => setTimeout(r, 20));
+
+    const setKeys = h.bridge.request.mock.calls
+      .filter((c) => (c[0] as { kind: string }).kind === "emitters/set-track-key")
+      .map((c) => (c[0] as { params: { id: number } }).params);
+    expect(setKeys.filter((p) => p.id === 1)).toHaveLength(0);
+    expect(setKeys).toHaveLength(0);
+  });
+
+  // Same guard for a multi-key GROUP drag: the selection (which survives an
+  // emitter switch) must not be shifted on the newly selected emitter.
+  it("an emitter switch mid GROUP drag commits no set-track-key onto the new emitter", async () => {
+    const h = makeSwitchableBridge();
+    render(<CurveEditorPanel bridge={h.bridge} />);
+    await waitFor(() => expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument());
+    selectChannel("scale");
+    await waitFor(() => expect(screen.getByTestId("curve-layer-scale")).toBeInTheDocument());
+
+    const svg = screen.getByTestId("curve-editor-svg");
+    svg.getBoundingClientRect = () => ({
+      x: 0, y: 0, top: 0, left: 0, right: 600, bottom: 300,
+      width: 600, height: 300, toJSON: () => ({}),
+    } as DOMRect);
+    const scaleKey = (t: number) => document.querySelector(
+      `[data-testid="curve-key"][data-key-time="${t}"][data-channel-id="scale"]`,
+    )!;
+    fireEvent.click(scaleKey(50));
+    fireEvent.click(scaleKey(100), { ctrlKey: true });
+    const panel = screen.getByTestId("curve-editor-panel");
+    await waitFor(() => expect(panel.getAttribute("data-selected-key-count")).toBe("2"));
+
+    const key = scaleKey(50);
+    const cx = Number(key.getAttribute("cx"));
+    const cy = Number(key.getAttribute("cy"));
+    fireEvent.pointerDown(key, { button: 0, pointerId: 91, clientX: cx, clientY: cy });
+    fireEvent.pointerMove(svg, { pointerId: 91, clientX: cx + 10, clientY: cy + 20 });
+
+    await act(async () => { h.selectEmitter(1); });
+    await waitFor(() => {
+      const gets = h.bridge.request.mock.calls
+        .filter((c) => (c[0] as { kind: string }).kind === "emitters/get-tracks")
+        .map((c) => (c[0] as { params: { id?: number } }).params.id);
+      expect(gets).toContain(1);
+    });
+
+    fireEvent.pointerMove(svg, { pointerId: 91, clientX: cx + 15, clientY: cy + 30 });
+    fireEvent.pointerUp(svg, { pointerId: 91, clientX: cx + 15, clientY: cy + 30 });
+    await new Promise((r) => setTimeout(r, 20));
+
+    const setKeys = h.bridge.request.mock.calls
+      .filter((c) => (c[0] as { kind: string }).kind === "emitters/set-track-key")
+      .map((c) => (c[0] as { params: { id: number } }).params);
+    expect(setKeys.filter((p) => p.id === 1)).toHaveLength(0);
+    expect(setKeys).toHaveLength(0);
+  });
+});
+
+// An authoritative refetch (e.g. after undo) must win over the sticky
+// optimistic spinner override. Without reconciliation the Value spinner kept
+// showing the pre-undo value, and the next nudge was computed from it — so
+// undo-then-nudge silently re-applied the undone edit.
+describe("CurveEditorPanel — optimistic spinner value reconciles with refetch", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    __resetAtlasContext();
+    __resetRightDockForTests();
+  });
+
+  it("after a nudge, a refetch carrying the reverted value shows it and bases the next nudge on it", async () => {
+    const tracksWith = (v: number): TrackDto[] =>
+      TRACK_NAMES.map((name) => ({
+        name,
+        keys: name === "red"
+          ? [{ time: 0, value: 0 }, { time: 25, value: v }, { time: 100, value: 1 }]
+          : [{ time: 0, value: 0 }, { time: 100, value: name === "rotationSpeed" ? -1 : 1 }],
+        interpolation: "linear" as const,
+        lockedTo: null,
+      }));
+    let hostTracks = tracksWith(0.25);
+    const treeChanged: Array<() => void> = [];
+    const bridge = {
+      request: vi.fn().mockImplementation((req: { kind: string }) => {
+        if (req.kind === "engine/state/snapshot") {
+          return Promise.resolve({ ...makeDefaultEngineState(), selectedEmitterId: 1 });
+        }
+        if (req.kind === "emitters/get-tracks") {
+          return Promise.resolve({ tracks: hostTracks });
+        }
+        if (req.kind === "emitters/get-properties") {
+          return Promise.resolve({ properties: { textureSize: 1 } });
+        }
+        return Promise.resolve({});
+      }),
+      on: vi.fn().mockImplementation((kind: string, cb: () => void) => {
+        if (kind === "emitters/tree/changed") treeChanged.push(cb);
+        return () => {};
+      }),
+    } as unknown as Bridge & { request: ReturnType<typeof vi.fn> };
+    const fireTreeChanged = async () => {
+      await act(async () => {
+        for (const cb of treeChanged) cb();
+        await Promise.resolve();
+      });
+    };
+    const setKeyValues = () =>
+      bridge.request.mock.calls
+        .filter((c) => (c[0] as { kind: string }).kind === "emitters/set-track-key")
+        .map((c) => (c[0] as { params: { newValue: number } }).params.newValue);
+
+    render(<CurveEditorPanel bridge={bridge} />);
+    const keyAt25 = (await screen.findAllByTestId("curve-key")).find(
+      (k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "red",
+    )!;
+    fireEvent.click(keyAt25);
+    const panel = screen.getByTestId("curve-editor-panel");
+    await waitFor(() => expect(panel.getAttribute("data-selected-key-count")).toBe("1"));
+    const valueInput = () =>
+      screen.getByTestId("ce-spinner-value-wrapper").querySelector("input") as HTMLInputElement;
+    await waitFor(() => expect(Number(valueInput().value)).toBeCloseTo(0.25, 5));
+
+    const svg = screen.getByTestId("curve-editor-svg");
+    // Nudge #1: 0.25 → 0.26. The host applies it and echoes tree/changed.
+    fireEvent.keyDown(svg, { key: "ArrowUp", ctrlKey: true });
+    expect(setKeyValues()).toHaveLength(1);
+    expect(setKeyValues()[0]).toBeCloseTo(0.26, 6);
+    hostTracks = tracksWith(Math.fround(0.26));
+    await fireTreeChanged();
+    await waitFor(() => expect(Number(valueInput().value)).toBeCloseTo(0.26, 5));
+
+    // Undo on the host: the key is back at 0.25, and its echo refetches.
+    hostTracks = tracksWith(0.25);
+    await fireTreeChanged();
+    await waitFor(() => expect(Number(valueInput().value)).toBeCloseTo(0.25, 5));
+
+    // Nudge #2 is based on the reverted 0.25, not the stale 0.26.
+    fireEvent.keyDown(svg, { key: "ArrowUp", ctrlKey: true });
+    expect(setKeyValues()).toHaveLength(2);
+    expect(setKeyValues()[1]).toBeCloseTo(0.26, 6);
   });
 });

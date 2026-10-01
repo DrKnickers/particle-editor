@@ -12,6 +12,9 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 - Pressing Escape in an emitter's name or texture field now cancels the edit instead of applying it, and a change made elsewhere (undo, linked emitters) no longer wipes text you are still typing
 - Ctrl+Arrow in a whole-number field (such as the atlas Index) now steps by whole units instead of silently storing a fraction, and number fields reject typed hex or Infinity values
+- Pressing Delete on an emitter no longer also deletes the curve keys selected in the curve editor, and Delete with a dialog open no longer deletes keys behind it
+- After an undo, the curve editor's Value and Time fields show the restored value, so the next nudge starts from it instead of re-applying the undone edit
+- Dragging a curve key while the selected emitter changes no longer moves a key on the newly selected emitter
 
 ## [0.4.1] - 2026-08-12
 

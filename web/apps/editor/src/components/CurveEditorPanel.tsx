@@ -24,14 +24,14 @@
 //   - The panel hosts a window-scoped Delete keypress handler that
 //     fires delete-track-keys on the focus channel's selected keys,
 //     filtering out border keys + any presses inside a typing surface
-//     (input / textarea / select).
+//     (input / textarea / select), outside the panel, or under a modal.
 //
 // Channel visibility AND focus are SESSION-SCOPED — every editor
 // boot starts with the documented defaults (R / G / B visible,
 // focus on Red). Selection (per focus channel) clears on focus
 // change. Optimistic (time, value) override keeps spinners
 // populated across the bridge round-trip (sticky override; don't clear
-// on every `tracks` refresh).
+// on every `tracks` refresh — only when a refetch disagrees with it).
 //
 // Y-axis range is UNIFIED across visible channels — every visible
 // curve renders into the same Y space (union of per-channel
@@ -55,6 +55,7 @@ import { CurveEditor, type ChannelDef, type CurveKeyboardNavAction, type CurveMa
 import { computeGroupMoves, valueRangeForTrack } from "@/lib/curve-model";
 import type { SuppressedMove } from "@/lib/use-curve-morph";
 import { isTypingTarget } from "@/lib/viewport-input";
+import { useModalOpen } from "@/lib/modal-open";
 import { Spinner } from "@/primitives/Spinner";
 import { Tip } from "@/primitives/Tip";
 import {
@@ -390,6 +391,9 @@ export function CurveEditorPanel({ bridge }: Props) {
   // Handle to start a marquee from the axis-label gutters (see
   // CanvasWithAxisLabels.onGutterPointerDown wiring below).
   const curveRef = useRef<CurveMarqueeHandle>(null);
+  // Panel root — the Delete handler's scope check (keys pressed elsewhere,
+  // e.g. on an emitter-tree row or a modal button, are not ours).
+  const panelRef = useRef<HTMLDivElement>(null);
   // Shared morph-suppress slot, threaded into CurveEditor. The canvas drag
   // records into it there; the spinner/commit handlers below record into it
   // here — so a value/time edit these paths already applied optimistically
@@ -493,6 +497,9 @@ export function CurveEditorPanel({ bridge }: Props) {
     id: null,
     track: "red",
   });
+  // The curve a key drag STARTED on (set in handleKeyDragStart), so the commit
+  // at pointer-up targets it rather than whatever is selected by then.
+  const dragScopeRef = useRef<{ id: number | null; track: TrackName } | null>(null);
 
   // Snapshot seed + live selection subscription.
   useEffect(() => {
@@ -543,6 +550,19 @@ export function CurveEditorPanel({ bridge }: Props) {
           if (stale()) return;
           setTracks(res.tracks);
           setTracksOwnerId(id);
+          // The sticky optimistic override only bridges the round-trip of our
+          // OWN edit. Once an authoritative fetch disagrees with it (undo, or
+          // any other host-side change), drop it — otherwise the spinner keeps
+          // showing the pre-undo value and the next nudge re-applies it.
+          // Read the focus track from liveScopeRef: this closure's
+          // focusedChannel is stale (the effect doesn't re-run on focus change).
+          const track = res.tracks.find((t) => t.name === liveScopeRef.current.track);
+          setOptimisticSelected((cur) =>
+            cur === null ||
+            track?.keys.some((k) => k.time === cur.time && Math.fround(k.value) === cur.value)
+              ? cur
+              : null,
+          );
         })
         .catch(() => {
           if (cancelled) return;
@@ -550,6 +570,7 @@ export function CurveEditorPanel({ bridge }: Props) {
           if (stale()) return;
           setTracks([]);
           setTracksOwnerId(id);
+          setOptimisticSelected(null); // no track left for the override to describe
         });
     };
     fetchTracks(selectedId, /*guarded=*/false); // authoritative selection load
@@ -929,7 +950,15 @@ export function CurveEditorPanel({ bridge }: Props) {
       // resurrect the stale drag value onto a later emitter/track (#610 review).
       cancelLiveFlush();
       setLiveDrag(null);
-      if (selectedId === null || focusedTrack === null || focusLocked) return;
+      // Commit against the curve the drag STARTED on. The selection can change
+      // mid-drag (any host emitters/selected push); if it did, the drag's
+      // target is gone — drop the commit rather than write it onto a key of
+      // the newly selected emitter that the user never grabbed.
+      const scope = dragScopeRef.current;
+      dragScopeRef.current = null;
+      if (scope === null || scope.id === null || !stillScoped(scope.id, scope.track)) return;
+      if (focusedTrack === null || focusLocked) return;
+      const { id, track } = scope;
       // The engine stores track key times as float32; a JS-side
       // double like 49.476439790575924 comes back from the bridge
       // refetch as 49.476440429... — equal at float32 precision but
@@ -943,12 +972,14 @@ export function CurveEditorPanel({ bridge }: Props) {
       // paints unselected (the bug this fixes).
       const engineNewTime = Math.fround(newTime);
       setSelectedKeyTimes(new Set([engineNewTime]));
-      setOptimisticSelected({ time: engineNewTime, value: newValue });
+      // Value float32-canonical too, so the drag's own echo refetch matches it
+      // and doesn't drop the override (see the refetch reconciliation).
+      setOptimisticSelected({ time: engineNewTime, value: Math.fround(newValue) });
       editEpochRef.current += 1; // local edit — in-flight refetches are now stale (#613)
       setTracks((prev) => {
         if (prev === null) return prev;
         return prev.map((t) => {
-          if (t.name !== focusedChannel.trackName) return t;
+          if (t.name !== track) return t;
           const keys = t.keys
             .map((k) => (k.time === keyTime ? { time: engineNewTime, value: newValue } : k))
             .sort((a, b) => a.time - b.time);
@@ -958,15 +989,15 @@ export function CurveEditorPanel({ bridge }: Props) {
       void bridge.request({
         kind: "emitters/set-track-key",
         params: {
-          id: selectedId,
-          track: focusedChannel.trackName,
+          id,
+          track,
           oldTime: keyTime,
           newTime,
           newValue,
         },
       }).catch(() => { /* silent — re-fetch on tree/changed */ });
     },
-    [bridge, selectedId, focusedTrack, focusLocked, focusedChannel.trackName, cancelLiveFlush],
+    [bridge, focusedTrack, focusLocked, stillScoped, cancelLiveFlush],
   );
 
   const handleKeyDragStart = useCallback(
@@ -985,8 +1016,10 @@ export function CurveEditorPanel({ bridge }: Props) {
         prev.has(keyTime) && prev.size > 1 ? prev : new Set([keyTime]),
       );
       setOptimisticSelected(null);
+      // Pin the curve this drag belongs to; handleKeyDragEnd commits to it.
+      dragScopeRef.current = { id: selectedId, track: focusedChannel.trackName };
     },
-    [],
+    [selectedId, focusedChannel.trackName],
   );
 
   const handleKeyDragMove = useCallback(
@@ -1150,9 +1183,18 @@ export function CurveEditorPanel({ bridge }: Props) {
     // `valueBounds` differs by input method: a canvas group DRAG passes the focus
     // channel's DISPLAY range so the commit matches the on-canvas preview (no jump
     // on release, #620); a group SPINNER edit passes the wider engine spinner
-    // bounds so a typed value can legitimately grow the range.
-    (dTime: number, dValue: number, valueBounds: { min: number; max: number }) => {
-      if (selectedId === null || focusedTrack === null) return;
+    // bounds so a typed value can legitimately grow the range. `target` is the
+    // curve a canvas group drag STARTED on (already checked stillScoped by the
+    // caller); spinner edits omit it and use the live selection.
+    (
+      dTime: number,
+      dValue: number,
+      valueBounds: { min: number; max: number },
+      target?: { id: number; track: TrackName },
+    ) => {
+      const id = target?.id ?? selectedId;
+      const track = target?.track ?? focusedChannel.trackName;
+      if (id === null || focusedTrack === null) return;
       const keys = focusedTrack.keys;
       if (keys.length === 0) return;
       // `computeGroupMoves` is the single source of the group's clamped
@@ -1191,7 +1233,7 @@ export function CurveEditorPanel({ bridge }: Props) {
         prev === null
           ? prev
           : prev.map((t) =>
-              t.name !== focusedChannel.trackName
+              t.name !== track
                 ? t
                 : {
                     ...t,
@@ -1214,8 +1256,8 @@ export function CurveEditorPanel({ bridge }: Props) {
           .request({
             kind: "emitters/set-track-key",
             params: {
-              id: selectedId,
-              track: focusedChannel.trackName,
+              id,
+              track,
               // Commit the float32 (engineTime/engineValue), NOT raw doubles, so
               // what the engine stores + returns on refetch EXACTLY matches the
               // optimistic overlay + morph-suppress — otherwise the moved keys
@@ -1239,7 +1281,14 @@ export function CurveEditorPanel({ bridge }: Props) {
       // committed (optimistic) positions instead of the in-flight shift.
       cancelLiveFlush();
       setLiveGroup(null);
-      if (focusLocked || (dTime === 0 && dValue === 0)) {
+      // Commit against the curve the drag STARTED on (handleKeyDragStart pins it
+      // for group drags too) — same guard as handleKeyDragEnd.
+      const scope = dragScopeRef.current;
+      dragScopeRef.current = null;
+      if (
+        scope === null || scope.id === null || !stillScoped(scope.id, scope.track) ||
+        focusLocked || (dTime === 0 && dValue === 0)
+      ) {
         // No commit → no optimistic track change to snap. Drop any suppress the
         // canvas onPointerUp recorded for this gesture (a border-only or
         // zero-delta drag still records one); otherwise it lingers and, since
@@ -1250,9 +1299,9 @@ export function CurveEditorPanel({ bridge }: Props) {
       }
       // Canvas drag → clamp value to the DISPLAY range so the commit matches the
       // on-canvas preview (no jump on release, #620).
-      applyGroupShift(dTime, dValue, focusDisplayRange);
+      applyGroupShift(dTime, dValue, focusDisplayRange, { id: scope.id, track: scope.track });
     },
-    [cancelLiveFlush, focusLocked, applyGroupShift, focusDisplayRange],
+    [cancelLiveFlush, focusLocked, stillScoped, applyGroupShift, focusDisplayRange],
   );
 
   // Spinner display values + enablement. Single-key wins; otherwise the
@@ -1484,10 +1533,20 @@ export function CurveEditorPanel({ bridge }: Props) {
   );
 
   // ── Delete keyboard handler (window-scoped typing-target guard) ────
+  // Window-scoped because clicking an SVG key may leave focus on <body>, but
+  // only a Delete aimed at nothing (body) or at this panel is ours. Key
+  // selection survives emitter switches, so without the scope check one
+  // Delete on an emitter-tree row (or a modal button) also deleted the curve
+  // keys behind it. The open-modal check is a belt for the same reason the
+  // viewport has one (ViewportSlot).
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Delete") return;
       if (isTypingTarget(e.target)) return;
+      if (useModalOpen.getState().count > 0) return;
+      const target = e.target;
+      const inPanel = target instanceof Node && (panelRef.current?.contains(target) ?? false);
+      if (target !== document.body && !inPanel) return;
       if (selectedKeyTimes.size === 0) return;
       e.preventDefault();
       handleDelete();
@@ -1664,6 +1723,7 @@ export function CurveEditorPanel({ bridge }: Props) {
 
   return (
     <div
+      ref={panelRef}
       data-testid="curve-editor-panel"
       data-selected-id={selectedId === null ? "null" : String(selectedId)}
       data-focus-channel={focusChannel}
