@@ -5,6 +5,7 @@
 #include "EmitterInstance.h"
 #include "ParticleCompaction.h"
 #include "SpawnSchedule.h"   // ReconcileNextSpawnTime (rate-edit clamp)
+#include "BounceCatchUp.h"   // GROUND_BOUNCE catch-up loop
 #include "ParticleSystemInstance.h"
 using namespace std;
 
@@ -503,28 +504,10 @@ void EmitterInstance::UpdateParticle(Particle& particle, float t)
 
     if (m_emitter.groundBehavior == ParticleSystem::GROUND_BOUNCE)
     {
-        while (t > particle.m_bounceTime)
-        {
-            // The particle has bounced
-            float bt = particle.m_bounceTime - particle.m_positionTime;
-            particle.m_initialPosition =  particle.m_initialPosition + (particle.m_initialSpeed + 0.5 * particle.m_acceleration * bt) * bt;
-            particle.m_initialSpeed    =  particle.m_initialSpeed + particle.m_acceleration * bt;
-            particle.m_initialSpeed.z  = -particle.m_initialSpeed.z * m_emitter.bounciness;
-            particle.m_positionTime    =  particle.m_bounceTime;
-
-            // Calculate new bounce time
-            if (particle.m_acceleration.z == 0 || particle.m_initialSpeed.z == 0)
-            {
-                // No more bounces
-                particle.m_bounceTime = FLT_MAX;
-            }
-            else
-            {
-                // Calculate the new parabola
-                // We know x(0) is 0, so the problem becomes a lot simpler
-                particle.m_bounceTime += 2 * -particle.m_initialSpeed.z / particle.m_acceleration.z;
-            }
-        }
+        // Catch up on every bounce before t. Bounded for any bounciness
+        // (the file and the UI allow values outside [0,1]); see BounceCatchUp.h.
+        BounceCatchUp(particle.m_initialPosition, particle.m_initialSpeed, particle.m_acceleration,
+                      particle.m_positionTime, particle.m_bounceTime, t, m_emitter.bounciness);
     }
 
     const float scaleSample =

@@ -6,6 +6,9 @@
 #include "BridgeDispatchShared.h"
 #include "BridgeRequestContext.h"
 
+#include <cfloat>                 // FLT_MAX (bounciness range check)
+#include <climits>                // INT_MIN / INT_MAX (getInt range check)
+
 #include "StringConv.h"           // host::Utf8ToWide / WideToUtf8
 #include "../ParticleSystemIO.h"  // LoadParticleSystem (preview/import-from-file)
 
@@ -528,7 +531,13 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         };
         auto getInt = [&](const char* key, int fallback) -> int {
             if (patch.contains(key) && patch.at(key).is_number_integer()) { appliedArr.push_back(key); return patch.at(key).get<int>(); }
-            if (patch.contains(key) && patch.at(key).is_number()) { appliedArr.push_back(key); return static_cast<int>(patch.at(key).get<double>()); }
+            if (patch.contains(key) && patch.at(key).is_number())
+            {
+                // A double outside int's range (or NaN) makes the cast undefined;
+                // report it as skipped, like a wrong-typed value.
+                const double d = patch.at(key).get<double>();
+                if (d >= INT_MIN && d <= INT_MAX) { appliedArr.push_back(key); return static_cast<int>(d); }
+            }
             skippedArr.push_back(key);
             return fallback;
         };
@@ -598,7 +607,17 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         if (patch.contains("inwardSpeed"))             emit->inwardSpeed = getFloat("inwardSpeed", emit->inwardSpeed);
         if (patch.contains("inwardAcceleration"))      emit->inwardAcceleration = getFloat("inwardAcceleration", emit->inwardAcceleration);
         if (patch.contains("objectSpaceAcceleration")) emit->objectSpaceAcceleration = getBool("objectSpaceAcceleration", emit->objectSpaceAcceleration);
-        if (patch.contains("bounciness"))              emit->bounciness = getFloat("bounciness", emit->bounciness);
+        if (patch.contains("bounciness"))
+        {
+            // Values outside [0,1] are allowed (the Physics tab doesn't clamp),
+            // but a non-finite one would poison the GROUND_BOUNCE simulation and
+            // the saved file. Skip it like a wrong-typed value.
+            const json& b = patch.at("bounciness");
+            if (!b.is_number() || (std::isfinite(b.get<double>()) && std::fabs(b.get<double>()) <= FLT_MAX))
+                emit->bounciness = getFloat("bounciness", emit->bounciness);
+            else
+                skippedArr.push_back("bounciness");
+        }
         if (patch.contains("groundBehavior"))          emit->groundBehavior = static_cast<unsigned long>(getInt("groundBehavior", static_cast<int>(emit->groundBehavior)));
         if (patch.contains("emitFromMesh"))            emit->emitFromMesh = getInt("emitFromMesh", emit->emitFromMesh);
         if (patch.contains("emitFromMeshOffset"))      emit->emitFromMeshOffset = getFloat("emitFromMeshOffset", emit->emitFromMeshOffset);

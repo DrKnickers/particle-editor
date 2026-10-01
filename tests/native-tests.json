@@ -16,6 +16,12 @@
       "uses": ["dxsdk"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
+    "test_alo_editor_state": {
+      "sources": ["src/ParticleSystem.cpp", "src/ParticleSystemSerialization.cpp", "src/ChunkReader.cpp", "src/ChunkWriter.cpp", "src/crc32.cpp", "src/files.cpp", "src/utils.cpp", "src/LinkGroup.cpp"],
+      "uses": ["expat", "dxsdk", "webview2"],
+      "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"],
+      "release": true
+    },
     "test_alo_fuzz": {
       "sources": ["src/AloModel.cpp", "src/ChunkReader.cpp", "src/files.cpp", "src/utils.cpp"],
       "uses": ["dxsdk"],
@@ -51,6 +57,9 @@
     },
     "test_blend_mode_classify": {
       "uses": ["expat", "dxsdk"]
+    },
+    "test_bounce_catch_up": {
+      "release": true
     },
     "test_bridge_spawner_state": {
       "sources": ["src/SpawnerDriver.cpp"],

@@ -177,6 +177,9 @@
     <ClInclude Include="AssetPathSafety.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="BounceCatchUp.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="CloseDecision.h">
       <Filter>Header Files</Filter>
     </ClInclude>

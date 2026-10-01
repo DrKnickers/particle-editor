@@ -21,6 +21,10 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 - A toolbar or keyboard action that fails (Undo, Redo, Play/Pause, Step, Clear, Spawn, the View toggles, reloading textures or shaders, the reference-object controls) now says so in the status bar instead of failing silently
 - Loading a particle `.alo` no longer drops the settings that follow an unrecognized data chunk (for example "leave particles"), and particle files with corrupt chunk headers or nesting are now rejected as corrupt instead of being misread
 - File load errors now show their actual message instead of "Unknown exception"
+- An emitter that bounces off the ground no longer freezes the editor when its bounciness is negative, 1 or more, or not a number
+- Undo and redo no longer un-hide emitters you hid with the eye toggle
+- A colour channel you unlock now stays unlocked after save and reload, undo, or redo, even before you edit it
+- Saving a particle file that contains property 0x11 no longer drops it
 
 ### Security
 

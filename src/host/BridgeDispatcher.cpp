@@ -1433,6 +1433,26 @@ void BridgeDispatcher::ApplyUndoSnapshot(const std::vector<char>& buf,
     }
     if (m_engine) m_engine->Clear();
 
+    // Carry each emitter's eye toggle across the swap. `visible` is editor-
+    // only view state that the snapshot doesn't store, so the restored system
+    // came back all-visible and hide -> edit -> undo un-hid every emitter.
+    // Matched by index, only when the emitter counts agree: there is no
+    // persistent identity to match on (stableId is re-issued on load), so an
+    // undo that adds or removes emitters falls back to all-visible, and one
+    // that reorders them (same count) keeps the flags by position.
+    if (*m_pParticleSystem)
+    {
+        const std::vector<ParticleSystem::Emitter*>& oldEmitters = (*m_pParticleSystem)->getEmitters();
+        const std::vector<ParticleSystem::Emitter*>& newEmitters = sys->getEmitters();
+        if (oldEmitters.size() == newEmitters.size())
+        {
+            for (size_t i = 0; i < newEmitters.size(); i++)
+            {
+                newEmitters[i]->visible = oldEmitters[i]->visible;
+            }
+        }
+    }
+
     *m_pParticleSystem = std::unique_ptr<ParticleSystem>(sys);
 
     if (m_engine)

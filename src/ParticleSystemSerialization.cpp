@@ -162,6 +162,13 @@ void ParticleSystem::Emitter::writeProperties(ChunkWriter& writer) const
 
 	writeMiniFloat  (writer, 0x0C, gravity);
 	writeMiniFloat  (writer, 0x0F, lifetime);
+	if (has11)
+	{
+		// Unknown property, absent from every shipped particle file. Written
+		// back only when the loaded file had it, so other files stay
+		// byte-identical; 0x0F..0x12 is where numeric order would place it.
+		writeMiniFloat(writer, 0x11, unknown11);
+	}
 	writeMiniFloat  (writer, 0x12, randomScalePerc);
 	writeMiniFloat  (writer, 0x13, randomLifetimePerc);
 	writeMiniInteger(writer, 0x49, unknown49);
@@ -215,6 +222,9 @@ void ParticleSystem::Emitter::writeTracks(ChunkWriter& writer) const
 	// Write channel tracks
 	for (int i = 0; i < 4; i++)
 	{
+		// The first and last keys are the endpoints written below; every
+		// host edit path keeps at least those two.
+		assert(tracks[i]->keys.size() >= 2);
 		writer.beginChunk(0x00);
 		writer.beginMiniChunk(0x02);
 		writeByte(writer, (uint8_t)(int)(tracks[i]->keys.begin()->value * 255));
@@ -243,6 +253,7 @@ void ParticleSystem::Emitter::writeTracks(ChunkWriter& writer) const
 	// Write other tracks
 	for (int i = 4; i < 7; i++)
 	{
+		assert(tracks[i]->keys.size() >= 2);
 		float first = tracks[i]->keys.begin()->value;
 		float last  = tracks[i]->keys.rbegin()->value;
 
@@ -291,9 +302,23 @@ void ParticleSystem::Emitter::writeGroups(ChunkWriter& writer) const
 
 	for (int i = 0; i < NUM_GROUPS; i++)
 	{
+		Group group = groups[i];
+		if (i == GROUP_LIFETIME)
+		{
+			// The lifetime group is derived from lifetime and
+			// randomLifetimePerc. Normalized on this copy so that writing
+			// (undo snapshots included) never mutates the emitter.
+			group.type = 1;
+			group.minX = 0.0f;
+			group.maxX = 0.0f;
+			group.minY = lifetime * (1 - randomLifetimePerc);
+			group.maxY = lifetime;
+			group.minZ = 0.0f;
+			group.maxZ = 0.0f;
+		}
 		writer.beginChunk(0x1100);
 		writer.beginChunk(0x1101);
-		writer.write(&groups[i], sizeof(Group));
+		writer.write(&group, sizeof(Group));
 		writer.endChunk();
 		writer.endChunk();
 	}
@@ -301,17 +326,55 @@ void ParticleSystem::Emitter::writeGroups(ChunkWriter& writer) const
 	writer.endChunk();
 }
 
+// A colour channel's keys as readTracks will rebuild them from what
+// writeTracks emits: values quantized to bytes, times scaled out and back.
+static void reloadedChannelKeys(const ParticleSystem::Emitter::Track& track,
+                                std::vector<ParticleSystem::Emitter::Track::Key>& keys)
+{
+	typedef ParticleSystem::Emitter::Track Track;
+	keys.clear();
+	keys.push_back(Track::Key(0.0f, (uint8_t)(int)(track.keys.begin()->value * 255) / 255.0f));
+	for (Track::KeyMap::const_iterator key = ++track.keys.begin(); key != --track.keys.end(); key++)
+	{
+		uint32_t value = (uint32_t)(unsigned long)(key->value * 255);
+		keys.push_back(Track::Key((key->time / 100.0f) * 100.0f, value / 255.0f));
+	}
+	keys.push_back(Track::Key(100.0f, (uint8_t)(int)(track.keys.rbegin()->value * 255) / 255.0f));
+}
+
+// Colour channels (1..3, as a bitmask) that are unlocked but that readTracks
+// would re-lock on load, because their written keys match an earlier
+// channel's. readTracks locks a channel to the first earlier identical one,
+// so "identical to any earlier channel" is exactly the re-lock condition.
+static unsigned long unlockedIdenticalChannels(const ParticleSystem::Emitter& emitter)
+{
+	typedef ParticleSystem::Emitter::Track Track;
+	std::vector<Track::Key> keys[4];
+	for (int i = 0; i < 4; i++)
+	{
+		reloadedChannelKeys(*emitter.tracks[i], keys[i]);
+	}
+
+	unsigned long mask = 0;
+	for (int j = 1; j < 4; j++)
+	{
+		if (emitter.tracks[j] != &emitter.trackContents[j]) continue;
+		for (int i = 0; i < j; i++)
+		{
+			if (clampInterpolation((unsigned long)emitter.tracks[i]->interpolation) ==
+			    clampInterpolation((unsigned long)emitter.tracks[j]->interpolation) &&
+			    keys[i] == keys[j])
+			{
+				mask |= 1ul << j;
+				break;
+			}
+		}
+	}
+	return mask;
+}
+
 void ParticleSystem::Emitter::write(ChunkWriter& writer, bool copy)
 {
-	// Set second group
-	groups[1].type = 1;
-	groups[1].minX = 0.0f;
-	groups[1].maxX = 0.0f;
-	groups[1].minY = lifetime * (1 - randomLifetimePerc);
-	groups[1].maxY = lifetime;
-	groups[1].minZ = 0.0f;
-	groups[1].maxZ = 0.0f;
-
 	writeProperties(writer);
 
 	writer.beginChunk(0x0003);
@@ -349,6 +412,21 @@ void ParticleSystem::Emitter::write(ChunkWriter& writer, bool copy)
 	{
 		writer.beginChunk(0x0100);
 		writeInteger(writer, linkGroup);
+		writer.endChunk();
+	}
+
+	// Editor-only explicit-unlock chunk: a bitmask of the colour channels
+	// (1..3) that are unlocked although their keys match an earlier channel.
+	// The reader re-locks identical channels, so without this an unlock with
+	// no edit was lost on save + reload and on undo/redo. Skipped by the game
+	// like 0x0100, and only written when such a channel exists, so other
+	// files stay byte-identical. Kept on clipboard copy: lock state belongs
+	// to the emitter, not to the file.
+	unsigned long unlocked = unlockedIdenticalChannels(*this);
+	if (unlocked != 0)
+	{
+		writer.beginChunk(0x0101);
+		writeInteger(writer, unlocked);
 		writer.endChunk();
 	}
 }
@@ -418,7 +496,7 @@ void ParticleSystem::Emitter::readProperties(ChunkReader& reader)
 			case 0x48: randomRotation			= readBool(reader); break;
 
 			case 0x06: unknown06 = readInteger(reader); break;
-			case 0x11: unknown11 = readFloat(reader);   break;
+			case 0x11: unknown11 = readFloat(reader); has11 = true; break;
 			case 0x15: unknown15 = readBool(reader);    break;
 			case 0x3F: unknown3f = readFloat(reader);   break;
 			case 0x44: unknown44 = readBool(reader);    break;
@@ -589,6 +667,22 @@ ParticleSystem::Emitter::Emitter(ChunkReader& reader)
 	if (type == 0x100)
 	{
 		linkGroup = readInteger(reader);
+		type = reader.next();
+	}
+
+	// Editor-only explicit-unlock chunk (see write). Optional. Undoes the
+	// re-lock readTracks applied to channels the editor had unlocked; each
+	// channel's own keys are still in trackContents.
+	if (type == 0x101)
+	{
+		unsigned long unlocked = readInteger(reader);
+		for (int i = 1; i < 4; i++)
+		{
+			if (unlocked & (1ul << i))
+			{
+				tracks[i] = &trackContents[i];
+			}
+		}
 		type = reader.next();
 	}
 

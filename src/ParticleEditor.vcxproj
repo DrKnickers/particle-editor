@@ -135,6 +135,7 @@
     <ClInclude Include="utils.h" />
     <ClInclude Include="xml.h" />
     <ClInclude Include="AssetPathSafety.h" />
+    <ClInclude Include="BounceCatchUp.h" />
     <ClInclude Include="CloseDecision.h" />
     <ClInclude Include="DeferredParticleSystemChange.h" />
     <ClInclude Include="DeviceRecovery.h" />

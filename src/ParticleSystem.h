@@ -242,6 +242,7 @@ public:
 		bool  unknown2b;
 		bool  unknown44;
 		float unknown11;
+		bool  has11;		// 0x11 was in the loaded file; written back only then
 		float unknown3f;
 		unsigned long unknown06;
 		unsigned long unknown49;

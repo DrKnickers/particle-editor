@@ -163,6 +163,7 @@ void ParticleSystem::Emitter::copySharedParamsFrom(const Emitter&         src,
     bool          sav_unknown2b = unknown2b;
     bool          sav_unknown44 = unknown44;
     float         sav_unknown11 = unknown11;
+    bool          sav_has11     = has11;
     float         sav_unknown3f = unknown3f;
     unsigned long sav_unknown06 = unknown06;
     unsigned long sav_unknown49 = unknown49;
@@ -267,7 +268,7 @@ void ParticleSystem::Emitter::copySharedParamsFrom(const Emitter&         src,
     }
 
     if (exempt.unknown06) unknown06 = sav_unknown06;
-    if (exempt.unknown11) unknown11 = sav_unknown11;
+    if (exempt.unknown11) { unknown11 = sav_unknown11; has11 = sav_has11; }
     if (exempt.unknown15) unknown15 = sav_unknown15;
     if (exempt.unknown2b) unknown2b = sav_unknown2b;
     if (exempt.unknown3f) unknown3f = sav_unknown3f;
@@ -408,6 +409,7 @@ void ParticleSystem::Emitter::setDefaults()
 	unknown15 = true;
 	unknown44 = false;
 	unknown11 =   0.0f;
+	has11     = false;
 	unknown3f =  50.00f;
 	unknown06 = 0;
 }
