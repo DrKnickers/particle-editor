@@ -571,7 +571,7 @@ const LANES = [
         if (ensureRestored() !== 0) {
           return fail("NuGet restore (prereq for the WebView2-dependent unit test)");
         }
-        const expatProj = join(repoRoot, "libs", "expat-2.2.0", "expatw_static.vcxproj");
+        const expatProj = join(repoRoot, "libs", "expat-2.8.5", "expatw_static.vcxproj");
         for (const cfg of ["Debug", "Release"]) {
           if (msbuildProject(expatProj, cfg) !== 0) {
             return fail(`expatw_static ${cfg} build (prereq for expat-linking unit tests)`);

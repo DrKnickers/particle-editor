@@ -78,8 +78,8 @@ static void checkEmpty(XMLNode* node)
 	}
 }
 
-// Audit F-XML (untrusted mod XML): the bundled Expat is 2.1.0, with no
-// entity-expansion limit and no nesting limit. Both handlers below stop the
+// Audit F-XML (untrusted mod XML): Expat has no nesting or element-count limit
+// of its own, so these caps are ours. Both handlers below stop the
 // parser rather than throw — C++ exceptions must not unwind through Expat's C
 // frames. thread_local: XMLTree::parse runs concurrently on the
 // GameObjectCatalog worker pool, so this MUST be per-thread — a shared static
@@ -227,10 +227,10 @@ static int onUnknownEncoding(void* /*data*/, const XML_Char* name, XML_Encoding*
 	return XML_STATUS_OK;
 }
 
-// Legit game/mod XML declares NO custom entities (the bundled Expat 2.1.0
-// predates the 2.4.0 billion-laughs amplification cap), so abort parsing on the
-// first <!ENTITY> declaration — closing the entity-expansion DoS. The aborted
-// parse surfaces as the normal XML_Parse==0 ParseException below.
+// Legit game/mod XML declares NO custom entities, so abort parsing on the first
+// <!ENTITY> declaration — closing the entity-expansion DoS outright rather than
+// relying only on Expat's (>= 2.4.0) billion-laughs amplification cap. The
+// aborted parse surfaces as the normal XML_Parse==0 ParseException below.
 static void onEntityDecl(void* /*userData*/, const XML_Char* /*entityName*/,
     int /*isParameterEntity*/, const XML_Char* /*value*/, int /*valueLength*/,
     const XML_Char* /*base*/, const XML_Char* /*systemId*/,

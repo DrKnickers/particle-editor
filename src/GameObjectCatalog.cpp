@@ -233,10 +233,11 @@ namespace
     // WideToAnsi / push_back) degrades to "this file contributes nothing" -- the
     // same observable result as the old malformed-file catch-and-skip, never a crash.
     //
-    // Footgun (xmlparse.c:694): expat seeds the CRT PRNG via srand()/rand() on the
-    // FIRST XML_Parse per thread. MSVC's rand/srand are per-thread, so dedicated +
-    // joined parse workers don't race or perturb the engine's rand stream. Do NOT
-    // move parsing onto a reused/engine thread (it would disturb that thread's rand).
+    // CRT rand(): the bundled Expat (2.8.5) never touches it. Each parser's hash
+    // salt comes from rand_s() (RtlGenRandom) in generate_hash_secret_salt
+    // (libs/expat-2.8.5/lib/xmlparse.c), so parsing on any thread leaves that
+    // thread's srand()/rand() stream alone. (The old 2.1.0 reseeded it with
+    // srand(time) on every parser.)
     void parseObjectBytes(const std::vector<char>& bytes, const std::string& fileName,
                           std::vector<RawEntry>& entries)
     {

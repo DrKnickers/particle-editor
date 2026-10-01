@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Static, UTF-16 (wchar_t) build of the vendored Expat 2.8.5 for the
+     Particle Editor. Upstream ships CMake only; this project mirrors what its
+     CMakeLists.txt does for an MSVC static wchar_t build:
+       -DEXPAT_SHARED_LIBS=OFF -DEXPAT_CHAR_TYPE=wchar_t
+     i.e. XML_STATIC + XML_UNICODE_WCHAR_T, _CRT_SECURE_NO_WARNINGS + /wd4996,
+     sources lib/xmlparse.c, lib/xmlrole.c, lib/xmltok.c and (on Windows)
+     lib/random_rand_s.c; xmltok_impl.c, xmltok_ns.c and xcsinc.c are #included
+     by those and are not compiled on their own. expat_config.h (beside this
+     file) is the MSVC expansion of upstream's expat_config.h.cmake.
+
+     CRT: matches src/ParticleEditor.vcxproj per configuration — Debug uses the
+     default debug DLL CRT (/MDd), Release links the static CRT (/MT). Consumers
+     must also define XML_STATIC and XML_UNICODE_WCHAR_T and put include\ on
+     their include path (#include "expat/expat.h"). -->
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="lib\xmlparse.c" />
+    <ClCompile Include="lib\xmlrole.c" />
+    <ClCompile Include="lib\xmltok.c" />
+    <ClCompile Include="lib\random_rand_s.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="expat_config.h" />
+    <ClInclude Include="include\expat\expat.h" />
+    <ClInclude Include="include\expat\expat_external.h" />
+    <ClInclude Include="lib\ascii.h" />
+    <ClInclude Include="lib\asciitab.h" />
+    <ClInclude Include="lib\fallthrough.h" />
+    <ClInclude Include="lib\hash_table.h" />
+    <ClInclude Include="lib\iasciitab.h" />
+    <ClInclude Include="lib\internal.h" />
+    <ClInclude Include="lib\latin1tab.h" />
+    <ClInclude Include="lib\nametab.h" />
+    <ClInclude Include="lib\random_rand_s.h" />
+    <ClInclude Include="lib\siphash.h" />
+    <ClInclude Include="lib\utf8tab.h" />
+    <ClInclude Include="lib\winconfig.h" />
+    <ClInclude Include="lib\xmlrole.h" />
+    <ClInclude Include="lib\xmltok.h" />
+    <ClInclude Include="lib\xmltok_impl.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="lib\xcsinc.c" />
+    <None Include="lib\xmltok_impl.c" />
+    <None Include="lib\xmltok_ns.c" />
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{3D0991C0-DB91-116B-53EF-BBDE6D53F949}</ProjectGuid>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <!-- libs\expat-2.8.5\x64\<Config>\expatw_static.lib: tests/build-native.mjs
+         links it from here via /LIBPATH. -->
+    <OutDir>$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_LIB;XML_STATIC;XML_UNICODE_WCHAR_T;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)include\expat;$(ProjectDir)lib;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <WarningLevel>Level3</WarningLevel>
+      <DisableSpecificWarnings>4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Optimization>Disabled</Optimization>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

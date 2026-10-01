@@ -20,6 +20,10 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 - The Bloom and Spawner panels no longer briefly revert to older settings when they open while the scene is changing
 - A toolbar or keyboard action that fails (Undo, Redo, Play/Pause, Step, Clear, Spawn, the View toggles, reloading textures or shaders, the reference-object controls) now says so in the status bar instead of failing silently
 
+### Security
+
+- Update the bundled Expat XML parser from 2.1.0 to 2.8.5, bringing years of upstream security fixes for malformed or hostile XML in game and mod data folders
+
 ## [0.4.1] - 2026-08-12
 
 ### Fixed

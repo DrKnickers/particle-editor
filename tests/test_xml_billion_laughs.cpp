@@ -1,8 +1,8 @@
 // Regression test for the XML DoS guards (src/xml.cpp, audit F-XML + the
 // 2026-07 pre-release audit).
 //
-// Guard 1 (entity expansion): the bundled Expat predates the 2.4.0
-// billion-laughs amplification cap and has no entity-expansion limit. Legit
+// Guard 1 (entity expansion): added when the bundled Expat (2.1.0) predated
+// the 2.4.0 billion-laughs amplification cap; kept as defence in depth. Legit
 // game/mod XML declares NO custom entities, so the fix registers an entity-decl
 // handler that XML_StopParser's on the first <!ENTITY> declaration -- the
 // aborted parse surfaces as the normal XML_Parse==0 ParseException.

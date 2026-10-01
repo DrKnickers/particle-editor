@@ -7,7 +7,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ParticleEditor", "src\Parti
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "libs", "libs", "{53C41C7D-0012-40CE-8D39-C11EEDFEE249}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "expatw_static", "libs\expat-2.2.0\expatw_static.vcxproj", "{3D0991C0-DB91-116B-53EF-BBDE6D53F949}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "expatw_static", "libs\expat-2.8.5\expatw_static.vcxproj", "{3D0991C0-DB91-116B-53EF-BBDE6D53F949}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "viewport_poc", "src\host\viewport_poc.vcxproj", "{4843B928-23DB-4D9F-8F1F-D80071FD0C33}"
 EndProject

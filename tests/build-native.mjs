@@ -125,7 +125,7 @@ function compileFlags(t, config, env) {
   if (uses.has("expat")) f.push("/DXML_STATIC", "/DXML_UNICODE_WCHAR_T");
   for (const d of t.defines ?? []) f.push(`/D${d}`);
   // Same include order as the vcxproj: expat, DXSDK, src, WebView2.
-  if (uses.has("expat")) f.push(`/I${join(repoRoot, "libs", "expat-2.2.0", "include")}`);
+  if (uses.has("expat")) f.push(`/I${join(repoRoot, "libs", "expat-2.8.5", "include")}`);
   if (uses.has("dxsdk")) f.push(`/I${env.DXSDK_INC}`);
   f.push(`/I${join(repoRoot, "src")}`);
   for (const inc of t.includes ?? []) f.push(`/I${join(repoRoot, inc)}`);
@@ -139,11 +139,12 @@ function linkFlags(t, config, env, objDir) {
   const f = ["/nologo", "/DEBUG", "/INCREMENTAL:NO", `/OUT:${exe}`, `/PDB:${join(objDir, `${t.name}.pdb`)}`];
   if (uses.has("dxsdk")) f.push(`/LIBPATH:${env.DXSDK_LIB}`);
   if (uses.has("expat-lib")) {
-    // The prebuilt expatw_static.lib uses the static CRT (/MT, /MTd); drop its
-    // default-lib request so it links against this exe's DLL CRT.
-    f.push(`/LIBPATH:${join(repoRoot, "libs", "expat-2.2.0", "x64", config === "release" ? "Release" : "Debug")}`,
-           config === "release" ? "/NODEFAULTLIB:libcmt.lib" : "/NODEFAULTLIB:libcmtd.lib",
-           "expatw_static.lib");
+    // expatw_static.lib follows the editor's CRT: Debug is /MDd (same as this
+    // exe), Release is the static CRT (/MT). Only the Release pass therefore has
+    // to drop the lib's libcmt default-lib request to link this exe's /MD CRT.
+    f.push(`/LIBPATH:${join(repoRoot, "libs", "expat-2.8.5", "x64", config === "release" ? "Release" : "Debug")}`);
+    if (config === "release") f.push("/NODEFAULTLIB:libcmt.lib");
+    f.push("expatw_static.lib");
   }
   f.push(...(t.libs ?? []));
   return f;
