@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { IncrementIndexDialog } from "../IncrementIndexDialog";
 import { useTreeContextStore } from "@/lib/tree-context";
-import { makeBridgeStub } from "./bridge-stub";
+import { makeBridgeStub } from "@/test/bridge-stub";
 
 // The Spinner commits on blur/Enter, not on keystroke — set the text then blur.
 function setSpinner(label: string, value: string): void {

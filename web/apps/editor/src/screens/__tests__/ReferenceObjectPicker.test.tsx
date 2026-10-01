@@ -12,7 +12,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, act, within } from "@testing-library/react";
 import { ReferenceObjectPickerBody } from "../ReferenceObjectPicker";
 import { MockBridge } from "@/bridge/mock";
-import { useMockEngineState, makeDefaultEngineState } from "@/bridge/mock-state";
+import { resetMockState } from "@/test/mock-state";
 import { __resetPickerStateCacheForTests } from "@/lib/picker-state";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
@@ -23,7 +23,7 @@ import type { Bridge } from "@particle-editor/bridge-schema";
 // assert on the pristine "no object selected" / "unlocked" defaults pick up the
 // previous test's selection + lock state and fail.
 beforeEach(() => {
-  useMockEngineState.setState(makeDefaultEngineState());
+  resetMockState();
 });
 
 describe("ReferenceObjectPicker — selection + status", () => {

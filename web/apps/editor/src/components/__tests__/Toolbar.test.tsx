@@ -6,6 +6,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { Toolbar } from "../Toolbar";
 import type { Bridge } from "@particle-editor/bridge-schema";
+import { makeBridgeStub } from "@/test/bridge-stub";
 import { __resetRightDockForTests } from "@/lib/right-dock";
 import { __resetStatusFeedbackForTests, useStatusFeedback } from "@/lib/status-feedback";
 
@@ -20,22 +21,20 @@ const renderToolbar = (bridge: Bridge) =>
   );
 
 function makeBridge() {
-  const snap = {
-    paused: false,
-    bloom: false,
-    bloomAvailable: true,
-    ground: true,
-    gridVisible: true,
-    heatDebug: false,
-    canUndo: true,
-    canRedo: false,
-  };
-  const request = vi.fn().mockImplementation((req: { kind: string }) => {
-    if (req.kind === "engine/state/snapshot") return Promise.resolve(snap);
-    return Promise.resolve({});
+  return makeBridgeStub({
+    responses: {
+      "engine/state/snapshot": {
+        paused: false,
+        bloom: false,
+        bloomAvailable: true,
+        ground: true,
+        gridVisible: true,
+        heatDebug: false,
+        canUndo: true,
+        canRedo: false,
+      },
+    },
   });
-  const on = vi.fn().mockReturnValue(() => {});
-  return { request, on } as unknown as Bridge & { request: ReturnType<typeof vi.fn> };
 }
 
 beforeEach(() => {
@@ -219,18 +218,16 @@ describe("Toolbar — Particle Editor 2026 layout", () => {
 
   it("atlas button is enabled when an emitter is selected", async () => {
     // Build a bridge whose snapshot already carries selectedEmitterId: 1.
-    const snap = {
-      paused: false, bloom: false, bloomAvailable: true,
-      ground: true, gridVisible: true, heatDebug: false,
-      canUndo: true, canRedo: false,
-      selectedEmitterId: 1,
-    };
-    const request = vi.fn().mockImplementation((req: { kind: string }) => {
-      if (req.kind === "engine/state/snapshot") return Promise.resolve(snap);
-      return Promise.resolve({});
+    const b = makeBridgeStub({
+      responses: {
+        "engine/state/snapshot": {
+          paused: false, bloom: false, bloomAvailable: true,
+          ground: true, gridVisible: true, heatDebug: false,
+          canUndo: true, canRedo: false,
+          selectedEmitterId: 1,
+        },
+      },
     });
-    const on = vi.fn().mockReturnValue(() => {});
-    const b = { request, on } as unknown as Bridge & { request: ReturnType<typeof vi.fn> };
     renderToolbar(b);
     const atlasBtn = await screen.findByRole("button", { name: "Toggle Atlas frame picker" });
     await waitFor(() => expect(atlasBtn).not.toBeDisabled());

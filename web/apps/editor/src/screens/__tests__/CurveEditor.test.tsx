@@ -14,8 +14,8 @@
 import type { InterpolationType, TrackDto } from "@particle-editor/bridge-schema";
 import type * as React from "react";
 import { createRef } from "react";
-import { afterEach, describe, it, expect, vi } from "vitest";
-import { act, fireEvent, render, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
+import { act, fireEvent, render } from "@testing-library/react";
 import { computeGroupMoves } from "@/lib/curve-model";
 import type { SuppressedMove } from "@/lib/use-curve-morph";
 import { CurveEditor, type ChannelDef, type CurveMarqueeHandle } from "../CurveEditor";
@@ -919,12 +919,41 @@ function mcCurveWithColor(
   );
 }
 
+// Fake-time helpers for the curve-morph block (see its beforeEach).
+const FRAME_MS = 16;
+const SETTLE_MS = 1000; // well past MORPH_MS (180) + the fallback (250)
+async function advance(ms: number): Promise<void> {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+}
+/** Fake-time stand-in for `waitFor`: advance the clock by `ms`, then assert. */
+async function after<T>(ms: number, assert: () => T): Promise<T> {
+  await advance(ms);
+  return assert();
+}
+
 describe("curve morph (structural changes)", () => {
   let restoreMatchMedia: (() => void) | null = null;
+
+  // The morph runs on rAF against performance.now(), with MORPH_MS (180 ms) of
+  // glide and a MORPH_MS+250 fallback timeout. On wall-clock time a loaded
+  // machine could finish a morph before a "mid-morph" step ran (the
+  // interruption test flaked that way), so these tests drive fake time: rAF,
+  // performance.now and the timers all advance only when the test says so.
+  beforeEach(() => {
+    vi.useFakeTimers({
+      toFake: [
+        "setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date",
+        "requestAnimationFrame", "cancelAnimationFrame", "performance",
+      ],
+    });
+  });
 
   afterEach(() => {
     restoreMatchMedia?.();
     restoreMatchMedia = null;
+    vi.useRealTimers();
   });
 
   it("mounts a morph overlay on a structural change, hides the static curve, then settles", async () => {
@@ -937,7 +966,7 @@ describe("curve morph (structural changes)", () => {
     rerender(mcCurve(t1, "red"));
 
     // Overlay should mount.
-    const overlay = await waitFor(() => {
+    const overlay = await after(0, () => {
       const el = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="red"]');
       expect(el).not.toBeNull();
       return el!;
@@ -948,9 +977,9 @@ describe("curve morph (structural changes)", () => {
     expect((staticLayer as SVGGElement).style.visibility).toBe("hidden");
 
     // After the morph completes, overlay unmounts and static layer re-appears.
-    await waitFor(() => {
+    await after(SETTLE_MS, () => {
       expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
-    }, { timeout: 2000 });
+    });
 
     expect((staticLayer as SVGGElement).style.visibility).not.toBe("hidden");
     // Suppress unused-variable warning — overlay was captured to verify the
@@ -969,7 +998,7 @@ describe("curve morph (structural changes)", () => {
 
     // The green channel is the focused+locked follower — its overlay polyline
     // should carry the READONLY_DASH ("7 5").
-    const line = await waitFor(() => {
+    const line = await after(0, () => {
       const el = container.querySelector(
         '[data-testid="curve-morph-overlay"][data-channel-id="green"] polyline',
       );
@@ -990,7 +1019,7 @@ describe("curve morph (structural changes)", () => {
       const { rerender, container } = render(mcCurve(t0, "red"));
       rerender(mcCurve([trk("red", [k(0, 0), k(50, 1), k(100, 1)], "linear")], "red"));
       // Give any rAF-backed morph time to manifest (it shouldn't).
-      await new Promise<void>((r) => setTimeout(r, 50));
+      await advance(50);
       expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
     } finally {
       (window as unknown as Record<string, unknown>).matchMedia = savedMM;
@@ -1004,7 +1033,7 @@ describe("curve morph (structural changes)", () => {
     const { rerender, container } = render(mcCurve(t0, "red"));
     rerender(mcCurve([trk("red", [k(0, 0), k(50, 1), k(100, 1)], "linear")], "red"));
     // Give rAF time to fire if the gate erroneously passes.
-    await new Promise<void>((r) => setTimeout(r, 50));
+    await advance(50);
     expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
   });
 
@@ -1018,25 +1047,25 @@ describe("curve morph (structural changes)", () => {
     rerender(mcCurve([trk("red", [k(0, 0), k(40, 0.8), k(100, 1)], "linear")], "red"));
 
     // Wait for the overlay to appear.
-    const overlay = await waitFor(() => {
+    const overlay = await after(0, () => {
       const el = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="red"]');
       expect(el).not.toBeNull();
       return el!;
     });
 
     // About 30ms into the morph, issue a second structural change.
-    await new Promise<void>((r) => setTimeout(r, 30));
+    await advance(30);
     rerender(mcCurve([trk("red", [k(0, 0), k(60, 0.3), k(100, 1)], "linear")], "red"));
 
     // The overlay element should be the SAME node (not unmounted/remounted).
-    await new Promise<void>((r) => setTimeout(r, 10));
+    await advance(10);
     const overlayAfterRetarget = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="red"]');
     expect(overlayAfterRetarget).toBe(overlay);
 
     // Eventually the morph settles.
-    await waitFor(() => {
+    await after(SETTLE_MS, () => {
       expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
-    }, { timeout: 2000 });
+    });
   });
 
   it("sustained interruption-folding: repeated retargets past 430 ms never trigger the stale fallback", async () => {
@@ -1059,31 +1088,31 @@ describe("curve morph (structural changes)", () => {
 
     // Retarget 1 — starts the morph.
     rerender(mcCurve([trk("red", [k(0, 0), k(30, 0.7), k(100, 1)], "linear")], "red"));
-    await waitFor(() => {
+    await after(FRAME_MS, () => {
       expect(container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="red"]')).not.toBeNull();
     });
 
     // Retarget 2 at ~80 ms.
-    await new Promise<void>((r) => setTimeout(r, 80));
+    await advance(80);
     rerender(mcCurve([trk("red", [k(0, 0), k(45, 0.4), k(100, 1)], "linear")], "red"));
 
     // Retarget 3 at ~160 ms.
-    await new Promise<void>((r) => setTimeout(r, 80));
+    await advance(80);
     rerender(mcCurve([trk("red", [k(0, 0), k(55, 0.6), k(100, 1)], "linear")], "red"));
 
     // Retarget 4 at ~240 ms.
-    await new Promise<void>((r) => setTimeout(r, 80));
+    await advance(80);
     rerender(mcCurve([trk("red", [k(0, 0), k(65, 0.2), k(100, 1)], "linear")], "red"));
 
     // Retarget 5 at ~320 ms.
-    await new Promise<void>((r) => setTimeout(r, 80));
+    await advance(80);
     rerender(mcCurve([trk("red", [k(0, 0), k(70, 0.9), k(100, 1)], "linear")], "red"));
 
     // At ~400 ms (>430 ms from the first start but only ~80 ms after last
     // retarget), wait another 100 ms (total ~500 ms from first retarget).
     // The stale-fallback bug would have snapped done at ~430 ms; the fixed
     // version must NOT have snapped.
-    await new Promise<void>((r) => setTimeout(r, 100));
+    await advance(100);
     expect(
       container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="red"]'),
       "overlay must still exist at ~500 ms (fallback must NOT have fired at ~430 ms)",
@@ -1092,9 +1121,9 @@ describe("curve morph (structural changes)", () => {
     // Allow the morph to settle naturally (MORPH_MS=180 from the last
     // retarget at ~320 ms → done by ~500 ms + rAF latency). Give extra
     // headroom for CI.
-    await waitFor(() => {
+    await after(SETTLE_MS, () => {
       expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
-    }, { timeout: 2000 });
+    });
   });
 
   it("focus-channel markers: matched keys glide, added key pops in, removed key ghosts out", async () => {
@@ -1106,14 +1135,14 @@ describe("curve morph (structural changes)", () => {
     // delete the 50-key, add a 75-key in one change (paste-like)
     rerender(mcCurve([trk("red", [k(0, 0), k(75, 0.9), k(100, 1)], "linear")], "red"));
 
-    const overlay = await waitFor(() => {
+    const overlay = await after(0, () => {
       const el = container.querySelector('[data-testid="curve-morph-overlay"]');
       expect(el).not.toBeNull();
       return el!;
     });
 
     // mid-morph: overlay carries marker circles — 2 moved (0, 100) + 1 in (75) + 1 ghost (50) = 4
-    await waitFor(() => {
+    await after(FRAME_MS, () => {
       expect(overlay.querySelectorAll("circle").length).toBe(4);
     });
 
@@ -1126,9 +1155,9 @@ describe("curve morph (structural changes)", () => {
     const cxValues = new Set(circles4.map((c) => c.getAttribute("cx")));
     expect(cxValues.size, "all 4 marker circles must have distinct cx values").toBe(4);
 
-    await waitFor(() => {
+    await after(SETTLE_MS, () => {
       expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
-    }, { timeout: 2000 });
+    });
   });
 
   it("emitter switch: a NEW key (count mismatch) rides the line in, it does not pop", async () => {
@@ -1145,14 +1174,14 @@ describe("curve morph (structural changes)", () => {
     // Switch to emitter 2: red now has a NEW interior key at t=50 (3 keys).
     rerender(mcCurve([trk("red", [k(0, 1), k(50, 0.2), k(100, 0)], "linear")], "red", 2));
 
-    const overlay = await waitFor(() => {
+    const overlay = await after(0, () => {
       const el = container.querySelector('[data-testid="curve-morph-overlay"]');
       expect(el).not.toBeNull();
       return el!;
     });
     // One marker per NEW key = 3, and ALL are "move" markers (full radius +
     // opacity) — a popping key would be an "in" marker (r<5 / opacity<1).
-    await waitFor(() => {
+    await after(FRAME_MS, () => {
       const circles = Array.from(overlay.querySelectorAll("circle"));
       expect(circles.length).toBe(3);
       for (const c of circles) {
@@ -1161,9 +1190,9 @@ describe("curve morph (structural changes)", () => {
       }
     });
 
-    await waitFor(() => {
+    await after(SETTLE_MS, () => {
       expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
-    }, { timeout: 2000 });
+    });
   });
 
   it("emitter switch: NON-focus channel keys also glide (no border blink-in)", async () => {
@@ -1182,14 +1211,14 @@ describe("curve morph (structural changes)", () => {
     rerender(mcCurve([trk("red", [k(0, 1), k(100, 0)], "linear"),
                       trk("green", [k(0, 0.5), k(100, 0.5)], "linear")], "red", 2));
 
-    const green = await waitFor(() => {
+    const green = await after(0, () => {
       const el = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="green"]');
       expect(el).not.toBeNull();
       return el!;
     });
     // Green's 2 keys glide (BEFORE the fix this was 0 — they popped via the
     // static layer at morph end). Dimmed non-focus styling, all "move".
-    await waitFor(() => {
+    await after(FRAME_MS, () => {
       const circles = Array.from(green.querySelectorAll("circle"));
       expect(circles.length).toBe(2);
       for (const c of circles) {
@@ -1198,9 +1227,9 @@ describe("curve morph (structural changes)", () => {
       }
     });
 
-    await waitFor(() => {
+    await after(SETTLE_MS, () => {
       expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
-    }, { timeout: 2000 });
+    });
   });
 
   it("emitter switch in VIEW-ONLY mode (no focus channel): markers match the r=4 stroked static dot", async () => {
@@ -1213,12 +1242,12 @@ describe("curve morph (structural changes)", () => {
     const { rerender, container } = render(mcCurve(a, undefined, 1)); // no focus → view-only
     rerender(mcCurve([trk("red", [k(0, 1), k(50, 0.2), k(100, 0)], "linear")], undefined, 2));
 
-    const overlay = await waitFor(() => {
+    const overlay = await after(0, () => {
       const el = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="red"]');
       expect(el).not.toBeNull();
       return el!;
     });
-    await waitFor(() => {
+    await after(FRAME_MS, () => {
       const circles = Array.from(overlay.querySelectorAll("circle"));
       expect(circles.length).toBe(3);
       for (const c of circles) {
@@ -1228,9 +1257,9 @@ describe("curve morph (structural changes)", () => {
       }
     });
 
-    await waitFor(() => {
+    await after(SETTLE_MS, () => {
       expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
-    }, { timeout: 2000 });
+    });
   });
 
   it("non-focus channels morph their line but render no overlay markers", async () => {
@@ -1242,14 +1271,14 @@ describe("curve morph (structural changes)", () => {
     rerender(mcCurve([trk("red", KEYS3, "linear"),
                       trk("green", [k(0, 0), k(40, 1), k(100, 0.5)], "linear")], "red"));
 
-    const overlay = await waitFor(() => {
+    const overlay = await after(0, () => {
       const el = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="green"]');
       expect(el).not.toBeNull();
       return el!;
     });
 
     // Give at least one rAF tick so drawJob runs.
-    await new Promise<void>((r) => setTimeout(r, 30));
+    await advance(30);
 
     expect(overlay.querySelectorAll("circle").length).toBe(0);
   });
@@ -1264,7 +1293,7 @@ describe("curve morph (structural changes)", () => {
     rerender(mcCurve([trk("red", KEYS3, "linear"),
                       trk("green", [k(0, 0), k(40, 1), k(100, 0.5)], "linear")], "red"));
 
-    const overlay = await waitFor(() => {
+    const overlay = await after(0, () => {
       const el = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="green"]');
       expect(el).not.toBeNull();
       return el!;
@@ -1294,14 +1323,14 @@ describe("curve morph (structural changes)", () => {
     rerender(mcCurveWithColor([trk("red", [k(0, 0), k(50, 0.9), k(100, 1)], "linear")], "red", varColor));
 
     // Wait for the overlay to mount and for drawJob to create the imperative children.
-    const overlayG = await waitFor(() => {
+    const overlayG = await after(0, () => {
       const el = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="red"]');
       expect(el).not.toBeNull();
       return el!;
     });
 
     // Give at least one rAF tick so drawJob creates the imperative children.
-    await new Promise<void>((r) => setTimeout(r, 30));
+    await advance(30);
 
     const polyline = overlayG.querySelector("polyline");
     expect(polyline, "overlay polyline must exist after first rAF tick").not.toBeNull();
@@ -1340,14 +1369,14 @@ describe("curve morph (structural changes)", () => {
     rerender(mcCurve([trk("red", KEYS3, "linear"),
                       trk("green", [k(0, 0), k(40, 1), k(100, 0.5)], "linear")], "red"));
 
-    const overlay = await waitFor(() => {
+    const overlay = await after(0, () => {
       const el = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="green"]');
       expect(el).not.toBeNull();
       return el!;
     });
 
     // Give at least one rAF tick so drawJob runs.
-    await new Promise<void>((r) => setTimeout(r, 30));
+    await advance(30);
 
     // Non-focus: no fill <path> should exist.
     expect(overlay.querySelector("path"), "non-focus overlay must not have a fill path").toBeNull();
@@ -1459,7 +1488,7 @@ describe("curve morph (structural changes)", () => {
     );
 
     // The locked follower (green) MUST morph — its change wasn't the dragged channel.
-    await waitFor(() => {
+    await after(0, () => {
       expect(
         container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="green"]'),
       ).not.toBeNull();

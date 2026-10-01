@@ -2,25 +2,15 @@
 // Predictive system-total warning: visible exactly when the NEXT spawn
 // attempt would be refused by the #138 gate —
 // (instances + 1) × systemLoad > cap, guard enabled.
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, act, waitFor } from "@testing-library/react";
 import { SystemLoadChip } from "../SystemLoadChip";
 import { writeOverloadGuard } from "@/lib/overload-guard";
-import type { Bridge } from "@particle-editor/bridge-schema";
+import { makeBridgeStub } from "@/test/bridge-stub";
 
 function makeBridge() {
-  const handlers = new Map<string, (e: { payload: unknown }) => void>();
-  const request = vi.fn().mockResolvedValue({ ok: true });
-  const on = vi.fn().mockImplementation(
-    (event: string, cb: (e: { payload: unknown }) => void) => {
-      handlers.set(event, cb);
-      return () => handlers.delete(event);
-    },
-  );
-  const emit = (event: string, payload: unknown) => {
-    act(() => handlers.get(event)?.({ payload }));
-  };
-  return { bridge: { request, on } as unknown as Bridge, emit };
+  const bridge = makeBridgeStub({ fallback: { ok: true } });
+  return { bridge, emit: bridge.emit };
 }
 
 const tick = (instances: number) => ({

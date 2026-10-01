@@ -16,7 +16,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render as rtlRender, screen, cleanup, type RenderOptions } from "@testing-library/react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { type ReactElement } from "react";
-import type { Bridge } from "@particle-editor/bridge-schema";
+import { makeBridgeStub } from "@/test/bridge-stub";
 import { ViewportSlot } from "../ViewportSlot";
 import { MK_LBUTTON, MK_SHIFT } from "../../lib/viewport-input";
 import { useDockAnim } from "../../lib/dock-anim";
@@ -27,16 +27,8 @@ import { useModalOpen } from "../../lib/modal-open";
 const render = (ui: ReactElement, options?: RenderOptions) =>
   rtlRender(<Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{ui}</Tooltip.Provider>, options);
 
-function makeStubBridge(): Bridge & {
-  request: ReturnType<typeof vi.fn>;
-  on: ReturnType<typeof vi.fn>;
-} {
-  const request = vi.fn().mockResolvedValue({});
-  const on = vi.fn().mockReturnValue(() => {});
-  return { request, on } as unknown as Bridge & {
-    request: ReturnType<typeof vi.fn>;
-    on: ReturnType<typeof vi.fn>;
-  };
+function makeStubBridge() {
+  return makeBridgeStub();
 }
 
 describe("ViewportSlot — render surface", () => {

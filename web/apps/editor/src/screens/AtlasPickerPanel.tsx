@@ -51,15 +51,10 @@ import { requestTreeRefetch } from "@/lib/tree-refetch";
 import { AtlasFrameGrid } from "./atlas/AtlasFrameGrid";
 import { drawHero, GRID_GAP } from "./atlas/atlas-canvas";
 import { useDecodedImage } from "./atlas/useDecodedImage";
-
-// Module-level cache of the last settled grid width. The panel UNMOUNTS when the
-// dock closes, so component state is lost; persisting the width here lets a
-// re-open render at its prior settled width immediately (no first-frame narrow
-// transient before the ResizeObserver fires). null until the first real measure.
-let lastAtlasGridW: number | null = null;
+import { atlasPanelCache } from "@/lib/atlas-panel-cache";
 
 // First-ever-open default for the grid content width, used ONLY before any real
-// measure exists (the cache above is null). It must equal the width the cold-start
+// measure exists (atlasPanelCache.gridW is null). It must equal the width the cold-start
 // slide will SETTLE at, or the grid lays out at the wrong column count and snaps
 // when the settle measure lands (the reported "first open reflows, fixed after"):
 // a too-wide seed picks an extra column for a 64-cell atlas, then the settle drops
@@ -72,30 +67,11 @@ let lastAtlasGridW: number | null = null;
 // NO gutter — AtlasPickerPanel passes bodyScroll={false} since it owns its scroll —
 // so it doesn't shift the width.) Seeding 215 makes the first render pick the
 // settle's column count (4 for a 64-cell atlas) at the settle's exact cell size, so
-// there's no snap and no nudge; re-opens seed from the cached real width above —
+// there's no snap and no nudge; re-opens seed from the cached real width (atlasPanelCache.gridW) —
 // this only governs the first-ever open before any measure. Verified empirically
 // (faithful DOM replica in real Chromium): min-dock settle = 215px, 4 cols, +1px
 // of panel-centre.
 const COLD_START_GRIDW = 215;
-
-// Module-level cache of the last fetched emitter props (textureSize/colorTexture).
-// The panel UNMOUNTS on dock close, so the first render of a RE-OPEN would
-// otherwise show the loading placeholder until the emitters/get-properties
-// round-trip resolves — and that grid mount lands DURING the dock-slide tween,
-// contending with it. Seeding the initial state from this cache (when the id
-// matches) renders the grid SYNCHRONOUSLY on the first frame, before the slide
-// starts, so the tween runs uncontended. The fetch still runs to confirm/refresh.
-// null until the first successful fetch.
-let lastEmitterProps: { id: number; textureSize: number; colorTexture: string; blendAlphaGated: boolean } | null = null;
-
-/** Test-only: clear the module-level caches (seeded emitter props + the last
- *  settled grid width) so neither can leak across independent test cases — a
- *  width-mocking test would otherwise seed gridW (→ a different column count)
- *  into a later keyboard-nav test. */
-export function __resetAtlasPropsCache(): void {
-  lastEmitterProps = null;
-  lastAtlasGridW = null;
-}
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
@@ -131,9 +107,9 @@ export function AtlasPickerPanel({
   // an emitter (no matching cache) falls back to the defaults and the grid
   // renders once the fetch resolves.
   const [textureSize, setTextureSize]   = useState(() =>
-    lastEmitterProps && lastEmitterProps.id === emitterId ? lastEmitterProps.textureSize : 1);
+    atlasPanelCache.emitterProps && atlasPanelCache.emitterProps.id === emitterId ? atlasPanelCache.emitterProps.textureSize : 1);
   const [colorTexture, setColorTexture] = useState(() =>
-    lastEmitterProps && lastEmitterProps.id === emitterId ? lastEmitterProps.colorTexture : "");
+    atlasPanelCache.emitterProps && atlasPanelCache.emitterProps.id === emitterId ? atlasPanelCache.emitterProps.colorTexture : "");
   // Both alpha modes are prefetched and held independently so a blend-mode change
   // is a synchronous swap — no per-change bridge round-trip and no loading flash
   // (that uncached host re-decode was the reported ~3s lag). The displayed
@@ -151,7 +127,7 @@ export function AtlasPickerPanel({
   // Drives BOTH the displayed preview (alpha vs flat) and dead-cell dimming. Seeded
   // from the module cache so a re-open renders correctly on the first frame.
   const [blendAlphaGated, setBlendAlphaGated] = useState<boolean>(() =>
-    lastEmitterProps && lastEmitterProps.id === emitterId ? lastEmitterProps.blendAlphaGated : false);
+    atlasPanelCache.emitterProps && atlasPanelCache.emitterProps.id === emitterId ? atlasPanelCache.emitterProps.blendAlphaGated : false);
   const hoverRef                        = useRef<number | null>(null);
   const hoverPreviewRedrawRef             = useRef<(() => void) | null>(null);
   const hoverPreviewRafRef                = useRef<number | null>(null);
@@ -164,7 +140,7 @@ export function AtlasPickerPanel({
   // first frame; COLD_START_GRIDW (the deterministic dock-min content width) is
   // the first-ever-open default so even that first open picks the settle's column
   // count — no 5→4 snap (see COLD_START_GRIDW above).
-  const [gridW, setGridW] = useState<number>(() => lastAtlasGridW ?? COLD_START_GRIDW);
+  const [gridW, setGridW] = useState<number>(() => atlasPanelCache.gridW ?? COLD_START_GRIDW);
   // [#572] The grid is ONE <canvas> painted as a static tall image, so scrolling
   // needs NO re-render/redraw — we only keep a handle to the scroll container so
   // keyboard nav can scroll the roving cell into view (adjust scrollTop).
@@ -221,7 +197,7 @@ export function AtlasPickerPanel({
       // mid-slide width (that collapse-then-snap is the bug this guards).
       if (useDockAnim.getState().animating) return;
       const w = Math.max(0, el.clientWidth - SCROLL_PAD);
-      if (w > 0) { setGridW(w); lastAtlasGridW = w; } // cache the settled width for the next open
+      if (w > 0) { setGridW(w); atlasPanelCache.gridW = w; } // cache the settled width for the next open
     };
     lastMeasureRef.current = measure;
     measure(); // initial fit at attach (suppressed if mounting mid-slide → keeps the cached init)
@@ -292,7 +268,7 @@ export function AtlasPickerPanel({
           setBlendAlphaGated(r.properties.blendAlphaGated);
           // Cache for the next RE-OPEN's synchronous first-render seed (above).
           if (emitterId !== null)
-            lastEmitterProps = { id: emitterId, textureSize: r.properties.textureSize, colorTexture: r.properties.colorTexture, blendAlphaGated: r.properties.blendAlphaGated };
+            atlasPanelCache.emitterProps = { id: emitterId, textureSize: r.properties.textureSize, colorTexture: r.properties.colorTexture, blendAlphaGated: r.properties.blendAlphaGated };
           if (again) { again = false; fetchProps(); } // trailing fetch for events that arrived mid-flight
         })
         .catch((err) => {

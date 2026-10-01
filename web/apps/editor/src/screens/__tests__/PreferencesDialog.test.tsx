@@ -1,37 +1,34 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { Bridge, Request } from "@particle-editor/bridge-schema";
+import { makeBridgeStub } from "@/test/bridge-stub";
 import { PreferencesDialog } from "../PreferencesDialog";
 import { readConfirmDelete } from "@/lib/delete-emitters";
 
-function makeBridgeStub(msaaLevels: number[] = [0, 2, 4]) {
-  const request = vi.fn().mockImplementation((req: Request) => {
-    if (req.kind === "engine/query/msaa-levels") {
-      return Promise.resolve({ levels: msaaLevels, current: 4 });
-    }
-    return Promise.resolve({});
+function makePrefsBridge(msaaLevels: number[] = [0, 2, 4]) {
+  const bridge = makeBridgeStub({
+    responses: { "engine/query/msaa-levels": { levels: msaaLevels, current: 4 } },
   });
-  return { bridge: { request, on: vi.fn().mockReturnValue(() => {}) } as unknown as Bridge, request };
+  return { bridge, request: bridge.request };
 }
 
 describe("PreferencesDialog", () => {
   beforeEach(() => localStorage.clear());
   it("renders a 3-way theme control", () => {
-    render(<PreferencesDialog bridge={makeBridgeStub().bridge} open onOpenChange={() => {}} />);
+    render(<PreferencesDialog bridge={makePrefsBridge().bridge} open onOpenChange={() => {}} />);
     expect(screen.getByRole("radio", { name: /dark/i })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /light/i })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /system/i })).toBeInTheDocument();
   });
   it("selecting Light applies + persists the mode", () => {
-    render(<PreferencesDialog bridge={makeBridgeStub().bridge} open onOpenChange={() => {}} />);
+    render(<PreferencesDialog bridge={makePrefsBridge().bridge} open onOpenChange={() => {}} />);
     fireEvent.click(screen.getByRole("radio", { name: /light/i }));
     expect(document.documentElement.dataset.theme).toBe("light");
     expect(localStorage.getItem("alo:theme")).toBe("light");
   });
   it("toggles and persists confirm-before-delete", async () => {
     localStorage.removeItem("alo:confirm-delete");
-    render(<PreferencesDialog bridge={makeBridgeStub().bridge} open onOpenChange={() => {}} />);
+    render(<PreferencesDialog bridge={makePrefsBridge().bridge} open onOpenChange={() => {}} />);
     const box = screen.getByLabelText("Confirm before deleting emitters") as HTMLInputElement;
     expect(box.checked).toBe(true);            // default on
     await userEvent.click(box);
@@ -40,7 +37,7 @@ describe("PreferencesDialog", () => {
   });
 
   it("renders the preview guard controls (checkbox on, number enabled, no warning)", () => {
-    const { bridge } = makeBridgeStub();
+    const { bridge } = makePrefsBridge();
     render(<PreferencesDialog bridge={bridge} open onOpenChange={() => {}} />);
     const box = screen.getByRole("checkbox", { name: /limit preview particle count/i });
     expect(box).toBeChecked();
@@ -51,7 +48,7 @@ describe("PreferencesDialog", () => {
   });
 
   it("unchecking sends enabled:false, persists, greys the number, shows the warning", () => {
-    const { bridge, request } = makeBridgeStub();
+    const { bridge, request } = makePrefsBridge();
     render(<PreferencesDialog bridge={bridge} open onOpenChange={() => {}} />);
     fireEvent.click(screen.getByRole("checkbox", { name: /limit preview particle count/i }));
     expect(request).toHaveBeenCalledWith({
@@ -67,7 +64,7 @@ describe("PreferencesDialog", () => {
   });
 
   it("committing a new cap on blur clamps, persists, and sends", () => {
-    const { bridge, request } = makeBridgeStub();
+    const { bridge, request } = makePrefsBridge();
     render(<PreferencesDialog bridge={bridge} open onOpenChange={() => {}} />);
     const num = screen.getByRole("spinbutton", { name: /max preview particles/i });
     fireEvent.change(num, { target: { value: "50" } });
@@ -80,7 +77,7 @@ describe("PreferencesDialog", () => {
   });
 
   it("Enter commits the cap too", () => {
-    const { bridge, request } = makeBridgeStub();
+    const { bridge, request } = makePrefsBridge();
     render(<PreferencesDialog bridge={bridge} open onOpenChange={() => {}} />);
     const num = screen.getByRole("spinbutton", { name: /max preview particles/i });
     fireEvent.change(num, { target: { value: "60000" } });
@@ -93,7 +90,7 @@ describe("PreferencesDialog", () => {
 
   it("renders the Antialiasing select disabled while query is in-flight", () => {
     // The stub resolves on the next microtask — before that the select should be disabled.
-    const { bridge } = makeBridgeStub();
+    const { bridge } = makePrefsBridge();
     render(<PreferencesDialog bridge={bridge} open onOpenChange={() => {}} />);
     const sel = screen.getByRole("combobox", { name: /antialiasing/i });
     // Initially disabled (query not yet resolved)
@@ -102,7 +99,7 @@ describe("PreferencesDialog", () => {
 
   it("populates Antialiasing options from the query result and defaults to saved level", async () => {
     localStorage.setItem("alo:msaa-quality", "2");
-    const { bridge } = makeBridgeStub([0, 2, 4]);
+    const { bridge } = makePrefsBridge([0, 2, 4]);
     render(<PreferencesDialog bridge={bridge} open onOpenChange={() => {}} />);
     const sel = await screen.findByRole("combobox", { name: /antialiasing/i });
     await waitFor(() => expect(sel).toBeEnabled());
@@ -113,7 +110,7 @@ describe("PreferencesDialog", () => {
 
   it("selecting a different MSAA level persists and sends the bridge call", async () => {
     localStorage.setItem("alo:msaa-quality", "0");
-    const { bridge, request } = makeBridgeStub([0, 2, 4]);
+    const { bridge, request } = makePrefsBridge([0, 2, 4]);
     render(<PreferencesDialog bridge={bridge} open onOpenChange={() => {}} />);
     const sel = await screen.findByRole("combobox", { name: /antialiasing/i });
     await waitFor(() => expect(sel).toBeEnabled());
@@ -128,7 +125,7 @@ describe("PreferencesDialog", () => {
   it("displays the engine's current level when saved level isn't offered, without writing localStorage or sending the bridge", async () => {
     // Saved 8× but the GPU only reports [0, 2, 4]; engine's current is 4.
     localStorage.setItem("alo:msaa-quality", "8");
-    const { bridge, request } = makeBridgeStub([0, 2, 4]); // stub returns current: 4
+    const { bridge, request } = makePrefsBridge([0, 2, 4]); // stub returns current: 4
     render(<PreferencesDialog bridge={bridge} open onOpenChange={() => {}} />);
     const sel = await screen.findByRole("combobox", { name: /antialiasing/i });
     await waitFor(() => expect(sel).toBeEnabled());
@@ -145,13 +142,10 @@ describe("PreferencesDialog", () => {
   it("query failure leaves the control showing the saved level without persisting or sending", async () => {
     localStorage.setItem("alo:msaa-quality", "4");
     // Bridge rejects the query entirely.
-    const request = vi.fn().mockImplementation((req: Request) => {
-      if (req.kind === "engine/query/msaa-levels") {
-        return Promise.reject(new Error("bridge down"));
-      }
-      return Promise.resolve({});
+    const bridge = makeBridgeStub({
+      responses: { "engine/query/msaa-levels": () => Promise.reject(new Error("bridge down")) },
     });
-    const bridge = { request, on: vi.fn().mockReturnValue(() => {}) } as unknown as Bridge;
+    const request = bridge.request;
     render(<PreferencesDialog bridge={bridge} open onOpenChange={() => {}} />);
     // The query will resolve (to the unknown fallback) on the next microtask.
     // Let it settle, then verify the control stayed as-is.
@@ -168,7 +162,7 @@ describe("PreferencesDialog", () => {
   });
 
   it("Model shadows defaults on; unchecking sends enabled:false and persists", () => {
-    const { bridge, request } = makeBridgeStub();
+    const { bridge, request } = makePrefsBridge();
     render(<PreferencesDialog bridge={bridge} open onOpenChange={() => {}} />);
     const box = screen.getByRole("checkbox", { name: /model shadows/i }) as HTMLInputElement;
     expect(box.checked).toBe(true); // default on
@@ -182,7 +176,7 @@ describe("PreferencesDialog", () => {
   });
 
   it("Soft shadows defaults on; unchecking sends enabled:false and persists", () => {
-    const { bridge, request } = makeBridgeStub();
+    const { bridge, request } = makePrefsBridge();
     render(<PreferencesDialog bridge={bridge} open onOpenChange={() => {}} />);
     const box = screen.getByRole("checkbox", { name: /soft shadows/i }) as HTMLInputElement;
     expect(box.checked).toBe(true); // default on
@@ -199,7 +193,7 @@ describe("PreferencesDialog", () => {
   // field (the uncommitted draft), not the last-committed guard value — else a
   // typed-but-unblurred edit is silently discarded (the s63 stepper regression).
   it("stepper ▲/▼ step from the visible draft, not the committed value", () => {
-    const { bridge, request } = makeBridgeStub(); // default cap 10000
+    const { bridge, request } = makePrefsBridge(); // default cap 10000
     render(<PreferencesDialog bridge={bridge} open onOpenChange={() => {}} />);
     const num = screen.getByRole("spinbutton", { name: /max preview particles/i }) as HTMLInputElement;
     // Type a new value but do NOT commit (no blur / Enter).
@@ -217,7 +211,7 @@ describe("PreferencesDialog", () => {
   });
 
   it("Soft shadows depends on Model shadows: disabled when off, stored pref not clobbered", () => {
-    const { bridge } = makeBridgeStub(); // both default on
+    const { bridge } = makePrefsBridge(); // both default on
     render(<PreferencesDialog bridge={bridge} open onOpenChange={() => {}} />);
     const soft = screen.getByRole("checkbox", { name: /soft shadows/i }) as HTMLInputElement;
     expect(soft).toBeEnabled();

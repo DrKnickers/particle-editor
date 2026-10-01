@@ -5,24 +5,23 @@
 // own coverage (formerly BackgroundPicker.test.tsx); this spec just
 // verifies the trigger + popover wiring.
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { BackgroundDropdown } from "../BackgroundDropdown";
-import type { Bridge } from "@particle-editor/bridge-schema";
+import { makeBridgeStub } from "@/test/bridge-stub";
 
 function makeBridge() {
-  const snap = {
-    paused: false,
-    skydomeSlot: 0,
-    background: 0x00ff0000, // COLORREF for blue (0x00BBGGRR)
-    skydomeCustomPaths: ["", "", ""],
-  };
-  const request = vi.fn().mockImplementation((req: { kind: string }) => {
-    if (req.kind === "engine/state/snapshot") return Promise.resolve(snap);
-    return Promise.resolve({ ok: true });
+  return makeBridgeStub({
+    responses: {
+      "engine/state/snapshot": {
+        paused: false,
+        skydomeSlot: 0,
+        background: 0x00ff0000, // COLORREF for blue (0x00BBGGRR)
+        skydomeCustomPaths: ["", "", ""],
+      },
+    },
+    fallback: { ok: true },
   });
-  const on = vi.fn().mockReturnValue(() => {});
-  return { request, on } as unknown as Bridge & { request: ReturnType<typeof vi.fn> };
 }
 
 describe("BackgroundDropdown", () => {

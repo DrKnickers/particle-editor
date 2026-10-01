@@ -1,15 +1,18 @@
 // Tests for Paste As ▸ Child: the pure mock-state tree
 // helper and the MockBridge `emitters/paste-as-child` round-trip.
 
-import { describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect } from "vitest";
 import { ZERO_SPAWN } from "@particle-editor/bridge-schema";
 import type { EmitterTreeDto, EmitterTreeNode } from "@particle-editor/bridge-schema";
 import {
   pasteAsChildFromClipboard,
   useMockEmitterTree,
-  useMockEmitterClipboard,
 } from "../mock-state";
 import { MockBridge } from "../mock";
+import { resetMockState } from "@/test/mock-state";
+
+// The MockBridge round-trips share the module-level mock stores.
+beforeEach(resetMockState);
 
 function node(
   id: number,
@@ -97,8 +100,6 @@ describe("pasteAsChildFromClipboard", () => {
 
 describe("MockBridge emitters/paste-as-child", () => {
   it("pastes the clipboard into a free lifetime slot and returns a real newId", async () => {
-    useMockEmitterTree.getState().reset();
-    useMockEmitterClipboard.getState().reset();
     const bridge = new MockBridge();
     const roots = useMockEmitterTree.getState().tree.root.children;
     const copyId = roots[0].id; // "Smoke"
@@ -117,8 +118,6 @@ describe("MockBridge emitters/paste-as-child", () => {
   });
 
   it("returns newId -1 when the clipboard is empty", async () => {
-    useMockEmitterTree.getState().reset();
-    useMockEmitterClipboard.getState().reset();
     const bridge = new MockBridge();
     const id = useMockEmitterTree.getState().tree.root.children[0].id;
     const res = await bridge.request({

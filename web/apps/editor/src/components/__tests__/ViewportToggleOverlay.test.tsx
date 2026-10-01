@@ -2,7 +2,7 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { describe, it, expect, beforeEach } from "vitest";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { MockBridge } from "@/bridge/mock";
-import { useMockEngineState } from "@/bridge/mock-state";
+import { resetMockState } from "@/test/mock-state";
 import { ViewportToggleOverlay } from "@/components/ViewportToggleOverlay";
 
 function setup() {
@@ -19,7 +19,7 @@ function setup() {
 
 // The mock engine state is a module-level singleton — reset it so each test
 // starts from defaults (incl. ground: true) and never leaks into the next.
-beforeEach(() => useMockEngineState.getState().reset());
+beforeEach(resetMockState);
 
 describe("ViewportToggleOverlay", () => {
   it("renders the four toggles", async () => {

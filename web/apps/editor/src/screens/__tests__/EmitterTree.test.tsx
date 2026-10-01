@@ -12,6 +12,7 @@ import type { Bridge, EmitterTreeDto, EmitterTreeNode } from "@particle-editor/b
 import { EmitterTree } from "../EmitterTree";
 import { MockBridge } from "@/bridge/mock";
 import { useMockEmitterProperties } from "@/bridge/mock-state";
+import { resetMockState } from "@/test/mock-state";
 import { useEmitterSelectionStore } from "@/lib/emitter-selection";
 import { useEmitterTreeStore } from "@/lib/emitter-tree";
 import { useDeleteConfirmStore, requestDeleteEmitters } from "@/lib/delete-emitters";
@@ -1027,7 +1028,7 @@ describe("chain-load warning glyph", () => {
   beforeEach(() => {
     // The overlay is module-scoped; reset so a patched spawn value can't
     // leak between tests.
-    useMockEmitterProperties.getState().reset();
+    resetMockState();
   });
 
   it("renders no glyph at fixture-default spawn values", async () => {
@@ -1097,7 +1098,7 @@ describe("chain-load warning glyph", () => {
 // the guard is on at cap 100).
 describe("chain-warning glyph tracks the configurable guard cap", () => {
   beforeEach(() => {
-    useMockEmitterProperties.getState().reset();
+    resetMockState();
     localStorage.clear();
   });
 

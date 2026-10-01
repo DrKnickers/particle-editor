@@ -5,7 +5,7 @@
 import { describe, it, expect } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { RescaleDialog } from "../RescaleDialog";
-import { makeBridgeStub } from "./bridge-stub";
+import { makeBridgeStub } from "@/test/bridge-stub";
 
 describe("RescaleDialog", () => {
   it("clicking OK fires engine/action/rescale-system with current spinner values", () => {

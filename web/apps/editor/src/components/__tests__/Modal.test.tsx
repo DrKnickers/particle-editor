@@ -5,17 +5,13 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { useState } from "react";
-import type { Bridge } from "@particle-editor/bridge-schema";
+import { makeBridgeStub } from "@/test/bridge-stub";
 import { BridgeContext } from "@/lib/bridge-context";
 import { Modal } from "../Modal";
 import { useModalOpen } from "@/lib/modal-open";
 
 function makeStubBridge() {
-  const request = vi.fn().mockResolvedValue({});
-  const on = vi.fn().mockReturnValue(() => {});
-  return { request, on } as unknown as Bridge & {
-    request: ReturnType<typeof vi.fn>;
-  };
+  return makeBridgeStub();
 }
 
 function SecondaryActionFixture({ onClick }: { onClick: () => void }) {

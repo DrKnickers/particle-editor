@@ -13,7 +13,7 @@
 //   4. If it changes the document, make MockBridge's `isMutating` return true
 //      (every `engine/set/*` already does by prefix) and, if it can be
 //      refused or be a no-op, teach `didMutate` so the refusal stays clean.
-//   5. Cover it in `apps/editor/src/bridge/__tests__/bridge-contract.test.ts`.
+//   5. Cover it in the matching `apps/editor/src/bridge/__tests__/bridge-contract.<namespace>.test.ts`.
 //   6. Implement the native handler in `src/host/BridgeDispatch_*.cpp`.
 //
 // Naming convention for NEW kinds (existing kinds keep their names — renaming

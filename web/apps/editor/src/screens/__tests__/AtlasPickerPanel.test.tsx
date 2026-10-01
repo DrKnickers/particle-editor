@@ -12,9 +12,11 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent, createEvent, act, cleanup } from "@testing-library/react";
-import { AtlasPickerPanel, __resetAtlasPropsCache } from "../AtlasPickerPanel";
+import { AtlasPickerPanel } from "../AtlasPickerPanel";
 import { publishAtlasContext, __resetAtlasContext } from "@/lib/atlas-context";
 import { MockBridge } from "@/bridge/mock";
+import { resetMockState } from "@/test/mock-state";
+import { __resetAtlasPanelCacheForTests } from "@/lib/atlas-panel-cache";
 import type { Request } from "@particle-editor/bridge-schema";
 import { useMockEmitterProperties } from "@/bridge/mock-state";
 import { __resetPreviewCache, bumpTextureEpoch } from "@/lib/atlas-preview-cache";
@@ -23,12 +25,12 @@ import { useDockAnim } from "@/lib/dock-anim";
 
 beforeEach(() => {
   __resetAtlasContext();
-  useMockEmitterProperties.getState().reset();
+  resetMockState();
   __resetPreviewCache();
   __resetModStackForTests();
   // The seeded-props cache is module-level; clear it so a textureSize/colorTexture
   // cached by one case can't leak into the next case's synchronous first render.
-  __resetAtlasPropsCache();
+  __resetAtlasPanelCacheForTests();
   useDockAnim.setState({ atlasTerminalFirstPaint: false, atlasGridMounted: false });
 });
 

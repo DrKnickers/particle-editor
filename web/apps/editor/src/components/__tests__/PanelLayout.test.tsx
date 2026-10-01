@@ -24,6 +24,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import type { Bridge } from "@particle-editor/bridge-schema";
+import { makeBridgeStub } from "@/test/bridge-stub";
 import { BridgeContext } from "@/lib/bridge-context";
 import { PanelLayout } from "../PanelLayout";
 import {
@@ -38,10 +39,7 @@ import {
 import { __resetRightDockForTests, setDock } from "@/lib/right-dock";
 
 function makeStubBridge(): Bridge {
-  return {
-    request: () => Promise.resolve({}),
-    on: () => () => {},
-  } as unknown as Bridge;
+  return makeBridgeStub();
 }
 
 // PanelLayout mounts EmitterTree, whose Tips (Radix Tooltip.Root)

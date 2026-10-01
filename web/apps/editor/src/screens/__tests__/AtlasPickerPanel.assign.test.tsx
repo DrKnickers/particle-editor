@@ -12,15 +12,18 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { AtlasPickerPanel } from "../AtlasPickerPanel";
 import { publishAtlasContext, __resetAtlasContext } from "@/lib/atlas-context";
 import { MockBridge } from "@/bridge/mock";
+import { resetMockState } from "@/test/mock-state";
+import { __resetAtlasPanelCacheForTests } from "@/lib/atlas-panel-cache";
 import { useMockEmitterProperties } from "@/bridge/mock-state";
 import { __resetPreviewCache } from "@/lib/atlas-preview-cache";
 import { __resetModStackForTests } from "@/lib/mod-stack";
 
 beforeEach(() => {
   __resetAtlasContext();
-  useMockEmitterProperties.getState().reset();
+  resetMockState();
   __resetPreviewCache();
   __resetModStackForTests();
+  __resetAtlasPanelCacheForTests();
 });
 
 function mk() {

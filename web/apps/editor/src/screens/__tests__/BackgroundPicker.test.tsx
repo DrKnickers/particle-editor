@@ -14,14 +14,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { BackgroundPickerBody } from "../BackgroundPicker";
 import { MockBridge } from "@/bridge/mock";
-import { useMockEngineState, makeDefaultEngineState } from "@/bridge/mock-state";
+import { resetMockState } from "@/test/mock-state";
 import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
 
 // The MockBridge mutates a global zustand store; reset it so each MockBridge-
 // driven test starts from a clean snapshot (the stub-bridge tests below don't
 // touch the store).
 beforeEach(() => {
-  useMockEngineState.setState(makeDefaultEngineState());
+  resetMockState();
 });
 
 // Display-logic stub: inject just the skydome fields the picker reads so we can

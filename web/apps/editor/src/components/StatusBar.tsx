@@ -40,7 +40,9 @@ function cell(label: string, value: string, dim: boolean, warn = false) {
 
 // Test-only render counter for StatsCells — lets a jsdom test prove that a
 // cursor/position-3d event does NOT re-render the stats cells (memo working),
-// while a stats/tick event does. Inert in production (a plain integer).
+// while a stats/tick event does. Counted in a commit-phase effect, not in the
+// render body: render stays pure, and StrictMode's double-invoked renders (or a
+// discarded concurrent render) don't inflate it. Inert in production.
 let statsCellsRenders = 0;
 export function __statsCellsRenderCount(): number {
   return statsCellsRenders;
@@ -50,7 +52,11 @@ export function __statsCellsRenderCount(): number {
 // the `stats` prop. Returns a fragment so the flex layout is identical to the
 // inline version — StatsCells adds no DOM node of its own.
 const StatsCells = memo(function StatsCells({ stats }: { stats: Stats | null }) {
-  statsCellsRenders++;
+  // No deps: runs once per committed render of this component (memo bail-outs
+  // commit nothing, so they don't count).
+  useEffect(() => {
+    statsCellsRenders++;
+  });
   const placeholder = stats === null;
   return (
     <>

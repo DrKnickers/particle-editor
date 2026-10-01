@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import { TitleBar } from "../TitleBar";
+import { makeBridgeStub } from "@/test/bridge-stub";
 import { markHeadless, __resetRecordModeForTests } from "@/lib/record-mode";
 
 afterEach(() => {
@@ -9,16 +10,8 @@ afterEach(() => {
 });
 
 function makeMockBridge() {
-  const handlers: Record<string, (p: unknown) => void> = {};
-  const request = vi.fn().mockResolvedValue({ ok: true, data: {} });
-  const on = vi.fn((kind: string, cb: (p: unknown) => void) => {
-    handlers[kind] = cb;
-    return () => delete handlers[kind];
-  });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const bridge = { request, on } as any;
-  // Real bridge.on passes the whole event {kind, payload}; mirror that.
-  return { bridge, request, emit: (kind: string, payload: unknown) => act(() => handlers[kind]?.({ kind, payload })) };
+  const bridge = makeBridgeStub({ fallback: { ok: true, data: {} } });
+  return { bridge, request: bridge.request, emit: bridge.emit };
 }
 
 describe("TitleBar", () => {

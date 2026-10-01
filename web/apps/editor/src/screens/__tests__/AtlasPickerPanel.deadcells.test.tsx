@@ -17,10 +17,12 @@ vi.mock("@/lib/atlas-dead-cells", async (orig) => {
   return { ...actual, computeDeadCells: vi.fn(async () => new Set<number>()) };
 });
 
-import { AtlasPickerPanel, __resetAtlasPropsCache } from "../AtlasPickerPanel";
+import { AtlasPickerPanel } from "../AtlasPickerPanel";
 import { computeDeadCells } from "@/lib/atlas-dead-cells";
 import { publishAtlasContext, __resetAtlasContext } from "@/lib/atlas-context";
 import { MockBridge } from "@/bridge/mock";
+import { resetMockState } from "@/test/mock-state";
+import { __resetAtlasPanelCacheForTests } from "@/lib/atlas-panel-cache";
 import { useMockEmitterProperties } from "@/bridge/mock-state";
 import { __resetPreviewCache } from "@/lib/atlas-preview-cache";
 import { __resetModStackForTests } from "@/lib/mod-stack";
@@ -28,10 +30,10 @@ import { useDockAnim } from "@/lib/dock-anim";
 
 beforeEach(() => {
   __resetAtlasContext();
-  useMockEmitterProperties.getState().reset();
+  resetMockState();
   __resetPreviewCache();
   __resetModStackForTests();
-  __resetAtlasPropsCache();
+  __resetAtlasPanelCacheForTests();
   useDockAnim.setState({ atlasTerminalFirstPaint: false, atlasGridMounted: false });
   vi.mocked(computeDeadCells).mockResolvedValue(new Set<number>());
 });

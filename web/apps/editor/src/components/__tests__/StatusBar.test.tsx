@@ -7,26 +7,16 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, act, waitFor } from "@testing-library/react";
 import { StatusBar, __statsCellsRenderCount } from "../StatusBar";
-import type { Bridge } from "@particle-editor/bridge-schema";
+import { makeBridgeStub } from "@/test/bridge-stub";
 
 // A bridge mock that records `on` handlers by event name so the test can
 // drive them, and resolves the engine-state snapshot request.
 function makeBridge(snapshot: { paused: boolean } = { paused: false }) {
-  const handlers = new Map<string, (e: { payload: unknown }) => void>();
-  const request = vi.fn().mockImplementation((req: { kind: string }) => {
-    if (req.kind === "engine/state/snapshot") return Promise.resolve(snapshot);
-    return Promise.resolve({ ok: true });
+  const bridge = makeBridgeStub({
+    responses: { "engine/state/snapshot": snapshot },
+    fallback: { ok: true },
   });
-  const on = vi.fn().mockImplementation(
-    (event: string, cb: (e: { payload: unknown }) => void) => {
-      handlers.set(event, cb);
-      return () => handlers.delete(event);
-    },
-  );
-  const emit = (event: string, payload: unknown) => {
-    act(() => handlers.get(event)?.({ payload }));
-  };
-  return { bridge: { request, on } as unknown as Bridge, emit };
+  return { bridge, emit: bridge.emit };
 }
 
 describe("StatusBar", () => {

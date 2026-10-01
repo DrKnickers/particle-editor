@@ -2,27 +2,32 @@
 // The banner subscribes to the 4 Hz stats/tick bridge event and shows a
 // fixed warning over the viewport while `overload` is latched.
 
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { render, screen, act } from "@testing-library/react";
 import { OverloadBanner } from "../OverloadBanner";
-import type { Bridge } from "@particle-editor/bridge-schema";
+import { makeBridgeStub } from "@/test/bridge-stub";
 
-// Stub bridge mirroring StatusBar.test.tsx's makeBridge: records `on`
-// handlers by event name so the test can drive them; `request` records
-// calls (the occlusion assertions read them) and resolves ok.
+// Shared typed stub: records `on` handlers per event so the test can drive
+// them; `request` records calls and resolves ok.
 function makeBridge() {
-  const handlers = new Map<string, (e: { payload: unknown }) => void>();
-  const request = vi.fn().mockResolvedValue({ ok: true });
-  const on = vi.fn().mockImplementation(
-    (event: string, cb: (e: { payload: unknown }) => void) => {
-      handlers.set(event, cb);
-      return () => handlers.delete(event);
-    },
-  );
-  const emit = (event: string, payload: unknown) => {
-    act(() => handlers.get(event)?.({ payload }));
-  };
-  return { bridge: { request, on } as unknown as Bridge, emit, request, handlers };
+  const bridge = makeBridgeStub({ fallback: { ok: true } });
+  return { bridge, emit: bridge.emit, request: bridge.request };
+}
+
+// The refusal window (REFUSAL_MS 5000) and the usePresence exit fallback
+// (EXIT_MS 150 + 50ms slack) are plain timers — drive them with fake time
+// instead of sleeping ~25 s of wall clock.
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+async function advance(ms: number): Promise<void> {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
 }
 
 const tick = (overload: boolean) => ({
@@ -64,9 +69,7 @@ describe("OverloadBanner", () => {
     // timeout fallback (EXIT_MS 150 + 50ms slack).
     const banner = screen.getByTestId("preview-overload-banner");
     expect(banner).toHaveAttribute("data-state", "closed");
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 250));
-    });
+    await advance(250);
     expect(screen.queryByTestId("preview-overload-banner")).not.toBeInTheDocument();
   });
 
@@ -84,11 +87,11 @@ describe("OverloadBanner", () => {
   });
 
   it("unsubscribes from stats/tick on unmount", () => {
-    const { bridge, handlers } = makeBridge();
+    const { bridge } = makeBridge();
     const { unmount } = render(<OverloadBanner bridge={bridge} />);
-    expect(handlers.has("stats/tick")).toBe(true);
+    expect(bridge.listenerCount("stats/tick") > 0).toBe(true);
     unmount();
-    expect(handlers.has("stats/tick")).toBe(false);
+    expect(bridge.listenerCount("stats/tick") > 0).toBe(false);
   });
 
   // ── Refusal banner ──────────────────────────────────────────────
@@ -111,16 +114,12 @@ describe("OverloadBanner", () => {
     expect(screen.getByTestId("preview-overload-banner")).toBeInTheDocument();
     // First act: wait past REFUSAL_MS (5000ms) so setRefusal(null) fires and
     // the banner transitions to data-state="closed".
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 5050));
-    });
+    await advance(5050);
     // Banner is now in data-state="closed" (usePresence exit window started).
     // Second act: wait for the usePresence timeout fallback (EXIT_MS+50 = 200ms).
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 250));
-    });
+    await advance(250);
     expect(screen.queryByTestId("preview-overload-banner")).not.toBeInTheDocument();
-  }, 10_000);
+  });
 
   it("latch banner unchanged: stats/tick overload=true shows latch copy, overload=false hides it", async () => {
     const { bridge, emit } = makeBridge();
@@ -132,9 +131,7 @@ describe("OverloadBanner", () => {
     // Clear latch
     emit("stats/tick", tick(false));
     expect(screen.getByTestId("preview-overload-banner")).toHaveAttribute("data-state", "closed");
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 250));
-    });
+    await advance(250);
     expect(screen.queryByTestId("preview-overload-banner")).not.toBeInTheDocument();
   });
 
@@ -155,56 +152,44 @@ describe("OverloadBanner", () => {
     emit("stats/tick", tick(true));
     // After 5s window with latch still active → banner returns to latch copy.
     // Wait past REFUSAL_MS so setRefusal(null) fires.
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 5050));
-    });
+    await advance(5050);
     // Latch is still active (overload=true was never cleared) → latch copy visible.
     // visible = false || true = true, so usePresence stays mounted (no exit).
     const bannerAfter = screen.queryByTestId("preview-overload-banner");
     expect(bannerAfter).toBeInTheDocument();
     expect(bannerAfter!.textContent).toContain("Preview spawning limited");
-  }, 10_000);
+  });
 
   it("keeps the refusal copy through the exit fade — no stale latch flash", async () => {
     const { bridge, emit } = makeBridge();
     render(<OverloadBanner bridge={bridge} />);
     emit("engine/overload/refused", { estimated: 2000, cap: 1000, attemptedCount: 1 });
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 5050));
-    });
+    await advance(5050);
     const banner = screen.getByTestId("preview-overload-banner");
     expect(banner).toHaveAttribute("data-state", "closed");
     expect(banner.textContent).toContain("Spawn blocked");
     expect(banner.textContent).not.toContain("Preview spawning limited");
-  }, 10_000);
+  });
 
   it("a refusal clears a stale web-side latch (engine cleared the preview)", async () => {
     const { bridge, emit } = makeBridge();
     render(<OverloadBanner bridge={bridge} />);
     emit("stats/tick", tick(true));
     emit("engine/overload/refused", { estimated: 2000, cap: 1000, attemptedCount: 1 });
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 5050));
-    });
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 250));
-    });
+    await advance(5050);
+    await advance(250);
     expect(screen.queryByTestId("preview-overload-banner")).not.toBeInTheDocument();
-  }, 10_000);
+  });
 
   it("re-firing a refusal restarts the 5s dismiss window", async () => {
     const { bridge, emit } = makeBridge();
     render(<OverloadBanner bridge={bridge} />);
     emit("engine/overload/refused", { estimated: 24000, cap: 10000, attemptedCount: 1 });
     // After ~3s, fire a second refusal (restarts the window)
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 3000));
-    });
+    await advance(3000);
     emit("engine/overload/refused", { estimated: 24000, cap: 10000, attemptedCount: 1 });
     // At ~4s from first refusal (1s after second), still visible
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 1000));
-    });
+    await advance(1000);
     expect(screen.queryByTestId("preview-overload-banner")).toBeInTheDocument();
-  }, 15_000);
+  });
 });

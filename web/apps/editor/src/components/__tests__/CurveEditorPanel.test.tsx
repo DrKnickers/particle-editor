@@ -21,7 +21,6 @@ import type {
   TrackDto,
 } from "@particle-editor/bridge-schema";
 import { TRACK_NAMES } from "@particle-editor/bridge-schema";
-import { computeGroupMoves } from "@/lib/curve-model";
 import { CurveEditorPanel, CHANNELS } from "../CurveEditorPanel";
 
 // the toolbar buttons mount Tips (Radix Tooltip.Root), which
@@ -2708,38 +2707,6 @@ describe("CurveEditorPanel — snap-to-grid toggle (#618)", () => {
     const params = (call![0] as { params: { newTime: number; newValue: number } }).params;
     expect(params.newTime).toBeCloseTo(52, 4);   // snapped, not raw 51.17
     expect(params.newValue).toBeCloseTo(0.52, 4); // snapped, not raw 0.5233
-  });
-});
-
-// ─── computeGroupMoves — group-drag clamp (#619 collision, #620 value bounds) ──
-describe("computeGroupMoves (#619/#620)", () => {
-  const keys = [
-    { time: 0, value: 0 },
-    { time: 25, value: 5 },
-    { time: 50, value: 0 },
-    { time: 100, value: 0 },
-  ];
-  const borders = new Set([0, 100]);
-
-  it("bounds a rightward group shift so no selected key crosses an unselected key (#619)", () => {
-    // Select {25}; +30 would reach 55, past the unselected key at 50. The rigid
-    // clamp stops it eps before 50 — no colliding newTime.
-    const moves = computeGroupMoves(keys, new Set([25]), borders, 30, 0, { min: 0, max: 1e6 });
-    expect(moves).toHaveLength(1);
-    expect(moves[0]!.newTime).toBeLessThan(50);
-    expect(moves[0]!.newTime).toBeCloseTo(49.99, 2); // 50 - eps
-    // The committed newTime must not equal any unselected key's time.
-    expect(keys.some((k) => !new Set([25]).has(k.time) && k.time === moves[0]!.newTime)).toBe(false);
-  });
-
-  it("clamps the value to the PASSED bounds so canvas (display) and spinner (engine) differ (#620)", () => {
-    // dValue +20 on value 5 → 25. With the display range (max 10) it clamps to 10
-    // (what a canvas drag commits, matching the preview); with wide spinner bounds
-    // it stays 25 (what a spinner group edit commits).
-    const display = computeGroupMoves(keys, new Set([25]), borders, 0, 20, { min: 0, max: 10 });
-    expect(display[0]!.newValue).toBe(10);
-    const spinner = computeGroupMoves(keys, new Set([25]), borders, 0, 20, { min: 0, max: 1e6 });
-    expect(spinner[0]!.newValue).toBe(25);
   });
 });
 
