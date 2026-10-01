@@ -33,14 +33,14 @@ import { applyMsaaLevel, readMsaaLevel } from "@/lib/msaa-quality";
 import { applyModelShadows, readModelShadows } from "@/lib/model-shadows";
 import { applySoftShadows, readSoftShadows } from "@/lib/soft-shadows";
 import { RecordCursor } from "@/components/RecordCursor";
-import { parseCursorMessage, postFrameAcked, isRecordHeadlessMessage, commitAndAck } from "@/lib/record-cursor-bridge";
+import { postFrameAcked, commitAndAck } from "@/lib/record-cursor-bridge";
 import { latchRecordModeFromMessage, markHeadless, useRecording } from "@/lib/record-mode";
 import { TitleBar } from "@/components/TitleBar";
 import { evalRecordCursor } from "@/lib/record-cursor-eval";
 import { applyRecordDrag, createRecordDragState, resetRecordDrag } from "@/lib/record-cursor-drag";
 import { applyRecordActivation, createRecordActivateState, resetRecordActivation } from "@/lib/record-cursor-activate";
-import { parseCursorTickMessage, parseCursorTrackMessage, type RecordCursorKey } from "@/lib/record-cursor-track";
-import { parseSetThemeMessage } from "@/lib/record-focus-bridge";
+import type { RecordCursorKey } from "@/lib/record-cursor-track";
+import { useHostMessage } from "@/lib/use-host-message";
 
 // ?demo=primitives → render the primitives gallery instead of the app shell.
 // Evaluated once at module load; a page navigation to ?demo=primitives
@@ -227,8 +227,8 @@ function AppShell() {
 
   // --record synthetic cursor: the host pushes ui/cursor over WebView2; mirror it
   // into a fixed overlay and ack each frame (double-rAF) so the host's PrintWindow
-  // grab captures a committed composite. Raw listener — NativeBridge ignores a
-  // ui/cursor message (type is neither res nor evt), so there's no conflict.
+  // grab captures a committed composite. Delivered by the ui/* message hub —
+  // NativeBridge ignores a ui/cursor message (type is neither res nor evt).
   // Entirely dormant outside --record.
   const [recordCursor, setRecordCursor] = useState({ x: 0, y: 0, visible: false, pressed: false });
   const recordCursorTrackRef = useRef<RecordCursorKey[] | null>(null);
@@ -247,118 +247,92 @@ function AppShell() {
   // Opt-in click/focus dispatch for `"activate": true` cursor keys (see
   // lib/record-cursor-activate.ts). Dormant outside --record like the drag.
   const recordActivateStateRef = useRef(createRecordActivateState());
-  useEffect(() => {
-    const wv = window.chrome?.webview as
-      | {
-          addEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
-          removeEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
-          postMessage?: (m: unknown) => void;
-        }
-      | undefined;
-    if (!wv?.addEventListener) return;
-    const onMsg = (e: { data: unknown }) => {
-      // Latch record mode on the first record-cursor message (track or legacy
-      // ui/cursor) — suppresses focus-pinned tooltips (Tip). One guarded wiring
-      // point; a no-op for tick/other messages. See lib/record-mode.ts.
-      latchRecordModeFromMessage(e.data);
+  // Latch headless-capture mode (host → web, once, before the frame loop).
+  useHostMessage("ui/record-headless", () => {
+    recordHeadlessRef.current = true;
+    markHeadless(); // reactive latch → TitleBar hides its window controls
+  });
 
-      // Latch headless-capture mode (host → web, once, before the frame loop).
-      if (isRecordHeadlessMessage(e.data)) {
-        recordHeadlessRef.current = true;
-        markHeadless(); // reactive latch → TitleBar hides its window controls
-        return;
-      }
+  // Isolated --record profiles have no saved alo:theme. Let a timeline pin
+  // its concrete palette instead of inheriting the capture machine's OS
+  // preference. The cursor track arrives before frame 0 and latches record
+  // mode, so applyMode skips its interactive cross-fade.
+  useHostMessage("ui/set-theme", (msg) => applyMode(msg.theme));
 
-      // Isolated --record profiles have no saved alo:theme. Let a timeline pin
-      // its concrete palette instead of inheriting the capture machine's OS
-      // preference. The cursor track arrives before frame 0 and latches record
-      // mode, so applyMode skips its interactive cross-fade.
-      const recordTheme = parseSetThemeMessage(e.data);
-      if (recordTheme) {
-        applyMode(recordTheme);
-        return;
-      }
+  useHostMessage("ui/cursor-track", (msg) => {
+    // Latch record mode on the first record-cursor message (track or legacy
+    // ui/cursor) — suppresses focus-pinned tooltips (Tip). See lib/record-mode.ts.
+    latchRecordModeFromMessage(msg);
+    // A track swap mid-drag would strand a live synthetic gesture — abort it
+    // (pointercancel, no commit) before the new track starts. See gap 1 /
+    // invariant 2 in record-cursor-drag.ts.
+    resetRecordDrag(recordDragStateRef.current);
+    resetRecordActivation(recordActivateStateRef.current);
+    recordCursorTrackRef.current = msg.keys;
+  });
 
-      const track = parseCursorTrackMessage(e.data);
-      if (track) {
-        // A track swap mid-drag would strand a live synthetic gesture — abort it
-        // (pointercancel, no commit) before the new track starts. See gap 1 /
-        // invariant 2 in record-cursor-drag.ts.
-        resetRecordDrag(recordDragStateRef.current);
-        resetRecordActivation(recordActivateStateRef.current);
-        recordCursorTrackRef.current = track;
-        return;
-      }
+  useHostMessage("ui/cursor-tick", (tick) => {
+    const keys = recordCursorTrackRef.current;
+    if (!keys) {
+      // Cursor-free clip: no cursor state to apply, but the per-frame tick
+      // is still the headless commit+ack heartbeat — the host fails the
+      // frame (exit 4) if the ack never lands. Nothing to flush; ack directly.
+      postFrameAcked(tick.frame);
+      return;
+    }
+    const cursor = evalRecordCursor(keys, tick.t);
+    const ackMsg = JSON.stringify({
+      type: "ui/frame-acked",
+      frame: tick.frame,
+      cursor: {
+        x: cursor.x,
+        y: cursor.y,
+        vis: cursor.vis,
+        press: cursor.press,
+        resolved: cursor.resolved,
+      },
+    });
+    // Apply the frame's cursor + a real drag from its press/move BEFORE the
+    // ack, so the gesture's chip+gap are in the DOM by the time the host
+    // grabs the frame. `ok` gates the down/move so an unresolved press never
+    // clicks (0,0); point ("literal") targets are always ok, so they drive it
+    // too (gaps 2 & 3).
+    // Apply cursor + drag (headless flushSyncs BOTH so the drag chip/gap in
+    // other components commit pre-ack), then ack. See commitAndAck.
+    commitAndAck({
+      headless: recordHeadlessRef.current,
+      applyFrame: () => {
+        setRecordCursor({ x: cursor.x, y: cursor.y, visible: cursor.vis, pressed: cursor.press });
+        applyRecordDrag({ x: cursor.x, y: cursor.y, press: cursor.press, ok: cursor.ok, activate: cursor.activate }, recordDragStateRef.current);
+        applyRecordActivation(
+          { x: cursor.x, y: cursor.y, press: cursor.press, ok: cursor.ok, activate: cursor.activate, mods: cursor.mods, button: cursor.button },
+          recordActivateStateRef.current,
+        );
+      },
+      post: () => window.chrome?.webview?.postMessage?.(ackMsg),
+      flushSync,
+    });
+  });
 
-      const tick = parseCursorTickMessage(e.data);
-      if (tick) {
-        const keys = recordCursorTrackRef.current;
-        if (!keys) {
-          // Cursor-free clip: no cursor state to apply, but the per-frame tick
-          // is still the headless commit+ack heartbeat — the host fails the
-          // frame (exit 4) if the ack never lands. Nothing to flush; ack directly.
-          postFrameAcked(tick.frame);
-          return;
-        }
-        const cursor = evalRecordCursor(keys, tick.t);
-        const ackMsg = JSON.stringify({
-          type: "ui/frame-acked",
-          frame: tick.frame,
-          cursor: {
-            x: cursor.x,
-            y: cursor.y,
-            vis: cursor.vis,
-            press: cursor.press,
-            resolved: cursor.resolved,
-          },
-        });
-        // Apply the frame's cursor + a real drag from its press/move BEFORE the
-        // ack, so the gesture's chip+gap are in the DOM by the time the host
-        // grabs the frame. `ok` gates the down/move so an unresolved press never
-        // clicks (0,0); point ("literal") targets are always ok, so they drive it
-        // too (gaps 2 & 3).
-        // Apply cursor + drag (headless flushSyncs BOTH so the drag chip/gap in
-        // other components commit pre-ack), then ack. See commitAndAck.
-        commitAndAck({
-          headless: recordHeadlessRef.current,
-          applyFrame: () => {
-            setRecordCursor({ x: cursor.x, y: cursor.y, visible: cursor.vis, pressed: cursor.press });
-            applyRecordDrag({ x: cursor.x, y: cursor.y, press: cursor.press, ok: cursor.ok, activate: cursor.activate }, recordDragStateRef.current);
-            applyRecordActivation(
-              { x: cursor.x, y: cursor.y, press: cursor.press, ok: cursor.ok, activate: cursor.activate, mods: cursor.mods, button: cursor.button },
-              recordActivateStateRef.current,
-            );
-          },
-          post: () => wv.postMessage?.(ackMsg),
-          flushSync,
-        });
-        return;
-      }
-
-      const c = parseCursorMessage(e.data);
-      if (!c) return;
-      // Legacy per-frame ("literal") cursor path drives the drag too — a literal
-      // coordinate is always resolved (no ref to miss), so ok:true. Without this,
-      // only the target-based track would reorder (gap 3). NOTE: this deprecated
-      // protocol is always authored with real coords; parseCursorMessage coerces a
-      // missing x/y to 0, so a hand-crafted literal message with pressed:true and no
-      // coords would arm at (0,0) — an accepted latent gap for the legacy path only
-      // (no dragging literal clip exists; new clips use the target track).
-      const frame =
-        typeof (e.data as { frame?: number })?.frame === "number" ? (e.data as { frame: number }).frame : 0;
-      commitAndAck({
-        headless: recordHeadlessRef.current,
-        applyFrame: () => {
-          setRecordCursor(c);
-          applyRecordDrag({ x: c.x, y: c.y, press: c.pressed, ok: true }, recordDragStateRef.current);
-        },
-        post: () => postFrameAcked(frame),
-        flushSync,
-      });
-    };
-    wv.addEventListener("message", onMsg);
-    return () => wv.removeEventListener?.("message", onMsg);
-  }, []);
+  useHostMessage("ui/cursor", (c) => {
+    latchRecordModeFromMessage(c);
+    // Legacy per-frame ("literal") cursor path drives the drag too — a literal
+    // coordinate is always resolved (no ref to miss), so ok:true. Without this,
+    // only the target-based track would reorder (gap 3). NOTE: this deprecated
+    // protocol is always authored with real coords; parseCursorMessage coerces a
+    // missing x/y to 0, so a hand-crafted literal message with pressed:true and no
+    // coords would arm at (0,0) — an accepted latent gap for the legacy path only
+    // (no dragging literal clip exists; new clips use the target track).
+    commitAndAck({
+      headless: recordHeadlessRef.current,
+      applyFrame: () => {
+        setRecordCursor({ x: c.x, y: c.y, visible: c.visible, pressed: c.pressed });
+        applyRecordDrag({ x: c.x, y: c.y, press: c.pressed, ok: true }, recordDragStateRef.current);
+      },
+      post: () => postFrameAcked(c.frame),
+      flushSync,
+    });
+  });
 
   return (
     <BridgeContext.Provider value={bridge}>

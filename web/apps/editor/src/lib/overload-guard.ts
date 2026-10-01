@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
+import { writeStoredPref } from "./stored-pref";
 
 export type OverloadGuardConfig = { enabled: boolean; maxParticles: number };
 
@@ -51,7 +52,7 @@ export function readOverloadGuard(): OverloadGuardConfig {
 }
 
 export function writeOverloadGuard(c: OverloadGuardConfig): void {
-  localStorage.setItem(
+  writeStoredPref(
     KEY,
     JSON.stringify({ enabled: c.enabled, maxParticles: clampMaxParticles(c.maxParticles) }),
   );

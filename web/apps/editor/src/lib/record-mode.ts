@@ -16,8 +16,7 @@
 // re-render the instant the flag flips, dropping any already-open tooltip.
 
 import { create } from "zustand";
-import { parseCursorTrackMessage } from "./record-cursor-track";
-import { parseCursorMessage } from "./record-cursor-bridge";
+import type { UiMessage } from "@/bridge/ui-message";
 
 type RecordModeStore = {
   recording: boolean;
@@ -66,13 +65,13 @@ export function markHeadless(): void {
   useStore.getState().setHeadless();
 }
 
-/** Latch record mode iff `data` is a record-cursor host message — the cursor
- *  track (target clips) or a legacy `ui/cursor` (hero/faith). App.tsx's host-message
- *  listener calls this first, so the latch is one guarded wiring point independent of
- *  the downstream track/tick/cursor handling (and unit-testable without mounting the
- *  app). A per-frame `ui/cursor-tick` is neither, so it never latches. */
-export function latchRecordModeFromMessage(data: unknown): void {
-  if (parseCursorTrackMessage(data) || parseCursorMessage(data)) markRecording();
+/** Latch record mode iff `msg` is a record-cursor host message — the cursor
+ *  track (target clips) or a legacy `ui/cursor` (hero/faith). App.tsx's cursor
+ *  handlers call this before their track/cursor handling, so the latch rule is one
+ *  guarded decision (unit-testable without mounting the app). A per-frame
+ *  `ui/cursor-tick` is neither, so it never latches. */
+export function latchRecordModeFromMessage(msg: UiMessage | null): void {
+  if (msg?.type === "ui/cursor-track" || msg?.type === "ui/cursor") markRecording();
 }
 
 /** Test-only: clear the latch (the store is a module singleton that survives across tests). */

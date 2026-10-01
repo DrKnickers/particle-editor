@@ -6,6 +6,7 @@ import { useFileStateStore } from "../file-state";
 import { RESET_CAMERA } from "../reset-camera";
 import { useTextureEpoch, __resetPreviewCache } from "../atlas-preview-cache";
 import { __resetRightDockForTests, useRightDockStoreForTests } from "../right-dock";
+import { __resetStatusFeedbackForTests, useStatusFeedback } from "../status-feedback";
 
 // A minimal fake bridge: captures the `accelerator/pressed` +
 // `engine/state/changed` handlers and spies on `request`.
@@ -36,7 +37,6 @@ function makeFakeBridge() {
 }
 
 function Harness({ bridge }: { bridge: ReturnType<typeof makeFakeBridge> }) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   useAppAccelerators(bridge as any);
   return null;
 }
@@ -345,7 +345,6 @@ describe("useAppAccelerators — uncovered dispatch + guard paths", () => {
         };
       },
     };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     render(<Harness bridge={bridge as any} />);
     await flush();
     expect(warn).toHaveBeenCalledWith(
@@ -356,5 +355,19 @@ describe("useAppAccelerators — uncovered dispatch + guard paths", () => {
     request.mockClear();
     handlers["accelerator/pressed"]?.({ payload: { combo: "Ctrl+Del" } });
     expect(request).toHaveBeenCalledWith({ kind: "engine/action/clear", params: {} });
+  });
+
+  it("a failed accelerator action (Ctrl+Z) surfaces in the status feedback slot", async () => {
+    __resetStatusFeedbackForTests();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const b = makeFakeBridge();
+    b.request.mockImplementation((req: { kind: string }) =>
+      req.kind === "undo/perform" ? Promise.reject(new Error("host gone")) : Promise.resolve({}),
+    );
+    render(<Harness bridge={b} />);
+    b.fire("Ctrl+Z");
+    await flush();
+    expect(useStatusFeedback.getState().message).toBe("Undo failed: host gone");
+    warn.mockRestore();
   });
 });

@@ -633,7 +633,7 @@ export function useCurveMorph(args: {
       const e = easeOutCubic(Math.min(1, (now - j.start) / MORPH_MS));
       drawJob(j, e, { width, height }, timeMin, timeMax);
     }
-  }, [activeIds]); // eslint-disable-line react-hooks/exhaustive-deps — drawJob/dims read fresh
+  }, [activeIds]); // drawJob/dims read fresh
 
   // Cleanup on unmount.
   useEffect(() => {
@@ -641,7 +641,6 @@ export function useCurveMorph(args: {
       cancelAnimationFrame(raf.current);
       if (fallback.current !== null) clearTimeout(fallback.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return {

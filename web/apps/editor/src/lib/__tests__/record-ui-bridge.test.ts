@@ -5,7 +5,7 @@ import {
   parseSelectKeyMessage,
   parseSetThemeMessage,
   parseShowPanelMessage,
-} from "../record-focus-bridge";
+} from "../record-control-messages";
 
 describe("record-ui-bridge", () => {
   it("parses a record-only theme message and rejects invalid values", () => {

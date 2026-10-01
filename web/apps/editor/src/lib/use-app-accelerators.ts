@@ -26,6 +26,7 @@ import { useEmitterSelectionStore } from "@/lib/emitter-selection";
 import { moveEmitters } from "@/lib/emitter-reorder";
 import { RESET_CAMERA } from "@/lib/reset-camera";
 import { bumpTextureEpoch } from "@/lib/atlas-preview-cache";
+import { fireAndReport } from "@/lib/status-feedback";
 
 const ACCEL_COMBOS = [
   "Ctrl+N",
@@ -106,14 +107,14 @@ export function useAppAccelerators(bridge: Bridge): void {
           break;
         // ── Edit ──
         case "Ctrl+Del":
-          void bridge.request({ kind: "engine/action/clear", params: {} });
+          void fireAndReport(bridge, { kind: "engine/action/clear", params: {} }, "Clear particles");
           break;
         case "Ctrl+Z":
-          void bridge.request({ kind: "undo/perform", params: { direction: "undo" } });
+          void fireAndReport(bridge, { kind: "undo/perform", params: { direction: "undo" } }, "Undo");
           break;
         case "Ctrl+Y":
         case "Ctrl+Shift+Z":
-          void bridge.request({ kind: "undo/perform", params: { direction: "redo" } });
+          void fireAndReport(bridge, { kind: "undo/perform", params: { direction: "redo" } }, "Redo");
           break;
         // ── Emitters ──
         case "Alt+Up":
@@ -127,59 +128,57 @@ export function useAppAccelerators(bridge: Bridge): void {
           break;
         }
         case "Ctrl+Space":
-          void bridge.request({ kind: "spawner/trigger", params: {} });
+          void fireAndReport(bridge, { kind: "spawner/trigger", params: {} }, "Spawn");
           break;
         // ── View (toggles read live state) ──
         case "Ctrl+G":
-          void bridge.request({
+          void fireAndReport(bridge, {
             kind: "engine/set/ground",
             params: { enabled: !(st?.ground ?? false) },
-          });
+          }, "Toggle ground");
           break;
         case "Ctrl+H":
-          void bridge.request({
+          void fireAndReport(bridge, {
             kind: "engine/set/heat-debug",
             params: { enabled: !(st?.heatDebug ?? false) },
-          });
+          }, "Toggle heat debug");
           break;
         case "Ctrl+L":
           // Toggle the reference-object lock — only meaningful when one is loaded.
           if ((st?.referenceObjectName ?? "") !== "") {
-            void bridge.request({
+            void fireAndReport(bridge, {
               kind: "engine/set/reference-object-lock",
               params: { locked: !(st?.referenceObjectLocked ?? false) },
-            });
+            }, "Toggle reference lock");
           }
           break;
         case "F8":
-          void bridge.request({
+          void fireAndReport(bridge, {
             kind: "engine/set/paused",
             params: { paused: !(st?.paused ?? false) },
-          });
+          }, st?.paused ? "Play" : "Pause");
           break;
         case "F9":
-          void bridge.request({ kind: "engine/action/step-frames", params: { frames: 1 } });
+          void fireAndReport(bridge, { kind: "engine/action/step-frames", params: { frames: 1 } }, "Step");
           break;
         case "F10":
-          void bridge.request({ kind: "engine/action/step-frames", params: { frames: 10 } });
+          void fireAndReport(bridge, { kind: "engine/action/step-frames", params: { frames: 10 } }, "Step 10");
           break;
         case "F7":
           toggleDock("spawner");
           break;
         case "Ctrl+Home":
-          void bridge.request({ kind: "engine/set/camera", params: RESET_CAMERA });
+          void fireAndReport(bridge, { kind: "engine/set/camera", params: RESET_CAMERA }, "Reset camera");
           break;
         case "F5":
-          void bridge
-            .request({ kind: "engine/action/reload-textures", params: {} })
-            .then(() => bumpTextureEpoch()); // re-fetch atlas previews with fresh content
+          void fireAndReport(bridge, { kind: "engine/action/reload-textures", params: {} }, "Reload textures")
+            .then((r) => { if (r !== undefined) bumpTextureEpoch(); }); // re-fetch atlas previews with fresh content
           break;
         case "F6":
-          void bridge.request({ kind: "engine/action/reload-shaders", params: {} });
+          void fireAndReport(bridge, { kind: "engine/action/reload-shaders", params: {} }, "Reload shaders");
           break;
       }
     });
     return off;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bridge]);
 }

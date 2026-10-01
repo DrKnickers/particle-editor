@@ -37,7 +37,6 @@ vi.mock("@/screens/LightingPanel", () => ({ LightingPanel: () => <div /> }));
 vi.mock("../CurveEditorPanel", () => ({ CurveEditorPanel: () => <div /> }));
 vi.mock("../ViewportSlot", () => ({ ViewportSlot: () => <div /> }));
 
-// eslint-disable-next-line import/first
 import { PanelLayout } from "../PanelLayout";
 
 describe("PanelLayout — dock-slide animation (Item 3)", () => {

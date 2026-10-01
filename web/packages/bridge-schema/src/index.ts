@@ -2,8 +2,34 @@
 // the React UI and the C++ host. Imported by both web/apps/editor/'s
 // MockBridge + NativeBridge, and (eventually) consumed by the C++
 // dispatcher via a JSON-schema codegen step.
+//
+// Adding a request kind — every place it has to land:
+//   1. Add its arm to the `Request` union below (params shape + a comment).
+//   2. Add its response shape to `ResponseMap` (a missing entry fails to
+//      compile at `ResponseFor`).
+//   3. Handle it in MockBridge's switch (`apps/editor/src/bridge/mock.ts`), or
+//      add it to the commented DEFERRED allowlist in
+//      `apps/editor/src/bridge/__tests__/contract-drift.test.ts`.
+//   4. If it changes the document, make MockBridge's `isMutating` return true
+//      (every `engine/set/*` already does by prefix) and, if it can be
+//      refused or be a no-op, teach `didMutate` so the refusal stays clean.
+//   5. Cover it in `apps/editor/src/bridge/__tests__/bridge-contract.test.ts`.
+//   6. Implement the native handler in `src/host/BridgeDispatch_*.cpp`.
+//
+// Naming convention for NEW kinds (existing kinds keep their names — renaming
+// a wire kind churns both languages): lowercase kebab-case segments separated
+// by `/`, namespace first, verb last — `<namespace>/<object>/<verb>` or
+// `<namespace>/<verb>`, e.g. `emitters/set-visible`, `settings/lighting/set`.
+// No camelCase segments and no un-namespaced kinds.
+//
+// Failure has two channels: the request promise REJECTS (transport failure,
+// or the host answered with an `ok:false` wire envelope), or it RESOLVES with
+// an in-band `{ ok: false, ... }` refusal for the kinds whose response type
+// says so — test those with `isRefusal()`.
 
-export type RequestId = string;  // UUID v4
+// Per-bridge request id: `r<n>-<base36 ms>` from NativeBridge, `t<n>-<base36 ms>`
+// from TestHostBridge. Unique within one page session; not a UUID.
+export type RequestId = string;
 
 // ============================================================================
 // Primitive types
@@ -601,8 +627,6 @@ export type EmitterPropertiesDto = {
 // Other DTOs (expanded in later tasks)
 // ============================================================================
 
-export type EmitterPatchDto = Record<string, unknown>;  // expanded later
-
 // `EmitterTreeDto` is the wire shape returned by `emitters/list`. Until
 // the per-emitter field set is fleshed out, it's a thin wrapper
 // over the minimal `EmitterTreeNode` (one root node + descendants).
@@ -797,7 +821,6 @@ export type Request =
   // Emitters
   | { kind: "emitters/list";              params: Record<string, never> }
   | { kind: "emitters/select";            params: { id: number | null } }
-  | { kind: "emitters/update";            params: { id: number; patch: EmitterPatchDto } }
   | { kind: "emitters/import-from-file";  params: { path: string; selected: number[] } }
   | { kind: "emitters/preview-from-file"; params: { path: string } }
 
@@ -1100,105 +1123,104 @@ export type Request =
 
   | { kind: "register-accelerators";      params: { combos: string[] } };
 
-// One response shape per Request kind.
-// Split into two halves to avoid TS2321 "Excessive stack depth comparing
-// types" — TypeScript's conditional-type depth checker trips on chains
-// longer than ~100 branches. Both halves share the same `never` tail so
-// the composed type is `ResponseForA<R> extends never ? ResponseForB<R> : ResponseForA<R>`.
-type ResponseForA<R extends Request> =
+// One response shape per Request kind, keyed by kind. An interface (not a
+// conditional-type chain) so a kind missing here is a compile error at
+// `ResponseFor` below, and a kind listed here but absent from `Request` is one
+// at `StaleResponseKinds`.
+export interface ResponseMap {
   // File
-  R extends { kind: "file/new" }                  ? Record<string, never> :
-  R extends { kind: "file/open" }                 ? { ok: true; path?: string } | { ok: false; error: string } :
-  R extends { kind: "file/pick-open" }            ? { ok: true; path?: string } | { ok: false; error: string } :
-  R extends { kind: "file/save" }                 ? { ok: true; path?: string } | { ok: false; error: string } :
-  R extends { kind: "file/save-as" }              ? { ok: true; path?: string } | { ok: false; error: string } :
-  R extends { kind: "file/recent/list" }          ? { paths: string[] } :
-  R extends { kind: "textures/browse" }           ? { filename: string } :
+  "file/new": Record<string, never>;
+  "file/open": { ok: true; path?: string } | { ok: false; error: string };
+  "file/pick-open": { ok: true; path?: string } | { ok: false; error: string };
+  "file/save": { ok: true; path?: string } | { ok: false; error: string };
+  "file/save-as": { ok: true; path?: string } | { ok: false; error: string };
+  "file/recent/list": { paths: string[] };
+  "textures/browse": { filename: string };
 
   // Texture palette
-  R extends { kind: "textures/palette/list" }
-    ? { hasMod: boolean; filter: "color" | "bump"; pins: PaletteEntry[]; recents: PaletteEntry[] } :
-  R extends { kind: "textures/palette/thumbnail" }
-    ? { dataUri: string | null; status: "ok" | "missing" | "broken" } :
-  R extends { kind: "textures/get-preview" }
-    ? // discriminated on status so illegal states are unrepresentable
-      | { status: "ok"; dataUri: string; srcW: number; srcH: number } // srcW/H = ORIGINAL DDS dims (pre-downsample)
-      | { status: "pending" }
-      | { status: "missing" }
-      | { status: "broken" } :
-  R extends { kind: "textures/palette/toggle-pin" }
-    ? { ok: true; pinned: boolean } | { ok: false; reason: "pins-full" } :
-  R extends { kind: "textures/palette/touch-recent" }
-    ? { ok: true } :
+  "textures/palette/list":
+    { hasMod: boolean; filter: "color" | "bump"; pins: PaletteEntry[]; recents: PaletteEntry[] };
+  "textures/palette/thumbnail":
+    { dataUri: string | null; status: "ok" | "missing" | "broken" };
+  "textures/get-preview":
+    // discriminated on status so illegal states are unrepresentable
+    | { status: "ok"; dataUri: string; srcW: number; srcH: number } // srcW/H = ORIGINAL DDS dims (pre-downsample)
+    | { status: "pending" }
+    | { status: "missing" }
+    | { status: "broken" };
+  "textures/palette/toggle-pin":
+    { ok: true; pinned: boolean } | { ok: false; reason: "pins-full" };
+  "textures/palette/touch-recent":
+    { ok: true };
 
   // Mods
-  R extends { kind: "mods/list" }    ? { mods: ModDescriptor[]; layers: LayerRef[]; stack: string[]; activePath: string | null } :
-  R extends { kind: "mods/refresh" } ? { mods: ModDescriptor[]; layers: LayerRef[]; stack: string[]; activePath: string | null } :
+  "mods/list": { mods: ModDescriptor[]; layers: LayerRef[]; stack: string[]; activePath: string | null };
+  "mods/refresh": { mods: ModDescriptor[]; layers: LayerRef[]; stack: string[]; activePath: string | null };
   // `error` rides along on the ok:false success-shape too: the stack still
   // applied in memory, so `stack` is meaningful, but the caller needs to know
   // WHICH failure occurred (shader reload vs. registry persist) to say anything
   // accurate to the user.
-  R extends { kind: "mods/set-layers" } ? { ok: boolean; stack: string[]; error?: string } | { ok: false; error: string } :
+  "mods/set-layers": { ok: boolean; stack: string[]; error?: string } | { ok: false; error: string };
 
   // Autosave crash-recovery
-  R extends { kind: "autosave/check-recovery" }   ? { orphan: AutosaveOrphan | null } :
-  R extends { kind: "autosave/recover" }          ? { status: "recovered" | "discarded" | "failed"; reason?: string } :
+  "autosave/check-recovery": { orphan: AutosaveOrphan | null };
+  "autosave/recover": { status: "recovered" | "discarded" | "failed"; reason?: string };
 
   // Engine snapshot
-  R extends { kind: "engine/state/snapshot" }     ? EngineStateDto :
+  "engine/state/snapshot": EngineStateDto;
 
   // Engine setters — most return an empty object. Texture-slot setters report
   // the state the native engine actually reached.
-  R extends { kind: "engine/set/ground" }                  ? Record<string, never> :
-  R extends { kind: "engine/set/ground-z" }                ? Record<string, never> :
-  R extends { kind: "engine/set/ground-texture" }          ? { slot: number; applied: boolean } :
-  R extends { kind: "engine/set/ground-solid-color" }      ? Record<string, never> :
-  R extends { kind: "engine/set/ground-slot-custom-path" } ? Record<string, never> :
-  R extends { kind: "engine/set/skydome-slot" }            ? { slot: number; applied: boolean } :
-  R extends { kind: "engine/set/skydome-custom-path" }     ? Record<string, never> :
-  R extends { kind: "engine/set/skydome-environment" }     ? Record<string, never> :
-  R extends { kind: "engine/set/reference-object" }           ? Record<string, never> :
-  R extends { kind: "engine/set/reference-object-visible" }   ? Record<string, never> :
-  R extends { kind: "engine/set/reference-object-lock" }      ? Record<string, never> :
-  R extends { kind: "engine/set/reference-object-transform" } ? Record<string, never> :
-  R extends { kind: "engine/set/grid-visible" }               ? Record<string, never> :
-  R extends { kind: "engine/set/grid-spacing" }               ? Record<string, never> :
-  R extends { kind: "engine/set/snap-enabled" }               ? Record<string, never> :
-  R extends { kind: "engine/set/background" }              ? Record<string, never> :
-  R extends { kind: "engine/set/bloom" }                   ? Record<string, never> :
-  R extends { kind: "engine/set/bloom-strength" }          ? Record<string, never> :
-  R extends { kind: "engine/set/bloom-cutoff" }            ? Record<string, never> :
-  R extends { kind: "engine/set/bloom-size" }              ? Record<string, never> :
-  R extends { kind: "engine/set/leave-particles" }         ? Record<string, never> :
-  R extends { kind: "engine/set/heat-debug" }              ? Record<string, never> :
-  R extends { kind: "engine/set/camera" }                  ? Record<string, never> :
-  R extends { kind: "engine/set/light" }                   ? Record<string, never> :
-  R extends { kind: "engine/set/ambient" }                 ? Record<string, never> :
-  R extends { kind: "engine/set/shadow" }                  ? Record<string, never> :
-  R extends { kind: "engine/set/paused" }                  ? Record<string, never> :
-  R extends { kind: "engine/set/overload-guard" }          ? Record<string, never> :
-  R extends { kind: "engine/set/msaa-level" }              ? Record<string, never> :
-  R extends { kind: "engine/set/model-shadows" }           ? Record<string, never> :
-  R extends { kind: "engine/set/soft-shadows" }            ? Record<string, never> :
-  R extends { kind: "engine/set/estimated-load" }          ? Record<string, never> :
-  R extends { kind: "stats/set-frozen" }                   ? Record<string, never> :
+  "engine/set/ground": Record<string, never>;
+  "engine/set/ground-z": Record<string, never>;
+  "engine/set/ground-texture": { slot: number; applied: boolean };
+  "engine/set/ground-solid-color": Record<string, never>;
+  "engine/set/ground-slot-custom-path": Record<string, never>;
+  "engine/set/skydome-slot": { slot: number; applied: boolean };
+  "engine/set/skydome-custom-path": Record<string, never>;
+  "engine/set/skydome-environment": Record<string, never>;
+  "engine/set/reference-object": Record<string, never>;
+  "engine/set/reference-object-visible": Record<string, never>;
+  "engine/set/reference-object-lock": Record<string, never>;
+  "engine/set/reference-object-transform": Record<string, never>;
+  "engine/set/grid-visible": Record<string, never>;
+  "engine/set/grid-spacing": Record<string, never>;
+  "engine/set/snap-enabled": Record<string, never>;
+  "engine/set/background": Record<string, never>;
+  "engine/set/bloom": Record<string, never>;
+  "engine/set/bloom-strength": Record<string, never>;
+  "engine/set/bloom-cutoff": Record<string, never>;
+  "engine/set/bloom-size": Record<string, never>;
+  "engine/set/leave-particles": Record<string, never>;
+  "engine/set/heat-debug": Record<string, never>;
+  "engine/set/camera": Record<string, never>;
+  "engine/set/light": Record<string, never>;
+  "engine/set/ambient": Record<string, never>;
+  "engine/set/shadow": Record<string, never>;
+  "engine/set/paused": Record<string, never>;
+  "engine/set/overload-guard": Record<string, never>;
+  "engine/set/msaa-level": Record<string, never>;
+  "engine/set/model-shadows": Record<string, never>;
+  "engine/set/soft-shadows": Record<string, never>;
+  "engine/set/estimated-load": Record<string, never>;
+  "stats/set-frozen": Record<string, never>;
 
   // Engine actions — empty body
-  R extends { kind: "engine/action/clear" }                       ? Record<string, never> :
-  R extends { kind: "engine/action/reload-shaders" }              ? Record<string, never> :
-  R extends { kind: "engine/action/reload-textures" }             ? Record<string, never> :
-  R extends { kind: "engine/action/on-particle-system-changed" }  ? Record<string, never> :
-  R extends { kind: "engine/action/step-frames" }                 ? Record<string, never> :
-  R extends { kind: "engine/action/rescale-system" }              ? Record<string, never> :
+  "engine/action/clear": Record<string, never>;
+  "engine/action/reload-shaders": Record<string, never>;
+  "engine/action/reload-textures": Record<string, never>;
+  "engine/action/on-particle-system-changed": Record<string, never>;
+  "engine/action/step-frames": Record<string, never>;
+  "engine/action/rescale-system": Record<string, never>;
 
   // Engine queries
-  R extends { kind: "engine/query/ground-slot-empty" }   ? boolean :
-  R extends { kind: "engine/query/skydome-slot-empty" }  ? boolean :
-  R extends { kind: "engine/query/skydome-list" }        ? { primary: string[]; secondary: string[] } :
-  R extends { kind: "engine/query/reference-object-list" } ? { objects: ReferenceObjectEntry[]; building?: boolean } :
-  R extends { kind: "engine/query/bloom-available" }     ? boolean :
-  R extends { kind: "engine/query/msaa-levels" }         ? { levels: number[]; current: number } :
-  R extends { kind: "engine/query/live-instances" }      ? {
+  "engine/query/ground-slot-empty": boolean;
+  "engine/query/skydome-slot-empty": boolean;
+  "engine/query/skydome-list": { primary: string[]; secondary: string[] };
+  "engine/query/reference-object-list": { objects: ReferenceObjectEntry[]; building?: boolean };
+  "engine/query/bloom-available": boolean;
+  "engine/query/msaa-levels": { levels: number[]; current: number };
+  "engine/query/live-instances": {
     instances: number;
     emitters: number;
     particles: number;
@@ -1208,120 +1230,127 @@ type ResponseForA<R extends Request> =
       relativeTimePercent: number;
       scale: number;
     }[];
-  } :
+  };
 
   // Settings (cross-mode registry persistence)
-  R extends { kind: "settings/lighting" }                 ? LightingSettingsDto :
-  R extends { kind: "settings/lighting-force-align/set" } ? Record<string, never> :
-  R extends { kind: "settings/lighting/set" }             ? Record<string, never> :
+  "settings/lighting": LightingSettingsDto;
+  "settings/lighting-force-align/set": Record<string, never>;
+  "settings/lighting/set": Record<string, never>;
 
-  never;
-
-type ResponseForB<R extends Request> =
   // Emitters
-  R extends { kind: "emitters/list" }             ? EmitterTreeDto :
-  R extends { kind: "emitters/select" }           ? Record<string, never> :
-  R extends { kind: "emitters/update" }           ? Record<string, never> :
-  R extends { kind: "emitters/import-from-file" } ? { ok: true; imported: number } :
-  R extends { kind: "emitters/preview-from-file" } ?
+  "emitters/list": EmitterTreeDto;
+  "emitters/select": Record<string, never>;
+  "emitters/import-from-file": { ok: true; imported: number };
+  "emitters/preview-from-file":
     | { ok: true; tree: EmitterTreeNode }
-    | { ok: false; error: string } :
+    | { ok: false; error: string };
 
   // Track read. Always returns 7 tracks in
   // TRACK_NAMES order; an unknown id yields 7 empty tracks rather than
   // an error so the panel can render a "no data yet" stub without
   // special-casing the failure.
-  R extends { kind: "emitters/get-tracks" } ? { tracks: TrackDto[] } :
+  "emitters/get-tracks": { tracks: TrackDto[] };
 
   // Emitter properties. Read returns the
   // full DTO; write returns an empty object after the patch is
   // applied. Unknown id: read returns default-shaped properties
   // (zeros + empty strings) so the form can render a disabled
   // placeholder instead of an error; write is a silent no-op.
-  R extends { kind: "emitters/get-properties" } ? { properties: EmitterPropertiesDto } :
-  R extends { kind: "emitters/set-properties" } ? Record<string, never> :
+  "emitters/get-properties": { properties: EmitterPropertiesDto };
+  "emitters/set-properties": Record<string, never>;
 
   // Track mutations
-  R extends { kind: "emitters/delete-track-keys" }       ? Record<string, never> :
-  R extends { kind: "emitters/set-track-interpolation" } ? Record<string, never> :
-  R extends { kind: "emitters/set-track-lock" } ? Record<string, never> :
+  "emitters/delete-track-keys": Record<string, never>;
+  "emitters/set-track-interpolation": Record<string, never>;
+  "emitters/set-track-lock": Record<string, never>;
 
   // Track key mutations.
   // set-track-key returns empty; add-track-key returns the actual
   // inserted (time, value) which may differ from the requested time
   // when a same-time collision triggered a dedupe-bump.
-  R extends { kind: "emitters/set-track-key" } ? Record<string, never> :
-  R extends { kind: "emitters/add-track-key" } ? { time: number; value: number } :
-  R extends { kind: "emitters/add-track-keys" } ? { keys: TrackKey[] } :
+  "emitters/set-track-key": Record<string, never>;
+  "emitters/add-track-key": { time: number; value: number };
+  "emitters/add-track-keys": { keys: TrackKey[] };
 
   // Emitter mutations
-  R extends { kind: "emitters/duplicate" } ?
+  "emitters/duplicate":
     | { ok: true; newId: number }
-    | { ok: false; error: string } :
-  R extends { kind: "emitters/duplicate-many" } ?
+    | { ok: false; error: string };
+  "emitters/duplicate-many":
     | { ok: true; newIds: number[] }
-    | { ok: false; error: string } :
-  R extends { kind: "emitters/delete" }                         ? Record<string, never> :
-  R extends { kind: "emitters/delete-many" }                    ? Record<string, never> :
-  R extends { kind: "emitters/rename" }                         ? Record<string, never> :
-  R extends { kind: "emitters/duplicate-with-index-increment" } ? { newId: number } :
-  R extends { kind: "emitters/duplicate-with-index-increment-many" } ? { newIds: number[] } :
+    | { ok: false; error: string };
+  "emitters/delete": Record<string, never>;
+  "emitters/delete-many": Record<string, never>;
+  "emitters/rename": Record<string, never>;
+  "emitters/duplicate-with-index-increment": { newId: number };
+  "emitters/duplicate-with-index-increment-many": { newIds: number[] };
 
   // Emitter mutations
-  R extends { kind: "emitters/add-lifetime-child" } ? { newId: number } :
-  R extends { kind: "emitters/add-death-child" }    ? { newId: number } :
-  R extends { kind: "emitters/add-root" }           ? { newId: number } :
-  R extends { kind: "emitters/move" }               ? Record<string, never> :
-  R extends { kind: "emitters/move-many" }          ? { newIds: number[] } :
-  R extends { kind: "emitters/reorder-many" } ?
+  "emitters/add-lifetime-child": { newId: number };
+  "emitters/add-death-child": { newId: number };
+  "emitters/add-root": { newId: number };
+  "emitters/move": Record<string, never>;
+  "emitters/move-many": { newIds: number[] };
+  "emitters/reorder-many":
     | { ok: true; newIds: number[] }
-    | { ok: false; error: string } :
-  R extends { kind: "emitters/set-visible" }        ? Record<string, never> :
-  R extends { kind: "emitters/set-all-visible" }    ? Record<string, never> :
-  R extends { kind: "linkGroups/set-membership" }   ? Record<string, never> :
+    | { ok: false; error: string };
+  "emitters/set-visible": Record<string, never>;
+  "emitters/set-all-visible": Record<string, never>;
+  "linkGroups/set-membership": Record<string, never>;
 
   // Emitter drag/drop
-  R extends { kind: "emitters/drop" } ?
+  "emitters/drop":
     | { ok: true }
-    | { ok: false; error: string } :
+    | { ok: false; error: string };
 
   // Emitter clipboard
-  R extends { kind: "emitters/copy" }  ? Record<string, never> :
-  R extends { kind: "emitters/cut" }   ? Record<string, never> :
-  R extends { kind: "emitters/paste" } ? { newIds: number[] } :
-  R extends { kind: "emitters/paste-as-child" } ? { newId: number } :
+  "emitters/copy": Record<string, never>;
+  "emitters/cut": Record<string, never>;
+  "emitters/paste": { newIds: number[] };
+  "emitters/paste-as-child": { newId: number };
 
   // Per-emitter rescale
-  R extends { kind: "engine/action/rescale-emitter" } ? Record<string, never> :
+  "engine/action/rescale-emitter": Record<string, never>;
 
   // Link-group exempt-set CRUD
-  R extends { kind: "linkGroups/list-exempt-fields" }  ? { fields: string[] } :
-  R extends { kind: "linkGroups/set-exempt-fields" }   ? Record<string, never> :
-  R extends { kind: "linkGroups/reset-exempt-fields" } ? Record<string, never> :
-  R extends { kind: "linkGroups/diff-membership" }     ? { conflicts: { id: number; fields: string[] }[] } :
-  R extends { kind: "linkGroups/diff-exempt-change" }  ? { conflicts: { id: number; fields: string[] }[] } :
+  "linkGroups/list-exempt-fields": { fields: string[] };
+  "linkGroups/set-exempt-fields": Record<string, never>;
+  "linkGroups/reset-exempt-fields": Record<string, never>;
+  "linkGroups/diff-membership": { conflicts: { id: number; fields: string[] }[] };
+  "linkGroups/diff-exempt-change": { conflicts: { id: number; fields: string[] }[] };
 
   // Undo / spawner / layout / accelerators
-  R extends { kind: "undo/perform" }              ? { applied: boolean; label?: string } :
-  R extends { kind: "layout/viewport-rect" }      ? Record<string, never> :
-  R extends { kind: "layout/scene-rect" }         ? Record<string, never> :
-  R extends { kind: "animate-scene-rect" }        ? Record<string, never> :
-  R extends { kind: "host/backing-color" }        ? Record<string, never> :
-  R extends { kind: "viewport/capture-snapshot" } ? { imageBase64: string; w: number; h: number } :
-  R extends { kind: "viewport/input" }            ? Record<string, never> :
-  R extends { kind: "spawner/start" }             ? Record<string, never> :
-  R extends { kind: "spawner/trigger" }           ? Record<string, never> :
-  R extends { kind: "spawner/stop" }              ? Record<string, never> :
-  R extends { kind: "app/quit" }                  ? Record<string, never> :
-  R extends { kind: "engine/action/reset-view-settings" } ? Record<string, never> :
-  R extends { kind: "register-accelerators" }     ? Record<string, never> :
-  R extends { kind: "window/minimize" }           ? Record<string, never> :
-  R extends { kind: "window/maximize" }           ? Record<string, never> :
-  R extends { kind: "window/close" }              ? Record<string, never> :
-  never;
+  "undo/perform": { applied: boolean; label?: string };
+  "layout/viewport-rect": Record<string, never>;
+  "layout/scene-rect": Record<string, never>;
+  "animate-scene-rect": Record<string, never>;
+  "host/backing-color": Record<string, never>;
+  "viewport/capture-snapshot": { imageBase64: string; w: number; h: number };
+  "viewport/input": Record<string, never>;
+  "spawner/start": Record<string, never>;
+  "spawner/trigger": Record<string, never>;
+  "spawner/stop": Record<string, never>;
+  "app/quit": Record<string, never>;
+  "engine/action/reset-view-settings": Record<string, never>;
+  "register-accelerators": Record<string, never>;
+  "window/minimize": Record<string, never>;
+  "window/maximize": Record<string, never>;
+  "window/close": Record<string, never>;
+}
 
-export type ResponseFor<R extends Request> =
-  ResponseForA<R> extends never ? ResponseForB<R> : ResponseForA<R>;
+export type ResponseFor<R extends Request> = ResponseMap[R["kind"]];
+
+// Fails to compile while ResponseMap carries a kind the Request union lacks.
+type AssertNever<T extends never> = T;
+export type StaleResponseKinds = AssertNever<Exclude<keyof ResponseMap, Request["kind"]>>;
+
+/** True for an in-band refusal: a response that RESOLVED but carries
+ *  `ok: false` (e.g. `emitters/drop`, `file/save`, `textures/palette/toggle-pin`).
+ *  This is the second failure channel — the first is the request promise
+ *  rejecting (transport failure or a host `ok:false` wire envelope). */
+export function isRefusal(r: unknown): r is { ok: false; error?: string } {
+  return r !== null && typeof r === "object" && (r as { ok?: unknown }).ok === false;
+}
 
 // ============================================================================
 // Event DTOs (host → JS push)

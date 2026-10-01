@@ -78,3 +78,16 @@ describe("msaa-quality", () => {
     expect(result).toEqual({ levels: [], current: -1 });
   });
 });
+
+describe("msaa-quality storage guard", () => {
+  it("writeMsaaLevel swallows a throwing localStorage", () => {
+    const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("QuotaExceededError");
+    });
+    try {
+      expect(() => writeMsaaLevel(8)).not.toThrow();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});

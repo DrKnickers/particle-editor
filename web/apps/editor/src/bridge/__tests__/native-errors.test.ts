@@ -121,6 +121,28 @@ describe("NativeBridge incoming responses", () => {
     expect(pendingSize(b)).toBe(0);
   });
 
+  it("an ok:false reply with no error string rejects with a message naming the request", async () => {
+    const b = new NativeBridge();
+    const p = b.request({ kind: "file/save", params: {} } as never);
+    deliver({ type: "res", id: postedId(), ok: false });
+    await expect(p).rejects.toThrow(/file\/save/);
+    expect(pendingSize(b)).toBe(0);
+  });
+
+  it("a response missing its ok flag fails the request rather than resolving it", async () => {
+    const b = new NativeBridge();
+    const p = b.request({ kind: "emitters/list", params: {} } as never);
+    deliver({ type: "res", id: postedId(), data: { root: [] } });
+    await expect(p).rejects.toThrow(/emitters\/list/);
+  });
+
+  it("ignores a response whose id is not a string", () => {
+    const b = new NativeBridge();
+    void b.request({ kind: "emitters/list", params: {} } as never).catch(() => {});
+    expect(() => deliver({ type: "res", id: 1, ok: true, data: 1 })).not.toThrow();
+    expect(pendingSize(b)).toBe(1);
+  });
+
   it("an ok:false reply also clears an armed opt-in timeout timer (no zombie timer)", async () => {
     vi.useFakeTimers();
     const b = new NativeBridge({ requestTimeoutMs: 5_000 });
@@ -185,6 +207,18 @@ describe("NativeBridge events", () => {
     deliver(evt("dirty/changed", { dirty: false }));
     expect(a).toHaveLength(1);
     expect(c).toHaveLength(2);
+  });
+
+  it("a throwing subscriber is logged and does not stop the remaining subscribers", () => {
+    const b = new NativeBridge();
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const seen: unknown[] = [];
+    b.on("dirty/changed" as never, () => { throw new Error("subscriber bug"); });
+    b.on("dirty/changed" as never, (e) => seen.push(e));
+    expect(() => deliver(evt("dirty/changed", { dirty: true }))).not.toThrow();
+    expect(seen).toEqual([{ kind: "dirty/changed", payload: { dirty: true } }]);
+    expect(err).toHaveBeenCalled();
+    err.mockRestore();
   });
 
   it("parses string-encoded events too", () => {

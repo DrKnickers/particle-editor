@@ -32,7 +32,8 @@ import type {
 } from "@particle-editor/bridge-schema";
 import { Spinner } from "@/primitives/Spinner";
 import { loadPickerState, resolveFaction, savePickerState } from "@/lib/picker-state";
-import { parseSetPickerCollapseMessage, parseSetPickerSearchMessage } from "@/lib/record-focus-bridge";
+import { useHostMessage } from "@/lib/use-host-message";
+import { fireAndReport } from "@/lib/status-feedback";
 
 type BodyProps = {
   bridge: Bridge;
@@ -178,25 +179,10 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
   // --record only: the host drives the search box via a ui/set-picker-search push
   // (the synthetic cursor can't type) — used to filter the tree to a few units so a
   // clip cursor can reach them instead of scrolling. Dormant outside --record.
-  useEffect(() => {
-    const wv = window.chrome?.webview as
-      | {
-          addEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
-          removeEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
-        }
-      | undefined;
-    if (!wv?.addEventListener) return;
-    const onMsg = (e: { data: unknown }) => {
-      const msg = parseSetPickerSearchMessage(e.data);
-      if (msg) setQuery(msg.text);
-      // Bare section names from the timeline (e.g. "Heroes") map to the prefixed
-      // collapse keys the tree uses ("sec:Heroes"), matching `collapsed`/isOpen.
-      const col = parseSetPickerCollapseMessage(e.data);
-      if (col) setForceCollapsed(new Set(col.keys.map((k) => `sec:${k}`)));
-    };
-    wv.addEventListener("message", onMsg);
-    return () => wv.removeEventListener?.("message", onMsg);
-  }, []);
+  useHostMessage("ui/set-picker-search", (msg) => setQuery(msg.text));
+  // Bare section names from the timeline (e.g. "Heroes") map to the prefixed
+  // collapse keys the tree uses ("sec:Heroes"), matching `collapsed`/isOpen.
+  useHostMessage("ui/picker-collapse", (col) => setForceCollapsed(new Set(col.keys.map((k) => `sec:${k}`))));
 
   const loading = !ready;
 
@@ -392,18 +378,18 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
   };
 
   const selectObject = (n: string) =>
-    void bridge.request({ kind: "engine/set/reference-object", params: { name: n } });
+    void fireAndReport(bridge, { kind: "engine/set/reference-object", params: { name: n } }, "Set reference object");
 
   const setVisible = (v: boolean) =>
-    void bridge.request({ kind: "engine/set/reference-object-visible", params: { visible: v } });
+    void fireAndReport(bridge, { kind: "engine/set/reference-object-visible", params: { visible: v } }, "Toggle reference visibility");
 
   const setLocked = (v: boolean) =>
-    void bridge.request({ kind: "engine/set/reference-object-lock", params: { locked: v } });
+    void fireAndReport(bridge, { kind: "engine/set/reference-object-lock", params: { locked: v } }, "Toggle reference lock");
 
   // Persistent gizmo snap toggle. Ticking it persists/round-trips now; the
   // drag-time apply (reads the engine's snap state) lands in a separate task.
   const setSnapEnabled = (v: boolean) =>
-    void bridge.request({ kind: "engine/set/snap-enabled", params: { enabled: v } });
+    void fireAndReport(bridge, { kind: "engine/set/snap-enabled", params: { enabled: v } }, "Toggle snap");
 
   const setTransform = (position: Vec3, rotation: Vec3) =>
     void bridge.request({

@@ -4,9 +4,9 @@ import {
   parseHidePanelMessage,
   parseSetPickerCollapseMessage,
   parseSetPickerSearchMessage,
-} from "../record-focus-bridge";
+} from "../record-control-messages";
 
-describe("record-focus-bridge", () => {
+describe("record-control-messages", () => {
   it("parses a ui/focus-channel message (object form)", () => {
     expect(parseFocusChannelMessage({ type: "ui/focus-channel", channel: "scale" })).toBe("scale");
   });

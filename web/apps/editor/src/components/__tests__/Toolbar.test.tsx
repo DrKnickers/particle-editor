@@ -7,6 +7,7 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import { Toolbar } from "../Toolbar";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { __resetRightDockForTests } from "@/lib/right-dock";
+import { __resetStatusFeedbackForTests, useStatusFeedback } from "@/lib/status-feedback";
 
 // toolbar buttons mount a Tip (Radix Tooltip.Root), which requires
 // the Tooltip.Provider that App.tsx supplies in production — this helper
@@ -81,6 +82,23 @@ describe("Toolbar — Particle Editor 2026 layout", () => {
     await waitFor(() => {
       expect(b.request).toHaveBeenCalledWith({ kind: "undo/perform", params: { direction: "undo" } });
     });
+  });
+
+  it("a failed Undo surfaces in the status feedback slot instead of failing silently", async () => {
+    __resetStatusFeedbackForTests();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const b = makeBridge();
+    b.request.mockImplementation((req: { kind: string }) => {
+      if (req.kind === "engine/state/snapshot") return Promise.resolve({ canUndo: true, canRedo: false, paused: false });
+      if (req.kind === "undo/perform") return Promise.reject(new Error("host gone"));
+      return Promise.resolve({});
+    });
+    renderToolbar(b);
+    const undo = await screen.findByRole("button", { name: "Undo" });
+    await waitFor(() => expect(undo).not.toBeDisabled());
+    fireEvent.click(undo);
+    await waitFor(() => expect(useStatusFeedback.getState().message).toBe("Undo failed: host gone"));
+    warn.mockRestore();
   });
 
   it("Redo is disabled when canRedo is false (no dispatch on click)", async () => {

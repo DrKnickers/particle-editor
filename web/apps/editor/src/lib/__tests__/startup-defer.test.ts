@@ -23,12 +23,10 @@ beforeEach(() => {
   idleQueue = [];
   origRIC = globalThis.requestIdleCallback;
   origCIC = globalThis.cancelIdleCallback;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (globalThis as any).requestIdleCallback = (cb: () => void) => {
     idleQueue.push(cb);
     return idleQueue.length; // 1-based id
   };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (globalThis as any).cancelIdleCallback = (id: number) => { idleQueue[id - 1] = () => {}; };
 });
 afterEach(() => {

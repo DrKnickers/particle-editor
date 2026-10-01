@@ -32,6 +32,7 @@ import { Tip } from "@/primitives/Tip";
 import { promptSaveChanges } from "@/lib/file-state";
 import { runFileOp } from "@/lib/file-op";
 import { useEngineField } from "@/lib/use-engine-snapshot";
+import { fireAndReport } from "@/lib/status-feedback";
 
 type Props = { bridge: Bridge };
 
@@ -119,7 +120,7 @@ export function Toolbar({ bridge }: Props) {
             className="tb-btn"
             aria-label="Undo"
             disabled={!canUndo}
-            onClick={() => { void bridge.request({ kind: "undo/perform", params: { direction: "undo" } }); }}
+            onClick={() => { void fireAndReport(bridge, { kind: "undo/perform", params: { direction: "undo" } }, "Undo"); }}
           >
             <Undo2 {...ICON} />
           </button>
@@ -130,7 +131,7 @@ export function Toolbar({ bridge }: Props) {
             className="tb-btn"
             aria-label="Redo"
             disabled={!canRedo}
-            onClick={() => { void bridge.request({ kind: "undo/perform", params: { direction: "redo" } }); }}
+            onClick={() => { void fireAndReport(bridge, { kind: "undo/perform", params: { direction: "redo" } }, "Redo"); }}
           >
             <Redo2 {...ICON} />
           </button>
@@ -147,7 +148,7 @@ export function Toolbar({ bridge }: Props) {
             className="tb-btn"
             aria-label={paused ? "Play" : "Pause"}
             aria-pressed={!paused}
-            onClick={() => { void bridge.request({ kind: "engine/set/paused", params: { paused: !paused } }); }}
+            onClick={() => { void fireAndReport(bridge, { kind: "engine/set/paused", params: { paused: !paused } }, paused ? "Play" : "Pause"); }}
           >
             {paused ? <Play {...ICON} /> : <Pause {...ICON} />}
           </button>
@@ -157,7 +158,7 @@ export function Toolbar({ bridge }: Props) {
             type="button"
             className="tb-btn"
             aria-label="Step"
-            onClick={() => { void bridge.request({ kind: "engine/action/step-frames", params: { frames: 1 } }); }}
+            onClick={() => { void fireAndReport(bridge, { kind: "engine/action/step-frames", params: { frames: 1 } }, "Step"); }}
           >
             <ChevronRight {...ICON} />
           </button>
@@ -167,7 +168,7 @@ export function Toolbar({ bridge }: Props) {
             type="button"
             className="tb-btn"
             aria-label="Step 10"
-            onClick={() => { void bridge.request({ kind: "engine/action/step-frames", params: { frames: 10 } }); }}
+            onClick={() => { void fireAndReport(bridge, { kind: "engine/action/step-frames", params: { frames: 10 } }, "Step 10"); }}
           >
             <ChevronsRight {...ICON} />
           </button>
@@ -186,7 +187,7 @@ export function Toolbar({ bridge }: Props) {
             className="tb-btn"
             aria-label="Leave particles after instance death"
             aria-pressed={leaveParticles}
-            onClick={() => { void bridge.request({ kind: "engine/set/leave-particles", params: { enabled: !leaveParticles } }); }}
+            onClick={() => { void fireAndReport(bridge, { kind: "engine/set/leave-particles", params: { enabled: !leaveParticles } }, "Leave particles"); }}
           >
             <Sparkles {...ICON} />
           </button>

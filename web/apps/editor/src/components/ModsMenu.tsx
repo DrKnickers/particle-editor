@@ -8,7 +8,7 @@ import { useFileOpErrorStore } from "@/lib/file-op";
 import { runWhenIdle } from "@/lib/run-after-paint";
 import { moveItemToGap, refreshModStack } from "@/lib/mod-stack";
 import { basename, eqPath } from "@/lib/paths";
-import { parseOpenPickerMessage, parsePoseDragMessage } from "@/lib/record-focus-bridge";
+import { useHostMessage } from "@/lib/use-host-message";
 import { LoadOrderDialog } from "@/screens/LoadOrderDialog";
 
 const MODS_MENU_VALUE = "mods";
@@ -146,33 +146,20 @@ export function ModsMenu({
       cancelled = true;
       cancelModsSeed();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bridge]);
 
-  useEffect(() => {
-    const wv = window.chrome?.webview as
-      | {
-          addEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
-          removeEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
-        }
-      | undefined;
-    if (!wv?.addEventListener) return;
-    const onMsg = (e: { data: unknown }) => {
-      const msg = parseOpenPickerMessage(e.data);
-      if (msg?.which === "mods") {
-        // The host may have changed the layer stack out-of-band (e.g. a --record
-        // mods/set-layers, which goes straight through the bridge and never hits the
-        // web setLayerStack wrapper). Re-fetch so the dropdown shows the live stack.
-        if (msg.open) void refreshModsList();
-        else setPosedStackDrag(null); // closing clears any posed drag so the chip can't ghost
-        onMenuValueChange(msg.open ? MODS_MENU_VALUE : "");
-      }
-      const pd = parsePoseDragMessage(e.data);
-      if (pd?.target === "stack") setPosedStackDrag({ from: pd.from, gap: pd.gap });
-    };
-    wv.addEventListener("message", onMsg);
-    return () => wv.removeEventListener?.("message", onMsg);
-  }, []);
+  useHostMessage("ui/open-picker", (msg) => {
+    if (msg.which !== "mods") return;
+    // The host may have changed the layer stack out-of-band (e.g. a --record
+    // mods/set-layers, which goes straight through the bridge and never hits the
+    // web setLayerStack wrapper). Re-fetch so the dropdown shows the live stack.
+    if (msg.open) void refreshModsList();
+    else setPosedStackDrag(null); // closing clears any posed drag so the chip can't ghost
+    onMenuValueChange(msg.open ? MODS_MENU_VALUE : "");
+  });
+  useHostMessage("ui/pose-drag", (pd) => {
+    if (pd.target === "stack") setPosedStackDrag({ from: pd.from, gap: pd.gap });
+  });
 
   // Add mod… catalog — the layer catalog grouped by parent, searchable
   // (membership lives here now, out of the top-level menu). Mirrors the modal's

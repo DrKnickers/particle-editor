@@ -5,6 +5,7 @@ import {
   latchRecordModeFromMessage,
   __resetRecordModeForTests,
 } from "../record-mode";
+import { parseUiMessage } from "@/bridge/ui-message";
 import { renderHook, act } from "@testing-library/react";
 
 // Valid host-message fixtures (shapes per record-cursor-track.ts / record-cursor-bridge.ts).
@@ -39,26 +40,26 @@ describe("record-mode", () => {
   describe("latchRecordModeFromMessage (App.tsx wiring guard)", () => {
     it("latches on a ui/cursor-track message (the target-clip path)", () => {
       const { result } = renderHook(() => useRecording());
-      act(() => latchRecordModeFromMessage(CURSOR_TRACK));
+      act(() => latchRecordModeFromMessage(parseUiMessage(CURSOR_TRACK)));
       expect(result.current).toBe(true);
     });
 
     it("latches on a legacy ui/cursor message (hero/faith path)", () => {
       const { result } = renderHook(() => useRecording());
-      act(() => latchRecordModeFromMessage(LEGACY_CURSOR));
+      act(() => latchRecordModeFromMessage(parseUiMessage(LEGACY_CURSOR)));
       expect(result.current).toBe(true);
     });
 
     it("does NOT latch on a per-frame ui/cursor-tick", () => {
       const { result } = renderHook(() => useRecording());
-      act(() => latchRecordModeFromMessage(CURSOR_TICK));
+      act(() => latchRecordModeFromMessage(parseUiMessage(CURSOR_TICK)));
       expect(result.current).toBe(false);
     });
 
     it("does NOT latch on an unrelated message (interactive user stays un-recorded)", () => {
       const { result } = renderHook(() => useRecording());
-      act(() => latchRecordModeFromMessage({ type: "engine/state/changed" }));
-      act(() => latchRecordModeFromMessage("not even an object"));
+      act(() => latchRecordModeFromMessage(parseUiMessage({ type: "engine/state/changed" })));
+      act(() => latchRecordModeFromMessage(parseUiMessage("not even an object")));
       expect(result.current).toBe(false);
     });
   });

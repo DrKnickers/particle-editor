@@ -44,7 +44,7 @@ import { Profiler, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { Group, Panel, Separator, usePanelRef, type Layout } from "react-resizable-panels";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { useRightDock, setDock } from "@/lib/right-dock";
-import { parseHidePanelMessage, parseShowPanelMessage } from "@/lib/record-focus-bridge";
+import { useHostMessage } from "@/lib/use-host-message";
 import { computeSceneRect, dockSlideTarget } from "@/lib/scene-rect";
 import { useDockAnim } from "@/lib/dock-anim";
 import { emitPerfTrace, makePerfSpanId } from "@/lib/perf-trace";
@@ -206,25 +206,8 @@ export function PanelLayout({ bridge }: Props) {
   // --record host push: hide the right-dock (Spawner/Lighting/Atlas) so a
   // recorded clip shows a clean layout + more curve editor. Mirrors the
   // ui/cursor / ui/focus-channel pushes.
-  useEffect(() => {
-    const wv = window.chrome?.webview as
-      | {
-          addEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
-          removeEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
-        }
-      | undefined;
-    if (!wv?.addEventListener) return;
-    const onMsg = (e: { data: unknown }) => {
-      if (parseHidePanelMessage(e.data)) {
-        setDock(null);
-        return;
-      }
-      const show = parseShowPanelMessage(e.data);
-      if (show) setDock(show.panel);
-    };
-    wv.addEventListener("message", onMsg);
-    return () => wv.removeEventListener?.("message", onMsg);
-  }, []);
+  useHostMessage("ui/hide-panel", () => setDock(null));
+  useHostMessage("ui/show-panel", (msg) => setDock(msg.panel));
 
   // The outer 3-col layout is ALWAYS mounted: the right-dock is a
   // collapsible slot, not a conditionally-rendered panel. So the Group

@@ -81,3 +81,20 @@ describe("useOverloadGuardConfig", () => {
     expect(result.current).toEqual({ enabled: true, maxParticles: 2_000 });
   });
 });
+
+describe("overload-guard storage guard", () => {
+  it("writeOverloadGuard swallows a throwing localStorage and still signals the change", () => {
+    const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("QuotaExceededError");
+    });
+    const onChange = vi.fn();
+    window.addEventListener(OVERLOAD_GUARD_CHANGED_EVENT, onChange);
+    try {
+      expect(() => writeOverloadGuard({ enabled: false, maxParticles: 5_000 })).not.toThrow();
+      expect(onChange).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener(OVERLOAD_GUARD_CHANGED_EVENT, onChange);
+      spy.mockRestore();
+    }
+  });
+});

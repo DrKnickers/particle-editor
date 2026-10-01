@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { resolveTheme, readStoredMode, applyMode } from "../theme";
 
 describe("theme 3-way", () => {
@@ -25,5 +25,24 @@ describe("theme 3-way", () => {
     applyMode("dark", true);
     expect(document.documentElement.dataset.theme).toBe("dark");
     expect(localStorage.getItem("alo:theme")).toBe("dark");
+  });
+});
+
+describe("theme storage guards", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("readStoredMode falls back to system when localStorage throws", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new DOMException("SecurityError");
+    });
+    expect(readStoredMode()).toBe("system");
+  });
+
+  it("applyMode still applies the theme when localStorage throws", () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("QuotaExceededError");
+    });
+    expect(() => applyMode("light", true)).not.toThrow();
+    expect(document.documentElement.dataset.theme).toBe("light");
   });
 });

@@ -1,3 +1,7 @@
+// The global `window.chrome.webview` type lives in bridge/native.ts.
+import type {} from "@/bridge/native";
+import { coerceMessage } from "@/bridge/wire";
+
 export interface CursorMessage {
   x: number;
   y: number;
@@ -8,20 +12,11 @@ export interface CursorMessage {
 /**
  * Parse a host->web ui/cursor push; returns null for any other message. The host
  * sends it via PostWebMessageAsJson (object) or PostWebMessageAsString (string);
- * accept both. NativeBridge ignores it (type is neither "res" nor "evt"), so this
- * raw listener owns it without conflict.
+ * accept both. NativeBridge ignores it (type is neither "res" nor "evt"); the ui/*
+ * message hub (bridge/ui-message.ts) delivers it.
  */
 export function parseCursorMessage(data: unknown): CursorMessage | null {
-  let m: Record<string, unknown> | null = null;
-  if (typeof data === "string") {
-    try {
-      m = JSON.parse(data) as Record<string, unknown>;
-    } catch {
-      return null;
-    }
-  } else if (data && typeof data === "object") {
-    m = data as Record<string, unknown>;
-  }
+  const m = coerceMessage(data);
   if (!m || m.type !== "ui/cursor") return null;
   return {
     x: Number(m.x) || 0,
@@ -40,16 +35,7 @@ export function parseCursorMessage(data: unknown): CursorMessage | null {
  * Accepts the raw string or object form, like the other record parsers.
  */
 export function isRecordHeadlessMessage(data: unknown): boolean {
-  let m: Record<string, unknown> | null = null;
-  if (typeof data === "string") {
-    try {
-      m = JSON.parse(data) as Record<string, unknown>;
-    } catch {
-      return false;
-    }
-  } else if (data && typeof data === "object") {
-    m = data as Record<string, unknown>;
-  }
+  const m = coerceMessage(data);
   return !!m && m.type === "ui/record-headless";
 }
 
@@ -95,6 +81,5 @@ export function commitAndAck(opts: {
  * as a JSON string to match how the host's OnWebMessage reads bridge messages.
  */
 export function postFrameAcked(frame: number): void {
-  const wv = (window as unknown as { chrome?: { webview?: { postMessage(m: unknown): void } } }).chrome?.webview;
-  wv?.postMessage(JSON.stringify({ type: "ui/frame-acked", frame }));
+  window.chrome?.webview?.postMessage?.(JSON.stringify({ type: "ui/frame-acked", frame }));
 }

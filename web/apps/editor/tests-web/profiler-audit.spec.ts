@@ -215,10 +215,10 @@ test("react re-render audit: per-component commit counts under scripted interact
   const diag = await page.evaluate(async () => {
     // MockBridge internals (TS-private), read only for this diagnostic.
     const b = window.bridge as
-      | (E2EBridge & { listeners?: Map<string, Set<unknown>>; emit?: unknown })
+      | (E2EBridge & { events?: { listenerCount(key: string): number }; emit?: unknown })
       | undefined;
-    const cursorListeners = b?.listeners?.get?.("cursor/position-3d")?.size ?? null;
-    const statsListeners = b?.listeners?.get?.("stats/tick")?.size ?? null;
+    const cursorListeners = b?.events?.listenerCount?.("cursor/position-3d") ?? null;
+    const statsListeners = b?.events?.listenerCount?.("stats/tick") ?? null;
     window.__profilerAudit!.reset();
     window.__profilerAudit!.emitCursor(7, 8, 9);
     await new Promise((r) => requestAnimationFrame(() => r(null)));

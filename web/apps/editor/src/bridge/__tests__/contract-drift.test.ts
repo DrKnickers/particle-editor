@@ -63,9 +63,6 @@ function mockCaseLabels(src: string): Set<string> {
 // adding a real mock handler for it, must also remove it here (the "no stale
 // allowlist entries" assertion enforces that).
 const DEFERRED: readonly string[] = [
-  // Per-emitter property patch via the legacy update path — superseded in the
-  // mock by emitters/set-properties; the native host owns the real update.
-  "emitters/update",
   // Real .alo import requires FileManager + ParticleSystem the browser-mode
   // host doesn't own (the preview path, emitters/preview-from-file, IS mocked).
   "emitters/import-from-file",

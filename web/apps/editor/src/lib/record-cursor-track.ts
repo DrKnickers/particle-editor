@@ -1,4 +1,4 @@
-import { coerceMessage } from "@/lib/coerce-message";
+import { coerceMessage } from "@/bridge/wire";
 
 export type CursorElementRef =
   | `curve-key:${string}:${string}`

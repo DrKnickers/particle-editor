@@ -58,11 +58,7 @@ import { isTypingTarget } from "@/lib/viewport-input";
 import { useModalOpen } from "@/lib/modal-open";
 import { Spinner } from "@/primitives/Spinner";
 import { Tip } from "@/primitives/Tip";
-import {
-  parseFocusChannelMessage,
-  parseRevealCurveChannelMessage,
-  parseSelectKeyMessage,
-} from "@/lib/record-focus-bridge";
+import { useHostMessage } from "@/lib/use-host-message";
 import {
   getCurveKeysClipboard,
   setCurveKeysClipboard,
@@ -846,33 +842,18 @@ export function CurveEditorPanel({ bridge }: Props) {
   // (the same path as a user click) so visibility/solo + focus stay
   // consistent. The channel may arrive as a track name ("scale",
   // "rotationSpeed") or a channel id ("rotation"); resolve both.
-  useEffect(() => {
-    const wv = window.chrome?.webview as
-      | {
-          addEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
-          removeEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
-        }
-      | undefined;
-    if (!wv?.addEventListener) return;
-    const onMsg = (e: { data: unknown }) => {
-      const reveal = parseRevealCurveChannelMessage(e.data);
-      if (reveal) {
-        const def = CHANNELS.find((c) => c.id === reveal || c.trackName === reveal);
-        if (def) {
-          document
-            .querySelector<HTMLElement>(`[data-testid="curve-channel-row-${def.id}"]`)
-            ?.scrollIntoView?.({ block: "nearest" });
-        }
-        return;
-      }
-      const ch = parseFocusChannelMessage(e.data);
-      if (!ch) return;
-      const def = CHANNELS.find((c) => c.id === ch || c.trackName === ch);
-      if (def) handleRowClick(def.id);
-    };
-    wv.addEventListener("message", onMsg);
-    return () => wv.removeEventListener?.("message", onMsg);
-  }, [handleRowClick]);
+  useHostMessage("ui/reveal-curve-channel", ({ channel }) => {
+    const def = CHANNELS.find((c) => c.id === channel || c.trackName === channel);
+    if (def) {
+      document
+        .querySelector<HTMLElement>(`[data-testid="curve-channel-row-${def.id}"]`)
+        ?.scrollIntoView?.({ block: "nearest" });
+    }
+  });
+  useHostMessage("ui/focus-channel", ({ channel }) => {
+    const def = CHANNELS.find((c) => c.id === channel || c.trackName === channel);
+    if (def) handleRowClick(def.id);
+  });
 
   // --record key-select push: the host posts ui/select-key so a scripted atlas
   // edit SELECTS the key it is about to reassign — the same selection a user
@@ -883,23 +864,10 @@ export function CurveEditorPanel({ bridge }: Props) {
   // box stays empty. Mirrors handleKeyClick's single-select (clears optimistic
   // override first). The host fires ui/focus-channel BEFORE this, so the named
   // track is already focused by the time it arrives.
-  useEffect(() => {
-    const wv = window.chrome?.webview as
-      | {
-          addEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
-          removeEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
-        }
-      | undefined;
-    if (!wv?.addEventListener) return;
-    const onMsg = (e: { data: unknown }) => {
-      const sel = parseSelectKeyMessage(e.data);
-      if (!sel) return;
-      setOptimisticSelected(null);
-      setSelectedKeyTimes(new Set([sel.time]));
-    };
-    wv.addEventListener("message", onMsg);
-    return () => wv.removeEventListener?.("message", onMsg);
-  }, []);
+  useHostMessage("ui/select-key", (sel) => {
+    setOptimisticSelected(null);
+    setSelectedKeyTimes(new Set([sel.time]));
+  });
 
   // ── Curve interactions ────────────────────────────────────────────
 

@@ -1,4 +1,8 @@
-import { coerceMessage } from "@/lib/coerce-message";
+// Parsers for the host->web ui/* control pushes a --record timeline sends to
+// steer the UI (theme, right-dock panels, curve focus/key selection, pickers,
+// posed drags). The cursor pushes live in record-cursor-bridge.ts and
+// record-cursor-track.ts; bridge/ui-message.ts routes every one of them.
+import { coerceMessage } from "@/bridge/wire";
 
 /**
  * Parse a host->web ui/focus-channel push; returns the channel string (a track
@@ -7,7 +11,7 @@ import { coerceMessage } from "@/lib/coerce-message";
  * channel it edits (the curve panel's focus is React-local and defaults to "red").
  * The host sends it via PostWebMessageAsJson (object) or PostWebMessageAsString
  * (string); accept both. NativeBridge ignores it (type is neither "res" nor
- * "evt"), so a raw listener owns it without conflict.
+ * "evt"); the ui/* message hub (bridge/ui-message.ts) delivers it.
  */
 export function parseFocusChannelMessage(data: unknown): string | null {
   const m = coerceMessage(data);

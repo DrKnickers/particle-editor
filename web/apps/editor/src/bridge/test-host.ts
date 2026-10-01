@@ -30,6 +30,8 @@ import type {
   RequestId,
 } from "@particle-editor/bridge-schema";
 import { traceBridgeRequestEnd, traceBridgeRequestStart } from "@/lib/perf-trace";
+import { EventHub } from "./event-hub";
+import { parseWireMessage, responseError } from "./wire";
 
 // The `window.chrome.webview` / `window.chrome.webview.hostObjects`
 // types are declared globally in `./native.ts` (single source of truth).
@@ -37,7 +39,7 @@ import { traceBridgeRequestEnd, traceBridgeRequestStart } from "@/lib/perf-trace
 
 export class TestHostBridge implements Bridge {
   private idCounter = 0;
-  private listeners = new Map<EventKind, Set<(e: Event) => void>>();
+  private events = new EventHub<{ [K in EventKind]: EventOf<K> }>("TestHostBridge");
 
   constructor() {
     // Also subscribe to postMessage-delivered events. WebView2 still
@@ -75,10 +77,11 @@ export class TestHostBridge implements Bridge {
     const startMs = traceBridgeRequestStart(req.kind, envelope.id, "sync");
     try {
       const resStr = await hb.dispatchRequest(JSON.stringify(envelope));
-      const res = JSON.parse(resStr) as
-        | { type: "res"; ok: true; data: unknown }
-        | { type: "res"; ok: false; error: string };
-      if (!res.ok) throw new Error(res.error);
+      const res = parseWireMessage(resStr);
+      if (res?.type !== "res") {
+        throw new Error(`TestHostBridge: malformed reply to "${req.kind}"`);
+      }
+      if (!res.ok) throw responseError(req.kind, res.error);
       traceBridgeRequestEnd(req.kind, envelope.id, "sync", startMs, "ok");
       return res.data as ResponseFor<R>;
     } catch (err) {
@@ -89,15 +92,7 @@ export class TestHostBridge implements Bridge {
   }
 
   on<K extends EventKind>(kind: K, handler: (e: EventOf<K>) => void): () => void {
-    let bucket = this.listeners.get(kind);
-    if (!bucket) {
-      bucket = new Set();
-      this.listeners.set(kind, bucket);
-    }
-    bucket.add(handler as (e: Event) => void);
-    return () => {
-      bucket?.delete(handler as (e: Event) => void);
-    };
+    return this.events.on(kind, handler);
   }
 
   private onEventMessage(raw: unknown): void {
@@ -108,20 +103,8 @@ export class TestHostBridge implements Bridge {
     //   - PostWebMessageAsJson → e.data is the parsed JS value
     //   - PostWebMessageAsString → e.data is a JSON-encoded string
     // The host currently uses PostWebMessageAsJson; we accept either.
-    let msg: unknown = raw;
-    if (typeof raw === "string") {
-      try {
-        msg = JSON.parse(raw);
-      } catch {
-        return;
-      }
-    }
-    if (typeof msg !== "object" || msg === null) return;
-    const m = msg as { type?: string; kind?: string; payload?: unknown };
-    if (m.type !== "evt" || typeof m.kind !== "string") return;
-    const bucket = this.listeners.get(m.kind as EventKind);
-    bucket?.forEach((h) =>
-      h({ kind: m.kind, payload: m.payload } as Event)
-    );
+    const m = parseWireMessage(raw);
+    if (m?.type !== "evt") return;
+    this.events.emit(m.kind, { kind: m.kind, payload: m.payload } as Event);
   }
 }

@@ -1,5 +1,7 @@
 import type { Bridge, Request, ResponseFor, Event, EventKind, EventOf, WireMessage, RequestId } from "@particle-editor/bridge-schema";
 import { traceBridgeRequestEnd, traceBridgeRequestStart } from "@/lib/perf-trace";
+import { EventHub } from "./event-hub";
+import { parseWireMessage, responseError } from "./wire";
 
 type Pending = {
   resolve: (data: unknown) => void;
@@ -23,6 +25,7 @@ declare global {
         // `PostWebMessageAsJson`, or the raw string when it posts via
         // `PostWebMessageAsString`. Listeners must accept both.
         addEventListener?: (ev: string, h: (e: { data: unknown }) => void) => void;
+        removeEventListener?: (ev: string, h: (e: { data: unknown }) => void) => void;
         hostObjects?: {
           hostBridge?: { dispatchRequest(jsonReq: string): Promise<string> };
         };
@@ -33,7 +36,7 @@ declare global {
 
 export class NativeBridge implements Bridge {
   private pending = new Map<RequestId, Pending>();
-  private listeners = new Map<EventKind, Set<(e: Event) => void>>();
+  private events = new EventHub<{ [K in EventKind]: EventOf<K> }>("NativeBridge");
   private idCounter = 0;
   private disposed = false;
   // Optional per-request timeout (G12). OFF by default: several requests are
@@ -109,28 +112,18 @@ export class NativeBridge implements Bridge {
   }
 
   on<K extends EventKind>(kind: K, handler: (e: EventOf<K>) => void): () => void {
-    let bucket = this.listeners.get(kind);
-    if (!bucket) {
-      bucket = new Set();
-      this.listeners.set(kind, bucket);
-    }
-    bucket.add(handler as (e: Event) => void);
-    return () => { bucket?.delete(handler as (e: Event) => void); };
+    return this.events.on(kind, handler);
   }
 
   private onMessage(raw: unknown): void {
     // `raw` is either the already-parsed JS value (host used
     // PostWebMessageAsJson — current path) or a JSON-encoded string
-    // (PostWebMessageAsString). Accept both.
-    let msg: WireMessage;
-    if (typeof raw === "string") {
-      try { msg = JSON.parse(raw) as WireMessage; } catch { return; }
-    } else if (raw && typeof raw === "object") {
-      msg = raw as WireMessage;
-    } else {
-      return;
-    }
+    // (PostWebMessageAsString); parseWireMessage accepts both and drops
+    // anything that is not a well-formed res/evt envelope (incl. ui/* pushes).
+    const msg = parseWireMessage(raw);
+    if (!msg) return;
     if (msg.type === "res") {
+      if (msg.id === undefined) return;
       const p = this.pending.get(msg.id);
       if (!p) return;
       this.pending.delete(msg.id);
@@ -139,12 +132,12 @@ export class NativeBridge implements Bridge {
         traceBridgeRequestEnd(p.bridgeKind, msg.id, "async", p.startMs, "ok");
         p.resolve(msg.data);
       } else {
-        traceBridgeRequestEnd(p.bridgeKind, msg.id, "async", p.startMs, "error", msg.error);
-        p.reject(new Error(msg.error));
+        const err = responseError(p.bridgeKind, msg.error);
+        traceBridgeRequestEnd(p.bridgeKind, msg.id, "async", p.startMs, "error", err.message);
+        p.reject(err);
       }
-    } else if (msg.type === "evt") {
-      const bucket = this.listeners.get(msg.kind);
-      bucket?.forEach((h) => h({ kind: msg.kind, payload: msg.payload } as Event));
+    } else {
+      this.events.emit(msg.kind, { kind: msg.kind, payload: msg.payload } as Event);
     }
   }
 }

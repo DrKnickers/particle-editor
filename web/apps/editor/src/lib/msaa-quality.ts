@@ -7,6 +7,7 @@
 // current GPU actually supports.
 
 import type { Bridge } from "@particle-editor/bridge-schema";
+import { writeStoredPref } from "./stored-pref";
 
 export type MsaaLevel = 0 | 2 | 4 | 8;
 
@@ -29,9 +30,9 @@ export function readMsaaLevel(): MsaaLevel {
   }
 }
 
-/** Persist `level` to localStorage. */
+/** Persist `level` to localStorage (silently no-ops on quota/private-mode). */
 export function writeMsaaLevel(level: MsaaLevel): void {
-  localStorage.setItem(KEY, String(level));
+  writeStoredPref(KEY, String(level));
 }
 
 /** Push the saved MSAA level to the engine — fire-and-forget so a failed

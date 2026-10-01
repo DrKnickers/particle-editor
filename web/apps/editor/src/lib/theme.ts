@@ -2,6 +2,7 @@
 // "system" follows prefers-color-scheme live. Resolves to a concrete
 // "dark"|"light" applied as <html data-theme>.
 import { isRecording } from "./record-mode";
+import { readStoredPref, writeStoredPref } from "./stored-pref";
 
 export type ThemeMode = "dark" | "light" | "system";
 export type ResolvedTheme = "dark" | "light";
@@ -29,7 +30,7 @@ function beginThemeTransition(root: HTMLElement, next: ResolvedTheme): void {
 }
 
 export function readStoredMode(): ThemeMode {
-  const v = localStorage.getItem(KEY);
+  const v = readStoredPref(KEY);
   return v === "dark" || v === "light" || v === "system" ? v : "system";
 }
 
@@ -46,5 +47,5 @@ export function applyMode(mode: ThemeMode, osPrefersDark = prefersDark()): void 
   const next = resolveTheme(mode, osPrefersDark);
   beginThemeTransition(document.documentElement, next);
   document.documentElement.dataset.theme = next;
-  localStorage.setItem(KEY, mode);
+  writeStoredPref(KEY, mode);
 }

@@ -5,11 +5,11 @@
 //
 // Coverage:
 //   - engine/state/snapshot                  full DTO
-//   - engine/set/*  (17 setters)             mutates the store, then
+//   - engine/set/*                           mutates the store, then
 //                                            emits engine/state/changed
-//   - engine/action/* (4 actions)            mutates where appropriate,
+//   - engine/action/*                        mutates where appropriate,
 //                                            emits engine/state/changed
-//   - engine/query/* (3 queries)             read-only
+//   - engine/query/*                         read-only (live-instances throws)
 //   - register-accelerators                  accepted as a no-op
 //   - layout/viewport-rect                   accepted as a no-op
 //   - layout/scene-rect                      accepted as a no-op
@@ -73,6 +73,7 @@ import {
   useMockTrackOverlay,
   snapshotEngineState,
 } from "./mock-state";
+import { EventHub } from "./event-hub";
 
 // Mirrors native ClampSpawnerConfig (src/SpawnerDriver.cpp): burstSize
 // 1..MAX_BURST_SIZE (10), spacingSec 0..MAX_SPACING_SEC (10), intervalSec
@@ -204,14 +205,32 @@ function isMutating(kind: Request["kind"]): boolean {
  *  - emitters/move-many → no-op when the block is edge-pinned (nothing moved);
  *    detected from the pre-move root order, since the response always returns
  *    the surviving newIds regardless.
+ *  - emitters/paste → `newIds: []` when the clipboard is empty.
+ *  - emitters/paste-as-child, add-lifetime-child, add-death-child → `newId: -1`
+ *    when refused (occupied slot, empty clipboard, unknown parent).
+ *  - emitters/delete, delete-many → an unknown id deletes nothing; checked
+ *    against the pre-call tree, since the response is `{}` either way.
  */
 function didMutate(
   req: Request,
   result: unknown,
   preMoveRootOrder: number[] | null,
   preEngineSlot: number | null,
+  preTree: EmitterTreeDto,
 ): boolean {
   switch (req.kind) {
+    case "emitters/paste":
+      return (result as { newIds: number[] }).newIds.length > 0;
+    case "emitters/paste-as-child":
+    case "emitters/add-lifetime-child":
+    case "emitters/add-death-child":
+      return (result as { newId: number }).newId !== -1;
+    case "emitters/delete":
+    case "emitters/delete-many": {
+      const ids = req.kind === "emitters/delete" ? [req.params.id] : req.params.ids;
+      // id -1 is the synthetic root, which findEmitterNode would match.
+      return ids.some((id) => id !== -1 && findEmitterNode(preTree, id) !== null);
+    }
     case "engine/set/ground-texture":
     case "engine/set/skydome-slot":
       return (result as { slot: number }).slot !== preEngineSlot;
@@ -317,7 +336,7 @@ function mockGroundColor(slot: number, solidColor: number): number {
 const MOCK_ATLAS_PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAAFoElEQVR42u3UQQEAMAgDMcQhH0+bif6aBwquZO7uNd/uVp/+3f3HAACgPwAMAAD6A8AAAKA/AAwAAPoDwAAAoD8ADAAA+gPAAACgPwAMAAD6A8AAAKA/AAwAAPoDwAAAoD8ADAAA+gPAAACgPwAMAAD6A8AAAKA/AAwAAPoDwAAAoD8ADAAA+gPAAACgPwAMAAD6A8AAAKA/AAwAAPoDwAAAoD8ADAAA+gPAAACgPwAMAAD6A8AAAKA/AAwAAPoDwAAAoD8ADAAA+gPAAACgPwAMAAD6A8AAAKA/AAwAAPoDwAAAoD8ADAAA+gPAAAAAAAMAgP4AMAAA6A8AAwCA/gAwAADoDwADAID+ADAAAOgPAAMAgP4AMAAA6A8AAwCA/gAwAADoDwADAID+ADAAAOgPAAMAgP4AMAAA6A8AAwCA/gAwAADoDwADAID+ADAAAOgPAAMAgP4AMAAA6A8AAwCA/gAwAADoDwADAID+ADAAAOgPAAMAgP4AMAAA6B8EwAN4AP17DwAA0B8ABgAA/QFgAADQHwAGAAD9AWAAANAfAAYAAP0BYAAA0B8ABgAA/QFgAADQHwAGAAD9AWAAANAfAAYAAP0BYAAA0B8ABgAA/QFgAADQHwAGAAD9AWAAANAfAAYAAP0BYAAA0B8ABgAA/QFgAADQHwAGAAD9AWAAANAfAAYAAP0BYAAA0B8ABgAA/QFgAADQHwAGAAD9AWAAANAfAAYAAP0BYAAA0B8ABgAA/QFgAADQHwAGAAD9AWAAANAfAAYAAP0BYAAAAIABAEB/ABgAAPQHgAEAQH8AGAAA9AeAAQBAfwAYAAD0B4ABAEB/ABgAAPQHgAEAQH8AGAAA9AeAAQBAfwAYAAD0B4ABAEB/ABgAAPQHgAEAQH8AGAAA9AeAAQBAfwAYAAD0B4ABAEB/ABgAAPQHgAEAQH8AGAAA9AeAAQBAfwAYAAD0B4ABAEB/ABgAAPRPAuABPID+vQcAAOgPAAMAgP4AMAAA6A8AAwCA/gAwAADoDwADAID+ADAAAOgPAAMAgP4AMAAA6A8AAwCA/gAwAADoDwADAID+ADAAAOgPAAMAgP4AMAAA6A8AAwCA/gAwAADoDwADAID+ADAAAOgPAAMAgP4AMAAA6A8AAwCA/gAwAADoDwADAID+ADAAAOgPAAMAgP4AMAAA6A8AAwCA/gAwAADoDwADAID+ADAAAOgPAAMAgP4AMAAA6A8AAwCA/gAwAADoDwADAID+ADAAAADAAACgPwAMAAD6A8AAAKA/AAwAAPoDwAAAoD8ADAAA+gPAAACgPwAMAAD6A8AAAKA/AAwAAPoDwAAAoD8ADAAA+gPAAACgPwAMAAD6A8AAAKA/AAwAAPoDwAAAoD8ADAAA+gPAAACgPwAMAAD6A8AAAKA/AAwAAPoDwAAAoD8ADAAA+gPAAACgPwAMAAD6JwHwAB5A/94DAAD0B4ABAEB/ABgAAPQHgAEAQH8AGAAA9AeAAQBAfwAYAAD0B4ABAEB/ABgAAPQHgAEAQH8AGAAA9AeAAQBAfwAYAAD0B4ABAEB/ABgAAPQHgAEAQH8AGAAA9AeAAQBAfwAYAAD0B4ABAEB/ABgAAPQHgAEAQH8AGAAA9AeAAQBAfwAYAAD0B4ABAEB/ABgAAPQHgAEAQH8AGAAA9AeAAQBAfwAYAAD0B4ABAEB/ABgAAPQHgAEAQH8AGAAA9AeAAQBAfwAYAAAAYAAA0B8ABgAA/QFgAADQHwAGAAD9AWAAANAfAAYAAP0BYAAA0B8ABgAA/QFgAADQHwAGAAD9AWAAANAfAAYAAP0BYAAA0B8ABgAA/QFgAADQHwAGAAD9AWAAANAfAAYAAP0BYAAA0B8ABgAA/QFgAADQHwAGAAD9AWAAANAfAAYAAP0BYAAA0B8ABgAA/YP3AXIVJtrUiwADAAAAAElFTkSuQmCC";
 
 export class MockBridge implements Bridge {
-  private listeners = new Map<EventKind, Set<(e: Event) => void>>();
+  private events = new EventHub<{ [K in EventKind]: EventOf<K> }>("MockBridge");
 
   /** In-mock "active spawner instance count". Bumped
    *  by Manual spawner/trigger (by burstSize), zeroed by spawner/stop. The
@@ -361,6 +380,7 @@ export class MockBridge implements Bridge {
         : req.kind === "engine/set/skydome-slot"
           ? snapshotEngineState().skydomeSlot
           : null;
+    const preTree = useMockEmitterTree.getState().tree;
     const result = this.handle(req);
     // After the handler completes, mark dirty for any engine mutation —
     // but only on a REAL mutation. A refused drag-commit (ok:false) or a
@@ -370,20 +390,14 @@ export class MockBridge implements Bridge {
     // refused/no-op drag-commit falsely dirtied the doc.
     // (file/* and engine/action/reload-* / clear are deliberately NOT
     // marked dirty — see isMutating below.)
-    if (isMutating(req.kind) && didMutate(req, result, preMoveRootOrder, preEngineSlot)) {
+    if (isMutating(req.kind) && didMutate(req, result, preMoveRootOrder, preEngineSlot, preTree)) {
       this.markDirty();
     }
     return result as ResponseFor<R>;
   }
 
   on<K extends EventKind>(kind: K, handler: (e: EventOf<K>) => void): () => void {
-    let bucket = this.listeners.get(kind);
-    if (!bucket) {
-      bucket = new Set();
-      this.listeners.set(kind, bucket);
-    }
-    bucket.add(handler as (e: Event) => void);
-    return () => { bucket?.delete(handler as (e: Event) => void); };
+    return this.events.on(kind, handler);
   }
 
   // ---------------------------------------------------------------- internals
@@ -394,8 +408,7 @@ export class MockBridge implements Bridge {
     if (e.kind === "emitters/tree/changed") {
       e = { ...e, payload: { ...e.payload, root: decorateSpawn(e.payload.root) } };
     }
-    const bucket = this.listeners.get(e.kind);
-    bucket?.forEach((h) => h(e));
+    this.events.emit(e.kind, e);
   }
 
   /** Patch the store and broadcast engine/state/changed with the full snapshot. */
@@ -1859,7 +1872,6 @@ export class MockBridge implements Bridge {
         return {};
 
       // ---------------- emitters / undo: not yet implemented ----------------
-      case "emitters/update":
       case "emitters/import-from-file":
       // Live-simulation counters read the real Engine's instance/emitter/
       // particle totals. Browser mode runs no simulation, so a plausible-looking

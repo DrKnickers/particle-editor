@@ -3,7 +3,7 @@
 // follow-up snapshot read. Keeps the schema (`EngineStateDto`) and the
 // MockBridge implementation honest as the bridge surface grows.
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { MockBridge } from "../mock";
 import {
   useMockEmitterClipboard,
@@ -196,10 +196,8 @@ describe("MockBridge contract", () => {
     ["engine/set/paused",             { paused: true },               "paused",           true],
   ] as const)("%s mutates the snapshot", async (kind, params, field, expected) => {
     const b = new MockBridge();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await b.request({ kind, params } as any);
     const s = await b.request({ kind: "engine/state/snapshot", params: {} });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect((s as any)[field]).toEqual(expected);
   });
 
@@ -493,12 +491,9 @@ describe("MockBridge contract", () => {
 
   it("rejects unimplemented emitters/* requests (mutations) as not implemented", async () => {
     const b = new MockBridge();
-    // emitters/list and emitters/select are implemented;
-    // emitters/import-from-file landed with a native
-    // handler + the emitter-import a11y spec). emitters/update remains
-    // unimplemented and is the one asserted unimplemented here.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await expect(b.request({ kind: "emitters/update", params: { id: 0, patch: {} } } as any))
+    // emitters/import-from-file has a native handler (and the emitter-import
+    // a11y spec) but needs the real FileManager, so browser mode rejects it.
+    await expect(b.request({ kind: "emitters/import-from-file", params: { path: "x.alo", selected: [0] } }))
       .rejects.toThrow(/not implemented/);
   });
 
@@ -631,7 +626,6 @@ describe("MockBridge contract", () => {
   // cleanly in browser mode without surfacing a raw rejection.
   it("resolves file/open with ok:false in browser mode", async () => {
     const b = new MockBridge();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const r = await b.request({ kind: "file/open", params: {} } as any);
     expect(r).toEqual({ ok: false, error: "browser-mode" });
   });
@@ -1860,6 +1854,85 @@ describe("MockBridge dirty-bit for batch structural mutations", () => {
     // Smoke is the TOP root; moving it up is pinned → nothing moves.
     await b.request({ kind: "emitters/move-many", params: { ids: [0], direction: "up" } });
     expect((await b.request({ kind: "engine/state/snapshot", params: {} })).dirty).toBe(false);
+  });
+
+  // Refused / no-op clipboard + structural mutations (WX7): each returns its
+  // refusal shape and must leave the document clean, as its handler comments
+  // promise and as the native host does (markDirty only on the success branch).
+  const isDirty = async (b: MockBridge) =>
+    (await b.request({ kind: "engine/state/snapshot", params: {} })).dirty;
+
+  it("emitters/paste with an EMPTY clipboard leaves the document clean", async () => {
+    const b = new MockBridge();
+    const r = await b.request({ kind: "emitters/paste", params: {} });
+    expect(r.newIds).toEqual([]);
+    expect(await isDirty(b)).toBe(false);
+  });
+
+  it("a REFUSED emitters/paste-as-child (occupied slot) leaves the document clean", async () => {
+    const b = new MockBridge();
+    await b.request({ kind: "emitters/copy", params: { ids: [5] } });
+    // Smoke (0) already has a lifetime child (1).
+    const r = await b.request({ kind: "emitters/paste-as-child", params: { parentId: 0, slot: "lifetime" } });
+    expect(r.newId).toBe(-1);
+    expect(await isDirty(b)).toBe(false);
+  });
+
+  it("a REFUSED emitters/paste-as-child (empty clipboard) leaves the document clean", async () => {
+    const b = new MockBridge();
+    const r = await b.request({ kind: "emitters/paste-as-child", params: { parentId: 5, slot: "lifetime" } });
+    expect(r.newId).toBe(-1);
+    expect(await isDirty(b)).toBe(false);
+  });
+
+  it("a REFUSED emitters/add-lifetime-child (slot filled) leaves the document clean", async () => {
+    const b = new MockBridge();
+    const r = await b.request({ kind: "emitters/add-lifetime-child", params: { parentId: 0 } });
+    expect(r.newId).toBe(-1);
+    expect(await isDirty(b)).toBe(false);
+  });
+
+  it("a REFUSED emitters/add-death-child (slot filled) leaves the document clean", async () => {
+    const b = new MockBridge();
+    const r = await b.request({ kind: "emitters/add-death-child", params: { parentId: 0 } });
+    expect(r.newId).toBe(-1);
+    expect(await isDirty(b)).toBe(false);
+  });
+
+  it("emitters/delete of an UNKNOWN id leaves the document clean", async () => {
+    const b = new MockBridge();
+    await b.request({ kind: "emitters/delete", params: { id: 999 } });
+    expect(await isDirty(b)).toBe(false);
+  });
+
+  it("emitters/delete-many of only UNKNOWN ids leaves the document clean", async () => {
+    const b = new MockBridge();
+    await b.request({ kind: "emitters/delete-many", params: { ids: [998, 999] } });
+    expect(await isDirty(b)).toBe(false);
+  });
+
+  it("the successful counterparts still mark the document dirty", async () => {
+    const b = new MockBridge();
+    await b.request({ kind: "emitters/add-lifetime-child", params: { parentId: 5 } });
+    expect(await isDirty(b)).toBe(true);
+    const c = new MockBridge();
+    useMockEngineState.setState(makeDefaultEngineState());
+    await c.request({ kind: "emitters/delete", params: { id: 5 } });
+    expect(await isDirty(c)).toBe(true);
+  });
+});
+
+describe("MockBridge event fan-out", () => {
+  it("a throwing subscriber is logged and neither fails the request nor starves later subscribers", async () => {
+    const b = new MockBridge();
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    let seen = 0;
+    b.on("engine/state/changed", () => { throw new Error("subscriber bug"); });
+    b.on("engine/state/changed", () => { seen++; });
+    await expect(b.request({ kind: "engine/set/ground-z", params: { z: 3 } })).resolves.toEqual({});
+    expect(seen).toBe(1);
+    expect(err).toHaveBeenCalled();
+    err.mockRestore();
   });
 });
 
