@@ -52,17 +52,21 @@ function killStaleTestHost() {
   spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", cmd], { stdio: "ignore", shell: false });
 }
 
-// Resolve MSBuild via vswhere (generic across machines/VS versions).
+// Resolve MSBuild via vswhere (generic across machines/VS versions). -products *
+// covers Build Tools installs, which plain -latest misses.
 function findMsbuild() {
   const vswhere = join(
     process.env["ProgramFiles(x86)"] || "C:/Program Files (x86)",
     "Microsoft Visual Studio", "Installer", "vswhere.exe",
   );
-  const r = spawnSync(vswhere, ["-latest", "-find", "MSBuild\\**\\Bin\\MSBuild.exe"], {
-    encoding: "utf8", shell: false,
-  });
-  const path = (r.stdout || "").split(/\r?\n/).find((l) => l.trim().endsWith("MSBuild.exe"));
-  return path ? path.trim() : null;
+  for (const extra of [[], ["-products", "*"]]) {
+    const r = spawnSync(vswhere, ["-latest", ...extra, "-find", "MSBuild\\**\\Bin\\MSBuild.exe"], {
+      encoding: "utf8", shell: false,
+    });
+    const path = (r.stdout || "").split(/\r?\n/).find((l) => l.trim().endsWith("MSBuild.exe"));
+    if (path) return path.trim();
+  }
+  return null;
 }
 
 // Newest mtime of an actual SOURCE file under src/ (recursive) — the

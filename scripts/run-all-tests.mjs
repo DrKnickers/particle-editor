@@ -292,17 +292,21 @@ function psCapture(command) {
 }
 
 // Resolve MSBuild via vswhere (same locator as a11y-drift-check.mjs — do not
-// invent a third one).
+// invent a third one). -products * covers Build Tools installs, which plain
+// -latest misses (vswhere defaults to Community/Professional/Enterprise).
 function findMsbuild() {
   const vswhere = join(
     process.env["ProgramFiles(x86)"] || "C:/Program Files (x86)",
     "Microsoft Visual Studio", "Installer", "vswhere.exe",
   );
-  const r = spawnSync(vswhere, ["-latest", "-find", "MSBuild\\**\\Bin\\MSBuild.exe"], {
-    encoding: "utf8", shell: false,
-  });
-  const path = (r.stdout || "").split(/\r?\n/).find((l) => l.trim().endsWith("MSBuild.exe"));
-  return path ? path.trim() : null;
+  for (const extra of [[], ["-products", "*"]]) {
+    const r = spawnSync(vswhere, ["-latest", ...extra, "-find", "MSBuild\\**\\Bin\\MSBuild.exe"], {
+      encoding: "utf8", shell: false,
+    });
+    const path = (r.stdout || "").split(/\r?\n/).find((l) => l.trim().endsWith("MSBuild.exe"));
+    if (path) return path.trim();
+  }
+  return null;
 }
 
 // Newest mtime among the inputs a native build consumes. Used to prove a build
