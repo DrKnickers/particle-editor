@@ -22,7 +22,7 @@
 //
 // Temp-file handling mirrors tests/test_palette_store.cpp (GetTempPathW + a
 // unique per-process directory, deleted on exit). Standalone console exe; see
-// tests/build_test_particle_system_io.bat.
+// the test_particle_system_io entry in tests/native-tests.json.
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>

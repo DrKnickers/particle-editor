@@ -19,7 +19,7 @@
 // suite.
 //
 // The builder links the exact production adapter TU; see
-// tests/build_test_startup_callback_guard.bat.
+// the test_startup_callback_guard entry in tests/native-tests.json.
 
 #include "host/StartupCallbackAdapter.h"
 #include "host/CompositionStartupPolicy.h"

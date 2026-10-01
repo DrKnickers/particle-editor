@@ -18,7 +18,7 @@
 //      byte-patching one field to its crafted value (located by a unique sentinel),
 //      so each image stays structurally valid up to the targeted corruption.
 //
-// See tests/build_test_alo_roundtrip.bat.
+// See the test_alo_roundtrip entry in tests/native-tests.json.
 
 #include "ParticleSystem.h"
 #include "ParticleSystemInstance.h"

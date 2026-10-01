@@ -16,7 +16,7 @@
 // it). NONE selected => blank-dome risk => re-scope trigger.
 //
 // This is a throwaway diagnostic (not a CI unit test); build via
-// tests/build_spike_skydome_technique.bat. Usage:
+// `node tests/build-native.mjs spike_skydome_technique`. Usage:
 //   spike_skydome_technique <shader.fxo> [more.fxo ...]
 
 #include <windows.h>

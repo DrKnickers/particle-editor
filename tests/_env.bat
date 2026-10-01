@@ -1,13 +1,14 @@
 @echo off
 REM ---------------------------------------------------------------------------
-REM Shared toolchain setup for the tests\build_*.bat host-free unit builders.
+REM Shared toolchain setup for tests\build-native.mjs (the host-free unit-test
+REM and tool builder), which runs this once and captures the resulting env.
 REM Discovers the toolchain AT RUNTIME so no machine-specific path is baked in:
 REM   * Visual Studio C++ (vcvars64) via vswhere.exe -- the fixed-location locator
 REM     Microsoft ships with every VS 2017+ install (any edition / install path).
 REM   * the legacy DirectX SDK (June 2010) via the DXSDK_DIR env var its installer
 REM     sets (falls back to the conventional Program Files location).
 REM Exports DXSDK_INC / DXSDK_LIB for callers that compile against d3dx9.
-REM Usage from a build script:  call "%~dp0_env.bat" || exit /b 1
+REM Usage from a script:  call "%~dp0_env.bat" || exit /b 1
 REM ---------------------------------------------------------------------------
 
 REM --- Visual Studio (skip if a developer environment is already active) ------

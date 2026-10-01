@@ -5,7 +5,7 @@
 // or required. Covers happy paths, multi-submesh / multi-mesh, tolerant
 // skipping of non-mesh root chunks, the legacy 0x10005 skip, and the malformed
 // cases the parser must reject. Standalone console exe; see
-// tests/build_test_alo_model.bat.
+// the test_alo_model entry in tests/native-tests.json.
 
 #include "AloModel.h"
 #include "ReferenceObjectMesh.h"   // [refmesh] shadow-bucket routing test

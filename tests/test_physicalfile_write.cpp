@@ -23,7 +23,7 @@
 //    If anyone ever adds FILE_SHARE_DELETE to the open flags, the first half of
 //    that assertion changes — deliberately, so the coupling is visible.
 //
-// Header + files.cpp only; see tests/build_test_physicalfile_write.bat.
+// Header + files.cpp only; see the test_physicalfile_write entry in tests/native-tests.json.
 
 #include "files.h"
 #include "exceptions.h"

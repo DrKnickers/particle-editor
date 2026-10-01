@@ -24,7 +24,7 @@
 // a white light, linearity in Diffuse.w, and the same per-light ambient
 // accumulation into _44.
 //
-// Standalone console exe; see tests/build_test_spherical_harmonics.bat.
+// Standalone console exe; see the test_spherical_harmonics entry in tests/native-tests.json.
 
 #include "SphericalHarmonics.h"
 

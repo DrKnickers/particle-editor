@@ -15,7 +15,7 @@
 //   - RegisterCombos REPLACES the previous list entirely (AcceleratorBridge.cpp:91-104)
 //
 // Mirrors tests/test_webview_modal_policy.cpp's shape. Standalone console exe;
-// see tests/build_test_accelerator_bridge.bat.
+// see the test_accelerator_bridge entry in tests/native-tests.json.
 
 #include "host/AcceleratorBridge.h"
 

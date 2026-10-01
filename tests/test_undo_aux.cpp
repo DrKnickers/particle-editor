@@ -15,7 +15,7 @@
 //   6. the shipped byte budget is 256 MiB
 //   7. only the explicit immediate-pair policy retains two over-budget entries
 //
-// Build/run: tests\build_test_undo_aux.bat ; tests\test_undo_aux.exe
+// Build/run: node tests/build-native.mjs test_undo_aux ; tests\test_undo_aux.exe
 // Expects the final line "=== undo aux: ALL PASS ===" and exit code 0.
 
 #include "UndoStack.h"

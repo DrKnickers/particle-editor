@@ -8,7 +8,7 @@
 // leaving legitimate relative game-asset names (interior backslashes, dotted
 // filenames) untouched. The newer fail-closed texture candidate helper must
 // return no candidates for unsafe names. Header-only; see
-// tests/build_test_asset_path_safety.bat.
+// the test_asset_path_safety entry in tests/native-tests.json.
 
 #include "AssetPathSafety.h"
 

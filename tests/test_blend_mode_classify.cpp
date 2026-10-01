@@ -1,8 +1,8 @@
 // Unit test for ParticleSystem::blendModeIsAlphaGated — the single source of
 // truth the Atlas-Frames picker's `blendAlphaGated` DTO field mirrors. Asserts
 // every exposed blend-mode enum value maps to the expected alpha-gated class.
-// Standalone x64 console exe (no engine runtime); build shape mirrors
-// tests/build_test_emitter_reorder.bat but header-only (single TU).
+// Standalone x64 console exe (no engine runtime); same build shape as
+// test_emitter_reorder in tests/native-tests.json but header-only (single TU).
 #include "ParticleSystem.h"
 #include <cstdio>
 

@@ -10,7 +10,7 @@
 // mapping, and stable name sorting. Plus the trivial ProbeModelSkinned fail
 // branches; the Renderable / SkinnedUnsupported split is validated against real
 // `.alo` via the --probe dump mode. Standalone console exe; see
-// tests/build_test_game_object_catalog.bat.
+// the test_game_object_catalog entry in tests/native-tests.json.
 
 #include "GameObjectCatalog.h"
 #include "managers.h"

@@ -6,7 +6,7 @@
 // per-instance phase. Header-only + pure, so this links nothing from the
 // D3D rendering stack — just the DirectX libs for D3DXVECTOR3.
 //
-// Build:  tests\build_test_spawner_path.bat
+// Build:  node tests/build-native.mjs test_spawner_path
 // Run:    expects "Results: N passed, 0 failed".
 
 #include "SpawnerPath.h"

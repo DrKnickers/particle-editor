@@ -17,7 +17,7 @@
 //
 // All chosen inputs are exactly representable and scaled by powers of two, so
 // float comparisons below are exact unless noted. Standalone console exe; see
-// tests/build_test_rescale.bat.
+// the test_rescale entry in tests/native-tests.json.
 
 #include "Rescale.h"
 #include "ParticleSystem.h"

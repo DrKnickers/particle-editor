@@ -34,7 +34,7 @@
 //     virtual-dispatch on a fake instance would be UB)
 //   - the file-static RandPhase helper.
 //
-// Standalone console exe; see tests/build_test_spawner_driver.bat.
+// Standalone console exe; see the test_spawner_driver entry in tests/native-tests.json.
 
 #include "SpawnerDriver.h"
 

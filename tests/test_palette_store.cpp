@@ -10,7 +10,7 @@
 // leave only temp files behind.
 //
 // Build (from repo root):
-//   tests\build_test_palette_store.bat
+//   node tests/build-native.mjs test_palette_store
 // Run:
 //   tests\test_palette_store.exe
 

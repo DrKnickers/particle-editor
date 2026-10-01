@@ -2,18 +2,21 @@
 //
 //   node scripts/run-native-unit-tests.mjs [flags]
 //
-// Enumerates tests/test_*.cpp (cpp -> bat direction, so dump_*/spike_*/make_* diag
-// tools never enter the lane), builds each via its tests/build_<name>.bat, runs the
-// exe, and prints a PASS/FAIL/SKIP summary. Exits nonzero on any FAIL. A needs-exe
-// test whose ParticleEditor.exe is absent is a FAIL by default (a gate must not go
-// green around missing coverage); pass --allow-missing-exe to downgrade it to a
-// VISIBLE SKIP when iterating without an app build. A binary that exits 0 after
-// printing `SKIP:` for a case whose capability probe failed is likewise a FAIL by
-// default (--allow-missing-capabilities to accept). Hard-errors up front if any
-// test_*.cpp has no matching builder (orphan guard — a test that exists but can't
-// be built is a silent coverage hole).
+// Enumerates tests/test_*.cpp (the diagnostic tools live in tests/tools/ and never
+// enter the lane), builds them all in parallel through tests/build-native.mjs from
+// the tests/native-tests.json manifest, runs each exe in turn, and prints a
+// PASS/FAIL/SKIP summary. A manifest entry with "release": true is also built and
+// run as an /O2 /DNDEBUG binary, reported as `<name> [release]`. Exits nonzero on
+// any FAIL. A needs-exe test whose ParticleEditor.exe is absent is a FAIL by
+// default (a gate must not go green around missing coverage); pass
+// --allow-missing-exe to downgrade it to a VISIBLE SKIP when iterating without an
+// app build. A binary that exits 0 after printing `SKIP:` for a case whose
+// capability probe failed is likewise a FAIL by default
+// (--allow-missing-capabilities to accept). Hard-errors up front if the manifest
+// disagrees with the tree — above all, a test_*.cpp with no manifest entry (orphan
+// guard — a test that exists but can't be built is a silent coverage hole).
 //
-// Builds are NOT incremental: the bats compile production src/*.cpp and header-only
+// Builds are NOT incremental: tests compile production src/*.cpp and header-only
 // deps, so any cheap freshness check risks running stale exes green. --skip-build
 // exists as an EXPLICITLY UNSAFE flag for iterating on test logic only.
 //
@@ -36,6 +39,7 @@ import { readdirSync, existsSync, statSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
+import { buildTargets, configsOf, exePath, loadManifest, targetsOf, validateManifest } from "../tests/build-native.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const testsDir = join(repoRoot, "tests");
@@ -100,30 +104,18 @@ if (ONLY_NEEDS_EXE && EXCLUDE_NEEDS_EXE) {
   process.exit(1);
 }
 
-// cmd.exe /d /s /c with verbatim args: the only reliable way to launch a .bat
-// whose absolute path contains spaces ("Particle Editor") from Node. cwd is
-// ALWAYS repoRoot — several builders (e.g. build_test_clip_runner.bat) assume it.
-function runBat(batPath) {
-  return spawnSync("cmd.exe", ["/d", "/s", "/c", `""${batPath}""`], {
-    cwd: repoRoot,
-    stdio: "inherit",
-    shell: false,
-    windowsVerbatimArguments: true,
-    timeout: 300000, // a single unit build should never take 5 min
-  });
-}
-
 function discover() {
   const names = readdirSync(testsDir)
     .filter((f) => /^test_.*\.cpp$/i.test(f))
     .map((f) => f.replace(/\.cpp$/i, ""))
     .sort();
-  // Orphan guard: every assertion test must have a standard builder.
-  const orphans = names.filter((n) => !existsSync(join(testsDir, `build_${n}.bat`)));
-  if (orphans.length > 0) {
+  // Orphan guard: every assertion test must be in the build manifest (and the
+  // manifest must not point at files that are gone).
+  const problems = validateManifest();
+  if (problems.length > 0) {
     console.error(
-      `[gate] ORPHAN native test(s) with no tests/build_<name>.bat — unbuildable ` +
-        `assertions are a silent coverage hole:\n  ${orphans.join("\n  ")}`,
+      `[gate] tests/native-tests.json disagrees with the tree — an unbuildable ` +
+        `assertion is a silent coverage hole:\n  ${problems.join("\n  ")}`,
     );
     process.exit(1);
   }
@@ -138,10 +130,13 @@ function discover() {
   return list;
 }
 
-function main() {
+async function main() {
   const tests = discover();
+  const targets = targetsOf(loadManifest());
   if (LIST) {
-    for (const n of tests) console.log(n + (NEEDS_EXE.has(n) ? "  (needs-exe)" : ""));
+    for (const n of tests) {
+      console.log(n + (NEEDS_EXE.has(n) ? "  (needs-exe)" : "") + (targets.get(n).release ? "  (+release)" : ""));
+    }
     return 0;
   }
   if (tests.length === 0) {
@@ -149,17 +144,56 @@ function main() {
     return 1;
   }
 
+  const appExeMissing = (name) => NEEDS_EXE.has(name) && !existsSync(APP_EXE);
+  // One row per (test, config): the debug build keeps the bare test name, an
+  // extra release pass reports as `<name> [release]`.
+  const runs = tests.flatMap((name) =>
+    configsOf(targets.get(name)).map((config) => ({
+      name,
+      config,
+      label: config === "debug" ? name : `${name} [release]`,
+      exe: exePath(targets.get(name), config),
+    })));
+
+  // Build everything up front, in parallel (each target has its own obj dir).
+  const buildFailures = new Map();
+  if (!SKIP_BUILD) {
+    const toBuild = tests.filter((n) => !appExeMissing(n));
+    const beforeMs = new Map();
+    for (const r of runs) {
+      try { beforeMs.set(r.label, statSync(r.exe).mtimeMs); } catch { beforeMs.set(r.label, -1); }
+    }
+    const started = Date.now();
+    console.log(`[gate] building ${toBuild.length} native test(s) via tests/build-native.mjs`);
+    const built = await buildTargets(toBuild);
+    for (const r of runs.filter((r) => toBuild.includes(r.name))) {
+      const b = built.get(`${r.name}|${r.config}`);
+      if (!b?.ok) {
+        process.stdout.write(b?.log ?? "");
+        buildFailures.set(r.label, "build failed");
+        continue;
+      }
+      // Exit 0 alone doesn't prove a fresh binary — require the exe mtime to
+      // ADVANCE, else a stale exe reads green (same trap as the web-build dist proof).
+      let afterMs = -1;
+      try { afterMs = statSync(r.exe).mtimeMs; } catch { /* still missing */ }
+      if (afterMs <= beforeMs.get(r.label) || afterMs < 0) {
+        buildFailures.set(r.label, "build exited 0 but exe was not (re)produced");
+      }
+    }
+    console.log(`[gate] build phase ${((Date.now() - started) / 1000).toFixed(1)}s, ${buildFailures.size} failed`);
+  }
+
   const results = [];
   // Cases a binary self-skipped because a capability probe failed. Reported at
   // the end so a green run states plainly what it did NOT exercise (2026-07 audit).
   const skippedCases = [];
-  for (const name of tests) {
+  for (const { name, label, exe } of runs) {
     const started = Date.now();
-    const exe = join(testsDir, `${name}.exe`);
     const record = (status, note = "") =>
-      results.push({ name, status, secs: (Date.now() - started) / 1000, note });
+      results.push({ name: label, status, secs: (Date.now() - started) / 1000, note });
 
-    if (NEEDS_EXE.has(name) && !existsSync(APP_EXE)) {
+    if (appExeMissing(name)) {
       if (ALLOW_MISSING_EXE && !ONLY_NEEDS_EXE) {
         console.log(`[gate] ${name}: SKIP (app exe missing: ${APP_EXE})`);
         record("SKIP", "app exe missing");
@@ -173,24 +207,9 @@ function main() {
       continue;
     }
 
-    if (!SKIP_BUILD) {
-      let beforeMs = -1;
-      try { beforeMs = statSync(exe).mtimeMs; } catch { /* no prior exe */ }
-      console.log(`[gate] build ${name}`);
-      const b = runBat(join(testsDir, `build_${name}.bat`));
-      if (b.status !== 0 || b.error) {
-        record("FAIL", `build exit ${b.error ? "spawn-error" : b.status}`);
-        continue;
-      }
-      // A bat can exit 0 without compiling (broken script, skipped cl). Exit 0
-      // alone doesn't prove a fresh binary — require the exe mtime to ADVANCE,
-      // else a stale exe reads green (same trap as the web-build dist proof).
-      let afterMs = -1;
-      try { afterMs = statSync(exe).mtimeMs; } catch { /* still missing */ }
-      if (afterMs <= beforeMs || afterMs < 0) {
-        record("FAIL", "build exited 0 but exe was not (re)produced");
-        continue;
-      }
+    if (buildFailures.has(label)) {
+      record("FAIL", buildFailures.get(label));
+      continue;
     }
     if (!existsSync(exe)) {
       // --skip-build on a tree that never built this test.
@@ -198,7 +217,7 @@ function main() {
       continue;
     }
 
-    console.log(`[gate] run   ${name}`);
+    console.log(`[gate] run   ${label}`);
     // Capture-and-echo rather than "inherit": a test binary can print
     // `SKIP: <case> (<reason>)` for a case whose CAPABILITY probe failed —
     // test_clip_save_confinement does exactly that when `mklink /J` or 8.3
@@ -216,7 +235,7 @@ function main() {
     if (r.stdout) process.stdout.write(r.stdout);
     if (r.stderr) process.stderr.write(r.stderr);
     const skipped = [...String(r.stdout || "").matchAll(/^SKIP:\s*(.+)$/gm)].map((m) => m[1].trim());
-    if (skipped.length) skippedCases.push({ test: name, cases: skipped });
+    if (skipped.length) skippedCases.push({ test: label, cases: skipped });
 
     const verdict = selfSkipVerdict(skipped.length, ALLOW_MISSING_CAPABILITIES);
     if (r.error || r.signal) record("FAIL", r.signal ? `timeout/killed (${r.signal})` : String(r.error));
@@ -251,5 +270,8 @@ function main() {
 // selfSkipVerdict, and an unguarded process.exit(main()) would launch a full
 // native build the moment the module was imported.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  process.exit(main());
+  main().then(
+    (code) => process.exit(code),
+    (e) => { console.error(`[gate] ${e?.stack ?? e}`); process.exit(1); },
+  );
 }

@@ -5,7 +5,7 @@
 // without reading or writing the developer's real AloParticleEditor values.
 //
 // Build (from repo root):
-//   tests\build_test_recent_files.bat
+//   node tests/build-native.mjs test_recent_files
 // Run:
 //   tests\test_recent_files.exe
 

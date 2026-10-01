@@ -6,7 +6,7 @@
 // blocker was vetoing (or not vetoing) on the wrong combination. ShouldVetoClose
 // must return true on EXACTLY one of the eight (dirty, ephemeral, testHost)
 // combinations: dirty && !ephemeral && !testHost. Header-only; see
-// tests/build_test_close_guard.bat.
+// the test_close_guard entry in tests/native-tests.json.
 
 #include "CloseDecision.h"
 

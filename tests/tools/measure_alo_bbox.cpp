@@ -3,7 +3,7 @@
 // Not part of CI; not committed as a permanent test. Position floats live at
 // offset 0 of the 144-byte MASTER_VERTEX stride (AloModel.h:113).
 //
-//   build_test_alo_model.bat-style invocation; see the inline note below.
+//   build: node tests/build-native.mjs measure_alo_bbox; see the inline note below.
 //   usage: measure_alo_bbox.exe <path-to.alo>
 
 #include "AloModel.h"

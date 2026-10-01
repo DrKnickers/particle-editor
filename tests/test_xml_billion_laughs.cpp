@@ -22,7 +22,7 @@
 // This test feeds both payloads through XMLTree::parse via a MemoryFile and
 // asserts they THROW promptly, while normal documents (including one nested
 // deeper than any real game file but under the cap) parse WITHOUT throwing.
-// See tests/build_test_xml_billion_laughs.bat.
+// See the test_xml_billion_laughs entry in tests/native-tests.json.
 
 #include "xml.h"
 #include "files.h"

@@ -10,7 +10,7 @@
 // nameIndex/start/size, throwing BadFileException instead of crashing. This test
 // feeds crafted byte images through the MegaFile(IFile*) ctor (via a MemoryFile)
 // and asserts BadFileException is thrown -- never a crash -- and that a
-// well-formed tiny .meg constructs cleanly. See tests/build_test_meg_fuzz.bat.
+// well-formed tiny .meg constructs cleanly. See the test_meg_fuzz entry in tests/native-tests.json.
 
 #include "MegaFiles.h"
 #include "files.h"

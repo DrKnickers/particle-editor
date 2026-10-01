@@ -8,7 +8,7 @@
 // the adjacent entry's bytes as trailing garbage -> expat parse failed -> the
 // skydome XML lists "resolved" but parsed to zero entries. This test pins the
 // boundary behaviour against that regression. Standalone console exe; see
-// tests/build_test_subfile_read.bat.
+// the test_subfile_read entry in tests/native-tests.json.
 
 #include "files.h"
 #include "exceptions.h"

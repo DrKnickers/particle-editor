@@ -1,0 +1,278 @@
+{
+  "_readme": [
+    "Build manifest for the standalone native unit tests (tests/test_*.cpp) and the",
+    "diagnostic tools (tests/tools/*.cpp). Built by tests/build-native.mjs; the",
+    "cpp-unit lane (scripts/run-native-unit-tests.mjs) requires every test_*.cpp here.",
+    "Every target compiles tests/<name>.cpp (tools: tests/tools/<name>.cpp) plus",
+    "`sources`, with /W3 /WX and /I src. `uses`: dxsdk = DirectX SDK include + lib",
+    "path; expat = expat headers + XML_STATIC/XML_UNICODE_WCHAR_T; expat-lib = expat",
+    "plus the prebuilt expatw_static.lib; webview2 = WebView2 NuGet headers.",
+    "`release: true` adds an /O2 /DNDEBUG pass (tests/<name>.release.exe) so the",
+    "shipped parser's no-assert behaviour is exercised too."
+  ],
+  "tests": {
+    "test_accelerator_bridge": {
+      "sources": ["src/host/AcceleratorBridge.cpp"],
+      "uses": ["dxsdk"],
+      "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "test_alo_fuzz": {
+      "sources": ["src/AloModel.cpp", "src/ChunkReader.cpp", "src/files.cpp", "src/utils.cpp"],
+      "uses": ["dxsdk"],
+      "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"],
+      "release": true
+    },
+    "test_alo_model": {
+      "sources": ["src/AloModel.cpp", "src/ReferenceObjectMesh.cpp", "src/ChunkReader.cpp", "src/files.cpp", "src/utils.cpp"],
+      "defines": ["ALO_MODEL_TEST_PROBES"],
+      "uses": ["dxsdk"],
+      "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "test_alo_roundtrip": {
+      "sources": ["src/ParticleSystem.cpp", "src/ParticleSystemSerialization.cpp", "src/ChunkReader.cpp", "src/ChunkWriter.cpp", "src/crc32.cpp", "src/files.cpp", "src/utils.cpp", "src/LinkGroup.cpp"],
+      "uses": ["expat", "dxsdk", "webview2"],
+      "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"],
+      "release": true
+    },
+    "test_asset_path_safety": {
+      "uses": ["dxsdk"],
+      "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "test_asset_safety_integration": {
+      "sources": ["src/GameObjectCatalog.cpp", "src/SkydomeEnvironment.cpp", "src/AloModel.cpp", "src/ChunkReader.cpp", "src/xml.cpp", "src/files.cpp", "src/utils.cpp"],
+      "uses": ["expat-lib", "dxsdk", "webview2"],
+      "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "test_autosave_recover": {
+      "sources": ["src/Autosave.cpp", "src/ParticleSystem.cpp", "src/ParticleSystemSerialization.cpp", "src/ChunkReader.cpp", "src/ChunkWriter.cpp", "src/crc32.cpp", "src/files.cpp", "src/utils.cpp", "src/LinkGroup.cpp"],
+      "defines": ["AUTOSAVE_TESTING"],
+      "uses": ["expat", "dxsdk", "webview2"],
+      "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "shell32.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "test_blend_mode_classify": {
+      "uses": ["expat", "dxsdk"]
+    },
+    "test_bridge_spawner_state": {
+      "sources": ["src/SpawnerDriver.cpp"],
+      "includes": ["src/host"],
+      "uses": ["dxsdk"],
+      "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "test_capture_golden_profile": {},
+    "test_clip_path_tokens": {
+      "includes": ["src/host"]
+    },
+    "test_clip_runner": {
+      "sources": ["src/host/ClipRunner.cpp"],
+      "includes": ["src/host"]
+    },
+    "test_clip_save_confinement": {
+      "libs": ["shell32.lib"]
+    },
+    "test_clip_timeline": {
+      "includes": ["src/host"]
+    },
+    "test_close_guard": {
+      "uses": ["dxsdk"],
+      "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "test_device_state": {
+      "uses": ["dxsdk"]
+    },
+    "test_drive_runner": {
+      "sources": ["src/host/DriveRunner.cpp"],
+      "includes": ["src/host"]
+    },
+    "test_drive_script": {
+      "includes": ["src/host"]
+    },
+    "test_emitter_draw_order": {},
+    "test_emitter_reorder": {
+      "sources": ["src/ParticleSystem.cpp", "src/ParticleSystemSerialization.cpp", "src/ChunkReader.cpp", "src/ChunkWriter.cpp", "src/crc32.cpp", "src/files.cpp", "src/utils.cpp", "src/LinkGroup.cpp"],
+      "uses": ["expat", "dxsdk", "webview2"],
+      "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "test_game_object_catalog": {
+      "sources": ["src/GameObjectCatalog.cpp", "src/AloModel.cpp", "src/ChunkReader.cpp", "src/xml.cpp", "src/files.cpp", "src/utils.cpp"],
+      "uses": ["expat-lib", "dxsdk", "webview2"],
+      "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "test_gdiplus_encode": {},
+    "test_gizmo_ribbon": {},
+    "test_gizmo_sizing": {},
+    "test_instance_borrow": {},
+    "test_manip_readout": {
+      "uses": ["dxsdk"],
+      "libs": ["d3dx9.lib"]
+    },
+    "test_meg_fuzz": {
+      "sources": ["src/MegaFiles.cpp", "src/files.cpp", "src/utils.cpp", "src/crc32.cpp"],
+      "uses": ["expat", "dxsdk", "webview2"],
+      "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"],
+      "release": true
+    },
+    "test_mod_catalog": {
+      "libs": ["shell32.lib", "shlwapi.lib", "ole32.lib"]
+    },
+    "test_mod_layers": {},
+    "test_module_path": {
+      "libs": ["kernel32.lib"]
+    },
+    "test_muzzle_flash": {},
+    "test_palette_store": {
+      "sources": ["src/UI/PaletteStore.cpp", "src/crc32.cpp", "src/utils.cpp"],
+      "libs": ["shell32.lib", "user32.lib", "advapi32.lib"]
+    },
+    "test_particle_compaction": {},
+    "test_particle_mipfilter": {},
+    "test_particle_system_io": {
+      "sources": ["src/ParticleSystem.cpp", "src/ParticleSystemSerialization.cpp", "src/ChunkReader.cpp", "src/ChunkWriter.cpp", "src/crc32.cpp", "src/files.cpp", "src/utils.cpp", "src/LinkGroup.cpp"],
+      "uses": ["expat", "dxsdk", "webview2"],
+      "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "test_perf_trace": {
+      "sources": ["src/host/PerfTrace.cpp"],
+      "includes": ["src/host"]
+    },
+    "test_physicalfile_write": {
+      "sources": ["src/files.cpp", "src/utils.cpp"],
+      "uses": ["dxsdk"],
+      "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "test_plane_handle": {},
+    "test_preview_encode_worker": {
+      "sources": ["src/UI/PaletteThumbs.cpp", "src/utils.cpp", "src/files.cpp", "src/host/PerfTrace.cpp"],
+      "includes": ["src/host"],
+      "uses": ["dxsdk"],
+      "libs": ["d3d9.lib", "d3dx9.lib", "gdiplus.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "test_recent_files": {
+      "sources": ["src/host/RecentFiles.cpp"],
+      "uses": ["dxsdk"],
+      "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "test_record_output_safety": {
+      "includes": ["src/host"]
+    },
+    "test_ref_lock": {},
+    "test_reference_transform_memory": {
+      "uses": ["dxsdk"],
+      "libs": ["d3dx9.lib"]
+    },
+    "test_reference_world": {
+      "uses": ["dxsdk"],
+      "libs": ["d3dx9.lib"]
+    },
+    "test_rescale": {
+      "sources": ["src/Rescale.cpp", "src/ParticleSystem.cpp", "src/ParticleSystemSerialization.cpp", "src/ChunkReader.cpp", "src/ChunkWriter.cpp", "src/crc32.cpp", "src/files.cpp", "src/utils.cpp", "src/LinkGroup.cpp"],
+      "uses": ["expat", "dxsdk", "webview2"],
+      "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "test_resource_strings": {
+      "libs": ["user32.lib"]
+    },
+    "test_ring_fade": {},
+    "test_scene_overscan": {},
+    "test_selection_box": {},
+    "test_settings_restore": {
+      "sources": ["src/host/RestoredSettings.cpp"],
+      "includes": ["src/host"],
+      "uses": ["dxsdk"],
+      "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "test_skydome_environment": {
+      "sources": ["src/SkydomeEnvironment.cpp", "src/xml.cpp", "src/files.cpp", "src/utils.cpp"],
+      "uses": ["expat-lib", "dxsdk", "webview2"],
+      "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "test_spawn_schedule": {
+      "libs": ["kernel32.lib"]
+    },
+    "test_spawner_driver": {
+      "sources": ["src/SpawnerDriver.cpp"],
+      "uses": ["dxsdk"],
+      "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "test_spawner_path": {
+      "uses": ["dxsdk"],
+      "libs": ["d3dx9.lib"]
+    },
+    "test_spherical_harmonics": {
+      "sources": ["src/SphericalHarmonics.cpp"],
+      "uses": ["dxsdk"],
+      "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "test_startup_callback_guard": {
+      "sources": ["src/host/StartupCallbackAdapter.cpp"],
+      "uses": ["webview2"],
+      "libs": ["kernel32.lib"]
+    },
+    "test_stringconv": {},
+    "test_subfile_read": {
+      "sources": ["src/files.cpp", "src/utils.cpp"],
+      "uses": ["dxsdk"],
+      "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "test_undo_aux": {
+      "sources": ["src/UndoStack.cpp", "src/ParticleSystem.cpp", "src/ParticleSystemSerialization.cpp", "src/ChunkReader.cpp", "src/ChunkWriter.cpp", "src/crc32.cpp", "src/files.cpp", "src/utils.cpp", "src/LinkGroup.cpp"],
+      "uses": ["expat", "dxsdk", "webview2"],
+      "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "test_webmessage_ingress_policy": {},
+    "test_webview_modal_policy": {
+      "uses": ["dxsdk"],
+      "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "test_wic_encode_parity": {
+      "sources": ["src/host/WicEncode.cpp", "src/host/WindowCapture.cpp"],
+      "libs": ["gdiplus.lib", "windowscodecs.lib", "ole32.lib", "oleaut32.lib", "user32.lib", "gdi32.lib", "shlwapi.lib"]
+    },
+    "test_xml_billion_laughs": {
+      "sources": ["src/xml.cpp", "src/files.cpp", "src/utils.cpp"],
+      "uses": ["expat-lib", "dxsdk", "webview2"],
+      "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"],
+      "release": true
+    }
+  },
+  "tools": {
+    "dump_bones": {
+      "sources": ["src/AloModel.cpp", "src/ReferenceObjectMesh.cpp", "src/ChunkReader.cpp", "src/files.cpp", "src/utils.cpp"],
+      "uses": ["dxsdk"],
+      "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "dump_bounds": {
+      "sources": ["src/AloModel.cpp", "src/ChunkReader.cpp", "src/files.cpp", "src/utils.cpp"],
+      "uses": ["dxsdk"],
+      "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "dump_fire_emitter": {
+      "sources": ["src/ParticleSystem.cpp", "src/ParticleSystemSerialization.cpp", "src/ChunkReader.cpp", "src/ChunkWriter.cpp", "src/crc32.cpp", "src/files.cpp", "src/utils.cpp", "src/LinkGroup.cpp"],
+      "uses": ["expat", "dxsdk"],
+      "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "dump_refbounds": {
+      "sources": ["src/AloModel.cpp", "src/ReferenceObjectMesh.cpp", "src/ChunkReader.cpp", "src/files.cpp", "src/utils.cpp"],
+      "uses": ["dxsdk"],
+      "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "dump_skydome_uv": {
+      "sources": ["src/AloModel.cpp", "src/ReferenceObjectMesh.cpp", "src/ChunkReader.cpp", "src/files.cpp", "src/utils.cpp"],
+      "uses": ["dxsdk"],
+      "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "make_chain_test_alo": {
+      "sources": ["src/ParticleSystem.cpp", "src/ParticleSystemSerialization.cpp", "src/ChunkReader.cpp", "src/ChunkWriter.cpp", "src/crc32.cpp", "src/files.cpp", "src/utils.cpp", "src/LinkGroup.cpp"],
+      "uses": ["expat", "dxsdk", "webview2"],
+      "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "measure_alo_bbox": {
+      "sources": ["src/AloModel.cpp", "src/ChunkReader.cpp", "src/files.cpp", "src/utils.cpp"],
+      "uses": ["dxsdk"],
+      "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "spike_skydome_technique": {
+      "uses": ["dxsdk"],
+      "libs": ["d3d9.lib", "d3dx9.lib", "user32.lib", "gdi32.lib"]
+    }
+  }
+}

@@ -31,7 +31,7 @@
 // BadFile path instead. The former expectedKindMismatch() skip has been
 // removed, so the fuzzer now exercises this whole class rather than dodging it.
 //
-// Standalone console exe; see tests/build_test_alo_fuzz.bat.
+// Standalone console exe; see the test_alo_fuzz entry in tests/native-tests.json.
 
 #include "AloModel.h"
 #include "files.h"

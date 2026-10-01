@@ -15,7 +15,7 @@
 // reads that were always fine, which would take the editor from "blank window"
 // to "will not start at all".
 //
-// Header-only; see tests/build_test_module_path.bat.
+// Header-only; see the test_module_path entry in tests/native-tests.json.
 
 #include "host/ModulePath.h"
 

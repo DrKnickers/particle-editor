@@ -5,7 +5,7 @@
 // enumeration, the no-model skip, defaults for absent fields, case-insensitive
 // In_Background, model resolution, the total-miss path, and primary/secondary
 // pair resolution (incl. the asymmetric-miss case). Standalone console exe;
-// see tests/build_test_skydome_environment.bat.
+// see the test_skydome_environment entry in tests/native-tests.json.
 
 #include "SkydomeEnvironment.h"
 #include "managers.h"
