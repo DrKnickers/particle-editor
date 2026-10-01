@@ -140,7 +140,7 @@ public:
 	IDirect3DTexture9* getTexture(IDirect3DDevice9* pDevice, string filename)
 	{
 		size_t pos;
-		transform(filename.begin(), filename.end(), filename.begin(), toupper);
+		transform(filename.begin(), filename.end(), filename.begin(), [](unsigned char c) { return (char)toupper(c); });
 		filename = SanitizeAssetName(filename);   // F-PATH: strip absolute/UNC/.. before any CreateFile
 		if (ShaderDiagEnabled()) ShaderLog("[tex-gate] getTexture(%s)\n", filename.c_str());
 
@@ -334,7 +334,7 @@ public:
 	Effect* getShader(IDirect3DDevice9* pDevice, string filename)
 	{
 		size_t pos;
-		transform(filename.begin(), filename.end(), filename.begin(), toupper);
+		transform(filename.begin(), filename.end(), filename.begin(), [](unsigned char c) { return (char)toupper(c); });
 		filename = SanitizeAssetName(filename);   // F-PATH: strip absolute/UNC/.. before any CreateFile
 		if (ShaderDiagEnabled()) ShaderLog("[shader-gate] getShader(%s)\n", filename.c_str());
 
@@ -539,7 +539,7 @@ std::unique_ptr<ParticleSystem> LoadParticleSystem(const std::wstring& path,
     }
     catch (wexception& e)
     {
-        if (errorOut) *errorOut = WideToAnsi(e.what());
+        if (errorOut) *errorOut = WideToAnsi(e.wwhat());
         return nullptr;
     }
     catch (...)
@@ -555,7 +555,7 @@ std::unique_ptr<ParticleSystem> LoadParticleSystem(const std::wstring& path,
     }
     catch (wexception& e)
     {
-        if (errorOut) *errorOut = WideToAnsi(e.what());
+        if (errorOut) *errorOut = WideToAnsi(e.wwhat());
         system.reset();
     }
     catch (...)
@@ -590,7 +590,7 @@ bool SaveParticleSystem(ParticleSystem* system, const std::wstring& path,
     }
     catch (wexception& e)
     {
-        if (errorOut) *errorOut = WideToAnsi(e.what());
+        if (errorOut) *errorOut = WideToAnsi(e.wwhat());
         return false;
     }
     catch (...)
@@ -606,7 +606,7 @@ bool SaveParticleSystem(ParticleSystem* system, const std::wstring& path,
     }
     catch (wexception& e)
     {
-        if (errorOut) *errorOut = WideToAnsi(e.what());
+        if (errorOut) *errorOut = WideToAnsi(e.wwhat());
         ok = false;
     }
     catch (...)
@@ -1142,7 +1142,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			std::set_terminate([]() {
 				fprintf(stderr, "[capture] FATAL: std::terminate (unhandled exception)\n");
 				try { if (auto e = std::current_exception()) std::rethrow_exception(e); }
-				catch (wexception& we) { fwprintf(stderr, L"  wexception: %ls\n", we.what()); }
+				catch (wexception& we) { fwprintf(stderr, L"  wexception: %ls\n", we.wwhat()); }
 				catch (const std::exception& ex) { fprintf(stderr, "  std::exception: %s\n", ex.what()); }
 				catch (...) { fprintf(stderr, "  (non-std exception)\n"); }
 				fflush(stderr);

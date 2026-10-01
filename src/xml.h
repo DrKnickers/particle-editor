@@ -65,6 +65,8 @@ public:
 
 	XMLTree();
 	~XMLTree();
+	XMLTree(const XMLTree&) = delete;
+	XMLTree& operator=(const XMLTree&) = delete;
 };
 
 #endif

@@ -123,6 +123,12 @@
       "sources": ["src/UI/PaletteStore.cpp", "src/crc32.cpp", "src/utils.cpp"],
       "libs": ["shell32.lib", "user32.lib", "advapi32.lib"]
     },
+    "test_particle_alo_fuzz": {
+      "sources": ["src/ParticleSystem.cpp", "src/ParticleSystemSerialization.cpp", "src/ChunkReader.cpp", "src/ChunkWriter.cpp", "src/crc32.cpp", "src/files.cpp", "src/utils.cpp", "src/LinkGroup.cpp"],
+      "uses": ["expat", "dxsdk", "webview2"],
+      "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"],
+      "release": true
+    },
     "test_particle_compaction": {},
     "test_particle_mipfilter": {},
     "test_particle_system_io": {

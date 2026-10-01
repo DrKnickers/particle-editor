@@ -39,11 +39,13 @@ public:
 	ChunkType   nextMini();
 	void        skip();
 	long        size();
-	long        read(void* buffer, long size, bool check = true);
+	long        read(void* buffer, long size);
 	std::string readString();
 
 	ChunkReader(IFile* file);
 	~ChunkReader();
+	ChunkReader(const ChunkReader&) = delete;
+	ChunkReader& operator=(const ChunkReader&) = delete;
 };
 
 class ChunkWriter
@@ -71,5 +73,7 @@ public:
 
 	ChunkWriter(IFile* file);
 	~ChunkWriter();
+	ChunkWriter(const ChunkWriter&) = delete;
+	ChunkWriter& operator=(const ChunkWriter&) = delete;
 };
 #endif

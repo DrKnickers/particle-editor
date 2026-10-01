@@ -48,7 +48,11 @@ float GetRandom(float min, float max)
 
 static wstring FormatString(const wchar_t* format, va_list args)
 {
-    int      n   = _vscwprintf(format, args);
+    // Measuring consumes a va_list, so measure a copy and format with the original
+    va_list  copy;
+    va_copy(copy, args);
+    int      n   = _vscwprintf(format, copy);
+    va_end(copy);
     wchar_t* buf = new wchar_t[n + 1];
     try
     {

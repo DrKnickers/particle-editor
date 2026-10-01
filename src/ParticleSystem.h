@@ -308,6 +308,8 @@ public:
 	ParticleSystem();
 	ParticleSystem(IFile* file);
 	~ParticleSystem();
+	ParticleSystem(const ParticleSystem&) = delete;
+	ParticleSystem& operator=(const ParticleSystem&) = delete;
 
 	// Write the particle system to a file
 	void write(IFile* file);

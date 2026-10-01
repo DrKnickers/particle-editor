@@ -153,6 +153,9 @@ public:
         delete[] m_freeMap;
         delete[] m_particles;
     }
+
+    ParticleBlock(const ParticleBlock&) = delete;
+    ParticleBlock& operator=(const ParticleBlock&) = delete;
 };
 
 EmitterInstance::Particle& EmitterInstance::AllocateParticle()

@@ -1,4 +1,3 @@
-#include <cassert>
 #include <vector>
 #include "ChunkFile.h"
 #include "exceptions.h"
@@ -7,8 +6,14 @@ using namespace std;
 
 ChunkType ChunkReader::nextMini()
 {
-	assert(m_curDepth >= 0);
-	assert(m_size >= 0);
+	// Mini-chunks live only inside a data chunk. These used to be asserts,
+	// gone in Release: past the end of the file m_curDepth is -1 and
+	// m_offsets[-1] was read below; inside a container (m_size < 0) the
+	// container's bytes were parsed as mini-chunks.
+	if (m_curDepth < 0 || m_size < 0)
+	{
+		throw BadFileException();
+	}
 
 	if (m_miniSize >= 0)
 	{
@@ -49,7 +54,11 @@ ChunkType ChunkReader::nextMini()
 
 ChunkType ChunkReader::next()
 {
-	assert(m_curDepth >= 0);
+	// Past the end of the file (the top level already returned -1)
+	if (m_curDepth < 0)
+	{
+		throw BadFileException();
+	}
 
 	if (m_size >= 0)
 	{
@@ -70,6 +79,14 @@ ChunkType ChunkReader::next()
 	if (m_file->read((void*)&hdr, sizeof(CHUNKHDR)) != sizeof(CHUNKHDR))
 	{
 		throw ReadException();
+	}
+
+	// ChunkType is a signed long, so an on-disk type 0xFFFFFFFF would be
+	// returned as -1, the end-of-chunk sentinel, after we've already
+	// descended into it: the caller and the reader then disagree on depth.
+	if (letohl(hdr.type) == 0xFFFFFFFF)
+	{
+		throw BadFileException();
 	}
 
 	unsigned long size = letohl(hdr.size);
@@ -110,6 +127,13 @@ void ChunkReader::skip()
 	}
 	else
 	{
+		// Skipping pops one level; there is no chunk to skip at the top
+		// level (or past the end of the file), and popping there used to
+		// index m_offsets[-1].
+		if (m_curDepth <= 0)
+		{
+			throw BadFileException();
+		}
 		m_file->seek(m_offsets[m_curDepth--]);
 	}
 }
@@ -154,13 +178,13 @@ string ChunkReader::readString()
 	return string(buf.data(), (size_t)len - 1);
 }
 
-long ChunkReader::read(void* buffer, long size, bool check)
+long ChunkReader::read(void* buffer, long size)
 {
 	if (m_size >= 0)
 	{
 		unsigned long s = m_file->read(buffer, min(m_position + size, this->size()) - m_position);
 		m_position += s;
-		if (check && s != size)
+		if (s != size)
 		{
 			throw ReadException();
 		}

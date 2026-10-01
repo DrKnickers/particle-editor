@@ -19,6 +19,8 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 - New and Open right after an edit now always ask to save the unsaved change
 - The Bloom and Spawner panels no longer briefly revert to older settings when they open while the scene is changing
 - A toolbar or keyboard action that fails (Undo, Redo, Play/Pause, Step, Clear, Spawn, the View toggles, reloading textures or shaders, the reference-object controls) now says so in the status bar instead of failing silently
+- Loading a particle `.alo` no longer drops the settings that follow an unrecognized data chunk (for example "leave particles"), and particle files with corrupt chunk headers or nesting are now rejected as corrupt instead of being misread
+- File load errors now show their actual message instead of "Unknown exception"
 
 ### Security
 

@@ -119,7 +119,7 @@ IFile* MegaFile::getFile(std::string path) const
 {
 	try
 	{
-		transform(path.begin(), path.end(), path.begin(), toupper);
+		transform(path.begin(), path.end(), path.begin(), [](unsigned char c) { return (char)toupper(c); });
 		unsigned long crc = crc32(path.c_str(), path.size());
 
 		// Do a binary search (entries are sorted by CRC32)

@@ -17,12 +17,16 @@ IFile* FileManager::getFile(const string& path)
 	// the selected submod layers, then the mod root; see BuildModContentRoots) so mod
 	// loose files shadow the base game's. First match wins: the engine REPLACES a
 	// file by precedence, never merges, so this single resolved copy is faithful.
+	//
+	// A drive ("C:...") or rooted ("\...") path is used as-is; anything else is
+	// relative to each root. Length-checked: path may be shorter than two chars.
+	const bool relative = (path.size() < 2 || path[1] != ':') && (path.empty() || path[0] != '\\');
 	for (vector<wstring>::const_iterator root = modContentRoots.begin(); root != modContentRoots.end(); ++root)
 	{
 		try
 		{
 			wstring wpath = AnsiToWide(path);
-			wstring filename = (path[1] != ':' && path[0] != '\\') ? *root + wpath : wpath;
+			wstring filename = relative ? *root + wpath : wpath;
 			return new PhysicalFile(filename);
 		}
 		catch (IOException&)
@@ -36,7 +40,7 @@ IFile* FileManager::getFile(const string& path)
 		try
 		{
 			wstring wpath = AnsiToWide(path);
-			wstring filename = (path[1] != ':' && path[0] != '\\') ? *base + wpath : wpath;
+			wstring filename = relative ? *base + wpath : wpath;
 			return new PhysicalFile(filename);
 		}
 		catch (IOException&)

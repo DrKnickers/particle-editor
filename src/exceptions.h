@@ -10,10 +10,24 @@
 class wexception : public std::exception
 {
 	std::wstring message;
+	std::string  narrowMessage;
+
+	// ASCII copy for code that only knows std::exception (non-ASCII becomes
+	// '?'), so it is valid as both ANSI and UTF-8
+	void narrow()
+	{
+		narrowMessage.reserve(message.size());
+		for (size_t i = 0; i < message.size(); i++)
+		{
+			narrowMessage += (message[i] < 0x80) ? (char)message[i] : '?';
+		}
+	}
+
 public:
-	const wchar_t* what() { return message.c_str(); }
-	wexception(const wchar_t* _message) : message(_message) {}
-	wexception(const std::wstring& _message) : message(_message) {}
+	const wchar_t* wwhat() const { return message.c_str(); }
+	const char*    what() const noexcept override { return narrowMessage.c_str(); }
+	wexception(const wchar_t* _message) : message(_message) { narrow(); }
+	wexception(const std::wstring& _message) : message(_message) { narrow(); }
 };
 
 class wruntime_error : public wexception

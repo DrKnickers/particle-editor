@@ -341,7 +341,7 @@ static int dumpRealAlo(const char* path) {
     catch (...) { std::printf("cannot open %s\n", path); return 2; }
     AloModel m;
     try { m = LoadAloModel(f); }
-    catch (wexception& e) { f->Release(); std::wprintf(L"parse failed: %s\n", e.what()); return 1; }
+    catch (wexception& e) { f->Release(); std::wprintf(L"parse failed: %s\n", e.wwhat()); return 1; }
     catch (...) { f->Release(); std::printf("parse failed (unknown)\n"); return 1; }
     f->Release();
     std::printf("meshes: %zu\n", m.meshes.size());

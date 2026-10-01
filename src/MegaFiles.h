@@ -25,6 +25,8 @@ public:
 
 	MegaFile(IFile* file);
 	~MegaFile();
+	MegaFile(const MegaFile&) = delete;
+	MegaFile& operator=(const MegaFile&) = delete;
 };
 
 #endif

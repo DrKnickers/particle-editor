@@ -749,9 +749,11 @@ ParticleSystem::ParticleSystem(IFile* file)
 	            fflush(stdout);
 #endif
 	        }
-	        else
+	        else if (reader.size() < 0)
 	        {
-	            // Unknown chunk — drain its bytes and continue.
+	            // Unknown container — skip past it. An unknown DATA chunk is
+	            // skipped by the next() below; skipping it here as well popped
+	            // out of the 0x0900 root and lost every chunk after it.
 	            reader.skip();
 	        }
 	        type = reader.next();

@@ -293,7 +293,7 @@ int main(int argc, char** argv)
 
     AloModel m;
     try { m = LoadAloModel(f); f->Release(); }
-    catch (wexception& e) { f->Release(); std::wprintf(L"parse failed: %s\n", e.what()); return 1; }
+    catch (wexception& e) { f->Release(); std::wprintf(L"parse failed: %s\n", e.wwhat()); return 1; }
     catch (...) { f->Release(); std::printf("parse failed (unknown)\n"); return 1; }
 
     std::printf("=== %s ===\nmeshes=%zu\n\n", argv[1], m.meshes.size());

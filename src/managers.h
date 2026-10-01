@@ -133,6 +133,8 @@ public:
 
 	FileManager(const std::vector<std::wstring>& basepaths);
 	~FileManager();
+	FileManager(const FileManager&) = delete;
+	FileManager& operator=(const FileManager&) = delete;
 };
 
 #endif
