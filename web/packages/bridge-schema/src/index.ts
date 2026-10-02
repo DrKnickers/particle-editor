@@ -1,3 +1,21 @@
+// Section index — search for the quoted text below:
+//   Adding a request: "Adding a request kind"
+//   Message IDs: "export type RequestId"
+//   Primitive types (vectors and colours): "Primitive types"
+//   Engine state, lights and spawner values: "Engine state DTO"
+//   Tree rows and reference objects: "export type EmitterTreeNode"
+//   Mods and content layers: "export type ModDescriptor"
+//   Viewport input: "export type ViewportInputEvent"
+//   Curve names, keys and locks: "Per-emitter animation curves"
+//   Emitter property fields: "Emitter properties DTO"
+//   Other data transfer objects: "Other DTOs"
+//   Requests, palette entries and autosave candidates: "Requests: JS"
+//   Answers by request name: "export interface ResponseMap"
+//   Answer lookup and refusals: "export type ResponseFor", "function isRefusal"
+//   Events pushed by the host: "Event DTOs"
+//   Bridge methods: "Bridge interface"
+//   JSON message wrappers: "Wire envelopes"
+//
 // Bridge schema — single source of truth for the JSON contract between
 // the React UI and the C++ host. Imported by both web/apps/editor/'s
 // MockBridge + NativeBridge; the C++ dispatcher implements it manually.

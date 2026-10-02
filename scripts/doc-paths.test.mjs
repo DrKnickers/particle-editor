@@ -1,5 +1,5 @@
 // Keep contributor links valid in both the working tree and the public mirror.
-// Source maps are checked when present; they are added separately.
+// Both source maps are required, so removing one fails the check too.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -50,7 +50,7 @@ function missingLinks(document, markdown) {
   return linkPaths(markdown).filter((path) => !existsSync(resolve(dirname(document), path)));
 }
 
-for (const document of [...documents, ...sourceMaps.filter((path) => existsSync(resolve(repoRoot, path)))]) {
+for (const document of [...documents, ...sourceMaps]) {
   test(`${document} local Markdown links exist`, () => {
     const fullPath = resolve(repoRoot, document);
     const missing = missingLinks(fullPath, readFileSync(fullPath, "utf8"));

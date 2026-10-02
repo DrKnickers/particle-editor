@@ -78,6 +78,10 @@ The codebase has been around since 2008 and inherits Mike.NL's GlyphX-era style.
 - **Change native behaviour.** Follow the [two-build instructions](#build--it-takes-two-builds)
   below. Build the web interface first, then the Windows host.
 
+- **Find the code.** Use the [native source map](src/README.md) for file formats,
+  simulation and request handlers, or the [web source map](web/apps/editor/README.md)
+  for panels, state owners and a worked property edit.
+
 ## Words this project uses
 
 | Word | Meaning |
@@ -91,6 +95,15 @@ The codebase has been around since 2008 and inherits Mike.NL's GlyphX-era style.
 | Lane | One group of checks in the test runner, such as `vitest` or `cpp-unit`. |
 | Policy header | A small C++ header that holds a rule without needing a window or graphics device. It has its own test. |
 | Legacy | Mike.NL's original Win32 editor. This editor preserves its behaviour. Names starting with `IDC_` or `IDD_` in comments are its old control IDs; you can ignore them. |
+
+| User term | Name in code | Meaning and source |
+|---|---|---|
+| Effect | `ParticleSystem` | The definition saved in a `.alo` file. It holds emitters, not running particles. See [ParticleSystem.h](src/ParticleSystem.h) and `ParticleSystem::write` in [ParticleSystemSerialization.cpp](src/ParticleSystemSerialization.cpp). The C++ class named `Effect` instead wraps a graphics shader, a program that draws a surface; see [Effect.h](src/Effect.h). |
+| Instance | `ParticleSystemInstance` | One running copy of an effect. It owns running emitters and refers to the definition. It is not saved in `.alo`. See [ParticleSystemInstance.h](src/ParticleSystemInstance.h), `m_system`, `m_emitters` and `SetMaxLifetime` (seconds; zero means no spawner lifetime cap). |
+| Emitter number or ID | `Emitter::index`, bridge `id`; `stableId` is different | `index` is the zero-based position in the emitter list. Requests use it as `id`; moves and deletions can change it. `stableId` keeps a row's identity across moves. It is not saved and is issued again when loading or undo rebuilds emitters. See [ParticleSystem.h](src/ParticleSystem.h), `stableId`, and [ParticleSystemSerialization.cpp](src/ParticleSystemSerialization.cpp), `writeProperties`: the positional index is written, but its saved value is ignored when reading. |
+| Index curve | Track name `index`, `TRACK_INDEX` | Chooses a frame in a texture atlas, an image split into cells. This is separate from the emitter's list position. The engine rounds the sampled value down before choosing a cell. The spinner allows 0 to 1,000,000 and nudges by 1; typed fractions are allowed. See [EmitterInstance.cpp](src/EmitterInstance.cpp), `texIndex`, and [CurveEditorPanel.tsx](web/apps/editor/src/screens/curve-editor/CurveEditorPanel.tsx), `spinnerBoundsForTrack`. Track values are saved by `writeTracks` in [ParticleSystemSerialization.cpp](src/ParticleSystemSerialization.cpp). |
+| Rotation curve | Track name `rotationSpeed`, `TRACK_ROTATION_SPEED` | The visible label is Rotation. With random rotation off, the engine integrates this curve over elapsed seconds to get turns, then converts turns to radians. Values therefore describe turns per second, not degrees. The spinner allows -1,000,000 to 1,000,000, stepping by 0.1. See `CHANNELS` and `spinnerBoundsForTrack` in [CurveEditorPanel.tsx](web/apps/editor/src/screens/curve-editor/CurveEditorPanel.tsx), and `IntegrateTrack` in [EmitterInstance.cpp](src/EmitterInstance.cpp). With random rotation on, `writeTracks` in [ParticleSystemSerialization.cpp](src/ParticleSystemSerialization.cpp) writes the random rotation average instead of the curve. |
+| Curve time | `TrackKey.time` | 0 is birth and 100 is the end of that particle's lifetime, not 100 seconds. The engine computes percentage time in `UpdateParticle` in [EmitterInstance.cpp](src/EmitterInstance.cpp). `writeTracks` in [ParticleSystemSerialization.cpp](src/ParticleSystemSerialization.cpp) divides interior key times by 100 for storage; the [schema](web/packages/bridge-schema/src/index.ts), `TrackKey`, carries the 0 to 100 form. |
 
 ## Which check for which change
 

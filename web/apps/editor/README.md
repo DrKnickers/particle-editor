@@ -1,0 +1,122 @@
+# Find the web interface code
+
+Start with [CONTRIBUTING.md](../../../CONTRIBUTING.md#start-here) to run the
+interface in a browser and make a first label change. React builds the visible
+interface from components, small pieces of screen code. The **bridge** lets
+those pieces ask the Windows **host** to read or change native state. In a
+browser, a **mock** supplies sample data instead of the host.
+
+## Where to look
+
+| Folder | What it is for; when to open it |
+|---|---|
+| `src/screens` | Whole panels and dialogs. Start with [EmitterPropertyTabs.tsx](src/screens/EmitterPropertyTabs.tsx) for the inspector, then [BasicTab.tsx](src/screens/property-tabs/BasicTab.tsx), [AppearanceTab.tsx](src/screens/property-tabs/AppearanceTab.tsx) or [PhysicsTab.tsx](src/screens/property-tabs/PhysicsTab.tsx) for a field. For the tree, open [EmitterTree.tsx](src/screens/EmitterTree.tsx), [EmitterRow.tsx](src/screens/emitter-tree/EmitterRow.tsx) or [EmitterTreeToolbar.tsx](src/screens/emitter-tree/EmitterTreeToolbar.tsx). Curves live in [CurveEditorPanel.tsx](src/screens/curve-editor/CurveEditorPanel.tsx) and [CurveEditor.tsx](src/screens/curve-editor/CurveEditor.tsx). |
+| `src/components` | Pieces shared around the main screen. Open [PanelLayout.tsx](src/components/PanelLayout.tsx) for panel placement, [MenuBar.tsx](src/components/MenuBar.tsx) for menus, or [Toolbar.tsx](src/components/Toolbar.tsx) for toolbar buttons. |
+| `src/primitives` | Basic controls. Open [Spinner.tsx](src/primitives/Spinner.tsx) for number entry, [Select.tsx](src/primitives/Select.tsx) for a list of choices, or [Tip.tsx](src/primitives/Tip.tsx) for hover help. A spinner is a number box with step buttons. |
+| `src/lib` | Shared rules and state. Open [file-state.ts](src/lib/file-state.ts) for file status and save prompts, [emitter-selection.ts](src/lib/tree/emitter-selection.ts) for multiple selection, or [curve-model.ts](src/lib/curve/curve-model.ts) for curve calculations. |
+| `src/bridge` | Host communication and the browser stand-in. [index.ts](src/bridge/index.ts), `makeBridge`, chooses [native.ts](src/bridge/native.ts) inside WebView2, the embedded browser, and [mock.ts](src/bridge/mock.ts) outside it. Open these when a request or event behaves differently in the two modes. |
+| `src/styles` | [tokens.css](src/styles/tokens.css) holds shared colours and sizes. [components.css](src/styles/components.css) holds rules for controls and panels. [globals.css](src/styles/globals.css) sets page-wide rules. Open these for appearance changes. |
+
+[App.tsx](src/App.tsx) connects the main pieces. The
+[bridge schema](../../packages/bridge-schema/src/index.ts) defines request,
+answer and event shapes. Search for the request name, such as
+`emitters/set-track-key`. Find its native handler in the
+[native source map](../../../src/README.md#find-a-request-handler).
+
+## Who owns this state?
+
+The owner holds the value that other parts must follow. A **cache** is a local
+copy for reading. An **event** is a message the host sends when something
+changes. **Persistence** means keeping a value after closing the program.
+**Undo** means restoring a saved earlier editing state.
+A **snapshot** is a copy of the current values.
+
+| State | Owner | How it changes | Persistence | Undo | Readers | Source to open |
+|---|---|---|---|---|---|---|
+| Document: emitter definitions and curves | Host's `ParticleSystem` | Property, track and tree requests change native fields; events tell the web to read again. | Written to `.alo` on Save. | Native snapshots restore document content. | Property tabs, tree, curve panel and particle engine. | [ParticleSystem.h](../../../src/ParticleSystem.h), [UndoStack.cpp](../../../src/UndoStack.cpp), [dispatch map](../../../src/README.md#find-a-request-handler). |
+| File path, dirty flag and recent files | Host; web keeps a copy. Dirty means there are unsaved changes. | File requests update path and recents; edits set dirty. `useSeedFileState` reads snapshots and follows events. | Content goes in `.alo`; recent paths go in Windows settings. Current path and dirty flag are session state. | Restoring content recalculates dirty against the last saved snapshot. It does not restore the file path or recent list. | App title, File menu and save prompt. | [file-state.ts](src/lib/file-state.ts), [BridgeDispatch_File.cpp](../../../src/host/BridgeDispatch_File.cpp), [BridgeDispatcher.cpp](../../../src/host/BridgeDispatcher.cpp), `ApplyUndoSnapshot`. |
+| Primary emitter selection: one row | Host's `m_selectedEmitterId` | `emitters/select` sets it; `emitters/selected` and engine events report it. | Session only; absent from `.alo`. | Selection alone creates no undo step. Document snapshots capture and restore the selected position. | Inspector, curve panel and tree. | [BridgeDispatch_Emitters.cpp](../../../src/host/BridgeDispatch_Emitters.cpp), [BridgeDispatcher.cpp](../../../src/host/BridgeDispatcher.cpp), `CaptureUndoPoint`. |
+| Multiple emitter selection | Web's `useEmitterSelectionStore` | Tree gestures call `setSingle`, `toggle`, `range` or `setIds`. The tree sends only the primary row to the host; batch actions send their own list of IDs. | Memory only. | No history for the set. Host selection events can adjust it after document undo. | Tree, keyboard navigation and batch menu actions. | [emitter-selection.ts](src/lib/tree/emitter-selection.ts), [EmitterTree.tsx](src/screens/EmitterTree.tsx), [MenuBar.tsx](src/components/MenuBar.tsx). |
+| Engine snapshot cache | Host owns values; `useEngineField` keeps one cache per bridge. | Starts with `engine/state/snapshot`, then follows `engine/state/changed`. Stops listening when the last reader leaves. | Cache stays in memory; this hook saves nothing. Individual fields have their own owners. | Cache has no undo history; it follows host events. | Toolbar, MenuBar, StatusBar and viewport controls. | [use-engine-snapshot.ts](src/lib/use-engine-snapshot.ts). |
+| Right dock: which side pane is open | Web store | `toggleDock` and `setDock` change it. | Browser `localStorage`, a saved key/value store, under `alo:right-dock`. Atlas reopens closed because it needs a selection. | No undo history. | PanelLayout, Toolbar, View menu and pane close buttons. | [right-dock.ts](src/lib/right-dock.ts), [PanelLayout.tsx](src/components/PanelLayout.tsx). |
+| Theme choice | Web | Preferences calls `applyMode`; App follows the operating system when the choice is `system`. | Browser storage under `alo:theme`. | No undo history. | Page colour rules and Preferences. | [theme.ts](src/lib/theme.ts), [stored-pref.ts](src/lib/stored-pref.ts), [App.tsx](src/App.tsx). |
+| Lighting | Host engine holds live lights; host settings hold the saved colour/intensity split. LightingPane keeps form values. | `engine/set/light`, `engine/set/ambient` and `engine/set/shadow` update the preview. Separate `settings/lighting/set` saves form values; `settings/lighting` reads them. | Windows registry, a settings store, through `LightingValues`; restored at startup. Not part of `.alo`. Test-host mode normally disables live settings reads and writes. | These lighting requests capture no undo point. The preview setters still mark the document dirty. | LightingPane and engine rendering. | [LightingPane.tsx](src/screens/LightingPane.tsx), [BridgeDispatch_Engine.cpp](../../../src/host/BridgeDispatch_Engine.cpp), [BridgeDispatch_SpawnerLighting.cpp](../../../src/host/BridgeDispatch_SpawnerLighting.cpp), [RestoredSettings.cpp](../../../src/host/RestoredSettings.cpp). |
+
+## How one edit travels
+
+This example changes **Initial spawn delay** (`initialDelay`), measured in
+seconds. It shows where to look when a field changes on screen but does not
+reach the preview or saved file.
+
+1. In [BasicTab.tsx](src/screens/property-tabs/BasicTab.tsx), search for
+   `Initial spawn delay:`. Its `FieldSpinner` receives `properties.initialDelay`
+   and commits `{ initialDelay: v }`. It displays two decimal places and
+   has a step of 0.1 seconds.
+2. [fields.tsx](src/screens/property-tabs/fields.tsx), `FieldSpinner`, passes
+   that value and callback to [Spinner.tsx](src/primitives/Spinner.tsx).
+   Typing commits on blur; Enter causes blur. Step, wheel and drag actions
+   also call `onChange`. `min={0}` clamps edits to zero or above. It does not
+   repair a negative value received from the host.
+3. [EmitterPropertyTabs.tsx](src/screens/EmitterPropertyTabs.tsx), `commit`,
+   updates the form immediately and sends
+   `emitters/set-properties` with `{ id: selectedId, patch: { initialDelay: v } }`.
+   A patch is a group of fields to change. This immediate local update is
+   called optimistic: the host has not answered yet.
+4. [NativeBridge](src/bridge/native.ts), `request`, puts the request in a
+   JSON message and sends it through WebView2. JSON is the text format used
+   for bridge messages. [BridgeDispatcher.cpp](../../../src/host/BridgeDispatcher.cpp),
+   `DispatchInternal`, routes it to
+   [BridgeDispatch_EmitterProperties.cpp](../../../src/host/BridgeDispatch_EmitterProperties.cpp).
+5. Search that handler for `emitters/set-properties`. It rejects an unknown
+   emitter or a missing/non-object patch. Before changing fields, it calls
+   `captureUndo`. Rapid edits with the same emitter and field names can share
+   one undo step. `getFloat` assigns the JSON number to `emit->initialDelay`.
+6. The handler calls `propagateLinkGroup`. A link group shares settings
+   between emitters. [BridgeDispatcher.cpp](../../../src/host/BridgeDispatcher.cpp)
+   copies shared fields to other members;
+   [ParticleSystem.cpp](../../../src/ParticleSystem.cpp), `copySharedParamsFrom`,
+   preserves `initialDelay` on a member when that field is exempt. The undo
+   snapshot covers the whole group.
+7. The handler returns `applied` and `skipped` field names, calls `MarkDirty`,
+   then calls `OnParticleSystemChanged(-1)` when an engine is bound. This
+   refreshes live instances and allows a paused preview to repaint. It emits
+   `engine/state/changed` and `emitters/tree/changed`. `MarkDirty` also emits
+   `dirty/changed` if the dirty flag changed. Refreshing does not promise to
+   restart an existing instance's initial wait; see
+   [EmitterInstance.cpp](../../../src/EmitterInstance.cpp), `onParticleSystemChanged`,
+   and [SpawnSchedule.h](../../../src/SpawnSchedule.h), `ReconcileNextSpawnTime`.
+8. The tree event makes `EmitterPropertyTabs` call `fetchProps` for the
+   current selection. [tree-refetch.ts](src/lib/tree-refetch.ts),
+   `requestTreeRefetch`, shares matching reads made in the same turn.
+   `emitters/get-properties` returns the native `initialDelay`, and the form
+   replaces its local copy. A rejected edit also calls `fetchProps`.
+9. The edit itself does not save a file. On Save,
+   [BridgeDispatch_File.cpp](../../../src/host/BridgeDispatch_File.cpp),
+   `file/save`, calls [ParticleSystemIO.cpp](../../../src/ParticleSystemIO.cpp),
+   `SaveParticleSystem`. [AtomicSave.cpp](../../../src/AtomicSave.cpp),
+   `AtomicWriteParticleSystem`, writes a temporary file through
+   `ParticleSystem::write` and replaces the destination after a successful
+   write. [ParticleSystemSerialization.cpp](../../../src/ParticleSystemSerialization.cpp),
+   `Emitter::writeProperties`, writes `initialDelay` as a float, a number that
+   can have a fractional part. It goes in mini-chunk `0x24`, a numbered field
+   in the file. `readProperties` reads it back.
+
+### Where validation happens
+
+The spinner's zero minimum is an interface rule. Native `getFloat` checks
+that `initialDelay` is a JSON number; it does **not** enforce that minimum.
+A wrong type keeps the old value and lists the field in `skipped`. Unknown
+field names are also skipped. Even a skipped patch reaches the handler's
+dirty, refresh and event code. The current web commit ignores the returned
+`applied`/`skipped` lists; its tree-event read supplies the host's value.
+
+[mock.ts](src/bridge/mock.ts), `emitters/set-properties`, is more lenient.
+It accepts known fields without native type checks, including the derived
+`blendAlphaGated` field, which native skips. An unknown emitter returns two
+empty lists instead of rejecting. Browser checks therefore cannot prove
+native validation, rendering or file saving.
+
+Use the **Property behaviour** row in
+[Which check for which change](../../../CONTRIBUTING.md#which-check-for-which-change)
+after changing a field. For a request addition, follow the checklist at the
+top of the [bridge schema](../../packages/bridge-schema/src/index.ts).
