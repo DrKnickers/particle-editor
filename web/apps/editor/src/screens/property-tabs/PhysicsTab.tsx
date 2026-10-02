@@ -1,6 +1,9 @@
+import { useId } from "react";
 import type { EmitterPropertiesDto, GroupDto, Vec3 } from "@particle-editor/bridge-schema";
 import { Section } from "@/components/Section";
 import { Spinner } from "@/primitives/Spinner";
+import { Tip } from "@/primitives/Tip";
+import { cn } from "@/lib/utils";
 import {
   FieldCheckbox,
   FieldSelect,
@@ -63,6 +66,14 @@ export function PhysicsTab({
 }) {
   const nonWeather = !properties.isWeatherParticle;
   const bouncinessEnabled = nonWeather && properties.groundBehavior === GROUND_BEHAVIOR_BOUNCE;
+  // Reasons come from the same flags that disable the controls, so an
+  // enabled field never carries an explanation for being unavailable.
+  const weatherHelp = nonWeather
+    ? undefined
+    : "Unavailable when Weather particle is selected in Basic → Generation.";
+  const bouncinessHelp = weatherHelp
+    ?? (bouncinessEnabled ? undefined : "Choose Bounce in Ground interaction → Behavior to edit bounciness.");
+  const accelerationDescriptionId = useId();
 
   const updateAcceleration = (idx: 0 | 1 | 2, v: number) => {
     const next: [number, number, number] = [
@@ -81,6 +92,12 @@ export function PhysicsTab({
 
   return (
     <div className="inspector">
+      {!nonWeather && (
+        <p className="text-xs text-text-2">
+          Weather particle in Basic → Generation disables Parent speed inherit, Acceleration X/Y/Z,
+          Gravity acceleration, Inward acceleration, Object space acceleration, Behavior and Bounciness.
+        </p>
+      )}
       <Section title="Initial position" unit="units">
         <GroupBody index={2} group={properties.groups[2]} onChange={(p) => updateGroup(2, p)} />
       </Section>
@@ -103,6 +120,7 @@ export function PhysicsTab({
             `displayPercentScale` primitive. */}
         <FieldSpinner
           label="Parent speed inherit:"
+          help={weatherHelp}
           value={Math.round(properties.parentLinkStrength * 100)}
           min={0}
           max={100}
@@ -128,7 +146,16 @@ export function PhysicsTab({
           {/* No unit here — the "Acceleration" section header carries
               "units/s²" for every field in the section (keeping this label short
               so the fixed-width label column doesn't truncate it). */}
-          <span className="lbl pt-1">X / Y / Z:</span>
+          <Tip content={weatherHelp}>
+            <span
+              className={cn("lbl pt-1", !nonWeather && "focus-ring")}
+              tabIndex={!nonWeather ? 0 : undefined}
+              aria-describedby={weatherHelp ? accelerationDescriptionId : undefined}
+            >
+              X / Y / Z:
+            </span>
+          </Tip>
+          {weatherHelp && <span id={accelerationDescriptionId} hidden>{weatherHelp}</span>}
           <div className="grid grid-cols-3 gap-1">
             <div className="axis-cell">
               <span className="axis-lbl">X</span>
@@ -138,6 +165,7 @@ export function PhysicsTab({
                 disabled={!nonWeather}
                 onChange={(v) => updateAcceleration(0, v)}
                 aria-label="Acceleration X"
+                aria-describedby={weatherHelp ? accelerationDescriptionId : undefined}
               />
             </div>
             <div className="axis-cell">
@@ -148,6 +176,7 @@ export function PhysicsTab({
                 disabled={!nonWeather}
                 onChange={(v) => updateAcceleration(1, v)}
                 aria-label="Acceleration Y"
+                aria-describedby={weatherHelp ? accelerationDescriptionId : undefined}
               />
             </div>
             <div className="axis-cell">
@@ -158,6 +187,7 @@ export function PhysicsTab({
                 disabled={!nonWeather}
                 onChange={(v) => updateAcceleration(2, v)}
                 aria-label="Acceleration Z"
+                aria-describedby={weatherHelp ? accelerationDescriptionId : undefined}
               />
             </div>
           </div>
@@ -166,6 +196,7 @@ export function PhysicsTab({
             "units/s²" for every acceleration field in the section. */}
         <FieldSpinner
           label="Gravity acceleration:"
+          help={weatherHelp}
           value={properties.gravity}
           step={0.1}
           disabled={!nonWeather}
@@ -173,6 +204,7 @@ export function PhysicsTab({
         />
         <FieldSpinner
           label="Inward acceleration:"
+          help={weatherHelp}
           value={properties.inwardAcceleration}
           step={0.1}
           disabled={!nonWeather}
@@ -180,6 +212,7 @@ export function PhysicsTab({
         />
         <FieldCheckbox
           label="Object space acceleration"
+          help={weatherHelp}
           checked={properties.objectSpaceAcceleration}
           disabled={!nonWeather}
           onCheckedChange={(v) => onCommit({ objectSpaceAcceleration: v })}
@@ -190,6 +223,7 @@ export function PhysicsTab({
       <Section title="Ground interaction">
         <FieldSelect
           label="Behavior:"
+          help={weatherHelp}
           value={properties.groundBehavior}
           options={GROUND_BEHAVIOR_OPTIONS}
           disabled={!nonWeather}
@@ -201,6 +235,7 @@ export function PhysicsTab({
             existing files outside [0,1] must round-trip on edit. */}
         <FieldSpinner
           label="Bounciness:"
+          help={bouncinessHelp}
           value={properties.bounciness}
           step={0.05}
           disabled={!bouncinessEnabled}

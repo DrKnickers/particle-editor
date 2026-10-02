@@ -78,6 +78,7 @@ export function BasicTab({
         />
         <FieldSpinner
           label="Skip time:"
+          help="Pre-spawns non-weather particles from this many seconds earlier."
           value={properties.skipTime}
           min={0}
           step={0.1}
@@ -87,6 +88,7 @@ export function BasicTab({
         />
         <FieldSpinner
           label="Freeze time:"
+          help="Freezes emitter time after this many seconds, counting Skip time; 0 or a value below Skip time disables freezing."
           value={properties.freezeTime}
           min={0}
           step={0.1}
@@ -219,6 +221,7 @@ export function BasicTab({
         />
         <FieldSpinner
           label="Minimum lifetime:"
+          help="Percent of maximum lifetime; each particle gets a random lifespan between that fraction and the maximum."
           value={properties.randomLifetimePerc}
           displayInvertedPercent
           unit="%"
@@ -230,6 +233,7 @@ export function BasicTab({
       <Section title="Connection">
         <FieldCheckbox
           label="Link particles to instance"
+          help="Makes already-spawned particles follow the effect instance's position, without rotating them."
           checked={properties.linkToSystem}
           onCheckedChange={(v) => onCommit({ linkToSystem: v })}
           inlineLabel

@@ -17,6 +17,7 @@
 
 import { describe, it, expect, vi } from "vitest";
 import { render as rtlRender, screen, fireEvent } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import type { ReactElement, ReactNode } from "react";
 import { AppearanceTab } from "../EmitterPropertyTabs";
@@ -101,5 +102,32 @@ describe("AppearanceTab — Always face camera semantic flip", () => {
     render(<AppearanceTab bridge={stubBridge} properties={props} onCommit={onCommit} />);
     fireEvent.click(screen.getByLabelText("Always face camera"));
     expect(onCommit).toHaveBeenCalledWith({ isWorldOriented: true });
+  });
+
+  it("describes the forced Bump map checkbox and gives its label a keyboard target", async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn();
+    const props = { ...makeFixtureProperties(0), blendMode: 11, isWorldOriented: true };
+    const { rerender } = render(<AppearanceTab bridge={stubBridge} properties={props} onCommit={onCommit} />);
+    const checkbox = screen.getByRole("checkbox", { name: "Always face camera" });
+    const label = screen.getByText("Always face camera");
+    const id = checkbox.getAttribute("aria-describedby");
+    expect(id).toBeTruthy();
+    expect(document.getElementById(id!)).toHaveAttribute("hidden");
+    expect(document.getElementById(id!)).toHaveTextContent("Fixed on while Blend mode is Bump map.");
+    expect(label).toHaveAttribute("aria-describedby", id);
+    expect(label).toHaveAttribute("tabindex", "0");
+    screen.getByRole("button", { name: "Rendering" }).focus();
+    await user.tab();
+    expect(label).toHaveFocus();
+    expect(checkbox).toBeDisabled();
+    expect(checkbox).toBeChecked();
+    await user.keyboard(" ");
+    expect(onCommit).not.toHaveBeenCalled();
+
+    rerender(<AppearanceTab bridge={stubBridge} properties={{ ...props, blendMode: 1 }} onCommit={onCommit} />);
+    expect(screen.getByRole("checkbox", { name: "Always face camera" })).not.toHaveAttribute("aria-describedby");
+    expect(screen.getByRole("checkbox", { name: "Always face camera" })).toBeEnabled();
+    expect(screen.getByText("Always face camera")).not.toHaveAttribute("tabindex");
   });
 });

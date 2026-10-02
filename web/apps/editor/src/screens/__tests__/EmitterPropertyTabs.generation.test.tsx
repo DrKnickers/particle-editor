@@ -111,4 +111,49 @@ describe("BasicTab — tri-state Generation mutex", () => {
     expect(onCommit).toHaveBeenCalledTimes(1);
     expect(onCommit).toHaveBeenCalledWith({ useBursts: false, isWeatherParticle: false });
   });
+
+  it("describes timing, lifetime and linking without guessing mesh emission meanings", () => {
+    renderWithMode(false, false);
+    const descriptions = [
+      ["Skip time:", "Pre-spawns non-weather particles from this many seconds earlier."],
+      ["Freeze time:", "Freezes emitter time after this many seconds, counting Skip time; 0 or a value below Skip time disables freezing."],
+      ["Minimum lifetime:", "Percent of maximum lifetime; each particle gets a random lifespan between that fraction and the maximum."],
+      ["Link particles to instance", "Makes already-spawned particles follow the effect instance's position, without rotating them."],
+    ] as const;
+    const ids: string[] = [];
+    for (const [label, help] of descriptions) {
+      const id = screen.getByLabelText(label).getAttribute("aria-describedby");
+      expect(id).toBeTruthy();
+      ids.push(id!);
+      expect(document.getElementById(id!)).toHaveAttribute("hidden");
+      expect(document.getElementById(id!)).toHaveTextContent(help);
+    }
+    expect(new Set(ids).size).toBe(descriptions.length);
+    expect(screen.getByRole("combobox", { name: "Emit mode:" })).not.toHaveAttribute("aria-describedby");
+    expect(screen.getByLabelText("Emit offset:")).not.toHaveAttribute("aria-describedby");
+    expect(screen.getByLabelText("Emit offset:")).toBeDisabled();
+  });
+
+  it("help preserves timing, minimum-lifetime and linking commit payloads", () => {
+    renderWithMode(false, false);
+    for (const [label, value, patch] of [
+      ["Skip time:", "2.5", { skipTime: 2.5 }],
+      ["Freeze time:", "4.5", { freezeTime: 4.5 }],
+      ["Minimum lifetime:", "25", { randomLifetimePerc: 0.75 }],
+    ] as const) {
+      onCommit.mockClear();
+      const input = screen.getByLabelText(label);
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value } });
+      fireEvent.blur(input);
+      expect(onCommit).toHaveBeenCalledTimes(1);
+      expect(onCommit).toHaveBeenCalledWith(patch);
+    }
+    onCommit.mockClear();
+    const checkbox = screen.getByRole("checkbox", { name: "Link particles to instance" }) as HTMLInputElement;
+    const next = !checkbox.checked;
+    fireEvent.click(checkbox);
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    expect(onCommit).toHaveBeenCalledWith({ linkToSystem: next });
+  });
 });

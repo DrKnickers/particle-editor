@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useId, useRef, useState } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
 import { FolderOpen, LayoutGrid } from "lucide-react";
 import { TexturePalettePopover } from "@/screens/TexturePalettePopover";
@@ -336,8 +336,36 @@ export function rowClassFor(widthBoost: WidthBoost | undefined): string {
         : "form-row";
 }
 
+function FieldLabel({
+  label,
+  help,
+  descriptionId,
+  disabled,
+}: {
+  label: string;
+  help?: string;
+  descriptionId: string;
+  disabled?: boolean;
+}) {
+  return (
+    <>
+      <Tip content={help}>
+        <span
+          className={cn("lbl", disabled && help && "focus-ring")}
+          tabIndex={disabled && help ? 0 : undefined}
+          aria-describedby={help ? descriptionId : undefined}
+        >
+          {label}
+        </span>
+      </Tip>
+      {help && <span id={descriptionId} hidden>{help}</span>}
+    </>
+  );
+}
+
 export function FieldSpinner({
   label,
+  help,
   value,
   min,
   max,
@@ -352,6 +380,7 @@ export function FieldSpinner({
   onCommit,
 }: {
   label: string;
+  help?: string;
   value: number;
   min?: number;
   max?: number;
@@ -386,6 +415,7 @@ export function FieldSpinner({
   testId?: string;
   onCommit: (value: number) => void;
 }) {
+  const descriptionId = useId();
   const displayValue = displayInvertedPercent
     ? Math.round(100 - value * 100)
     : displayScale != null
@@ -406,7 +436,7 @@ export function FieldSpinner({
   const effectiveDecimals = displayInvertedPercent ? 0 : decimals;
   return (
     <div className={rowClassFor(widthBoost)} data-testid={testId}>
-      <span className="lbl">{label}</span>
+      <FieldLabel label={label} help={help} descriptionId={descriptionId} disabled={disabled} />
       {/* The design's .form-row 3rd column carries the unit
           hint, so we suppress the Spinner's inline trailing-unit overlay
           here. Outside .form-row callers still get the inline unit. */}
@@ -419,6 +449,7 @@ export function FieldSpinner({
         decimals={effectiveDecimals}
         disabled={disabled}
         aria-label={label}
+        aria-describedby={help ? descriptionId : undefined}
         testId={testId}
       />
       <span className="unit">{unit ?? ""}</span>
@@ -428,6 +459,7 @@ export function FieldSpinner({
 
 export function FieldCheckbox({
   label,
+  help,
   checked,
   disabled,
   onCheckedChange,
@@ -435,6 +467,7 @@ export function FieldCheckbox({
   testId,
 }: {
   label: string;
+  help?: string;
   checked: boolean;
   disabled?: boolean;
   onCheckedChange: (checked: boolean) => void;
@@ -448,6 +481,7 @@ export function FieldCheckbox({
    *  instance" at the minimum pane width. */
   inlineLabel?: boolean;
 }) {
+  const descriptionId = useId();
   // Checkbox rows use the `.form-row-check` grid (`1fr auto`): the label
   // fills the row and the 18px checkbox hugs the right edge. Unlike the
   // spinner `.form-row` (`1fr 58px 40px`), it doesn't reserve the
@@ -456,7 +490,7 @@ export function FieldCheckbox({
   // `justify-self-end` keeps the checkbox flush right within its column.
   return (
     <div className={cn("form-row form-row-check", inlineLabel && "form-row-check-inline")}>
-      <span className="lbl">{label}</span>
+      <FieldLabel label={label} help={help} descriptionId={descriptionId} disabled={disabled} />
       <Checkbox
         size="md"
         checked={checked}
@@ -465,6 +499,7 @@ export function FieldCheckbox({
         onChange={(e) => onCheckedChange(e.target.checked)}
         className="justify-self-end"
         aria-label={label}
+        aria-describedby={help ? descriptionId : undefined}
       />
     </div>
   );
@@ -472,6 +507,7 @@ export function FieldCheckbox({
 
 export function FieldSelect({
   label,
+  help,
   value,
   options,
   disabled,
@@ -480,6 +516,7 @@ export function FieldSelect({
   widthBoost,
 }: {
   label: string;
+  help?: string;
   value: number;
   options: { value: number; label: string }[];
   disabled?: boolean;
@@ -492,9 +529,10 @@ export function FieldSelect({
    *  CSS modifiers. */
   widthBoost?: WidthBoost;
 }) {
+  const descriptionId = useId();
   return (
     <div className={rowClassFor(widthBoost)}>
-      <span className="lbl">{label}</span>
+      <FieldLabel label={label} help={help} descriptionId={descriptionId} disabled={disabled} />
       <Select
         value={String(value)}
         onValueChange={(v) => onCommit(Number(v))}
@@ -506,6 +544,7 @@ export function FieldSelect({
         disabled={disabled}
         data-testid={testId}
         aria-label={label}
+        aria-describedby={help ? descriptionId : undefined}
         className="w-full"
         contentClassName="min-w-[160px]"
       />

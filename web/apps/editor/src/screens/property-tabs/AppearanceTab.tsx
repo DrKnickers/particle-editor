@@ -261,6 +261,7 @@ export function AppearanceTab({
             checkbox checked + disabled. */}
         <FieldCheckbox
           label="Always face camera"
+          help={forceFace ? "Fixed on while Blend mode is Bump map." : undefined}
           checked={forceFace ? true : !properties.isWorldOriented}
           disabled={forceFace}
           onCheckedChange={(v) => onCommit({ isWorldOriented: !v })}

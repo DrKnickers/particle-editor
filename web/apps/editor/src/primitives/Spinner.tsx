@@ -52,6 +52,7 @@ export type SpinnerProps = {
   density?: SpinnerDensity;
   disabled?: boolean;
   "aria-label"?: string;
+  "aria-describedby"?: string;
   /** Optional test id. When set, stamps the increment/decrement arrow buttons
    *  as `${testId}-inc` / `${testId}-dec` so a --record clip (or a test) can
    *  click a specific spinner's arrow. Off by default — most spinners don't
@@ -99,6 +100,7 @@ export function Spinner({
   density = "default",
   disabled = false,
   "aria-label": ariaLabel,
+  "aria-describedby": ariaDescribedBy,
   testId,
 }: SpinnerProps) {
   const height = ROW_HEIGHT[density];
@@ -528,6 +530,7 @@ export function Spinner({
         value={text}
         disabled={disabled}
         aria-label={ariaLabel}
+        aria-describedby={ariaDescribedBy}
         onChange={(e) => { edited.current = true; setText(e.target.value); }}
         onKeyDown={handleKeyDown}
         onBlur={handleBlur}

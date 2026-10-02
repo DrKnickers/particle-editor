@@ -14,6 +14,7 @@
 
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render as rtlRender, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import type { ReactElement, ReactNode } from "react";
 import type {
@@ -401,6 +402,101 @@ describe("EmitterPropertyTabs", () => {
     render(<PhysicsTab properties={props} onCommit={() => {}} />);
     const input = screen.getByLabelText("Parent speed inherit:") as HTMLInputElement;
     expect(input.disabled).toBe(true);
+  });
+
+  it("PhysicsTab: weather reasons describe only the disabled fields, with one shared acceleration description", async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn();
+    const props = { ...makeFixtureProperties(0), isWeatherParticle: true };
+    render(<PhysicsTab properties={props} onCommit={onCommit} />);
+    const labels = [
+      "Parent speed inherit:", "Acceleration X", "Acceleration Y", "Acceleration Z",
+      "Gravity acceleration:", "Inward acceleration:", "Object space acceleration", "Behavior:", "Bounciness:",
+    ];
+    const ids = labels.map((label) => {
+      const control = screen.getByLabelText(label);
+      expect(control).toBeDisabled();
+      const id = control.getAttribute("aria-describedby");
+      expect(id).toBeTruthy();
+      expect(document.getElementById(id!)).toHaveAttribute("hidden");
+      expect(document.getElementById(id!)).toHaveTextContent("Unavailable when Weather particle is selected in Basic → Generation.");
+      return id;
+    });
+    expect(ids[1]).toBe(ids[2]);
+    expect(ids[2]).toBe(ids[3]);
+    expect(new Set(ids).size).toBe(7);
+    for (const label of ["Parent speed inherit:", "Gravity acceleration:", "Inward acceleration:", "Object space acceleration", "Behavior:", "Bounciness:"]) {
+      expect(screen.getByText(label)).toHaveAttribute("tabindex", "0");
+    }
+    expect(screen.getByLabelText("Inward speed:")).toBeEnabled();
+    expect(screen.getByRole("checkbox", { name: "Affected by wind" })).toBeEnabled();
+    expect(screen.getByTestId("physics-group-2-type-trigger")).toBeEnabled();
+    const note = screen.getByText(/Weather particle in Basic/);
+    expect(note).not.toHaveTextContent("Initial position");
+    expect(note).toHaveTextContent("Parent speed inherit");
+    expect(note).toHaveTextContent("Bounciness");
+
+    const clusterLabel = screen.getByText("X / Y / Z:");
+    expect(clusterLabel).toHaveAttribute("aria-describedby", ids[1]);
+    screen.getByRole("button", { name: "Acceleration" }).focus();
+    await user.tab();
+    expect(clusterLabel).toHaveFocus();
+    await user.keyboard("{Enter} ");
+    expect(onCommit).not.toHaveBeenCalled();
+    await user.tab();
+    expect(screen.getByText("Gravity acceleration:")).toHaveFocus();
+  });
+
+  it("PhysicsTab: described acceleration inputs keep per-axis names and commit payloads", () => {
+    const onCommit = vi.fn();
+    const props = {
+      ...makeFixtureProperties(0),
+      isWeatherParticle: false,
+      acceleration: [1, 2, 3] as unknown as [number, number, number],
+    };
+    render(<PhysicsTab properties={props} onCommit={onCommit} />);
+    for (const [axis, value, expected] of [
+      ["X", "4", [4, 2, 3]],
+      ["Y", "5", [1, 5, 3]],
+      ["Z", "6", [1, 2, 6]],
+    ] as const) {
+      onCommit.mockClear();
+      const input = screen.getByRole("textbox", { name: `Acceleration ${axis}` });
+      expect(input).toBeEnabled();
+      expect(input).not.toHaveAttribute("aria-describedby");
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value } });
+      fireEvent.blur(input);
+      expect(onCommit).toHaveBeenCalledTimes(1);
+      expect(onCommit).toHaveBeenCalledWith({ acceleration: expected });
+    }
+    expect(screen.getByText("X / Y / Z:")).not.toHaveAttribute("tabindex");
+    expect(screen.getByText("X / Y / Z:")).not.toHaveAttribute("aria-describedby");
+    for (const label of ["Parent speed inherit:", "Gravity acceleration:", "Inward acceleration:", "Object space acceleration", "Behavior:"]) {
+      expect(screen.getByLabelText(label)).not.toHaveAttribute("aria-describedby");
+    }
+    expect(screen.queryByText(/Weather particle in Basic/)).toBeNull();
+  });
+
+  it("PhysicsTab: non-weather bounciness explains the Bounce dependency", () => {
+    const props = { ...makeFixtureProperties(0), isWeatherParticle: false, groundBehavior: 0 };
+    render(<PhysicsTab properties={props} onCommit={vi.fn()} />);
+    const control = screen.getByLabelText("Bounciness:");
+    const id = control.getAttribute("aria-describedby");
+    expect(control).toBeDisabled();
+    expect(id).toBeTruthy();
+    expect(document.getElementById(id!)).toHaveTextContent("Choose Bounce in Ground interaction → Behavior to edit bounciness.");
+    expect(screen.getByText("Bounciness:")).toHaveAttribute("tabindex", "0");
+  });
+
+  it("PhysicsTab: an editable bounciness field carries no unavailable reason", () => {
+    // groundBehavior 2 is Bounce, the one setting that enables the field.
+    const props = { ...makeFixtureProperties(0), isWeatherParticle: false, groundBehavior: 2 };
+    render(<PhysicsTab properties={props} onCommit={vi.fn()} />);
+    const control = screen.getByLabelText("Bounciness:");
+    expect(control).toBeEnabled();
+    expect(control).not.toHaveAttribute("aria-describedby");
+    expect(screen.getByText("Bounciness:")).not.toHaveAttribute("tabindex");
   });
 
   it("PhysicsTab: Inward speed STAYS ENABLED when weather mode active (legacy parity, Emitter.cpp:175-190)", () => {
