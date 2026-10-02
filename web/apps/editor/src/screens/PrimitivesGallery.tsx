@@ -26,7 +26,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-[10px] text-text-3">{label}</span>
+      <span className="text-3xs text-text-3">{label}</span>
       <div>{children}</div>
     </div>
   );
@@ -48,7 +48,7 @@ export function PrimitivesGallery() {
         <span className="font-semibold">Particle Editor</span>
         <span className="text-text-3">·</span>
         <span className="text-xs text-text-2">Primitives gallery</span>
-        <span className="ml-auto text-[10px] text-text-3">?demo=primitives</span>
+        <span className="ml-auto text-3xs text-text-3">?demo=primitives</span>
       </header>
 
       <main className="mx-auto max-w-2xl px-6 py-6">
@@ -58,7 +58,7 @@ export function PrimitivesGallery() {
             <div className="w-32">
               <Spinner value={spin1} onChange={setSpin1} step={1} aria-label="Demo spinner 1" />
             </div>
-            <span className="mt-0.5 text-[10px] text-text-3">value: {spin1}</span>
+            <span className="mt-0.5 text-3xs text-text-3">value: {spin1}</span>
           </Row>
           <Row label="Float, unit='deg/s', tight density, min=-180, max=180">
             <div className="w-40">
@@ -74,7 +74,7 @@ export function PrimitivesGallery() {
                 aria-label="Demo spinner 2"
               />
             </div>
-            <span className="mt-0.5 text-[10px] text-text-3">value: {spin2}</span>
+            <span className="mt-0.5 text-3xs text-text-3">value: {spin2}</span>
           </Row>
           <Row label="Scientific notation, step=1e-4, loose density">
             <div className="w-40">
@@ -87,7 +87,7 @@ export function PrimitivesGallery() {
                 aria-label="Demo spinner 3"
               />
             </div>
-            <span className="mt-0.5 text-[10px] text-text-3">value: {spin3}</span>
+            <span className="mt-0.5 text-3xs text-text-3">value: {spin3}</span>
           </Row>
         </Section>
 
@@ -95,7 +95,7 @@ export function PrimitivesGallery() {
         <Section title="ColorButton">
           <Row label="Default density">
             <ColorButton value={color1} onChange={setColor1} aria-label="Demo color 1" />
-            <span className="mt-0.5 text-[10px] text-text-3">
+            <span className="mt-0.5 text-3xs text-text-3">
               rgb({color1.r}, {color1.g}, {color1.b})
             </span>
           </Row>
@@ -106,7 +106,7 @@ export function PrimitivesGallery() {
               density="tight"
               aria-label="Demo color 2"
             />
-            <span className="mt-0.5 text-[10px] text-text-3">
+            <span className="mt-0.5 text-3xs text-text-3">
               rgb({color2.r}, {color2.g}, {color2.b})
             </span>
           </Row>

@@ -263,7 +263,7 @@ async function main() {
       // level via engine/query/msaa-levels `current`, plus toggle
       // persistence across reopen. Restores every setting it mutates.
       "tests/preferences.spec.ts",
-      // AtlasPickerPanel click-to-assign: index-channel key selection
+      // AtlasPickerPane click-to-assign: index-channel key selection
       // auto-opens the docked picker; cell clicks write frames via
       // emitters/set-track-key (incl. the differing-frames confirm
       // modal). Runtime-skips when the seed texture can't be decoded

@@ -30,6 +30,8 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 - A camera position that would produce an invalid view (eye on the target, or looking straight along the up axis) is now refused instead of blanking the viewport, and zooming all the way in can no longer break the camera
 - If the editor's interface crashes, it now reloads itself instead of leaving a dead window. If it can't recover, it saves your unsaved changes for recovery, tells you, and closes, rather than leaving a window that can't be used or closed
 - A failed `--record` run no longer replaces the previous good clip, and recording never deletes unrelated files left in the clip's staging folder
+- The curve editor's right-click key menu now works from the keyboard (arrow keys, Enter, Escape) and returns focus where it came from. Each curve channel row has its own visibility checkbox and a separate "Edit curve" button, so screen readers no longer announce a button wrapped around a checkbox
+- Buttons, checkboxes, dropdowns and menus look and behave the same everywhere in the editor, and the remaining browser-native tooltips use the editor's own tooltip
 
 ### Security
 

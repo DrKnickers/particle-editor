@@ -9,6 +9,7 @@ import { Search, Package, Check, Plus, GripVertical, ChevronUp, ChevronDown, X, 
 import type { Bridge, LayerRef } from "@particle-editor/bridge-schema";
 import { Modal } from "@/components/Modal";
 import { cn } from "@/lib/utils";
+import { IconButton } from "@/primitives/IconButton";
 import { useStackReorder } from "@/lib/use-stack-reorder";
 import { moveItemToGap, refreshModStack } from "@/lib/mod-stack";
 import { basename, eqPath } from "@/lib/paths";
@@ -115,7 +116,6 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
     ? groups.map((g) => ({ ...g, items: g.items.filter((l) => l.label.toLowerCase().includes(q)) })).filter((g) => g.items.length > 0)
     : groups;
 
-  const iconBtn = "flex size-5 shrink-0 items-center justify-center rounded-[var(--radius-xs)] text-text-2 hover:bg-hover hover:text-text disabled:pointer-events-none disabled:opacity-40 focus-ring";
   // Make-room gap spacer (matches EmitterTree): role=presentation so it's never a
   // load-order listitem; bg-accent-soft + inset sky-400 ring previews the landing.
   const gapSpacer = (
@@ -128,9 +128,9 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
   );
 
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title="Mod Load Order" size="lg">
+    <Modal bridge={bridge} open={open} onOpenChange={onOpenChange} title="Mod Load Order" size="lg">
       <Modal.Body>
-        <p className="mb-3 text-[11px] leading-relaxed text-text-3">
+        <p className="mb-3 text-2xs leading-relaxed text-text-3">
           Top of the stack <span className="text-text-2">wins</span> on a shared file. Drag or use the
           arrows to reorder. <span className="text-text-2">Base game</span> is always the bottom layer.
         </p>
@@ -138,7 +138,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
 
           {/* LEFT — available */}
           <div className="flex min-w-0 flex-1 flex-col">
-            <div className="mb-[7px] text-[10px] font-semibold uppercase tracking-[0.06em] text-text-3">
+            <div className="mb-[7px] text-3xs font-semibold uppercase tracking-[0.06em] text-text-3">
               Available mods
             </div>
             {/* focus-within accent border = the keyboard-focus cue for the
@@ -156,7 +156,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
             <div className="flex flex-col gap-2">
               {visibleGroups.map((g) => (
                 <div key={g.key}>
-                  <div className="px-1.5 pb-1 text-[10px] font-semibold uppercase tracking-[0.06em] text-text-3">{g.label}</div>
+                  <div className="px-1.5 pb-1 text-3xs font-semibold uppercase tracking-[0.06em] text-text-3">{g.label}</div>
                   <div className="flex flex-col gap-px">
                     {g.items.map((l) => {
                       const added = inStack(l.path);
@@ -176,7 +176,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
                           <Package className="size-3 shrink-0 text-text-3" strokeWidth={1.5} />
                           <span className="min-w-0 flex-1 truncate">{l.label}</span>
                           {added ? (
-                            <span className="flex shrink-0 items-center gap-1 text-[10px] text-text-3">
+                            <span className="flex shrink-0 items-center gap-1 text-3xs text-text-3">
                               <Check className="size-2.5 text-success-fg" strokeWidth={1.8} />
                               in stack
                             </span>
@@ -185,7 +185,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
                               type="button"
                               aria-label={`Add ${l.label}`}
                               onClick={() => add(l.path)}
-                              className="flex shrink-0 items-center gap-0.5 rounded-[var(--radius-xs)] px-1.5 py-0.5 text-[11px] font-semibold text-accent hover:bg-accent-soft focus-ring"
+                              className="flex shrink-0 items-center gap-0.5 rounded-[var(--radius-xs)] px-1.5 py-0.5 text-2xs font-semibold text-accent hover:bg-accent-soft focus-ring"
                             >
                               <Plus className="size-2.5" strokeWidth={1.8} />
                               add
@@ -198,7 +198,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
                 </div>
               ))}
               {visibleGroups.length === 0 && (
-                <div className="px-1.5 py-2 text-[11px] text-text-3">No mods match “{query}”.</div>
+                <div className="px-1.5 py-2 text-2xs text-text-3">No mods match “{query}”.</div>
               )}
             </div>
           </div>
@@ -209,8 +209,8 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
           {/* RIGHT — load order */}
           <div className="flex min-w-0 flex-1 flex-col">
             <div className="mb-[7px] flex items-center gap-[7px]">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-text-3">Load order</span>
-              <span className="inline-flex items-center gap-[3px] rounded-[9px] bg-accent-soft px-1.5 py-px text-[9px] font-semibold uppercase tracking-[0.04em] text-accent">
+              <span className="text-3xs font-semibold uppercase tracking-[0.06em] text-text-3">Load order</span>
+              <span className="inline-flex items-center gap-[3px] rounded-[9px] bg-accent-soft px-1.5 py-px text-4xs font-semibold uppercase tracking-[0.04em] text-accent">
                 <Triangle className="size-2 fill-current" strokeWidth={0} />
                 top wins
               </span>
@@ -225,7 +225,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
                   <div className="mb-1.5 flex flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-border-2 px-3 py-[22px] text-center">
                     <Layers className="size-[22px] text-text-3" strokeWidth={1.3} />
                     <div className="text-xs text-text-2">No mods added</div>
-                    <div className="text-[11px] text-text-3">Base game only — add mods from the left.</div>
+                    <div className="text-2xs text-text-3">Base game only — add mods from the left.</div>
                   </div>
                 ) : (
                   <ul ref={drag.listRef} className="flex flex-col gap-[5px]" aria-label="Load order">
@@ -243,21 +243,21 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
                           <span className="flex w-[14px] shrink-0 items-center justify-center text-text-3" aria-hidden>
                             <GripVertical className="size-2.5" />
                           </span>
-                          <span className="min-w-[13px] shrink-0 text-right text-[11px] font-semibold tabular-nums text-text-3" aria-hidden="true">{i + 1}</span>
+                          <span className="min-w-[13px] shrink-0 text-right text-2xs font-semibold tabular-nums text-text-3" aria-hidden="true">{i + 1}</span>
                           <span className="min-w-0 flex-1 truncate text-text">{labelFor(p)}</span>
                           <div className="flex shrink-0 items-center gap-px">
-                            <button type="button" aria-label={`Move ${labelFor(p)} up`} disabled={i === 0}
-                                    onClick={() => move(i, -1)} className={iconBtn} title="Move up">
+                            <IconButton variant="row" label={`Move ${labelFor(p)} up`} tip="Move up"
+                                        disabled={i === 0} onClick={() => move(i, -1)}>
                               <ChevronUp className="size-3" strokeWidth={1.6} />
-                            </button>
-                            <button type="button" aria-label={`Move ${labelFor(p)} down`} disabled={i === order.length - 1}
-                                    onClick={() => move(i, 1)} className={iconBtn} title="Move down">
+                            </IconButton>
+                            <IconButton variant="row" label={`Move ${labelFor(p)} down`} tip="Move down"
+                                        disabled={i === order.length - 1} onClick={() => move(i, 1)}>
                               <ChevronDown className="size-3" strokeWidth={1.6} />
-                            </button>
-                            <button type="button" aria-label={`Remove ${labelFor(p)}`} onClick={() => remove(i)}
-                                    className={cn(iconBtn, "text-text-3 hover:text-danger-fg")} title="Remove">
+                            </IconButton>
+                            <IconButton variant="row" label={`Remove ${labelFor(p)}`} tip="Remove"
+                                        onClick={() => remove(i)} className="text-text-3 hover:text-danger-fg">
                               <X className="size-3" strokeWidth={1.5} />
-                            </button>
+                            </IconButton>
                           </div>
                         </li>
                       </Fragment>
@@ -273,7 +273,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
                     <Lock className="size-[11px]" strokeWidth={1.4} />
                   </span>
                   <span className="min-w-0 flex-1 truncate text-xs">Base game</span>
-                  <span className="shrink-0 text-[10px]">always last</span>
+                  <span className="shrink-0 text-3xs">always last</span>
                 </div>
               </div>
             </div>
@@ -282,7 +282,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
       </Modal.Body>
       <Modal.Footer>
         {applyError != null && (
-          <span data-testid="load-order-error" className="mr-auto text-[11px] leading-snug text-danger-fg">
+          <span data-testid="load-order-error" className="mr-auto text-2xs leading-snug text-danger-fg">
             {applyError}
           </span>
         )}

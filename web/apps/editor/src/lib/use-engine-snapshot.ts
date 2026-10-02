@@ -5,8 +5,8 @@
 // resolves. Errors are SWALLOWED (the consumer degrades to its defaults) —
 // this is the toolbar-dropdown contract. Do NOT add a console.warn here: the
 // picker BODIES that warn keep their own richer subscriptions; this hook is
-// only for the lightweight trigger dropdowns (BackgroundDropdown /
-// GroundDropdown / ReferenceObjectDropdown), which had three byte-identical
+// only for the lightweight trigger dropdowns (BackgroundPopover /
+// GroundPopover / ReferenceObjectPopover), which had three byte-identical
 // copies of this effect (DRY audit web-screens-0).
 
 import { useCallback, useRef, useSyncExternalStore } from "react";

@@ -1,7 +1,17 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { render as rtlRender, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import * as Tooltip from "@radix-ui/react-tooltip";
+import type { ReactElement, ReactNode } from "react";
 import { LoadOrderDialog } from "../LoadOrderDialog";
 import type { Bridge } from "@particle-editor/bridge-schema";
+
+// The row actions mounts Tips (Radix Tooltip.Root), which require the
+// Tooltip.Provider App.tsx supplies in production — this wrapper stands in
+// for it (precedent: renderWithTooltips in EmitterTree.test.tsx).
+const TipProvider = ({ children }: { children: ReactNode }) => (
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+);
+const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
 const LAYERS = [
   { path: "C:/m/Alpha",          label: "Alpha",    isFoC: true,  kind: "mod" as const },

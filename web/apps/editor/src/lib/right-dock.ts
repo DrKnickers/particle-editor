@@ -11,7 +11,7 @@
 // Default: "spawner" (matches the legacy spawner-visible=true default).
 //
 // The Toolbar's Spawner toggle, the View menu's Spawner (F7) + Lighting
-// entries, the SpawnerPanel's X-close, and PanelLayout's column all read +
+// entries, the SpawnerPane's X-close, and PanelLayout's column all read +
 // write through this single store so they stay in sync.
 
 import { create } from "zustand";
@@ -76,7 +76,7 @@ export function toggleDock(target: DockTarget): void {
   useStore.getState().toggle(target);
 }
 
-/** Imperative set (e.g. the SpawnerPanel X-close → `setDock(null)`). */
+/** Imperative set (e.g. the SpawnerPane X-close → `setDock(null)`). */
 export function setDock(d: RightDock): void {
   useStore.getState().setDock(d);
 }

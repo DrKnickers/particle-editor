@@ -25,7 +25,6 @@ import { render, screen } from "@testing-library/react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { makeBridgeStub } from "@/test/bridge-stub";
-import { BridgeContext } from "@/lib/bridge-context";
 import { PanelLayout } from "../PanelLayout";
 import {
   loadLayout,
@@ -48,9 +47,7 @@ function makeStubBridge(): Bridge {
 const renderPanelLayout = (bridge: Bridge) =>
   render(
     <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>
-      <BridgeContext.Provider value={bridge}>
-        <PanelLayout bridge={bridge} />
-      </BridgeContext.Provider>
+      <PanelLayout bridge={bridge} />
     </Tooltip.Provider>,
   );
 

@@ -54,7 +54,7 @@ describe("ToolPanel", () => {
   });
 
   it("bodyScroll={false} drops the body's overflow + reserved gutter (panel owns its scroll)", () => {
-    // AtlasPickerPanel scrolls its grid in its own container, so the ToolPanel
+    // AtlasPickerPane scrolls its grid in its own container, so the ToolPanel
     // body must NOT reserve a gutter — that wasted right strip pushes the
     // centred grid off-centre in the panel.
     render(

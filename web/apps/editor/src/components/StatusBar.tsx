@@ -9,14 +9,19 @@
 // cursor updates (which re-render this parent) SKIP them — they only re-render
 // when `stats` actually changes (stats/tick, 4 Hz). See the #549 Profiler audit:
 // StatusBar was re-rendering all five cells on every cursor move.
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useId, useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { useEngineField } from "@/lib/use-engine-snapshot";
+import { Tip } from "@/primitives/Tip";
 import { usePresence } from "@/lib/use-presence";
 import { STATUS_FEEDBACK_CLEAR_MS, useStatusFeedback } from "@/lib/status-feedback";
+import { cn } from "@/lib/utils";
 
 // Mirrors --motion-fast-out (tokens.css) — the .fade-animate-fast exit duration.
 const PAUSED_EXIT_MS = 110;
+
+const AUTOSAVE_FAILED_DETAIL =
+  "The last autosave write failed. Your most recent changes are not recoverable after a crash — save the file manually.";
 
 type Stats = { fps: number; emitters: number; particles: number; instances: number; overload: boolean };
 type Cursor3D = { x: number; y: number; z: number };
@@ -28,9 +33,10 @@ function cell(label: string, value: string, dim: boolean, warn = false) {
     <span className="flex items-baseline gap-1.5">
       <span className="text-text-3">{label}</span>
       <span
-        className={`font-mono tabular-nums ${
-          warn ? "text-warning-fg" : dim ? "text-text-3" : "text-text-2"
-        }`}
+        className={cn(
+          "font-mono tabular-nums",
+          warn ? "text-warning-fg" : dim ? "text-text-3" : "text-text-2",
+        )}
       >
         {value}
       </span>
@@ -107,6 +113,7 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
   // autosave has nothing to warn about, and a default of `false` would cry wolf
   // on every launch.
   const [autosaveHealthy, setAutosaveHealthy] = useState(true);
+  const autosaveDetailId = useId();
 
   useEffect(() => {
     const offStats = bridge.on("stats/tick", (e) => {
@@ -191,14 +198,22 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
             losing the crash-recovery net is not a status update, and the user
             may be minutes from needing it. */}
         {!autosaveHealthy && (
-          <span
-            role="alert"
-            data-testid="status-autosave-failed"
-            title="The last autosave write failed. Your most recent changes are not recoverable after a crash — save the file manually."
-            className="shrink-0 font-semibold text-warning-fg"
-          >
-            ⚠ Autosave failing
-          </span>
+          // The detail is the hover Tip for sighted users AND a permanent
+          // aria-describedby (a hidden node) for AT — a tooltip alone would
+          // exist only while hovered, which a screen reader never does.
+          <>
+            <Tip content={AUTOSAVE_FAILED_DETAIL}>
+              <span
+                role="alert"
+                data-testid="status-autosave-failed"
+                aria-describedby={autosaveDetailId}
+                className="shrink-0 font-semibold text-warning-fg"
+              >
+                ⚠ Autosave failing
+              </span>
+            </Tip>
+            <span id={autosaveDetailId} hidden>{AUTOSAVE_FAILED_DETAIL}</span>
+          </>
         )}
         <span className="shrink-0 text-text-3">⇧ Shift: spawn instance</span>
       </div>

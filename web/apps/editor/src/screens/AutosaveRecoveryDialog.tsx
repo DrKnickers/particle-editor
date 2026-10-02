@@ -43,6 +43,7 @@ export function formatAutosaveAge(mtimeMs: number, nowMs: number): string {
 export type RecoverChoice = "recent" | "stable" | "discard";
 
 type ViewProps = {
+  bridge: Bridge;
   /** The orphan to offer, or null to keep the dialog closed. */
   orphan: AutosaveOrphan | null;
   /** Current time for age rendering. Injectable for deterministic tests. */
@@ -58,7 +59,7 @@ type ViewProps = {
 
 /** Pure presentation. Renders the 3-state recovery prompt for the tiers the
  *  orphan carries (both → 3 buttons; single tier → restore + discard). */
-export function AutosaveRecoveryView({ orphan, nowMs, onChoose, onDismiss, error }: ViewProps) {
+export function AutosaveRecoveryView({ bridge, orphan, nowMs, onChoose, onDismiss, error }: ViewProps) {
   const now = nowMs ?? Date.now();
   const hasRecent = orphan != null && orphan.recentMtimeMs != null;
   const hasStable = orphan != null && orphan.stableMtimeMs != null;
@@ -69,6 +70,7 @@ export function AutosaveRecoveryView({ orphan, nowMs, onChoose, onDismiss, error
 
   return (
     <Modal
+      bridge={bridge}
       open={orphan != null}
       onOpenChange={(o) => { if (!o) onDismiss(); }}
       title="Recover unsaved changes?"
@@ -87,7 +89,7 @@ export function AutosaveRecoveryView({ orphan, nowMs, onChoose, onDismiss, error
             <span className="font-medium text-text break-all">{original}</span>
           </p>
           {orphan != null && (
-            <ul className="flex flex-col gap-1 text-[11px] leading-relaxed text-text-3">
+            <ul className="flex flex-col gap-1 text-2xs leading-relaxed text-text-3">
               {hasRecent && (
                 <li>
                   Most recent autosave —{" "}
@@ -109,7 +111,7 @@ export function AutosaveRecoveryView({ orphan, nowMs, onChoose, onDismiss, error
           {error != null && (
             <p
               data-testid="autosave-recover-error"
-              className="rounded border border-border bg-bg px-2 py-1 text-[11px] leading-relaxed text-danger-fg"
+              className="rounded border border-border bg-bg px-2 py-1 text-2xs leading-relaxed text-danger-fg"
             >
               {error}
             </p>
@@ -195,5 +197,5 @@ export function AutosaveRecoveryDialog({ bridge }: Props) {
   // for next launch.
   const dismiss = () => setOrphan(null);
 
-  return <AutosaveRecoveryView orphan={orphan} onChoose={choose} onDismiss={dismiss} error={recoverError} />;
+  return <AutosaveRecoveryView bridge={bridge} orphan={orphan} onChoose={choose} onDismiss={dismiss} error={recoverError} />;
 }

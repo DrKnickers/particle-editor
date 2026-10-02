@@ -46,6 +46,7 @@ export function RescaleDialog({ bridge, open, onOpenChange }: Props) {
 
   return (
     <Modal
+      bridge={bridge}
       open={open}
       onOpenChange={onOpenChange}
       title="Rescale Particle System"
@@ -87,7 +88,7 @@ export function RescaleDialog({ bridge, open, onOpenChange }: Props) {
               aria-label="Size scale"
             />
           </div>
-          <p className="text-[11px] leading-relaxed text-text-3">
+          <p className="text-2xs leading-relaxed text-text-3">
             Applies to the entire particle system. Use{" "}
             <em>Rescale Emitter…</em> to rescale a single emitter.
           </p>

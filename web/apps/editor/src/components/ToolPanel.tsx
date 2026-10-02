@@ -24,6 +24,8 @@
 import { X } from "lucide-react";
 import { useEffect, useRef, type ReactNode } from "react";
 import { Section } from "@/components/Section";
+import { IconButton } from "@/primitives/IconButton";
+import { cn } from "@/lib/utils";
 
 type ToolPanelProps = {
   title: string;
@@ -38,7 +40,7 @@ type ToolPanelProps = {
    *  slide-out from targeting the shrinking/detaching Close button. */
   closing?: boolean;
   /** When false, the body does NOT scroll or reserve a scrollbar gutter. For
-   *  panels that own an INTERNAL scroll region (e.g. AtlasPickerPanel, whose
+   *  panels that own an INTERNAL scroll region (e.g. AtlasPickerPane, whose
    *  cell grid scrolls in its own container) the body never overflows, so the
    *  default reserved `scrollbar-gutter` is pure waste — a 15px empty strip on
    *  the right that pushes the panel's content (and its centred grid) off-centre.
@@ -129,14 +131,9 @@ export function ToolPanel({
         style={{ height: HEADER_HEIGHT_PX }}
       >
         <span className="text-sm font-semibold text-text">{title}</span>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          className="flex size-6 items-center justify-center rounded text-text-2 focus-ring hover:bg-panel-2 hover:text-text"
-        >
+        <IconButton label="Close" tip={null} variant="ghost" onClick={onClose}>
           <X className="size-4" />
-        </button>
+        </IconButton>
       </div>
       {/* Body — scrolls independently when content overflows the panel
           height. The 48 px subtraction keeps the scrollbar inside the
@@ -144,9 +141,10 @@ export function ToolPanel({
           (panels with their own internal scroll) drops the overflow + reserved
           gutter so the body doesn't waste a 15px right strip. */}
       <div
-        className={`flex-1 p-3 ${
-          bodyScroll ? "overflow-y-auto scrollbar-stable" : "overflow-hidden"
-        }`}
+        className={cn(
+          "flex-1 p-3",
+          bodyScroll ? "overflow-y-auto scrollbar-stable" : "overflow-hidden",
+        )}
         style={{ height: `calc(100% - ${HEADER_HEIGHT_PX}px)` }}
       >
         {children}
@@ -231,7 +229,7 @@ type ToolPanelRowProps = {
 function ToolPanelRow({ label, children }: ToolPanelRowProps) {
   return (
     <div className="grid grid-cols-[80px_1fr] items-center gap-2">
-      <span className="text-[11px] text-text-2">{label}</span>
+      <span className="text-2xs text-text-2">{label}</span>
       <div className="min-w-0">{children}</div>
     </div>
   );

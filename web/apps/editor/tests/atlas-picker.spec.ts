@@ -1,4 +1,4 @@
-// Playwright specs for the AtlasPickerPanel click-to-assign flow
+// Playwright specs for the AtlasPickerPane click-to-assign flow
 // against the real native bridge inside ParticleEditor.exe --test-host.
 // Same CDP-attach harness as sibling specs (track-editor.spec.ts).
 //
@@ -13,7 +13,7 @@
 //      emitters/get-tracks.
 //   2. Confirm modal: with TWO selected index keys whose current frames
 //      differ (selection.frame === null), clicking a cell surfaces
-//      AtlasConfirmModal instead of committing; "Set all" applies the
+//      AtlasConfirmDialog instead of committing; "Set all" applies the
 //      frame to both keys.
 //
 // Host-data dependency: the cell grid mounts only when
@@ -26,7 +26,7 @@
 // PE_REQUIRE_GAME_TEXTURES=1 on a machine where game data is expected —
 // the probe failure then FAILS the test instead of skipping.
 //
-// jsdom coverage of the same surface: AtlasPickerPanel.assign.test.tsx
+// jsdom coverage of the same surface: AtlasPickerPane.assign.test.tsx
 // (assign + confirm semantics against the mock bridge) and
 // use-atlas-autoopen.test.tsx (reducer edges). These specs lock the
 // composed path: real curve-editor clicks → atlas context → dock →
@@ -231,9 +231,9 @@ test("selecting an index key on an atlas-eligible emitter auto-opens the picker;
   }
 });
 
-// ── 2. Multi-key differing frames → AtlasConfirmModal ────────────────
+// ── 2. Multi-key differing frames → AtlasConfirmDialog ────────────────
 
-test("two selected index keys with differing frames surface AtlasConfirmModal; Set all applies to both", async () => {
+test("two selected index keys with differing frames surface AtlasConfirmDialog; Set all applies to both", async () => {
   const firstId = await selectFirstEmitter();
 
   skipUnlessTextureOk(await seedTexturePreviewStatus());

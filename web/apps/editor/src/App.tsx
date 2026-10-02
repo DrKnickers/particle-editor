@@ -18,13 +18,12 @@ import { RescaleEmitterDialog } from "@/screens/RescaleEmitterDialog";
 import { LinkGroupSettingsDialog } from "@/screens/LinkGroupSettingsDialog";
 import { SetLinkGroupDialog } from "@/screens/SetLinkGroupDialog";
 import { AutosaveRecoveryDialog, AutosaveRecoveryView } from "@/screens/AutosaveRecoveryDialog";
-import { FileOpErrorModal } from "@/components/FileOpErrorModal";
-import { DeleteConfirmModal } from "@/components/DeleteConfirmModal";
-import { SaveChangesPrompt } from "@/screens/SaveChangesPrompt";
+import { FileOpErrorDialog } from "@/components/FileOpErrorDialog";
+import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
+import { SaveChangesDialog } from "@/screens/SaveChangesDialog";
 import { useFileState, useSeedFileState, promptSaveChanges, useFileStateStore } from "@/lib/file-state";
 import { useSeedModStack } from "@/lib/mod-stack";
 import { formatWindowTitle } from "@/lib/window-title";
-import { BridgeContext } from "@/lib/bridge-context";
 import { useBackingColorSync } from "@/lib/backing-color-sync";
 import { useAppAccelerators } from "@/lib/use-app-accelerators";
 import { applyMode, readStoredMode } from "@/lib/theme";
@@ -335,7 +334,7 @@ function AppShell() {
   });
 
   return (
-    <BridgeContext.Provider value={bridge}>
+    <>
       <RecordCursor
         x={recordCursor.x}
         y={recordCursor.y}
@@ -404,7 +403,7 @@ function AppShell() {
           {/* Sub-dialogs. Mounted at app level so menu
               triggers from anywhere can drive them and Radix portals don't
               fight clipping from intermediate scrollable parents. */}
-          <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
+          <AboutDialog bridge={bridge} open={aboutOpen} onOpenChange={setAboutOpen} />
           <RescaleDialog
             bridge={bridge}
             open={rescaleOpen}
@@ -419,7 +418,7 @@ function AppShell() {
               the file-state atom; this mount is invisible while the
               pendingAction slot is null. Driven from any destructive op
               handler via `promptSaveChanges(...)`. */}
-          <SaveChangesPrompt bridge={bridge} />
+          <SaveChangesDialog bridge={bridge} />
           {/* Emitter-tree context-menu modals. They
               observe the `tree-context` Zustand atom for open state; the
               EmitterTree row's ContextMenu items poke the atom to mount
@@ -433,11 +432,11 @@ function AppShell() {
           {/* Crash-recovery. Checks for an orphaned autosave on mount;
               a no-op when the host reports none (always so under the mock). */}
           <AutosaveRecoveryDialog bridge={bridge} />
-          <FileOpErrorModal />
-          <DeleteConfirmModal bridge={bridge} />
+          <FileOpErrorDialog bridge={bridge} />
+          <DeleteConfirmDialog bridge={bridge} />
         </div>
       </Tooltip.Provider>
-    </BridgeContext.Provider>
+    </>
   );
 }
 
@@ -452,10 +451,14 @@ const DEMO_AUTOSAVE_ORPHAN = {
   stableMtimeMs: DEMO_AUTOSAVE_NOW_MS - 8 * 60_000,   // "8 minutes ago"
 };
 function AutosaveRecoveryDemo() {
+  // The view's Modal takes the bridge like every dialog; outside the App shell
+  // there is no viewport to snapshot, so it is never actually called.
+  const bridge = useMemo(() => makeBridge(), []);
   return (
     <div className="flex h-full w-full items-center justify-center bg-bg text-sm text-text-2">
       <span>Autosave recovery dialog demo.</span>
       <AutosaveRecoveryView
+        bridge={bridge}
         orphan={DEMO_AUTOSAVE_ORPHAN}
         nowMs={DEMO_AUTOSAVE_NOW_MS}
         onChoose={(c) => console.log("[demo:autosave-recovery] choice:", c)}

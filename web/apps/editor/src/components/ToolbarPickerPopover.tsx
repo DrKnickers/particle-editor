@@ -1,6 +1,6 @@
 import * as Popover from "@radix-ui/react-popover";
 import type { ReactElement, ReactNode } from "react";
-import { AnimatedPopover } from "@/components/AnimatedPopover";
+import { AnimatedPopover } from "@/primitives/AnimatedPopover";
 
 type Props = {
   open?: boolean;

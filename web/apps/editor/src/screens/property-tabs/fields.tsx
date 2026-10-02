@@ -1,10 +1,11 @@
 import { useCallback, useRef, useState } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
-import * as Checkbox from "@radix-ui/react-checkbox";
-import * as Select from "@radix-ui/react-select";
-import { Check, ChevronDown, FolderOpen, LayoutGrid } from "lucide-react";
+import { FolderOpen, LayoutGrid } from "lucide-react";
 import { TexturePalettePopover } from "@/screens/TexturePalettePopover";
 import type { Bridge, GroupDto, Vec3 } from "@particle-editor/bridge-schema";
+import { cn } from "@/lib/utils";
+import { Checkbox } from "@/primitives/Checkbox";
+import { Select } from "@/primitives/Select";
 import { Spinner } from "@/primitives/Spinner";
 import { Tip } from "@/primitives/Tip";
 
@@ -455,25 +456,17 @@ export function FieldCheckbox({
   // beside the checkbox and squeezed long labels into a too-narrow col 1.
   // `justify-self-end` keeps the checkbox flush right within its column.
   return (
-    <div className={`form-row form-row-check${inlineLabel ? " form-row-check-inline" : ""}`}>
+    <div className={cn("form-row form-row-check", inlineLabel && "form-row-check-inline")}>
       <span className="lbl">{label}</span>
-      <Checkbox.Root
+      <Checkbox
+        size="md"
         checked={checked}
         disabled={disabled}
         data-testid={testId}
-        onCheckedChange={(v) => onCheckedChange(v === true)}
-        className={`flex h-[18px] w-[18px] items-center justify-center rounded border border-border-2 bg-bg-2 transition focus-ring col-2 justify-self-end ${
-          disabled ? "cursor-not-allowed opacity-40" : "cursor-pointer hover:border-border-2"
-        } data-[state=checked]:border-accent-strong data-[state=checked]:bg-accent-strong`}
+        onChange={(e) => onCheckedChange(e.target.checked)}
+        className="justify-self-end"
         aria-label={label}
-      >
-        <Checkbox.Indicator>
-          {/* White (not text-text) so the checkmark clears WCAG on the
-              --accent-strong fill in BOTH themes (text-text is #1f1f1f in
-              light → only 2.7:1 on the fill). */}
-          <Check size={12} className="text-white" />
-        </Checkbox.Indicator>
-      </Checkbox.Root>
+      />
     </div>
   );
 }
@@ -500,68 +493,27 @@ export function FieldSelect({
    *  CSS modifiers. */
   widthBoost?: WidthBoost;
 }) {
-  const selected = options.find((o) => o.value === value);
   return (
     <div className={rowClassFor(widthBoost)}>
       <span className="lbl">{label}</span>
-      <Select.Root
+      <Select
         value={String(value)}
         onValueChange={(v) => onCommit(Number(v))}
+        options={options.map((opt) => ({
+          value: String(opt.value),
+          label: opt.label,
+          testId: testId ? `${testId}-option-${opt.value}` : undefined,
+        }))}
         disabled={disabled}
-      >
-        <Select.Trigger
-          data-testid={testId}
-          aria-label={label}
-          className="flex h-[var(--row-h)] w-full items-center justify-between gap-1 rounded border border-border-2 bg-bg-2 px-2 text-xs text-text transition motion-reduce:transition-none hover:border-border-2 focus-ring disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {/* Radix Select.Value strips className, so wrap it in a truncating
-              span — white-space:nowrap + overflow-hidden + ellipsis apply to
-              the selected-label text through the wrapper. min-w-0 lets this
-              flex child shrink so long labels (e.g. "Diffuse transparent")
-              ellipsize instead of wrapping onto a second line (#573). */}
-          <span className="min-w-0 truncate">
-            <Select.Value>{selected?.label ?? ""}</Select.Value>
-          </span>
-          <Select.Icon className="shrink-0">
-            <ChevronDown className="size-3 text-text-3" />
-          </Select.Icon>
-        </Select.Trigger>
-        <Select.Portal>
-          <Select.Content
-            position="popper"
-            sideOffset={4}
-            className="z-50 min-w-[160px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-[var(--shadow-soft)] popover-animate-in"
-          >
-            <Select.Viewport>
-              {options.map((opt) => (
-                <Select.Item
-                  key={opt.value}
-                  value={String(opt.value)}
-                  data-testid={
-                    testId ? `${testId}-option-${opt.value}` : undefined
-                  }
-                  className="cursor-pointer rounded px-2 py-0.5 text-xs text-text outline-none data-[highlighted]:bg-accent-soft data-[highlighted]:text-accent"
-                >
-                  <Select.ItemText>{opt.label}</Select.ItemText>
-                </Select.Item>
-              ))}
-            </Select.Viewport>
-          </Select.Content>
-        </Select.Portal>
-      </Select.Root>
+        data-testid={testId}
+        aria-label={label}
+        className="w-full"
+        contentClassName="min-w-[160px]"
+      />
       <span className="unit" />
     </div>
   );
 }
-
-// No-op bridge so AppearanceTab renders in isolation (existing field-label
-// / spinner tests) without wiring a real bridge. The palette popover is
-// closed at mount, so list/occlusion requests never fire; only a texture
-// commit would hit `request`, which harmlessly resolves empty.
-export const NOOP_BRIDGE = {
-  request: async () => ({}),
-  on: () => () => {},
-} as unknown as Bridge;
 
 // GroupBody — renders a single random-param group's fields (Type
 // selector + type-conditional fields). The parent <Section> carries

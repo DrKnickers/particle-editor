@@ -33,6 +33,8 @@ import type {
 import { Check, ChevronRight, File, Minus } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { basename } from "@/lib/paths";
+import { Tip } from "@/primitives/Tip";
+import { cn } from "@/lib/utils";
 
 type Props = {
   bridge: Bridge;
@@ -342,10 +344,10 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
             branch is carried by the dash glyph alone. `mb-0.5` keeps adjacent
             selections as discrete pills. */}
         <div
-          className={
-            "mb-0.5 flex h-[26px] cursor-pointer items-center gap-1.5 rounded pr-1.5 text-xs " +
-            (state === "all" ? "bg-accent/20" : "hover:bg-hover")
-          }
+          className={cn(
+            "mb-0.5 flex h-[26px] cursor-pointer items-center gap-1.5 rounded pr-1.5 text-xs",
+            state === "all" ? "bg-accent/20" : "hover:bg-hover",
+          )}
           style={{ paddingLeft: `${4 + depth * 16}px` }}
         >
           {hasChildren ? (
@@ -365,7 +367,10 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
               className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded text-text-3 hover:text-text"
             >
               <ChevronRight
-                className={"size-3.5 transition-transform motion-reduce:transition-none " + (isCollapsed ? "" : "rotate-90")}
+                className={cn(
+                  "size-3.5 transition-transform motion-reduce:transition-none",
+                  !isCollapsed && "rotate-90",
+                )}
               />
             </span>
           ) : (
@@ -373,17 +378,20 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
           )}
           <span
             aria-hidden
-            className={
-              "flex size-3 shrink-0 items-center justify-center rounded-[3px] " +
-              (state === "none" ? "border border-border-2" : "bg-accent-strong text-white")
-            }
+            className={cn(
+              "flex size-3 shrink-0 items-center justify-center rounded-[3px]",
+              state === "none" ? "border border-border-2" : "bg-accent-strong text-white",
+            )}
           >
             {state === "all" && <Check className="size-2.5" strokeWidth={3} />}
             {state === "partial" && <Minus className="size-2.5" strokeWidth={3} />}
           </span>
-          <span className="min-w-0 flex-1 truncate text-text" title={node.name}>
-            {node.name}
-          </span>
+          {/* The full name for a truncated row. */}
+          <Tip content={node.name}>
+            <span className="min-w-0 flex-1 truncate text-text">
+              {node.name}
+            </span>
+          </Tip>
         </div>
         {hasChildren && !isCollapsed && (
           <div role="group">
@@ -402,6 +410,7 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
 
   return (
     <Modal
+      bridge={bridge}
       open={open}
       onOpenChange={onOpenChange}
       title="Import Emitters"
@@ -411,14 +420,14 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
         <div className="space-y-3">
           {/* Source file row */}
           <div className="flex items-center gap-2">
-            <span className="text-[11px] text-text-2">Source</span>
-            <span
-              title={sourcePath ?? undefined}
-              className="flex min-w-0 flex-1 items-center gap-1.5 rounded bg-bg-3 px-2 py-1 text-xs text-text-2"
-            >
-              <File className="size-3.5 shrink-0 text-text-3" aria-hidden />
-              <span className="truncate">{sourceLabel}</span>
-            </span>
+            <span className="text-2xs text-text-2">Source</span>
+            {/* The full path behind the basename. */}
+            <Tip content={sourcePath ?? undefined}>
+              <span className="flex min-w-0 flex-1 items-center gap-1.5 rounded bg-bg-3 px-2 py-1 text-xs text-text-2">
+                <File className="size-3.5 shrink-0 text-text-3" aria-hidden />
+                <span className="truncate">{sourceLabel}</span>
+              </span>
+            </Tip>
             <button
               type="button"
               onClick={() => void handleBrowse()}
@@ -459,7 +468,7 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
             <div className="overflow-hidden rounded border border-border">
               {/* Card header: count + bulk controls */}
               <div className="flex items-center justify-between border-b border-border bg-bg-2 px-3 py-2">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-text-2">
+                <span className="text-2xs font-semibold uppercase tracking-[0.04em] text-text-2">
                   Emitters{" "}
                   <span className="font-normal text-text-3">
                     · {picks.size} of {allIds.length} selected
@@ -471,7 +480,7 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
                     onClick={handleSelectAll}
                     disabled={allIds.length === 0}
                     aria-label="Select all emitters"
-                    className="text-[11px] text-accent hover:underline focus-ring disabled:cursor-not-allowed disabled:text-text-3 disabled:no-underline"
+                    className="text-2xs text-accent hover:underline focus-ring disabled:cursor-not-allowed disabled:text-text-3 disabled:no-underline"
                   >
                     Select all
                   </button>
@@ -480,7 +489,7 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
                     onClick={handleClear}
                     disabled={picks.size === 0}
                     aria-label="Clear selection"
-                    className="text-[11px] text-accent hover:underline focus-ring disabled:cursor-not-allowed disabled:text-text-3 disabled:no-underline"
+                    className="text-2xs text-accent hover:underline focus-ring disabled:cursor-not-allowed disabled:text-text-3 disabled:no-underline"
                   >
                     Clear
                   </button>

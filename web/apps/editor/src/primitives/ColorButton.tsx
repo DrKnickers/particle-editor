@@ -9,14 +9,16 @@
 // Flow:
 //   - Clicking the swatch button opens a sticky Radix Popover.
 //   - Clicking a basic/custom color fires onChange(rgb) immediately; popover
-//     stays open (sticky-on-commit pattern from BackgroundPicker).
+//     stays open (sticky-on-commit pattern from BackgroundPopoverBody).
 //   - "Add to custom" stores the picker's current color in the next empty slot.
 //
 // NOT routed through native ChooseColor — pure React, safe for CDP test mode.
 
 import { useState, useCallback } from "react";
 import { Tip } from "@/primitives/Tip";
+import { AnimatedPopover } from "@/primitives/AnimatedPopover";
 import { useRovingIndex } from "@/lib/use-roving-index";
+import { cn } from "@/lib/utils";
 import * as Popover from "@radix-ui/react-popover";
 import type { RgbColor } from "./palette-store";
 import { usePaletteStore } from "./palette-store";
@@ -149,7 +151,7 @@ export function ColorButton({
     addColor(pickerColor);
   };
 
-  const HEIGHT_MAP = { tight: "h-[var(--row-h-sm)]", default: "h-[var(--row-h)]", loose: "h-[32px]" };
+  const HEIGHT_MAP = { tight: "h-[var(--row-h-sm)]", default: "h-[var(--row-h)]", loose: "h-[var(--row-h-lg)]" };
 
   return (
     <Popover.Root open={open} onOpenChange={handleOpenChange}>
@@ -158,23 +160,26 @@ export function ColorButton({
           type="button"
           disabled={disabled}
           aria-label={ariaLabel}
-          className={`flex items-center gap-1.5 rounded border border-border-2 bg-bg-2 px-2 text-xs text-text-2 transition hover:border-border-2 disabled:cursor-not-allowed disabled:opacity-40 focus-ring ${HEIGHT_MAP[density]}`}
+          className={cn(
+            "flex items-center gap-1.5 rounded border border-border-2 bg-bg-2 px-2 text-xs text-text-2 transition enabled:hover:bg-panel-2 disabled:cursor-not-allowed disabled:opacity-40 focus-ring",
+            HEIGHT_MAP[density],
+          )}
         >
           <span
             className="inline-block size-3 rounded-sm border border-border-2"
             style={swatchStyle}
             aria-hidden="true"
           />
-          <span className="font-mono text-[10px]">{rgbToHex(value).toUpperCase()}</span>
+          <span className="font-mono text-3xs">{rgbToHex(value).toUpperCase()}</span>
         </button>
       </Popover.Trigger>
 
       <Popover.Portal>
-        <Popover.Content
+        <AnimatedPopover
           side="bottom"
           align="start"
           sideOffset={4}
-          className="z-50 w-72 rounded-md border border-border-2 bg-bg-2 p-3 shadow-[var(--shadow-soft)] popover-animate"
+          className="z-50 w-72 rounded-md border border-border-2 bg-bg-2 p-3 shadow-[var(--shadow-soft)]"
           onOpenAutoFocus={(e) => e.preventDefault()}
           onEscapeKeyDown={handleCancel}
         >
@@ -182,7 +187,7 @@ export function ColorButton({
               (design pass, B5): each grid is ONE Tab stop; arrows move within
               it (Up/Down jump a row of 8). */}
           <div className="mb-2">
-            <div className="mb-1 text-[10px] text-text-3">Basic colors</div>
+            <div className="mb-1 text-3xs text-text-3">Basic colors</div>
             <div className="grid grid-cols-8 gap-0.5">
               {BASIC_COLORS.map((color, i) => (
                 <Tip key={i} content={rgbToHex(color).toUpperCase()}>
@@ -201,7 +206,7 @@ export function ColorButton({
 
           {/* Custom colors — 2 rows × 8 columns = 16 slots (own roving group). */}
           <div className="mb-3">
-            <div className="mb-1 text-[10px] text-text-3">Custom colors</div>
+            <div className="mb-1 text-3xs text-text-3">Custom colors</div>
             <div className="grid grid-cols-8 gap-0.5">
               {slots.map((color, i) => (
                 <Tip key={i} content={color ? rgbToHex(color).toUpperCase() : "Empty"}>
@@ -211,9 +216,10 @@ export function ColorButton({
                     {...customRoving.itemProps(i)}
                     onClick={() => { if (color) handleSelectColor(color); }}
                     onContextMenu={(e) => { e.preventDefault(); setSlot(i, null); }}
-                    className={`size-5 rounded-sm border hover:border-border-2 focus-ring ${
-                      color ? "border-border-2" : "border-dashed border-border-2"
-                    }`}
+                    className={cn(
+                      "size-5 rounded-sm border hover:border-text-3 focus-ring",
+                      color ? "border-border-2" : "border-dashed border-border-2",
+                    )}
                     style={color ? { backgroundColor: rgbToHex(color) } : { backgroundColor: "transparent" }}
                   />
                 </Tip>
@@ -223,7 +229,7 @@ export function ColorButton({
 
           {/* Hex input */}
           <div className="mb-2 flex items-center gap-2">
-            <span className="text-[10px] text-text-3">#</span>
+            <span className="text-3xs text-text-3">#</span>
             <input
               type="text"
               value={hexText}
@@ -247,7 +253,7 @@ export function ColorButton({
           <div className="mb-3 space-y-1.5">
             {(["r", "g", "b"] as const).map((ch) => (
               <div key={ch} className="flex items-center gap-2">
-                <span className="w-3 text-[10px] text-text-3 uppercase">{ch}</span>
+                <span className="w-3 text-3xs text-text-3 uppercase">{ch}</span>
                 <input
                   type="range"
                   min={0}
@@ -266,7 +272,7 @@ export function ColorButton({
                     const n = parseInt(e.target.value, 10);
                     if (!Number.isNaN(n)) handleSliderChange(ch, n);
                   }}
-                  className="w-12 rounded border border-border-2 bg-panel-2 px-1 py-0.5 text-right font-mono text-[10px] text-text-2 outline-none transition-colors motion-reduce:transition-none focus:border-accent"
+                  className="w-12 rounded border border-border-2 bg-panel-2 px-1 py-0.5 text-right font-mono text-3xs text-text-2 outline-none transition-colors motion-reduce:transition-none focus:border-accent"
                   aria-label={`${ch.toUpperCase()} value`}
                 />
               </div>
@@ -278,7 +284,7 @@ export function ColorButton({
           <div className="mb-2 flex items-center gap-2">
             <div className="flex items-center gap-1.5" aria-hidden="true">
               <div className="flex flex-col items-center gap-0.5">
-                <span className="text-[9px] text-text-3">Original</span>
+                <span className="text-4xs text-text-3">Original</span>
                 <span
                   data-testid="color-original"
                   className="inline-block h-5 w-7 rounded-sm border border-border-2"
@@ -286,7 +292,7 @@ export function ColorButton({
                 />
               </div>
               <div className="flex flex-col items-center gap-0.5">
-                <span className="text-[9px] text-text-3">New</span>
+                <span className="text-4xs text-text-3">New</span>
                 <span
                   className="inline-block h-5 w-7 rounded-sm border border-border-2"
                   style={{ backgroundColor: rgbToHex(pickerColor) }}
@@ -297,14 +303,14 @@ export function ColorButton({
               <button
                 type="button"
                 onClick={() => { handleCancel(); setOpen(false); }}
-                className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-[10px] text-text-2 hover:bg-panel-3 hover:text-text focus-ring"
+                className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-3xs text-text-2 hover:bg-panel-3 hover:text-text focus-ring"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded border border-accent-strong bg-accent-strong px-3 py-1 text-[10px] font-medium text-white hover:opacity-90 focus-ring"
+                className="rounded border border-accent-strong bg-accent-strong px-3 py-1 text-3xs font-medium text-white hover:opacity-90 focus-ring"
               >
                 OK
               </button>
@@ -315,7 +321,7 @@ export function ColorButton({
           <button
             type="button"
             onClick={handleAddToCustom}
-            className="w-full rounded border border-border-2 bg-panel-2 px-2 py-1 text-[10px] text-text-2 hover:bg-panel-3 hover:text-text focus-ring"
+            className="w-full rounded border border-border-2 bg-panel-2 px-2 py-1 text-3xs text-text-2 hover:bg-panel-3 hover:text-text focus-ring"
           >
             Add to custom colors
           </button>
@@ -323,7 +329,7 @@ export function ColorButton({
           {/* Matches the popover surface (bg-bg-2) so it theme-flips; was a
               Tailwind palette gray that broke on the light theme. */}
           <Popover.Arrow className="fill-[var(--bg-2)]" />
-        </Popover.Content>
+        </AnimatedPopover>
       </Popover.Portal>
     </Popover.Root>
   );

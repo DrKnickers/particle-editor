@@ -10,6 +10,8 @@ import { moveItemToGap, refreshModStack } from "@/lib/mod-stack";
 import { basename, eqPath } from "@/lib/paths";
 import { useHostMessage } from "@/lib/use-host-message";
 import { LoadOrderDialog } from "@/screens/LoadOrderDialog";
+import { MENUBAR_CONTENT, MENUBAR_TRIGGER, MENU_ITEM, MENU_SEPARATOR } from "@/primitives/menu";
+import { Tip } from "@/primitives/Tip";
 
 const MODS_MENU_VALUE = "mods";
 
@@ -23,7 +25,7 @@ const ExpandIcon = () => (
   <svg aria-hidden width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 2.5h4v4M13.5 2.5l-5 5M7 3.5H3.5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V9" /></svg>
 );
 const TopWinsBadge = () => (
-  <span aria-hidden className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-accent">
+  <span aria-hidden className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-1.5 py-px text-4xs font-semibold uppercase tracking-wide text-accent">
     <svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><path d="M8 3l5 6H3z" /></svg>
     top wins
   </span>
@@ -32,20 +34,14 @@ const TopWinsBadge = () => (
 type ModsMenuProps = {
   bridge: Bridge;
   onMenuValueChange: (value: string) => void;
-  triggerClass: string;
-  contentClass: string;
-  itemClass: string;
-  separatorClass: string;
 };
 
-export function ModsMenu({
-  bridge,
-  onMenuValueChange,
-  triggerClass: TRIGGER,
-  contentClass: CONTENT,
-  itemClass: ITEM,
-  separatorClass: SEPARATOR,
-}: ModsMenuProps) {
+const TRIGGER = MENUBAR_TRIGGER;
+const CONTENT = MENUBAR_CONTENT;
+const ITEM = MENU_ITEM;
+const SEPARATOR = MENU_SEPARATOR;
+
+export function ModsMenu({ bridge, onMenuValueChange }: ModsMenuProps) {
   // list of discovered mods, fetched separately from the
   // engine snapshot because it has a much lower change cadence (only
   // shifts on Refresh or disk mutation). The *active* mod is on the
@@ -193,7 +189,7 @@ export function ModsMenu({
         <Menubar.Trigger className={TRIGGER}>Mods</Menubar.Trigger>
         <Menubar.Portal>
           <Menubar.Content
-            className={`${CONTENT} w-72`}
+            className={cn(CONTENT, "w-72")}
             align="start"
             sideOffset={4}
             // Guardrail: suppress the dropdown's auto-dismiss while a drag
@@ -209,7 +205,7 @@ export function ModsMenu({
                 as the demoted fallback + the keyboard/AT reorder path). */}
             <div className="mb-1 rounded-md border border-border bg-bg p-2">
               <div className="mb-1.5 flex items-center gap-1.5 px-0.5">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-text-3">
+                <span className="text-3xs font-semibold uppercase tracking-wide text-text-3">
                   Active load order
                 </span>
                 {stack.length > 0 && <TopWinsBadge />}
@@ -218,17 +214,18 @@ export function ModsMenu({
                     reorder path (the modal has ↑/↓ + tabbable remove). A real
                     Menubar.Item so it's in the roving tab order + AT-announced
                     (the menu's drag/× are mouse conveniences on top of this). */}
-                <Menubar.Item
-                  aria-label="Expand to full editor"
-                  title="Expand to full editor"
-                  onSelect={() => setLoadOrderOpen(true)}
-                  className="flex size-[18px] shrink-0 cursor-pointer items-center justify-center rounded text-text-3 outline-none hover:bg-hover hover:text-text data-[highlighted]:bg-hover data-[highlighted]:text-text"
-                >
-                  <ExpandIcon />
-                </Menubar.Item>
+                <Tip content="Expand to full editor">
+                  <Menubar.Item
+                    aria-label="Expand to full editor"
+                    onSelect={() => setLoadOrderOpen(true)}
+                    className="flex size-[18px] shrink-0 cursor-pointer items-center justify-center rounded text-text-3 outline-none hover:bg-hover hover:text-text data-[highlighted]:bg-hover data-[highlighted]:text-text"
+                  >
+                    <ExpandIcon />
+                  </Menubar.Item>
+                </Tip>
               </div>
               {stack.length === 0 ? (
-                <div className="flex h-[var(--row-h)] items-center rounded-[var(--radius-sm)] border border-dashed border-border-2 px-2 text-[11px] text-text-3">
+                <div className="flex h-[var(--row-h)] items-center rounded-[var(--radius-sm)] border border-dashed border-border-2 px-2 text-2xs text-text-3">
                   Unmodded — base game only.
                 </div>
               ) : (
@@ -253,7 +250,7 @@ export function ModsMenu({
                           <span className="flex w-3.5 shrink-0 items-center justify-center text-text-3" aria-hidden>
                             <GripVertical className="size-2.5" />
                           </span>
-                          <span className="min-w-[11px] shrink-0 text-right text-[11px] font-semibold tabular-nums text-text-3" aria-hidden="true">{i + 1}</span>
+                          <span className="min-w-[11px] shrink-0 text-right text-2xs font-semibold tabular-nums text-text-3" aria-hidden="true">{i + 1}</span>
                           <Layers className="size-3 shrink-0 text-text-3" strokeWidth={1.3} />
                           <span className="min-w-0 flex-1 truncate text-text">{labelFor(p)}</span>
                           <button
@@ -287,7 +284,7 @@ export function ModsMenu({
               </Menubar.SubTrigger>
               <Menubar.Portal>
                 <Menubar.SubContent
-                  className={`${CONTENT} w-60`}
+                  className={cn(CONTENT, "w-60")}
                   sideOffset={2}
                   alignOffset={-4}
                 >
@@ -307,7 +304,7 @@ export function ModsMenu({
                   </div>
                   {addVisibleGroups.map((g) => (
                     <div key={g.key}>
-                      <div className="px-2 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-wide text-text-3">{g.label}</div>
+                      <div className="px-2 pb-0.5 pt-1 text-3xs font-semibold uppercase tracking-wide text-text-3">{g.label}</div>
                       {g.items.map((l) => {
                         const added = inStack(l.path);
                         const nested = l.kind === "nested";
@@ -315,7 +312,7 @@ export function ModsMenu({
                           <div key={l.path} className={cn("flex h-[var(--row-h)] items-center gap-1.5 px-2 text-xs text-text-3", nested && "pl-5")}>
                             <Layers className="size-3 shrink-0 text-text-3" strokeWidth={1.3} />
                             <span className="min-w-0 flex-1 truncate">{l.label}</span>
-                            <span className="flex shrink-0 items-center gap-1 text-[10px]"><Check className="size-2.5 text-success-fg" strokeWidth={1.8} />in stack</span>
+                            <span className="flex shrink-0 items-center gap-1 text-3xs"><Check className="size-2.5 text-success-fg" strokeWidth={1.8} />in stack</span>
                           </div>
                         ) : (
                           <Menubar.Item
@@ -332,7 +329,7 @@ export function ModsMenu({
                     </div>
                   ))}
                   {addVisibleGroups.length === 0 && (
-                    <div className="px-2 py-2 text-[11px] text-text-3">No mods match.</div>
+                    <div className="px-2 py-2 text-2xs text-text-3">No mods match.</div>
                   )}
                 </Menubar.SubContent>
               </Menubar.Portal>

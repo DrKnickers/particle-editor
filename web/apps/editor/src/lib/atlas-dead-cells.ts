@@ -7,7 +7,7 @@
 // draw). This flags those cells so the picker can dim + disable them.
 //
 // Detection keys on the ALPHA-mode preview (`rawPrev`, flattenAlpha:false), whose PNG
-// preserves real transparency (see AtlasPickerPanel.tsx / PaletteThumbs.cpp). A cell is
+// preserves real transparency (see AtlasPickerPane.tsx / PaletteThumbs.cpp). A cell is
 // "dead" when the MAX alpha across its pixels is below the threshold — max (not mean) so a
 // faint-but-real sprite (low average alpha) is never mislabeled.
 

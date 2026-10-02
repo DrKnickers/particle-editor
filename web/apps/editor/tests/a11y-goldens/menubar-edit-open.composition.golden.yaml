@@ -129,27 +129,20 @@
 - text: "Value:"
 - textbox "Selected key value" [disabled]: "0.00"
 - group "Curve channels":
-  - button "Toggle Red curve Red" [pressed]:
-    - checkbox "Toggle Red curve" [checked]
-    - text: Red
-  - button "Toggle Green curve Green":
-    - checkbox "Toggle Green curve" [checked]
-    - text: Green
-  - button "Toggle Blue curve Blue":
-    - checkbox "Toggle Blue curve" [checked]
-    - text: Blue
-  - button "Toggle Alpha curve Alpha":
-    - checkbox "Toggle Alpha curve"
-    - text: Alpha
-  - button "Toggle Scale curve Scale":
-    - checkbox "Toggle Scale curve"
-    - text: Scale
-  - button "Toggle Index curve Index":
-    - checkbox "Toggle Index curve"
-    - text: Index
-  - button "Toggle Rotation curve Rotation":
-    - checkbox "Toggle Rotation curve"
-    - text: Rotation
+  - checkbox "Toggle Red curve" [checked]
+  - button "Edit Red curve" [pressed]: Red
+  - checkbox "Toggle Green curve" [checked]
+  - button "Edit Green curve": Green
+  - checkbox "Toggle Blue curve" [checked]
+  - button "Edit Blue curve": Blue
+  - checkbox "Toggle Alpha curve"
+  - button "Edit Alpha curve": Alpha
+  - checkbox "Toggle Scale curve"
+  - button "Edit Scale curve": Scale
+  - checkbox "Toggle Index curve"
+  - button "Edit Index curve": Index
+  - checkbox "Toggle Rotation curve"
+  - button "Edit Rotation curve": Rotation
 - text: 1 0 0.5
 - group "Multi-channel curve plot, 3 channels. Arrow keys select keys and switch channels; hold Ctrl to nudge."
 - status

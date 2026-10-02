@@ -8,7 +8,7 @@ namespace host {
 // REG_BINARY; colours + the force-align flag are REG_DWORD. ONE definition —
 // consumed by the HostWindow WM_CREATE restore and by both BridgeDispatch_Spawner
 // lighting handlers (get + set). The matching TS defaults live in
-// web/apps/editor/src/screens/LightingPanel.tsx (kept in lockstep by hand).
+// web/apps/editor/src/screens/LightingPane.tsx (kept in lockstep by hand).
 constexpr const wchar_t* kLightSunIntensity       = L"LightSunIntensity";
 constexpr const wchar_t* kLightSunZAngle          = L"LightSunZAngle";
 constexpr const wchar_t* kLightSunTilt            = L"LightSunTilt";

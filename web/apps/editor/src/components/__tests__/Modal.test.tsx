@@ -6,7 +6,6 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { makeBridgeStub } from "@/test/bridge-stub";
-import { BridgeContext } from "@/lib/bridge-context";
 import { Modal } from "../Modal";
 import { useModalOpen } from "@/lib/modal-open";
 
@@ -14,10 +13,14 @@ function makeStubBridge() {
   return makeBridgeStub();
 }
 
+// The modal only calls the bridge (backdrop snapshot) when a quadrant
+// viewport is mounted; tests without one just need a stub to satisfy the prop.
+const bridge = makeStubBridge();
+
 function SecondaryActionFixture({ onClick }: { onClick: () => void }) {
   const [open, setOpen] = useState(true);
   return (
-    <Modal open={open} onOpenChange={setOpen} title="Secondary action">
+    <Modal bridge={bridge} open={open} onOpenChange={setOpen} title="Secondary action">
       <Modal.Body>body</Modal.Body>
       <Modal.Footer>
         <Modal.OkButton variant="secondary" onClick={onClick}>Keep open</Modal.OkButton>
@@ -29,7 +32,7 @@ function SecondaryActionFixture({ onClick }: { onClick: () => void }) {
 describe("Modal", () => {
   it("renders title and body when open={true}", () => {
     render(
-      <Modal open onOpenChange={() => {}} title="Test Modal">
+      <Modal bridge={bridge} open onOpenChange={() => {}} title="Test Modal">
         <Modal.Body>
           <p>body-content</p>
         </Modal.Body>
@@ -53,7 +56,7 @@ describe("Modal", () => {
 
   it("forwards a caller's data-testid over the default OkButton selector", () => {
     render(
-      <Modal open onOpenChange={() => {}} title="Forwarded props">
+      <Modal bridge={bridge} open onOpenChange={() => {}} title="Forwarded props">
         <Modal.Footer>
           <Modal.OkButton data-testid="unique-action">Act</Modal.OkButton>
         </Modal.Footer>
@@ -66,7 +69,7 @@ describe("Modal", () => {
   it("Esc key fires onOpenChange(false)", () => {
     const onOpenChange = vi.fn();
     render(
-      <Modal open onOpenChange={onOpenChange} title="Test Modal">
+      <Modal bridge={bridge} open onOpenChange={onOpenChange} title="Test Modal">
         <Modal.Body>body</Modal.Body>
       </Modal>
     );
@@ -89,7 +92,7 @@ describe("Modal", () => {
   // useEffect for the alpha-cut sizing rationale.
   it("dialog body declares an opaque background", () => {
     render(
-      <Modal open onOpenChange={() => {}} title="Test Modal">
+      <Modal bridge={bridge} open onOpenChange={() => {}} title="Test Modal">
         <Modal.Body>body</Modal.Body>
       </Modal>
     );
@@ -106,7 +109,7 @@ describe("Modal", () => {
 
   it("dialog body uses a small drop-shadow (no shadow-xl or shadow-2xl)", () => {
     render(
-      <Modal open onOpenChange={() => {}} title="Test Modal">
+      <Modal bridge={bridge} open onOpenChange={() => {}} title="Test Modal">
         <Modal.Body>body</Modal.Body>
       </Modal>
     );
@@ -125,7 +128,7 @@ describe("Modal", () => {
     // load — they generated zero CSS (see components.css's popover
     // section note). They were replaced with real keyframe classes.
     render(
-      <Modal open onOpenChange={() => {}} title="Test Modal">
+      <Modal bridge={bridge} open onOpenChange={() => {}} title="Test Modal">
         <Modal.Body>body</Modal.Body>
       </Modal>
     );
@@ -147,12 +150,12 @@ describe("Modal", () => {
     // we stub so getBoundingClientRect does not collapse to zero.
     const bridge = makeStubBridge();
     render(
-      <BridgeContext.Provider value={bridge}>
+      <>
         <div data-testid="quadrant-viewport" style={{ width: 800, height: 600 }} />
-        <Modal open onOpenChange={() => {}} title="Test Modal">
+        <Modal bridge={bridge} open onOpenChange={() => {}} title="Test Modal">
           <Modal.Body>body</Modal.Body>
         </Modal>
-      </BridgeContext.Provider>,
+      </>,
     );
     await waitFor(() => {
       expect(bridge.request).toHaveBeenCalledWith({
@@ -176,7 +179,7 @@ describe("Modal", () => {
     // (dialogs.spec.ts) where a real browser fires real events.
     const onOpenChange = vi.fn();
     render(
-      <Modal open onOpenChange={onOpenChange} title="Test Modal">
+      <Modal bridge={bridge} open onOpenChange={onOpenChange} title="Test Modal">
         <Modal.Body>body</Modal.Body>
       </Modal>
     );
@@ -188,7 +191,7 @@ describe("Modal", () => {
   it("tracks useModalOpen: +1 while open, -1 on close and on unmount (#12)", () => {
     useModalOpen.setState({ count: 0 });
     const view = (open: boolean) => (
-      <Modal open={open} onOpenChange={() => {}} title="M">
+      <Modal bridge={bridge} open={open} onOpenChange={() => {}} title="M">
         <Modal.Body>b</Modal.Body>
       </Modal>
     );

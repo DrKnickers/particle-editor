@@ -22,6 +22,11 @@ import type {
 } from "@particle-editor/bridge-schema";
 import { EmitterPropertyTabs, AppearanceTab, PhysicsTab } from "../EmitterPropertyTabs";
 import { makeDefaultEngineState, makeFixtureProperties } from "@/bridge/mock-state";
+import { makeBridgeStub } from "@/test/bridge-stub";
+
+// AppearanceTab takes the bridge as a prop (the texture palette lists the
+// game textures through it); nothing here exercises that path.
+const stubBridge = makeBridgeStub();
 
 // the property tabs mount Tips (Radix Tooltip.Root) on the form-row
 // labels, which require the Tooltip.Provider App.tsx supplies in production —
@@ -179,7 +184,7 @@ describe("EmitterPropertyTabs", () => {
 
   it("AppearanceTab renders the expected field labels", () => {
     const props = makeFixtureProperties(0);
-    render(<AppearanceTab properties={props} onCommit={() => {}} />);
+    render(<AppearanceTab bridge={stubBridge} properties={props} onCommit={() => {}} />);
     // Five sections (Textures / Random color addition /
     // Tail / Rotation / Rendering) with renamed labels.
     // `Triangles` and `Affected by Wind` are dropped (former
@@ -215,7 +220,7 @@ describe("EmitterPropertyTabs", () => {
   it("AppearanceTab: editing Tail length fires onCommit with patch.tailSize", async () => {
     const onCommit = vi.fn();
     const props = { ...makeFixtureProperties(0), hasTail: true, tailSize: 0.5 };
-    render(<AppearanceTab properties={props} onCommit={onCommit} />);
+    render(<AppearanceTab bridge={stubBridge} properties={props} onCommit={onCommit} />);
     const tailSizeInput = screen.getByLabelText("Tail length:") as HTMLInputElement;
     fireEvent.focus(tailSizeInput);
     fireEvent.change(tailSizeInput, { target: { value: "1.25" } });
@@ -227,7 +232,7 @@ describe("EmitterPropertyTabs", () => {
 
   it("AppearanceTab: hasTail === false disables Tail length spinner", () => {
     const props = { ...makeFixtureProperties(0), hasTail: false, tailSize: 2 };
-    render(<AppearanceTab properties={props} onCommit={() => {}} />);
+    render(<AppearanceTab bridge={stubBridge} properties={props} onCommit={() => {}} />);
     const tailSizeInput = screen.getByLabelText("Tail length:") as HTMLInputElement;
     expect(tailSizeInput.disabled).toBe(true);
   });
@@ -238,7 +243,7 @@ describe("EmitterPropertyTabs", () => {
   // the Appearance tab.
   it("AppearanceTab does not render the Triangles field (dropped per design decision)", () => {
     const props = makeFixtureProperties(0);
-    render(<AppearanceTab properties={props} onCommit={() => {}} />);
+    render(<AppearanceTab bridge={stubBridge} properties={props} onCommit={() => {}} />);
     expect(screen.queryByLabelText("Triangles")).toBeNull();
     expect(screen.queryByLabelText("Triangles:")).toBeNull();
   });
@@ -386,7 +391,7 @@ describe("EmitterPropertyTabs", () => {
   it("PhysicsTab: Affected by wind STAYS ENABLED when weather mode active (legacy parity, Emitter.cpp:175-190)", () => {
     const props = { ...makeFixtureProperties(0), isWeatherParticle: true, affectedByWind: false };
     render(<PhysicsTab properties={props} onCommit={() => {}} />);
-    // Radix Checkbox renders a <button> for the input; query by role.
+    // The shared Checkbox is a native input that mirrors Radix's data-disabled.
     const checkbox = screen.getByRole("checkbox", { name: "Affected by wind" });
     expect(checkbox).not.toHaveAttribute("data-disabled");
   });

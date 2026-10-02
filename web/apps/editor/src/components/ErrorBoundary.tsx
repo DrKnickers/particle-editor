@@ -12,6 +12,7 @@
 // fallback, which is reserved for render-time errors React hands us.
 
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Button } from "@/primitives/Button";
 
 type Props = { children: ReactNode };
 type State = { hasError: boolean };
@@ -57,13 +58,7 @@ export class ErrorBoundary extends Component<Props, State> {
         className="flex h-full w-full flex-col items-center justify-center gap-3 p-6 text-center text-text"
       >
         <p className="text-sm font-medium">Something went wrong.</p>
-        <button
-          type="button"
-          onClick={this.handleReload}
-          className="rounded px-3 py-1 text-xs text-white transition motion-reduce:transition-none focus-ring bg-accent-strong hover:bg-accent-strong-hover"
-        >
-          Reload
-        </button>
+        <Button onClick={this.handleReload}>Reload</Button>
       </div>
     );
   }

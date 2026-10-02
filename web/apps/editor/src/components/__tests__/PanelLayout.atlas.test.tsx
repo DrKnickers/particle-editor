@@ -1,7 +1,7 @@
 // Vitest: atlas branch in the right-dock slot (Task 10).
 //
 // Verifies that setting the right-dock to "atlas" renders
-// AtlasPickerPanel's ToolPanel header "Atlas Frames" inside the
+// AtlasPickerPane's ToolPanel header "Atlas Frames" inside the
 // quadrant-spawner slot. Harness is a direct copy of the one in
 // PanelLayout.test.tsx — same providers, same stub bridge.
 
@@ -10,7 +10,6 @@ import { render, screen } from "@testing-library/react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { makeBridgeStub } from "@/test/bridge-stub";
-import { BridgeContext } from "@/lib/bridge-context";
 import { PanelLayout } from "../PanelLayout";
 import { __resetRightDockForTests, setDock } from "@/lib/right-dock";
 import { __resetAtlasContext, publishAtlasContext } from "@/lib/atlas-context";
@@ -22,9 +21,7 @@ function makeStubBridge(): Bridge {
 const renderPanelLayout = (bridge: Bridge) =>
   render(
     <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>
-      <BridgeContext.Provider value={bridge}>
-        <PanelLayout bridge={bridge} />
-      </BridgeContext.Provider>
+      <PanelLayout bridge={bridge} />
     </Tooltip.Provider>,
   );
 
@@ -36,7 +33,7 @@ beforeEach(() => {
 });
 
 describe("PanelLayout — atlas dock branch (Task 10)", () => {
-  it("renders AtlasPickerPanel when dock === 'atlas'", () => {
+  it("renders AtlasPickerPane when dock === 'atlas'", () => {
     // Publish a minimal atlas context so the panel has something to read.
     publishAtlasContext({
       emitterId: 1,
@@ -50,7 +47,7 @@ describe("PanelLayout — atlas dock branch (Task 10)", () => {
     renderPanelLayout(bridge);
 
     // The quadrant-spawner slot is always in the DOM (always-mounted
-    // collapsible) and the content is the AtlasPickerPanel ToolPanel.
+    // collapsible) and the content is the AtlasPickerPane ToolPanel.
     expect(screen.getByTestId("quadrant-spawner")).toBeInTheDocument();
     // ToolPanel renders its title in a dialog heading with role="dialog"
     // name matching the title prop "Atlas Frames".

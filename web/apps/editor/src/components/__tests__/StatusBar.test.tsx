@@ -5,9 +5,19 @@
 //   - cursor readout is 2 decimal places (legacy was 2dp).
 
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, act, waitFor } from "@testing-library/react";
+import { render as rtlRender, screen, act, waitFor } from "@testing-library/react";
+import * as Tooltip from "@radix-ui/react-tooltip";
+import type { ReactElement, ReactNode } from "react";
 import { StatusBar, __statsCellsRenderCount } from "../StatusBar";
 import { makeBridgeStub } from "@/test/bridge-stub";
+
+// The autosave warning mounts Tips (Radix Tooltip.Root), which require the
+// Tooltip.Provider App.tsx supplies in production — this wrapper stands in
+// for it (precedent: renderWithTooltips in EmitterTree.test.tsx).
+const TipProvider = ({ children }: { children: ReactNode }) => (
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+);
+const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
 // A bridge mock that records `on` handlers by event name so the test can
 // drive them, and resolves the engine-state snapshot request.

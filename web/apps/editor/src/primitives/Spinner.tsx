@@ -20,13 +20,15 @@
 //   - density: row height override per call ("tight"=22px, "default"=26px, "loose"=32px).
 
 import { useEffect, useRef, useState, useCallback, type KeyboardEvent } from "react";
+import { cn } from "@/lib/utils";
 
 export type SpinnerDensity = "tight" | "default" | "loose";
 
+// Row-height tokens (styles/tokens.css): 22 / 26 / 32 px.
 const ROW_HEIGHT: Record<SpinnerDensity, string> = {
-  tight: "22px",
-  default: "26px",
-  loose: "32px",
+  tight: "var(--row-h-sm)",
+  default: "var(--row-h)",
+  loose: "var(--row-h-lg)",
 };
 
 // F6: pixels of vertical movement on the arrow column before a press is
@@ -517,7 +519,7 @@ export function Spinner({
   return (
     <div
       ref={wrapRef}
-      className={`relative flex items-center ${dragging ? "cursor-ns-resize" : ""}`}
+      className={cn("relative flex items-center", dragging && "cursor-ns-resize")}
       style={{ height }}
     >
       <input
@@ -530,9 +532,11 @@ export function Spinner({
         onKeyDown={handleKeyDown}
         onBlur={handleBlur}
         onFocus={handleFocus}
-        className={`w-full rounded border border-border-2 bg-bg-2 pl-2 text-xs text-text outline-none transition focus:border-accent ${
-          disabled ? "cursor-not-allowed opacity-40" : "cursor-text"
-        } ${dragging ? "select-none" : ""}`}
+        className={cn(
+          "w-full rounded border border-border-2 bg-bg-2 pl-2 text-xs text-text outline-none transition focus:border-accent",
+          disabled ? "cursor-not-allowed opacity-40" : "cursor-text",
+          dragging && "select-none",
+        )}
         style={{ height, paddingRight: `${inputPadRight}px` }}
         spellCheck={false}
         autoComplete="off"
@@ -562,7 +566,10 @@ export function Spinner({
         // `rounded` corner, exactly 1px inside — the border sits in the
         // gap. overflow-hidden clips the square-cornered button fills to
         // the rounded column.
-        className={`absolute flex touch-none flex-col overflow-hidden rounded-r-[3px] border-l border-border-2 ${disabled ? "opacity-40" : "cursor-ns-resize"}`}
+        className={cn(
+          "absolute flex touch-none flex-col overflow-hidden rounded-r-[3px] border-l border-border-2",
+          disabled ? "opacity-40" : "cursor-ns-resize",
+        )}
         style={{ top: 1, right: 1, bottom: 1, width: `${ARROW_W - 1}px` }}
         aria-hidden={disabled}
       >

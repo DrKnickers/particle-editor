@@ -56,6 +56,11 @@ const TESTID_RE = /(?:data-)?test[iI]d=(?:"([^"]+)"|\{`([^`]+)`\})/g;
 // — any template literal inside a braced testid attribute value (dotall, bounded
 // at the first backtick pair so it can't swallow unrelated code).
 const TESTID_TPL_RE = /(?:data-)?test[iI]d=\{[^{}`]*`([^`]+)`/gs;
+// Object-property form, for primitives that take their options as data
+// (Select / NativeSelect: `{ value, label, testId: `${testId}-option-${v}` }`).
+// Single-line only, so a `testId: string;` type member can't reach a later
+// backtick.
+const TESTID_PROP_RE = /\btest[iI]d:[ \t]*(?:"([^"\n]+)"|[^{}`;\n]*`([^`\n]+)`)/g;
 
 function addTemplate(tpl, exact, prefixes, infixes) {
   const cut = tpl.indexOf("${");
@@ -84,6 +89,10 @@ export function collectTestids(srcDir) {
         else addTemplate(m[2], exact, prefixes, infixes);
       }
       for (const m of text.matchAll(TESTID_TPL_RE)) addTemplate(m[1], exact, prefixes, infixes);
+      for (const m of text.matchAll(TESTID_PROP_RE)) {
+        if (m[1] != null) exact.add(m[1]);
+        else addTemplate(m[2], exact, prefixes, infixes);
+      }
     }
   };
   walk(srcDir);

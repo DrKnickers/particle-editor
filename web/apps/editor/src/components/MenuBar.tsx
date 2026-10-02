@@ -49,6 +49,7 @@ import { RESET_CAMERA } from "@/lib/reset-camera";
 import { Modal } from "@/components/Modal";
 import { PreferencesDialog } from "@/screens/PreferencesDialog";
 import { ShortcutsDialog } from "@/screens/ShortcutsDialog";
+import { MENUBAR_CONTENT, MENUBAR_TRIGGER, MENU_ITEM, MENU_SEPARATOR } from "@/primitives/menu";
 import { ModsMenu } from "./ModsMenu";
 
 type Props = {
@@ -59,20 +60,15 @@ type Props = {
   onResetPanelLayout: () => void;
 };
 
-// Style constants — shared across triggers and items so the Tailwind
-// class strings don't drift between menus.
-const TRIGGER =
-  // focus-ring: keyboard focus on a CLOSED trigger was invisible (outline-none
-  // with no replacement) — a 2.4.7 gap the PRODUCT.md conformance check caught.
-  "px-2 py-1 text-xs font-medium text-text-2 transition-colors motion-reduce:transition-none hover:bg-bg-2 rounded data-[state=open]:bg-bg-2 data-[state=open]:text-text outline-none focus-ring select-none cursor-default";
-const CONTENT =
-  "min-w-[200px] bg-bg-2 border border-border rounded-md shadow-[var(--shadow-soft)] p-1 z-50 popover-animate";
-const ITEM =
-  "flex items-center gap-2 px-2 py-1 text-xs text-text rounded hover:bg-panel-2 data-[highlighted]:bg-panel-2 outline-none cursor-pointer data-[disabled]:text-text-3 data-[disabled]:opacity-40 data-[disabled]:cursor-not-allowed data-[disabled]:hover:bg-transparent select-none";
-const SEPARATOR = "my-1 h-px bg-panel-2";
+// Menu styling has one source (primitives/menu.ts), shared with ModsMenu,
+// the emitter-tree menus and the curve-key menu.
+const TRIGGER = MENUBAR_TRIGGER;
+const CONTENT = MENUBAR_CONTENT;
+const ITEM = MENU_ITEM;
+const SEPARATOR = MENU_SEPARATOR;
 
 function Hint({ children }: { children: string }) {
-  return <span className="ml-auto text-[10px] text-text-3">{children}</span>;
+  return <span className="ml-auto text-3xs text-text-3">{children}</span>;
 }
 
 function CheckSlot({ active }: { active: boolean }) {
@@ -159,7 +155,7 @@ export function MenuBar({
   // All destructive ops (New / Open / Recent) route through
   // promptSaveChanges() which gates on the current dirty flag and
   // either runs the action immediately (clean) or pops the
-  // SaveChangesPrompt (dirty). Save / Save As don't need the gate —
+  // SaveChangesDialog (dirty). Save / Save As don't need the gate —
   // they ARE the save path.
 
   const handleNew = () => {
@@ -506,14 +502,7 @@ export function MenuBar({
         </Menubar.Portal>
       </Menubar.Menu>
 
-      <ModsMenu
-        bridge={bridge}
-        onMenuValueChange={setMenuValue}
-        triggerClass={TRIGGER}
-        contentClass={CONTENT}
-        itemClass={ITEM}
-        separatorClass={SEPARATOR}
-      />
+      <ModsMenu bridge={bridge} onMenuValueChange={setMenuValue} />
 
       {/* ─── View ─── */}
       <Menubar.Menu value="view">
@@ -701,7 +690,7 @@ export function MenuBar({
     <PreferencesDialog bridge={bridge} open={prefsOpen} onOpenChange={setPrefsOpen} />
 
     {/* Help -> Keyboard Shortcuts... (design follow-ups, F1) */}
-    <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+    <ShortcutsDialog bridge={bridge} open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
 
     {/* Confirm prompt for View → Reset View Settings.
         Body copy preserves the established reset-settings wording.
@@ -709,6 +698,7 @@ export function MenuBar({
         Radix's child-list semantics for keyboard nav aren't disturbed.
         Modal manages its own portal, so DOM position doesn't matter. */}
     <Modal
+      bridge={bridge}
       open={resetViewOpen}
       onOpenChange={setResetViewOpen}
       title="Reset View Settings"

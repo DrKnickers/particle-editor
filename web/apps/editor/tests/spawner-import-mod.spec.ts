@@ -3,7 +3,7 @@
 // specs.
 //
 // Three specs:
-//   1. Tools → Spawner opens the SpawnerPanel; opening Background
+//   1. Tools → Spawner opens the SpawnerPane; opening Background
 //      closes it (mutual exclusion via the openToolPanel atom).
 //   2. Changing the Burst size Spinner fires `engine/state/changed`
 //      with the new `spawner.burstSize` value.
@@ -62,7 +62,7 @@ async function ensureSpawnerHidden(p: Page) {
 }
 
 async function closeAnyPanel(p: Page) {
-  // SpawnerPanel is a docked column (shares the
+  // SpawnerPane is a docked column (shares the
   // right-dock slot with the docked Lighting pane via alo:right-dock).
   // The remaining ToolPanel-chrome dialogs are the docked Lighting pane
   // plus the Background/Ground popovers. Keep cleaning those up so
@@ -77,7 +77,7 @@ async function closeAnyPanel(p: Page) {
 }
 
 test("Emitters → Spawner toggles the Spawner column", async () => {
-  // SpawnerPanel is a permanent right column. The Emitters
+  // SpawnerPane is a permanent right column. The Emitters
   // menu's "Spawner" entry now toggles the column (not opens a
   // slide-in). Start hidden so the menu click flips it visible.
   await closeAnyPanel(page);
@@ -164,7 +164,7 @@ test("File → Import Emitters opens the Import Emitters modal", async () => {
   await page.waitForSelector(RADIX_DIALOG, { timeout: 2000 });
 
   // Assert the dialog's heading carries the modal title so we know we
-  // opened the right one (BackgroundPicker also uses role="dialog" but
+  // opened the right one (the old BackgroundPicker also used role="dialog" but
   // without data-state — RADIX_DIALOG already filters that out).
   const title = await page
     .locator(RADIX_DIALOG)

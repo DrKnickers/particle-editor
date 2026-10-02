@@ -7,7 +7,6 @@ import {
   FieldCheckbox,
   FieldSelect,
   FieldSpinner,
-  NOOP_BRIDGE,
   TexturePickerField,
 } from "./fields";
 
@@ -40,7 +39,7 @@ export function AppearanceTab({
   properties,
   onCommit,
   onBrowseTexture = async () => "",
-  bridge = NOOP_BRIDGE,
+  bridge,
 }: {
   properties: EmitterPropertiesDto;
   onCommit: (patch: Partial<EmitterPropertiesDto>) => void;
@@ -48,9 +47,8 @@ export function AppearanceTab({
    *  basename ("" if cancelled). Defaults to a no-op so existing tests
    *  and any caller that doesn't wire Browse still render cleanly. */
   onBrowseTexture?: (slot: "color" | "bump") => Promise<string>;
-  /** Live bridge for the texture palette popover + usage tracking.
-   *  Defaults to a no-op so isolated AppearanceTab tests render cleanly. */
-  bridge?: Bridge;
+  /** Live bridge for the texture palette popover + usage tracking. */
+  bridge: Bridge;
 }) {
   const forceFace = properties.blendMode === BLEND_BUMP;
   const tailEnabled = properties.hasTail;

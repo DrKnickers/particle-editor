@@ -1,5 +1,5 @@
 // Vitest specs for TexturePalettePopover — the frequently-used texture
-// palette popup. Mirrors the GroundDropdown/BackgroundDropdown
+// palette popup. Mirrors the GroundPopover/BackgroundPopover
 // Radix-Popover test pattern: build a fake bridge, click the trigger, then
 // assert against the portaled content.
 
@@ -121,7 +121,8 @@ describe("TexturePalettePopover", () => {
       </TexturePalettePopover>,
     );
     open();
-    fireEvent.click(await screen.findByRole("button", { name: "Bump" }));
+    // Color / Bump is a SegmentedControl (radiogroup).
+    fireEvent.click(await screen.findByRole("radio", { name: "Bump" }));
     await waitFor(() => {
       expect(b.request).toHaveBeenCalledWith({
         kind: "textures/palette/list",

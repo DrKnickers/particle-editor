@@ -63,7 +63,6 @@ import {
   useRef,
   Fragment,
   useState,
-  type ComponentProps,
 } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Menubar from "@radix-ui/react-menubar";
@@ -73,14 +72,12 @@ import type {
   EmitterTreeDto,
   EmitterTreeNode,
 } from "@particle-editor/bridge-schema";
-import { openTreeContextDialog } from "@/lib/tree-context";
 import { useTreeActionStore } from "@/lib/tree-action";
 import {
   useEmitterSelectionIds,
   useEmitterSelectionPrimary,
   useEmitterSelectionStore,
 } from "@/lib/emitter-selection";
-import { markEmittersCopied, useEmitterClipboardHasContent } from "@/lib/emitter-clipboard";
 import { computeAutoscrollDelta } from "@/lib/drag-autoscroll";
 import { computeFlipDeltas, DRAG_FEEL, pickFlipDuration, type FlipPositions } from "@/lib/flip";
 import { useRecording } from "@/lib/record-mode";
@@ -96,6 +93,9 @@ import { estimateChainLoad, estimateSystemLoad, formatChainWarning, type ChainWa
 import { useOverloadGuardConfig } from "@/lib/overload-guard";
 import { useEstimatedLoadPush } from "@/lib/use-estimated-load-push";
 import { SystemLoadChip } from "@/components/SystemLoadChip";
+import { cn } from "@/lib/utils";
+import { IconButton, iconButtonClass } from "@/primitives/IconButton";
+import { MENU_CONTENT, MENU_ITEM } from "@/primitives/menu";
 import { Tip } from "@/primitives/Tip";
 import { ChainWarningTip } from "./ChainWarningTip";
 import { useEmitterTreeStore } from "@/lib/emitter-tree";
@@ -117,6 +117,7 @@ import { canMoveSelection } from "@/lib/move-enabled";
 import { useEmitterMarquee } from "./emitter-tree/useEmitterMarquee";
 import { useEmitterRename, type RenameEditingState } from "./emitter-tree/useEmitterRename";
 import { useEmitterTreeKeyboard } from "./emitter-tree/useEmitterTreeKeyboard";
+import { EmitterRowContextMenu } from "./emitter-tree/EmitterRowContextMenu";
 
 export type { RenameEditingState } from "./emitter-tree/useEmitterRename";
 
@@ -351,31 +352,6 @@ type RowProps = {
   entering: boolean;
 };
 
-// Styled ContextMenu.Content for the emitter-tree row context menu --
-// shared border/shadow chrome matching the menubar dropdowns.
-function StyledContextMenuContent({ children, ...rest }: ComponentProps<typeof ContextMenu.Content>) {
-  return (
-    <ContextMenu.Content
-      className="z-50 min-w-[220px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-[var(--shadow-soft)] popover-animate"
-      {...rest}
-    >
-      {children}
-    </ContextMenu.Content>
-  );
-}
-
-// Styled ContextMenu.SubContent (e.g. the "Paste As" submenu), same chrome.
-function StyledContextSubContent({ children, ...rest }: ComponentProps<typeof ContextMenu.SubContent>) {
-  return (
-    <ContextMenu.SubContent
-      className="z-50 min-w-[200px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-[var(--shadow-soft)] popover-animate"
-      {...rest}
-    >
-      {children}
-    </ContextMenu.SubContent>
-  );
-}
-
 function EmitterRow({
   row, primaryId, selectedIds, orderedIds, onRowClick, bridge,
   draggingId, draggingIds, indicator, startDrag,
@@ -395,8 +371,6 @@ function EmitterRow({
   const linkColor = colorForGroup(node.linkGroup);
   const spineTintColor = isLinked && !isSelected ? linkColor : null;
   const isEditing = editing !== null && editing.id === node.id;
-  // Context-menu Paste gates on session clipboard content.
-  const hasClipboard = useEmitterClipboardHasContent();
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   // Auto-focus + select-all on the input the moment editing toggles to
@@ -409,178 +383,8 @@ function EmitterRow({
     }
   }, [isEditing]);
 
-  // Disabled states (derived from the tree DTO + the multi-selection).
-  // The DTO doesn't expose `spawnDuringLife` / `spawnOnDeath` directly,
-  // but children-by-role is equivalent: the slot is filled iff there's
-  // a child of that role.
-  const hasLifetimeChild = node.children.some((c) => c.role === "lifetime");
-  const hasDeathChild    = node.children.some((c) => c.role === "death");
-  // Move is a root-only operation. The engine refuses non-root moves
-  // (children of the same role can't be swapped — at most one of each).
-  const isRoot = node.role === "root";
-  // The context-menu Move targets the whole selection when this row is part of
-  // it (else just this row — mirrors resolveTargetIds), so its enabled state
-  // uses the same preserve rule as move-many over that target set.
-  const moveTargetIds = isRoot && selectedIds.includes(node.id) ? selectedIds : [node.id];
-  const rootIdsInOrder = siblings.map((s) => s.id);
-  const canMoveUp   = isRoot && canMoveSelection(moveTargetIds, rootIdsInOrder, "up");
-  const canMoveDown = isRoot && canMoveSelection(moveTargetIds, rootIdsInOrder, "down");
-
-  // Leave Link Group: enabled when at least one of the currently
-  // selected emitters has `linkGroup !== 0`. If the right-clicked row
-  // isn't in the selection, fall back to the row's own linkGroup.
-  // (The handler also promotes a non-selected right-clicked row to
-  // single-select before the click reaches this menu state.)
-  const selectionLinkGroups = useMemo(() => {
-    return selectedIds.length > 0 ? selectedIds : [node.id];
-  }, [selectedIds, node.id]);
-  const leaveLinkGroupDisabled = useMemo(() => {
-    // Need the tree to inspect linkGroup; rebuild a fast lookup.
-    const idToLinkGroup = new Map<number, number>();
-    const visit = (n: EmitterTreeNode) => {
-      idToLinkGroup.set(n.id, n.linkGroup);
-      n.children.forEach(visit);
-    };
-    // We only have the row itself + the row's own subtree here. The
-    // ordered-ids list is the in-order walk; we leverage *that* with
-    // a child-look-up via the closures the parent passed. To keep
-    // memory churn tight, derive the answer from the row + the
-    // multi-selection by treating "we don't know the rest" as the
-    // most permissive case (enabled). The Leave-LG bridge call is
-    // idempotent on linkGroup=0, so the worst case is a redundant
-    // round-trip on a no-op, not a wrong-result mutation.
-    if (selectionLinkGroups.length === 1) {
-      if (selectionLinkGroups[0] === node.id) return node.linkGroup === 0;
-    }
-    // Walk the row's own subtree as best-effort fallback.
-    visit(node);
-    const lookup = (id: number): number | undefined => idToLinkGroup.get(id);
-    return selectionLinkGroups.every((id) => (lookup(id) ?? 0) === 0);
-  }, [selectionLinkGroups, node]);
-
   // Indent by 12px per depth level.
   const indentPx = depth * 12;
-
-  // Context-menu handlers ────────────────────────────────────────────
-  //
-  // Each handler promotes the right-clicked row to single-select when
-  // it isn't already in the selection. Without that step, "Set Link
-  // Group…" would fire on whatever the previous selection was, which
-  // is surprising. The promotion routes through the bridge so the
-  // server's primary id and React's primary stay in lock-step.
-
-  /** Snapshot the current selection at handler-execution time, falling
-   *  back to a single-select of `node.id` when nothing is selected or
-   *  when the row isn't already in the selection. */
-  const resolveTargetIds = (): number[] => {
-    const cur = useEmitterSelectionStore.getState().ids;
-    if (cur.includes(node.id) && cur.length > 0) return [...cur];
-    // Promote.
-    useEmitterSelectionStore.getState().setSingle(node.id);
-    void bridge.request({ kind: "emitters/select", params: { id: node.id } });
-    return [node.id];
-  };
-
-  const handleRename = () => {
-    // Context-menu Rename starts inline edit instead of
-    // opening a modal. `RenameEmitterDialog` has been removed.
-    resolveTargetIds();
-    beginEdit(node.id, node.name);
-  };
-  const handleDuplicate = () => {
-    // Duplicate the resolved target set (whole selection if the clicked row
-    // is in it, else just that row); the selection moves to the new copies.
-    {
-      const ids = resolveTargetIds();
-      announceWhenOk(duplicateEmitters(bridge, ids) as Promise<unknown>, `Duplicated ${ids.length === 1 ? "emitter" : `${ids.length} emitters`} — Ctrl+Z to undo`);
-    }
-  };
-  const handleDelete = () => {
-    // Delete the resolved target set — the whole selection when the
-    // right-clicked row is part of it, else just the clicked row
-    // (resolveTargetIds promotes a non-selected row to a single select).
-    // Previously this discarded the return and hardcoded [node.id], so
-    // right-click → Delete on a multi-selection deleted only one row and
-    // skipped the destructive-confirm.
-    requestDeleteEmitters(bridge, resolveTargetIds());
-  };
-  const handleIncrement = () => {
-    resolveTargetIds();
-    openTreeContextDialog("increment", node.id);
-  };
-  const handleRescale = () => {
-    resolveTargetIds();
-    openTreeContextDialog("rescale", node.id);
-  };
-  // Context-menu clipboard + New Root — reuse the same
-  // bridge calls as the tree's Ctrl+C/X/V so behaviour stays identical.
-  const handleNewRoot = () => {
-    announceWhenOk(bridge.request({ kind: "emitters/add-root", params: {} }), "Added emitter — Ctrl+Z to undo");
-  };
-  const handleContextCopy = () => {
-    const ids = resolveTargetIds();
-    void bridge.request({ kind: "emitters/copy", params: { ids } });
-    markEmittersCopied();
-  };
-  const handleContextCut = () => {
-    const ids = resolveTargetIds();
-    announceWhenOk(bridge.request({ kind: "emitters/cut", params: { ids } }), `Cut ${ids.length === 1 ? "emitter" : `${ids.length} emitters`} — Ctrl+Z to undo`);
-    markEmittersCopied();
-  };
-  const handleContextPaste = () => {
-    announceWhenOk(bridge.request({ kind: "emitters/paste", params: {} }), "Pasted — Ctrl+Z to undo");
-  };
-  // Paste As ▸ Lifetime/Death Child — paste the clipboard into this
-  // emitter's child slot (legacy ID_PASTEAS_LIFETIME / ID_PASTEAS_DEATH).
-  const handlePasteAsLifetime = () => {
-    resolveTargetIds();
-    void bridge.request({
-      kind: "emitters/paste-as-child",
-      params: { parentId: node.id, slot: "lifetime" },
-    });
-  };
-  const handlePasteAsDeath = () => {
-    resolveTargetIds();
-    void bridge.request({
-      kind: "emitters/paste-as-child",
-      params: { parentId: node.id, slot: "death" },
-    });
-  };
-  const handleLinkGroupSettings = () => {
-    resolveTargetIds();
-    openTreeContextDialog("link-group", node.id, node.linkGroup);
-  };
-  const handleAddLifetimeChild = () => {
-    resolveTargetIds();
-    void bridge.request({
-      kind: "emitters/add-lifetime-child",
-      params: { parentId: node.id },
-    });
-  };
-  const handleAddDeathChild = () => {
-    resolveTargetIds();
-    void bridge.request({
-      kind: "emitters/add-death-child",
-      params: { parentId: node.id },
-    });
-  };
-  const handleMoveUp = () => {
-    void moveEmitters(bridge, resolveTargetIds(), "up");
-  };
-  const handleMoveDown = () => {
-    void moveEmitters(bridge, resolveTargetIds(), "down");
-  };
-  const handleSetLinkGroup = () => {
-    resolveTargetIds();
-    openTreeContextDialog("set-link-group", node.id);
-  };
-  const handleLeaveLinkGroup = () => {
-    const ids = resolveTargetIds();
-    void bridge.request({
-      kind: "linkGroups/set-membership",
-      params: { ids, groupId: null },
-    });
-  };
 
   // Reference orderedIds so eslint-no-unused-vars in the trimmed file
   // doesn't complain when the only consumer is the parent's click
@@ -608,11 +412,6 @@ function EmitterRow({
     indicator?.kind === "onto" && indicator.targetId === node.id
       ? "bg-accent-soft ring-1 ring-accent"
       : "";
-
-  const menuItemClass =
-    "flex cursor-pointer items-center rounded px-2 py-1 text-xs text-text outline-none data-[disabled]:cursor-not-allowed data-[disabled]:text-text-3 data-[highlighted]:bg-panel-2";
-  const separatorClass =
-    "my-1 h-px bg-panel-2";
 
   // Selected-row styling:
   //   - primary       : strong sky-500 left border + sky-500/15 bg
@@ -905,130 +704,16 @@ function EmitterRow({
           </div>
         </ContextMenu.Trigger>
         <ContextMenu.Portal>
-          <StyledContextMenuContent
-            data-testid={`emitter-context-menu-${node.id}`}
-          >
-            <ContextMenu.Item onSelect={handleRename} className={menuItemClass}>
-              Rename
-            </ContextMenu.Item>
-            <ContextMenu.Item onSelect={handleDuplicate} className={menuItemClass}>
-              Duplicate
-            </ContextMenu.Item>
-            <ContextMenu.Item onSelect={handleDelete} className={menuItemClass}>
-              Delete
-            </ContextMenu.Item>
-            <ContextMenu.Separator className={separatorClass} />
-            <ContextMenu.Item onSelect={handleContextCut} className={menuItemClass}>
-              Cut
-            </ContextMenu.Item>
-            <ContextMenu.Item onSelect={handleContextCopy} className={menuItemClass}>
-              Copy
-            </ContextMenu.Item>
-            <ContextMenu.Item
-              onSelect={handleContextPaste}
-              disabled={!hasClipboard}
-              className={menuItemClass}
-            >
-              Paste
-            </ContextMenu.Item>
-            <ContextMenu.Sub>
-              <ContextMenu.SubTrigger
-                disabled={!hasClipboard}
-                className={menuItemClass}
-              >
-                Paste As
-              </ContextMenu.SubTrigger>
-              <ContextMenu.Portal>
-                <StyledContextSubContent
-                >
-                  <ContextMenu.Item
-                    onSelect={handlePasteAsLifetime}
-                    disabled={!hasClipboard || hasLifetimeChild}
-                    className={menuItemClass}
-                  >
-                    Lifetime Child
-                  </ContextMenu.Item>
-                  <ContextMenu.Item
-                    onSelect={handlePasteAsDeath}
-                    disabled={!hasClipboard || hasDeathChild}
-                    className={menuItemClass}
-                  >
-                    Death Child
-                  </ContextMenu.Item>
-                </StyledContextSubContent>
-              </ContextMenu.Portal>
-            </ContextMenu.Sub>
-            <ContextMenu.Separator className={separatorClass} />
-            <ContextMenu.Item onSelect={handleIncrement} className={menuItemClass} data-testid="ctx-increment-index">
-              Increment Index…
-            </ContextMenu.Item>
-            <ContextMenu.Item onSelect={handleRescale} className={menuItemClass}>
-              Rescale Emitter…
-            </ContextMenu.Item>
-            {/* ─────────────────────────────────────────────────── */}
-            <ContextMenu.Separator className={separatorClass} />
-            <ContextMenu.Item onSelect={handleNewRoot} className={menuItemClass}>
-              New Root Emitter
-            </ContextMenu.Item>
-            <ContextMenu.Item
-              onSelect={handleAddLifetimeChild}
-              disabled={hasLifetimeChild}
-              className={menuItemClass}
-            >
-              Add Lifetime Child
-            </ContextMenu.Item>
-            <ContextMenu.Item
-              onSelect={handleAddDeathChild}
-              disabled={hasDeathChild}
-              className={menuItemClass}
-            >
-              Add Death Child
-            </ContextMenu.Item>
-            <ContextMenu.Separator className={separatorClass} />
-            <ContextMenu.Item
-              onSelect={handleMoveUp}
-              disabled={!canMoveUp}
-              className={menuItemClass}
-            >
-              Move Up
-            </ContextMenu.Item>
-            <ContextMenu.Item
-              onSelect={handleMoveDown}
-              disabled={!canMoveDown}
-              className={menuItemClass}
-            >
-              Move Down
-            </ContextMenu.Item>
-            <ContextMenu.Separator className={separatorClass} />
-            <ContextMenu.Item
-              onSelect={handleSetLinkGroup}
-              className={menuItemClass}
-              data-testid="ctx-set-link-group"
-            >
-              Set Link Group…
-            </ContextMenu.Item>
-            <ContextMenu.Item
-              onSelect={handleLeaveLinkGroup}
-              disabled={leaveLinkGroupDisabled}
-              className={menuItemClass}
-            >
-              Leave Link Group
-            </ContextMenu.Item>
-            <ContextMenu.Item
-              onSelect={() => onDissolveLinkGroup(node.linkGroup)}
-              disabled={!isLinked}
-              className={menuItemClass}
-            >
-              Dissolve Link Group
-            </ContextMenu.Item>
-            <ContextMenu.Item
-              onSelect={handleLinkGroupSettings}
-              disabled={!isLinked}
-              className={menuItemClass}
-            >
-              Link Group Settings…
-            </ContextMenu.Item>
-          </StyledContextMenuContent>
+          {/* Mounted only while open, so the menu's derived state (clipboard,
+              child slots, move/link enablement) costs nothing per row. */}
+          <EmitterRowContextMenu
+            node={node}
+            siblings={siblings}
+            selectedIds={selectedIds}
+            bridge={bridge}
+            beginEdit={beginEdit}
+            onDissolveLinkGroup={onDissolveLinkGroup}
+          />
         </ContextMenu.Portal>
       </ContextMenu.Root>
       {/* Spine hit-strip: 8px wide invisible strip over the row's left
@@ -1066,14 +751,9 @@ function EmitterRow({
 // All four buttons here use bridge calls that already exist in the
 // schema — no host-side work needed.
 
-// F2: 28px square to match the main toolbar's `.tb-btn`. F3: `:active`
-// pressed state (lighter bg + slight scale) via Tailwind `active:`,
-// suppressed while disabled.
-const TOOLBAR_BTN =
-  "flex h-7 w-7 items-center justify-center rounded text-text-2 transition motion-reduce:transition-none hover:bg-panel-2 hover:text-text active:bg-panel-3 active:scale-95 disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent disabled:active:scale-100 focus-ring";
-
-const NEW_EMITTER_MENU_ITEM =
-  "flex select-none items-center gap-2 rounded px-2 py-1 text-xs text-text hover:bg-panel-2 data-[highlighted]:bg-panel-2 outline-none cursor-pointer data-[disabled]:text-text-3 data-[disabled]:cursor-not-allowed data-[disabled]:hover:bg-transparent";
+// The footer buttons are IconButton's "tree" variant (28px square, matching
+// the main toolbar's `.tb-btn` height); the New Emitter dropdown wears the
+// shared menu styling (primitives/menu.ts).
 
 function findNodeInTree(
   tree: EmitterTreeDto | null,
@@ -1181,7 +861,7 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
         <Menubar.Menu>
           <Tip content="New Emitter">
             <Menubar.Trigger
-              className={TOOLBAR_BTN}
+              className={iconButtonClass("tree")}
               aria-label="New Emitter"
             >
               <Plus className="size-4" />
@@ -1189,13 +869,13 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
           </Tip>
           <Menubar.Portal>
             <Menubar.Content
-              className="min-w-[160px] rounded-md border border-border bg-bg-2 p-1 shadow-[var(--shadow-soft)] z-50 popover-animate"
+              className={cn(MENU_CONTENT, "min-w-[160px]")}
               align="start"
               sideOffset={4}
             >
               <Menubar.Item
                 onSelect={addRoot}
-                className={NEW_EMITTER_MENU_ITEM}
+                className={MENU_ITEM}
                 data-testid="new-emitter-root"
               >
                 Root Emitter
@@ -1203,7 +883,7 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
               <Menubar.Item
                 onSelect={addLifetime}
                 disabled={!canAddLifetime}
-                className={NEW_EMITTER_MENU_ITEM}
+                className={MENU_ITEM}
                 data-testid="new-emitter-lifetime-child"
               >
                 Lifetime Child
@@ -1211,7 +891,7 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
               <Menubar.Item
                 onSelect={addDeath}
                 disabled={!canAddDeath}
-                className={NEW_EMITTER_MENU_ITEM}
+                className={MENU_ITEM}
                 data-testid="new-emitter-death-child"
               >
                 Death Child
@@ -1220,82 +900,35 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
           </Menubar.Portal>
         </Menubar.Menu>
       </Menubar.Root>
-      {/* Span shims: disabled buttons fire no pointer events, so the Tip
+      {/* tipWhenDisabled: disabled buttons fire no pointer events, so the Tip
           listens on a wrapping span that stays interactive while the button
           inside is disabled. */}
-      <Tip content="Duplicate">
-        <span className="inline-block">
-          <button
-            type="button"
-            className={TOOLBAR_BTN}
-            data-testid="emitter-duplicate-btn"
-            aria-label="Duplicate emitter"
-            disabled={!hasPrimary}
-            onClick={duplicatePrimary}
-          >
-            <Copy className="size-4" />
-          </button>
-        </span>
-      </Tip>
-      <Tip content="Delete">
-        <span className="inline-block">
-          <button
-            type="button"
-            className={TOOLBAR_BTN}
-            aria-label="Delete emitter"
-            disabled={!hasPrimary}
-            onClick={del}
-          >
-            <Trash2 className="size-4" />
-          </button>
-        </span>
-      </Tip>
-      <Tip content="Move Up">
-        <span className="inline-block">
-          <button
-            type="button"
-            className={TOOLBAR_BTN}
-            aria-label="Move emitter up"
-            disabled={!canMoveUp}
-            onClick={moveUp}
-          >
-            <ChevronUp className="size-4" />
-          </button>
-        </span>
-      </Tip>
-      <Tip content="Move Down">
-        <span className="inline-block">
-          <button
-            type="button"
-            className={TOOLBAR_BTN}
-            aria-label="Move emitter down"
-            disabled={!canMoveDown}
-            onClick={moveDown}
-          >
-            <ChevronDown className="size-4" />
-          </button>
-        </span>
-      </Tip>
-      <Tip content="Show All Emitters">
-        <button
-          type="button"
-          className={TOOLBAR_BTN}
-          aria-label="Show all emitters"
-          onClick={showAll}
-        >
-          <Eye className="size-4" />
-        </button>
-      </Tip>
-      <Tip content="Hide All Emitters">
-        <button
-          type="button"
-          className={TOOLBAR_BTN}
-          aria-label="Hide all emitters"
-          onClick={hideAll}
-        >
-          <EyeOff className="size-4" />
-        </button>
-      </Tip>
+      <IconButton
+        variant="tree"
+        label="Duplicate emitter"
+        tip="Duplicate"
+        tipWhenDisabled
+        data-testid="emitter-duplicate-btn"
+        disabled={!hasPrimary}
+        onClick={duplicatePrimary}
+      >
+        <Copy className="size-4" />
+      </IconButton>
+      <IconButton variant="tree" label="Delete emitter" tip="Delete" tipWhenDisabled disabled={!hasPrimary} onClick={del}>
+        <Trash2 className="size-4" />
+      </IconButton>
+      <IconButton variant="tree" label="Move emitter up" tip="Move Up" tipWhenDisabled disabled={!canMoveUp} onClick={moveUp}>
+        <ChevronUp className="size-4" />
+      </IconButton>
+      <IconButton variant="tree" label="Move emitter down" tip="Move Down" tipWhenDisabled disabled={!canMoveDown} onClick={moveDown}>
+        <ChevronDown className="size-4" />
+      </IconButton>
+      <IconButton variant="tree" label="Show all emitters" tip="Show All Emitters" onClick={showAll}>
+        <Eye className="size-4" />
+      </IconButton>
+      <IconButton variant="tree" label="Hide all emitters" tip="Hide All Emitters" onClick={hideAll}>
+        <EyeOff className="size-4" />
+      </IconButton>
     </div>
   );
 }

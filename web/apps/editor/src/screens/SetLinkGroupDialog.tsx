@@ -22,8 +22,10 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Bridge, EmitterTreeDto, EmitterTreeNode } from "@particle-editor/bridge-schema";
 import { Modal } from "@/components/Modal";
+import { NativeSelect } from "@/primitives/Select";
 import { useTreeContextStore } from "@/lib/tree-context";
 import { useEmitterSelectionStore } from "@/lib/emitter-selection";
+import { cn } from "@/lib/utils";
 
 type Props = {
   bridge: Bridge;
@@ -134,6 +136,7 @@ export function SetLinkGroupDialog({ bridge }: Props) {
 
   return (
     <Modal
+      bridge={bridge}
       open={open}
       onOpenChange={(o) => { if (!o) close(); }}
       title="Set Link Group"
@@ -153,10 +156,7 @@ export function SetLinkGroupDialog({ bridge }: Props) {
             <span>Create new group</span>
           </label>
           <label
-            className={[
-              "flex items-center gap-2",
-              hasExisting ? "text-text" : "text-text-3",
-            ].join(" ")}
+            className={cn("flex items-center gap-2", hasExisting ? "text-text" : "text-text-3")}
           >
             <input
               type="radio"
@@ -170,13 +170,13 @@ export function SetLinkGroupDialog({ bridge }: Props) {
             />
             <span>Join existing group</span>
           </label>
-          <select
+          <NativeSelect
             value={chosenGroup ?? ""}
             onChange={(e) => setChosenGroup(Number.parseInt(e.target.value, 10))}
             disabled={!hasExisting || mode !== "existing"}
             aria-label="Existing group to join"
             data-testid="set-link-group-select"
-            className="ml-6 w-32 rounded border border-border-2 bg-bg px-2 py-1 text-sm text-text focus-ring disabled:cursor-not-allowed disabled:opacity-40"
+            wrapperClassName="ml-6 w-32"
           >
             {existingGroups.map((g) => (
               <option key={g} value={g}>
@@ -184,13 +184,13 @@ export function SetLinkGroupDialog({ bridge }: Props) {
               </option>
             ))}
             {!hasExisting && <option value="">(none)</option>}
-          </select>
+          </NativeSelect>
           {mode === "new" && selectedIds.length < 2 ? (
-            <p className="text-[11px] font-medium leading-relaxed text-text-2">
+            <p className="text-2xs font-medium leading-relaxed text-text-2">
               Select at least 2 emitters to create a group.
             </p>
           ) : (
-            <p className="text-[11px] leading-relaxed text-text-3">
+            <p className="text-2xs leading-relaxed text-text-3">
               All {selectedIds.length} selected
               {selectedIds.length === 1 ? " emitter" : " emitters"} will be linked.
             </p>
@@ -201,7 +201,7 @@ export function SetLinkGroupDialog({ bridge }: Props) {
           {conflictFields.length > 0 && (
             <div
               data-testid="link-conflict-inline"
-              className="rounded border border-warning/60 bg-warning/15 px-2 py-1.5 text-[11px] leading-relaxed text-warning-fg"
+              className="rounded border border-warning/60 bg-warning/15 px-2 py-1.5 text-2xs leading-relaxed text-warning-fg"
             >
               <p className="font-medium">
                 Joining overwrites {conflictFields.length}{" "}

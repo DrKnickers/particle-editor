@@ -35,7 +35,7 @@ const PROFILED_IDS = [
   "StatusBar",
   "EmitterTree",
   "CurveEditorPanel",
-  "AtlasPickerPanel",
+  "AtlasPickerPane",
 ] as const;
 
 declare global {
@@ -156,7 +156,7 @@ test("react re-render audit: per-component commit counts under scripted interact
     }
   });
 
-  // --- AtlasPickerPanel: open via the atlas seam, then hover several frames.
+  // --- AtlasPickerPane: open via the atlas seam, then hover several frames.
   //     Post-#572 the grid is a single <canvas> (no per-cell DOM); hover is
   //     imperative (rAF canvas repaint) — expected to NOT re-render the panel;
   //     this confirms the #532 protection. Required: seedAtlas must exist and the
@@ -301,7 +301,7 @@ test("react re-render audit: per-component commit counts under scripted interact
     "selection re-rendered EmitterTree",
   ).toBeGreaterThan(0);
 
-  // AtlasPickerPanel was genuinely measured (grid mounted), so its 0-on-hover row
+  // AtlasPickerPane was genuinely measured (grid mounted), so its 0-on-hover row
   // is a real finding, not an absent measurement.
   expect(atlasFramesHovered, "atlas grid mounted (canvas hovered)").toBeGreaterThan(0);
 

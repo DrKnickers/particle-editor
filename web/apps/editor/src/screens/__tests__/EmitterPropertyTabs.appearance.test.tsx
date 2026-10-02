@@ -21,6 +21,11 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import type { ReactElement, ReactNode } from "react";
 import { AppearanceTab } from "../EmitterPropertyTabs";
 import { makeFixtureProperties } from "@/bridge/mock-state";
+import { makeBridgeStub } from "@/test/bridge-stub";
+
+// AppearanceTab takes the bridge as a prop (the texture palette lists the
+// game textures through it); nothing here exercises that path.
+const stubBridge = makeBridgeStub();
 
 // AppearanceTab mounts Tips (Radix Tooltip.Root) on the form-row
 // labels, which require the app-level Tooltip.Provider — wrapper stands in
@@ -37,7 +42,7 @@ describe("AppearanceTab — Always face camera semantic flip", () => {
       blendMode: 1,
       isWorldOriented: true,
     };
-    render(<AppearanceTab properties={props} onCommit={vi.fn()} />);
+    render(<AppearanceTab bridge={stubBridge} properties={props} onCommit={vi.fn()} />);
     const cb = screen.getByLabelText("Always face camera");
     expect(cb.getAttribute("data-state")).toBe("unchecked");
   });
@@ -48,7 +53,7 @@ describe("AppearanceTab — Always face camera semantic flip", () => {
       blendMode: 1,
       isWorldOriented: false,
     };
-    render(<AppearanceTab properties={props} onCommit={vi.fn()} />);
+    render(<AppearanceTab bridge={stubBridge} properties={props} onCommit={vi.fn()} />);
     const cb = screen.getByLabelText("Always face camera");
     expect(cb.getAttribute("data-state")).toBe("checked");
   });
@@ -63,7 +68,7 @@ describe("AppearanceTab — Always face camera semantic flip", () => {
       blendMode: 11,
       isWorldOriented: true,
     };
-    render(<AppearanceTab properties={props} onCommit={vi.fn()} />);
+    render(<AppearanceTab bridge={stubBridge} properties={props} onCommit={vi.fn()} />);
     const cb = screen.getByLabelText("Always face camera");
     expect(cb.getAttribute("data-state")).toBe("checked");
     expect(cb.getAttribute("data-disabled")).not.toBeNull();
@@ -78,7 +83,7 @@ describe("AppearanceTab — Always face camera semantic flip", () => {
       blendMode: 1,
       isWorldOriented: true,
     };
-    render(<AppearanceTab properties={props} onCommit={onCommit} />);
+    render(<AppearanceTab bridge={stubBridge} properties={props} onCommit={onCommit} />);
     fireEvent.click(screen.getByLabelText("Always face camera"));
     expect(onCommit).toHaveBeenCalledWith({ isWorldOriented: false });
   });
@@ -93,7 +98,7 @@ describe("AppearanceTab — Always face camera semantic flip", () => {
       blendMode: 1,
       isWorldOriented: false,
     };
-    render(<AppearanceTab properties={props} onCommit={onCommit} />);
+    render(<AppearanceTab bridge={stubBridge} properties={props} onCommit={onCommit} />);
     fireEvent.click(screen.getByLabelText("Always face camera"));
     expect(onCommit).toHaveBeenCalledWith({ isWorldOriented: true });
   });

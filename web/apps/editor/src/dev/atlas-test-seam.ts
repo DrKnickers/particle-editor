@@ -39,7 +39,7 @@ export function installAtlasTestSeam(): void {
         colorTexture: opts.colorTexture ?? "fire.dds",
       });
       // focusedTrack "index" + a populated selection are what unblock the grid
-      // (see the AtlasPickerPanel placeholder cascade).
+      // (see the AtlasPickerPane placeholder cascade).
       publishAtlasContext({
         emitterId,
         focusedTrack: "index",

@@ -1,6 +1,6 @@
 // TexturePalettePopover — frequently-used texture palette.
 //
-// A Radix Popover (mirroring GroundDropdown/BackgroundDropdown) anchored to
+// A Radix Popover (mirroring GroundPopover/BackgroundPopover) anchored to
 // a trigger passed as `children` — in practice the palette button on
 // TexturePickerField. Shows this mod's Pinned + Recent textures (backed by
 // the C++ TexturePalette::Store) as a Color/Bump-filtered thumbnail grid.
@@ -14,10 +14,17 @@
 import * as Popover from "@radix-ui/react-popover";
 import { useEffect, useState, type ReactElement } from "react";
 import type { Bridge, PaletteEntry } from "@particle-editor/bridge-schema";
-import { AnimatedPopover } from "@/components/AnimatedPopover";
+import { AnimatedPopover } from "@/primitives/AnimatedPopover";
+import { SegmentedControl } from "@/primitives/SegmentedControl";
 import { Tip } from "@/primitives/Tip";
+import { cn } from "@/lib/utils";
 
 type Slot = "color" | "bump";
+
+const SLOT_FILTERS: { value: Slot; label: string }[] = [
+  { value: "color", label: "Color" },
+  { value: "bump", label: "Bump" },
+];
 
 type Props = {
   bridge: Bridge;
@@ -125,23 +132,13 @@ function PaletteBody({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex gap-1" role="group" aria-label="Texture slot filter">
-        {(["color", "bump"] as Slot[]).map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => setFilter(s)}
-            aria-pressed={filter === s}
-            className={`rounded px-3 py-1 text-xs transition focus-ring ${
-              filter === s
-                ? "bg-accent-strong text-white"
-                : "bg-bg-2 text-text-2 hover:bg-bg-3"
-            }`}
-          >
-            {s === "color" ? "Color" : "Bump"}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        aria-label="Texture slot filter"
+        value={filter}
+        onValueChange={setFilter}
+        options={SLOT_FILTERS}
+        className="self-start"
+      />
 
       {!hasMod ? (
         <p className="px-1 py-6 text-center text-xs text-text-3">
@@ -195,7 +192,7 @@ function PaletteSection({
 
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-[11px] font-medium uppercase tracking-wide text-text-3">
+      <span className="text-2xs font-medium uppercase tracking-wide text-text-3">
         {label}
       </span>
       <div className="grid grid-cols-4 gap-2">
@@ -274,27 +271,28 @@ function PaletteCell({
               <div
                 data-testid={`palette-thumb-placeholder-${entry.filename}`}
                 data-thumb-status={thumb ? thumb.status : "loading"}
-                className={`absolute inset-0 flex flex-col items-center justify-center gap-0.5 ${
+                className={cn(
+                  "absolute inset-0 flex flex-col items-center justify-center gap-0.5",
                   thumb?.status === "broken"
                     ? "bg-danger/10 text-danger-fg"
                     : thumb?.status === "missing"
-                      ? "bg-bg-2 text-text-3"
-                      : "bg-bg-2"
-                }`}
+                    ? "bg-bg-2 text-text-3"
+                    : "bg-bg-2",
+                )}
               >
                 {thumb && (
                   <>
                     <span aria-hidden="true" className="text-base leading-none">
                       {thumb.status === "broken" ? "⚠" : "?"}
                     </span>
-                    <span className="text-[9px] uppercase tracking-wide">
+                    <span className="text-4xs uppercase tracking-wide">
                       {thumb.status === "broken" ? "broken" : "missing"}
                     </span>
                   </>
                 )}
               </div>
             )}
-            <span className="absolute inset-x-0 bottom-0 truncate bg-bg/80 px-1 py-0.5 text-left text-[10px] text-text backdrop-blur-sm">
+            <span className="absolute inset-x-0 bottom-0 truncate bg-bg/80 px-1 py-0.5 text-left text-3xs text-text backdrop-blur-sm">
               {entry.filename}
             </span>
           </button>
@@ -304,9 +302,10 @@ function PaletteCell({
         type="button"
         onClick={() => onTogglePin(entry.filename)}
         aria-label={`${entry.pinned ? "Unpin" : "Pin"} ${entry.filename}`}
-        className={`absolute right-0.5 top-0.5 flex size-5 items-center justify-center rounded text-sm focus-ring ${
-          entry.pinned ? "text-warning-fg" : "text-text-3 hover:text-text"
-        }`}
+        className={cn(
+          "absolute right-0.5 top-0.5 flex size-5 items-center justify-center rounded text-sm focus-ring",
+          entry.pinned ? "text-warning-fg" : "text-text-3 hover:text-text",
+        )}
       >
         {entry.pinned ? "★" : "☆"}
       </button>

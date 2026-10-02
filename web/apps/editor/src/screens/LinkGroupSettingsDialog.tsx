@@ -29,6 +29,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { Modal } from "@/components/Modal";
+import { Checkbox } from "@/primitives/Checkbox";
 import { useTreeContextStore } from "@/lib/tree-context";
 
 // Display labels for the wire-name field set. Names not in this map
@@ -185,13 +186,12 @@ function CategorySection({
         >
           <Chevron className="size-3.5 text-text-3" aria-hidden="true" />
           <span className="text-xs font-medium text-text">{label}</span>
-          <span className="text-[10px] text-text-3">
+          <span className="text-3xs text-text-3">
             {sharedCount}/{fields.length} shared
           </span>
         </button>
-        <input
+        <Checkbox
           ref={catRef}
-          type="checkbox"
           checked={allShared}
           aria-label={`Share all ${label}`}
           onChange={(e) => onToggleCategory(fields, e.target.checked)}
@@ -204,8 +204,7 @@ function CategorySection({
               key={field}
               className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-panel-2"
             >
-              <input
-                type="checkbox"
+              <Checkbox
                 data-field={field}
                 checked={!exempt.has(field)}
                 onChange={(e) => onToggleField(field, e.target.checked)}
@@ -365,6 +364,7 @@ export function LinkGroupSettingsDialog({ bridge }: Props) {
 
   return (
     <Modal
+      bridge={bridge}
       open={open}
       onOpenChange={(o) => {
         if (!o) close();
@@ -383,7 +383,7 @@ export function LinkGroupSettingsDialog({ bridge }: Props) {
         )}
         {state.kind === "loaded" && (
           <div className="flex flex-col gap-1 text-sm">
-            <p className="mb-2 text-[11px] leading-relaxed text-text-3">
+            <p className="mb-2 text-2xs leading-relaxed text-text-3">
               Checked fields are <em>shared</em> across the link group —
               edits propagate to every member. Unchecked fields are{" "}
               <em>per-emitter</em>.
@@ -398,7 +398,7 @@ export function LinkGroupSettingsDialog({ bridge }: Props) {
               return (
                 <div
                   data-testid="link-settings-conflict-inline"
-                  className="mb-2 rounded border border-warning/60 bg-warning/15 px-2 py-1.5 text-[11px] leading-relaxed text-warning-fg"
+                  className="mb-2 rounded border border-warning/60 bg-warning/15 px-2 py-1.5 text-2xs leading-relaxed text-warning-fg"
                 >
                   <p className="font-medium">
                     Sharing {n} {n === 1 ? "field" : "fields"} will overwrite{" "}

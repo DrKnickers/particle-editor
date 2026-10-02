@@ -1,7 +1,7 @@
 // Vitest tests for MenuBar.
 //
 // Coverage:
-//   1. File → New on a dirty system opens the SaveChangesPrompt
+//   1. File → New on a dirty system opens the SaveChangesDialog
 //      (assert prompt presence in the DOM after the click).
 //   2. Recent Files submenu renders entries from the file-state atom
 //      (recentFiles array of paths).
@@ -13,13 +13,23 @@
 // trigger + SubTrigger.
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { render as rtlRender, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import * as Tooltip from "@radix-ui/react-tooltip";
+import type { ReactElement, ReactNode } from "react";
 import { MenuBar } from "../MenuBar";
 import { useFileStateStore } from "@/lib/file-state";
 import { useFileOpErrorStore } from "@/lib/file-op";
 import { useEmitterSelectionStore } from "@/lib/emitter-selection";
 import { useTreeActionStore } from "@/lib/tree-action";
 import type { Bridge } from "@particle-editor/bridge-schema";
+
+// The Mods menu mounts Tips (Radix Tooltip.Root), which require the
+// Tooltip.Provider App.tsx supplies in production — this wrapper stands in
+// for it (precedent: renderWithTooltips in EmitterTree.test.tsx).
+const TipProvider = ({ children }: { children: ReactNode }) => (
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+);
+const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
 function makeStubBridge(): Bridge & { request: ReturnType<typeof vi.fn> } {
   return {
@@ -53,7 +63,7 @@ function renderMenuBar(
 }
 
 describe("MenuBar — File menu", () => {
-  it("File → New on a dirty system stores the pending action (opens SaveChangesPrompt)", async () => {
+  it("File → New on a dirty system stores the pending action (opens SaveChangesDialog)", async () => {
     useFileStateStore.getState().setDirty(true);
     const bridge = makeStubBridge();
     renderMenuBar(bridge);

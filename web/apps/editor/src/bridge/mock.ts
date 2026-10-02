@@ -931,7 +931,7 @@ export class MockBridge implements Bridge {
       // event ordering) matches the native host.
       //
       // Two historical callers also depend on this:
-      //   - BackgroundPicker chains file/open → set skydome-custom-path
+      //   - BackgroundPopoverBody chains file/open → set skydome-custom-path
       //     → set skydome-slot. In browser mode (with no real picker)
       //     the call still resolves with ok:false so the chain aborts
       //     cleanly without surfacing a raw rejection. The signal that
@@ -1844,7 +1844,7 @@ export class MockBridge implements Bridge {
       // canonical defaults (matching the legacy Win32 dialog), with the live
       // in-memory `lightingForceAlign` flag). `…/set` writes just the
       // flag. No event is emitted — the constraint is enforced UI-side
-      // in LightingPanel, and lighting isn't part of EngineStateDto.
+      // in LightingPane, and lighting isn't part of EngineStateDto.
       case "settings/lighting": {
         if (this.lightingOverride) {
           // Last written snapshot wins; forceAlign tracks the live flag so a

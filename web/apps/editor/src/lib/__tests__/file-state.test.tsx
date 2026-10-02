@@ -11,7 +11,7 @@
 //      is discarded (`cancelled` guard).
 //   4. React StrictMode double-mount does not double-subscribe.
 //   5. promptSaveChanges: clean → runs immediately; dirty → stored as
-//      pendingAction and resolved via the SaveChangesPrompt's Save /
+//      pendingAction and resolved via the SaveChangesDialog's Save /
 //      Don't Save / Cancel buttons. Cancel is the data-loss guard: the
 //      pending destructive closure must NEVER run afterwards.
 //
@@ -28,7 +28,7 @@ import {
   useSeedFileState,
   promptSaveChanges,
 } from "../file-state";
-import { SaveChangesPrompt } from "@/screens/SaveChangesPrompt";
+import { SaveChangesDialog } from "@/screens/SaveChangesDialog";
 import { useFileOpErrorStore } from "@/lib/file-op";
 
 type FakeEvent = { kind: string; payload: unknown };
@@ -59,7 +59,7 @@ function makeFakeBridge(opts?: {
       if (req.kind === "file/recent/list") {
         return Promise.resolve({ paths: recents });
       }
-      // file/save (SaveChangesPrompt's Save path) and anything else.
+      // file/save (SaveChangesDialog's Save path) and anything else.
       if (req.kind === "file/save") {
         return Promise.resolve({ ok: true, path: "C:/mock/saved.alo" });
       }
@@ -267,7 +267,7 @@ describe("promptSaveChanges", () => {
     const action = vi.fn();
     promptSaveChanges(action);
 
-    render(<SaveChangesPrompt bridge={bridge} />);
+    render(<SaveChangesDialog bridge={bridge} />);
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
@@ -283,7 +283,7 @@ describe("promptSaveChanges", () => {
     const action = vi.fn();
     promptSaveChanges(action);
 
-    render(<SaveChangesPrompt bridge={bridge} />);
+    render(<SaveChangesDialog bridge={bridge} />);
     fireEvent.click(screen.getByRole("button", { name: "Don't Save" }));
 
     await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
@@ -299,7 +299,7 @@ describe("promptSaveChanges", () => {
     const action = vi.fn();
     promptSaveChanges(action);
 
-    render(<SaveChangesPrompt bridge={bridge} />);
+    render(<SaveChangesDialog bridge={bridge} />);
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(useFileStateStore.getState().pendingAction).toBeNull();

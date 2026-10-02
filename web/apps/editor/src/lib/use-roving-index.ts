@@ -11,8 +11,8 @@
 // Deliberately minimal: no wrap-around, no typeahead, no selection state —
 // selection stays the consumer's concern (aria-selected etc.). New consumers
 // (TexturePalette, ColorButton) share this; the three pre-existing bespoke
-// implementations (AtlasPickerPanel, ImportEmittersDialog,
-// ReferenceObjectPicker) are intentionally NOT retrofitted (surgical rule).
+// implementations (AtlasPickerPane, ImportEmittersDialog,
+// ReferenceObjectPopoverBody) are intentionally NOT retrofitted (surgical rule).
 
 import { useRef, useState, type KeyboardEvent } from "react";
 

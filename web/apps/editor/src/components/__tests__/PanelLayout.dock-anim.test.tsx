@@ -4,7 +4,7 @@
 // MOCK the heavy child screens to trivial stubs. The children each do an
 // on-mount bridge fetch that, under a stub bridge, resolves to {} and crashes
 // its render once an `await` flushes the microtask queue (EmitterTree reads
-// tree.root, SpawnerPanel reads config.mode, …). The dock effect under test
+// tree.root, SpawnerPane reads config.mode, …). The dock effect under test
 // needs none of them — it reads PanelLayout's own quadrant-viewport div and the
 // dock panel ref — so stubbing the children isolates the behaviour. Kept in a
 // separate file from PanelLayout.test.tsx so those synchronous DOM-structure
@@ -26,15 +26,14 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act, render, waitFor } from "@testing-library/react";
 import type { Bridge } from "@particle-editor/bridge-schema";
-import { BridgeContext } from "@/lib/bridge-context";
 import { __resetRightDockForTests, setDock } from "@/lib/right-dock";
 import { useDockAnim } from "@/lib/dock-anim";
 
 vi.mock("@/screens/EmitterTree", () => ({ EmitterTree: () => <div /> }));
 vi.mock("@/screens/EmitterPropertyTabs", () => ({ EmitterPropertyTabs: () => <div /> }));
-vi.mock("@/screens/SpawnerPanel", () => ({ SpawnerPanel: () => <div /> }));
-vi.mock("@/screens/LightingPanel", () => ({ LightingPanel: () => <div /> }));
-vi.mock("../CurveEditorPanel", () => ({ CurveEditorPanel: () => <div /> }));
+vi.mock("@/screens/SpawnerPane", () => ({ SpawnerPane: () => <div /> }));
+vi.mock("@/screens/LightingPane", () => ({ LightingPane: () => <div /> }));
+vi.mock("@/screens/curve-editor/CurveEditorPanel", () => ({ CurveEditorPanel: () => <div /> }));
 vi.mock("../ViewportSlot", () => ({ ViewportSlot: () => <div /> }));
 
 import { PanelLayout } from "../PanelLayout";
@@ -56,11 +55,7 @@ describe("PanelLayout — dock-slide animation (Item 3)", () => {
     };
   }
   function renderLayout(bridge: Bridge) {
-    return render(
-      <BridgeContext.Provider value={bridge}>
-        <PanelLayout bridge={bridge} />
-      </BridgeContext.Provider>,
-    );
+    return render(<PanelLayout bridge={bridge} />);
   }
   function animateCalls(bridge: { request: ReturnType<typeof vi.fn> }) {
     return bridge.request.mock.calls.filter((c) => c[0]?.kind === "animate-scene-rect");

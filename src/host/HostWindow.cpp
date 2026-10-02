@@ -3649,7 +3649,7 @@ static void ApplyRestoredSettings(Engine* engine, const host::RestoredSettings& 
     // floor; per Petroglyph's shaders (reference/foc-shaders/AlamoEngine.fxh)
     // production Mesh*/RSkin* light ambient ONLY via that SPH path, so w=1
     // reproduces the game's mesh brightness. This and the React
-    // `ambientToVec4` (LightingPanel.tsx) push the same w=1, so load == Reset
+    // `ambientToVec4` (LightingPane.tsx) push the same w=1, so load == Reset
     // (keep both in lockstep).
     auto ambientToVec4 = [](COLORREF c) -> D3DXVECTOR4 {
         return D3DXVECTOR4(GetRValue(c) / 255.0f, GetGValue(c) / 255.0f,

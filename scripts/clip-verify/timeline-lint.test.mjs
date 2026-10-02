@@ -260,8 +260,10 @@ test("collectTestids finds literal, prop-passed, and template-prefix testids in 
   assert.ok(known.prefixes.some((p) => "emitter-row:0".startsWith(p)));
   // test-only ids must NOT legitimize timeline refs
   assert.ok(!known.exact.has("atlas-alpha-toggle"));
-  // multiline conditional template (data-testid={ testId ? `${testId}-option-${v}` : undefined })
-  // legitimizes derived option ids via its static infix
+  // a select option's id built in an options object
+  // ({ testId: testId ? `${testId}-option-${v}` : undefined }) legitimizes
+  // derived option ids via its static infix; a static-prefix one via its prefix
+  assert.ok(known.prefixes.some((p) => "ce-lock-to-option-none".startsWith(p)));
   const r = lintTimeline(base([
     { cursor: [{ t: 100, target: el("testid:appearance-blend-mode-trigger-option-11"), vis: true, press: false }] },
   ]), { knownTestids: known });

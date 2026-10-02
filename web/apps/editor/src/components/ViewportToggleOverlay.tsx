@@ -9,6 +9,7 @@ import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
 import { useEngineField } from "@/lib/use-engine-snapshot";
 import { pillScrimMode, pillBackdropColor } from "@/lib/colorref";
 import { Tip } from "@/primitives/Tip";
+import { cn } from "@/lib/utils";
 
 type Props = { bridge: Bridge };
 
@@ -62,11 +63,11 @@ function ToggleButton(props: {
       <span className="inline-flex">
         <button
           type="button"
-          className={
-            "vp-overlay-btn" +
-            (active ? " vp-overlay-btn--active" : "") +
-            (lock && active ? " vp-overlay-btn--lock" : "")
-          }
+          className={cn(
+            "vp-overlay-btn",
+            active && "vp-overlay-btn--active",
+            lock && active && "vp-overlay-btn--lock",
+          )}
           aria-label={label}
           aria-pressed={active}
           disabled={disabled}

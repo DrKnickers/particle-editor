@@ -1,8 +1,8 @@
-// Module-level caches for AtlasPickerPanel. The panel UNMOUNTS when the dock
+// Module-level caches for AtlasPickerPane. The panel UNMOUNTS when the dock
 // closes, so component state is lost; these survive the unmount so a re-open
 // renders its first frame from the last known values instead of a placeholder.
 //
-// Kept out of AtlasPickerPanel.tsx so the component module exports only
+// Kept out of AtlasPickerPane.tsx so the component module exports only
 // components (Fast Refresh) and the test reset lives with the other lib
 // `__reset*ForTests` seams.
 

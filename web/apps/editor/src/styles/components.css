@@ -137,7 +137,8 @@ html.theme-transition body * {
 [data-recording] .panel-section-header,
 [data-recording] .btn-texture-browse,
 [data-recording] .atlas-hover-fade,
-[data-recording] .curve-list .curve-row { transition: none !important; }
+[data-recording] .curve-list .curve-row,
+[data-recording] .checkbox { transition: none !important; }
 
 /* ---- Tooltip surface + motion family ----
    The shared Tip primitive (primitives/Tip.tsx). Surface is theme-following
@@ -453,7 +454,7 @@ html.theme-transition body * {
   padding: 5px 8px;
   background: var(--bg-2);
   border-radius: var(--radius-xs);
-  font-size: 11px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -584,7 +585,7 @@ html.theme-transition body * {
   color: var(--text);
 }
 .form-row .lbl { color: var(--text); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.form-row .unit { color: var(--text-3); font-size: 11px; overflow: visible; min-width: 0; }
+.form-row .unit { color: var(--text-3); font-size: var(--text-2xs); overflow: visible; min-width: 0; }
 /* Disabled params dim their label — the dim token now signals "disabled",
    not "secondary label". Mode-gated rows (e.g. the Continuous-stream and
    Weather spinners when that mode isn't selected, or any checkbox/select
@@ -628,7 +629,7 @@ html.theme-transition body * {
 .form-row.form-row-text .text-input {
   min-width: 0;
   width: 100%;
-  font-size: 11px;
+  font-size: var(--text-2xs);
 }
 
 /* Texture picker row: label + text input + Browse button. The input
@@ -645,7 +646,7 @@ html.theme-transition body * {
 .form-row.form-row-texture .text-input {
   min-width: 0;
   width: 100%;
-  font-size: 11px;
+  font-size: var(--text-2xs);
 }
 .btn-texture-browse {
   display: inline-flex;
@@ -746,7 +747,7 @@ html.theme-transition body * {
 .axis-cell .axis-lbl {
   display: block;
   text-align: center;
-  font-size: 10px;
+  font-size: var(--text-3xs);
   line-height: 1;
   padding-bottom: 2px;
   color: var(--text-3);
@@ -796,6 +797,40 @@ html.theme-transition body * {
   transition: border-color var(--motion-fast-in) var(--ease-entrance);
 }
 .text-input:focus { border-color: var(--accent); }
+
+/* The one checkbox look (primitives/Checkbox.tsx) — a native input with
+   appearance:none, so the box, fill and glyph are ours in every surface and
+   theme while the control stays a real checkbox. Lives here rather than in
+   Tailwind because the check/dash glyphs are background images keyed off
+   :checked / :indeterminate. Fill is --accent-strong (AA behind the white
+   glyph, as the old Radix box). Hover lifts the fill, like every bordered
+   control. */
+.checkbox {
+  appearance: none;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-xs);
+  background: var(--bg-2) center / 10px 10px no-repeat;
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fast-in) var(--ease-entrance),
+    border-color var(--motion-fast-in) var(--ease-entrance);
+}
+.checkbox-md { width: 18px; height: 18px; background-size: 12px 12px; }
+.checkbox:hover:not(:disabled):not(:checked):not(:indeterminate) { background-color: var(--panel-2); }
+.checkbox:checked,
+.checkbox:indeterminate { background-color: var(--accent-strong); border-color: var(--accent-strong); }
+.checkbox:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+}
+.checkbox:indeterminate {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round'%3E%3Cpath d='M6 12h12'/%3E%3C/svg%3E");
+}
+.checkbox:disabled { opacity: 0.4; cursor: not-allowed; }
+.checkbox:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* ========== Viewport ========== */
 .vp-overlay {
@@ -900,8 +935,8 @@ html.theme-transition body * {
   transition: background-color var(--motion-fast-in) var(--ease-entrance);
 }
 .curve-list .curve-row:hover { background: var(--hover); }
-/* Inset focus ring — rows live in the .curve-list overflow scroller. */
-.curve-list .curve-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* (The row itself is not focusable — its checkbox and name button carry
+   their own focus rings; CurveChannelList.tsx.) */
 .curve-list .swatch {
   width: 10px; height: 10px;
   border-radius: var(--radius-2xs);
@@ -1009,7 +1044,8 @@ html.theme-transition body * {
   .panel-header .icon-btn,
   .panel-section-header,
   .btn-texture-browse,
-  .curve-list .curve-row { transition: none; }
+  .curve-list .curve-row,
+  .checkbox { transition: none; }
 }
 
 /* Viewport display-options overlay: a quiet, in-context cluster of viewport

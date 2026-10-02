@@ -44,11 +44,15 @@
 - **12px body convention app-wide.** Tailwind's `--text-sm` is rebased to 12px
   so `text-sm` and `text-xs` agree; larger steps reserved for headings/glyphs.
   Tabular numerals for stats/readouts.
+- **Small steps are tokens, not literals:** `text-2xs` 11px / `text-3xs` 10px /
+  `text-4xs` 9px (`@theme` in tokens.css). Never write `text-[11px]`; `cn()`
+  is taught these names so tailwind-merge does not mistake them for colours.
 
 ## Spacing, radii, chrome
 
 - Radii: `--radius` 8 / `--radius-sm` 5 / `--radius-xs` 4 / `--radius-2xs` 2.
-- Row heights: `--row-h` 26 / `--row-h-sm` 22.
+- Row heights: `--row-h` 26 / `--row-h-sm` 22 / `--row-h-lg` 32. Control
+  heights use these tokens, not px literals.
 - One elevation shadow for floating surfaces: `--shadow-soft` (two-layer,
   theme-tuned). Sole exception: the adaptive viewport-overlay scrim carries
   its own tokenized shadow (`--vp-scrim-shadow`) because it sits over
@@ -81,6 +85,23 @@
   shared `Modal` owns dialog chrome + frozen-viewport backdrop; `ToolPanel`
   owns docked/overlay tool windows (incl. focus management: chrome-triggered
   opens focus the panel, close restores the opener, auto-open never steals).
+- **Shared primitives are the single source** for their look
+  (`src/primitives/`): `Button` (primary / danger / secondary), `IconButton`
+  (one `label` → aria-label + tooltip; toolbar / tree / toggle / ghost / row),
+  `Checkbox` (native input, `.checkbox`), `Select` (Radix) and `NativeSelect`,
+  `SegmentedControl` (radiogroup), `SelectedBadge`, `AnimatedPopover`, `Tip`,
+  `Spinner`, `ColorButton`, and `menu.ts` — the one class source for every
+  Radix menu surface, item, separator and select listbox. Never re-roll one of
+  these inline; extend the primitive.
+- **One styling rule:** a look shared by many surfaces, or one that needs
+  selectors/pseudo-elements, lives as a class in components.css; everything
+  else is Tailwind at the call site. Class strings that merge or vary are
+  composed with `cn()`, never template literals or `+`. Tooltips are
+  `<Tip>`, never a native `title=`.
+- **Hover is never a no-op:** a bordered control (select trigger, toggle,
+  colour button, checkbox) lifts its fill to `--panel-2` on hover, gated by
+  `enabled:` so disabled controls stay still; borderless glyph buttons lift
+  fill and text. A hover that restates the resting style is a bug.
 - **Focus:** one canonical ring — `.focus-ring` / `.focus-ring-inset`
   (keyboard-only). Borderless inputs get wrapper `focus-within:border-accent`.
 - **Collections are single Tab stops** (roving tabindex): emitter tree,
@@ -91,7 +112,7 @@
   styling (unreachable today, FieldText exposes no disabled prop). Disabled
   = `opacity-40` + `cursor-not-allowed`. Async feedback via
   `role="status"`/`aria-live` regions. Empty states teach the next action
-  (AtlasPickerPanel's six cause-specific messages are the pattern).
+  (AtlasPickerPane's six cause-specific messages are the pattern).
 - **Density:** compact (26/22px rows, 12px type) — a tool, not a marketing
   page. Uppercase section headers are the settings-panel convention.
 

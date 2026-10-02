@@ -1,8 +1,11 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Check, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
+import { ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { Modal } from "@/components/Modal";
 import { cn } from "@/lib/utils";
+import { Checkbox } from "@/primitives/Checkbox";
+import { SegmentedControl } from "@/primitives/SegmentedControl";
+import { NativeSelect } from "@/primitives/Select";
 import { applyMode, readStoredMode, type ThemeMode } from "@/lib/theme";
 import { readConfirmDelete, writeConfirmDelete } from "@/lib/delete-emitters";
 import {
@@ -38,54 +41,11 @@ const MODES: { value: ThemeMode; label: string }[] = [
 function SectionCard({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-bg">
-      <div className="border-b border-border bg-bg-2 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.04em] text-text-2">
+      <div className="border-b border-border bg-bg-2 px-3 py-2 text-2xs font-semibold uppercase tracking-[0.04em] text-text-2">
         {title}
       </div>
       {children}
     </div>
-  );
-}
-
-// A real <input type="checkbox"> (kept for role/label/keyboard + tests) made
-// to look like the mockup's 14px box: the native input is visually hidden but
-// still the accessible control; a sibling <span> draws the box + tick from the
-// `checked` prop. The wrapping <label> is the click target; `aria-label` (not
-// the row title element) is the accessible name so getByLabelText resolves to
-// exactly the title.
-function CheckToggle({
-  id,
-  label,
-  checked,
-  onChange,
-  disabled,
-}: {
-  id: string;
-  label: string;
-  checked: boolean;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <label className={cn("relative inline-flex size-[14px] shrink-0", disabled ? "cursor-not-allowed" : "cursor-pointer")}>
-      <input
-        id={id}
-        type="checkbox"
-        aria-label={label}
-        checked={checked}
-        disabled={disabled}
-        onChange={onChange}
-        className="peer sr-only"
-      />
-      <span
-        aria-hidden
-        className={cn(
-          "flex size-[14px] items-center justify-center rounded-[var(--radius-xs)] border transition-colors motion-reduce:transition-none peer-disabled:opacity-40 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-[var(--accent)]",
-          checked ? "border-accent-strong bg-accent-strong" : "border-border-2 bg-bg-3",
-        )}
-      >
-        {checked && <Check className="size-2.5 text-white" strokeWidth={3} />}
-      </span>
-    </label>
   );
 }
 
@@ -178,7 +138,7 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
   };
 
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title="Preferences" size="md">
+    <Modal bridge={bridge} open={open} onOpenChange={onOpenChange} title="Preferences" size="md">
       <Modal.Body>
         <div className="flex flex-col gap-2.5">
 
@@ -186,29 +146,7 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
           <SectionCard title="Appearance">
             <div className="flex items-center justify-between gap-3 px-3 py-[9px]">
               <span className="text-xs text-text">Theme</span>
-              <div
-                role="radiogroup"
-                aria-label="Theme"
-                className="inline-flex gap-0.5 rounded-[var(--radius-sm)] border border-border-2 bg-bg-2 p-0.5"
-              >
-                {MODES.map((m) => (
-                  <button
-                    key={m.value}
-                    role="radio"
-                    aria-checked={mode === m.value}
-                    aria-label={m.label}
-                    onClick={() => choose(m.value)}
-                    className={cn(
-                      "rounded-[var(--radius-xs)] px-[11px] py-[3px] text-[11px] transition-colors motion-reduce:transition-none focus-ring-inset",
-                      mode === m.value
-                        ? "bg-accent-soft font-semibold text-accent"
-                        : "text-text-3 hover:text-text-2",
-                    )}
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
+              <SegmentedControl aria-label="Theme" value={mode} onValueChange={choose} options={MODES} />
             </div>
           </SectionCard>
 
@@ -217,13 +155,13 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
             <div className="flex items-start justify-between gap-3 px-3 py-[9px]">
               <div className="flex min-w-0 flex-col gap-0.5">
                 <span className="text-xs text-text">Confirm before deleting emitters</span>
-                <span className="text-[11px] leading-snug text-text-3">
+                <span className="text-2xs leading-snug text-text-3">
                   Shows a confirmation dialog before an emitter is removed.
                 </span>
               </div>
-              <CheckToggle
+              <Checkbox
                 id="pref-confirm-delete"
-                label="Confirm before deleting emitters"
+                aria-label="Confirm before deleting emitters"
                 checked={confirmDelete}
                 onChange={(e) => { setConfirmDelete(e.target.checked); writeConfirmDelete(e.target.checked); }}
               />
@@ -237,9 +175,9 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
           <SectionCard title="Preview">
             <div className="flex items-center justify-between gap-3 px-3 py-[9px]">
               <span className="text-xs text-text">Limit preview particle count</span>
-              <CheckToggle
+              <Checkbox
                 id="pref-overload-guard"
-                label="Limit preview particle count"
+                aria-label="Limit preview particle count"
                 checked={guard.enabled}
                 onChange={(e) => commitGuard({ ...guard, enabled: e.target.checked })}
               />
@@ -302,7 +240,7 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
             {!guard.enabled && (
               <div className="mx-3 mb-[11px] flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 px-[9px] py-[7px]">
                 <AlertTriangle className="mt-px size-3 shrink-0 text-warning-fg" strokeWidth={1.5} />
-                <span className="text-[11px] leading-snug text-warning-fg">
+                <span className="text-2xs leading-snug text-warning-fg">
                   Unlimited spawning can crash the editor on extreme effects —
                   unsaved changes are at risk.
                 </span>
@@ -316,38 +254,31 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
           <SectionCard title="Rendering">
             <div className="flex items-center justify-between gap-3 px-3 py-[9px]">
               <label htmlFor="pref-msaa-level" className="text-xs text-text">Antialiasing</label>
-              <div className="relative h-[var(--row-h-sm)]">
-                <select
-                  id="pref-msaa-level"
-                  aria-label="Antialiasing"
-                  value={msaaLevel}
-                  disabled={msaaLevels === null}
-                  onChange={(e) => commitMsaaLevel(Number(e.target.value) as MsaaLevel)}
-                  className="h-[var(--row-h-sm)] min-w-[104px] cursor-pointer appearance-none rounded-[var(--radius-sm)] border border-border-2 bg-bg-3 pl-2 pr-6 text-xs text-text focus-ring disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {(msaaLevels ?? [msaaLevel]).map((lvl) => (
-                    <option key={lvl} value={lvl}>
-                      {lvl === 0 ? "Off" : `${lvl}× MSAA`}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown
-                  aria-hidden
-                  className="pointer-events-none absolute right-[7px] top-1/2 size-2.5 -translate-y-1/2 text-text-3"
-                  strokeWidth={1.6}
-                />
-              </div>
+              <NativeSelect
+                id="pref-msaa-level"
+                aria-label="Antialiasing"
+                value={msaaLevel}
+                disabled={msaaLevels === null}
+                onChange={(e) => commitMsaaLevel(Number(e.target.value) as MsaaLevel)}
+                className="min-w-[104px]"
+              >
+                {(msaaLevels ?? [msaaLevel]).map((lvl) => (
+                  <option key={lvl} value={lvl}>
+                    {lvl === 0 ? "Off" : `${lvl}× MSAA`}
+                  </option>
+                ))}
+              </NativeSelect>
             </div>
             <div className="flex items-start justify-between gap-3 border-t border-border px-3 py-[9px]">
               <div className="flex min-w-0 flex-col gap-0.5">
                 <span className="text-xs text-text">Model shadows</span>
-                <span className="text-[11px] leading-snug text-text-3">
+                <span className="text-2xs leading-snug text-text-3">
                   Casts the game's stencil shadow for the reference model onto the ground (and self-shadows it).
                 </span>
               </div>
-              <CheckToggle
+              <Checkbox
                 id="pref-model-shadows"
-                label="Model shadows"
+                aria-label="Model shadows"
                 checked={modelShadows}
                 onChange={(e) => commitModelShadows(e.target.checked)}
               />
@@ -361,13 +292,13 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
             >
               <div className="flex min-w-0 flex-col gap-0.5">
                 <span className="text-xs text-text">Soft shadows</span>
-                <span className="text-[11px] leading-snug text-text-3">
+                <span className="text-2xs leading-snug text-text-3">
                   Softens (blurs) the model shadow&apos;s edges, matching the game; off = hard-edged.
                 </span>
               </div>
-              <CheckToggle
+              <Checkbox
                 id="pref-soft-shadows"
-                label="Soft shadows"
+                aria-label="Soft shadows"
                 checked={softShadows}
                 disabled={!modelShadows}
                 onChange={(e) => commitSoftShadows(e.target.checked)}

@@ -8,8 +8,9 @@
 // plumbing; this comment is the drift tripwire). Panel-local keys (tree,
 // curve plot, atlas grid, spinners) are documented at their handlers:
 // EmitterTree.handleTreeKeyDown, CurveEditor.onKeyboardNav wiring,
-// AtlasPickerPanel.onGridKeyDown, Spinner's scrub column.
+// AtlasPickerPane.onGridKeyDown, Spinner's scrub column.
 import { Fragment } from "react";
+import type { Bridge } from "@particle-editor/bridge-schema";
 import { Modal } from "@/components/Modal";
 
 type Row = { keys: string[]; does: string };
@@ -95,26 +96,28 @@ const SECTIONS: readonly Section[] = [
 
 function Kbd({ children }: { children: string }) {
   return (
-    <kbd className="rounded border border-border-2 bg-bg-3 px-1.5 py-0.5 font-mono text-[10px] text-text-2">
+    <kbd className="rounded border border-border-2 bg-bg-3 px-1.5 py-0.5 font-mono text-3xs text-text-2">
       {children}
     </kbd>
   );
 }
 
 export function ShortcutsDialog({
+  bridge,
   open,
   onOpenChange,
 }: {
+  bridge: Bridge;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title="Keyboard Shortcuts" size="md">
+    <Modal bridge={bridge} open={open} onOpenChange={onOpenChange} title="Keyboard Shortcuts" size="md">
       <Modal.Body>
         <div className="flex flex-col gap-4">
           {SECTIONS.map((s) => (
             <section key={s.title}>
-              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-text-2">
+              <div className="mb-1.5 text-2xs font-semibold uppercase tracking-[0.04em] text-text-2">
                 {s.title}
               </div>
               <div className="grid grid-cols-[minmax(120px,auto)_1fr] items-baseline gap-x-4 gap-y-1.5">

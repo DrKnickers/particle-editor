@@ -397,7 +397,7 @@ test("Appearance tab Rotation/Scale: checkbox commits via UI; inverted + scaled 
   const rotationAvg = page.getByLabel("Rotation average:", { exact: true });
   await expect(rotationAvg).toBeDisabled();
 
-  // UI-driven commit: the Radix checkbox is a real button — click it and
+  // UI-driven commit: the inspector checkbox is a native input — click it and
   // assert the round-trip (mirrors the Generation radio leg above).
   await fixedRotation.click();
   await expect

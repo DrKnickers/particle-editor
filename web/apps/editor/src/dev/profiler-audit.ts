@@ -8,7 +8,7 @@
 //
 // Design (see tasks/2026-07-07-react-profiler-audit-plan.md §3 + §7):
 //  - The five audited mount sites (App.tsx: Toolbar, StatusBar; PanelLayout.tsx:
-//    EmitterTree, CurveEditorPanel, AtlasPickerPanel) are each wrapped, behind an
+//    EmitterTree, CurveEditorPanel, AtlasPickerPane) are each wrapped, behind an
 //    `import.meta.env.DEV` gate, in React's built-in <Profiler>. Their onRender
 //    calls `window.__profilerAudit?.record`. Production files never import THIS
 //    module — they reference only the `window.__profilerAudit` global (typed by

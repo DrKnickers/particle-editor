@@ -30,7 +30,7 @@ test.beforeAll(async ({ cdpPage }) => {
   page = cdpPage;
 });
 
-// Radix Modal content (portalled). The BackgroundPicker/ToolPanel
+// Radix Modal content (portalled). The old BackgroundPicker/ToolPanel
 // surfaces also use role="dialog" but carry no data-state — see the
 // selector note in dialogs.spec.ts.
 const RADIX_DIALOG = '[role="dialog"][data-state="open"]';

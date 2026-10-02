@@ -6,6 +6,7 @@
 // the `--legacy-ui` opt-out were removed; this React modal is now
 // the sole About surface.
 
+import type { Bridge } from "@particle-editor/bridge-schema";
 import { Modal } from "@/components/Modal";
 
 // Pull from Vite-injected env. These are JSON-stringified by `define` so
@@ -22,13 +23,15 @@ const BUILD_DATE = (import.meta.env.VITE_BUILD_DATE as string | undefined) ?? "u
 const GITHUB_URL = "https://github.com/DrKnickers/particle-editor";
 
 type Props = {
+  bridge: Bridge;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
 
-export function AboutDialog({ open, onOpenChange }: Props) {
+export function AboutDialog({ bridge, open, onOpenChange }: Props) {
   return (
     <Modal
+      bridge={bridge}
       open={open}
       onOpenChange={onOpenChange}
       title="About Particle Editor"

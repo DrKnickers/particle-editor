@@ -12,6 +12,7 @@
 
 import type { ChainWarning } from "@/lib/chain-load";
 import { fmtCount, fmtMultiplier } from "@/lib/chain-load";
+import { cn } from "@/lib/utils";
 
 export function ChainWarningTip({ warning }: { warning: ChainWarning }) {
   // A single-row path is one emitter pinning the threshold on its own; a
@@ -27,9 +28,10 @@ export function ChainWarningTip({ warning }: { warning: ChainWarning }) {
           <div key={i} className="flex items-baseline justify-between gap-4">
             <span>{i === 0 ? p.name : `→ ${p.name}`}</span>
             <span
-              className={`font-mono text-[11px] tabular-nums ${
-                i === warning.path.length - 1 ? "text-warning-fg font-semibold" : "text-text-2"
-              }`}
+              className={cn(
+                "font-mono text-2xs tabular-nums",
+                i === warning.path.length - 1 ? "text-warning-fg font-semibold" : "text-text-2",
+              )}
             >
               {i === 0
                 ? `~${fmtMultiplier(p.perEmitter)} particles`

@@ -21,12 +21,12 @@ test.beforeAll(async ({ cdpPage }) => {
 
 // ── 1. Help → About renders modal with version text ─────────────────────────
 //
-// Selector note: the BackgroundPicker panel also uses role="dialog" (it's a
+// Selector note: the old BackgroundPicker panel also used role="dialog" (it was a
 // non-modal slide-in), so we can't filter by role alone. Radix Dialog
 // content carries the `data-radix-dialog-content` attribute (or the
 // canonical `data-state="open"` plus aria-labelledby pointing at the
 // Radix title). Target via `[role="dialog"][data-state]` which only
-// matches the Radix Modal content, not the BackgroundPicker shell.
+// matches the Radix Modal content, not the BackgroundPopoverBody shell.
 
 const RADIX_DIALOG = '[role="dialog"][data-state="open"]';
 

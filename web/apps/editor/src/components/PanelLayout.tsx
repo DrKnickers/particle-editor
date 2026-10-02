@@ -50,12 +50,13 @@ import { useDockAnim } from "@/lib/dock-anim";
 import { emitPerfTrace, makePerfSpanId } from "@/lib/perf-trace";
 import { ViewportSlot } from "./ViewportSlot";
 import { OverloadBanner } from "./OverloadBanner";
-import { CurveEditorPanel } from "./CurveEditorPanel";
+import { CurveEditorPanel } from "@/screens/curve-editor/CurveEditorPanel";
 import { EmitterPropertyTabs } from "@/screens/EmitterPropertyTabs";
 import { EmitterTree } from "@/screens/EmitterTree";
-import { LightingPanel } from "@/screens/LightingPanel";
-import { SpawnerPanel } from "@/screens/SpawnerPanel";
-import { AtlasPickerPanel } from "@/screens/AtlasPickerPanel";
+import { LightingPane } from "@/screens/LightingPane";
+import { SpawnerPane } from "@/screens/SpawnerPane";
+import { AtlasPickerPane } from "@/screens/AtlasPickerPane";
+import { cn } from "@/lib/utils";
 
 export type { Layout };
 
@@ -436,7 +437,7 @@ export function PanelLayout({ bridge }: Props) {
         if (atlasGate) atlasGate.ended = true;
         raf = requestAnimationFrame(startSlide);
       };
-      // READ readiness BEFORE clearing it. On a RE-OPEN the AtlasPickerPanel
+      // READ readiness BEFORE clearing it. On a RE-OPEN the AtlasPickerPane
       // (a child) reaches its terminal first paint synchronously from the caches
       // and its readiness effect runs BEFORE this parent effect (React runs child
       // effects first), so atlasTerminalFirstPaint is already true here → start
@@ -713,10 +714,7 @@ export function PanelLayout({ bridge }: Props) {
           overrides disabled-panel constraints in the lib. */}
       <Separator
         disabled={!dockVisible}
-        className={
-          "ce-splitter ce-splitter-v" +
-          (dockVisible ? "" : " invisible pointer-events-none")
-        }
+        className={cn("ce-splitter ce-splitter-v", !dockVisible && "invisible pointer-events-none")}
       />
       <Panel
         id="spawner"
@@ -743,21 +741,21 @@ export function PanelLayout({ bridge }: Props) {
           {displayDock !== null && (
           <div key={displayDock} className="h-full w-full fade-in-fast">
           {displayDock === "spawner" ? (
-            <SpawnerPanel bridge={bridge} />
+            <SpawnerPane bridge={bridge} />
           ) : displayDock === "lighting" ? (
-            <LightingPanel bridge={bridge} onClose={() => setDock(null)} closing={dockClosing} />
+            <LightingPane bridge={bridge} onClose={() => setDock(null)} closing={dockClosing} />
           ) : displayDock === "atlas" ? (
             import.meta.env.DEV ? (
               <Profiler
-                id="AtlasPickerPanel"
+                id="AtlasPickerPane"
                 onRender={(id, phase, actualDuration, baseDuration, startTime, commitTime) =>
                   window.__profilerAudit?.record(id, phase, actualDuration, baseDuration, startTime, commitTime)
                 }
               >
-                <AtlasPickerPanel bridge={bridge} onClose={() => setDock(null)} closing={dockClosing} />
+                <AtlasPickerPane bridge={bridge} onClose={() => setDock(null)} closing={dockClosing} />
               </Profiler>
             ) : (
-              <AtlasPickerPanel bridge={bridge} onClose={() => setDock(null)} closing={dockClosing} />
+              <AtlasPickerPane bridge={bridge} onClose={() => setDock(null)} closing={dockClosing} />
             )
           ) : null}
           </div>

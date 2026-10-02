@@ -12,7 +12,7 @@
 //
 // skydome-slot / skydome-custom-path are exercised here purely as a
 // native-bridge contract (the host's registry startup-restore still drives
-// them); the React BackgroundPicker no longer does — its custom
+// them); the React BackgroundPopoverBody no longer does — its custom
 // skydome-texture slots were removed (it's Game dome + Solid colour only).
 //
 // Notes on TestHostBridge.on(): the host-object channel doesn't carry
@@ -39,27 +39,30 @@ test.beforeAll(async ({ cdpPage }) => {
 });
 
 test("Background popover opens from the toolbar dropdown trigger", async () => {
-  // Task 2.2: the BackgroundPicker slide-in ToolPanel was replaced by a
+  // Task 2.2: the old BackgroundPicker slide-in ToolPanel was replaced by a
   // Radix Popover triggered from the Toolbar's Group 4 dropdown. The
   // dropdown button still carries aria-label="Background", but the
   // mounted content is now a popover wrapper (data-radix-popper-content-wrapper)
-  // rather than role="dialog". BackgroundPickerBody is now Game dome +
+  // rather than role="dialog". BackgroundPopoverBody is now Game dome +
   // Solid colour only (the custom skydome-texture tiles were removed), so the
-  // aria-pressed surface is the Space/Land context toggle (2) + the Solid
-  // colour swatch (1) = 3. The Primary/Secondary domes are <select>s, not
-  // aria-pressed buttons. (e2e against --test-host; not part of the Vitest leg.)
+  // only aria-pressed button is the Solid colour swatch (1); the Space/Land
+  // context toggle is a SegmentedControl radiogroup (2 role="radio"). The
+  // Primary/Secondary domes are <select>s. (e2e against --test-host; not part
+  // of the Vitest leg.)
   const probe = await page.evaluate(async () => {
     const btn = document.querySelector<HTMLButtonElement>('button[aria-label="Background"]');
-    if (!btn) return { clicked: false, popover: false, slots: 0 };
+    if (!btn) return { clicked: false, popover: false, slots: 0, radios: 0 };
     btn.click();
     await new Promise((r) => setTimeout(r, 250));
     const popover = document.querySelector('[data-radix-popper-content-wrapper]');
     const slots = popover?.querySelectorAll("button[aria-pressed]").length ?? 0;
-    return { clicked: true, popover: !!popover, slots };
+    const radios = popover?.querySelectorAll("[role=radiogroup] [role=radio]").length ?? 0;
+    return { clicked: true, popover: !!popover, slots, radios };
   });
   expect(probe.clicked).toBe(true);
   expect(probe.popover).toBe(true);
-  expect(probe.slots).toBe(3);
+  expect(probe.slots).toBe(1);
+  expect(probe.radios).toBe(2);
 });
 
 test("engine/set/skydome-slot reports exact applied and actual slots for invalid, fallback, no-op, and bundled requests", async () => {

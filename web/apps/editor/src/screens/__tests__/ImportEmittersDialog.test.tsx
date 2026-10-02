@@ -5,10 +5,20 @@
 // navigation. Selection is asserted via aria-checked (not a nested input).
 
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render as rtlRender, screen, fireEvent, waitFor } from "@testing-library/react";
+import * as Tooltip from "@radix-ui/react-tooltip";
+import type { ReactElement, ReactNode } from "react";
 import { ZERO_SPAWN } from "@particle-editor/bridge-schema";
 import type { Bridge, EmitterTreeNode } from "@particle-editor/bridge-schema";
 import { ImportEmittersDialog } from "../ImportEmittersDialog";
+
+// The tree rows and source path mount Tips (Radix Tooltip.Root), which require the
+// Tooltip.Provider App.tsx supplies in production — this wrapper stands in
+// for it (precedent: renderWithTooltips in EmitterTree.test.tsx).
+const TipProvider = ({ children }: { children: ReactNode }) => (
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+);
+const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
 function makeStubBridge(): Bridge & {
   request: ReturnType<typeof vi.fn>;

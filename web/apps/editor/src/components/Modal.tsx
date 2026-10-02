@@ -1,7 +1,7 @@
 // Modal — shared dialog foundation for sub-dialogs.
 //
 // Radix Dialog wrapper exposing a compound-component API:
-//   <Modal open onOpenChange title size="sm|md|lg">
+//   <Modal bridge open onOpenChange title size="sm|md|lg">
 //     <Modal.Body>…</Modal.Body>
 //     <Modal.Footer>
 //       <Modal.CancelButton>Cancel</Modal.CancelButton>
@@ -26,10 +26,15 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { useEffect, useState, type ComponentPropsWithoutRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { useBridge } from "@/lib/bridge-context";
+import type { Bridge } from "@particle-editor/bridge-schema";
 import { useModalOpen } from "@/lib/modal-open";
+import { cn } from "@/lib/utils";
+import { Button, type ButtonVariant } from "@/primitives/Button";
+import { IconButton } from "@/primitives/IconButton";
 
 export type ModalSize = "sm" | "md" | "lg";
+
+const QUADRANT_VIEWPORT = '[data-testid="quadrant-viewport"]';
 
 const SIZE_CLASS: Record<ModalSize, string> = {
   sm: "w-[320px]",
@@ -38,6 +43,9 @@ const SIZE_CLASS: Record<ModalSize, string> = {
 };
 
 type ModalProps = {
+  /** The live bridge, threaded down like everywhere else in the app — used
+   *  for the one-shot frosted-backdrop snapshot (viewport/capture-snapshot). */
+  bridge: Bridge;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
@@ -46,6 +54,7 @@ type ModalProps = {
 };
 
 export function Modal({
+  bridge,
   open,
   onOpenChange,
   title,
@@ -71,8 +80,8 @@ export function Modal({
   //      transparent again and the live DComp engine visual shows
   //      through. The engine keeps rendering through the modal lifecycle.
   //
-  // Bridge comes from BridgeContext (NOT `window.bridge`).
-  const bridge = useBridge();
+  // `bridge` is the prop App threads down (NOT `window.bridge`, which
+  // exposeBridgeForTests can swap for a TestHostBridge under WebView2).
   const [snapshot, setSnapshot] = useState<{ imageBase64: string; w: number; h: number } | null>(null);
   const [viewportEl, setViewportEl] = useState<HTMLElement | null>(null);
   // Gate Dialog open on snapshot
@@ -101,17 +110,15 @@ export function Modal({
       setSnapshotReady(false);
       return;
     }
-    if (!bridge) {
-      // Test env / no-context path — open the dialog immediately so
-      // unit tests rendering <Modal open> without a BridgeContext
-      // see Dialog.Content mount. The snapshot/<img> render guard
-      // already short-circuits the portaled <img> in this case.
+    if (!document.querySelector(QUADRANT_VIEWPORT)) {
+      // No viewport quadrant to freeze (a Modal mounted outside the App
+      // shell — unit tests): no snapshot will be taken, so open now.
       setSnapshotReady(true);
       return;
     }
     const fallback = window.setTimeout(() => setSnapshotReady(true), 750);
     return () => window.clearTimeout(fallback);
-  }, [open, bridge]);
+  }, [open]);
 
   // Mark a blocking modal open so the viewport suppresses global keys while this
   // dialog is up (release-audit #12). Keyed on `open` — Modal stays mounted and
@@ -124,15 +131,15 @@ export function Modal({
   }, [open]);
 
   useEffect(() => {
-    if (!open || !bridge) return;
+    if (!open) return;
 
     // Look up the quadrant-viewport node lazily on open — App.tsx's
     // shell mounts it once at startup, so by the time any modal opens
-    // it's already in the DOM. The querySelector miss is the test-env
-    // path (Modal mounted in isolation without the App shell); in that
-    // case viewportEl stays null and the createPortal render guards
-    // skip the img output.
-    const el = document.querySelector<HTMLElement>('[data-testid="quadrant-viewport"]');
+    // it's already in the DOM. A miss is the test-env path (Modal mounted
+    // in isolation without the App shell): there is nowhere to put a
+    // snapshot, so none is requested (the effect above opened the dialog).
+    const el = document.querySelector<HTMLElement>(QUADRANT_VIEWPORT);
+    if (!el) return;
     setViewportEl(el);
 
     let cancelled = false;
@@ -220,18 +227,20 @@ export function Modal({
             // copy worth distinguishing from the title; the title alone is
             // sufficient SR context.
             aria-describedby={undefined}
-            className={`fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 ${SIZE_CLASS[size]} max-h-[80vh] overflow-hidden rounded-lg border border-border bg-bg-2 text-text shadow-[var(--shadow-soft)] outline-none modal-animate`}
+            className={cn(
+              "fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 max-h-[80vh] overflow-hidden rounded-lg border border-border bg-bg-2 text-text shadow-[var(--shadow-soft)] outline-none modal-animate",
+              SIZE_CLASS[size],
+            )}
           >
             {/* Header */}
             <div className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-bg-2 px-4">
               <Dialog.Title className="text-sm font-semibold text-text">
                 {title}
               </Dialog.Title>
-              <Dialog.Close
-                aria-label="Close"
-                className="flex size-6 items-center justify-center rounded text-text-2 hover:bg-panel-2 hover:text-text focus-ring"
-              >
-                <X className="size-4" />
+              <Dialog.Close asChild>
+                <IconButton label="Close" tip={null} variant="ghost">
+                  <X className="size-4" />
+                </IconButton>
               </Dialog.Close>
             </div>
             {children}
@@ -259,28 +268,17 @@ function ModalFooter({ children }: { children: ReactNode }) {
 }
 
 type ButtonProps = ComponentPropsWithoutRef<"button">;
-type OkButtonVariant = "primary" | "danger" | "secondary";
 
-const OK_BUTTON_CLASS: Record<OkButtonVariant, string> = {
-  primary: "bg-accent-strong text-white hover:bg-accent-strong-hover",
-  danger: "bg-danger-strong text-white hover:bg-danger-strong-hover",
-  secondary: "border border-border-2 bg-panel-2 text-text hover:bg-panel-3",
-};
-
-function ModalCancelButton({ children = "Cancel", className, ...buttonProps }: ButtonProps) {
+function ModalCancelButton({ children = "Cancel", ...buttonProps }: ButtonProps) {
   // Wrap the button in Dialog.Close so clicking it always closes the modal
   // via Radix (firing onOpenChange(false)). Callers can attach onClick for
   // any extra side-effects (e.g. resetting a draft form). asChild forwards
   // the close behaviour to our styled <button>.
   return (
     <Dialog.Close asChild>
-      <button
-        type="button"
-        {...buttonProps}
-        className={`rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 focus-ring disabled:cursor-not-allowed disabled:opacity-40${className ? ` ${className}` : ""}`}
-      >
+      <Button variant="secondary" {...buttonProps}>
         {children}
-      </button>
+      </Button>
     </Dialog.Close>
   );
 }
@@ -288,22 +286,16 @@ function ModalCancelButton({ children = "Cancel", className, ...buttonProps }: B
 function ModalOkButton({
   children = "OK",
   variant = "primary",
-  className,
   ...buttonProps
-}: ButtonProps & { variant?: OkButtonVariant }) {
+}: ButtonProps & { variant?: ButtonVariant }) {
   // OK button does NOT auto-close. Callers fire their commit action in
   // onClick and then call onOpenChange(false) themselves. This lets a
   // caller keep the modal open on error (e.g. "rescale failed, show
   // inline error and leave dialog open").
   return (
-    <button
-      type="button"
-      data-testid="modal-ok"
-      {...buttonProps}
-      className={`rounded px-3 py-1 text-xs${variant === "secondary" ? "" : " font-medium"} ${OK_BUTTON_CLASS[variant]} focus-ring disabled:cursor-not-allowed disabled:opacity-40${className ? ` ${className}` : ""}`}
-    >
+    <Button variant={variant} data-testid="modal-ok" {...buttonProps}>
       {children}
-    </button>
+    </Button>
   );
 }
 

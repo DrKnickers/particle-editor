@@ -11,6 +11,11 @@ import {
   AutosaveRecoveryDialog,
   formatAutosaveAge,
 } from "../AutosaveRecoveryDialog";
+import { makeBridgeStub } from "@/test/bridge-stub";
+
+// Only the dialog backdrop snapshot reaches the bridge, and only with a
+// quadrant viewport mounted — a plain stub satisfies the prop.
+const viewBridge = makeBridgeStub();
 
 const NOW = 1_700_000_000_000;
 function orphan(p: Partial<AutosaveOrphan> = {}): AutosaveOrphan {
@@ -35,7 +40,7 @@ describe("formatAutosaveAge", () => {
 describe("AutosaveRecoveryView", () => {
   it("both tiers → Discard + Restore stable + Restore recent, with ages", () => {
     render(
-      <AutosaveRecoveryView orphan={orphan()} nowMs={NOW} onChoose={vi.fn()} onDismiss={vi.fn()} />,
+      <AutosaveRecoveryView bridge={viewBridge} orphan={orphan()} nowMs={NOW} onChoose={vi.fn()} onDismiss={vi.fn()} />,
     );
     expect(screen.getByTestId("autosave-discard")).toBeInTheDocument();
     expect(screen.getByTestId("autosave-restore-stable")).toBeInTheDocument();
@@ -47,7 +52,7 @@ describe("AutosaveRecoveryView", () => {
 
   it("recent only → no Restore stable button", () => {
     render(
-      <AutosaveRecoveryView
+      <AutosaveRecoveryView bridge={viewBridge}
         orphan={orphan({ stableMtimeMs: null })}
         nowMs={NOW}
         onChoose={vi.fn()}
@@ -60,7 +65,7 @@ describe("AutosaveRecoveryView", () => {
 
   it("stable only → no Restore recent button", () => {
     render(
-      <AutosaveRecoveryView
+      <AutosaveRecoveryView bridge={viewBridge}
         orphan={orphan({ recentMtimeMs: null })}
         nowMs={NOW}
         onChoose={vi.fn()}
@@ -73,7 +78,7 @@ describe("AutosaveRecoveryView", () => {
 
   it("empty originalFilename → 'Unsaved new file'", () => {
     render(
-      <AutosaveRecoveryView
+      <AutosaveRecoveryView bridge={viewBridge}
         orphan={orphan({ originalFilename: "" })}
         nowMs={NOW}
         onChoose={vi.fn()}
@@ -84,14 +89,14 @@ describe("AutosaveRecoveryView", () => {
   });
 
   it("null orphan → dialog closed (no buttons)", () => {
-    render(<AutosaveRecoveryView orphan={null} onChoose={vi.fn()} onDismiss={vi.fn()} />);
+    render(<AutosaveRecoveryView bridge={viewBridge} orphan={null} onChoose={vi.fn()} onDismiss={vi.fn()} />);
     expect(screen.queryByTestId("autosave-restore-recent")).toBeNull();
   });
 
   it("each button fires onChoose with its choice", () => {
     const onChoose = vi.fn();
     render(
-      <AutosaveRecoveryView orphan={orphan()} nowMs={NOW} onChoose={onChoose} onDismiss={vi.fn()} />,
+      <AutosaveRecoveryView bridge={viewBridge} orphan={orphan()} nowMs={NOW} onChoose={onChoose} onDismiss={vi.fn()} />,
     );
     fireEvent.click(screen.getByTestId("autosave-restore-recent"));
     fireEvent.click(screen.getByTestId("autosave-restore-stable"));

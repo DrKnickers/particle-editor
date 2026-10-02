@@ -1,6 +1,6 @@
 // file-state.ts — Zustand atom that mirrors the host's editor-level
 // file state (currentFilePath + dirty + recentFiles) plus the
-// SaveChangesPrompt's pending-action slot.
+// SaveChangesDialog's pending-action slot.
 //
 // The host is the source of truth for `currentFilePath`, `dirty`, and
 // the recent-files list. This module's job is:
@@ -13,7 +13,7 @@
 //      (New / Open / Recent) behind the modal save-changes prompt
 //      when dirty.
 //
-// The pending-action slot is a closure. When the SaveChangesPrompt is
+// The pending-action slot is a closure. When the SaveChangesDialog is
 // open, clicking Save / Don't Save runs the closure; Cancel discards it
 // and closes the modal. This keeps the prompt decoupled from any
 // specific destructive op: the caller passes "run this once the user
@@ -33,7 +33,7 @@ type FileStateStore = {
   dirty: boolean;
   recentFiles: string[];
 
-  /** When non-null, the SaveChangesPrompt is open and `pendingAction`
+  /** When non-null, the SaveChangesDialog is open and `pendingAction`
    *  fires on Save (after a successful file/save) or on Don't Save. */
   pendingAction: PendingAction;
 
@@ -154,7 +154,7 @@ export function useSeedFileState(bridge: Bridge): void {
 /** Returns a function `promptSaveChanges(action)` that:
  *
  *    - If `dirty` is false: runs `action()` immediately.
- *    - If `dirty` is true: opens the SaveChangesPrompt with `action`
+ *    - If `dirty` is true: opens the SaveChangesDialog with `action`
  *      stored as the pending closure. The prompt's buttons run the
  *      closure (Save / Don't Save) or discard it (Cancel).
  *
@@ -164,7 +164,7 @@ export function useSeedFileState(bridge: Bridge): void {
  *
  *  The closure is stored in a Zustand slot rather than passed to the
  *  prompt as a prop because the prompt is mounted at app-level and
- *  driven from anywhere — see App.tsx's `<SaveChangesPrompt />`.
+ *  driven from anywhere — see App.tsx's `<SaveChangesDialog />`.
  *
  *  While useSeedFileState is mounted, the decision reads the HOST's dirty
  *  bit from a fresh engine/state/snapshot rather than the mirror: the

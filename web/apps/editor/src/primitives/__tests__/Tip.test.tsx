@@ -3,17 +3,13 @@ import { render, screen, act } from "@testing-library/react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { Tip } from "../Tip";
 import { markRecording, __resetRecordModeForTests } from "@/lib/record-mode";
-import { BridgeContext } from "@/lib/bridge-context";
-import type { Bridge } from "@particle-editor/bridge-schema";
 
 // Render helper: Radix Tooltip requires a Provider. delayDuration=0 so
 // tests don't need fake timers. Opening via focus() is the reliable
 // jsdom path (hover needs real pointer events Radix sniffs for).
-function renderTip(ui: React.ReactElement, bridge: Bridge | null = null) {
+function renderTip(ui: React.ReactElement) {
   return render(
-    <BridgeContext.Provider value={bridge}>
-      <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{ui}</Tooltip.Provider>
-    </BridgeContext.Provider>,
+    <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{ui}</Tooltip.Provider>,
   );
 }
 

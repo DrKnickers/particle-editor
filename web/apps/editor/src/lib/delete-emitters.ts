@@ -7,7 +7,7 @@
 // A default-on localStorage toggle ("alo:confirm-delete") governs the confirm.
 //
 // `bridge` is threaded in — it is a prop, not a module singleton. The confirm
-// STORE never calls bridge; <DeleteConfirmModal> (mounted in App, where bridge
+// STORE never calls bridge; <DeleteConfirmDialog> (mounted in App, where bridge
 // lives) runs confirmPendingDelete(bridge) on confirm, which re-validates the
 // pending ids against the live tree (aborting if it changed) before delegating
 // to performDelete(bridge, ids, tree).
@@ -146,7 +146,7 @@ export function requestDeleteEmitters(bridge: Bridge, ids: number[]): void {
   useDeleteConfirmStore.getState().open(ids, impact, tree);
 }
 
-// Called by <DeleteConfirmModal> when the user confirms. Re-validates against the
+// Called by <DeleteConfirmDialog> when the user confirms. Re-validates against the
 // CURRENT tree: if it changed since the confirm opened (an emitters/tree/changed
 // landed), the captured positional ids are stale, so ABORT rather than delete the
 // wrong nodes (release-audit #8). Otherwise collapse-to-roots + delete against the

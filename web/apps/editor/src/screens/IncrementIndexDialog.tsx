@@ -53,6 +53,7 @@ export function IncrementIndexDialog({ bridge }: Props) {
 
   return (
     <Modal
+      bridge={bridge}
       open={open}
       onOpenChange={(o) => {
         if (!o) close();
@@ -89,7 +90,7 @@ export function IncrementIndexDialog({ bridge }: Props) {
               testId="increment-repeat"
             />
           </div>
-          <p className="text-[11px] leading-relaxed text-text-3">
+          <p className="text-2xs leading-relaxed text-text-3">
             Duplicates the emitter and shifts every atlas-index keyframe
             on the duplicate by this delta. If the source has no index
             keys, a single key at t=0 is inserted with the chosen value.

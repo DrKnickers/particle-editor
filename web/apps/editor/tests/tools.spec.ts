@@ -152,7 +152,7 @@ test("Toggling Enable Bloom fires engine/set/bloom (observed via state/changed)"
 });
 
 test("Ground popover opens from the toolbar dropdown trigger", async () => {
-  // The GroundTexturePanel slide-in ToolPanel was replaced by
+  // The old GroundTexturePanel slide-in ToolPanel was replaced by
   // a Radix Popover triggered from the Toolbar's Group 4 dropdown. The
   // dropdown button carries aria-label="Ground"; the mounted content is
   // a popover wrapper (data-radix-popper-content-wrapper) rather than
@@ -169,7 +169,7 @@ test("Ground popover opens from the toolbar dropdown trigger", async () => {
   });
   expect(probe.clicked).toBe(true);
   expect(probe.popover).toBe(true);
-  // GroundTexturePanelBody renders 8 aria-pressed slot buttons:
+  // GroundPopoverBody renders 8 aria-pressed slot buttons:
   //   solid colour (1) + bundled 0..3 (4) + custom 5..7 (3) = 8.
   expect(probe.slots).toBe(8);
 

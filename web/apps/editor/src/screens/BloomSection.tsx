@@ -1,7 +1,7 @@
 // BloomSection — bloom enable + strength / cutoff / size, rendered as a
 // `ToolPanel.Section` inside the docked Lighting pane. The standalone
 // BloomPanel was folded into Lighting (one right-dock slot);
-// this component carries the former BloomPanel's logic so LightingPanel
+// this component carries the former BloomPanel's logic so LightingPane
 // stays focused on the lights.
 //
 // Owns its own engine-state subscription (snapshot on mount +
@@ -18,6 +18,7 @@
 
 import { useEffect, useState } from "react";
 import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
+import { Checkbox } from "@/primitives/Checkbox";
 import { Spinner } from "@/primitives/Spinner";
 import { ToolPanel } from "@/components/ToolPanel";
 
@@ -86,18 +87,16 @@ export function BloomSection({ bridge, defaultOpen = false }: Props) {
   return (
     <ToolPanel.Section title="Bloom" defaultOpen={defaultOpen}>
       <label className="flex items-center gap-2 text-xs text-text">
-        <input
-          type="checkbox"
+        <Checkbox
           checked={enabled}
           onChange={(e) => setEnabled(e.target.checked)}
           disabled={disabled}
           aria-label="Enable bloom"
-          className="size-3 accent-[var(--accent-strong)] disabled:opacity-40 disabled:cursor-not-allowed"
         />
         <span>Enable bloom</span>
       </label>
       {disabled && (
-        <p className="text-[10px] text-text-3">
+        <p className="text-3xs text-text-3">
           (Bloom is not supported on this device.)
         </p>
       )}

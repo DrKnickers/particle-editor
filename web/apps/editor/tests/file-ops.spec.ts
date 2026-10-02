@@ -2,9 +2,9 @@
 //
 // Coverage:
 //   1. File → New on a clean system dispatches file/new with no
-//      SaveChangesPrompt modal (assert dirty/changed arrives with
+//      SaveChangesDialog modal (assert dirty/changed arrives with
 //      `dirty:false`).
-//   2. File → New on a dirty system shows the SaveChangesPrompt
+//   2. File → New on a dirty system shows the SaveChangesDialog
 //      (pre-seed dirty via an engine setter; click New; assert modal
 //      is in the DOM).
 //   3. file/save with a pre-seeded path clears dirty and the snapshot
@@ -46,7 +46,7 @@ test("File → New on a clean system fires file/new (no prompt)", async () => {
   // Subscribe to dirty/changed; on a clean→clean call we still expect
   // SetDirty(false) to be a no-op (debounced). But the bridge
   // response itself proves the round-trip happened, so we assert on
-  // that + the absence of the SaveChangesPrompt in the DOM.
+  // that + the absence of the SaveChangesDialog in the DOM.
   const result = await page.evaluate(async () => {
     const b = window.bridge!;
     const r = await b.request({ kind: "file/new", params: {} });
@@ -103,7 +103,7 @@ test("File → New on a dirty system shows the Save Changes prompt", async () =>
     .first()
     .click();
 
-  // The SaveChangesPrompt modal should now be mounted. Title-text
+  // The SaveChangesDialog modal should now be mounted. Title-text
   // selector — the modal renders the literal "Save changes?" string.
   await page.waitForSelector('text="Save changes?"', { timeout: 2000 });
   const promptVisible = await page
