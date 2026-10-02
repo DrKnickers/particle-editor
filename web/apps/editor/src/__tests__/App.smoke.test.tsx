@@ -25,6 +25,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useFileStateStore } from "@/lib/file-state";
 import { useMockEngineState, useMockRecentFiles } from "@/bridge/mock-state";
 import { resetMockState } from "@/test/mock-state";
+import { resetAppState } from "@/test/app-state";
 
 // Mount exactly like main.tsx does (minus createRoot — RTL owns the root).
 function renderApp() {
@@ -38,17 +39,11 @@ function renderApp() {
 }
 
 beforeEach(() => {
-  // The MockBridge's backing stores are module singletons — reset all of
-  // them (a fresh mock tree mints fresh stableIds, like a host load) plus
-  // the file-state atom App's startup seeds write, so renders stay
-  // independent.
+  // The MockBridge's backing stores and the app's own session stores are
+  // module singletons — reset both sides (a fresh mock tree mints fresh
+  // stableIds, like a host load) so renders stay independent.
   resetMockState();
-  useFileStateStore.setState({
-    currentFilePath: null,
-    dirty: false,
-    recentFiles: [],
-    pendingAction: null,
-  });
+  resetAppState();
 });
 
 describe("App — smoke render against the MockBridge", () => {
