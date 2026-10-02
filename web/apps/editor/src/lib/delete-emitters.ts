@@ -13,7 +13,7 @@
 // to performDelete(bridge, ids, tree).
 import { create } from "zustand";
 import type { Bridge, EmitterTreeDto, EmitterTreeNode } from "@particle-editor/bridge-schema";
-import { useEmitterTreeStore } from "@/lib/emitter-tree";
+import { getEmitterTree } from "@/lib/emitter-tree";
 import { useFileOpErrorStore } from "@/lib/file-op";
 import { announceWhenOk } from "./status-feedback";
 
@@ -137,7 +137,7 @@ export const useDeleteConfirmStore = create<DeleteConfirmStore>((set) => ({
 // The single entry point for all four delete call sites.
 export function requestDeleteEmitters(bridge: Bridge, ids: number[]): void {
   if (ids.length === 0) return;
-  const tree = useEmitterTreeStore.getState().tree;
+  const tree = getEmitterTree(bridge);
   const impact = computeDeleteImpact(ids, tree);
   if (!readConfirmDelete() || !impact.isDestructive) {
     performDelete(bridge, ids, tree);
@@ -153,7 +153,7 @@ export function requestDeleteEmitters(bridge: Bridge, ids: number[]): void {
 // live tree. Always clears the pending state.
 export function confirmPendingDelete(bridge: Bridge): void {
   const pending = useDeleteConfirmStore.getState().pending;
-  const live = useEmitterTreeStore.getState().tree;
+  const live = getEmitterTree(bridge);
   useDeleteConfirmStore.getState().clear();
   if (!pending) return;
   if (pending.tree !== live) {

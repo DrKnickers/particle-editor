@@ -12,7 +12,7 @@ import { useDockAnim } from "../lib/dock-anim";
 import { useModalOpen } from "../lib/modal-open";
 import { ManipulatorReadout } from "./ManipulatorReadout";
 import { ViewportToggleOverlay } from "./ViewportToggleOverlay";
-import { useEmitterTreeStore } from "@/lib/emitter-tree";
+import { useEmitterTree } from "@/lib/emitter-tree";
 import { useRecording } from "@/lib/record-mode";
 import { usePresence } from "@/lib/use-presence";
 
@@ -336,7 +336,7 @@ export function ViewportSlot({ bridge }: Props) {
           events-none (never steals viewport input); hidden under --record
           via useRecording (the CSS kill-switch only stops the fade, it
           doesn't hide). */}
-      <ViewportEmptyHint />
+      <ViewportEmptyHint bridge={bridge} />
       {/* In-drag readout pill. Floats up-right of the projected
           gizmo origin while a reference-object gizmo is being dragged.
           `pointer-events-none` (set on the pill itself) so it never steals
@@ -353,8 +353,8 @@ export function ViewportSlot({ bridge }: Props) {
 
 // See the mount-site comment (F3). Split out so the 4Hz-adjacent stores it
 // subscribes to never re-render the input-forwarding parent.
-function ViewportEmptyHint() {
-  const tree = useEmitterTreeStore((s) => s.tree);
+function ViewportEmptyHint({ bridge }: Props) {
+  const tree = useEmitterTree(bridge);
   const recording = useRecording();
   const empty = tree !== null && tree.root.children.length === 0;
   const presence = usePresence(empty && !recording, 150);

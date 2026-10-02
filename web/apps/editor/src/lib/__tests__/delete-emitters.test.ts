@@ -28,6 +28,9 @@ function recordingBridge() {
     },
     on: () => () => {},
   } as unknown as Bridge;
+  // The helpers only read a tree the store holds for THEIR bridge — claim the
+  // beforeEach-seeded tree for this one, as EmitterTree's emitters/list would.
+  useEmitterTreeStore.setState({ bridge });
   const deleteCalls = () =>
     requests.filter((r) => r.kind === "emitters/delete-many").map((r) => r.params.ids ?? []);
   return { bridge, requests, deleteCalls };

@@ -118,6 +118,38 @@ describe("EmitterTree", () => {
     expect(document.querySelectorAll('[data-testid^="emitter-row:"]')).toHaveLength(6);
   });
 
+  it("a remount on a new bridge never paints the previous session's rows; a same-bridge remount keeps them", async () => {
+    // The lifted tree store outlives the component. A remount against a new
+    // bridge session must not paint the old tree as current before its own
+    // emitters/list lands — that stale paint was then replaced, remounting
+    // every stableId-keyed row. A same-bridge remount (Reset Panel Layout)
+    // still paints the live tree at once, with no blank or exit-ghost flash.
+    const tree = (name: string, stableId: number): EmitterTreeDto => ({
+      root: {
+        id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
+        children: [
+          { id: 0, stableId, name, role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
+        ],
+      },
+    });
+    const first = makeMutableTreeBridge(tree("Alpha", 701));
+    const firstMount = renderWithTooltips(<EmitterTree bridge={first.bridge} />);
+    expect(await screen.findByText("Alpha")).toBeInTheDocument();
+    firstMount.unmount();
+
+    // Same bridge: painted synchronously from the store, before any refetch.
+    const sameBridge = renderWithTooltips(<EmitterTree bridge={first.bridge} />);
+    expect(screen.getByText("Alpha")).toBeInTheDocument();
+    sameBridge.unmount();
+
+    const second = makeMutableTreeBridge(tree("Gamma", 801));
+    renderWithTooltips(<EmitterTree bridge={second.bridge} />);
+    // Synchronously after mount — before the new emitters/list resolves.
+    expect(screen.queryByText("Alpha")).toBeNull();
+    const gamma = await screen.findByText("Gamma");
+    expect(gamma.closest("[data-stable-id]")).toHaveAttribute("data-stable-id", "801");
+  });
+
   // ─── Reorder glide — stableId keying ─────────────────────────────
 
   it("a host-side reorder (positional ids reshuffled, stableIds follow) MOVES row elements instead of remounting them", async () => {
@@ -1009,6 +1041,7 @@ describe("EmitterTree delete gating (helper-level)", () => {
   it("deleting a parent opens the confirm", () => {
     const calls: number[] = [];
     const bridge = { request: (r: { kind: string; params: { ids?: number[] } }) => { if (r.kind === "emitters/delete-many") calls.push(...r.params.ids!); return Promise.resolve({}); }, on: () => () => {} } as unknown as Bridge;
+    useEmitterTreeStore.setState({ bridge }); // the seeded tree is this bridge's
     requestDeleteEmitters(bridge, [0]);
     expect(calls).toEqual([]);
     expect(useDeleteConfirmStore.getState().pending?.ids).toEqual([0]);

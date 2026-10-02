@@ -98,7 +98,7 @@ import { IconButton, iconButtonClass } from "@/primitives/IconButton";
 import { MENU_CONTENT, MENU_ITEM } from "@/primitives/menu";
 import { Tip } from "@/primitives/Tip";
 import { ChainWarningTip } from "./ChainWarningTip";
-import { useEmitterTreeStore } from "@/lib/emitter-tree";
+import { useEmitterTree, useEmitterTreeStore } from "@/lib/emitter-tree";
 import { requestDeleteEmitters } from "@/lib/delete-emitters";
 import { moveEmitters, duplicateEmitters, reorderManyEmitters } from "@/lib/emitter-reorder";
 import {
@@ -934,7 +934,7 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
 }
 
 export function EmitterTree({ bridge }: Props) {
-  const tree = useEmitterTreeStore((s) => s.tree);
+  const tree = useEmitterTree(bridge);
   const setTree = useEmitterTreeStore((s) => s.setTree);
   const selectedIds = useEmitterSelectionIds();
   const primaryId = useEmitterSelectionPrimary();
@@ -1053,7 +1053,7 @@ export function EmitterTree({ bridge }: Props) {
         // Store invariant: null or a well-formed tree (every consumer here
         // assumes a truthy tree has a `root`). Ignore a malformed/partial
         // response — e.g. a stubbed `{}` — so it can't reach the renderers.
-        if (!cancelled && (t as EmitterTreeDto | null)?.root) setTree(t);
+        if (!cancelled && (t as EmitterTreeDto | null)?.root) setTree(t, bridge);
       })
       .catch((err) => console.warn("[EmitterTree] emitters/list failed:", err));
     return () => { cancelled = true; };
