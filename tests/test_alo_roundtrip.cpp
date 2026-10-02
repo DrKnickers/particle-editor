@@ -3,8 +3,8 @@
 // Two parts:
 //
 //  (a) ROUND-TRIP FIDELITY (audit C1 feasible proof). SaveParticleSystem's
-//      temp-then-rename atomicity lives in main.cpp with a heavy dep set and
-//      can't be linked / fault-injected standalone. The durable, linkable proof
+//      temp-then-rename atomicity (ParticleSystemIO.cpp + AtomicSave.cpp) is
+//      linked and fault-injected by test_particle_system_io. The proof here
 //      for the save path is round-trip fidelity: build a ParticleSystem via the
 //      public API, serialize with ParticleSystem::write(IFile*), reload via the
 //      ParticleSystem(IFile*) ctor, and assert key fields survive intact. A

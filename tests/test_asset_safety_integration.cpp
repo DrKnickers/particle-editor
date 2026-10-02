@@ -285,7 +285,7 @@ static void testAssetReadSizeCaps()
     CHECK(threw, "ReadAndReleaseCapped throws on an oversized texture asset");
     CHECK(!textureRead, "ReadAndReleaseCapped does not read an oversized asset before rejecting");
 
-    // Same helper guards the shader loaders (main.cpp) at the shader cap.
+    // Same helper guards the shader loaders (managers.cpp) at the shader cap.
     bool shaderRead = false;
     IFile* bigShader = new ClaimedSizeFile(kMaxShaderAssetBytes + 1u, &shaderRead);
     bool shaderThrew = false;

@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const hostSource = readFileSync(resolve(repoRoot, "src/host/HostWindow.cpp"), "utf8");
+// The HostWindowImpl constructor is defined in-class in the private header.
+const hostSource = readFileSync(resolve(repoRoot, "src/host/HostWindowImpl.h"), "utf8");
 
 test("automation isolates the texture palette before restoring the saved mod stack", () => {
   const constructor = hostSource.indexOf("HostWindowImpl(HINSTANCE inst");

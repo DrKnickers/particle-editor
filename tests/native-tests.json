@@ -148,7 +148,7 @@
     "test_particle_compaction": {},
     "test_particle_mipfilter": {},
     "test_particle_system_io": {
-      "sources": ["src/AtomicSave.cpp", "src/ParticleSystem.cpp", "src/ParticleSystemSerialization.cpp", "src/ChunkReader.cpp", "src/ChunkWriter.cpp", "src/crc32.cpp", "src/files.cpp", "src/utils.cpp", "src/LinkGroup.cpp"],
+      "sources": ["src/ParticleSystemIO.cpp", "src/AtomicSave.cpp", "src/ParticleSystem.cpp", "src/ParticleSystemSerialization.cpp", "src/ChunkReader.cpp", "src/ChunkWriter.cpp", "src/crc32.cpp", "src/files.cpp", "src/utils.cpp", "src/LinkGroup.cpp"],
       "uses": ["expat", "dxsdk", "webview2"],
       "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },

@@ -306,7 +306,7 @@ inline bool IsAllowedRecordKind(const std::string& kind) {
     // Dialog-free; bad id/channel returns sendErr (envelope-checked).
     if (kind == "emitters/set-track-lock")     return true;
     // preview/* — the scripted mirror of the native Shift-hover spawn
-    // (BridgeDispatch_Spawner.cpp), added for the guide's ref-shift-preview
+    // (BridgeDispatch_SpawnerLighting.cpp), added for the guide's ref-shift-preview
     // clip: attach spawns a cursor-bound instance at an unprojected client
     // (x,y), move re-positions it along the cursor path, place detaches it
     // (Shift-click), kill removes it (Shift release). Dialog-free, in-memory,

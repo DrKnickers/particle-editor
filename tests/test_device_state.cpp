@@ -220,6 +220,25 @@ static std::string ReadSource(const std::filesystem::path& path)
     return source;
 }
 
+// The host window implementation is split across HostWindowImpl.h and the
+// HostWindow*.cpp files, so a pin on "the host window source" reads all of
+// them. Empty if any file is missing, which fails the readable checks.
+static std::string ReadHostWindowSources(const std::filesystem::path& root)
+{
+    const char* const files[] = {
+        "HostWindowImpl.h", "HostWindow.cpp", "HostWindow_WebView2.cpp",
+        "HostWindow_Viewport.cpp", "HostWindow_Record.cpp" };
+    std::string all;
+    for (const char* file : files)
+    {
+        const std::string text = ReadSource(root / "src" / "host" / file);
+        if (text.empty()) return std::string();
+        all += text;
+        all += "\n";
+    }
+    return all;
+}
+
 static bool Contains(const std::string& text, const char* needle)
 {
     return text.find(needle) != std::string::npos;
@@ -797,8 +816,7 @@ int main()
         const std::string deferredChangeHeader =
             ReadSource(repoRoot / "src" /
                        "DeferredParticleSystemChange.h");
-        const std::string hostSource =
-            ReadSource(repoRoot / "src" / "host" / "HostWindow.cpp");
+        const std::string hostSource = ReadHostWindowSources(repoRoot);
         const std::string layoutSource =
             ReadSource(repoRoot / "src" / "host" / "LayoutBroker.cpp");
         const std::string compositorHeader =
@@ -807,8 +825,8 @@ int main()
             ReadSource(repoRoot / "src" / "host" / "Compositor.cpp");
         const std::string managerHeader =
             ReadSource(repoRoot / "src" / "managers.h");
-        const std::string mainSource =
-            ReadSource(repoRoot / "src" / "main.cpp");
+        const std::string managerSource =
+            ReadSource(repoRoot / "src" / "managers.cpp");
         const std::string emitterHeader =
             ReadSource(repoRoot / "src" / "EmitterInstance.h");
         const std::string emitterSource =
@@ -831,7 +849,7 @@ int main()
                     !hostSource.empty() && !layoutSource.empty() &&
                     !compositorHeader.empty() &&
                     !compositorSource.empty() && !managerHeader.empty() &&
-                    !mainSource.empty() &&
+                    !managerSource.empty() &&
                     !emitterHeader.empty() && !emitterSource.empty() &&
                     !instanceHeader.empty() && !instanceSource.empty() &&
                     !environmentSource.empty() && !referenceSource.empty(),
@@ -964,7 +982,7 @@ int main()
             hostSource.find("void HostWindowImpl::RenderD3D9()");
         const size_t renderD3D9End =
             hostSource.find(
-                "\nvoid HostWindowImpl::",
+                "\n}",
                 renderD3D9Begin == std::string::npos
                     ? 0
                     : renderD3D9Begin + 1);
@@ -1230,9 +1248,11 @@ int main()
         ExpectBool("ShaderManager exposes full cached-effect lifecycle",
                    Contains(managerHeader, "virtual void OnLostDevice() = 0;") &&
                    Contains(managerHeader, "virtual void OnResetDevice() = 0;") &&
-                   Contains(mainSource, "void OnLostDevice() override") &&
-                   Contains(mainSource, "void OnResetDevice() override") &&
-                   Contains(mainSource, "std::set<Effect*> unique;"),
+                   Contains(managerHeader, "void OnLostDevice() override;") &&
+                   Contains(managerHeader, "void OnResetDevice() override;") &&
+                   Contains(managerSource, "void ShaderManager::OnLostDevice()") &&
+                   Contains(managerSource, "void ShaderManager::OnResetDevice()") &&
+                   CountOccurrences(managerSource, "std::set<Effect*> unique;") == 2,
                    true);
 
         const size_t releaseBegin =

@@ -27,6 +27,25 @@ static std::string ReadSource(const std::filesystem::path& path)
                        std::istreambuf_iterator<char>());
 }
 
+// The host window implementation is split across HostWindowImpl.h and the
+// HostWindow*.cpp files, so a pin on "the host window source" reads all of
+// them. Empty if any file is missing, which fails the readable checks.
+static std::string ReadHostWindowSources(const std::filesystem::path& root)
+{
+    const char* const files[] = {
+        "HostWindowImpl.h", "HostWindow.cpp", "HostWindow_WebView2.cpp",
+        "HostWindow_Viewport.cpp", "HostWindow_Record.cpp" };
+    std::string all;
+    for (const char* file : files)
+    {
+        const std::string text = ReadSource(root / "src" / "host" / file);
+        if (text.empty()) return std::string();
+        all += text;
+        all += "\n";
+    }
+    return all;
+}
+
 static size_t CountOccurrences(const std::string& text,
                                const std::string& needle)
 {
@@ -148,8 +167,7 @@ int main()
     // the value reads and ambient push at their new production homes.
     {
         const std::filesystem::path root = std::filesystem::current_path();
-        const std::string source = ReadSource(
-            root / "src" / "host" / "HostWindow.cpp");
+        const std::string source = ReadHostWindowSources(root);
         const std::string restoredSource = ReadSource(
             root / "src" / "host" / "RestoredSettings.cpp");
         const std::string lightingSource = ReadSource(
@@ -303,11 +321,11 @@ int main()
         CHECK(!host::ShouldRestorePersistedModLayers(true),
               "golden captures do not restore the persisted mod-layer stack");
 
-        const std::string source = ReadSource(
-            std::filesystem::current_path() / "src" / "host" /
-            "HostWindow.cpp");
+        const std::string source =
+            ReadHostWindowSources(std::filesystem::current_path());
         const std::string compact = WithoutWhitespace(source);
 
+        CHECK(!source.empty(), "HostWindow production sources are readable");
         CHECK(CountOccurrences(source, "RestoreLastLayerStack()") == 1,
               "HostWindow restores the layer stack from exactly one site");
         CHECK(compact.find(

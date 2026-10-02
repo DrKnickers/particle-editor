@@ -6,6 +6,12 @@
 #include "xml.h"
 #include "utils.h"
 #include "ModLayers.h"
+#include <cstdarg>     // [shader-gate] va_list for ShaderLog
+#include <cstdio>      // [shader-gate] headless diagnostic logging (stdout)
+#include <set>
+#include "AssetPathSafety.h"
+#include "ResourceLimits.h"   // kMaxTextureAssetBytes (asset-read size caps, #415)
+#include "Resources/resource.h"
 using namespace std;
 
 //
@@ -231,3 +237,383 @@ void FileManager::SetLayers(const vector<wstring>& absoluteLayers)
 		});
 }
 
+//
+// Texture and shader managers
+//
+
+// [shader-gate] Headless diagnostic logger (stdout-flushed + debugger). Defined here so both
+// TextureManager and ShaderManager can use it; HostWindowImpl::Log is not reachable from here.
+static void ShaderLog(const char* fmt, ...)
+{
+	char buf[2048];
+	va_list ap;
+	va_start(ap, fmt);
+	_vsnprintf_s(buf, sizeof(buf), _TRUNCATE, fmt, ap);
+	va_end(ap);
+	OutputDebugStringA(buf);
+	fputs(buf, stdout);
+	fflush(stdout);
+}
+
+// [shader-gate] Gate for the *verbose* per-asset diagnostics (every getTexture /
+// getShader fetch, successful texture loads). Behind the ALO_SHADER_DIAG env var
+// (matches the repo's ALO_* test hooks) so normal interactive use stays silent.
+// Genuine failures (load/compile FAILED) call ShaderLog unconditionally and keep
+// surfacing regardless of this gate.
+static bool ShaderDiagEnabled()
+{
+	static int s_diag = -1;
+	if (s_diag < 0) { char b[8]; s_diag = (GetEnvironmentVariableA("ALO_SHADER_DIAG", b, sizeof(b)) > 0) ? 1 : 0; }
+	return s_diag != 0;
+}
+
+IDirect3DTexture9* TextureManager::createTexture(IDirect3DDevice9* pDevice, const std::vector<unsigned char>& bytes)
+{
+	IDirect3DTexture9* pTexture = NULL;
+	HRESULT thr = D3DXCreateTextureFromFileInMemory( pDevice, bytes.data(), (unsigned long)bytes.size(), &pTexture );
+	if (thr != D3D_OK)
+	{
+		ShaderLog("[tex-gate] D3DXCreateTextureFromFileInMemory FAILED hr=0x%08lx (%u bytes)\n",
+		          (unsigned long)thr, (unsigned)bytes.size());
+		return NULL;
+	}
+	{
+		D3DSURFACE_DESC d; if (ShaderDiagEnabled() && pTexture && SUCCEEDED(pTexture->GetLevelDesc(0, &d)))
+			ShaderLog("[tex-gate] loaded %ux%u fmt=%d\n", d.Width, d.Height, (int)d.Format);
+	}
+	return pTexture;
+}
+
+IDirect3DTexture9* TextureManager::load(IDirect3DDevice9* pDevice, const string& filename)
+{
+	TextureMap::iterator p = textures.find(filename);
+	if (p != textures.end())
+	{
+		// Texture has already been loaded
+		return p->second;
+	}
+
+	IFile* file = fileManager->getFile( basePath + filename );
+	if (file == NULL)
+	{
+		return NULL;
+	}
+	// ReadAndRelease consumes the IFile* reference
+	// (which the previous code leaked) and enforces exact-byte reads.
+	try
+	{
+		return createTexture(pDevice, ReadAndReleaseCapped(file, kMaxTextureAssetBytes));
+	}
+	catch (ReadException&)
+	{
+		return NULL;
+	}
+}
+
+IDirect3DTexture9* TextureManager::getTexture(IDirect3DDevice9* pDevice, string filename)
+{
+	size_t pos;
+	transform(filename.begin(), filename.end(), filename.begin(), [](unsigned char c) { return (char)toupper(c); });
+	filename = SanitizeAssetName(filename);   // F-PATH: strip absolute/UNC/.. before any CreateFile
+	if (ShaderDiagEnabled()) ShaderLog("[tex-gate] getTexture(%s)\n", filename.c_str());
+
+	// Cache lookup FIRST. The cache is consulted inside load() below, but
+	// the direct "file exists as specified" path never reaches load() when
+	// it succeeds — so a repeat call for a texture that resolves at its
+	// literal path re-read it from disk AND leaked the result: the tail's
+	// textures.insert() silently no-ops on the existing key (std::map does
+	// not overwrite), leaving the map holding the OLD texture while the
+	// unconditional AddRef stranded the NEW one at refcount 1, referenced by
+	// nothing (2026-07 audit).
+	//
+	// +1 to the caller matches what every other return path hands back.
+	{
+		TextureMap::iterator cached = textures.find(filename);
+		if (cached != textures.end())
+		{
+			cached->second->AddRef();
+			return cached->second;
+		}
+	}
+
+	IDirect3DTexture9* pTexture = NULL;
+
+	// See if the file exists as specified
+	try
+	{
+		IFile* file = new PhysicalFile(AnsiToWide(filename));
+		// ReadAndRelease handles exact-byte
+		// reads and the IFile Release (was `delete file;` which
+		// violated the refcounted IFile abstraction).
+		try
+		{
+			pTexture = createTexture(pDevice, ReadAndReleaseCapped(file, kMaxTextureAssetBytes));
+		}
+		catch (ReadException&) {}
+	}
+	catch (FileNotFoundException&)
+	{
+	}
+
+	if (pTexture == NULL)
+	{
+		// Use the part after the (back)slash, if any
+            if (filename.find_first_of(":") != string::npos && (pos = filename.find_last_of("\\/")) != string::npos)
+		{
+			filename = filename.substr(pos + 1);
+		}
+
+		pTexture = load(pDevice, filename);
+	}
+
+	if (pTexture == NULL)
+	{
+		string name = filename;
+		if ((pos = filename.rfind('.')) != string::npos)
+		{
+			name = name.substr(0, pos) + ".DDS";
+		}
+	
+		pTexture = load(pDevice, name);
+		if (pTexture == NULL)
+		{
+			// Load and return default placeholder texture
+			if (pDefaultTexture == NULL)
+			{
+				D3DXCreateTextureFromResource( pDevice, GetModuleHandle(NULL), MAKEINTRESOURCE(IDB_MISSING), &pDefaultTexture );
+			}
+
+			if (pDefaultTexture != NULL)
+			{
+				pTexture = pDefaultTexture;
+				pDefaultTexture->AddRef();
+			}
+		}
+	}
+
+	if (pTexture != NULL)
+	{
+		textures.insert(make_pair(filename, pTexture));
+		pTexture->AddRef();
+	}
+
+	return pTexture;
+}
+
+void TextureManager::Clear()
+{
+	for (TextureMap::iterator p = textures.begin(); p != textures.end(); p++)
+	{
+		SAFE_RELEASE(p->second);
+	}
+	textures.clear();
+}
+
+void TextureManager::OnLostDevice()
+{
+	Clear();
+	SAFE_RELEASE(pDefaultTexture);
+}
+
+TextureManager::TextureManager(IFileManager* fileManager, const std::string& basePath)
+{
+	this->basePath		  = basePath;
+	this->fileManager	  = fileManager;
+	this->pDefaultTexture = NULL;
+}
+
+TextureManager::~TextureManager()
+{
+	SAFE_RELEASE(pDefaultTexture);
+	Clear();
+}
+
+Effect* ShaderManager::createShader(IDirect3DDevice9* pDevice, const std::vector<unsigned char>& bytes)
+{
+	ID3DXEffect* pShader = NULL;
+	ID3DXBuffer* pErrors = NULL;
+	// [shader-gate] capture + surface D3DX compile errors (was swallowed: last arg NULL).
+	if (FAILED(D3DXCreateEffect( pDevice, bytes.data(), (unsigned long)bytes.size(), NULL, NULL, D3DXFX_NOT_CLONEABLE, NULL, &pShader, &pErrors )))
+	{
+		if (pErrors != NULL)
+		{
+			ShaderLog("[shader-gate] D3DXCreateEffect FAILED: %.*s\n",
+			          (int)pErrors->GetBufferSize(), (const char*)pErrors->GetBufferPointer());
+			pErrors->Release();
+		}
+		else
+		{
+			ShaderLog("[shader-gate] D3DXCreateEffect FAILED (no error text)\n");
+		}
+		return NULL;
+	}
+	if (pErrors != NULL) pErrors->Release();
+
+        D3DXHANDLE technique;
+        pShader->FindNextValidTechnique(NULL, &technique);
+        pShader->SetTechnique(technique);
+
+	Effect* pEffect = new Effect(pShader);
+        SAFE_RELEASE(pShader);
+        return pEffect;
+}
+
+Effect* ShaderManager::load(IDirect3DDevice9* pDevice, const string& filename)
+{
+	ShaderMap::iterator p = shaders.find(filename);
+	if (p != shaders.end())
+	{
+		// Texture has already been loaded
+		return p->second;
+	}
+
+	IFile* file = fileManager->getFile( basePath + filename );
+	if (file == NULL)
+	{
+		return NULL;
+	}
+	// ReadAndRelease consumes the IFile* reference
+	// (was leaked) and enforces exact-byte reads.
+	try
+	{
+		return createShader(pDevice, ReadAndReleaseCapped(file, kMaxShaderAssetBytes));
+	}
+	catch (ReadException&)
+	{
+		return NULL;
+	}
+}
+
+Effect* ShaderManager::getShader(IDirect3DDevice9* pDevice, string filename)
+{
+	size_t pos;
+	transform(filename.begin(), filename.end(), filename.begin(), [](unsigned char c) { return (char)toupper(c); });
+	filename = SanitizeAssetName(filename);   // F-PATH: strip absolute/UNC/.. before any CreateFile
+	if (ShaderDiagEnabled()) ShaderLog("[shader-gate] getShader(%s)\n", filename.c_str());
+
+	// Cache lookup FIRST — identical shape to getTexture above, and the same
+	// defect: the direct "file exists as specified" path below short-circuits
+	// before load() (which owns the lookup) is ever reached, so a repeat call
+	// recompiled the effect from disk and then stranded it at refcount 1 when
+	// shaders.insert() no-oped on the existing key (2026-07 audit).
+	{
+		ShaderMap::iterator cached = shaders.find(filename);
+		if (cached != shaders.end())
+		{
+			cached->second->AddRef();
+			return cached->second;
+		}
+	}
+
+	Effect* pShader = NULL;
+
+	// See if the file exists as specified
+	try
+	{
+		IFile* file = new PhysicalFile(AnsiToWide(filename));
+		// ReadAndRelease handles exact-byte
+		// reads and the IFile Release (was `delete file;` which
+		// violated the refcounted IFile abstraction).
+		try
+		{
+			pShader = createShader(pDevice, ReadAndReleaseCapped(file, kMaxShaderAssetBytes));
+		}
+		catch (ReadException&) {}
+	}
+	catch (FileNotFoundException&)
+	{
+	}
+
+	if (pShader == NULL)
+	{
+		// Use the part after the (back)slash, if any
+            if (filename.find_first_of(":") != string::npos && (pos = filename.find_last_of("\\/")) != string::npos)
+		{
+			filename = filename.substr(pos + 1);
+		}
+
+		pShader = load(pDevice, filename);
+	}
+
+	if (pShader == NULL)
+	{
+		string name = filename;
+		if ((pos = filename.rfind('.')) != string::npos)
+		{
+			name = name.substr(0, pos) + ".FXO";
+		}
+	
+		pShader = load(pDevice, name);
+		if (pShader == NULL)
+		{
+			// Load and return default placeholder texture
+			if (pDefaultShader == NULL)
+			{
+                    ID3DXEffect* pDefaultEffect;
+				if (SUCCEEDED(D3DXCreateEffectFromResource( pDevice, GetModuleHandle(NULL), MAKEINTRESOURCE(IDR_DEFAULT_SHADER), NULL, NULL, D3DXFX_NOT_CLONEABLE, NULL, &pDefaultEffect, NULL)))
+                    {
+                        pDefaultShader = new Effect(pDefaultEffect);
+                        SAFE_RELEASE(pDefaultEffect);
+                    }
+			}
+
+			if (pDefaultShader != NULL)
+			{
+				pShader = pDefaultShader;
+				pDefaultShader->AddRef();
+			}
+		}
+	}
+
+	if (pShader != NULL)
+	{
+		shaders.insert(make_pair(filename, pShader));
+		pShader->AddRef();
+	}
+
+	return pShader;
+}
+
+void ShaderManager::Clear()
+{
+	for (ShaderMap::iterator p = shaders.begin(); p != shaders.end(); p++)
+	{
+		SAFE_RELEASE(p->second);
+	}
+	shaders.clear();
+}
+
+void ShaderManager::OnLostDevice()
+{
+	std::set<Effect*> unique;
+	if (pDefaultShader != NULL) unique.insert(pDefaultShader);
+	for (const auto& entry : shaders)
+	{
+		if (entry.second != NULL) unique.insert(entry.second);
+	}
+	for (Effect* effect : unique) effect->OnLostDevice();
+}
+
+void ShaderManager::OnResetDevice()
+{
+	std::set<Effect*> unique;
+	if (pDefaultShader != NULL) unique.insert(pDefaultShader);
+	for (const auto& entry : shaders)
+	{
+		if (entry.second != NULL) unique.insert(entry.second);
+	}
+	for (Effect* effect : unique) effect->OnResetDevice();
+}
+
+ShaderManager::ShaderManager(IFileManager* fileManager, const std::string& basePath)
+{
+	this->basePath		 = basePath;
+	this->fileManager	 = fileManager;
+	this->pDefaultShader = NULL;
+}
+
+ShaderManager::~ShaderManager()
+{
+	SAFE_RELEASE(pDefaultShader);
+	Clear();
+}

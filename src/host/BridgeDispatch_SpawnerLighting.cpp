@@ -1,5 +1,5 @@
-// Kind handlers for the spawner/* + settings/* bridge domain(s), moved out of
-// DispatchInternal's ladder (Phase A dispatch split --
+// Kind handlers for the spawner/* + preview/* + settings/lighting* bridge
+// domains, moved out of DispatchInternal's ladder (Phase A dispatch split --
 // tasks/2026-07-06-heavyweight-refactor-plan.md).
 
 #include "BridgeDispatcher.h"

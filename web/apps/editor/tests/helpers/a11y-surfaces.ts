@@ -46,7 +46,7 @@ async function awaitExitAnimations(page: Page) {
  * Force the canonical captured UI state before a golden run.
  *
  * The native a11y harness reuses the host's STABLE WebView2 user-data
- * folder (`ComputeUserDataFolder`, src/host/HostWindow.cpp), so whatever
+ * folder (`ComputeUserDataFolder`, src/host/HostWindow_WebView2.cpp), so whatever
  * theme / panel state a prior interactive session (e.g. a live smoke) left
  * in `localStorage` leaks into the next capture. Every golden is pinned to
  * **light theme + Spawner docked** — seed those keys and reload so the

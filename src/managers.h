@@ -79,6 +79,75 @@ public:
 };
 
 //
+// Texture and shader managers. Both resolve an asset name through an
+// IFileManager under a base path and fall back to a built-in placeholder
+// resource; the definitions live in managers.cpp.
+//
+class TextureManager : public ITextureManager
+{
+	typedef std::map<std::string,IDirect3DTexture9*> TextureMap;
+
+	TextureMap			textures;
+	std::string			basePath;
+	IFileManager*		fileManager;
+	IDirect3DTexture9*  pDefaultTexture;
+
+	// Takes the decoded bytes by reference rather
+	// than an IFile* — file lifetime + exact-byte reads are handled by
+	// ReadAndRelease at the call sites.
+	static IDirect3DTexture9* createTexture(IDirect3DDevice9* pDevice, const std::vector<unsigned char>& bytes);
+
+	IDirect3DTexture9* load(IDirect3DDevice9* pDevice, const std::string& filename);
+
+public:
+	IDirect3DTexture9* getTexture(IDirect3DDevice9* pDevice, std::string filename);
+
+	void Clear();
+
+	// Drop every cached resource (including the missing-
+	// texture placeholder) for the device-reset path. Under D3D9Ex,
+	// D3DXCreateTextureFromFileInMemory and D3DXCreateTextureFromResource
+	// silently use D3DPOOL_DEFAULT — those handles are stale after
+	// IDirect3DDevice9::Reset, so all of them must go. getTexture()
+	// lazy-reloads on next call.
+	void OnLostDevice() override;
+
+	TextureManager(IFileManager* fileManager, const std::string& basePath);
+
+	~TextureManager();
+};
+
+class ShaderManager : public IShaderManager
+{
+	typedef std::map<std::string,Effect*> ShaderMap;
+
+	ShaderMap	  shaders;
+	std::string	  basePath;
+	IFileManager* fileManager;
+	Effect*       pDefaultShader;
+
+	// Takes decoded bytes by reference rather than
+	// an IFile* (file lifetime + exact-byte reads handled by
+	// ReadAndRelease at call sites).
+	static Effect* createShader(IDirect3DDevice9* pDevice, const std::vector<unsigned char>& bytes);
+
+	Effect* load(IDirect3DDevice9* pDevice, const std::string& filename);
+
+public:
+	Effect* getShader(IDirect3DDevice9* pDevice, std::string filename);
+
+	void Clear();
+
+	void OnLostDevice() override;
+
+	void OnResetDevice() override;
+
+	ShaderManager(IFileManager* fileManager, const std::string& basePath);
+
+	~ShaderManager();
+};
+
+//
 // File Manager
 //
 class FileManager : public IFileManager

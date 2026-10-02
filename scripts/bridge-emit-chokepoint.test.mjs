@@ -191,18 +191,23 @@ test("HostWindow's emit lambda is the serializer, and its other .dump() calls ar
   assert.ok(lambda, "the emitFn lambda (const nlohmann::json&) was not found in HostWindow.cpp");
   assert.match(lambda[1], /SerializeBridgeEnvelope\s*\(/, "emitFn must serialize through host::SerializeBridgeEnvelope");
   assert.doesNotMatch(lambda[1], /\.dump\s*\(/, "emitFn must not call .dump() itself");
-  // Every other .dump( in HostWindow.cpp serializes data nlohmann already
-  // parsed (a drive request) or writes a local sidecar file; neither reaches
-  // the UI. A new one has to be reviewed and added here by content.
+  // Every other .dump( in the host window sources (HostWindow.cpp, the
+  // HostWindow_*.cpp files and HostWindowImpl.h) serializes data nlohmann
+  // already parsed (a drive request) or writes a local sidecar file; neither
+  // reaches the UI. A new one has to be reviewed and added here by content.
   const allowed = [
     /dispatcher->DispatchSync\(\s*req\.dump\(\)\s*\)/,
     /m_clipRunner->Sidecar\(\)\.dump\(\s*2\s*\)/,
   ];
+  const family = sources.filter((s) => /^HostWindow(_\w+)?\.cpp$|^HostWindowImpl\.h$/.test(basename(s.file)));
+  assert.equal(family.length, 5, "expected HostWindowImpl.h, HostWindow.cpp and the three HostWindow_*.cpp files");
   const unknown = [];
-  hw.code.split("\n").forEach((text, idx) => {
-    if (/\.dump\s*\(/.test(text) && !allowed.some((re) => re.test(text))) unknown.push(`HostWindow.cpp:${idx + 1}  ${text.trim()}`);
-  });
-  assert.deepEqual(unknown, [], "a new .dump() in HostWindow.cpp: use SerializeBridgeEnvelope, or allowlist it here if it never reaches the UI");
+  for (const { file, code } of family) {
+    code.split("\n").forEach((text, idx) => {
+      if (/\.dump\s*\(/.test(text) && !allowed.some((re) => re.test(text))) unknown.push(`${basename(file)}:${idx + 1}  ${text.trim()}`);
+    });
+  }
+  assert.deepEqual(unknown, [], "a new .dump() in the host window sources: use SerializeBridgeEnvelope, or allowlist it here if it never reaches the UI");
 });
 
 test("both dispatch doors run handlers under RunGuardedDispatch", () => {

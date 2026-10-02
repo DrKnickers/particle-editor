@@ -6,9 +6,9 @@
 //     viewport-child as hDevice, matching legacy main.cpp's wiring)
 //   - the BridgeDispatcher, LayoutBroker, and AcceleratorBridge
 //
-// The implementation lives in HostWindow.cpp. Most of the composition
-// code is a port of src/host/viewport_poc.cpp (commit cf39762, polished
-// 4b23425) — including the two visual-gate fixes:
+// The implementation lives in HostWindow.cpp and HostWindow_*.cpp. Most of
+// the composition code is a port of src/host/viewport_poc.cpp (commit
+// cf39762, polished 4b23425) — including the two visual-gate fixes:
 //   1) ICoreWebView2Controller2::put_DefaultBackgroundColor({0,0,0,0})
 //   2) InvalidateRect on the viewport child after creation, to seed
 //      the first paint and suppress the white-flash on startup.
@@ -18,8 +18,11 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
+#include <memory>
 #include <string>
 #include <vector>
+
+#include "HostLaunchOptions.h"
 
 class ITextureManager;
 class IShaderManager;
@@ -27,11 +30,12 @@ class IFileManager;
 
 namespace host {
 
-// HostWindow is a thin facade. The whole implementation lives as
-// `HostWindowImpl` in the .cpp (file-local because the WndProc thunks
-// need a fixed global pointer and the lifetime of one host window per
-// process is enforced by Task 1.3's scope). This header only exists so
-// other TUs can spell the type if Task 2.x decides to expose it.
+struct HostWindowImpl;
+
+// HostWindow is a thin facade over `HostWindowImpl`, which is declared in the
+// private HostWindowImpl.h and implemented across HostWindow.cpp and the
+// HostWindow_*.cpp files. One host window exists per process: the WndProc
+// thunks reach the implementation through a single global pointer.
 class HostWindow
 {
 public:
@@ -40,21 +44,7 @@ public:
                IShaderManager&  shaderManager,
                IFileManager&    fileManager,
                const std::vector<std::wstring>& gameRoots,
-               bool useDevUi   = false,
-               bool useTestHost = false,
-               const std::wstring& captureAlo = L"",
-               const std::wstring& capturePng = L"",
-               int captureFrames = 60,
-               int captureSkydome = 0,
-               bool captureGoldenProfile = false,
-               const std::wstring& captureRef = L"",
-               // [world-lit] headless --capture lighting drivers (opt-in).
-               bool hasAmbient = false, float ambR = 0.0f, float ambG = 0.0f, float ambB = 0.0f,
-               bool hasSun = false, float sunR = 0.0f, float sunG = 0.0f, float sunB = 0.0f,
-               bool hasSunI = false, float sunIntensity = 1.0f,
-               const std::wstring& driveScriptPath = L"",
-               const std::wstring& recordScriptPath = L"",
-               const std::wstring& perfWebViewProfile = L"");
+               const HostLaunchOptions& options);
     ~HostWindow();
 
     HostWindow(const HostWindow&)            = delete;
@@ -66,7 +56,7 @@ public:
     int Run(int nCmdShow);
 
 private:
-    void* m_impl;  // opaque HostWindowImpl* (see HostWindow.cpp)
+    std::unique_ptr<HostWindowImpl> m_impl;  // see HostWindowImpl.h
 };
 
 } // namespace host

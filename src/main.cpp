@@ -1,7 +1,3 @@
-#define _WIN32_WINNT 0x0501
-// Pull comctl32 v6 declarations (TVN_ITEMCHANGED / NMTVITEMCHANGE) — needed
-// for the checkbox-tree cascade.
-#define _WIN32_IE 0x0600
 #include <cmath>
 #include <iostream>
 #include <iomanip>
@@ -11,23 +7,18 @@
 #include <cfloat>
 #include <sstream>
 #include <queue>
-#include <set>
 #include <cstdlib>     // _set_abort_behavior (headless --capture: no abort dialog)
 #include <crtdbg.h>    // _CrtSetReportMode/File (route Debug asserts to stderr)
 #include <exception>   // std::set_terminate (log unhandled exceptions headlessly)
-#include <cstdio>      // [shader-gate] headless diagnostic logging (stdout)
-#include <cstdarg>     // [shader-gate] va_list for ShaderLog
+#include <cstdio>      // fwprintf / fprintf CLI diagnostics
 
 #include "exceptions.h"
-#include "ResourceLimits.h"   // kMaxTextureAssetBytes (asset-read size caps, #415)
 #include "UI/TexturePalette.h"
 #include "SpawnerDriver.h"
 #include "UndoStack.h"
 #include "LinkGroup.h"
 #include "Autosave.h"
-#include "AtomicSave.h"
 #include "utils.h"
-#include "AssetPathSafety.h"
 #include "engine.h"
 #include "ParticleSystem.h"
 #include "ParticleSystemInstance.h"
@@ -45,7 +36,6 @@
 #include "host/CaptureGoldenProfile.h"
 #include "host/WindowCapture.h"
 #include "host/WebViewModalPolicy.h"  // IsFullyInteractiveSession — gate the pre-host data-path picker
-#include "host/StringConv.h"          // host::WideToUtf8 — ParticleSystemIO errorOut is UTF-8
 #include "host/SettingsRegistry.h"    // GameDataPath read/write
 #include "GameRoots.h"                // GameData / corruption sibling root
 
@@ -58,417 +48,6 @@ using namespace std;
 // Application version — single source of truth (also drives the binary's
 // VS_VERSION_INFO in ParticleEditor.rc and the React About via vite.config.ts).
 #include "version.h"
-
-// [shader-gate] Headless diagnostic logger (stdout-flushed + debugger). Defined here so both
-// TextureManager and ShaderManager can use it; HostWindowImpl::Log is not reachable from here.
-static void ShaderLog(const char* fmt, ...)
-{
-	char buf[2048];
-	va_list ap;
-	va_start(ap, fmt);
-	_vsnprintf_s(buf, sizeof(buf), _TRUNCATE, fmt, ap);
-	va_end(ap);
-	OutputDebugStringA(buf);
-	fputs(buf, stdout);
-	fflush(stdout);
-}
-
-// [shader-gate] Gate for the *verbose* per-asset diagnostics (every getTexture /
-// getShader fetch, successful texture loads). Behind the ALO_SHADER_DIAG env var
-// (matches the repo's ALO_* test hooks) so normal interactive use stays silent.
-// Genuine failures (load/compile FAILED) call ShaderLog unconditionally and keep
-// surfacing regardless of this gate.
-static bool ShaderDiagEnabled()
-{
-	static int s_diag = -1;
-	if (s_diag < 0) { char b[8]; s_diag = (GetEnvironmentVariableA("ALO_SHADER_DIAG", b, sizeof(b)) > 0) ? 1 : 0; }
-	return s_diag != 0;
-}
-
-class TextureManager : public ITextureManager
-{
-	typedef map<string,IDirect3DTexture9*> TextureMap;
-
-	TextureMap			textures;
-	string				basePath;
-	IFileManager*		fileManager;
-	IDirect3DTexture9*  pDefaultTexture;
-
-	// Takes the decoded bytes by reference rather
-	// than an IFile* — file lifetime + exact-byte reads are handled by
-	// ReadAndRelease at the call sites.
-	static IDirect3DTexture9* createTexture(IDirect3DDevice9* pDevice, const std::vector<unsigned char>& bytes)
-	{
-		IDirect3DTexture9* pTexture = NULL;
-		HRESULT thr = D3DXCreateTextureFromFileInMemory( pDevice, bytes.data(), (unsigned long)bytes.size(), &pTexture );
-		if (thr != D3D_OK)
-		{
-			ShaderLog("[tex-gate] D3DXCreateTextureFromFileInMemory FAILED hr=0x%08lx (%u bytes)\n",
-			          (unsigned long)thr, (unsigned)bytes.size());
-			return NULL;
-		}
-		{
-			D3DSURFACE_DESC d; if (ShaderDiagEnabled() && pTexture && SUCCEEDED(pTexture->GetLevelDesc(0, &d)))
-				ShaderLog("[tex-gate] loaded %ux%u fmt=%d\n", d.Width, d.Height, (int)d.Format);
-		}
-		return pTexture;
-	}
-
-	IDirect3DTexture9* load(IDirect3DDevice9* pDevice, const string& filename)
-	{
-		TextureMap::iterator p = textures.find(filename);
-		if (p != textures.end())
-		{
-			// Texture has already been loaded
-			return p->second;
-		}
-
-		IFile* file = fileManager->getFile( basePath + filename );
-		if (file == NULL)
-		{
-			return NULL;
-		}
-		// ReadAndRelease consumes the IFile* reference
-		// (which the previous code leaked) and enforces exact-byte reads.
-		try
-		{
-			return createTexture(pDevice, ReadAndReleaseCapped(file, kMaxTextureAssetBytes));
-		}
-		catch (ReadException&)
-		{
-			return NULL;
-		}
-	}
-
-public:
-	IDirect3DTexture9* getTexture(IDirect3DDevice9* pDevice, string filename)
-	{
-		size_t pos;
-		transform(filename.begin(), filename.end(), filename.begin(), [](unsigned char c) { return (char)toupper(c); });
-		filename = SanitizeAssetName(filename);   // F-PATH: strip absolute/UNC/.. before any CreateFile
-		if (ShaderDiagEnabled()) ShaderLog("[tex-gate] getTexture(%s)\n", filename.c_str());
-
-		// Cache lookup FIRST. The cache is consulted inside load() below, but
-		// the direct "file exists as specified" path never reaches load() when
-		// it succeeds — so a repeat call for a texture that resolves at its
-		// literal path re-read it from disk AND leaked the result: the tail's
-		// textures.insert() silently no-ops on the existing key (std::map does
-		// not overwrite), leaving the map holding the OLD texture while the
-		// unconditional AddRef stranded the NEW one at refcount 1, referenced by
-		// nothing (2026-07 audit).
-		//
-		// +1 to the caller matches what every other return path hands back.
-		{
-			TextureMap::iterator cached = textures.find(filename);
-			if (cached != textures.end())
-			{
-				cached->second->AddRef();
-				return cached->second;
-			}
-		}
-
-		IDirect3DTexture9* pTexture = NULL;
-
-		// See if the file exists as specified
-		try
-		{
-			IFile* file = new PhysicalFile(AnsiToWide(filename));
-			// ReadAndRelease handles exact-byte
-			// reads and the IFile Release (was `delete file;` which
-			// violated the refcounted IFile abstraction).
-			try
-			{
-				pTexture = createTexture(pDevice, ReadAndReleaseCapped(file, kMaxTextureAssetBytes));
-			}
-			catch (ReadException&) {}
-		}
-		catch (FileNotFoundException&)
-		{
-		}
-
-		if (pTexture == NULL)
-		{
-			// Use the part after the (back)slash, if any
-            if (filename.find_first_of(":") != string::npos && (pos = filename.find_last_of("\\/")) != string::npos)
-			{
-				filename = filename.substr(pos + 1);
-			}
-
-			pTexture = load(pDevice, filename);
-		}
-
-		if (pTexture == NULL)
-		{
-			string name = filename;
-			if ((pos = filename.rfind('.')) != string::npos)
-			{
-				name = name.substr(0, pos) + ".DDS";
-			}
-		
-			pTexture = load(pDevice, name);
-			if (pTexture == NULL)
-			{
-				// Load and return default placeholder texture
-				if (pDefaultTexture == NULL)
-				{
-					D3DXCreateTextureFromResource( pDevice, GetModuleHandle(NULL), MAKEINTRESOURCE(IDB_MISSING), &pDefaultTexture );
-				}
-
-				if (pDefaultTexture != NULL)
-				{
-					pTexture = pDefaultTexture;
-					pDefaultTexture->AddRef();
-				}
-			}
-		}
-
-		if (pTexture != NULL)
-		{
-			textures.insert(make_pair(filename, pTexture));
-			pTexture->AddRef();
-		}
-
-		return pTexture;
-	}
-
-	void Clear()
-	{
-		for (TextureMap::iterator p = textures.begin(); p != textures.end(); p++)
-		{
-			SAFE_RELEASE(p->second);
-		}
-		textures.clear();
-	}
-
-	// Drop every cached resource (including the missing-
-	// texture placeholder) for the device-reset path. Under D3D9Ex,
-	// D3DXCreateTextureFromFileInMemory and D3DXCreateTextureFromResource
-	// silently use D3DPOOL_DEFAULT — those handles are stale after
-	// IDirect3DDevice9::Reset, so all of them must go. getTexture()
-	// lazy-reloads on next call.
-	void OnLostDevice() override
-	{
-		Clear();
-		SAFE_RELEASE(pDefaultTexture);
-	}
-
-	TextureManager(IFileManager* fileManager, const std::string& basePath)
-	{
-		this->basePath		  = basePath;
-		this->fileManager	  = fileManager;
-		this->pDefaultTexture = NULL;
-	}
-
-	~TextureManager()
-	{
-		SAFE_RELEASE(pDefaultTexture);
-		Clear();
-	}
-};
-
-class ShaderManager : public IShaderManager
-{
-	typedef map<string,Effect*> ShaderMap;
-
-	ShaderMap	  shaders;
-	string		  basePath;
-	IFileManager* fileManager;
-	Effect*       pDefaultShader;
-
-	// Takes decoded bytes by reference rather than
-	// an IFile* (file lifetime + exact-byte reads handled by
-	// ReadAndRelease at call sites).
-	static Effect* createShader(IDirect3DDevice9* pDevice, const std::vector<unsigned char>& bytes)
-	{
-		ID3DXEffect* pShader = NULL;
-		ID3DXBuffer* pErrors = NULL;
-		// [shader-gate] capture + surface D3DX compile errors (was swallowed: last arg NULL).
-		if (FAILED(D3DXCreateEffect( pDevice, bytes.data(), (unsigned long)bytes.size(), NULL, NULL, D3DXFX_NOT_CLONEABLE, NULL, &pShader, &pErrors )))
-		{
-			if (pErrors != NULL)
-			{
-				ShaderLog("[shader-gate] D3DXCreateEffect FAILED: %.*s\n",
-				          (int)pErrors->GetBufferSize(), (const char*)pErrors->GetBufferPointer());
-				pErrors->Release();
-			}
-			else
-			{
-				ShaderLog("[shader-gate] D3DXCreateEffect FAILED (no error text)\n");
-			}
-			return NULL;
-		}
-		if (pErrors != NULL) pErrors->Release();
-        
-        D3DXHANDLE technique;
-        pShader->FindNextValidTechnique(NULL, &technique);
-        pShader->SetTechnique(technique);
-
-		Effect* pEffect = new Effect(pShader);
-        SAFE_RELEASE(pShader);
-        return pEffect;
-	}
-
-	Effect* load(IDirect3DDevice9* pDevice, const string& filename)
-	{
-		ShaderMap::iterator p = shaders.find(filename);
-		if (p != shaders.end())
-		{
-			// Texture has already been loaded
-			return p->second;
-		}
-
-		IFile* file = fileManager->getFile( basePath + filename );
-		if (file == NULL)
-		{
-			return NULL;
-		}
-		// ReadAndRelease consumes the IFile* reference
-		// (was leaked) and enforces exact-byte reads.
-		try
-		{
-			return createShader(pDevice, ReadAndReleaseCapped(file, kMaxShaderAssetBytes));
-		}
-		catch (ReadException&)
-		{
-			return NULL;
-		}
-	}
-
-public:
-	Effect* getShader(IDirect3DDevice9* pDevice, string filename)
-	{
-		size_t pos;
-		transform(filename.begin(), filename.end(), filename.begin(), [](unsigned char c) { return (char)toupper(c); });
-		filename = SanitizeAssetName(filename);   // F-PATH: strip absolute/UNC/.. before any CreateFile
-		if (ShaderDiagEnabled()) ShaderLog("[shader-gate] getShader(%s)\n", filename.c_str());
-
-		// Cache lookup FIRST — identical shape to getTexture above, and the same
-		// defect: the direct "file exists as specified" path below short-circuits
-		// before load() (which owns the lookup) is ever reached, so a repeat call
-		// recompiled the effect from disk and then stranded it at refcount 1 when
-		// shaders.insert() no-oped on the existing key (2026-07 audit).
-		{
-			ShaderMap::iterator cached = shaders.find(filename);
-			if (cached != shaders.end())
-			{
-				cached->second->AddRef();
-				return cached->second;
-			}
-		}
-
-		Effect* pShader = NULL;
-
-		// See if the file exists as specified
-		try
-		{
-			IFile* file = new PhysicalFile(AnsiToWide(filename));
-			// ReadAndRelease handles exact-byte
-			// reads and the IFile Release (was `delete file;` which
-			// violated the refcounted IFile abstraction).
-			try
-			{
-				pShader = createShader(pDevice, ReadAndReleaseCapped(file, kMaxShaderAssetBytes));
-			}
-			catch (ReadException&) {}
-		}
-		catch (FileNotFoundException&)
-		{
-		}
-
-		if (pShader == NULL)
-		{
-			// Use the part after the (back)slash, if any
-            if (filename.find_first_of(":") != string::npos && (pos = filename.find_last_of("\\/")) != string::npos)
-			{
-				filename = filename.substr(pos + 1);
-			}
-
-			pShader = load(pDevice, filename);
-		}
-
-		if (pShader == NULL)
-		{
-			string name = filename;
-			if ((pos = filename.rfind('.')) != string::npos)
-			{
-				name = name.substr(0, pos) + ".FXO";
-			}
-		
-			pShader = load(pDevice, name);
-			if (pShader == NULL)
-			{
-				// Load and return default placeholder texture
-				if (pDefaultShader == NULL)
-				{
-                    ID3DXEffect* pDefaultEffect;
-					if (SUCCEEDED(D3DXCreateEffectFromResource( pDevice, GetModuleHandle(NULL), MAKEINTRESOURCE(IDR_DEFAULT_SHADER), NULL, NULL, D3DXFX_NOT_CLONEABLE, NULL, &pDefaultEffect, NULL)))
-                    {
-                        pDefaultShader = new Effect(pDefaultEffect);
-                        SAFE_RELEASE(pDefaultEffect);
-                    }
-				}
-
-				if (pDefaultShader != NULL)
-				{
-					pShader = pDefaultShader;
-					pDefaultShader->AddRef();
-				}
-			}
-		}
-
-		if (pShader != NULL)
-		{
-			shaders.insert(make_pair(filename, pShader));
-			pShader->AddRef();
-		}
-
-		return pShader;
-	}
-
-	void Clear()
-	{
-		for (ShaderMap::iterator p = shaders.begin(); p != shaders.end(); p++)
-		{
-			SAFE_RELEASE(p->second);
-		}
-		shaders.clear();
-	}
-
-	void OnLostDevice() override
-	{
-		std::set<Effect*> unique;
-		if (pDefaultShader != NULL) unique.insert(pDefaultShader);
-		for (const auto& entry : shaders)
-		{
-			if (entry.second != NULL) unique.insert(entry.second);
-		}
-		for (Effect* effect : unique) effect->OnLostDevice();
-	}
-
-	void OnResetDevice() override
-	{
-		std::set<Effect*> unique;
-		if (pDefaultShader != NULL) unique.insert(pDefaultShader);
-		for (const auto& entry : shaders)
-		{
-			if (entry.second != NULL) unique.insert(entry.second);
-		}
-		for (Effect* effect : unique) effect->OnResetDevice();
-	}
-
-	ShaderManager(IFileManager* fileManager, const std::string& basePath)
-	{
-		this->basePath		 = basePath;
-		this->fileManager	 = fileManager;
-		this->pDefaultShader = NULL;
-	}
-
-	~ShaderManager()
-	{
-		SAFE_RELEASE(pDefaultShader);
-		Clear();
-	}
-};
 
 // MouseCursor + GetCursorPos3D live in src/MouseCursor.h for the host's
 // cursor-bound preview path. The header is included alongside
@@ -523,74 +102,6 @@ std::string GenerateDuplicateName(const ParticleSystem* system, const std::strin
     char suffix[32];
     sprintf_s(suffix, sizeof(suffix), "_%d", maxN + 1);
     return base + suffix;
-}
-
-// ── Pure-IO ParticleSystem helpers ─────────
-//
-// These free functions are declared in `src/ParticleSystemIO.h` and
-// implemented here so the host's BridgeDispatcher can read/write .alo
-// files without duplicating the PhysicalFile + ParticleSystem(IFile*)
-// ctor dance.
-
-std::unique_ptr<ParticleSystem> LoadParticleSystem(const std::wstring& path,
-                                                   std::string* errorOut)
-{
-    if (errorOut) errorOut->clear();
-    PhysicalFile* file = NULL;
-    try
-    {
-        file = new PhysicalFile(path);
-    }
-    catch (wexception& e)
-    {
-        if (errorOut) *errorOut = host::WideToUtf8(e.wwhat());
-        return nullptr;
-    }
-    catch (...)
-    {
-        if (errorOut) *errorOut = "could not open file";
-        return nullptr;
-    }
-
-    std::unique_ptr<ParticleSystem> system;
-    try
-    {
-        system.reset(new ParticleSystem(file));
-    }
-    catch (wexception& e)
-    {
-        if (errorOut) *errorOut = host::WideToUtf8(e.wwhat());
-        system.reset();
-    }
-    catch (...)
-    {
-        if (errorOut) *errorOut = "not a valid particle system";
-        system.reset();
-    }
-    file->Release();
-    return system;
-}
-
-bool SaveParticleSystem(ParticleSystem* system, const std::wstring& path,
-                        std::string* errorOut)
-{
-    if (errorOut) errorOut->clear();
-    if (system == NULL)
-    {
-        if (errorOut) *errorOut = "null particle system";
-        return false;
-    }
-    // Data-loss guard: write a flushed sibling temp, then rename it into place
-    // (AtomicWriteParticleSystem, shared with the autosave tiers). Opening the
-    // destination CREATE_ALWAYS and streaming chunks in place would let any
-    // mid-write failure (disk full, removable drive, denied, throw) corrupt the
-    // user's original .alo. A failure leaves the original untouched; only a
-    // fully-written temp replaces it. The temp name carries the process id so
-    // it can never collide with another editor instance's save of this file,
-    // nor with an autosave tier's fixed `.tmp`.
-    AtomicSaveOptions options;
-    options.tmpPath = path + L"." + std::to_wstring(GetCurrentProcessId()) + L".tmp";
-    return AtomicWriteParticleSystem(*system, path, options, errorOut);
 }
 
 
@@ -802,7 +313,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 	// here gives the editor its own slot keyed off this name, so the
 	// taskbar pulls the current WM_SETICON / WNDCLASS icon instead.
 	// Loaded dynamically because the prototype lives in shell32 from
-	// Windows 7 onwards and the project's _WIN32_WINNT is set to XP.
+	// Windows 7 onwards.
 	if (HMODULE hShell32 = GetModuleHandleW(L"shell32.dll"))
 	{
 		typedef HRESULT (WINAPI *PFN_SetAppId)(PCWSTR);
@@ -1445,18 +956,30 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		}
 		TextureManager textureManager(fileManager, "Data\\Art\\Textures\\");
 		ShaderManager  shaderManager (fileManager, "Data\\Art\\Shaders\\");
+		host::HostLaunchOptions launch;
+		launch.useDevUi             = devUi;
+		launch.useTestHost          = testHost;
+		launch.captureAlo           = captureAlo;
+		launch.capturePng           = capturePng;
+		launch.captureFrames        = captureFrames;
+		launch.captureSkydome       = captureSkydome;
+		launch.captureGoldenProfile = captureGoldenProfile;
+		launch.captureRef           = captureRef;
+		launch.hasAmbient           = captureHasAmbient;
+		launch.ambient[0] = captureAmbient[0]; launch.ambient[1] = captureAmbient[1]; launch.ambient[2] = captureAmbient[2];
+		launch.hasSun               = captureHasSun;
+		launch.sun[0] = captureSun[0]; launch.sun[1] = captureSun[1]; launch.sun[2] = captureSun[2];
+		launch.hasSunIntensity      = captureHasSunI;
+		launch.sunIntensity         = captureSunIntensity;
+		launch.driveScriptPath      = driveScriptPath;
+		launch.recordScriptPath     = recordScriptPath;
+		launch.perfTracePath        = perfTracePath;
+		launch.perfTraceMode        = perfTraceMode;
+		launch.perfArtifactDir      = perfArtifactDir;
+		launch.perfWebViewProfile   = perfWebViewProfile;
 		int hostResult = host::Run(hInstance, SW_SHOWDEFAULT,
 		                           textureManager, shaderManager, *fileManager,
-		                           gameRoots,
-		                           devUi, testHost,
-		                           captureAlo, capturePng, captureFrames,
-		                           captureSkydome, captureGoldenProfile, captureRef,
-		                           captureHasAmbient, captureAmbient[0], captureAmbient[1], captureAmbient[2],
-		                           captureHasSun, captureSun[0], captureSun[1], captureSun[2],
-		                           captureHasSunI, captureSunIntensity,
-		                           driveScriptPath, recordScriptPath,
-		                           perfTracePath, perfTraceMode, perfArtifactDir,
-		                           perfWebViewProfile);
+		                           gameRoots, launch);
 		delete fileManager;
 #ifndef NDEBUG
 		FreeConsole();

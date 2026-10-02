@@ -1,6 +1,6 @@
 // viewport interaction — Playwright spec covering the
 // `engine/set/camera` bridge path. The C++ viewport handler at
-// src/host/HostWindow.cpp `ViewportWndProc` mutates the camera via
+// src/host/HostWindow_Viewport.cpp `ViewportWndProc` mutates the camera via
 // `engine->SetCamera` directly (it bypasses the dispatcher's setter
 // ladder), so the actual mouse-drag path cannot be exercised from
 // Playwright — Playwright drives WebView2 input, not the sibling

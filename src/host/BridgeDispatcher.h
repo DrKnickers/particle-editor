@@ -649,7 +649,7 @@ private:
     ParticleSystemInstanceHandle*    m_pAttachedParticleSystem = nullptr;
 
     // [record-preview] Cursor-bound preview instance for the preview/*
-    // record kinds (BridgeDispatch_Spawner.cpp) — the scripted mirror of
+    // record kinds (BridgeDispatch_SpawnerLighting.cpp) — the scripted mirror of
     // the native Shift-hover spawn. The anchor is a dispatcher-lifetime
     // Object3D (instances parented to it never outlive it); the tokenized
     // handle is cleared by preview/place (detach) and preview/kill.

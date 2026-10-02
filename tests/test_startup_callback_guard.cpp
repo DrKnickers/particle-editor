@@ -44,6 +44,25 @@ static std::string ReadSource(const std::filesystem::path& path)
                        std::istreambuf_iterator<char>());
 }
 
+// The host window implementation is split across HostWindowImpl.h and the
+// HostWindow*.cpp files, so a pin on "the host window source" reads all of
+// them. Empty if any file is missing, which fails the readable checks.
+static std::string ReadHostWindowSources(const std::filesystem::path& root)
+{
+    const char* const files[] = {
+        "HostWindowImpl.h", "HostWindow.cpp", "HostWindow_WebView2.cpp",
+        "HostWindow_Viewport.cpp", "HostWindow_Record.cpp" };
+    std::string all;
+    for (const char* file : files)
+    {
+        const std::string text = ReadSource(root / "src" / "host" / file);
+        if (text.empty()) return std::string();
+        all += text;
+        all += "\n";
+    }
+    return all;
+}
+
 static size_t CountOccurrences(const std::string& text, const std::string& needle)
 {
     size_t count = 0;
@@ -257,8 +276,8 @@ int main()
     // to its matching WebView2 create call. Bind both call sites and the real
     // owner-retirement ordering, and forbid both raw handler factories.
     {
-        const std::string source = ReadSource(
-            std::filesystem::current_path() / "src" / "host" / "HostWindow.cpp");
+        const std::string source =
+            ReadHostWindowSources(std::filesystem::current_path());
         const size_t initStart = source.find(
             "HRESULT HostWindowImpl::InitWebView2()");
         const size_t initEnd = source.find(
@@ -362,13 +381,14 @@ int main()
               "composition create receives the controller factory result");
 
         // WM_DESTROY is the other half of the production contract. Isolate the
-        // main-window handler (there is a separate viewport WM_DESTROY later in
-        // this TU), then require retirement before every owner teardown.
+        // main-window handler (the viewport has its own WM_DESTROY in
+        // HostWindow_Viewport.cpp) up to its closing brace, then require
+        // retirement before every owner teardown.
         const size_t mainWndProcStart = source.find(
             "LRESULT HostWindowImpl::MainWndProc(");
-        const size_t mainWndProcEnd = source.find(
-            "LRESULT HostWindowImpl::ViewportWndProc(",
-            mainWndProcStart);
+        const size_t mainWndProcEnd = mainWndProcStart == std::string::npos
+            ? std::string::npos
+            : source.find("\n}", mainWndProcStart);
         const bool foundMainWndProc =
             mainWndProcStart != std::string::npos &&
             mainWndProcEnd != std::string::npos &&
@@ -459,8 +479,8 @@ int main()
     // production callback silently returned the HRESULT to a runtime that
     // discards it.
     {
-        const std::string source = ReadSource(
-            std::filesystem::current_path() / "src" / "host" / "HostWindow.cpp");
+        const std::string source =
+            ReadHostWindowSources(std::filesystem::current_path());
         CHECK(!source.empty(), "HostWindow production source is readable");
 
         const size_t dispatch = source.find(

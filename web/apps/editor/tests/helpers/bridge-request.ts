@@ -53,7 +53,7 @@ export type TestHostRequest =
         __testCorruptHandoffCandidate?: boolean;
       };
     }
-  // BridgeDispatch_Spawner.cpp — the --record cursor-preview seam.
+  // BridgeDispatch_SpawnerLighting.cpp — the --record cursor-preview seam.
   | { kind: "preview/attach";                 params: { x: number; y: number } }
   | { kind: "preview/place";                  params: Record<string, never> }
   | { kind: "preview/kill";                   params: Record<string, never> };

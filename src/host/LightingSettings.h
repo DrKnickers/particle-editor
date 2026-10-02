@@ -6,7 +6,7 @@ namespace host {
 
 // On-disk registry value names for the persisted lighting split. Floats are
 // REG_BINARY; colours + the force-align flag are REG_DWORD. ONE definition —
-// consumed by the HostWindow WM_CREATE restore and by both BridgeDispatch_Spawner
+// consumed by the HostWindow WM_CREATE restore and by both BridgeDispatch_SpawnerLighting
 // lighting handlers (get + set). The matching TS defaults live in
 // web/apps/editor/src/screens/LightingPane.tsx (kept in lockstep by hand).
 constexpr const wchar_t* kLightSunIntensity       = L"LightSunIntensity";

@@ -62,7 +62,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;XML_STATIC; _CRT_SECURE_NO_WARNINGS;XML_UNICODE_WCHAR_T;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir)\libs\expat-2.8.5\include;$(DXSDK_DIR)Include;$(SolutionDir)src;$(SolutionDir)packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory)..\libs\expat-2.8.5\include;$(DXSDK_DIR)Include;$(MSBuildThisFileDirectory)..\src;$(MSBuildThisFileDirectory)..\packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <TreatWarningAsError>true</TreatWarningAsError>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
@@ -82,7 +82,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>NDEBUG;_WINDOWS;XML_STATIC;_CRT_SECURE_NO_WARNINGS;XML_UNICODE_WCHAR_T;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir)\libs\expat-2.8.5\include;$(DXSDK_DIR)Include;$(SolutionDir)src;$(SolutionDir)packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory)..\libs\expat-2.8.5\include;$(DXSDK_DIR)Include;$(MSBuildThisFileDirectory)..\src;$(MSBuildThisFileDirectory)..\packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <TreatWarningAsError>true</TreatWarningAsError>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <LanguageStandard>stdcpp17</LanguageStandard>
@@ -185,7 +185,9 @@
     <ClInclude Include="host\Compositor.h" />
     <ClInclude Include="host\InputDispatcher.h" />
     <ClInclude Include="host\HostBridgeProxy.h" />
+    <ClInclude Include="host\HostLaunchOptions.h" />
     <ClInclude Include="host\HostWindow.h" />
+    <ClInclude Include="host\HostWindowImpl.h" />
     <ClInclude Include="host\WicEncode.h" />
     <ClInclude Include="host\WindowCapture.h" />
     <ClInclude Include="host\StringConv.h" />
@@ -229,6 +231,7 @@
     <ClCompile Include="MegaFiles.cpp" />
     <ClCompile Include="ParticleSystem.cpp" />
     <ClCompile Include="ParticleSystemSerialization.cpp" />
+    <ClCompile Include="ParticleSystemIO.cpp" />
     <ClCompile Include="ParticleSystemInstance.cpp" />
     <ClCompile Include="Rescale.cpp" />
     <ClCompile Include="Autosave.cpp" />
@@ -256,7 +259,7 @@
     <ClCompile Include="host\BridgeDispatch_Engine.cpp" />
     <ClCompile Include="host\BridgeDispatch_File.cpp" />
     <ClCompile Include="host\BridgeDispatch_Shell.cpp" />
-    <ClCompile Include="host\BridgeDispatch_Spawner.cpp" />
+    <ClCompile Include="host\BridgeDispatch_SpawnerLighting.cpp" />
     <ClCompile Include="host\CaptureRunner.cpp" />
     <ClCompile Include="host\CaptureTicker.cpp" />
     <ClCompile Include="host\RestoredSettings.cpp" />
@@ -266,7 +269,7 @@
            June-2010 DXSDK first (engine needs its d3dx9.h), whose stale
            winerror/dxgitype definitions collide. Win10 SDK first for this
            TU only; it includes no DXSDK headers. -->
-      <AdditionalIncludeDirectories>$(WindowsSdkDir)Include\$(WindowsSDKVersion)shared;$(WindowsSdkDir)Include\$(WindowsSDKVersion)um;$(SolutionDir)src</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(WindowsSdkDir)Include\$(WindowsSDKVersion)shared;$(WindowsSdkDir)Include\$(WindowsSDKVersion)um;$(MSBuildThisFileDirectory)..\src</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Include="host\DriveRunner.cpp" />
     <ClCompile Include="host\ClipRunner.cpp" />
@@ -289,7 +292,7 @@
            path so the build is portable to any installed Win10 SDK.
            $(WindowsSDKVersion) carries a trailing backslash by MSBuild
            convention. Still REPLACES the path (no DXSDK) for this file. -->
-      <AdditionalIncludeDirectories>$(WindowsSdkDir)Include\$(WindowsSDKVersion)shared;$(WindowsSdkDir)Include\$(WindowsSDKVersion)um;$(SolutionDir)packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\include;$(SolutionDir)src</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(WindowsSdkDir)Include\$(WindowsSDKVersion)shared;$(WindowsSdkDir)Include\$(WindowsSDKVersion)um;$(MSBuildThisFileDirectory)..\packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\include;$(MSBuildThisFileDirectory)..\src</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Include="host\InputDispatcher.cpp">
     </ClCompile>
@@ -298,6 +301,9 @@
     <ClCompile Include="host\StartupCallbackAdapter.cpp" />
     <ClCompile Include="host\HostWindow.cpp">
     </ClCompile>
+    <ClCompile Include="host\HostWindow_WebView2.cpp" />
+    <ClCompile Include="host\HostWindow_Viewport.cpp" />
+    <ClCompile Include="host\HostWindow_Record.cpp" />
     <ClCompile Include="host\WindowCapture.cpp">
     </ClCompile>
     <ClCompile Include="host\LayoutBroker.cpp">
@@ -331,13 +337,13 @@
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
-    <Import Project="$(SolutionDir)packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\Microsoft.Web.WebView2.targets" Condition="Exists('$(SolutionDir)packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\Microsoft.Web.WebView2.targets')" />
+    <Import Project="$(MSBuildThisFileDirectory)..\packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\Microsoft.Web.WebView2.targets" Condition="Exists('$(MSBuildThisFileDirectory)..\packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\Microsoft.Web.WebView2.targets')" />
   </ImportGroup>
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>
       <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them. For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
     </PropertyGroup>
-    <Error Condition="!Exists('$(SolutionDir)packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\Microsoft.Web.WebView2.targets')" Text="$([System.String]::Format('$(ErrorText)', '$(SolutionDir)packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\Microsoft.Web.WebView2.targets'))" />
+    <Error Condition="!Exists('$(MSBuildThisFileDirectory)..\packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\Microsoft.Web.WebView2.targets')" Text="$([System.String]::Format('$(ErrorText)', '$(MSBuildThisFileDirectory)..\packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\Microsoft.Web.WebView2.targets'))" />
   </Target>
   <!-- Regenerate the embedded web-bundle manifest (src\generated\EmbeddedWebAssets.{rc,h})
        from web\apps\editor\dist before compiling. ParticleEditor.rc #includes the .rc and
@@ -348,7 +354,7 @@
        separate web\ folder ships. The generator writes only when content changed, so a
        no-op rebuild leaves the .rc mtime untouched and rc.exe stays incremental. -->
   <Target Name="GenerateEmbeddedWebAssets" BeforeTargets="PrepareForBuild">
-    <Error Condition="!Exists('$(SolutionDir)web\apps\editor\dist\index.html')" Text="web\apps\editor\dist\index.html not found — build the editor web bundle first: cd web &amp;&amp; pnpm --filter ./apps/editor build" />
-    <Exec Command="node scripts\embed-web-dist.mjs" WorkingDirectory="$(SolutionDir)" />
+    <Error Condition="!Exists('$(MSBuildThisFileDirectory)..\web\apps\editor\dist\index.html')" Text="web\apps\editor\dist\index.html not found — build the editor web bundle first: cd web &amp;&amp; pnpm --filter ./apps/editor build" />
+    <Exec Command="node scripts\embed-web-dist.mjs" WorkingDirectory="$(MSBuildThisFileDirectory)..\" />
   </Target>
 </Project>

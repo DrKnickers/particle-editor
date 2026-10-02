@@ -35,6 +35,25 @@ std::string ReadSource(const std::filesystem::path& path)
                        std::istreambuf_iterator<char>());
 }
 
+// The host window implementation is split across HostWindowImpl.h and the
+// HostWindow*.cpp files, so a pin on "the host window source" reads all of
+// them. Empty if any file is missing, which fails the readable checks.
+std::string ReadHostWindowSources(const std::filesystem::path& root)
+{
+    const char* const files[] = {
+        "HostWindowImpl.h", "HostWindow.cpp", "HostWindow_WebView2.cpp",
+        "HostWindow_Viewport.cpp", "HostWindow_Record.cpp" };
+    std::string all;
+    for (const char* file : files)
+    {
+        const std::string text = ReadSource(root / "src" / "host" / file);
+        if (text.empty()) return std::string();
+        all += text;
+        all += "\n";
+    }
+    return all;
+}
+
 bool Contains(const std::string& text, const char* needle)
 {
     return text.find(needle) != std::string::npos;
@@ -122,10 +141,9 @@ int main()
         ReadSource(root / "src" / "ParticleSystemInstance.cpp");
     const std::string hostHeader =
         ReadSource(root / "src" / "host" / "BridgeDispatcher.h");
-    const std::string hostSource =
-        ReadSource(root / "src" / "host" / "HostWindow.cpp");
+    const std::string hostSource = ReadHostWindowSources(root);
     const std::string recordSource =
-        ReadSource(root / "src" / "host" / "BridgeDispatch_Spawner.cpp");
+        ReadSource(root / "src" / "host" / "BridgeDispatch_SpawnerLighting.cpp");
 
     Check(!engineHeader.empty() && !engineSource.empty()
               && !renderSource.empty() && !instanceHeader.empty()

@@ -241,8 +241,8 @@ export function render(files) {
       ...files.map((f) => `${f.id} RCDATA "${f.rcPath}"`),
     ].join("\n") + "\n";
 
-  // Header-only: the manifest is `inline` so only HostWindow.cpp needs to
-  // include it -- no separate .cpp / <ClCompile> item to reference a file that
+  // Header-only: the manifest is `inline`, so the host-window files that need it
+  // just include it -- no separate .cpp / <ClCompile> item to reference a file that
   // does not exist on a clean checkout before the generator runs.
   const rows = files.map(
     (f) =>

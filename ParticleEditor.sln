@@ -15,7 +15,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "dxgi_spike", "src\host\spik
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "shared_texture_test", "src\host\spike\shared_texture_test.vcxproj", "{9E0A12B3-C7D6-46BF-BAA2-E5921E5F2345}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "UiaInspector", "src\host\spike\uia_inspector.vcxproj", "{730BEA8B-5BC4-4E2F-A0D3-2EFE513A36AA}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "UiaInspector", "tools\uia_inspector\uia_inspector.vcxproj", "{730BEA8B-5BC4-4E2F-A0D3-2EFE513A36AA}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -32,17 +32,11 @@ Global
 		{3D0991C0-DB91-116B-53EF-BBDE6D53F949}.Release|x64.ActiveCfg = Release|x64
 		{3D0991C0-DB91-116B-53EF-BBDE6D53F949}.Release|x64.Build.0 = Release|x64
 		{4843B928-23DB-4D9F-8F1F-D80071FD0C33}.Debug|x64.ActiveCfg = Debug|x64
-		{4843B928-23DB-4D9F-8F1F-D80071FD0C33}.Debug|x64.Build.0 = Debug|x64
 		{4843B928-23DB-4D9F-8F1F-D80071FD0C33}.Release|x64.ActiveCfg = Release|x64
-		{4843B928-23DB-4D9F-8F1F-D80071FD0C33}.Release|x64.Build.0 = Release|x64
 		{8DC9F0A1-B7C6-46BF-BAA2-D3791D5E1234}.Debug|x64.ActiveCfg = Debug|x64
-		{8DC9F0A1-B7C6-46BF-BAA2-D3791D5E1234}.Debug|x64.Build.0 = Debug|x64
 		{8DC9F0A1-B7C6-46BF-BAA2-D3791D5E1234}.Release|x64.ActiveCfg = Release|x64
-		{8DC9F0A1-B7C6-46BF-BAA2-D3791D5E1234}.Release|x64.Build.0 = Release|x64
 		{9E0A12B3-C7D6-46BF-BAA2-E5921E5F2345}.Debug|x64.ActiveCfg = Debug|x64
-		{9E0A12B3-C7D6-46BF-BAA2-E5921E5F2345}.Debug|x64.Build.0 = Debug|x64
 		{9E0A12B3-C7D6-46BF-BAA2-E5921E5F2345}.Release|x64.ActiveCfg = Release|x64
-		{9E0A12B3-C7D6-46BF-BAA2-E5921E5F2345}.Release|x64.Build.0 = Release|x64
 		{730BEA8B-5BC4-4E2F-A0D3-2EFE513A36AA}.Debug|x64.ActiveCfg = Debug|x64
 		{730BEA8B-5BC4-4E2F-A0D3-2EFE513A36AA}.Debug|x64.Build.0 = Debug|x64
 		{730BEA8B-5BC4-4E2F-A0D3-2EFE513A36AA}.Release|x64.ActiveCfg = Release|x64

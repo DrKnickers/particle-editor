@@ -3,16 +3,12 @@
 // disk, plus the error taxonomy the wrappers translate into
 // `false + errorOut`.
 //
-// SCOPE NOTE (same constraint test_alo_roundtrip.cpp:5-12 documents): the
-// wrapper BODIES -- LoadParticleSystem / SaveParticleSystem -- live in
-// src/main.cpp (main.cpp:465-568) inside the composed-app TU (WinMain +
-// WebView2 host + engine), so they cannot be compiled or linked into a
-// standalone device-free exe without extracting them into their own TU (a src
-// change this test deliberately does not make). What IS linkable -- and what
-// this test pins -- is the exact machinery those wrappers are a thin
-// try/catch veneer over:
-//   - load  = PhysicalFile(path, READ) + ParticleSystem(IFile*)   (main.cpp:470-506)
-//   - save  = PhysicalFile(path, WRITE) + ParticleSystem::write   (main.cpp:508-568)
+// SCOPE NOTE: the wrapper BODIES -- LoadParticleSystem / SaveParticleSystem --
+// live in their own TU, src/ParticleSystemIO.cpp, and section J links and
+// exercises them for real. Sections A-H pin the machinery those wrappers are a
+// thin try/catch veneer over:
+//   - load  = PhysicalFile(path, READ) + ParticleSystem(IFile*)
+//   - save  = AtomicWriteParticleSystem (flushed temp, then rename; section I)
 // and the exception taxonomy the wrappers convert to false+errorOut:
 //   - nonexistent path       -> FileNotFoundException  (files.cpp:53-59)
 //   - unwritable path        -> FileNotFoundException / IOException (files.cpp:56-63)
@@ -509,6 +505,58 @@ int main()
               "atomic: the default temp name works without an error sink");
         CHECK(!exists(defaultTmp), "atomic: the default temp was renamed away");
         CHECK(reloadedName(dest) == "atomic_third", "atomic: default-temp save landed");
+    }
+
+    // ---- J: the real LoadParticleSystem / SaveParticleSystem wrappers ------
+    // Linked from src/ParticleSystemIO.cpp. Every failure must come back as
+    // false / nullptr with errorOut written, a success must clear errorOut,
+    // and a save goes through a per-process temp that never outlives the call.
+    // The file-exception messages are loaded from the exe's string table,
+    // which this test exe does not have, so a load failure's errorOut text can
+    // be empty here; the checks below only require it to have been written.
+    {
+        auto exists = [](const std::wstring& p) {
+            return GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES;
+        };
+
+        ParticleSystem ps;
+        ps.addRootEmitter();
+        ps.setName("wrapper_save");
+        const std::wstring dest = tempPath(L"Wrapper.alo");
+        const std::wstring pidTmp = tempPath(
+            (L"Wrapper.alo." + std::to_wstring(GetCurrentProcessId()) + L".tmp").c_str());
+
+        std::string err = "stale";
+        CHECK(SaveParticleSystem(&ps, dest, &err) && err.empty(),
+              "wrapper: save succeeds and clears the error");
+        CHECK(!exists(pidTmp), "wrapper: the per-process temp was renamed away");
+        CHECK(SaveParticleSystem(&ps, dest), "wrapper: save works without an error sink");
+
+        err = "stale";
+        std::unique_ptr<ParticleSystem> rp = LoadParticleSystem(dest, &err);
+        CHECK(rp != nullptr && err.empty() && rp->getName() == "wrapper_save",
+              "wrapper: load returns the saved system and clears the error");
+
+        CHECK(!SaveParticleSystem(nullptr, dest, &err) && err == "null particle system",
+              "wrapper: a null system is refused with a reason");
+
+        err = "stale";
+        rp = LoadParticleSystem(g_tempDir + L"\\missing-wrapper.alo", &err);
+        CHECK(rp == nullptr && err != "stale", "wrapper: a missing file -> nullptr + error");
+
+        const std::wstring garbage = tempPath(L"wrapper-garbage.alo");
+        writeRawBytes(garbage, "junk", 4);
+        err = "stale";
+        rp = LoadParticleSystem(garbage, &err);
+        CHECK(rp == nullptr && err != "stale", "wrapper: a corrupt file -> nullptr + error");
+
+        CHECK(!SaveParticleSystem(&ps, g_tempDir + L"\\no-such-dir\\Wrapper.alo", &err) &&
+                  !err.empty(),
+              "wrapper: an unwritable destination -> false + error");
+
+        rp = LoadParticleSystem(dest);
+        CHECK(rp != nullptr && rp->getName() == "wrapper_save",
+              "wrapper: the destination is untouched by the refused calls");
     }
 
     cleanupTempDir();

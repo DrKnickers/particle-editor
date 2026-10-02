@@ -276,7 +276,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         }
         // The record preview borrow dies with the document too — null it
         // eagerly (Clear() frees the instance; see the preview/* UAF guard
-        // in BridgeDispatch_Spawner.cpp).
+        // in BridgeDispatch_SpawnerLighting.cpp).
         m_recordPreviewAttached.Reset();
         if (m_pParticleSystem)
         {
@@ -495,7 +495,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         }
         // The record preview borrow dies with the document too — null it
         // eagerly (Clear() frees the instance; see the preview/* UAF guard
-        // in BridgeDispatch_Spawner.cpp).
+        // in BridgeDispatch_SpawnerLighting.cpp).
         m_recordPreviewAttached.Reset();
         if (m_pParticleSystem)
         {
@@ -840,7 +840,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
                         m_pAttachedParticleSystem->Reset();
                     }
                     // Record preview borrow: same document-teardown null (see the
-                    // preview/* UAF guard in BridgeDispatch_Spawner.cpp).
+                    // preview/* UAF guard in BridgeDispatch_SpawnerLighting.cpp).
                     m_recordPreviewAttached.Reset();
                     if (m_pParticleSystem) *m_pParticleSystem = std::move(loaded);
                     EnforceSingleMemberLinkGroups();

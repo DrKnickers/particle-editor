@@ -83,7 +83,7 @@ export async function discoverHostHwnd(
   // is more robust than .NET Process.MainWindowHandle and avoids a .NET
   // dependency in this Node-ESM context.
   //
-  // Class names: src/host/HostWindow.cpp:73-74
+  // Class names: src/host/HostWindowImpl.h
   //   kHostWindowClassName   = L"AloHostMain"     (the root we want)
   //   kHostViewportClassName = L"AloHostViewport" (the popup child, reliably found)
   const viewportClass = options?.windowClassName ?? "AloHostViewport";
