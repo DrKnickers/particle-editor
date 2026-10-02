@@ -8,6 +8,10 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ## [Unreleased]
 
+### Fixed
+
+- Edit → Paste and the emitter tree's Paste / Paste As items stay enabled after the editor reloads its interface (crash recovery or the error screen's Reload) while emitters are still on the clipboard
+
 ## [0.4.2] - 2026-10-02
 
 ### Fixed

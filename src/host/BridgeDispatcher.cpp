@@ -536,7 +536,8 @@ json BuildEngineStateSnapshot(Engine* engine,
                               const std::wstring& activeModPath,
                               bool leaveParticles,
                               bool canUndo,
-                              bool canRedo)
+                              bool canRedo,
+                              bool emitterClipboardHasContent)
 {
     if (!engine) return json::object();
 
@@ -682,6 +683,10 @@ json BuildEngineStateSnapshot(Engine* engine,
         // See undo/perform's comment block for the full design.
         {"canUndo",               canUndo},
         {"canRedo",               canRedo},
+
+        // Process-local emitter clipboard non-empty. It outlives the page,
+        // so a reloaded page seeds its Paste gate from here.
+        {"emitterClipboardHasContent", emitterClipboardHasContent},
     };
 }
 
@@ -1224,7 +1229,7 @@ void BridgeDispatcher::EmitEngineStateChangedNow()
     json env = {
         {"type",    "evt"},
         {"kind",    "engine/state/changed"},
-        {"payload", BuildEngineStateSnapshot(m_engine, m_currentFilePath, m_dirty, spawnerJson, m_selectedEmitterId, activeModPath, leaveParticles, canUndo, canRedo)},
+        {"payload", BuildEngineStateSnapshot(m_engine, m_currentFilePath, m_dirty, spawnerJson, m_selectedEmitterId, activeModPath, leaveParticles, canUndo, canRedo, !m_emitterClipboard.empty())},
     };
     m_emit(env);
 }

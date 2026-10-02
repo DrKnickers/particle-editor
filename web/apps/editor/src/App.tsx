@@ -23,6 +23,7 @@ import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import { SaveChangesDialog } from "@/screens/SaveChangesDialog";
 import { useFileState, useSeedFileState, promptSaveChanges, useFileStateStore } from "@/lib/file-state";
 import { useSeedModStack } from "@/lib/mod-stack";
+import { useSeedEmitterClipboard } from "@/lib/tree/emitter-clipboard";
 import { formatWindowTitle } from "@/lib/window-title";
 import { useBackingColorSync } from "@/lib/backing-color-sync";
 import { useAppAccelerators } from "@/lib/use-app-accelerators";
@@ -160,6 +161,10 @@ function AppShell() {
   // Seed the mod-stack store from mods/list and subscribe to
   // engine/state/changed so the preview cache is invalidated on mod switches.
   useSeedModStack(bridge);
+
+  // Turn the Paste gate on when the host already holds copied emitters —
+  // its clipboard outlives a page reload (crash recovery, ErrorBoundary).
+  useSeedEmitterClipboard(bridge);
 
   // Window title — single source of truth for the titlebar. The host
   // mirrors document.title into the Win32 titlebar (DocumentTitleChanged

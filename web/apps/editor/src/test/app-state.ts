@@ -6,8 +6,8 @@
 // reloads the page), so they never outlive their <App/>. In a test file they
 // do: a dialog left open, a copied-emitter flag or an error message from one
 // render shows up in the next. Startup seeds re-read some of them from the
-// host on mount (selection, file state, mod stack); the rest would just keep
-// what the last test left. Call `resetAppState()` in a beforeEach of any
+// host on mount (selection, file state, mod stack, the copied-emitter flag);
+// the rest would just keep what the last test left. Call `resetAppState()` in a beforeEach of any
 // suite that mounts <App/>, alongside resetMockState().
 //
 // Persisted preferences (palette slots, panel layout, picker state) are read

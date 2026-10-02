@@ -270,3 +270,29 @@ test("emitters/paste-as-child via the bridge attaches a lifetime child", async (
     }, result.newId);
   }
 });
+
+// ── 5. The snapshot reports the host clipboard ───────────────────────
+//
+// The host's emitter clipboard outlives the page, so a reloaded page
+// seeds its Paste gate from engine/state/snapshot's
+// emitterClipboardHasContent. After a copy the host must report true.
+// (Earlier specs share this process, so the pre-copy value isn't pinned.)
+
+test("engine/state/snapshot reports emitterClipboardHasContent after emitters/copy", async () => {
+  const result = await page.evaluate(async () => {
+    const bridge = window.bridge;
+    if (!bridge) throw new Error("bridge missing");
+    const list = await bridge.request({ kind: "emitters/list", params: {} });
+    const srcId = list.root.children[0]?.id ?? -1;
+    if (srcId < 0) return { skipped: true as const };
+    await bridge.request({ kind: "emitters/copy", params: { ids: [srcId] } });
+    const snap = await bridge.request({ kind: "engine/state/snapshot", params: {} });
+    return { hasContent: snap.emitterClipboardHasContent };
+  });
+
+  if ("skipped" in result) {
+    test.skip(true, "no root emitter in the seed");
+    return;
+  }
+  expect(result.hasContent).toBe(true);
+});

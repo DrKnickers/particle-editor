@@ -367,6 +367,12 @@ export type EngineStateDto = {
   // OR the cursor is mid-redo-branch).
   canUndo: boolean;
   canRedo: boolean;
+
+  // True when the host's process-local emitter clipboard holds at least
+  // one copied subtree (emitters/copy / emitters/cut fill it). The buffer
+  // outlives the page, so a reloaded page (crash recovery, ErrorBoundary
+  // Reload) seeds its Paste gate from this instead of starting disabled.
+  emitterClipboardHasContent: boolean;
 };
 
 // ─── Mods ────────────────────────────────────────────────────────────

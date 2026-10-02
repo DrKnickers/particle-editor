@@ -382,6 +382,20 @@ describe("MockBridge contract — emitters/*", () => {
     off();
   });
 
+  it("engine/state/snapshot reports emitterClipboardHasContent once copy / cut fill the clipboard", async () => {
+    const b = new MockBridge();
+    const before = await b.request({ kind: "engine/state/snapshot", params: {} });
+    expect(before.emitterClipboardHasContent).toBe(false);
+    await b.request({ kind: "emitters/copy", params: { ids: [0] } });
+    const afterCopy = await b.request({ kind: "engine/state/snapshot", params: {} });
+    expect(afterCopy.emitterClipboardHasContent).toBe(true);
+
+    resetMockState();
+    await b.request({ kind: "emitters/cut", params: { ids: [5] } });
+    const afterCut = await b.request({ kind: "engine/state/snapshot", params: {} });
+    expect(afterCut.emitterClipboardHasContent).toBe(true);
+  });
+
   it("emitters/cut serialises + deletes + a follow-up paste restores the subtree as a new root", async () => {
     const b = new MockBridge();
     let lastTree: EmitterTreeDto | null = null;

@@ -135,6 +135,10 @@ export function makeDefaultEngineState(): EngineStateDto {
     // which is the correct UX given the no-op behaviour.
     canUndo: false,
     canRedo: false,
+
+    // Placeholder only — snapshotEngineState() reads the live mock
+    // clipboard, the way the host reads its own buffer per snapshot.
+    emitterClipboardHasContent: false,
   };
 }
 
@@ -153,7 +157,10 @@ export const useMockEngineState = create<EngineStore>((set) => ({
  *  stripped — i.e. exactly what should be serialised over the bridge. */
 export function snapshotEngineState(): EngineStateDto {
   const { applyPatch: _a, reset: _r, ...rest } = useMockEngineState.getState();
-  return rest;
+  return {
+    ...rest,
+    emitterClipboardHasContent: useMockEmitterClipboard.getState().buffer.length > 0,
+  };
 }
 
 // ─── Recent files registry ───────────────────────

@@ -89,6 +89,7 @@ nlohmann::json BuildEngineStateSnapshot(Engine* engine,
                                         const std::wstring& activeModPath,
                                         bool leaveParticles,
                                         bool canUndo,
-                                        bool canRedo);
+                                        bool canRedo,
+                                        bool emitterClipboardHasContent);
 
 } // namespace host
