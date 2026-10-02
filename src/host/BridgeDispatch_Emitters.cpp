@@ -704,22 +704,13 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
     }
 
 
-    // -------- emitters/duplicate -------------------------------------
-    //
-    // Mirrors the legacy Win32 editor's `EmitterList_DuplicateEmitter`.
-    // Round-trips the source through
-    // the chunk serializer so the duplicate starts with empty
-    // m_instances (a direct copy-construct would shallow-copy that
-    // std::set and double-free on later deletion). The duplicate
-    // becomes a root via `insertEmitterAfter`.
     // -------- emitters/import-from-file ------------------
     //
     // Clone the `selected` source emitters from another `.alo` into the
     // live system as new roots, via the shared data-layer core
     // ParticleSystem::ImportEmittersFrom (the same logic the legacy import
     // dialog uses). Atomic single undo; emits the tree-changed event.
-    // Placed after the captureUndo lambda (defined above) with the other
-    // emitter-mutation handlers.
+    // Uses the shared captureUndo member for a single undo step.
     if (kind == "emitters/import-from-file")
     {
         // Hard failures go through sendErr (envelope ok:false) so the bridge
@@ -794,6 +785,14 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         return true;
     }
 
+    // -------- emitters/duplicate -------------------------------------
+    //
+    // Mirrors the legacy Win32 editor's `EmitterList_DuplicateEmitter`.
+    // Round-trips the source through
+    // the chunk serializer so the duplicate starts with empty
+    // m_instances (a direct copy-construct would shallow-copy that
+    // std::set and double-free on later deletion). The duplicate
+    // becomes a root via `insertEmitterAfter`.
     if (kind == "emitters/duplicate")
     {
         int id = params.value("id", -1);
