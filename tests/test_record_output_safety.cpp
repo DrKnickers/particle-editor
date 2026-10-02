@@ -25,6 +25,7 @@ static int g_failed = 0;
 
 using recordsafety::IsRecordArtifactName;
 using recordsafety::MayReplaceOutputDir;
+using recordsafety::MayReplaceRecordDir;
 
 int main()
 {
@@ -88,6 +89,25 @@ int main()
         CHECK(!MayReplaceOutputDir(true, nested, why),
               "a subdirectory makes the dir foreign (record output is flat)");
     }
+
+    // --- MayReplaceRecordDir: the on-disk wrapper used for out AND <out>.tmp --
+    CHECK(MayReplaceRecordDir(false, false, false, {}, why), "wrapper: absent path is safe");
+    CHECK(MayReplaceRecordDir(true, true, true, {}, why),    "wrapper: empty dir is safe");
+    {
+        const std::vector<std::wstring> prior = { L"frame_00000.png", L"pump-trace.txt" };
+        CHECK(MayReplaceRecordDir(true, true, true, prior, why),
+              "wrapper: a previous run's staging dir (frames + trace) is safe to clear");
+    }
+    {
+        const std::vector<std::wstring> victim = { L"thesis.docx" };
+        CHECK(!MayReplaceRecordDir(true, true, true, victim, why),
+              "wrapper: a foreign file in <out>.tmp is REFUSED (HX4)");
+    }
+    CHECK(!MayReplaceRecordDir(true, false, true, {}, why),
+          "wrapper: a FILE sitting at the path is refused, never deleted");
+    CHECK(why == L"is not a directory", "wrapper: the not-a-directory refusal says so");
+    CHECK(!MayReplaceRecordDir(true, true, false, {}, why),
+          "wrapper: an unlistable dir is refused, not treated as empty");
 
     std::printf("%s\n", g_failed ? "=== FAILED ===" : "=== ALL PASS ===");
     std::printf("(%d failure%s)\n", g_failed, g_failed == 1 ? "" : "s");

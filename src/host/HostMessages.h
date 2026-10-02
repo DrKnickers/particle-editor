@@ -8,6 +8,8 @@
 //   WM_APP + 1  WM_APP_COMPOSITION_FALLBACK  (defined locally in HostWindow.cpp)
 //   WM_APP + 2  WM_APP_QUIT_CONFIRMED        (below)
 //   WM_APP + 3  WM_APP_VIEWPORT_BLUR         (below)
+//   WM_APP + 4  WM_APP_PREVIEW_READY         (below)
+//   WM_APP + 5  WM_APP_WEB_DEAD              (defined locally in HostWindow.cpp)
 
 // Posted by the app/quit bridge handler AFTER the React Save/Discard/
 // Cancel prompt has cleared. Its wndproc handler calls DestroyWindow (→WM_DESTROY,

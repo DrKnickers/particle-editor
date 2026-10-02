@@ -281,7 +281,8 @@ bool AlphaCompositor::CaptureSnapshotPng(std::string& outBase64, int& outW, int&
     // BOTH the fast and slow paths; `pathTag` is for the debug latency log.
     auto encodeBitmap = [&](Gdiplus::Bitmap* bmp, const char* pathTag) -> bool
     {
-        IStream* stream = nullptr;
+        // ComPtr owns the stream (and through it the HGLOBAL) on every return.
+        Microsoft::WRL::ComPtr<IStream> stream;
         if (FAILED(CreateStreamOnHGlobal(nullptr, TRUE, &stream)) || !stream)
             return false;
 
@@ -295,30 +296,21 @@ bool AlphaCompositor::CaptureSnapshotPng(std::string& outBase64, int& outW, int&
         encParams.Parameter[0].NumberOfValues = 1;
         encParams.Parameter[0].Value          = &qval;
 
-        if (bmp->Save(stream, &jpegClsid, &encParams) != Gdiplus::Ok)
-        {
-            stream->Release();
+        if (bmp->Save(stream.Get(), &jpegClsid, &encParams) != Gdiplus::Ok)
             return false;
-        }
 
         LARGE_INTEGER zero = {};
         stream->Seek(zero, STREAM_SEEK_SET, nullptr);
 
         STATSTG stat = {};
         if (FAILED(stream->Stat(&stat, STATFLAG_NONAME)))
-        {
-            stream->Release();
             return false;
-        }
         const size_t imgBytes = static_cast<size_t>(stat.cbSize.QuadPart);
         std::vector<uint8_t> img(imgBytes);
         ULONG read = 0;
         if (FAILED(stream->Read(img.data(), static_cast<ULONG>(imgBytes), &read)) || read != imgBytes)
-        {
-            stream->Release();
             return false;
-        }
-        stream->Release();
+        stream.Reset();
 
         outBase64 = host::Base64Encode(img.data(), img.size());
         outW = dstW;

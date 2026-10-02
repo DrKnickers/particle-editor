@@ -4,9 +4,11 @@
 // session with unsaved work. Ephemeral runs (--drive / --capture) and
 // --test-host runs have no user to prompt and must close cleanly. The data-loss
 // blocker was vetoing (or not vetoing) on the wrong combination. ShouldVetoClose
-// must return true on EXACTLY one of the eight (dirty, ephemeral, testHost)
-// combinations: dirty && !ephemeral && !testHost. Header-only; see
-// the test_close_guard entry in tests/native-tests.json.
+// must return true on EXACTLY one of the sixteen (dirty, ephemeral, testHost,
+// webAlive) combinations: dirty && !ephemeral && !testHost && webAlive. The
+// webAlive leg: with the web process dead, the page's Save/Discard/Cancel prompt
+// can never answer, so a veto would leave the window unclosable. Header-only;
+// see the test_close_guard entry in tests/native-tests.json.
 
 #include "CloseDecision.h"
 
@@ -22,8 +24,8 @@ int main()
 {
     std::printf("test_close_guard\n");
 
-    // Full truth table over (dirty, ephemeral, testHost). Veto iff the lone
-    // interactive-with-unsaved-work case.
+    // Full truth table over (dirty, ephemeral, testHost) with a live web. Veto
+    // iff the lone interactive-with-unsaved-work case.
     struct Row { bool dirty, ephemeral, testHost, expect; const char* label; };
     const Row rows[] = {
         // dirty  ephem  test   expect
@@ -40,13 +42,25 @@ int main()
     int vetoCount = 0;
     for (const Row& r : rows)
     {
-        bool got = ShouldVetoClose(r.dirty, r.ephemeral, r.testHost);
+        bool got = ShouldVetoClose(r.dirty, r.ephemeral, r.testHost, /*webAlive*/true);
         CHECK(got == r.expect, r.label);
         if (got) ++vetoCount;
     }
 
+    // The same eight rows with the web process dead: nothing may veto, because
+    // the page that would answer the prompt is gone.
+    for (const Row& r : rows)
+    {
+        bool got = ShouldVetoClose(r.dirty, r.ephemeral, r.testHost, /*webAlive*/false);
+        char label[96];
+        std::snprintf(label, sizeof(label), "dead web: %s", r.label);
+        CHECK(!got, r.expect ? "dead web: DIRTY, interactive  -> no veto (page can't answer)"
+                             : label);
+        if (got) ++vetoCount;
+    }
+
     // Reinforce the "EXACTLY one" invariant independent of the per-row checks.
-    CHECK(vetoCount == 1, "exactly one of the eight combinations vetoes");
+    CHECK(vetoCount == 1, "exactly one of the sixteen combinations vetoes");
 
     std::printf("%s\n", g_failed ? "=== FAILED ===" : "=== ALL PASS ===");
     std::printf("(%d failure%s)\n", g_failed, g_failed == 1 ? "" : "s");

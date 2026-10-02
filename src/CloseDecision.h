@@ -8,7 +8,12 @@
 // --capture) and --test-host runs have no user to prompt and must close cleanly.
 // A confirmed quit never re-enters WM_CLOSE (it goes WM_APP_QUIT_CONFIRMED →
 // DestroyWindow → WM_DESTROY), so no quit-confirmed flag is needed here.
-inline bool ShouldVetoClose(bool dirty, bool ephemeral, bool testHost)
+//
+// webAlive: the veto hands the decision to the web page's Save/Discard/Cancel
+// prompt, and only the page can end it (app/quit). With the web process dead
+// that prompt can never appear, so a veto would make the window unclosable —
+// the host closes through its own dead-web path instead (WebViewCrashPolicy.h).
+inline bool ShouldVetoClose(bool dirty, bool ephemeral, bool testHost, bool webAlive)
 {
-    return dirty && !ephemeral && !testHost;
+    return dirty && !ephemeral && !testHost && webAlive;
 }

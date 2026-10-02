@@ -394,13 +394,28 @@ int main()
             destroyBody.find("m_startupGuard.Retire();");
         const size_t firstTimerTeardown =
             destroyBody.find("KillTimer(hwnd, kStatsTimerId);");
+        // The owner teardown lives in ReleaseHostComObjects() (one idempotent
+        // path shared with the automation exit in Run()), so WM_DESTROY must
+        // retire before it calls that, and that body must hold every owner
+        // release this check used to find inline.
+        const size_t ownerTeardownCall =
+            destroyBody.find("ReleaseHostComObjects();");
+        const size_t releaseStart = source.find(
+            "void HostWindowImpl::ReleaseHostComObjects()");
+        const size_t releaseEnd = releaseStart == std::string::npos
+            ? std::string::npos
+            : source.find("\n}", releaseStart);
+        const std::string releaseBody =
+            (releaseStart != std::string::npos && releaseEnd != std::string::npos)
+                ? source.substr(releaseStart, releaseEnd - releaseStart)
+                : std::string();
         const size_t webViewTeardown =
-            destroyBody.find(
+            releaseBody.find(
                 "webView->remove_WebMessageReceived(webMessageTok);");
         const size_t compositorTeardown =
-            destroyBody.find("m_compositor.reset();");
+            releaseBody.find("m_compositor.reset();");
         const size_t engineTeardown =
-            destroyBody.find("engine.reset();");
+            releaseBody.find("engine.reset();");
 
         CHECK(foundMainWndProc,
               "main-window production handler is isolated exactly");
@@ -412,14 +427,16 @@ int main()
               "main-window WM_DESTROY retires startup callbacks exactly once");
         CHECK(retire != std::string::npos &&
               firstTimerTeardown != std::string::npos &&
-              webViewTeardown != std::string::npos &&
+              ownerTeardownCall != std::string::npos &&
+              retire < firstTimerTeardown &&
+              retire < ownerTeardownCall,
+              "startup callback retirement precedes timers and owner teardown");
+        CHECK(webViewTeardown != std::string::npos &&
               compositorTeardown != std::string::npos &&
               engineTeardown != std::string::npos &&
-              retire < firstTimerTeardown &&
-              retire < webViewTeardown &&
-              retire < compositorTeardown &&
-              retire < engineTeardown,
-              "startup callback retirement precedes timers and owner teardown");
+              webViewTeardown < compositorTeardown &&
+              compositorTeardown < engineTeardown,
+              "owner teardown (webview, compositor, engine) lives in ReleaseHostComObjects");
     }
 
     // --- 12. The second WebView2 create has its OWN synchronous HRESULT. A

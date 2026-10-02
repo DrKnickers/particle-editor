@@ -28,6 +28,8 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 - A particle file whose emitter or texture names use non-UTF-8 characters (common in older mods) no longer breaks the editor's panels; those characters now show as a replacement mark
 - An unexpected error while applying an edit no longer leaves the panels out of step with the scene or skips the unsaved-changes prompt
 - A camera position that would produce an invalid view (eye on the target, or looking straight along the up axis) is now refused instead of blanking the viewport, and zooming all the way in can no longer break the camera
+- If the editor's interface crashes, it now reloads itself instead of leaving a dead window. If it can't recover, it saves your unsaved changes for recovery, tells you, and closes, rather than leaving a window that can't be used or closed
+- A failed `--record` run no longer replaces the previous good clip, and recording never deletes unrelated files left in the clip's staging folder
 
 ### Security
 

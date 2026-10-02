@@ -77,4 +77,34 @@ inline bool MayReplaceOutputDir(bool exists,
     return true;   // exclusively this pipeline's own prior output
 }
 
+// The same decision for a path the caller has inspected on disk, covering the
+// cases MayReplaceOutputDir can't see from a listing alone. Used for BOTH the
+// output dir at publish and the `<out>.tmp` staging dir at setup (2026-10-01
+// audit HX4: the setup step used to `remove_all(<out>.tmp)` with no check).
+//
+// `isDirectory` — false when something other than a directory sits at the
+//                 path (a stray FILE named `<out>.tmp` must not be deleted).
+// `listed`      — false when the listing failed part-way; an unreadable
+//                 directory is refused rather than treated as empty.
+inline bool MayReplaceRecordDir(bool exists,
+                                bool isDirectory,
+                                bool listed,
+                                const std::vector<std::wstring>& entries,
+                                std::wstring& reason)
+{
+    reason.clear();
+    if (!exists) return true;
+    if (!isDirectory)
+    {
+        reason = L"is not a directory";
+        return false;
+    }
+    if (!listed)
+    {
+        reason = L"could not be listed";
+        return false;
+    }
+    return MayReplaceOutputDir(true, entries, reason);
+}
+
 } // namespace recordsafety

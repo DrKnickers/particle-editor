@@ -70,6 +70,7 @@
 #include "RestoredSettings.h"
 #include "SettingsRegistry.h"
 #include "WebViewModalPolicy.h"
+#include "WebViewCrashPolicy.h"        // DecideWebFailure / PlanDeadWebClose (ProcessFailed recovery)
 #include "WebMessageIngressPolicy.h"   // ShouldAcceptWebMessage (bridge ingress cap)
 #include "WebViewOriginPolicy.h"       // IsApprovedWebViewOrigin (navigation + ingress origin gate)
 #include "BridgeWire.h"                // SerializeBridgeEnvelope (the one host->UI serializer)
@@ -126,9 +127,47 @@ static std::string ReadFileUtf8(const std::wstring& path)
     fseek(f, 0, SEEK_END);
     long n = ftell(f);
     fseek(f, 0, SEEK_SET);
-    if (n > 0) { out.resize(static_cast<size_t>(n)); fread(&out[0], 1, static_cast<size_t>(n), f); }
+    if (n > 0)
+    {
+        out.resize(static_cast<size_t>(n));
+        // A short read (I/O error, file truncated under us) must not hand the
+        // runner a zero-padded script — report it as unreadable instead.
+        if (fread(&out[0], 1, static_cast<size_t>(n), f) != static_cast<size_t>(n))
+            out.clear();
+    }
     fclose(f);
     return out;
+}
+
+// --record: inspect `dir` on disk and ask recordsafety::MayReplaceRecordDir
+// whether it may be remove_all'd. Used for the output dir at publish AND the
+// `<out>.tmp` staging dir at setup (2026-10-01 audit HX4). A listing error is
+// reported as such rather than read as "empty".
+static bool MayReplaceRecordDirOnDisk(const std::wstring& dir, std::wstring& reason)
+{
+    std::error_code ec;
+    const std::filesystem::file_status st = std::filesystem::status(dir, ec);
+    if (st.type() == std::filesystem::file_type::none)   // status itself failed
+    {
+        reason = L"could not be inspected";
+        return false;
+    }
+    const bool exists = std::filesystem::exists(st);
+    const bool isDirectory = std::filesystem::is_directory(st);
+    std::vector<std::wstring> entries;
+    bool listed = true;
+    if (exists && isDirectory)
+    {
+        std::filesystem::directory_iterator it(dir, ec);
+        const std::filesystem::directory_iterator end;
+        while (!ec && it != end)
+        {
+            entries.push_back(it->path().filename().wstring());
+            it.increment(ec);
+        }
+        listed = !ec;
+    }
+    return recordsafety::MayReplaceRecordDir(exists, isDirectory, listed, entries, reason);
 }
 
 namespace {
@@ -146,6 +185,12 @@ constexpr UINT_PTR    kStatsTimerId          = 0x100;  // 4 Hz stats broadcast
 // WM_EXITSIZEMOVE too.
 constexpr UINT_PTR    kResizeSettleTimerId   = 0x101;
 constexpr UINT        kResizeSettleDelayMs   = 150;
+// WebView2 crash recovery (WebViewCrashPolicy.h): the one-shot deadline for a
+// Reload() to bring the page back, and the retry that moves a dead-web close
+// out of a nested modal pump (a file dialog opened by a bridge request).
+constexpr UINT_PTR    kWebReloadDeadlineTimerId = 0x102;
+constexpr UINT_PTR    kWebDeadCloseRetryTimerId = 0x103;
+constexpr UINT        kWebDeadCloseRetryMs      = 250;
 
 // The WebView2 origin allow-list (IsApprovedWebViewOrigin) lives in
 // WebViewOriginPolicy.h so its boundary is unit-tested.
@@ -477,6 +522,12 @@ LRESULT CALLBACK HostViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 // fatal error and exits (FailFatalComposition).
 static const UINT WM_APP_COMPOSITION_FALLBACK = WM_APP + 1;
 
+// Posted by the ProcessFailed handler when the web layer is declared dead
+// (WebViewCrashPolicy.h). Like the composition fallback above, the handler runs
+// on the message loop, off the WebView2 callback stack, because an interactive
+// session shows a modal and destroys the window from it.
+static const UINT WM_APP_WEB_DEAD = WM_APP + 5;
+
 } // namespace
 
 // -----------------------------------------------------------------------------
@@ -558,6 +609,10 @@ struct HostWindowImpl
     // RCDATA bundle (prod only). Registered in FinishWebView2ControllerSetup,
     // removed in WM_DESTROY like the tokens above.
     EventRegistrationToken          webResourceTok = {};
+    // ProcessFailed → OnWebProcessFailed (renderer/browser crash recovery).
+    // Registered in FinishWebView2ControllerSetup, removed in
+    // ReleaseHostComObjects like the tokens above.
+    EventRegistrationToken          processFailedTok = {};
     // Every token above exists so WM_DESTROY can UNSUBSCRIBE a handler that
     // captures `this`. The two WebView2 CREATION callbacks have no token to
     // unsubscribe — they are one-shot completions the runtime owns — so they
@@ -1218,8 +1273,9 @@ struct HostWindowImpl
     // PR 12 (an-audit-finding): the --record arm's one-time setup — timeline parse + mod
     // check + startup gate (resize/pause/open/catalog/settles) + hook wiring.
     // Moved out of Run() (was a ~460-line inline block). Returns true if the
-    // run should quit (bad timeline exit 2 / failed open exit 3); on success
-    // builds m_clipRunner. Shared per-run state travels in `rec`.
+    // run should quit (bad timeline exit 2 / failed open exit 3 / unsafe
+    // <out>.tmp exit 4); on success builds m_clipRunner. Shared per-run state
+    // travels in `rec`.
     bool SetupRecordArm(RecordSession& rec);
     void CloseLog();
 
@@ -1263,6 +1319,35 @@ struct HostWindowImpl
     // (MessageBox) and exit the process rather than leave a black window.
     // [[noreturn]]: flushes host.log, shows the dialog, then ExitProcess.
     [[noreturn]] void FailFatalComposition(HRESULT hr);
+
+    // WebView2 process-failure recovery (2026-10-01 audit HX1). The decisions
+    // live in WebViewCrashPolicy.h; this is the wiring. m_webDead is the one
+    // flag the rest of the host reads: WM_CLOSE stops vetoing (the page that
+    // would answer the save prompt is gone), the pump ends a headless run with
+    // kWebProcessFailedExitCode, and an interactive session closes through
+    // CloseAfterWebDeath.
+    bool m_webDead              = false;
+    int  m_webReloadsUsed       = 0;      // capped at kMaxWebReloads per session
+    bool m_webReloadPending     = false;  // Reload() issued, the page's app/ready not yet seen
+    int  m_webHangReports       = 0;      // consecutive hang reports with no web message between
+    int  m_webMessageDepth      = 0;      // OnWebMessage frames on the stack (a handler's modal pumps)
+    std::wstring m_appNavUrl;             // the app URL the first Navigate used; recovery navigates here
+    bool m_webDeadCloseStarted  = false;  // CloseAfterWebDeath runs once (its modal pumps)
+    bool m_keepAutosaveSession  = false;  // WM_DESTROY skips DeleteOurSession
+    void OnWebProcessFailed(ICoreWebView2ProcessFailedEventArgs* args);
+    // Sets m_webDead and hands the close (interactive) or the abort (headless)
+    // to the message loop via WM_APP_WEB_DEAD.
+    void MarkWebDead(const char* why);
+    // Interactive close with a dead web: write the recovery copy if dirty,
+    // keep the autosave session for the next launch, tell the user once, and
+    // destroy the window.
+    void CloseAfterWebDeath(HWND hwnd);
+
+    // One idempotent release of every WebView2 / composition / engine COM
+    // object (2026-09-30 audit MH1). Called from WM_DESTROY and again at the end of Run()
+    // so automation exits — which leave the pump without destroying hMain —
+    // also release everything before CoUninitialize.
+    void ReleaseHostComObjects();
 
     LRESULT MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
     LRESULT ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
@@ -1493,6 +1578,291 @@ void HostWindowImpl::Log(const char* fmt, ...)
                     MB_OK | MB_ICONERROR);
     }
     ExitProcess(1);
+}
+
+// ---------- WebView2 process failure (2026-10-01 audit HX1) ----------
+
+// ProcessFailed handler. Runs on the UI thread inside a WebView2 callback, so
+// it only decides, logs, and either calls Reload() or posts WM_APP_WEB_DEAD —
+// the modal and the window teardown happen on the message loop.
+void HostWindowImpl::OnWebProcessFailed(ICoreWebView2ProcessFailedEventArgs* args)
+{
+    COREWEBVIEW2_PROCESS_FAILED_KIND kind = COREWEBVIEW2_PROCESS_FAILED_KIND_UNKNOWN_PROCESS_EXITED;
+    if (args) args->get_ProcessFailedKind(&kind);
+    int exitCode = 0;
+    int reason   = -1;
+    ComPtr<ICoreWebView2ProcessFailedEventArgs2> args2;
+    if (args && SUCCEEDED(args->QueryInterface(IID_PPV_ARGS(&args2))) && args2)
+    {
+        COREWEBVIEW2_PROCESS_FAILED_REASON r = COREWEBVIEW2_PROCESS_FAILED_REASON_UNEXPECTED;
+        if (SUCCEEDED(args2->get_Reason(&r))) reason = static_cast<int>(r);
+        args2->get_ExitCode(&exitCode);
+    }
+    Log("[webview] ProcessFailed kind=%d reason=%d exitCode=%d (dead=%d reloads=%d pending=%d)\n",
+        static_cast<int>(kind), reason, exitCode,
+        m_webDead ? 1 : 0, m_webReloadsUsed, m_webReloadPending ? 1 : 0);
+    if (m_webDead) return;   // already handled; the close / exit is under way
+
+    webviewcrash::WebFailure failure = webviewcrash::WebFailure::Other;
+    switch (kind)
+    {
+    case COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED:
+        failure = webviewcrash::WebFailure::BrowserExited; break;
+    case COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED:
+        failure = webviewcrash::WebFailure::RenderExited; break;
+    case COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_UNRESPONSIVE:
+        failure = webviewcrash::WebFailure::RenderUnresponsive; break;
+    default:
+        break;
+    }
+
+    // Hang reports repeat every few seconds while a hang lasts; OnWebMessage
+    // resets the count, since any message proves the renderer is answering.
+    if (failure == webviewcrash::WebFailure::RenderUnresponsive)
+        ++m_webHangReports;
+
+    webviewcrash::WebFailureAction action = webviewcrash::DecideWebFailure(
+        failure, IsFullyInteractive(), m_webReloadsUsed, m_webReloadPending,
+        m_webHangReports);
+
+    if (action == webviewcrash::WebFailureAction::Reload)
+    {
+        // Navigate to the app's own URL rather than Reload(): a renderer that
+        // dies before the first navigation commits leaves about:blank as the
+        // current document, and reloading THAT never boots the app (seen in
+        // a manual crash test: navigation "succeeds", no app/ready).
+        const HRESULT hr = !webView           ? E_POINTER
+                         : m_appNavUrl.empty() ? webView->Reload()
+                                               : webView->Navigate(m_appNavUrl.c_str());
+        if (SUCCEEDED(hr))
+        {
+            ++m_webReloadsUsed;
+            m_webReloadPending = true;
+            m_webHangReports = 0;
+            // The page must report in (app/ready) before the deadline, or
+            // the web is declared dead — a still-hung renderer can't commit
+            // the reload, and its later hang reports are skipped as pending.
+            if (hMain) SetTimer(hMain, kWebReloadDeadlineTimerId,
+                                webviewcrash::kWebReloadDeadlineMs, nullptr);
+            Log("[webview] reloading the UI (%d of %d)\n",
+                m_webReloadsUsed, webviewcrash::kMaxWebReloads);
+            return;
+        }
+        Log("[webview] Reload failed hr=0x%08lx\n", static_cast<unsigned long>(hr));
+        action = webviewcrash::WebFailureAction::MarkDead;
+    }
+
+    if (action == webviewcrash::WebFailureAction::LogOnly)
+    {
+        Log("[webview] no action (WebView2 recovers this kind itself, or a run "
+            "watchdog bounds it)\n");
+        return;
+    }
+
+    MarkWebDead("process failure");
+}
+
+void HostWindowImpl::MarkWebDead(const char* why)
+{
+    if (m_webDead) return;
+    m_webDead = true;
+    m_webReloadPending = false;
+    if (hMain) KillTimer(hMain, kWebReloadDeadlineTimerId);
+    Log("[webview] web layer DEAD (%s) — %s\n", why,
+        IsFullyInteractive() ? "closing through the native recovery path"
+                             : "ending the headless run");
+    if (hMain) PostMessageW(hMain, WM_APP_WEB_DEAD, 0, 0);
+}
+
+// Interactive close once the web is dead. Nothing here may wait on the page:
+// it is gone, so its Save/Discard/Cancel prompt is replaced by a recovery copy
+// plus one native notice. Runs once — the MessageBoxW below pumps messages, and
+// a second WM_CLOSE (Alt-F4 again) must not re-enter.
+void HostWindowImpl::CloseAfterWebDeath(HWND hwnd)
+{
+    if (m_webDeadCloseStarted) return;
+    // A bridge handler is still on the stack, pumping a modal (a file dialog
+    // opened by the page before it died). Destroying the window from inside
+    // that pump would release the engine under the handler, so wait for the
+    // outermost loop. Polled by timer: re-posting the message would spin.
+    if (m_webMessageDepth > 0)
+    {
+        SetTimer(hwnd, kWebDeadCloseRetryTimerId, kWebDeadCloseRetryMs, nullptr);
+        return;
+    }
+    KillTimer(hwnd, kWebDeadCloseRetryTimerId);
+    m_webDeadCloseStarted = true;
+
+    // The modal below pumps WM_TIMER: stop the autosave ticks first so an
+    // unverified timer write can't replace the verified recovery copy.
+    KillTimer(hwnd, Autosave::RECENT_TIMER_ID);
+    KillTimer(hwnd, Autosave::STABLE_TIMER_ID);
+    m_autosavePending = false;
+
+    const bool dirty = dispatcher && dispatcher->GetDirty();
+    const webviewcrash::DeadWebClosePlan plan =
+        webviewcrash::PlanDeadWebClose(dirty, IsFullyInteractive());
+
+    bool handoffOk = false;
+    if (plan.writeRecoveryHandoff && dispatcher && particleSystem)
+    {
+        handoffOk = Autosave::WriteRecoveryHandoff(*particleSystem,
+                                                   dispatcher->GetCurrentFilePath());
+        Log("[webview] dead-web close: recovery copy %s\n",
+            handoffOk ? "written" : "write FAILED (older autosaves kept)");
+    }
+    // Keep the session even when the handoff failed: the timer-written tiers
+    // are older, but still better than nothing.
+    m_keepAutosaveSession = plan.keepAutosaveSession;
+
+    if (plan.notifyUser)
+    {
+        const wchar_t* detail = !dirty
+            ? L"There were no unsaved changes."
+            : handoffOk
+                ? L"Your unsaved changes were saved for recovery. The next time you "
+                  L"start Particle Editor it will offer to restore them."
+                : L"Your unsaved changes could not be saved for recovery. The next "
+                  L"time you start Particle Editor it will offer the most recent "
+                  L"autosave, if there is one.";
+        wchar_t msg[640];
+        _snwprintf_s(msg, _TRUNCATE,
+            L"The editor's interface (WebView2) stopped working and could not be "
+            L"restarted.\n\n%s\n\nThe editor will now close.", detail);
+        MessageBoxW(hwnd, msg, L"Particle Editor — interface stopped",
+                    MB_OK | MB_ICONERROR);
+    }
+    DestroyWindow(hwnd);
+}
+
+// One idempotent teardown for every COM object the host holds (2026-09-30 audit MH1).
+// WM_DESTROY calls it on an interactive close; Run() calls it again after the
+// pump so an automation exit (which never destroys hMain) also releases
+// everything BEFORE CoUninitialize — a COM Release after CoUninitialize is
+// undefined. Every step null-checks, so the second call is a no-op.
+void HostWindowImpl::ReleaseHostComObjects()
+{
+    // Unregister the WebMessageReceived handler
+    // explicitly before tearing down webView, mirroring the
+    // accelKeyTok pattern below. The handler lambda captures
+    // `this`; explicit unsubscribe before destruction prevents
+    // any in-flight message dispatch from racing with
+    // HostWindowImpl teardown.
+    if (webView && webMessageTok.value != 0)
+    {
+        webView->remove_WebMessageReceived(webMessageTok);
+        webMessageTok = {};
+    }
+    // Unsubscribe the nav/new-window/permission handlers
+    // before webView teardown, same rationale as the WebMessageReceived removal above
+    // (the lambdas capture `this`).
+    if (webView)
+    {
+        if (navStartingTok.value != 0)
+        {
+            webView->remove_NavigationStarting(navStartingTok);
+            navStartingTok = {};
+        }
+        if (newWindowTok.value != 0)
+        {
+            webView->remove_NewWindowRequested(newWindowTok);
+            newWindowTok = {};
+        }
+        if (navCompletedTok.value != 0)
+        {
+            webView->remove_NavigationCompleted(navCompletedTok);
+            navCompletedTok = {};
+        }
+        if (permissionTok.value != 0)
+        {
+            webView->remove_PermissionRequested(permissionTok);
+            permissionTok = {};
+        }
+        if (webResourceTok.value != 0)
+        {
+            webView->remove_WebResourceRequested(webResourceTok);
+            webResourceTok = {};
+        }
+        if (docTitleTok.value != 0)
+        {
+            webView->remove_DocumentTitleChanged(docTitleTok);
+            docTitleTok = {};
+        }
+        if (processFailedTok.value != 0)
+        {
+            webView->remove_ProcessFailed(processFailedTok);
+            processFailedTok = {};
+        }
+    }
+    if (webController)
+    {
+        // Unregister the accelerator hook before closing the controller
+        // so the callback lambda (which captures `this`) is never invoked
+        // after HostWindowImpl starts destructing.
+        if (accelKeyTok.value != 0)
+        {
+            webController->remove_AcceleratorKeyPressed(accelKeyTok);
+            accelKeyTok = {};
+        }
+        webController->Close();
+        webController.Reset();
+    }
+    webView.Reset();
+    // Release the WebView2 environment here too, while COM is still live.
+    // It is a member ComPtr used by the WebResourceRequested handler; if left
+    // to HostWindowImpl's destructor its final Release() would run AFTER the
+    // CoUninitialize() at the end of Run() — a COM call past teardown.
+    webEnv.Reset();
+    // Release composition controller +
+    // DComp tree. Order matters per dxgi_spike.cpp:783-818:
+    // controller is released AFTER webController->Close() (which
+    // already settles WebView2's pending work) and BEFORE
+    // m_compositor.reset() (so the Compositor's defensive
+    // put_RootVisualTarget(nullptr) in its dtor still has a live
+    // controller via its internal Impl::controller ComPtr — the
+    // Compositor holds its own reference). m_compositor.reset()
+    // then releases the visual tree.
+    //
+    // Unregister the CursorChanged handler before
+    // releasing the controller so the lambda (which captures
+    // `this`) can't fire after HostWindowImpl starts destructing.
+    // Same pattern as AcceleratorKeyPressed above.
+    if (m_compositionController && m_cursorChangedTok.value != 0)
+    {
+        m_compositionController->remove_CursorChanged(m_cursorChangedTok);
+        m_cursorChangedTok = {};
+    }
+    m_webViewCursor = nullptr;
+    // The Controller4 QI is a second reference to the same controller; left
+    // alone it kept the controller alive past the Compositor release below
+    // (and past CoUninitialize), defeating the order above.
+    m_ncRegionEnabled = false;
+    m_compositionController4.Reset();
+    m_compositionController.Reset();
+    // Clear LayoutBroker's pointer BEFORE
+    // releasing the Compositor so any late SetSceneRect dispatch
+    // (e.g. an in-flight BridgeDispatcher message that's already
+    // past the WM_DESTROY barrier in the message-pump shutdown
+    // sequence) doesn't dereference a freed Compositor.
+    layout.SetCompositor(nullptr);
+    if (engine) engine->SetCompositionCompositor(nullptr);
+    m_compositor.reset();
+    // Detach the compositor from Engine BEFORE either is
+    // destroyed so Render() (if scheduled before WM_QUIT drains
+    // the queue) can't dereference a freed compositor. Drop the
+    // compositor first since Engine owns the D3D9 device the
+    // compositor's resources are bound to.
+    // Drop the InputDispatcher before the engine /
+    // compositor. It holds the viewport popup HWND raw; the popup
+    // itself is destroyed below as part of the standard WM_DESTROY
+    // cleanup.
+    m_inputDispatcher.reset();
+    if (engine) engine->SetAlphaCompositor(nullptr);
+    layout.SetAlphaCompositor(nullptr);
+    alphaCompositor.reset();
+    // engine owns its D3D9 device; just drop the engine and it
+    // tears the device down in its destructor.
+    engine.reset();
 }
 
 // ---------- D3D9 ----------
@@ -1776,6 +2146,17 @@ void HostWindowImpl::SettleResize(const char* why)
 
 void HostWindowImpl::OnWebMessage(const std::wstring& json)
 {
+    // Crash recovery: a message from the page proves the renderer answers, so
+    // a hang streak is over; and while a handler runs (it may pump a modal),
+    // a dead-web close must wait for the outer loop (CloseAfterWebDeath).
+    m_webHangReports = 0;
+    struct DepthGuard
+    {
+        int& depth;
+        explicit DepthGuard(int& d) : depth(d) { ++depth; }
+        ~DepthGuard() { --depth; }
+    } depthGuard(m_webMessageDepth);
+
     // [resize-perf] bridge message rate, tallied PER
     // KIND (the user's live splitter drag showed ~104/s of NON-scene-rect
     // traffic the dimension audit hadn't ranked; attribution found it was
@@ -1807,6 +2188,13 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
     {
         m_uiReady = true;
         Log("[capture] app/ready received (React first paint)\n");
+        // A crash-recovery Reload() is complete once the page itself is back.
+        if (m_webReloadPending)
+        {
+            m_webReloadPending = false;
+            if (hMain) KillTimer(hMain, kWebReloadDeadlineTimerId);
+            Log("[webview] reloaded UI is back (app/ready)\n");
+        }
         // Frameless title bar: replay the current maximized state now that the web
         // can receive it — a launch-maximized window's first WM_SIZE fired before
         // React existed, so the initial glyph would otherwise be stuck at Maximize.
@@ -2699,26 +3087,49 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                 }
                 Log("[capture] NavigationCompleted (success=%d webErrorStatus=%d)\n",
                     ok ? 1 : 0, static_cast<int>(err));
+                // A crash-recovery Reload() ends at the page's app/ready (or
+                // its deadline), not here: a navigation can complete while
+                // React never boots.
+                if (m_webReloadPending)
+                    Log("[webview] reload navigation completed (success=%d)\n", ok ? 1 : 0);
                 return S_OK;
             }).Get(), &navCompletedTok);
+
+    // Renderer / browser process failure (2026-10-01 audit HX1). Without this a
+    // crashed renderer left a dead page — and with a dirty document a window
+    // whose close was vetoed forever, waiting on a prompt the dead page could
+    // never show. Registered before Navigate so a crash during the first load
+    // is seen too; token removed in ReleaseHostComObjects.
+    {
+        const HRESULT pfHr = webView->add_ProcessFailed(
+            Callback<ICoreWebView2ProcessFailedEventHandler>(
+                [this](ICoreWebView2*,
+                       ICoreWebView2ProcessFailedEventArgs* args) noexcept -> HRESULT
+                {
+                    OnWebProcessFailed(args);
+                    return S_OK;
+                }).Get(), &processFailedTok);
+        if (FAILED(pfHr))
+            Log("[webview] add_ProcessFailed failed hr=0x%08lx (crash recovery off)\n",
+                static_cast<unsigned long>(pfHr));
+    }
 
     // Navigate to the React app. Navigate returns SYNCHRONOUSLY on whether the
     // request was accepted at all, and that HRESULT was dropped — a rejected
     // URL left the window blank with nothing in the log and a zero exit code
     // (2026-07 audit).
-    HRESULT navHr = S_OK;
     if (useDevUi)
     {
         Log("[host] dev-ui: Navigate to Vite dev server\n");
-        const std::wstring devUrl = host::perf::Enabled()
+        m_appNavUrl = host::perf::Enabled()
             ? L"http://localhost:5174/?perfTrace=1"
             : L"http://localhost:5174/";
-        navHr = webView->Navigate(devUrl.c_str());
     }
     else
     {
-        navHr = webView->Navigate(prodNavUrl.c_str());
+        m_appNavUrl = prodNavUrl;
     }
+    const HRESULT navHr = webView->Navigate(m_appNavUrl.c_str());
     if (FAILED(navHr))
     {
         Log("[host] Navigate REJECTED hr=0x%08lx\n", navHr);
@@ -3539,6 +3950,19 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             KillTimer(hwnd, kResizeSettleTimerId);
             SettleResize(m_inSizeMove ? "quiescence-pause" : "quiescence");
         }
+        // Crash recovery: a Reload() the page never answered (WebViewCrashPolicy.h).
+        else if (wp == kWebReloadDeadlineTimerId)
+        {
+            KillTimer(hwnd, kWebReloadDeadlineTimerId);
+            if (webviewcrash::DecideReloadDeadline(m_webReloadPending)
+                    == webviewcrash::WebFailureAction::MarkDead)
+                MarkWebDead("reload deadline passed");
+        }
+        // A dead-web close deferred out of a bridge handler's modal pump.
+        else if (wp == kWebDeadCloseRetryTimerId)
+        {
+            CloseAfterWebDeath(hwnd);
+        }
         return 0;
 
     // ---- Frameless custom title bar (pre-PR Win32 review recipe) ----
@@ -3939,12 +4363,31 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // a dirty interactive session to the SAME React Save/Discard/Cancel
         // prompt File→Exit uses; swallow the default destroy until React replies
         // (it dispatches app/quit → WM_APP_QUIT_CONFIRMED below).
-        if (ShouldVetoClose(dispatcher && dispatcher->GetDirty(), m_automationMode, useTestHost))
+        // A dead web can't show that prompt or send app/quit, so it never
+        // vetoes (HX1); an interactive session closes through the native
+        // recovery path instead of an unanswerable veto.
+        if (ShouldVetoClose(dispatcher && dispatcher->GetDirty(), m_automationMode, useTestHost,
+                            /*webAlive*/!m_webDead))
         {
             if (dispatcher) dispatcher->EmitCloseRequested();
             return 0;
         }
+        if (m_webDead && IsFullyInteractive())
+        {
+            CloseAfterWebDeath(hwnd);   // once; a repeat close during its modal is swallowed
+            return 0;
+        }
         break;   // not dirty (or headless) → DefWindowProc → WM_DESTROY
+
+    case WM_APP_WEB_DEAD:
+        // OnWebProcessFailed declared the web dead. The window is unusable
+        // (title bar, menus and viewport all live in the page), so an
+        // interactive session closes now rather than waiting for an Alt-F4 the
+        // user may not think of. A headless run ends from the pump instead,
+        // with kWebProcessFailedExitCode.
+        if (IsFullyInteractive())
+            CloseAfterWebDeath(hwnd);
+        return 0;
 
     case WM_APP_QUIT_CONFIRMED:
         // React confirmed the close (saved or discarded). DestroyWindow
@@ -3964,11 +4407,17 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // Stop autosave + delete THIS session's autosave files on a
         // clean exit so no orphan prompts on the next launch. A crash skips
         // WM_DESTROY, leaving the orphan for recovery — exactly the point.
+        // A dead-web close with unsaved work is the same case by another road:
+        // CloseAfterWebDeath wrote the recovery copy and set
+        // m_keepAutosaveSession so the next launch offers it.
         if (!useTestHost && !m_automationMode)
         {
             KillTimer(hwnd, Autosave::RECENT_TIMER_ID);
             KillTimer(hwnd, Autosave::STABLE_TIMER_ID);
-            Autosave::DeleteOurSession();
+            if (m_keepAutosaveSession)
+                Log("[webview] keeping this session's autosave files for recovery\n");
+            else
+                Autosave::DeleteOurSession();
         }
         // Release the class background brush. Per
         // WNDCLASSEX docs the system would free it on UnregisterClass,
@@ -3979,117 +4428,10 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             DeleteObject(m_classBrush);
             m_classBrush = nullptr;
         }
-        // Unregister the WebMessageReceived handler
-        // explicitly before tearing down webView, mirroring the
-        // accelKeyTok pattern below. The handler lambda captures
-        // `this`; explicit unsubscribe before destruction prevents
-        // any in-flight message dispatch from racing with
-        // HostWindowImpl teardown.
-        if (webView && webMessageTok.value != 0)
-        {
-            webView->remove_WebMessageReceived(webMessageTok);
-            webMessageTok = {};
-        }
-        // Unsubscribe the nav/new-window/permission handlers
-        // before webView teardown, same rationale as the WebMessageReceived removal above
-        // (the lambdas capture `this`).
-        if (webView)
-        {
-            if (navStartingTok.value != 0)
-            {
-                webView->remove_NavigationStarting(navStartingTok);
-                navStartingTok = {};
-            }
-            if (newWindowTok.value != 0)
-            {
-                webView->remove_NewWindowRequested(newWindowTok);
-                newWindowTok = {};
-            }
-            if (navCompletedTok.value != 0)
-            {
-                webView->remove_NavigationCompleted(navCompletedTok);
-                navCompletedTok = {};
-            }
-            if (permissionTok.value != 0)
-            {
-                webView->remove_PermissionRequested(permissionTok);
-                permissionTok = {};
-            }
-            if (webResourceTok.value != 0)
-            {
-                webView->remove_WebResourceRequested(webResourceTok);
-                webResourceTok = {};
-            }
-            if (docTitleTok.value != 0)
-            {
-                webView->remove_DocumentTitleChanged(docTitleTok);
-                docTitleTok = {};
-            }
-        }
-        if (webController)
-        {
-            // Unregister the accelerator hook before closing the controller
-            // so the callback lambda (which captures `this`) is never invoked
-            // after HostWindowImpl starts destructing.
-            if (accelKeyTok.value != 0)
-            {
-                webController->remove_AcceleratorKeyPressed(accelKeyTok);
-                accelKeyTok = {};
-            }
-            webController->Close();
-            webController.Reset();
-        }
-        webView.Reset();
-        // Release the WebView2 environment here too, while COM is still live.
-        // It is a member ComPtr used by the WebResourceRequested handler; if left
-        // to HostWindowImpl's destructor its final Release() would run AFTER the
-        // CoUninitialize() at the end of Run() — a COM call past teardown.
-        webEnv.Reset();
-        // Release composition controller +
-        // DComp tree. Order matters per dxgi_spike.cpp:783-818:
-        // controller is released AFTER webController->Close() (which
-        // already settles WebView2's pending work) and BEFORE
-        // m_compositor.reset() (so the Compositor's defensive
-        // put_RootVisualTarget(nullptr) in its dtor still has a live
-        // controller via its internal Impl::controller ComPtr — the
-        // Compositor holds its own reference). m_compositor.reset()
-        // then releases the visual tree.
-        //
-        // Unregister the CursorChanged handler before
-        // releasing the controller so the lambda (which captures
-        // `this`) can't fire after HostWindowImpl starts destructing.
-        // Same pattern as AcceleratorKeyPressed above.
-        if (m_compositionController && m_cursorChangedTok.value != 0)
-        {
-            m_compositionController->remove_CursorChanged(m_cursorChangedTok);
-            m_cursorChangedTok = {};
-        }
-        m_webViewCursor = nullptr;
-        m_compositionController.Reset();
-        // Clear LayoutBroker's pointer BEFORE
-        // releasing the Compositor so any late SetSceneRect dispatch
-        // (e.g. an in-flight BridgeDispatcher message that's already
-        // past the WM_DESTROY barrier in the message-pump shutdown
-        // sequence) doesn't dereference a freed Compositor.
-        layout.SetCompositor(nullptr);
-        if (engine) engine->SetCompositionCompositor(nullptr);
-        m_compositor.reset();
-        // Detach the compositor from Engine BEFORE either is
-        // destroyed so Render() (if scheduled before WM_QUIT drains
-        // the queue) can't dereference a freed compositor. Drop the
-        // compositor first since Engine owns the D3D9 device the
-        // compositor's resources are bound to.
-        // Drop the InputDispatcher before the engine /
-        // compositor. It holds the viewport popup HWND raw; the popup
-        // itself is destroyed below as part of the standard WM_DESTROY
-        // cleanup.
-        m_inputDispatcher.reset();
-        if (engine) engine->SetAlphaCompositor(nullptr);
-        layout.SetAlphaCompositor(nullptr);
-        alphaCompositor.reset();
-        // engine owns its D3D9 device; just drop the engine and it
-        // tears the device down in its destructor.
-        engine.reset();
+        // Every WebView2 / composition / engine COM object, in the documented
+        // order — shared with the end of Run() so automation exits release the
+        // same set (2026-09-30 audit MH1).
+        ReleaseHostComObjects();
         PostQuitMessage(0);
         return 0;
     }
@@ -5151,6 +5493,21 @@ bool HostWindowImpl::SetupRecordArm(RecordSession& rec)
                     // (f) output dirs: render to <out>.tmp, move on success.
                     rec.outDir = host::Utf8ToWide(tl.out);
                     rec.tmpDir = rec.outDir + L".tmp";
+                    // HX4: clearing <out>.tmp is the same remove_all as the
+                    // publish, so it gets the same check — a directory (or a
+                    // file) that happens to sit at that name and isn't a
+                    // previous run's staging output is refused, not deleted.
+                    {
+                        std::wstring refuseReason;
+                        if (!MayReplaceRecordDirOnDisk(rec.tmpDir, refuseReason))
+                        {
+                            Log("[record] REFUSING to clear staging dir %ls: %ls\n",
+                                rec.tmpDir.c_str(), refuseReason.c_str());
+                            Log("[record] move it aside, or point 'out' at a new directory\n");
+                            rec.exitCode = 4;   // output-dir safety refusal, same code as publish
+                            return true;
+                        }
+                    }
                     std::error_code ec;
                     std::filesystem::remove_all(rec.tmpDir, ec);
                     std::filesystem::create_directories(rec.tmpDir, ec);
@@ -5242,6 +5599,10 @@ bool HostWindowImpl::SetupRecordArm(RecordSession& rec)
                                 while (PeekMessage(&mw, nullptr, 0, 0, PM_REMOVE))
                                 { TranslateMessage(&mw); DispatchMessage(&mw); }
                                 if (m_lastAckedFrame >= frameId) { acked = true; break; }
+                                // A dead web will never ack; stop now and let the
+                                // pump end the run (HX1) instead of waiting out
+                                // the deadline frame after frame.
+                                if (m_webDead) break;
                                 if (rf > 0 && QpcMs(PerfQpcNow() - s, rf) >= dl) break;
                                 if (!m_recordHeadless) RenderD3D9();
                                 // [R4] Message-aware wait: the ack ARRIVES as a
@@ -5446,7 +5807,7 @@ int HostWindowImpl::Run(int nCmdShow)
             Log("[host] showing WebView2 install dialog\n");
             OfferWebView2Install(nullptr, nullptr);
         }
-        CoUninitialize();
+        if (SUCCEEDED(coHr)) CoUninitialize();
         CloseLog();
         return 1;
     }
@@ -5518,7 +5879,7 @@ int HostWindowImpl::Run(int nCmdShow)
     {
         Log("[host] CreateWindowEx parent failed (gle=%lu)\n", GetLastError());
         g_self = nullptr;
-        CoUninitialize();
+        if (SUCCEEDED(coHr)) CoUninitialize();
         CloseLog();
         return 1;
     }
@@ -5642,7 +6003,7 @@ int HostWindowImpl::Run(int nCmdShow)
             Log("[host] WebView2 init failed (0x%08lx) — bailing headlessly\n", hr);
         DestroyWindow(hMain);
         g_self = nullptr;
-        CoUninitialize();
+        if (SUCCEEDED(coHr)) CoUninitialize();
         CloseLog();
         return 1;
     }
@@ -5775,6 +6136,16 @@ int HostWindowImpl::Run(int nCmdShow)
             }
         }
         if (quit) break;
+        // HX1: a headless run whose web process died can't make progress — no
+        // app/ready, no frame acks, no composite — so end it now with
+        // kWebProcessFailedExitCode instead of waiting out a watchdog. An
+        // interactive session closes through WM_APP_WEB_DEAD instead.
+        if (m_webDead && !IsFullyInteractive())
+        {
+            Log("[webview] headless run aborted: web process failed (exit %d)\n",
+                webviewcrash::kWebProcessFailedExitCode);
+            break;
+        }
         // Load/capture failure → bail to cleanup
         // without rendering (exit code set below).
         if (captureRunner.Failed()) break;
@@ -5944,7 +6315,60 @@ int HostWindowImpl::Run(int nCmdShow)
                     // move on Windows (sharing violation), same reason the encoder
                     // is drained first. The per-frame flushes already persisted it.
                     m_recordTrace.reset();
-                    // Move the completed sequence into place on success only.
+                    // HX1: a web process that died during the run leaves frames
+                    // nobody can vouch for (the pump then ends the run with
+                    // kWebProcessFailedExitCode) — never publish them.
+                    if (rec.exitCode == 0 && m_webDead)
+                    {
+                        Log("[record] web process failed during the run -- not publishing\n");
+                        rec.exitCode = webviewcrash::kWebProcessFailedExitCode;
+                    }
+                    // Validate, THEN replace (HX3). Everything that can still fail
+                    // the run is checked against <out>.tmp first; the previous good
+                    // output in <out> is touched only once the new one is complete.
+                    // On any failure both stay as they are.
+                    //
+                    // Verify sidecar: a target-bearing run accumulated the
+                    // per-frame resolved cursor centers — write them next to the
+                    // frames so a downstream script can check the cursor landed on
+                    // each authored element. Literal runs skip it (empty array).
+                    // Written into <out>.tmp before the length check, so a clean
+                    // run that comes up short still leaves the sidecar to inspect.
+                    if (rec.exitCode == 0 && m_clipRunner->IsTargetCursor())
+                    {
+                        const std::filesystem::path sidecar =
+                            std::filesystem::path(rec.tmpDir) / L"cursor-sidecar.json";
+                        bool wrote = false;
+                        {
+                            std::ofstream f(sidecar, std::ios::binary | std::ios::trunc);
+                            if (f)
+                            {
+                                f << m_clipRunner->Sidecar().dump(2);
+                                f.close();
+                                wrote = !f.fail();
+                            }
+                        }
+                        if (wrote)
+                        {
+                            Log("[record] wrote cursor sidecar (%d frames)\n",
+                                (int)m_clipRunner->Sidecar().size());
+                        }
+                        else
+                        {
+                            Log("[record] cursor sidecar write failed\n");
+                            rec.exitCode = 4;
+                        }
+                        // One sidecar row per frame on a clean run (step 4a
+                        // appends or aborts). A short sidecar means a frame was
+                        // captured without resolve validation — fail, don't ship.
+                        if ((int)m_clipRunner->Sidecar().size() != m_clipRunner->FrameCount())
+                        {
+                            Log("[record] cursor sidecar incomplete: %d of %d frames\n",
+                                (int)m_clipRunner->Sidecar().size(), m_clipRunner->FrameCount());
+                            rec.exitCode = 4;
+                        }
+                    }
+                    // Move the completed, validated sequence into place.
                     if (rec.exitCode == 0)
                     {
                         // `out` is validated as relative + traversal-free,
@@ -5954,16 +6378,8 @@ int HostWindowImpl::Run(int nCmdShow)
                         // empty, or holds nothing but a previous record's own output.
                         // Re-shooting into the same directory (the normal workflow)
                         // still works; deleting a stranger's files does not.
-                        std::error_code ecScan;
-                        const bool outExists = std::filesystem::exists(rec.outDir, ecScan);
-                        std::vector<std::wstring> outEntries;
-                        if (outExists)
-                        {
-                            for (const auto& de : std::filesystem::directory_iterator(rec.outDir, ecScan))
-                                outEntries.push_back(de.path().filename().wstring());
-                        }
                         std::wstring refuseReason;
-                        if (!recordsafety::MayReplaceOutputDir(outExists, outEntries, refuseReason))
+                        if (!MayReplaceRecordDirOnDisk(rec.outDir, refuseReason))
                         {
                             Log("[record] REFUSING to replace output dir %ls: %ls\n",
                                 rec.outDir.c_str(), refuseReason.c_str());
@@ -5973,46 +6389,17 @@ int HostWindowImpl::Run(int nCmdShow)
                         }
                         else
                         {
-                        std::error_code ec;
-                        std::filesystem::remove_all(rec.outDir, ec);
-                        std::error_code ec2;
-                        std::filesystem::rename(rec.tmpDir, rec.outDir, ec2);
-                        if (ec2)
-                        {
-                            Log("[record] move tmp -> out failed: %s\n", ec2.message().c_str());
-                            rec.exitCode = 4;   // publish failure -> non-zero exit
-                        }
-                        // Verify sidecar: a target-bearing run accumulated the
-                        // per-frame resolved cursor centers — write them next to the
-                        // frames so a downstream script can check the cursor landed on
-                        // each authored element. Literal runs skip it (empty array).
-                        else if (m_clipRunner->IsTargetCursor())
-                        {
-                            // One sidecar row per frame on a clean run (step 4a
-                            // appends or aborts). A short sidecar means a frame was
-                            // captured without resolve validation — fail, don't ship.
-                            if ((int)m_clipRunner->Sidecar().size() != m_clipRunner->FrameCount())
+                            std::error_code ec;
+                            std::filesystem::remove_all(rec.outDir, ec);
+                            std::error_code ec2;
+                            std::filesystem::rename(rec.tmpDir, rec.outDir, ec2);
+                            if (ec2)
                             {
-                                Log("[record] cursor sidecar incomplete: %d of %d frames\n",
-                                    (int)m_clipRunner->Sidecar().size(), m_clipRunner->FrameCount());
-                                rec.exitCode = 4;
-                            }
-                            const std::filesystem::path sidecar =
-                                std::filesystem::path(rec.outDir) / L"cursor-sidecar.json";
-                            std::ofstream f(sidecar, std::ios::binary | std::ios::trunc);
-                            if (f)
-                            {
-                                f << m_clipRunner->Sidecar().dump(2);
-                                Log("[record] wrote cursor sidecar (%d frames)\n",
-                                    (int)m_clipRunner->Sidecar().size());
-                            }
-                            else
-                            {
-                                Log("[record] cursor sidecar write failed\n");
-                                rec.exitCode = 4;
+                                Log("[record] move tmp -> out failed: %s (the validated frames "
+                                    "are intact in %ls)\n", ec2.message().c_str(), rec.tmpDir.c_str());
+                                rec.exitCode = 4;   // publish failure -> non-zero exit
                             }
                         }
-                        }   // end: output dir was safe to replace
                     }
                     // [R3] Snapshot queue stats before the summary reads them.
                     if (rec.encoder) m_recordEncoderStats = rec.encoder->GetQueueStats();
@@ -6104,6 +6491,19 @@ int HostWindowImpl::Run(int nCmdShow)
     // [resize-perf] matching release for the timeBeginPeriod above.
     timeEndPeriod(1);
 
+    // Did a headless run lose its web process? Covers both the pump-top abort
+    // and a death delivered by the message pumping inside a run's final Tick.
+    const bool webDeadAbort = m_webDead && !IsFullyInteractive();
+
+    // Automation exits (--capture/--drive/--record, and a headless run ended by
+    // a dead web) break the pump via `quit` WITHOUT destroying hMain, so
+    // WM_DESTROY never ran and every WebView2 / composition / engine object is
+    // still held. Release them through the SAME path WM_DESTROY uses, at the
+    // same point in the sequence (pump done, before the worker joins and GDI+
+    // shutdown), so their final Release() precedes CoUninitialize on EVERY exit
+    // path (2026-09-30 audit MH1). Idempotent: after an interactive teardown it is a no-op.
+    ReleaseHostComObjects();
+
     g_self = nullptr;
     // Branch B: a WM_QUIT escape from the pump (user closed the record window)
     // bypasses the Done/watchdog joins above — the encoder worker MUST be
@@ -6116,20 +6516,13 @@ int HostWindowImpl::Run(int nCmdShow)
     // here because the message pump has drained: no dispatcher
     // handlers (CaptureSnapshotPng et al) can run after WM_QUIT.
     if (gdiplusToken) Gdiplus::GdiplusShutdown(gdiplusToken);
-    // Automation exits (--capture/--drive/--record) break the pump via `quit`
-    // WITHOUT destroying hMain, so WM_DESTROY never ran and the three WebView2
-    // objects (controller / view / environment) are still held. Release exactly
-    // those here so their final Release() precedes CoUninitialize on EVERY exit
-    // path, not just the interactive one — a COM Release after CoUninitialize is
-    // undefined. Idempotent with WM_DESTROY: after an interactive teardown they
-    // are already null. (The DComp composition objects have the same pre-existing
-    // post-CoUninitialize release on automation exit; that predates this change
-    // and its release ordering is delicate, so it is left as-is here.)
-    if (webController) { webController->Close(); webController.Reset(); }
-    webView.Reset();
-    webEnv.Reset();
-    CoUninitialize();
+    // Balance CoInitializeEx only if it succeeded (S_OK or S_FALSE); after a
+    // failure (e.g. RPC_E_CHANGED_MODE) there is nothing of ours to undo.
+    if (SUCCEEDED(coHr)) CoUninitialize();
     CloseLog();
+    // A headless run whose web process died (HX1) — whatever stage it reached,
+    // its output can't be trusted, and a --record run never published.
+    if (webDeadAbort) return webviewcrash::kWebProcessFailedExitCode;
     // In --capture mode we break the loop via
     // the `quit` flag (not PostQuitMessage), so m.wParam is stale; return
     // an explicit 0/2 so a script can detect a bad load / failed write.
