@@ -128,3 +128,71 @@ Use the **Property behaviour** row in
 [Which check for which change](../../../CONTRIBUTING.md#which-check-for-which-change)
 after changing a field. For a request addition, follow the checklist at the
 top of the [bridge schema](../../packages/bridge-schema/src/index.ts).
+
+## Adding a property field
+
+Use **Gravity acceleration** as the example for a new emitter setting.
+Follow its field through these seven steps so the browser, host and saved
+file agree.
+
+1. In the [bridge schema](../../packages/bridge-schema/src/index.ts), search
+   for `gravity: number` in `EmitterPropertiesDto`. Add the new field with
+   the type both sides will send.
+2. In [mock-state.ts](src/bridge/mock-state.ts), search for
+   `makeFixtureProperties` and `gravity: 0`. Add the browser default there.
+   [mock.ts](src/bridge/mock.ts), `emitters/set-properties`, needs no new
+   field-specific code: it derives `applied` and `skipped` from the fixture's
+   keys. The mock does not check types; the host does.
+3. In [ParticleSystem.h](../../../src/ParticleSystem.h), search for
+   `float gravity` and add the stored member. In
+   [ParticleSystem.cpp](../../../src/ParticleSystem.cpp), search for
+   `setDefaults` and give it a default. In
+   [ParticleSystemSerialization.cpp](../../../src/ParticleSystemSerialization.cpp),
+   search for `writeMiniFloat  (writer, 0x0C, gravity)` for the write line,
+   then `case 0x0C:` and `readFloat(reader)` for the matching read line.
+   Add both sides for the new field. Mini-chunk IDs must be unique within
+   chunk `0x0002`; read `writeProperties` to find the next free ID rather
+   than guessing from the gravity ID.
+4. In [BridgeDispatch_EmitterProperties.cpp](../../../src/host/BridgeDispatch_EmitterProperties.cpp),
+   search for `"gravity"`. Add one line to the get response and one
+   `patch.contains` line to the set handler. Choose the matching reader:
+   `getFloat`, `getInt`, `getBool` or `getString`. These helpers record
+   accepted fields in `applied` and wrong types in `skipped`, keeping the
+   old value when a type is wrong.
+5. In [PhysicsTab.tsx](src/screens/property-tabs/PhysicsTab.tsx), search for
+   `Gravity acceleration:` to see the field's value and commit callback.
+   Use `FieldSpinner`, `FieldCheckbox` or `FieldSelect` from
+   [fields.tsx](src/screens/property-tabs/fields.tsx) in the appropriate tab.
+   Add `help` when an explanation is useful. A reason for disabling a field
+   appears only while it is disabled; a plain explanatory sentence can
+   remain visible. Follow the existing field's bounds and units only when
+   they also apply to the new setting.
+6. If the field should be shared in a link group, add its exemption flag in
+   [LinkGroup.h](../../../src/LinkGroup.h), `bool gravity`, and its default
+   and difference check in [LinkGroup.cpp](../../../src/LinkGroup.cpp),
+   `gravity(false)` and `CHECK_FIELD(gravity,`. In
+   [ParticleSystem.cpp](../../../src/ParticleSystem.cpp),
+   `copySharedParamsFrom`, preserve and restore the field when exempt;
+   search for `sav_gravity` for the example. Add the bridge flag mapping to
+   [BridgeDispatcher.cpp](../../../src/host/BridgeDispatcher.cpp),
+   `kLinkFieldTable`, and the label and group entries to
+   [LinkGroupSettingsDialog.tsx](src/screens/LinkGroupSettingsDialog.tsx),
+   `"Gravity"` and `"gravity"`. If the field should change when the user
+   rescales an effect, add the appropriate time or size rule to
+   [Rescale.cpp](../../../src/Rescale.cpp), `emitter->gravity`.
+7. Extend the get/set round trip in
+   [bridge-contract.emitters.test.ts](src/bridge/__tests__/bridge-contract.emitters.test.ts),
+   `emitters/set-properties applies a partial patch`, and the label check
+   in [EmitterPropertyTabs.test.tsx](src/screens/__tests__/EmitterPropertyTabs.test.tsx),
+   `Gravity acceleration:`. Add a native round trip following
+   [property-tabs.spec.ts](tests/property-tabs.spec.ts),
+   `changing gravity round-trips via get-properties`. For the saved file,
+   extend [test_alo_roundtrip.cpp](../../../tests/test_alo_roundtrip.cpp),
+   `buildOne` and `ROUND-TRIP FIDELITY`, with a non-default value and an
+   assertion that it survives writing and reading.
+
+Use the **Property behaviour** row in
+[Which check for which change](../../../CONTRIBUTING.md#which-check-for-which-change)
+for the interface and bridge checks, and the **Native logic** row for
+stored fields and file-format changes. A browser round trip proves the
+mock path; native and file round trips check the real host and persistence.

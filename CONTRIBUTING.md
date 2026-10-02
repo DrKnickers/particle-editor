@@ -81,6 +81,8 @@ The codebase has been around since 2008 and inherits Mike.NL's GlyphX-era style.
 - **Find the code.** Use the [native source map](src/README.md) for file formats,
   simulation and request handlers, or the [web source map](web/apps/editor/README.md)
   for panels, state owners and a worked property edit.
+  For a new emitter setting, follow [Adding a property field](web/apps/editor/README.md#adding-a-property-field)
+  through the schema, browser default, host, saved file and tests.
 
 ## Words this project uses
 

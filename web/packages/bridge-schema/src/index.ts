@@ -568,6 +568,7 @@ export type GroupDto = {
   val: Vec3;                     // (valX, valY, valZ)
 };
 
+// Adding a property field: see web/apps/editor/README.md, "Adding a property field".
 export type EmitterPropertiesDto = {
   // ── Basic ── (Emitter fields: name, linkToSystem, randomRotation,
   // useBursts, lifetime, initialDelay, burstDelay, randomLifetimePerc,
