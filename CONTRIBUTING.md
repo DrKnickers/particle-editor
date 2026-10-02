@@ -48,6 +48,93 @@ The codebase has been around since 2008 and inherits Mike.NL's GlyphX-era style.
 
 - **[CHANGELOG.md](CHANGELOG.md)** — public-facing release history. A feature PR adds one user-facing bullet under `## [Unreleased]` when it lands (no bullet for non-user-facing changes — docs, CI, internal refactors); cutting a release rolls that section up. Follow the existing bullets: present tense, the user's point of view, no trailing period, ending with the PR link.
 
+## Start here
+
+- **Use the editor.** Start with the [download instructions](README.md#download)
+  and the [user guide](https://drknickers.github.io/particle-editor/guide/).
+- **Change the interface.** You need Node 22 or newer and the pnpm version
+  pinned in [web/package.json](web/package.json). From the repository root, run:
+
+  ```bash
+  cd web
+  pnpm install
+  pnpm --filter ./apps/editor dev
+  ```
+
+  Open `http://localhost:5174`. Try changing the `Skip time:` label in
+  [BasicTab.tsx](web/apps/editor/src/screens/property-tabs/BasicTab.tsx), then save and
+  look for the updated label in the browser. The
+  [dev script](web/apps/editor/package.json) starts Vite. Its
+  [settings](web/apps/editor/vite.config.ts) require port 5174 to be free.
+  The browser uses the [mock bridge](web/apps/editor/src/bridge/index.ts).
+  This is a mock editor: it does not render particles or read and write native
+  files. You can work on the interface without the Windows build tools.
+
+  Guide edits have a separate route in [site/README.md](site/README.md#guide-markdown--committed-html).
+  They need only Node. From the repository root, run
+  `node scripts/build-guide.mjs` to build the guide, then
+  `node scripts/build-guide.mjs --check` to check for stale pages and broken
+  guide links. Vite does not serve the guide.
+- **Change native behaviour.** Follow the [two-build instructions](#build--it-takes-two-builds)
+  below. Build the web interface first, then the Windows host.
+
+## Words this project uses
+
+| Word | Meaning |
+|---|---|
+| Host | The Windows program. It opens the window, runs the particle engine and holds the web interface. |
+| Bridge | The connection that lets the web interface ask the host to do something and receive its answer. |
+| Request kind | The name of an action sent over the bridge, such as `emitters/set-track-key`. Search for that name to find its handler. |
+| DTO | Short for "data transfer object". A group of values sent over the bridge, such as an emitter's properties. |
+| Mock | A stand-in for the host. It supplies sample data so the interface can run in a browser. |
+| Golden | A saved picture or description of the interface. Tests compare new output with it to catch changes. |
+| Lane | One group of checks in the test runner, such as `vitest` or `cpp-unit`. |
+| Policy header | A small C++ header that holds a rule without needing a window or graphics device. It has its own test. |
+| Legacy | Mike.NL's original Win32 editor. This editor preserves its behaviour. Names starting with `IDC_` or `IDD_` in comments are its old control IDs; you can ignore them. |
+
+## Which check for which change
+
+Start with the smallest useful check while you edit. Before a PR, run the
+listed lanes from the repository root with
+`node scripts/run-all-tests.mjs --lane <names>`. Replace `<names>` with the
+comma-separated names from the table. Selected lanes do not add their build
+steps for you. Keep `web-build` before `scripts` and the Windows builds.
+Every code PR builds both Debug and Release.
+
+| Change | Smallest useful check | Lanes before a PR | What these checks do not prove |
+|---|---|---|---|
+| Label or style | View the change in the browser; run `pnpm --filter ./apps/editor build` from `web/`. | `lint,vitest,web-build,playwright-web,msbuild-debug,playwright-native,msbuild-release` | The mock cannot prove particle rendering or native file operations. Check the real editor for those. |
+| Property behaviour | Run `pnpm --filter ./apps/editor test` from `web/` for the interface and mock tests. | `lint,vitest,web-build,playwright-web,msbuild-debug,playwright-native,msbuild-release` | Mock results do not prove the host accepts a value or saves it correctly. Native tests cover the real host. |
+| Native logic | Run `node scripts/run-native-unit-tests.mjs --filter <name>` for the rule you changed. | `web-build,scripts,cpp-unit,msbuild-debug,cpp-unit-exe,playwright-native,msbuild-release` | A small C++ test does not prove that the window, bridge or graphics device works. |
+| Rendering | Compare a capture from the real editor with its saved golden. | Full gate: `node scripts/run-all-tests.mjs` | Saved scenes do not cover every effect or graphics device. Inspect the changed effect in the real editor too. |
+| Guide prose | Run `node scripts/build-guide.mjs`, then `node scripts/build-guide.mjs --check`. | `web-build,scripts,site` | The builder checks guide links and stale pages. It does not prove that the instructions are correct or that the page looks right. Read the built page. |
+
+Windows builds and native browser, rendering, recording and drive checks need
+the Windows desktop and tools described below. Some also need the game files.
+If you cannot run a check, say which one is missing in the PR.
+
+Some tests read source files as text. If you move code, check these as well as
+the tests for its behaviour:
+
+- [contract-drift.test.ts](web/apps/editor/src/bridge/__tests__/contract-drift.test.ts)
+  checks the bridge contract.
+- [vcxproj-parity.test.mjs](scripts/vcxproj-parity.test.mjs) checks that native
+  files are listed in both Visual Studio project files.
+- [bridge-emit-chokepoint.test.mjs](scripts/bridge-emit-chokepoint.test.mjs)
+  checks how bridge messages are sent.
+- [test_capture_golden_profile.cpp](tests/test_capture_golden_profile.cpp),
+  [test_device_state.cpp](tests/test_device_state.cpp) and
+  [test_startup_callback_guard.cpp](tests/test_startup_callback_guard.cpp)
+  read the host window files. The device test also reads engine, asset and
+  manager files.
+- [test_bounce_catch_up.cpp](tests/test_bounce_catch_up.cpp) reads
+  [EmitterInstance.cpp](src/EmitterInstance.cpp).
+
+[doc-paths.test.mjs](scripts/doc-paths.test.mjs) checks local links in the
+contributor documents. Run it alone with `node --test scripts/doc-paths.test.mjs`.
+It proves that a linked path exists, not that its explanation is correct.
+Guide links use the guide builder's own check.
+
 ## Build — it takes TWO builds
 
 The editor is a C++ host **plus** a React/WebView2 UI, and the C++ build **embeds** the UI — so the two builds run **in order: web first, then C++.**
