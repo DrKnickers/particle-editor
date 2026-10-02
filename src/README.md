@@ -86,7 +86,7 @@ run the generator instead of editing the output.
 
 | Output or boundary | What to change and how |
 |---|---|
-| `generated/EmbeddedWebAssets.rc` and `.h`; `web/apps/editor/dist` | Edit web source. Build it with `pnpm --filter ./apps/editor build` from `web/`. The [project](ParticleEditor.vcxproj) runs [embed-web-dist.mjs](../scripts/embed-web-dist.mjs) during the native build. Follow the [two-build instructions](../CONTRIBUTING.md#build--it-takes-two-builds). |
+| `generated/` contains `EmbeddedWebAssets.rc` and `EmbeddedWebAssets.h`; `web/apps/editor/dist` | Edit web source. Build it with `pnpm --filter ./apps/editor build` from `web/`. The [project](ParticleEditor.vcxproj) runs [embed-web-dist.mjs](../scripts/embed-web-dist.mjs) during the native build. Follow the [two-build instructions](../CONTRIBUTING.md#build--it-takes-two-builds). |
 | Application version | Change [version.h](version.h). [ParticleEditor.rc](ParticleEditor.rc) uses it, and [app-version.ts](../web/apps/editor/app-version.ts) reads it for the web build. |
 | Icons | Change [build.py](Resources/icon-src/build.py). Follow the [icon source instructions](Resources/icon-src/README.md#regenerate); the SVG and PNG exports are generated too. |
 | Application resources | [ParticleEditor.rc](ParticleEditor.rc) is hand-authored. Keep its UTF-8 byte order mark, the encoding marker at the start of the file. Add IDs in [resource.h](Resources/resource.h). |

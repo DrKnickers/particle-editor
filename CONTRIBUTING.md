@@ -61,7 +61,7 @@ The codebase has been around since 2008 and inherits Mike.NL's GlyphX-era style.
   pnpm --filter ./apps/editor dev
   ```
 
-  Open `http://localhost:5174`. Try changing the `Skip time:` label in
+  Open http://localhost:5174. Try changing the `Skip time:` label in
   [BasicTab.tsx](web/apps/editor/src/screens/property-tabs/BasicTab.tsx), then save and
   look for the updated label in the browser. The
   [dev script](web/apps/editor/package.json) starts Vite. Its
@@ -100,10 +100,10 @@ The codebase has been around since 2008 and inherits Mike.NL's GlyphX-era style.
 |---|---|---|
 | Effect | `ParticleSystem` | The definition saved in a `.alo` file. It holds emitters, not running particles. See [ParticleSystem.h](src/ParticleSystem.h) and `ParticleSystem::write` in [ParticleSystemSerialization.cpp](src/ParticleSystemSerialization.cpp). The C++ class named `Effect` instead wraps a graphics shader, a program that draws a surface; see [Effect.h](src/Effect.h). |
 | Instance | `ParticleSystemInstance` | One running copy of an effect. It owns running emitters and refers to the definition. It is not saved in `.alo`. See [ParticleSystemInstance.h](src/ParticleSystemInstance.h), `m_system`, `m_emitters` and `SetMaxLifetime` (seconds; zero means no spawner lifetime cap). |
-| Emitter number or ID | `Emitter::index`, bridge `id`; `stableId` is different | `index` is the zero-based position in the emitter list. Requests use it as `id`; moves and deletions can change it. `stableId` keeps a row's identity across moves. It is not saved and is issued again when loading or undo rebuilds emitters. See [ParticleSystem.h](src/ParticleSystem.h), `stableId`, and [ParticleSystemSerialization.cpp](src/ParticleSystemSerialization.cpp), `writeProperties`: the positional index is written, but its saved value is ignored when reading. |
+| Emitter number or ID | `Emitter` field `index`, bridge `id`; `stableId` is different | `index` is the zero-based position in the emitter list. Requests use it as `id`; moves and deletions can change it. `stableId` keeps a row's identity across moves. It is not saved and is issued again when loading or undo rebuilds emitters. See [ParticleSystem.h](src/ParticleSystem.h), `stableId`, and [ParticleSystemSerialization.cpp](src/ParticleSystemSerialization.cpp), `writeProperties`: the positional index is written, but its saved value is ignored when reading. |
 | Index curve | Track name `index`, `TRACK_INDEX` | Chooses a frame in a texture atlas, an image split into cells. This is separate from the emitter's list position. The engine rounds the sampled value down before choosing a cell. The spinner allows 0 to 1,000,000 and nudges by 1; typed fractions are allowed. See [EmitterInstance.cpp](src/EmitterInstance.cpp), `texIndex`, and [CurveEditorPanel.tsx](web/apps/editor/src/screens/curve-editor/CurveEditorPanel.tsx), `spinnerBoundsForTrack`. Track values are saved by `writeTracks` in [ParticleSystemSerialization.cpp](src/ParticleSystemSerialization.cpp). |
 | Rotation curve | Track name `rotationSpeed`, `TRACK_ROTATION_SPEED` | The visible label is Rotation. With random rotation off, the engine integrates this curve over elapsed seconds to get turns, then converts turns to radians. Values therefore describe turns per second, not degrees. The spinner allows -1,000,000 to 1,000,000, stepping by 0.1. See `CHANNELS` and `spinnerBoundsForTrack` in [CurveEditorPanel.tsx](web/apps/editor/src/screens/curve-editor/CurveEditorPanel.tsx), and `IntegrateTrack` in [EmitterInstance.cpp](src/EmitterInstance.cpp). With random rotation on, `writeTracks` in [ParticleSystemSerialization.cpp](src/ParticleSystemSerialization.cpp) writes the random rotation average instead of the curve. |
-| Curve time | `TrackKey.time` | 0 is birth and 100 is the end of that particle's lifetime, not 100 seconds. The engine computes percentage time in `UpdateParticle` in [EmitterInstance.cpp](src/EmitterInstance.cpp). `writeTracks` in [ParticleSystemSerialization.cpp](src/ParticleSystemSerialization.cpp) divides interior key times by 100 for storage; the [schema](web/packages/bridge-schema/src/index.ts), `TrackKey`, carries the 0 to 100 form. |
+| Curve time | `TrackKey` field `time` | 0 is birth and 100 is the end of that particle's lifetime, not 100 seconds. The engine computes percentage time in `UpdateParticle` in [EmitterInstance.cpp](src/EmitterInstance.cpp). `writeTracks` in [ParticleSystemSerialization.cpp](src/ParticleSystemSerialization.cpp) divides interior key times by 100 for storage; the [schema](web/packages/bridge-schema/src/index.ts), `TrackKey`, carries the 0 to 100 form. |
 
 ## Which check for which change
 
@@ -145,7 +145,10 @@ the tests for its behaviour:
 
 [doc-paths.test.mjs](scripts/doc-paths.test.mjs) checks local links in the
 contributor documents. Run it alone with `node --test scripts/doc-paths.test.mjs`.
-It proves that a linked path exists, not that its explanation is correct.
+[doc-search-text.test.mjs](scripts/doc-search-text.test.mjs) also checks search
+text in the source maps and file contents comments. Run it alone with
+`node --test scripts/doc-search-text.test.mjs`. These checks do not prove that
+the explanations are correct.
 Guide links use the guide builder's own check.
 
 ## Build — it takes TWO builds

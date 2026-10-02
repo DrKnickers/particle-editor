@@ -1,4 +1,4 @@
-// Section index — search for the quoted text below:
+// Contents (search for the quoted text)
 //   Adding a request: "Adding a request kind"
 //   Message IDs: "export type RequestId"
 //   Primitive types (vectors and colours): "Primitive types"

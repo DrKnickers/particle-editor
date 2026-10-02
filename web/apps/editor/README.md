@@ -59,7 +59,9 @@ reach the preview or saved file.
    repair a negative value received from the host.
 3. [EmitterPropertyTabs.tsx](src/screens/EmitterPropertyTabs.tsx), `commit`,
    updates the form immediately and sends
-   `emitters/set-properties` with `{ id: selectedId, patch: { initialDelay: v } }`.
+   `emitters/set-properties` with `params: { id: selectedId, patch }`.
+   The patch contains the changed `initialDelay` value from
+   [BasicTab.tsx](src/screens/property-tabs/BasicTab.tsx).
    A patch is a group of fields to change. This immediate local update is
    called optimistic: the host has not answered yet.
 4. [NativeBridge](src/bridge/native.ts), `request`, puts the request in a
@@ -77,18 +79,22 @@ reach the preview or saved file.
    [ParticleSystem.cpp](../../../src/ParticleSystem.cpp), `copySharedParamsFrom`,
    preserves `initialDelay` on a member when that field is exempt. The undo
    snapshot covers the whole group.
-7. The handler returns `applied` and `skipped` field names, calls `MarkDirty`,
+7. [BridgeDispatch_EmitterProperties.cpp](../../../src/host/BridgeDispatch_EmitterProperties.cpp)
+   returns `applied` and `skipped` field names, calls `MarkDirty`,
    then calls `OnParticleSystemChanged(-1)` when an engine is bound. This
    refreshes live instances and allows a paused preview to repaint. It emits
    `engine/state/changed` and `emitters/tree/changed`. `MarkDirty` also emits
-   `dirty/changed` if the dirty flag changed. Refreshing does not promise to
+   `dirty/changed` if the dirty flag changed; see
+   [BridgeDispatcher.cpp](../../../src/host/BridgeDispatcher.cpp). Refreshing does not promise to
    restart an existing instance's initial wait; see
    [EmitterInstance.cpp](../../../src/EmitterInstance.cpp), `onParticleSystemChanged`,
    and [SpawnSchedule.h](../../../src/SpawnSchedule.h), `ReconcileNextSpawnTime`.
-8. The tree event makes `EmitterPropertyTabs` call `fetchProps` for the
+8. The tree event makes
+   [EmitterPropertyTabs.tsx](src/screens/EmitterPropertyTabs.tsx) call `fetchProps` for the
    current selection. [tree-refetch.ts](src/lib/tree-refetch.ts),
    `requestTreeRefetch`, shares matching reads made in the same turn.
-   `emitters/get-properties` returns the native `initialDelay`, and the form
+   [BridgeDispatch_EmitterProperties.cpp](../../../src/host/BridgeDispatch_EmitterProperties.cpp),
+   `emitters/get-properties`, returns the native `initialDelay`, and the form
    replaces its local copy. A rejected edit is announced in the status bar
    and also calls `fetchProps`.
 9. The edit itself does not save a file. On Save,
