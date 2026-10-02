@@ -8,6 +8,8 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-10-02
+
 ### Fixed
 
 - Pressing Escape in an emitter's name or texture field now cancels the edit instead of applying it, and a change made elsewhere (undo, linked emitters) no longer wipes text you are still typing
@@ -411,7 +413,8 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 - Deleting an emitter with live particles no longer crashes the editor
 - Overlapping emitters now stack in the same order as the game
 
-[Unreleased]: https://github.com/DrKnickers/particle-editor/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/DrKnickers/particle-editor/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/DrKnickers/particle-editor/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/DrKnickers/particle-editor/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/DrKnickers/particle-editor/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/DrKnickers/particle-editor/releases/tag/v0.3.0

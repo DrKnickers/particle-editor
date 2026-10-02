@@ -6,7 +6,7 @@ Thanks for the interest. This fork is a side project, so review can take days ra
 
 Open an issue using the **Bug report** template. The most useful reports include:
 
-- The editor version (Help → About: it'll say *"Particle Editor v0.4.1"* or similar).
+- The editor version (Help → About: it'll say *"Particle Editor v0.4.2"* or similar).
 - Your OS / Windows version.
 - The mod loaded at the time, if any.
 - Exact reproduction steps — what was clicked / opened / edited, in what order.

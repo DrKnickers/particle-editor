@@ -17,7 +17,7 @@ labels: bug
 
 ## Environment
 
-- **Editor version:** <!-- Help → About. Should read something like "Particle Editor v0.4.1" -->
+- **Editor version:** <!-- Help → About. Should read something like "Particle Editor v0.4.2" -->
 - **OS:** <!-- e.g. Windows 11 26H1 -->
 - **Mod loaded at the time** (if any): <!-- name and version, or "none / base game" -->
 - **Game install path** (if relevant to the bug): <!-- e.g. C:\Games\Star Wars Empire at War -->
