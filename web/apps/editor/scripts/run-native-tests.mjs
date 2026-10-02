@@ -250,6 +250,7 @@ async function main() {
       "tests/emitter-mutations.spec.ts",
       "tests/emitter-multi-mutations.spec.ts",
       "tests/selection-identity.spec.ts",
+      "tests/unsaved-changes-refusal.spec.ts",
       "tests/undo-navigation.spec.ts",
       "tests/emitter-import.spec.ts",
       // Non-UTF-8 emitter name end to end: responses + tree/changed event

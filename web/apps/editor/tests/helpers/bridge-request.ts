@@ -38,6 +38,9 @@ export type UndoBudgetState = {
 };
 
 export type TestHostRequest =
+  // BridgeDispatch_File.cpp — request-scoped interactive unsaved-work guard.
+  | { kind: "file/new"; params: { __testRefuseUnsaved: boolean; discardUnsaved?: true } }
+  | { kind: "file/open"; params: { __testRefuseUnsaved: boolean; path: string; filter?: "alo"; discardUnsaved?: true } }
   | { kind: "debug/device-recovery-work";     params: DeviceRecoveryWorkParams }
   | { kind: "undo/test/budget";               params: { maxTotalBytes?: number } }
   // BridgeDispatch_File.cpp — document-replacement seams (selection-identity.spec.ts).

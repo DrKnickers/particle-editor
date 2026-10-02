@@ -46,6 +46,17 @@ static bool DiscardUnsavedConfirmed(const json& params)
     return it != params.end() && it->is_boolean() && it->get<bool>();
 }
 
+// Native specs share a --test-host session (CDP + isolated user state), which
+// normally bypasses the unsaved-work refusal. Opt in for just this request to
+// exercise the interactive guard through the real dispatcher. Like the other
+// document seams below, this has no effect outside --test-host; automation
+// remains exempt and no session flag is changed.
+static bool EnforceUnsavedGuardForTest(bool testHost, const json& params)
+{
+    auto it = params.find("__testRefuseUnsaved");
+    return testHost && it != params.end() && it->is_boolean() && it->get<bool>();
+}
+
 // Mutation-test seam for the composed recovery oracle. An out-of-range group
 // type is emitted by ParticleSystem::write but rejected by the production
 // ParticleSystem parser. Therefore WriteRecoveryHandoff must fail before
@@ -255,7 +266,8 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         // Never drop unsaved work the user has not chosen to discard; the web
         // answers this by reopening its save prompt.
         if (ShouldRefuseDocumentReplace(m_dirty, DiscardUnsavedConfirmed(params),
-                                        m_automationMode, m_testHost))
+                                        m_automationMode,
+                                        m_testHost && !EnforceUnsavedGuardForTest(m_testHost, params)))
         {
             ctx.SendOk(json{{"ok", false}, {"error", "unsaved-changes"}});
             return true;
@@ -373,7 +385,8 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         // the document, so they are never refused.
         if (kind == "file/open" && filterId == "alo"
             && ShouldRefuseDocumentReplace(m_dirty, DiscardUnsavedConfirmed(params),
-                                           m_automationMode, m_testHost))
+                                           m_automationMode,
+                                           m_testHost && !EnforceUnsavedGuardForTest(m_testHost, params)))
         {
             ctx.SendOk(json{{"ok", false}, {"error", "unsaved-changes"}});
             return true;
