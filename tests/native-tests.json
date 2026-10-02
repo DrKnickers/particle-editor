@@ -108,6 +108,7 @@
       "uses": ["expat", "dxsdk", "webview2"],
       "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
+    "test_external_links": {},
     "test_game_object_catalog": {
       "sources": ["src/GameObjectCatalog.cpp", "src/AloModel.cpp", "src/ChunkReader.cpp", "src/xml.cpp", "src/files.cpp", "src/utils.cpp"],
       "uses": ["expat-lib", "dxsdk", "webview2"],

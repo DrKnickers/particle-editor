@@ -212,5 +212,6 @@
   - status
   - text: "PAUSED ⇧ Shift: spawn instance"
 - menu "Help":
+  - menuitem "User Guide"
   - menuitem "Keyboard Shortcuts…"
   - menuitem "About"

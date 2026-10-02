@@ -318,6 +318,9 @@
     <ClInclude Include="host\CompositionStartupPolicy.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="host\ExternalLinks.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
     <ClInclude Include="host\ViewportUnavailablePolicy.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>

@@ -2160,6 +2160,7 @@ int HostWindowImpl::Run(int nCmdShow)
                                                     /*automationMode*/IsAutomationMode());
     dispatcher->SetUndoStack(&undoStack);
     dispatcher->SetHostHwnd(hMain);
+    dispatcher->SetExternalLaunchAllowed(IsFullyInteractive());
     // Throttle the panel-refresh broadcasts during a --record run only
     // (NOT --drive, whose asserts must see every state change) so the driver's
     // rapid host-side edits don't saturate the web + starve the capture/ack loop.

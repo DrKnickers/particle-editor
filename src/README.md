@@ -54,7 +54,7 @@ the messages both sides agree to send.
 | [BridgeDispatch_Engine.cpp](host/BridgeDispatch_Engine.cpp) | Engine snapshots, preview setters, actions and queries, including rescaling. A snapshot is a copy of the current state sent to the interface. |
 | [BridgeDispatch_File.cpp](host/BridgeDispatch_File.cpp) | `file/`, `undo/perform` and `autosave/` requests. |
 | [BridgeDispatch_Assets.cpp](host/BridgeDispatch_Assets.cpp) | `mods/` and `textures/` requests. |
-| [BridgeDispatch_Shell.cpp](host/BridgeDispatch_Shell.cpp) | Window buttons, layout, viewport input and capture, accelerators, quitting and `stats/set-frozen`. Accelerators are keyboard shortcuts. |
+| [BridgeDispatch_Shell.cpp](host/BridgeDispatch_Shell.cpp) | Window buttons, layout, viewport input and capture, accelerators, quitting, `stats/set-frozen` and `app/open-external`, which opens the user guide or the project page in the default browser. Accelerators are keyboard shortcuts. |
 | [BridgeDispatch_SpawnerLighting.cpp](host/BridgeDispatch_SpawnerLighting.cpp) | `spawner/`, `settings/lighting` and scripted `preview/` requests. |
 
 Shared request helpers live in [BridgeDispatchShared.h](host/BridgeDispatchShared.h)

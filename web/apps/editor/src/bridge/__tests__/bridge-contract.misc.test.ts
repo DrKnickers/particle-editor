@@ -3,15 +3,47 @@
 // request is exercised end-to-end: request → store mutation → event →
 // follow-up read, keeping the schema and the MockBridge implementation honest.
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { MockBridge } from "../mock";
 import type {
   Event,
 } from "@particle-editor/bridge-schema";
 import { resetMockState } from "@/test/mock-state";
+import { EXTERNAL_LINKS } from "@/lib/external-links";
 
 // Reset the shared mock stores between tests so state mutations don't leak.
 beforeEach(resetMockState);
+
+describe("MockBridge contract — app/open-external", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it.each(["guide", "repository"] as const)("opens the fixed %s URL without mutating the document", async (target) => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const b = new MockBridge();
+    const before = await b.request({ kind: "engine/state/snapshot", params: {} });
+    const dirty = vi.fn();
+    const off = b.on("dirty/changed", dirty);
+    try {
+      await expect(b.request({ kind: "app/open-external", params: { target } })).resolves.toEqual({ opened: true });
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(open).toHaveBeenCalledWith(EXTERNAL_LINKS[target], "_blank", "noopener");
+      expect(await b.request({ kind: "engine/state/snapshot", params: {} })).toEqual(before);
+      expect(dirty).not.toHaveBeenCalled();
+    } finally {
+      off();
+    }
+  });
+
+  it.each(["", "Guide", "Repository", "https://example.com", "file:///C:/test", "__proto__"])("rejects unknown target %s without opening a window", async (target) => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const b = new MockBridge();
+    await expect(b.request({
+      kind: "app/open-external",
+      params: { target: target as "guide" },
+    })).rejects.toThrow("app/open-external: unknown target");
+    expect(open).not.toHaveBeenCalled();
+  });
+});
 
 describe("MockBridge contract — spawner/*, textures/*, subscriptions", () => {
   // ─── spawner + emitters/preview-from-file

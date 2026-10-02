@@ -1,5 +1,5 @@
 // AboutDialog — Help → About modal showing app name, version, build date,
-// credits, and GitHub link. No bridge call; version + build date are baked
+// credits, and GitHub link. Version + build date are baked
 // at build time via Vite `define` (see vite.config.ts).
 //
 // Ported from the legacy Win32 editor's About dialog. That dialog and
@@ -8,6 +8,9 @@
 
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { Modal } from "@/components/Modal";
+import { Button } from "@/primitives/Button";
+import { EXTERNAL_LINKS } from "@/lib/external-links";
+import { fireAndReport, useStatusFeedback } from "@/lib/status-feedback";
 
 // Pull from Vite-injected env. These are JSON-stringified by `define` so
 // they're available as plain strings at runtime. Fall back to "unknown"
@@ -20,7 +23,7 @@ const BUILD_DATE = (import.meta.env.VITE_BUILD_DATE as string | undefined) ?? "u
 // private repo: this string ships inside the exe's embedded web bundle, so a
 // private URL here 404s for every user (it leaked exactly that way in the
 // first v0.3.0 zip until a check of the shipped binary caught it).
-const GITHUB_URL = "https://github.com/DrKnickers/particle-editor";
+const GITHUB_URL = EXTERNAL_LINKS.repository;
 
 type Props = {
   bridge: Bridge;
@@ -29,6 +32,16 @@ type Props = {
 };
 
 export function AboutDialog({ bridge, open, onOpenChange }: Props) {
+  const handleOpenRepository = async () => {
+    const result = await fireAndReport(bridge, {
+      kind: "app/open-external",
+      params: { target: "repository" },
+    }, "Open project page");
+    if (!result?.opened) {
+      useStatusFeedback.getState().announce("Could not open project page. Copy the project address into your browser.");
+    }
+  };
+
   return (
     <Modal
       bridge={bridge}
@@ -57,14 +70,18 @@ export function AboutDialog({ bridge, open, onOpenChange }: Props) {
             Distributed under the MIT licence. This software is provided
             "as is", without warranty of any kind.
           </p>
-          <a
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-accent underline hover:text-accent focus-ring"
-          >
-            {GITHUB_URL}
-          </a>
+          <Button variant="secondary" onClick={() => void handleOpenRepository()}>
+            Open project page
+          </Button>
+          <label className="flex flex-col gap-1 text-xs text-text-2">
+            Project address
+            <input
+              className="text-input w-full select-text"
+              readOnly
+              value={GITHUB_URL}
+              onFocus={(e) => e.currentTarget.select()}
+            />
+          </label>
         </div>
       </Modal.Body>
       <Modal.Footer>

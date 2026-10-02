@@ -260,6 +260,9 @@ async function main() {
       "tests/emitter-keyboard.spec.ts",
       "tests/track-editor.spec.ts",
       "tests/property-tabs.spec.ts",
+      // app/open-external: a known link name answers opened:false under
+      // --test-host (no browser is started) and any other name is refused.
+      "tests/external-links.spec.ts",
       // PreferencesDialog host round-trips (Edit → Preferences…): MSAA
       // level via engine/query/msaa-levels `current`, plus toggle
       // persistence across reopen. Restores every setting it mutates.

@@ -9,11 +9,13 @@
 #include "AcceleratorBridge.h"
 #include "InputDispatcher.h"
 #include "LayoutBroker.h"
+#include "ExternalLinks.h"
 #include "WindowCapture.h"    // CaptureWindowToPng (debug/capture-*)
 #include "HostMessages.h"     // WM_APP_QUIT_CONFIRMED (app/quit)
 #include "StringConv.h"       // host::Utf8ToWide (debug/capture-window)
 
 #include <dwmapi.h>           // DwmSetWindowAttribute (host/backing-color)
+#include <shellapi.h>         // ShellExecuteW (app/open-external)
 #pragma comment(lib, "dwmapi.lib")
 // DWM immersive dark-mode caption attribute — same SDK guard as
 // BridgeDispatcher.cpp (value 20, post-Win10-2004).
@@ -273,6 +275,30 @@ bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
         m_accel.RegisterCombos(combos);
         fprintf(stderr, "[host] AcceleratorBridge registered %zu combo(s)\n", combos.size());
         ctx.SendOk(json::object());
+        return true;
+    }
+
+
+    // -------- app/open-external --------------------------------------
+    if (kind == "app/open-external")
+    {
+        const std::string target = params.value("target", std::string{});
+        const wchar_t* url = ExternalLinkUrl(target);
+        if (!url)
+        {
+            ctx.SendErr("app/open-external: unknown target");
+            return true;
+        }
+        bool opened = false;
+        if (m_externalLaunchAllowed)
+        {
+            const INT_PTR result = reinterpret_cast<INT_PTR>(
+                ShellExecuteW(m_hostHwnd, L"open", url, nullptr, nullptr, SW_SHOWNORMAL));
+            opened = result > 32;
+        }
+        printf("[bridge] open-external target=%s opened=%d\n", target.c_str(), opened ? 1 : 0);
+        fflush(stdout);
+        ctx.SendOk(json{{"opened", opened}});
         return true;
     }
 

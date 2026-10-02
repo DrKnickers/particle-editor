@@ -8,6 +8,10 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ## [Unreleased]
 
+### Added
+
+- Help → User Guide opens the online guide in your browser, and the About dialog's project link now works: a button opens the project page and the address stays on screen to copy
+
 ### Fixed
 
 - Edit → Paste and the emitter tree's Paste / Paste As items stay enabled after the editor reloads its interface (crash recovery or the error screen's Reload) while emitters are still on the clipboard

@@ -75,6 +75,7 @@ import {
   snapshotEngineState,
 } from "./mock-state";
 import { EventHub } from "./event-hub";
+import { EXTERNAL_LINKS } from "@/lib/external-links";
 
 // Mirrors native ClampSpawnerConfig (src/SpawnerDriver.cpp): burstSize
 // 1..MAX_BURST_SIZE (10), spacingSec 0..MAX_SPACING_SEC (10), intervalSec
@@ -884,6 +885,15 @@ export class MockBridge implements Bridge {
         // native host; in browser mode the design iteration doesn't need
         // a real hotkey system, so swallow the call.
         return {};
+
+      case "app/open-external": {
+        const target = req.params.target;
+        if (target !== "guide" && target !== "repository") {
+          throw new Error("app/open-external: unknown target");
+        }
+        window.open(EXTERNAL_LINKS[target], "_blank", "noopener");
+        return { opened: true };
+      }
 
       case "app/quit":
         // Mock: no host window to close. In browser mode the design

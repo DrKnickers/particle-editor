@@ -1113,6 +1113,10 @@ export type Request =
   // WM_DESTROY cleanup chain. React's File → Exit menu item is the
   // sole caller and gates on the dirty-prompt before dispatching.
   | { kind: "app/quit";                   params: Record<string, never> }
+  // Opens one fixed https address in the default browser. Unknown names reject;
+  // capture, automation and --test-host runs launch nothing and return
+  // opened: false.
+  | { kind: "app/open-external";          params: { target: "guide" | "repository" } }
   // Cascade reset for the View → Reset View Settings
   // menu. Pushes engine defaults for background, ground, bloom,
   // skydome, and lighting in one host-side action (one emit of
@@ -1353,6 +1357,7 @@ export interface ResponseMap {
   "spawner/trigger": Record<string, never>;
   "spawner/stop": Record<string, never>;
   "app/quit": Record<string, never>;
+  "app/open-external": { opened: boolean };
   "engine/action/reset-view-settings": Record<string, never>;
   "register-accelerators": Record<string, never>;
   "window/minimize": Record<string, never>;

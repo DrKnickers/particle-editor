@@ -12,7 +12,7 @@
 // asserting on the rendered submenu DOM nodes after clicking the File
 // trigger + SubTrigger.
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render as rtlRender, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import type { ReactElement, ReactNode } from "react";
@@ -22,6 +22,10 @@ import { useFileOpErrorStore } from "@/lib/file-op";
 import { useEmitterSelectionStore } from "@/lib/tree/emitter-selection";
 import { useTreeActionStore } from "@/lib/tree/tree-action";
 import type { Bridge } from "@particle-editor/bridge-schema";
+import userEvent from "@testing-library/user-event";
+import { makeBridgeStub } from "@/test/bridge-stub";
+import { EXTERNAL_LINKS } from "@/lib/external-links";
+import { __resetStatusFeedbackForTests, useStatusFeedback } from "@/lib/status-feedback";
 
 // The Mods menu mounts Tips (Radix Tooltip.Root), which require the
 // Tooltip.Provider App.tsx supplies in production — this wrapper stands in
@@ -61,6 +65,52 @@ function renderMenuBar(
     />,
   );
 }
+
+describe("MenuBar — User Guide", () => {
+  beforeEach(__resetStatusFeedbackForTests);
+  afterEach(() => vi.restoreAllMocks());
+
+  it.each(["opened", "false", "rejected"] as const)("sends one named request and handles %s", async (mode) => {
+    const user = userEvent.setup();
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const bridge = makeBridgeStub({ responses: {
+      "app/open-external": () => {
+        if (mode === "rejected") throw new Error("offline");
+        return { opened: mode === "opened" };
+      },
+    } });
+    renderMenuBar(bridge);
+    const trigger = screen.getByRole("menuitem", { name: "Help" });
+    fireEvent.pointerDown(trigger, { button: 0, pointerType: "mouse" });
+    fireEvent.click(trigger);
+    const guide = await screen.findByRole("menuitem", { name: "User Guide" });
+    const shortcuts = screen.getByRole("menuitem", { name: /Keyboard Shortcuts/ });
+    expect(guide.compareDocumentPosition(shortcuts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(guide);
+    await waitFor(() => {
+      expect(bridge.request.mock.calls.filter(([req]) => req.kind === "app/open-external"))
+        .toEqual([[{ kind: "app/open-external", params: { target: "guide" } }]]);
+    });
+    expect(open).not.toHaveBeenCalled();
+    if (mode === "opened") {
+      expect(screen.queryByRole("dialog", { name: "User Guide" })).toBeNull();
+      return;
+    }
+    const input = await screen.findByRole("textbox", { name: "Guide address" });
+    expect(input).toHaveValue(EXTERNAL_LINKS.guide);
+    expect(input).toHaveAttribute("readonly");
+    expect(input).toHaveClass("select-text");
+    expect(useStatusFeedback.getState().message).toContain("Copy the guide address");
+    for (let i = 0; i < 4 && document.activeElement !== input; i++) {
+      await user.keyboard("{Tab}");
+    }
+    expect(input).toHaveFocus();
+    await user.keyboard("{Control>}a{/Control}");
+    await user.copy();
+    expect(await navigator.clipboard.readText()).toBe(EXTERNAL_LINKS.guide);
+  });
+});
 
 describe("MenuBar — File menu", () => {
   it("File → New on a dirty system stores the pending action (opens SaveChangesDialog)", async () => {

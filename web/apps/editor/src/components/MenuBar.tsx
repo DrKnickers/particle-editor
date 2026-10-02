@@ -17,7 +17,8 @@ import { replaceDocument, runFileOp } from "@/lib/file-op";
 import { useEngineField } from "@/lib/use-engine-snapshot";
 import { basename } from "@/lib/paths";
 import { requestDeleteEmitters } from "@/lib/tree/delete-emitters";
-import { announceWhenOk } from "@/lib/status-feedback";
+import { announceWhenOk, fireAndReport, useStatusFeedback } from "@/lib/status-feedback";
+import { EXTERNAL_LINKS } from "@/lib/external-links";
 import { bumpTextureEpoch } from "@/lib/atlas/atlas-preview-cache";
 import {
   useEmitterSelectionPrimary,
@@ -92,7 +93,19 @@ export function MenuBar({
   const [resetViewOpen, setResetViewOpen] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [menuValue, setMenuValue] = useState("");
+
+  const handleOpenGuide = async () => {
+    const result = await fireAndReport(bridge, {
+      kind: "app/open-external",
+      params: { target: "guide" },
+    }, "Open User Guide");
+    if (!result?.opened) {
+      useStatusFeedback.getState().announce("Could not open User Guide. Copy the guide address into your browser.");
+      setGuideOpen(true);
+    }
+  };
 
   const handleResetViewConfirm = async () => {
     setResetViewOpen(false);
@@ -654,6 +667,13 @@ export function MenuBar({
           >
             <Menubar.Item
               className={ITEM}
+              data-testid="menu-help-guide"
+              onSelect={() => void handleOpenGuide()}
+            >
+              User Guide
+            </Menubar.Item>
+            <Menubar.Item
+              className={ITEM}
               data-testid="menu-help-shortcuts"
               onSelect={() => setShortcutsOpen(true)}
             >
@@ -671,6 +691,26 @@ export function MenuBar({
 
     {/* Help -> Keyboard Shortcuts... */}
     <ShortcutsDialog bridge={bridge} open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+
+    <Modal bridge={bridge} open={guideOpen} onOpenChange={setGuideOpen} title="User Guide" size="md">
+      <Modal.Body>
+        <p className="mb-3 text-sm text-text-2">
+          Could not open the browser. Copy this address into your browser to read the User Guide.
+        </p>
+        <label className="flex flex-col gap-1 text-xs text-text-2">
+          Guide address
+          <input
+            className="text-input w-full select-text"
+            readOnly
+            value={EXTERNAL_LINKS.guide}
+            onFocus={(e) => e.currentTarget.select()}
+          />
+        </label>
+      </Modal.Body>
+      <Modal.Footer>
+        <Modal.OkButton onClick={() => setGuideOpen(false)}>Close</Modal.OkButton>
+      </Modal.Footer>
+    </Modal>
 
     {/* Confirm prompt for View → Reset View Settings.
         Body copy preserves the established reset-settings wording.

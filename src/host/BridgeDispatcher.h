@@ -107,6 +107,12 @@ public:
     // main window — set this in HostWindow once hMain exists).
     void SetHostHwnd(HWND hwnd) { m_hostHwnd = hwnd; }
 
+    // True only when a human is at the keyboard (HostWindow's
+    // IsFullyInteractive()): not a capture, drive, record or --test-host run.
+    // app/open-external starts the default browser only when this is set, so a
+    // headless run never opens a window nobody asked for. Off until set.
+    void SetExternalLaunchAllowed(bool allowed) { m_externalLaunchAllowed = allowed; }
+
     // Async texture-preview pipeline. The get-preview handler serves LRU
     // hits synchronously; a miss decodes on the UI thread (device-bound) and
     // hands the raw pixels to PreviewEncodeWorker, answering {status:pending}.
@@ -596,6 +602,7 @@ private:
     bool               m_statsFrozen = false;
     UndoStack*         m_undo     = nullptr;
     HWND               m_hostHwnd = nullptr;
+    bool               m_externalLaunchAllowed = false;  // see SetExternalLaunchAllowed
     ::ModManager*      m_modManager = nullptr;  // mods/* surface
     InputDispatcher*   m_input      = nullptr;  // viewport/input
 
