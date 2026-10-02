@@ -4,6 +4,49 @@ The **host** is the Windows program that holds the web interface. The
 **engine** runs and draws particles. A **bridge request** is a named action
 sent from the interface to the host. Start with the thing you want to change.
 
+## How the pieces fit
+
+```mermaid
+flowchart TB
+    subgraph interface["Interface (React, in WebView2)"]
+        ui[Web interface]
+        mock[Mock bridge: stands in for the host in a browser]
+    end
+    subgraph hostwin["Windows host (ParticleEditor.exe)"]
+        host[Host window]
+        dispatcher[Bridge dispatcher]
+        handlers[Ten request handler files]
+        document[Effect document]
+        engine[Particle engine]
+        compositor[Compositor: places the rendered frame under the web interface]
+    end
+    files[".alo files"]
+    host -->|owns| ui
+    host -->|owns| dispatcher
+    host -->|owns| engine
+    ui -->|"JSON req"| dispatcher
+    dispatcher -->|"JSON res and evt"| ui
+    dispatcher -->|routes| handlers
+    handlers -->|edit| document
+    handlers -->|control| engine
+    document <-->|open and save| files
+    engine -->|"D3D9 frame"| compositor
+    ui <-->|"browser only"| mock
+```
+
+The [host window](host/HostWindow.h) owns the main window, hidden graphics
+device window, WebView2 view, engine and bridge dispatcher; WebView2 loads the
+React interface from [embedded resources](host/HostWindow_WebView2.cpp).
+The [bridge dispatcher](host/BridgeDispatcher.h) exchanges JSON requests
+(`req`), responses (`res`) and events (`evt`) with the interface and routes
+requests to the ten [handler files](#find-a-request-handler), which read or
+change the effect document and engine.
+[File helpers](ParticleSystemIO.h) open and save the effect document as
+`.alo` files, while the [compositor](host/Compositor.h) places the engine's
+rendered frame behind the web interface.
+In a browser, the [mock bridge](../web/apps/editor/src/bridge/mock.ts)
+supplies sample state and answers in place of the Windows host.
+
 ## Where to make a change
 
 | Change | Open this file and search for |

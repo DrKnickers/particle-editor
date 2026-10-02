@@ -6,6 +6,9 @@ interface from components, small pieces of screen code. The **bridge** lets
 those pieces ask the Windows **host** to read or change native state. In a
 browser, a **mock** supplies sample data instead of the host.
 
+See [How the pieces fit](../../../src/README.md#how-the-pieces-fit) for a
+picture of the interface, host, engine and file paths.
+
 ## Where to look
 
 | Folder | What it is for; when to open it |

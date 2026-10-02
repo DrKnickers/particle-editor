@@ -50,6 +50,9 @@ The codebase has been around since 2008 and inherits Mike.NL's GlyphX-era style.
 
 ## Start here
 
+See [How the pieces fit](src/README.md#how-the-pieces-fit) for a picture of
+the interface, host, engine and file paths.
+
 - **Use the editor.** Start with the [download instructions](README.md#download)
   and the [user guide](https://drknickers.github.io/particle-editor/guide/).
 - **Change the interface.** You need Node 22 or newer and the pnpm version
