@@ -1,3 +1,0 @@
-[submodule "libs/dx9"]
-	path = libs/dx9
-	url = https://github.com/hrydgard/minidx9.git

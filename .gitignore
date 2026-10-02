@@ -331,7 +331,7 @@ src/generated/
 test-results/
 
 # Append pre-flight's published-vocabulary cache. Derived by
-# scripts/public-history-preflight.py from a bare store of the CURRENTLY
+# the maintainer's append pre-flight from a bare store of the CURRENTLY
 # published history, and deliberately stale-by-construction: it must be deleted
 # and rebuilt after each successful publish so newly-published tokens are
 # absorbed. Tracking it would let a stale cache ride into the next cycle and
