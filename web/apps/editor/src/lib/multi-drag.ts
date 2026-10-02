@@ -3,7 +3,7 @@
 // EmitterTree.tsx calls them. Reorder-only, root-only — reparent stays a
 // single-emitter-drag affordance.
 import type { EmitterTreeNode } from "@particle-editor/bridge-schema";
-import { computeDropZone } from "@/lib/drop-zone";
+import { computeDropZone } from "@/lib/tree/drop-zone";
 
 /** The selected ids that are CURRENTLY roots, in tree (top-to-bottom) order. */
 export function selectedRootIdsInOrder(

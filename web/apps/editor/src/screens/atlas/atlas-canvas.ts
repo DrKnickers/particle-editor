@@ -1,4 +1,4 @@
-import { cellRect } from "@/lib/atlas-grid";
+import { cellRect } from "@/lib/atlas/atlas-grid";
 
 export const GRID_GAP = 4;
 

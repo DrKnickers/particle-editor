@@ -17,7 +17,7 @@
 // the static curve-fill-<channelId> gradient in CurveEditor.tsx.
 // Non-focus channels render a stroked line only, no fill path.
 
-import { isRecording } from "@/lib/record-mode";
+import { isRecording } from "@/lib/record/record-mode";
 import { clamp01 } from "@/lib/utils";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { TrackDto } from "@particle-editor/bridge-schema";

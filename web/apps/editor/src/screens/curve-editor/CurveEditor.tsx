@@ -57,10 +57,10 @@
 
 import { memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type PointerEvent as ReactPointerEvent, type Ref } from "react";
 import type { InterpolationType, TrackDto, TrackName } from "@particle-editor/bridge-schema";
-import { useCurveMorph, type SuppressedMove } from "@/lib/use-curve-morph";
-import { computeGroupMoves, valueRangeForTrack } from "@/lib/curve-model";
-import { clampGroupTimeShift } from "@/lib/curve-group-shift";
-import { snapToGrid, GRID_CELLS, GRID_SUBDIVISIONS } from "@/lib/curve-snap";
+import { useCurveMorph, type SuppressedMove } from "@/lib/curve/use-curve-morph";
+import { computeGroupMoves, valueRangeForTrack } from "@/lib/curve/curve-model";
+import { clampGroupTimeShift } from "@/lib/curve/curve-group-shift";
+import { snapToGrid, GRID_CELLS, GRID_SUBDIVISIONS } from "@/lib/curve/curve-snap";
 
 /** Channel definition for the multi-channel overlay branch.
  *  `id` is the UI-facing identifier (e.g. "rotation"); `trackName` is

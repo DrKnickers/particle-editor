@@ -19,8 +19,8 @@ import type { ReactElement, ReactNode } from "react";
 import { MenuBar } from "../MenuBar";
 import { useFileStateStore } from "@/lib/file-state";
 import { useFileOpErrorStore } from "@/lib/file-op";
-import { useEmitterSelectionStore } from "@/lib/emitter-selection";
-import { useTreeActionStore } from "@/lib/tree-action";
+import { useEmitterSelectionStore } from "@/lib/tree/emitter-selection";
+import { useTreeActionStore } from "@/lib/tree/tree-action";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
 // The Mods menu mounts Tips (Radix Tooltip.Root), which require the

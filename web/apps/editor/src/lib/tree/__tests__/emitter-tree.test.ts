@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { getEmitterTree, useEmitterTreeStore } from "@/lib/emitter-tree";
+import { getEmitterTree, useEmitterTreeStore } from "@/lib/tree/emitter-tree";
 import type { Bridge, EmitterTreeDto } from "@particle-editor/bridge-schema";
 
 beforeEach(() => useEmitterTreeStore.setState({ tree: null, bridge: null }));

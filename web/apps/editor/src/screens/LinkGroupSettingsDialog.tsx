@@ -30,7 +30,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { Modal } from "@/components/Modal";
 import { Checkbox } from "@/primitives/Checkbox";
-import { useTreeContextStore } from "@/lib/tree-context";
+import { useTreeContextStore } from "@/lib/tree/tree-context";
 
 // Display labels for the wire-name field set. Names not in this map
 // fall back to the wire name itself so a future field addition still

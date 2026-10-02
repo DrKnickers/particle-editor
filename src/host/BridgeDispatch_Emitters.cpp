@@ -2539,7 +2539,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
     {
         // G3: every failure in this handler is an intentional sendOk — the
         // success path returns ctx.SendOk({ok:true,newIds}) and the JS caller
-        // (lib/emitter-reorder.ts reorderManyEmitters) reads nested ok as
+        // (lib/tree/emitter-reorder.ts reorderManyEmitters) reads nested ok as
         // control flow: `const r = await request(...); if (!r.ok) return;`.
         // Converting to sendErr would make request() throw, defeating that
         // guard. Out of scope to fix on the JS side, so failures stay nested-ok.

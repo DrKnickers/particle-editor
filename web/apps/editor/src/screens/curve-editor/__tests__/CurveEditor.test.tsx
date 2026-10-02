@@ -16,8 +16,8 @@ import type * as React from "react";
 import { createRef } from "react";
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { act, fireEvent, render } from "@testing-library/react";
-import { computeGroupMoves } from "@/lib/curve-model";
-import type { SuppressedMove } from "@/lib/use-curve-morph";
+import { computeGroupMoves } from "@/lib/curve/curve-model";
+import type { SuppressedMove } from "@/lib/curve/use-curve-morph";
 import { CurveEditor, type ChannelDef, type CurveMarqueeHandle } from "../CurveEditor";
 
 function fixtureTrack(

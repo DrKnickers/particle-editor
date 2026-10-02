@@ -12,7 +12,7 @@ import type { Bridge } from "@particle-editor/bridge-schema";
 import { makeBridgeStub } from "@/test/bridge-stub";
 import { PanelLayout } from "../PanelLayout";
 import { __resetRightDockForTests, setDock } from "@/lib/right-dock";
-import { __resetAtlasContext, publishAtlasContext } from "@/lib/atlas-context";
+import { __resetAtlasContext, publishAtlasContext } from "@/lib/atlas/atlas-context";
 
 function makeStubBridge(): Bridge {
   return makeBridgeStub();

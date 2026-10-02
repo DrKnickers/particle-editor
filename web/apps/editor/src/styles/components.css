@@ -122,7 +122,7 @@ html.theme-transition body * {
 }
 
 /* --record kill-switch: the app root carries data-recording once the
-   record latch fires (App.tsx ← lib/record-mode.ts). Every animation
+   record latch fires (App.tsx ← lib/record/record-mode.ts). Every animation
    class in this section — plus the shared popover pair, now that the
    menubar/context menus wear it — goes inert so captured frames stay
    deterministic. (FLIP/JS glides self-gate via isRecording().) */

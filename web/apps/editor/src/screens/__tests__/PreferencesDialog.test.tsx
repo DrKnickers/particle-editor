@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { makeBridgeStub } from "@/test/bridge-stub";
 import { PreferencesDialog } from "../PreferencesDialog";
-import { readConfirmDelete } from "@/lib/delete-emitters";
+import { readConfirmDelete } from "@/lib/tree/delete-emitters";
 
 function makePrefsBridge(msaaLevels: number[] = [0, 2, 4]) {
   const bridge = makeBridgeStub({

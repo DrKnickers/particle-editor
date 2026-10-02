@@ -4,7 +4,7 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import type { ReactElement, ReactNode } from "react";
 import { TitleBar } from "../TitleBar";
 import { makeBridgeStub } from "@/test/bridge-stub";
-import { markHeadless, __resetRecordModeForTests } from "@/lib/record-mode";
+import { markHeadless, __resetRecordModeForTests } from "@/lib/record/record-mode";
 
 // The window controls mount Tips (Radix Tooltip.Root), which require the
 // Tooltip.Provider App.tsx supplies in production — this wrapper stands in

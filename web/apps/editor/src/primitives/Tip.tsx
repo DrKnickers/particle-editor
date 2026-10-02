@@ -19,7 +19,7 @@
 
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { type ReactNode, type ReactElement } from "react";
-import { useRecording } from "@/lib/record-mode";
+import { useRecording } from "@/lib/record/record-mode";
 
 type TipProps = {
   content: ReactNode;

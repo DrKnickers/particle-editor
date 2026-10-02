@@ -15,7 +15,7 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import { ZERO_SPAWN } from "@particle-editor/bridge-schema";
 import type { Bridge, EmitterTreeDto } from "@particle-editor/bridge-schema";
 import { EmitterTree } from "../EmitterTree";
-import { useEmitterSelectionStore } from "@/lib/emitter-selection";
+import { useEmitterSelectionStore } from "@/lib/tree/emitter-selection";
 import { flatRootsTree, makeStubBridge as makeEmitterTreeStubBridge, stubRect } from "./emitter-tree-fixtures";
 
 // EmitterTree mounts Tips (Radix Tooltip.Root), which require the

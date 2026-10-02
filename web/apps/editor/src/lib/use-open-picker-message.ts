@@ -1,4 +1,4 @@
-import type { PickerWhich } from "@/lib/record-control-messages";
+import type { PickerWhich } from "@/lib/record/record-control-messages";
 import { useHostMessage } from "@/lib/use-host-message";
 
 /** Keep a toolbar picker in sync with a record-mode ui/open-picker push. */

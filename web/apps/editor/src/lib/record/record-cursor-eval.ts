@@ -1,6 +1,6 @@
 import { useDockAnim } from "@/lib/dock-anim";
 import { computeSceneRect } from "@/lib/scene-rect";
-import type { CursorButton, CursorMods, CursorTarget, RecordCursorKey } from "@/lib/record-cursor-track";
+import type { CursorButton, CursorMods, CursorTarget, RecordCursorKey } from "@/lib/record/record-cursor-track";
 import { clamp01 } from "@/lib/utils";
 
 export interface ResolvedCursorCenter {

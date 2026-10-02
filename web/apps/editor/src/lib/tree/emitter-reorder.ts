@@ -9,7 +9,7 @@
 // (move) or lands on the new copies (duplicate). `bridge` is threaded in (it
 // is a prop, not a module singleton).
 import type { Bridge, EmitterTreeNode } from "@particle-editor/bridge-schema";
-import { useEmitterSelectionStore } from "@/lib/emitter-selection";
+import { useEmitterSelectionStore } from "@/lib/tree/emitter-selection";
 
 /** Re-select the emitters identified by `newIds` (aligned to `inputIds`),
  *  preserving which one is primary, and sync the host's single selection.

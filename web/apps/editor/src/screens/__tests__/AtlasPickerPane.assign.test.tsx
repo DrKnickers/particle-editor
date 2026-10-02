@@ -10,12 +10,12 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { AtlasPickerPane } from "../AtlasPickerPane";
-import { publishAtlasContext, __resetAtlasContext } from "@/lib/atlas-context";
+import { publishAtlasContext, __resetAtlasContext } from "@/lib/atlas/atlas-context";
 import { MockBridge } from "@/bridge/mock";
 import { resetMockState } from "@/test/mock-state";
-import { __resetAtlasPanelCacheForTests } from "@/lib/atlas-panel-cache";
+import { __resetAtlasPanelCacheForTests } from "@/lib/atlas/atlas-panel-cache";
 import { useMockEmitterProperties } from "@/bridge/mock-state";
-import { __resetPreviewCache } from "@/lib/atlas-preview-cache";
+import { __resetPreviewCache } from "@/lib/atlas/atlas-preview-cache";
 import { __resetModStackForTests } from "@/lib/mod-stack";
 
 beforeEach(() => {

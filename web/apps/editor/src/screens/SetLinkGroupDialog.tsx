@@ -23,8 +23,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { Bridge, EmitterTreeDto, EmitterTreeNode } from "@particle-editor/bridge-schema";
 import { Modal } from "@/components/Modal";
 import { NativeSelect } from "@/primitives/Select";
-import { useTreeContextStore } from "@/lib/tree-context";
-import { useEmitterSelectionStore } from "@/lib/emitter-selection";
+import { useTreeContextStore } from "@/lib/tree/tree-context";
+import { useEmitterSelectionStore } from "@/lib/tree/emitter-selection";
 import { cn } from "@/lib/utils";
 
 type Props = {

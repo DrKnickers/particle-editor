@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
-import { useDeleteConfirmStore } from "@/lib/delete-emitters";
+import { useDeleteConfirmStore } from "@/lib/tree/delete-emitters";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
 // A confirmed delete rides ONE batched emitters/delete-many, so the ids it

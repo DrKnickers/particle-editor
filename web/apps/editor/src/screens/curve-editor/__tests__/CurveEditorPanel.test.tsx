@@ -35,8 +35,8 @@ import { makeDefaultEngineState } from "@/bridge/mock-state";
 import {
   getCurveKeysClipboard,
   setCurveKeysClipboard,
-} from "@/lib/curve-key-clipboard";
-import { __resetAtlasContext } from "@/lib/atlas-context";
+} from "@/lib/curve/curve-key-clipboard";
+import { __resetAtlasContext } from "@/lib/atlas/atlas-context";
 import { __resetRightDockForTests } from "@/lib/right-dock";
 import { useModalOpen } from "@/lib/modal-open";
 

@@ -10,8 +10,8 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ZERO_SPAWN } from "@particle-editor/bridge-schema";
 import type { Bridge, EmitterTreeDto } from "@particle-editor/bridge-schema";
 import { SetLinkGroupDialog } from "../SetLinkGroupDialog";
-import { useTreeContextStore } from "@/lib/tree-context";
-import { useEmitterSelectionStore } from "@/lib/emitter-selection";
+import { useTreeContextStore } from "@/lib/tree/tree-context";
+import { useEmitterSelectionStore } from "@/lib/tree/emitter-selection";
 
 function fixtureTree(): EmitterTreeDto {
   return {

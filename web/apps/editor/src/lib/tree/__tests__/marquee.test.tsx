@@ -9,9 +9,9 @@ import {
   mergeMarqueeSelection,
   type Rect,
 } from "../marquee";
-import { EmitterTree } from "../../screens/EmitterTree";
+import { EmitterTree } from "../../../screens/EmitterTree";
 import { useEmitterSelectionStore } from "../emitter-selection";
-import { makeStubBridge, marqueeFlatRootsTree, stubRect } from "../../screens/__tests__/emitter-tree-fixtures";
+import { makeStubBridge, marqueeFlatRootsTree, stubRect } from "../../../screens/__tests__/emitter-tree-fixtures";
 
 const renderWithTooltips = (ui: ReactElement) =>
   render(

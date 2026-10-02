@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties, type ReactElement, type ReactNode } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { cn } from "@/lib/utils";
-import { useRecordHeadless } from "@/lib/record-mode";
+import { useRecordHeadless } from "@/lib/record/record-mode";
 import { APP_NAME, UNTITLED_DOC } from "@/lib/window-title";
 import { basename } from "@/lib/paths";
 import { Tip } from "@/primitives/Tip";

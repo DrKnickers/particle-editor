@@ -7,7 +7,7 @@ import { Checkbox } from "@/primitives/Checkbox";
 import { SegmentedControl } from "@/primitives/SegmentedControl";
 import { NativeSelect } from "@/primitives/Select";
 import { applyMode, readStoredMode, type ThemeMode } from "@/lib/theme";
-import { readConfirmDelete, writeConfirmDelete } from "@/lib/delete-emitters";
+import { readConfirmDelete, writeConfirmDelete } from "@/lib/tree/delete-emitters";
 import {
   applyOverloadGuard,
   clampMaxParticles,

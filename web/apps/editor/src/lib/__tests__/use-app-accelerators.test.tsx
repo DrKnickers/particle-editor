@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render } from "@testing-library/react";
 import { useAppAccelerators } from "../use-app-accelerators";
-import { useEmitterSelectionStore } from "../emitter-selection";
+import { useEmitterSelectionStore } from "../tree/emitter-selection";
 import { useFileStateStore } from "../file-state";
 import { RESET_CAMERA } from "../reset-camera";
-import { useTextureEpoch, __resetPreviewCache } from "../atlas-preview-cache";
+import { useTextureEpoch, __resetPreviewCache } from "../atlas/atlas-preview-cache";
 import { __resetRightDockForTests, useRightDockStoreForTests } from "../right-dock";
 import { __resetStatusFeedbackForTests, useStatusFeedback } from "../status-feedback";
 

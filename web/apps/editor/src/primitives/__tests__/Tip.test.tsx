@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, act } from "@testing-library/react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { Tip } from "../Tip";
-import { markRecording, __resetRecordModeForTests } from "@/lib/record-mode";
+import { markRecording, __resetRecordModeForTests } from "@/lib/record/record-mode";
 
 // Render helper: Radix Tooltip requires a Provider. delayDuration=0 so
 // tests don't need fake timers. Opening via focus() is the reliable

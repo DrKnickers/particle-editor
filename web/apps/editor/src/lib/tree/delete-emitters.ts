@@ -13,9 +13,9 @@
 // to performDelete(bridge, ids, tree).
 import { create } from "zustand";
 import type { Bridge, EmitterTreeDto, EmitterTreeNode } from "@particle-editor/bridge-schema";
-import { getEmitterTree } from "@/lib/emitter-tree";
+import { getEmitterTree } from "@/lib/tree/emitter-tree";
 import { useFileOpErrorStore } from "@/lib/file-op";
-import { announceWhenOk } from "./status-feedback";
+import { announceWhenOk } from "../status-feedback";
 
 export type DeleteImpact = {
   affectedCount: number; // deduped union of every selected id's subtree

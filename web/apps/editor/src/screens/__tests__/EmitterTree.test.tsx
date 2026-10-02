@@ -13,9 +13,9 @@ import { EmitterTree } from "../EmitterTree";
 import { MockBridge } from "@/bridge/mock";
 import { useMockEmitterProperties } from "@/bridge/mock-state";
 import { resetMockState } from "@/test/mock-state";
-import { useEmitterSelectionStore } from "@/lib/emitter-selection";
-import { useEmitterTreeStore } from "@/lib/emitter-tree";
-import { useDeleteConfirmStore, requestDeleteEmitters } from "@/lib/delete-emitters";
+import { useEmitterSelectionStore } from "@/lib/tree/emitter-selection";
+import { useEmitterTreeStore } from "@/lib/tree/emitter-tree";
+import { useDeleteConfirmStore, requestDeleteEmitters } from "@/lib/tree/delete-emitters";
 import { writeOverloadGuard } from "@/lib/overload-guard";
 import { makeStubBridge, stubRect } from "./emitter-tree-fixtures";
 

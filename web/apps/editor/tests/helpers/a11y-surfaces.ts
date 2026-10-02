@@ -310,7 +310,7 @@ export const DIALOG_SURFACES: SurfaceCapture[] = [
   // ── Tree-context (right-click) Modal dialogs ─────────────────────
   // Each requires the fixture to have at least one root emitter so
   // `[data-testid="emitter-tree"] [role="treeitem"]` resolves to a
-  // clickable row. The tree-context atom in lib/tree-context.ts is
+  // clickable row. The tree-context atom in lib/tree/tree-context.ts is
   // driven by the row's onSelect handlers, which call
   // openDialog(<kind>, emitterId).
   {

@@ -19,7 +19,7 @@ import {
 } from "@/lib/multi-drag";
 import { computeAutoscrollDelta } from "@/lib/drag-autoscroll";
 import { DRAG_FEEL, pickFlipDuration } from "@/lib/flip";
-import { useRecording } from "@/lib/record-mode";
+import { useRecording } from "@/lib/record/record-mode";
 
 // Tuning — mirrors EmitterTree.tsx so every reorderable list feels the same.
 const DRAG_THRESHOLD = 4;   // px (Manhattan) before a press becomes a drag

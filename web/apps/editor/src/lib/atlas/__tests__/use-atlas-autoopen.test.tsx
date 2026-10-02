@@ -3,7 +3,7 @@ import { StrictMode, useEffect } from "react";
 import { renderHook, act, render } from "@testing-library/react";
 import { useAtlasAutoOpen } from "../use-atlas-autoopen";
 import { publishAtlasContext, __resetAtlasContext, type AtlasContext } from "../atlas-context";
-import { setDock, __resetRightDockForTests, useRightDockStoreForTests } from "../right-dock";
+import { setDock, __resetRightDockForTests, useRightDockStoreForTests } from "../../right-dock";
 
 const dock = () => useRightDockStoreForTests().getState().dock;
 beforeEach(() => { localStorage.clear(); __resetRightDockForTests(); __resetAtlasContext(); setDock("lighting"); renders = 0; });

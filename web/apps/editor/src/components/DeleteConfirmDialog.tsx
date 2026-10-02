@@ -3,7 +3,7 @@
 // store holds only data, this component runs the actual delete on confirm).
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { Modal } from "@/components/Modal";
-import { useDeleteConfirmStore, confirmPendingDelete, type DeleteImpact } from "@/lib/delete-emitters";
+import { useDeleteConfirmStore, confirmPendingDelete, type DeleteImpact } from "@/lib/tree/delete-emitters";
 
 function bodyText(ids: number[], impact: DeleteImpact): string {
   const n = ids.length;

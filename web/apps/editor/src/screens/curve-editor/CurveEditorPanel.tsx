@@ -50,18 +50,18 @@ import type {
   TrackName,
 } from "@particle-editor/bridge-schema";
 import { CurveEditor, type ChannelDef, type CurveKeyboardNavAction, type CurveMarqueeHandle } from "@/screens/curve-editor/CurveEditor";
-import { computeGroupMoves, valueRangeForTrack } from "@/lib/curve-model";
-import type { SuppressedMove } from "@/lib/use-curve-morph";
+import { computeGroupMoves, valueRangeForTrack } from "@/lib/curve/curve-model";
+import type { SuppressedMove } from "@/lib/curve/use-curve-morph";
 import { isTypingTarget } from "@/lib/viewport-input";
 import { useModalOpen } from "@/lib/modal-open";
 import { useHostMessage } from "@/lib/use-host-message";
 import {
   getCurveKeysClipboard,
   setCurveKeysClipboard,
-} from "@/lib/curve-key-clipboard";
-import { isAtlasEligible, frameCount, wrapFrame } from "@/lib/atlas-grid";
-import { publishAtlasContext } from "@/lib/atlas-context";
-import { useAtlasAutoOpen } from "@/lib/use-atlas-autoopen";
+} from "@/lib/curve/curve-key-clipboard";
+import { isAtlasEligible, frameCount, wrapFrame } from "@/lib/atlas/atlas-grid";
+import { publishAtlasContext } from "@/lib/atlas/atlas-context";
+import { useAtlasAutoOpen } from "@/lib/atlas/use-atlas-autoopen";
 import { CurveChannelList } from "./CurveChannelList";
 import { CurveEditorToolbar, type CurveEditMode } from "./CurveEditorToolbar";
 import { CurveKeyContextMenu, type CurveKeyContextMenuHandle } from "./CurveKeyContextMenu";

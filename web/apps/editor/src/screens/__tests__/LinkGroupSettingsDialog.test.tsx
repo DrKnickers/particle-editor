@@ -9,7 +9,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
 import { LinkGroupSettingsDialog } from "../LinkGroupSettingsDialog";
-import { useTreeContextStore } from "@/lib/tree-context";
+import { useTreeContextStore } from "@/lib/tree/tree-context";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
 function makeStubBridge(opts?: {

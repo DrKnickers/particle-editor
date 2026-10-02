@@ -13,13 +13,13 @@
 import type {} from "./native";
 import { EventHub } from "./event-hub";
 import { coerceMessage } from "./wire";
-import { isRecordHeadlessMessage, parseCursorMessage, type CursorMessage } from "@/lib/record-cursor-bridge";
+import { isRecordHeadlessMessage, parseCursorMessage, type CursorMessage } from "@/lib/record/record-cursor-bridge";
 import {
   parseCursorTickMessage,
   parseCursorTrackMessage,
   type RecordCursorKey,
   type RecordCursorTick,
-} from "@/lib/record-cursor-track";
+} from "@/lib/record/record-cursor-track";
 import {
   parseFocusChannelMessage,
   parseHidePanelMessage,
@@ -31,7 +31,7 @@ import {
   parseSetPickerSearchMessage,
   parseSetThemeMessage,
   parseShowPanelMessage,
-} from "@/lib/record-control-messages";
+} from "@/lib/record/record-control-messages";
 
 type Parsed<F extends (data: unknown) => unknown> = NonNullable<ReturnType<F>>;
 

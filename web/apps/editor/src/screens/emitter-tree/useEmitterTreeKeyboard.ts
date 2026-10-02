@@ -1,8 +1,8 @@
 import { useCallback, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
 import type { Bridge, EmitterTreeNode } from "@particle-editor/bridge-schema";
-import { useEmitterSelectionStore } from "@/lib/emitter-selection";
-import { markEmittersCopied } from "@/lib/emitter-clipboard";
-import { requestDeleteEmitters } from "@/lib/delete-emitters";
+import { useEmitterSelectionStore } from "@/lib/tree/emitter-selection";
+import { markEmittersCopied } from "@/lib/tree/emitter-clipboard";
+import { requestDeleteEmitters } from "@/lib/tree/delete-emitters";
 import { announceWhenOk } from "@/lib/status-feedback";
 import { isTypingTarget } from "@/lib/viewport-input";
 import type { RenameEditingState } from "./useEmitterRename";

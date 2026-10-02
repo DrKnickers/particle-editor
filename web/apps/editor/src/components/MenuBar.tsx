@@ -30,20 +30,20 @@ import { promptSaveChanges, useFileState } from "@/lib/file-state";
 import { replaceDocument, runFileOp } from "@/lib/file-op";
 import { useEngineField } from "@/lib/use-engine-snapshot";
 import { basename } from "@/lib/paths";
-import { requestDeleteEmitters } from "@/lib/delete-emitters";
+import { requestDeleteEmitters } from "@/lib/tree/delete-emitters";
 import { announceWhenOk } from "@/lib/status-feedback";
-import { bumpTextureEpoch } from "@/lib/atlas-preview-cache";
+import { bumpTextureEpoch } from "@/lib/atlas/atlas-preview-cache";
 import {
   useEmitterSelectionPrimary,
   useEmitterSelectionIds,
   getEmitterSelectionSnapshot,
-} from "@/lib/emitter-selection";
+} from "@/lib/tree/emitter-selection";
 import {
   markEmittersCopied,
   useEmitterClipboardHasContent,
-} from "@/lib/emitter-clipboard";
-import { useTreeContextStore } from "@/lib/tree-context";
-import { requestEmitterRename } from "@/lib/tree-action";
+} from "@/lib/tree/emitter-clipboard";
+import { useTreeContextStore } from "@/lib/tree/tree-context";
+import { requestEmitterRename } from "@/lib/tree/tree-action";
 import { toggleDock } from "@/lib/right-dock";
 import { RESET_CAMERA } from "@/lib/reset-camera";
 import { Modal } from "@/components/Modal";

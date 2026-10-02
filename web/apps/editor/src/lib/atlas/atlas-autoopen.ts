@@ -1,7 +1,7 @@
 // Pure reducer for the picker's auto-open/persist/restore.
 // The hook (use-atlas-autoopen.ts) supplies events and executes commands;
 // this module holds NO React/store deps so it is exhaustively unit-tested.
-import type { RightDock } from "./right-dock";
+import type { RightDock } from "../right-dock";
 
 export interface AutoOpenState {
   armed: boolean;          // a fresh index-focus entry re-armed one auto-open

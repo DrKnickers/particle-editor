@@ -15,7 +15,7 @@
 //
 // Multi-select model: server tracks only the primary id (via the
 // existing `emitters/select`); React layers an in-memory `ids[]` +
-// `primary` atom on top (see `lib/emitter-selection.ts`). Plain click
+// `primary` atom on top (see `lib/tree/emitter-selection.ts`). Plain click
 // = setSingle + bridge select. Ctrl/Cmd+click = toggle. Shift+click =
 // range from primary to clicked along rendered tree order. Right-click
 // on a row not in the multi-selection promotes that row to single-
@@ -72,23 +72,23 @@ import type {
   EmitterTreeDto,
   EmitterTreeNode,
 } from "@particle-editor/bridge-schema";
-import { useTreeActionStore } from "@/lib/tree-action";
+import { useTreeActionStore } from "@/lib/tree/tree-action";
 import {
   useEmitterSelectionIds,
   useEmitterSelectionPrimary,
   useEmitterSelectionStore,
-} from "@/lib/emitter-selection";
+} from "@/lib/tree/emitter-selection";
 import { computeAutoscrollDelta } from "@/lib/drag-autoscroll";
 import { computeFlipDeltas, DRAG_FEEL, pickFlipDuration, type FlipPositions } from "@/lib/flip";
-import { useRecording } from "@/lib/record-mode";
+import { useRecording } from "@/lib/record/record-mode";
 import { announceWhenOk } from "@/lib/status-feedback";
 import {
   computeRootGapIndex,
   isDescendant,
   resolveReparentSlot,
   type DropZone,
-} from "@/lib/drop-zone";
-import { colorForGroup } from "@/lib/link-group-colors";
+} from "@/lib/tree/drop-zone";
+import { colorForGroup } from "@/lib/tree/link-group-colors";
 import { estimateChainLoad, estimateSystemLoad, formatChainWarning, type ChainWarning } from "@/lib/chain-load";
 import { useOverloadGuardConfig } from "@/lib/overload-guard";
 import { useEstimatedLoadPush } from "@/lib/use-estimated-load-push";
@@ -98,9 +98,9 @@ import { IconButton, iconButtonClass } from "@/primitives/IconButton";
 import { MENU_CONTENT, MENU_ITEM } from "@/primitives/menu";
 import { Tip } from "@/primitives/Tip";
 import { ChainWarningTip } from "./ChainWarningTip";
-import { useEmitterTree, useEmitterTreeStore } from "@/lib/emitter-tree";
-import { requestDeleteEmitters } from "@/lib/delete-emitters";
-import { moveEmitters, duplicateEmitters, reorderManyEmitters } from "@/lib/emitter-reorder";
+import { useEmitterTree, useEmitterTreeStore } from "@/lib/tree/emitter-tree";
+import { requestDeleteEmitters } from "@/lib/tree/delete-emitters";
+import { moveEmitters, duplicateEmitters, reorderManyEmitters } from "@/lib/tree/emitter-reorder";
 import {
   isMultiDrag,
   selectedRootIdsInOrder,
@@ -113,7 +113,7 @@ import {
   type RootBlockGeometry,
   type RowGeometry,
 } from "@/lib/multi-drag";
-import { canMoveSelection } from "@/lib/move-enabled";
+import { canMoveSelection } from "@/lib/tree/move-enabled";
 import { useEmitterMarquee } from "./emitter-tree/useEmitterMarquee";
 import { useEmitterRename, type RenameEditingState } from "./emitter-tree/useEmitterRename";
 import { useEmitterTreeKeyboard } from "./emitter-tree/useEmitterTreeKeyboard";

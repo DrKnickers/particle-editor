@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { Modal } from "@/components/Modal";
 import { Spinner } from "@/primitives/Spinner";
-import { useTreeContextStore } from "@/lib/tree-context";
+import { useTreeContextStore } from "@/lib/tree/tree-context";
 
 type Props = {
   bridge: Bridge;

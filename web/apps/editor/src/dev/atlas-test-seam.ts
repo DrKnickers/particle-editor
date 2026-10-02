@@ -11,7 +11,7 @@
 // (production-bundle guard) greps the built dist to prove `__atlasTest` is absent.
 
 import { useMockEmitterProperties } from "@/bridge/mock-state";
-import { publishAtlasContext } from "@/lib/atlas-context";
+import { publishAtlasContext } from "@/lib/atlas/atlas-context";
 import { setDock } from "@/lib/right-dock";
 
 export type AtlasTestApi = {

@@ -1,7 +1,7 @@
 import { ZERO_SPAWN } from "@particle-editor/bridge-schema";
 import type { Bridge, EmitterTreeDto } from "@particle-editor/bridge-schema";
 import { vi } from "vitest";
-import type { Rect } from "@/lib/marquee";
+import type { Rect } from "@/lib/tree/marquee";
 
 export function treeWithChildren(): EmitterTreeDto {
   return {

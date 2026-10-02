@@ -1,4 +1,4 @@
-// Unit tests for the pure curve-domain helpers in lib/curve-model.ts:
+// Unit tests for the pure curve-domain helpers in lib/curve/curve-model.ts:
 // the per-track y-axis range and the multi-key group-move transform.
 import { describe, it, expect } from "vitest";
 import type { TrackDto, TrackName } from "@particle-editor/bridge-schema";

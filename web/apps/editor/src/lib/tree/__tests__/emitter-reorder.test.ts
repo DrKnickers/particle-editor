@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { moveEmitters, duplicateEmitters, reorderManyEmitters } from "@/lib/emitter-reorder";
-import { useEmitterSelectionStore } from "@/lib/emitter-selection";
+import { moveEmitters, duplicateEmitters, reorderManyEmitters } from "@/lib/tree/emitter-reorder";
+import { useEmitterSelectionStore } from "@/lib/tree/emitter-selection";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
 function fakeBridge(responses: Record<string, unknown>) {

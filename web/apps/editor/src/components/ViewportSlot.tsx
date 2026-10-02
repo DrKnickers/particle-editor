@@ -12,8 +12,8 @@ import { useDockAnim } from "../lib/dock-anim";
 import { useModalOpen } from "../lib/modal-open";
 import { ManipulatorReadout } from "./ManipulatorReadout";
 import { ViewportToggleOverlay } from "./ViewportToggleOverlay";
-import { useEmitterTree } from "@/lib/emitter-tree";
-import { useRecording } from "@/lib/record-mode";
+import { useEmitterTree } from "@/lib/tree/emitter-tree";
+import { useRecording } from "@/lib/record/record-mode";
 import { usePresence } from "@/lib/use-presence";
 
 type Props = { bridge: Bridge };

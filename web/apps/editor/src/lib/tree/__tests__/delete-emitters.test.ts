@@ -3,8 +3,8 @@ import {
   computeDeleteImpact, performDelete, requestDeleteEmitters,
   readConfirmDelete, writeConfirmDelete, useDeleteConfirmStore,
   collapseToRoots, confirmPendingDelete,
-} from "@/lib/delete-emitters";
-import { useEmitterTreeStore } from "@/lib/emitter-tree";
+} from "@/lib/tree/delete-emitters";
+import { useEmitterTreeStore } from "@/lib/tree/emitter-tree";
 import type { Bridge, EmitterTreeDto, EmitterTreeNode } from "@particle-editor/bridge-schema";
 
 // helper to build a node; role is irrelevant to impact logic.

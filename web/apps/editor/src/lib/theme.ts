@@ -1,7 +1,7 @@
 // theme.ts — 3-way theme (dark/light/system). `alo:theme` stores the MODE;
 // "system" follows prefers-color-scheme live. Resolves to a concrete
 // "dark"|"light" applied as <html data-theme>.
-import { isRecording } from "./record-mode";
+import { isRecording } from "./record/record-mode";
 import { readStoredPref, writeStoredPref } from "./stored-pref";
 
 export type ThemeMode = "dark" | "light" | "system";

@@ -21,10 +21,10 @@ import { useEffect, useRef } from "react";
 import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
 import { replaceDocument, runFileOp } from "@/lib/file-op";
 import { toggleDock } from "@/lib/right-dock";
-import { useEmitterSelectionStore } from "@/lib/emitter-selection";
-import { moveEmitters } from "@/lib/emitter-reorder";
+import { useEmitterSelectionStore } from "@/lib/tree/emitter-selection";
+import { moveEmitters } from "@/lib/tree/emitter-reorder";
 import { RESET_CAMERA } from "@/lib/reset-camera";
-import { bumpTextureEpoch } from "@/lib/atlas-preview-cache";
+import { bumpTextureEpoch } from "@/lib/atlas/atlas-preview-cache";
 import { fireAndReport } from "@/lib/status-feedback";
 
 const ACCEL_COMBOS = [

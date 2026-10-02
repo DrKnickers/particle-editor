@@ -40,7 +40,7 @@ import {
   subscribeAtlasContext,
   type AtlasContext,
 } from "./atlas-context";
-import { setDock, useRightDock, type RightDock } from "./right-dock";
+import { setDock, useRightDock, type RightDock } from "../right-dock";
 
 export function useAtlasAutoOpen({ atlasEligible }: { atlasEligible: boolean }) {
   const dock = useRightDock();

@@ -1,13 +1,17 @@
-// use-engine-snapshot.ts — subscribe a component to the engine state DTO.
+// use-engine-snapshot.ts — exports useEngineField, a selector hook over the
+// engine state DTO.
 //
-// Seeds from a one-shot `engine/state/snapshot`, then tracks every
-// `engine/state/changed` broadcast; returns null until the first snapshot
-// resolves. Errors are SWALLOWED (the consumer degrades to its defaults) —
-// this is the toolbar-dropdown contract. Do NOT add a console.warn here: the
-// picker BODIES that warn keep their own richer subscriptions; this hook is
-// only for the lightweight trigger dropdowns (BackgroundPopover /
-// GroundPopover / ReferenceObjectPopover), which had three byte-identical
-// copies of this effect (DRY audit web-screens-0).
+// Each bridge gets one shared subscription: it seeds from a one-shot
+// `engine/state/snapshot`, then follows every `engine/state/changed`
+// broadcast, and unsubscribes when the last reader unmounts. useEngineField
+// picks one narrow value out of that cached state, so a component re-renders
+// only when its own field changes; it returns undefined until the first
+// snapshot or broadcast arrives. A failed snapshot request is ignored on
+// purpose, so readers show their defaults until the next broadcast.
+//
+// Readers: Toolbar, MenuBar, StatusBar, ViewportToggleOverlay,
+// ManipulatorReadout, and the Background, Ground and Reference Object
+// popovers.
 
 import { useCallback, useRef, useSyncExternalStore } from "react";
 import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";

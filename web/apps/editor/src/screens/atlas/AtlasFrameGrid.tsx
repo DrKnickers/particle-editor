@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { FocusEvent, KeyboardEvent, MouseEvent, RefObject } from "react";
-import { fitGridLayout } from "@/lib/atlas-grid";
+import { fitGridLayout } from "@/lib/atlas/atlas-grid";
 import { drawGrid, GRID_GAP } from "./atlas-canvas";
 import { useDecodedImage } from "./useDecodedImage";
 

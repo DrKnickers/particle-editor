@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { canMoveSelection } from "@/lib/move-enabled";
+import { canMoveSelection } from "@/lib/tree/move-enabled";
 
 const ROOTS = [10, 11, 12, 13]; // ids top-to-bottom
 

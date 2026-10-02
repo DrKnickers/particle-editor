@@ -1502,7 +1502,7 @@ void BridgeDispatcher::ApplyUndoSnapshot(const std::vector<char>& buf,
 
 // Demote single-member link groups to linkGroup=0 so the data
 // layer matches the render layer's existing filter at
-// computeLinkGroupBrackets (web/apps/editor/src/lib/link-group-colors.ts).
+// computeLinkGroupBrackets (web/apps/editor/src/lib/tree/link-group-colors.ts).
 // Called from emitters/delete + linkGroups/set-membership (the two
 // mutation paths that can leave a group with exactly one member —
 // see the ROADMAP for the enumeration) AND from file/open

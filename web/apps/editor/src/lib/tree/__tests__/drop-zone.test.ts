@@ -1,4 +1,4 @@
-// Vitest tests for lib/drop-zone.ts — the pure DnD math behind the
+// Vitest tests for lib/tree/drop-zone.ts — the pure DnD math behind the
 // EmitterTree drag/drop layer.
 //
 // Coverage:

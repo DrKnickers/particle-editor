@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { CursorElementRef, RecordCursorKey } from "../record-cursor-track";
 import { evalRecordCursor, resolveTargetCenter } from "../record-cursor-eval";
-import { useDockAnim } from "../dock-anim";
+import { useDockAnim } from "../../dock-anim";
 
 function pointKey(t: number, x: number, y: number, vis: boolean, press: boolean): RecordCursorKey {
   return { t, vis, press, activate: false, target: { kind: "point", x, y } };

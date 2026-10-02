@@ -18,7 +18,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
-import { useAtlasContext } from "@/lib/atlas-context";
+import { useAtlasContext } from "@/lib/atlas/atlas-context";
 import { ToolPanel } from "@/components/ToolPanel";
 import { AtlasConfirmDialog } from "@/components/AtlasConfirmDialog";
 import {
@@ -27,7 +27,7 @@ import {
   isAtlasTooLarge,
   resolveFrame,
   fitGridLayout,
-} from "@/lib/atlas-grid";
+} from "@/lib/atlas/atlas-grid";
 import { useDockAnim } from "@/lib/dock-anim";
 import { runWhenIdle } from "@/lib/run-after-paint";
 
@@ -43,15 +43,15 @@ const GRID_MAX_CELL = 160;
 // Stable empty dead-cell set so the "no dead cells" state never churns identity (React
 // bails the re-render when setDeadCells is handed the same reference).
 const EMPTY_DEAD_CELLS: ReadonlySet<number> = new Set();
-import { getPreviewCached, useTextureEpoch } from "@/lib/atlas-preview-cache";
-import { computeDeadCells } from "@/lib/atlas-dead-cells";
+import { getPreviewCached, useTextureEpoch } from "@/lib/atlas/atlas-preview-cache";
+import { computeDeadCells } from "@/lib/atlas/atlas-dead-cells";
 import { useModStack } from "@/lib/mod-stack";
 import { emitPerfTrace, makePerfSpanId } from "@/lib/perf-trace";
 import { requestTreeRefetch } from "@/lib/tree-refetch";
 import { AtlasFrameGrid } from "./atlas/AtlasFrameGrid";
 import { drawHero, GRID_GAP } from "./atlas/atlas-canvas";
 import { useDecodedImage } from "./atlas/useDecodedImage";
-import { atlasPanelCache } from "@/lib/atlas-panel-cache";
+import { atlasPanelCache } from "@/lib/atlas/atlas-panel-cache";
 
 // First-ever-open default for the grid content width, used ONLY before any real
 // measure exists (atlasPanelCache.gridW is null). It must equal the width the cold-start

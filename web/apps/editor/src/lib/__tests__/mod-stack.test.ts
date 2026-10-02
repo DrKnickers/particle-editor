@@ -7,8 +7,8 @@ import {
   __setModStackForTests,
   __resetModStackForTests,
 } from "../mod-stack";
-import { __resetPreviewCache } from "../atlas-preview-cache";
-import * as cache from "../atlas-preview-cache";
+import { __resetPreviewCache } from "../atlas/atlas-preview-cache";
+import * as cache from "../atlas/atlas-preview-cache";
 
 beforeEach(() => {
   __resetModStackForTests();

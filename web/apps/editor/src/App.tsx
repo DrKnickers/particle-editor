@@ -32,13 +32,13 @@ import { applyMsaaLevel, readMsaaLevel } from "@/lib/msaa-quality";
 import { applyModelShadows, readModelShadows } from "@/lib/model-shadows";
 import { applySoftShadows, readSoftShadows } from "@/lib/soft-shadows";
 import { RecordCursor } from "@/components/RecordCursor";
-import { postFrameAcked, commitAndAck } from "@/lib/record-cursor-bridge";
-import { latchRecordModeFromMessage, markHeadless, useRecording } from "@/lib/record-mode";
+import { postFrameAcked, commitAndAck } from "@/lib/record/record-cursor-bridge";
+import { latchRecordModeFromMessage, markHeadless, useRecording } from "@/lib/record/record-mode";
 import { TitleBar } from "@/components/TitleBar";
-import { evalRecordCursor } from "@/lib/record-cursor-eval";
-import { applyRecordDrag, createRecordDragState, resetRecordDrag } from "@/lib/record-cursor-drag";
-import { applyRecordActivation, createRecordActivateState, resetRecordActivation } from "@/lib/record-cursor-activate";
-import type { RecordCursorKey } from "@/lib/record-cursor-track";
+import { evalRecordCursor } from "@/lib/record/record-cursor-eval";
+import { applyRecordDrag, createRecordDragState, resetRecordDrag } from "@/lib/record/record-cursor-drag";
+import { applyRecordActivation, createRecordActivateState, resetRecordActivation } from "@/lib/record/record-cursor-activate";
+import type { RecordCursorKey } from "@/lib/record/record-cursor-track";
 import { useHostMessage } from "@/lib/use-host-message";
 
 // ?demo=primitives → render the primitives gallery instead of the app shell.
@@ -240,11 +240,11 @@ function AppShell() {
   const recordHeadlessRef = useRef(false);
   // --record synthetic drag: turns the per-frame cursor press/move into REAL pointer
   // events so a clip can drive a live reorder gesture (lifted chip + make-room gap +
-  // drop). See lib/record-cursor-drag.ts. Dormant outside --record (only the cursor
+  // drop). See lib/record/record-cursor-drag.ts. Dormant outside --record (only the cursor
   // paths below touch it).
   const recordDragStateRef = useRef(createRecordDragState());
   // Opt-in click/focus dispatch for `"activate": true` cursor keys (see
-  // lib/record-cursor-activate.ts). Dormant outside --record like the drag.
+  // lib/record/record-cursor-activate.ts). Dormant outside --record like the drag.
   const recordActivateStateRef = useRef(createRecordActivateState());
   // Latch headless-capture mode (host → web, once, before the frame loop).
   useHostMessage("ui/record-headless", () => {
@@ -260,7 +260,7 @@ function AppShell() {
 
   useHostMessage("ui/cursor-track", (msg) => {
     // Latch record mode on the first record-cursor message (track or legacy
-    // ui/cursor) — suppresses focus-pinned tooltips (Tip). See lib/record-mode.ts.
+    // ui/cursor) — suppresses focus-pinned tooltips (Tip). See lib/record/record-mode.ts.
     latchRecordModeFromMessage(msg);
     // A track swap mid-drag would strand a live synthetic gesture — abort it
     // (pointercancel, no commit) before the new track starts. See gap 1 /

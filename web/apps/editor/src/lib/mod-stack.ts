@@ -14,7 +14,7 @@
 
 import { useEffect } from "react";
 import { create } from "zustand";
-import { invalidatePreviewCache } from "./atlas-preview-cache";
+import { invalidatePreviewCache } from "./atlas/atlas-preview-cache";
 import { runWhenIdle } from "./run-after-paint";
 import type { Bridge } from "@particle-editor/bridge-schema";
 

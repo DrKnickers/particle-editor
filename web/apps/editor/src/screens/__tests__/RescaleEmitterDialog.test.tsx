@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { RescaleEmitterDialog } from "../RescaleEmitterDialog";
-import { useTreeContextStore } from "@/lib/tree-context";
+import { useTreeContextStore } from "@/lib/tree/tree-context";
 import { makeBridgeStub } from "@/test/bridge-stub";
 
 beforeEach(() => {

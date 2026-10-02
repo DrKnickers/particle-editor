@@ -12,19 +12,19 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent, act, cleanup } from "@testing-library/react";
 
-vi.mock("@/lib/atlas-dead-cells", async (orig) => {
-  const actual = await orig<typeof import("@/lib/atlas-dead-cells")>();
+vi.mock("@/lib/atlas/atlas-dead-cells", async (orig) => {
+  const actual = await orig<typeof import("@/lib/atlas/atlas-dead-cells")>();
   return { ...actual, computeDeadCells: vi.fn(async () => new Set<number>()) };
 });
 
 import { AtlasPickerPane } from "../AtlasPickerPane";
-import { computeDeadCells } from "@/lib/atlas-dead-cells";
-import { publishAtlasContext, __resetAtlasContext } from "@/lib/atlas-context";
+import { computeDeadCells } from "@/lib/atlas/atlas-dead-cells";
+import { publishAtlasContext, __resetAtlasContext } from "@/lib/atlas/atlas-context";
 import { MockBridge } from "@/bridge/mock";
 import { resetMockState } from "@/test/mock-state";
-import { __resetAtlasPanelCacheForTests } from "@/lib/atlas-panel-cache";
+import { __resetAtlasPanelCacheForTests } from "@/lib/atlas/atlas-panel-cache";
 import { useMockEmitterProperties } from "@/bridge/mock-state";
-import { __resetPreviewCache } from "@/lib/atlas-preview-cache";
+import { __resetPreviewCache } from "@/lib/atlas/atlas-preview-cache";
 import { __resetModStackForTests } from "@/lib/mod-stack";
 import { useDockAnim } from "@/lib/dock-anim";
 

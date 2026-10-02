@@ -26,8 +26,8 @@ test.describe("record cursor semantic targeting", () => {
     await seedTargets(page);
     const result = await page.evaluate(async () => {
       // Vite serves the modules at these URLs; tsc types them from the source.
-      const modUrl = "/src/lib/record-cursor-eval.ts";
-      const mod: typeof import("../src/lib/record-cursor-eval") = await import(modUrl);
+      const modUrl = "/src/lib/record/record-cursor-eval.ts";
+      const mod: typeof import("../src/lib/record/record-cursor-eval") = await import(modUrl);
       return {
         curve: mod.resolveTargetCenter({ kind: "element", ref: "curve-key:red:0" }),
         row: mod.resolveTargetCenter({ kind: "element", ref: "channel-row:alpha" }),
@@ -47,8 +47,8 @@ test.describe("record cursor semantic targeting", () => {
     await seedTargets(page);
     const result = await page.evaluate(async () => {
       // Vite serves the modules at these URLs; tsc types them from the source.
-      const modUrl = "/src/lib/record-cursor-eval.ts";
-      const mod: typeof import("../src/lib/record-cursor-eval") = await import(modUrl);
+      const modUrl = "/src/lib/record/record-cursor-eval.ts";
+      const mod: typeof import("../src/lib/record/record-cursor-eval") = await import(modUrl);
       const dockUrl = "/src/lib/dock-anim.ts";
       const dock: typeof import("../src/lib/dock-anim") = await import(dockUrl);
       const absent = mod.resolveTargetCenter({ kind: "element", ref: "curve-key:red:404" });
@@ -68,8 +68,8 @@ test.describe("record cursor semantic targeting", () => {
     await seedTargets(page);
     const resolved = await page.evaluate(async () => {
       // Vite serves the modules at these URLs; tsc types them from the source.
-      const modUrl = "/src/lib/record-cursor-eval.ts";
-      const mod: typeof import("../src/lib/record-cursor-eval") = await import(modUrl);
+      const modUrl = "/src/lib/record/record-cursor-eval.ts";
+      const mod: typeof import("../src/lib/record/record-cursor-eval") = await import(modUrl);
       const dockUrl = "/src/lib/dock-anim.ts";
       const dock: typeof import("../src/lib/dock-anim") = await import(dockUrl);
       dock.useDockAnim.getState().setAtlasGridMounted(true);

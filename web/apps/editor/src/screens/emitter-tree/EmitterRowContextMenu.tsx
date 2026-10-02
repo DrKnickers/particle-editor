@@ -10,13 +10,13 @@
 import { useMemo } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import type { Bridge, EmitterTreeNode } from "@particle-editor/bridge-schema";
-import { openTreeContextDialog } from "@/lib/tree-context";
-import { useEmitterSelectionStore } from "@/lib/emitter-selection";
-import { markEmittersCopied, useEmitterClipboardHasContent } from "@/lib/emitter-clipboard";
+import { openTreeContextDialog } from "@/lib/tree/tree-context";
+import { useEmitterSelectionStore } from "@/lib/tree/emitter-selection";
+import { markEmittersCopied, useEmitterClipboardHasContent } from "@/lib/tree/emitter-clipboard";
 import { announceWhenOk } from "@/lib/status-feedback";
-import { requestDeleteEmitters } from "@/lib/delete-emitters";
-import { moveEmitters, duplicateEmitters } from "@/lib/emitter-reorder";
-import { canMoveSelection } from "@/lib/move-enabled";
+import { requestDeleteEmitters } from "@/lib/tree/delete-emitters";
+import { moveEmitters, duplicateEmitters } from "@/lib/tree/emitter-reorder";
+import { canMoveSelection } from "@/lib/tree/move-enabled";
 import { cn } from "@/lib/utils";
 import { MENU_CONTENT, MENU_ITEM, MENU_SEPARATOR } from "@/primitives/menu";
 

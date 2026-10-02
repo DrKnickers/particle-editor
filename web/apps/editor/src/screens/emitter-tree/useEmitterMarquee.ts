@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { useEmitterSelectionStore } from "@/lib/emitter-selection";
-import { rectFromPoints, emittersInMarquee, mergeMarqueeSelection, type Rect } from "@/lib/marquee";
+import { useEmitterSelectionStore } from "@/lib/tree/emitter-selection";
+import { rectFromPoints, emittersInMarquee, mergeMarqueeSelection, type Rect } from "@/lib/tree/marquee";
 
 type MarqueeRowsSnapshot = {
   rows: { id: number; rect: Rect }[];
