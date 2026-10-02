@@ -343,7 +343,7 @@ public:
 	// redirects slot-0 RT to the compositor's off-screen ARGB surface (the
 	// shared-handle source the host's DComp path presents) and skips the
 	// engine-side Present(). Pass nullptr to fall back to the swap-chain
-	// Present path (used by viewport_poc / --capture and any host without a
+	// Present path (used by --capture and any host without a
 	// compositor).
 	void SetAlphaCompositor(host::AlphaCompositor* c) { m_pAlphaCompositor = c; }
 	// Non-owning D3D11 composition bridge. A full device reset must drop its
@@ -825,7 +825,7 @@ public:
 	// through `anchor` whose normal is world axis `normalAxis`, in that plane's
 	// (normalAxis+1, normalAxis+2) basis. False on grazing / behind-camera. Like
 	// ManipulatorAxisParam, the anchor is EXPLICIT: pick passes the current object
-	// position, but a drag MUST pass the FIXED grab position (m_manipStartPos) -- using
+	// position, but a drag MUST pass the FIXED grab position (m_viewport.manipStartPos) -- using
 	// the live, moving object origin feeds its own motion back in and flickers.
 	bool ManipulatorPlaneOffset(short screenX, short screenY, int normalAxis,
 	                            const D3DXVECTOR3& anchor, float& outU, float& outV) const;

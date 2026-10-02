@@ -1,9 +1,6 @@
 packages:
   - "packages/*"
   - "apps/*"
-  # The viewport proof-of-concept is not part of the shipped app; keep it (and
-  # its dependency tree) out of every workspace install and the lockfile.
-  - "!apps/viewport-poc"
 allowBuilds:
   esbuild: true
 onlyBuiltDependencies:

@@ -9,8 +9,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "libs", "libs", "{53C41C7D-0
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "expatw_static", "libs\expat-2.8.5\expatw_static.vcxproj", "{3D0991C0-DB91-116B-53EF-BBDE6D53F949}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "viewport_poc", "src\host\viewport_poc.vcxproj", "{4843B928-23DB-4D9F-8F1F-D80071FD0C33}"
-EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "dxgi_spike", "src\host\spike\dxgi_spike.vcxproj", "{8DC9F0A1-B7C6-46BF-BAA2-D3791D5E1234}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "shared_texture_test", "src\host\spike\shared_texture_test.vcxproj", "{9E0A12B3-C7D6-46BF-BAA2-E5921E5F2345}"
@@ -31,8 +29,6 @@ Global
 		{3D0991C0-DB91-116B-53EF-BBDE6D53F949}.Debug|x64.Build.0 = Debug|x64
 		{3D0991C0-DB91-116B-53EF-BBDE6D53F949}.Release|x64.ActiveCfg = Release|x64
 		{3D0991C0-DB91-116B-53EF-BBDE6D53F949}.Release|x64.Build.0 = Release|x64
-		{4843B928-23DB-4D9F-8F1F-D80071FD0C33}.Debug|x64.ActiveCfg = Debug|x64
-		{4843B928-23DB-4D9F-8F1F-D80071FD0C33}.Release|x64.ActiveCfg = Release|x64
 		{8DC9F0A1-B7C6-46BF-BAA2-D3791D5E1234}.Debug|x64.ActiveCfg = Debug|x64
 		{8DC9F0A1-B7C6-46BF-BAA2-D3791D5E1234}.Release|x64.ActiveCfg = Release|x64
 		{9E0A12B3-C7D6-46BF-BAA2-E5921E5F2345}.Debug|x64.ActiveCfg = Debug|x64

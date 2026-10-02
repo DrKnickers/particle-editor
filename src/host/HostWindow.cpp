@@ -1,7 +1,7 @@
 // HostWindow — see HostWindow.h for the design overview.
 //
-// This file grew out of src/host/viewport_poc.cpp, split into instance
-// methods on a singleton-style HostWindow + Impl pair. The PoC proved the
+// This file grew out of an early composition proof of concept, split into
+// instance methods on a singleton-style HostWindow + Impl pair. The PoC proved the
 // transparent-WebView2 pattern with a sibling D3D9 child HWND; the host now
 // presents the engine through a DirectComposition visual behind the
 // WebView2 visual instead (see Compositor.h), with the D3D9 device on a
@@ -234,9 +234,9 @@ void HostWindowImpl::OpenLog()
     const std::wstring perfArtifactDir = host::perf::CurrentConfig().artifactDir;
     // --drive (ephemeral): per-PID log filename so a --drive run's _wfsopen("w")
     // (truncate) never wipes a concurrently-running daily driver's host.log.
-    if (m_automationMode)
+    if (IsAutomationMode())
     {
-        const std::wstring suffix = (m_recordMode ? L"-record-" : L"-drive-") + std::to_wstring(GetCurrentProcessId());
+        const std::wstring suffix = (m_runMode == RunMode::Record ? L"-record-" : L"-drive-") + std::to_wstring(GetCurrentProcessId());
         if (!perfArtifactDir.empty())
         {
             std::error_code ec;
@@ -799,7 +799,7 @@ void HostWindowImpl::RenderD3D9()
     // In --record mode the spawner is driven EXACTLY ONCE per emitted frame by
     // the ClipRunner step hook (at the fixed virtual dt), so keep incidental
     // renders out of that deterministic schedule.
-    if (spawnerDriver && particleSystem && !m_recordMode)
+    if (spawnerDriver && particleSystem && m_runMode != RunMode::Record)
         spawnerDriver->Tick(dt, particleSystem.get(), engine.get());
 
     // shift-click-to-spawn: refresh cursor velocity from
@@ -1273,7 +1273,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 // (SetLight/SetAmbient(w=1)/SetShadow) are load-bearing — gating on a
                 // successful open once left a true first run unlit (ambient w=0 → black
                 // viewport). Caught by scripts/cold-launch-check.ps1 on a clean profile.
-                const bool inCaptureMode = !m_captureAlo.empty() || !m_captureRef.empty();
+                const bool inCaptureMode = m_runMode == RunMode::Capture;
                 HKEY hKey = host::OpenSettingsKeyForRead();
                 const host::RestoredSettings restored =
                     host::ReadRestoredSettings(hKey, inCaptureMode);
@@ -1377,7 +1377,9 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // land via the busy-override — and an ephemeral capture has no
         // business writing recovery files anyway (same orphan-prompt
         // rationale as --drive).
-        if (!useTestHost && !m_automationMode && m_captureAlo.empty())
+        // Reference-only captures historically service these timers too.
+        if (!useTestHost && (m_runMode == RunMode::Interactive ||
+            (m_runMode == RunMode::Capture && m_captureAlo.empty())))
         {
             SetTimer(hwnd, Autosave::RECENT_TIMER_ID, Autosave::RECENT_INTERVAL_MS, nullptr);
             SetTimer(hwnd, Autosave::STABLE_TIMER_ID, Autosave::STABLE_INTERVAL_MS, nullptr);
@@ -1399,7 +1401,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             // made the FPS chip a run-variant in recorded clips. Locked from
             // the moment the timeline parses (before frame 0's settle) so no
             // captured frame ever carries a wall-clock value.
-            float fps      = (m_recordMode && m_recordTimelineFps > 0)
+            float fps      = (m_runMode == RunMode::Record && m_recordTimelineFps > 0)
                                ? static_cast<float>(m_recordTimelineFps)
                                : fpsMeasurer.getFPS();
             int emitters   = engine ? engine->GetNumEmitters()  : 0;
@@ -1643,7 +1645,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_DPICHANGED:
         // In --record we pin RasterizationScale to the timeline's `scale` (see the
         // record branch); don't let a stray DPI-change clobber it back to monitor DPI.
-        if (m_compositionController && !m_recordMode)
+        if (m_compositionController && m_runMode != RunMode::Record)
         {
             ComPtr<ICoreWebView2Controller3> ctrl3;
             if (webController && SUCCEEDED(webController.As(&ctrl3)) && ctrl3)
@@ -1869,7 +1871,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // A dead web can't show that prompt or send app/quit, so it never
         // vetoes; an interactive session closes through the native
         // recovery path instead of an unanswerable veto.
-        if (ShouldVetoClose(dispatcher && dispatcher->GetDirty(), m_automationMode, useTestHost,
+        if (ShouldVetoClose(dispatcher && dispatcher->GetDirty(), IsAutomationMode(), useTestHost,
                             /*webAlive*/!m_webDead))
         {
             if (dispatcher) dispatcher->EmitCloseRequested();
@@ -1913,7 +1915,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // A dead-web close with unsaved work is the same case by another road:
         // CloseAfterWebDeath wrote the recovery copy and set
         // m_keepAutosaveSession so the next launch offers it.
-        if (!useTestHost && !m_automationMode)
+        if (!useTestHost && !IsAutomationMode())
         {
             KillTimer(hwnd, Autosave::RECENT_TIMER_ID);
             KillTimer(hwnd, Autosave::STABLE_TIMER_ID);
@@ -2006,7 +2008,6 @@ int HostWindowImpl::Run(int nCmdShow)
 
     // DPI awareness — PMv2 so child-window coords are physical pixels and
     // match what React sends from getBoundingClientRect under WebView2.
-    // viewport_poc.cpp ran with this too.
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
     // COM init — WebView2 needs an STA. main.cpp doesn't call
@@ -2156,7 +2157,7 @@ int HostWindowImpl::Run(int nCmdShow)
     };
     dispatcher = std::make_unique<BridgeDispatcher>(/*engine*/nullptr, layout, accelerator, emitFn,
                                                     /*useTestHost*/useTestHost,
-                                                    /*automationMode*/m_automationMode);
+                                                    /*automationMode*/IsAutomationMode());
     dispatcher->SetUndoStack(&undoStack);
     dispatcher->SetHostHwnd(hMain);
     // Throttle the panel-refresh broadcasts during a --record run only
@@ -2255,7 +2256,8 @@ int HostWindowImpl::Run(int nCmdShow)
 
     // --capture loads a scene + screenshots headlessly. Computed before the
     // window is shown so the show can avoid stealing focus in that mode.
-    const bool captureMode = (!m_captureAlo.empty() || !m_captureRef.empty())
+    // Keep the existing output-path gate: a missing PNG leaves the idle pump active.
+    const bool captureMode = (m_runMode == RunMode::Capture)
                              && !m_capturePng.empty();
 
     // In --capture mode show the window WITHOUT activating it: PrintWindow
@@ -2266,7 +2268,7 @@ int HostWindowImpl::Run(int nCmdShow)
     // can stop DComp compositing and yield a black composite.
     // --drive shows the window too (PrintWindow needs a composed window) but,
     // like --capture, must NOT steal focus from a daily-driver editor.
-    ShowWindow(hMain, (captureMode || m_automationMode) ? SW_SHOWNOACTIVATE : nCmdShow);
+    ShowWindow(hMain, (captureMode || IsAutomationMode()) ? SW_SHOWNOACTIVATE : nCmdShow);
     UpdateWindow(hMain);
 
     // --capture: construct the one-shot runner (setup + per-frame tick +
@@ -2377,7 +2379,7 @@ int HostWindowImpl::Run(int nCmdShow)
         // mode, so this must precede the !captureMode idle branch). Renders
         // every iteration; never blocks. States: wait app/ready -> build runner
         // -> one-shot DComp settle -> Tick per frame.
-        if (engine && m_driveMode)
+        if (engine && m_runMode == RunMode::Drive)
         {
             RenderD3D9();
             const double elapsedMs = driveFreq > 0
@@ -2462,17 +2464,16 @@ int HostWindowImpl::Run(int nCmdShow)
         // --drive with a null engine (D3D9/device init failed): the drive
         // branch above can't run, so exit non-zero rather than spin forever or
         // return a silent exit-0 with nothing captured.
-        else if (m_driveMode && !engine)
+        else if (m_runMode == RunMode::Drive && !engine)
         {
             Log("[drive] engine unavailable -- aborting drive run\n");
             driveExitCode = 5;
             quit = true;
         }
-        // --record: own top-level branch (captureMode/m_driveMode are false in
-        // record mode, so this precedes the !captureMode idle branch). States:
+        // --record: own top-level branch, before the paced idle branch. States:
         // wait app/ready -> parse timeline + one-time startup gate (seed/resize/
         // pause/open/catalog) + build runner -> Tick per emitted frame.
-        else if (engine && m_recordMode)
+        else if (engine && m_runMode == RunMode::Record)
         {
             RenderD3D9();
             const double elapsedMs = rec.freqQpc > 0
@@ -2646,7 +2647,7 @@ int HostWindowImpl::Run(int nCmdShow)
             }
         }
         // --record with a null engine: can't run; exit non-zero.
-        else if (m_recordMode && !engine)
+        else if (m_runMode == RunMode::Record && !engine)
         {
             Log("[record] engine unavailable -- aborting record run\n");
             rec.exitCode = 5;
@@ -2751,8 +2752,8 @@ int HostWindowImpl::Run(int nCmdShow)
     // an explicit 0/2 so a script can detect a bad load / failed write.
     if (captureMode) return captureRunner.ExitCode();
     // --drive likewise breaks via `quit`; return the runner's explicit code.
-    if (m_driveMode) return driveExitCode;
-    if (m_recordMode) return rec.exitCode;
+    if (m_runMode == RunMode::Drive) return driveExitCode;
+    if (m_runMode == RunMode::Record) return rec.exitCode;
     return static_cast<int>(m.wParam);
 }
 

@@ -14,7 +14,6 @@
 //   - src/host/spike/         standalone spikes with their own .vcxproj files
 //   - src/host/third_party/   vendored code (json.hpp is listed, but whatever
 //                             else a vendor drop brings is not ours to curate)
-//   - src/host/viewport_poc.cpp  diagnostic PoC, never compiled into the editor
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -24,7 +23,7 @@ import { fileURLToPath } from "node:url";
 
 const srcDir = resolve(dirname(fileURLToPath(import.meta.url)), "..", "src");
 const EXCLUDED_DIRS = ["generated", join("host", "spike"), join("host", "third_party")];
-const EXCLUDED_FILES = [join("host", "viewport_poc.cpp")];
+const EXCLUDED_FILES = [];
 const ITEM_TYPES = ["ClCompile", "ClInclude", "ResourceCompile", "Image", "FxCompile", "None"];
 
 // Map "Type|path" -> filter name (or null) for every project item in a file.

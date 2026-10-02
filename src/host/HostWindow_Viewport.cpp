@@ -87,10 +87,10 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // is alive.
         if (ParticleSystemInstance* attached = LiveAttachedSystem())
         {
-            m_dragMode     = DragMode::OBJECT_Z;
-            m_dragStartCam = engine->GetCamera();
-            m_dragStartX   = (short)LOWORD(lp);
-            m_dragStartY   = (short)HIWORD(lp);
+            m_viewport.dragMode     = DragMode::OBJECT_Z;
+            m_viewport.dragStartCam = engine->GetCamera();
+            m_viewport.dragStartX   = (short)LOWORD(lp);
+            m_viewport.dragStartY   = (short)HIWORD(lp);
             SetCapture(hwnd);
             Log("[ArchC-engine] LMB-down OBJECT_Z drag (placing attached=%p)\n",
                 static_cast<void*>(attached));
@@ -107,30 +107,30 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                 engine->PickManipulatorHandle((short)LOWORD(lp), (short)HIWORD(lp));
             if (h.kind != Engine::ManipHandle::NONE)
             {
-                m_manipKind     = h.kind;
-                m_manipAxis     = h.axis;
-                m_manipStartPos = engine->GetReferencePosition();
-                m_manipStartRot = engine->GetReferenceRotation();
+                m_viewport.manipKind     = h.kind;
+                m_viewport.manipAxis     = h.axis;
+                m_viewport.manipStartPos = engine->GetReferencePosition();
+                m_viewport.manipStartRot = engine->GetReferenceRotation();
                 if (h.kind == Engine::ManipHandle::TRANSLATE)
                 {
                     // Grab offset (axis param at press) so the object doesn't jump
                     // on the first move; if degenerate, fall back to 0.
                     if (!engine->ManipulatorAxisParam((short)LOWORD(lp), (short)HIWORD(lp),
-                                                      h.axis, m_manipStartPos, m_manipGrabT0))
-                        m_manipGrabT0 = 0.0f;
-                    m_manipPrevT  = m_manipGrabT0;   // seed accumulate-per-move (first move delta = 0 -> no jump)
-                    m_manipAccumT = 0.0f;
+                                                      h.axis, m_viewport.manipStartPos, m_viewport.manipGrabT0))
+                        m_viewport.manipGrabT0 = 0.0f;
+                    m_viewport.manipPrevT  = m_viewport.manipGrabT0;   // seed accumulate-per-move (first move delta = 0 -> no jump)
+                    m_viewport.manipAccumT = 0.0f;
                 }
                 else if (h.kind == Engine::ManipHandle::PLANE)
                 {
                     // Seed prev from the in-plane offset at press so the first move
                     // delta is 0 (no jump); accumulators start at 0. Anchor to the FIXED
-                    // grab position (m_manipStartPos) for the whole drag -- see below.
+                    // grab position (m_viewport.manipStartPos) for the whole drag -- see below.
                     if (!engine->ManipulatorPlaneOffset((short)LOWORD(lp), (short)HIWORD(lp),
-                                                        h.axis, m_manipStartPos, m_manipPrevU, m_manipPrevV))
-                    { m_manipPrevU = 0.0f; m_manipPrevV = 0.0f; }
-                    m_manipAccumU = 0.0f;
-                    m_manipAccumV = 0.0f;
+                                                        h.axis, m_viewport.manipStartPos, m_viewport.manipPrevU, m_viewport.manipPrevV))
+                    { m_viewport.manipPrevU = 0.0f; m_viewport.manipPrevV = 0.0f; }
+                    m_viewport.manipAccumU = 0.0f;
+                    m_viewport.manipAccumV = 0.0f;
                 }
                 else   // ROTATE
                 {
@@ -138,16 +138,16 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                     // first move is a no-op delta (no jump). If degenerate, the
                     // first valid move re-seeds prev (accum stays 0 until then).
                     if (!engine->ManipulatorRingAngle((short)LOWORD(lp), (short)HIWORD(lp),
-                                                      h.axis, m_manipGrabAngle))
-                        m_manipGrabAngle = 0.0f;
-                    m_manipPrevAngle  = m_manipGrabAngle;
-                    m_manipAccumAngle = 0.0f;
+                                                      h.axis, m_viewport.manipGrabAngle))
+                        m_viewport.manipGrabAngle = 0.0f;
+                    m_viewport.manipPrevAngle  = m_viewport.manipGrabAngle;
+                    m_viewport.manipAccumAngle = 0.0f;
                 }
                 // Tell the engine which handle is being dragged (drives the guide line / rotate sweep / dim).
                 // Rotate seeds both angles to the grab angle (applied == grab at accum 0); translate uses 0.
-                const float grabA = (h.kind == Engine::ManipHandle::ROTATE) ? m_manipGrabAngle : 0.0f;
+                const float grabA = (h.kind == Engine::ManipHandle::ROTATE) ? m_viewport.manipGrabAngle : 0.0f;
                 if (engine) engine->SetManipulatorActiveDrag(h, grabA, grabA);
-                m_dragMode = DragMode::MANIPULATE;
+                m_viewport.dragMode = DragMode::MANIPULATE;
                 SetCapture(hwnd);
                 return 0;
             }
@@ -161,8 +161,8 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         {
             int cx = (short)LOWORD(lp);
             int cy = (short)HIWORD(lp);
-            m_lastCursorX = cx;
-            m_lastCursorY = cy;
+            m_viewport.lastCursorX = cx;
+            m_viewport.lastCursorY = cy;
             D3DXVECTOR3 pos;
             GetCursorPos3D(engine.get(), (short)cx, (short)cy, pos);
             m_mouseCursor.SetPosition(pos);
@@ -185,10 +185,10 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                 dscene ? dx : 0, dscene ? dy : 0, dscene ? dw : 0, dscene ? dh : 0,
                 pos.x, pos.y, pos.z);
 #endif
-            m_dragMode     = DragMode::OBJECT_Z;
-            m_dragStartCam = engine->GetCamera();
-            m_dragStartX   = cx;
-            m_dragStartY   = cy;
+            m_viewport.dragMode     = DragMode::OBJECT_Z;
+            m_viewport.dragStartCam = engine->GetCamera();
+            m_viewport.dragStartX   = cx;
+            m_viewport.dragStartY   = cy;
             SetCapture(hwnd);
             return 0;
         }
@@ -212,10 +212,10 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             engine->SetReferenceObjectSelected(false);
         }
         // Plain LMB drag — camera MOVE / ZOOM (no preview involved).
-        m_dragMode     = (wp & MK_CONTROL) ? DragMode::ZOOM : DragMode::MOVE;
-        m_dragStartCam = engine->GetCamera();
-        m_dragStartX   = (short)LOWORD(lp);
-        m_dragStartY   = (short)HIWORD(lp);
+        m_viewport.dragMode     = (wp & MK_CONTROL) ? DragMode::ZOOM : DragMode::MOVE;
+        m_viewport.dragStartCam = engine->GetCamera();
+        m_viewport.dragStartX   = (short)LOWORD(lp);
+        m_viewport.dragStartY   = (short)HIWORD(lp);
         SetCapture(hwnd);
         return 0;
     }
@@ -224,15 +224,15 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         if (!engine) return 0;
         // An RMB press mid-LMB-manipulate-drag takes over the mode;
         // commit the in-flight move first so its persist/dirty isn't dropped.
-        if (m_dragMode == DragMode::MANIPULATE)
+        if (m_viewport.dragMode == DragMode::MANIPULATE)
         {
             if (dispatcher) dispatcher->CommitReferenceObjectTransform();
             ResetManipDragState();          // drop handle + zero accumulators + clear active-drag
         }
-        m_dragMode     = (wp & MK_CONTROL) ? DragMode::ZOOM : DragMode::ROTATE;
-        m_dragStartCam = engine->GetCamera();
-        m_dragStartX   = (short)LOWORD(lp);
-        m_dragStartY   = (short)HIWORD(lp);
+        m_viewport.dragMode     = (wp & MK_CONTROL) ? DragMode::ZOOM : DragMode::ROTATE;
+        m_viewport.dragStartCam = engine->GetCamera();
+        m_viewport.dragStartX   = (short)LOWORD(lp);
+        m_viewport.dragStartY   = (short)HIWORD(lp);
         SetCapture(hwnd);
         // See WM_LBUTTONDOWN — we don't SetFocus the hidden
         // popup, which would trigger the spurious WM_KILLFOCUS → kill loop.
@@ -243,10 +243,10 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // Manipulator drag release: commit the moved transform once
         // (gated persist + dirty + emit). Per-move only set+emitted (no persist),
         // so the registry/dirty flag is touched exactly once per gesture.
-        if (m_dragMode == DragMode::MANIPULATE)
+        if (m_viewport.dragMode == DragMode::MANIPULATE)
         {
             if (dispatcher) dispatcher->CommitReferenceObjectTransform();
-            m_dragMode  = DragMode::NONE;
+            m_viewport.dragMode  = DragMode::NONE;
             ResetManipDragState();          // drop handle + zero accumulators + clear active-drag
             ReleaseCapture();
             return 0;
@@ -266,13 +266,13 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             engine->DetachParticleSystem(m_attachedParticleSystem);
             m_attachedParticleSystem.Reset();
         }
-        m_dragMode = DragMode::NONE;
+        m_viewport.dragMode = DragMode::NONE;
         ReleaseCapture();
         return 0;
     }
     case WM_RBUTTONUP:
     {
-        m_dragMode = DragMode::NONE;
+        m_viewport.dragMode = DragMode::NONE;
         ReleaseCapture();
         return 0;
     }
@@ -282,11 +282,11 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // If a manipulator drag was interrupted, commit its current
         // position so the move isn't silently lost (the engine already holds the
         // last per-move position; CommitReferenceObjectTransform persists it).
-        if (m_dragMode == DragMode::MANIPULATE && dispatcher)
+        if (m_viewport.dragMode == DragMode::MANIPULATE && dispatcher)
             dispatcher->CommitReferenceObjectTransform();
         // Drop drag state so the next mouse-move doesn't ride a stale start camera
         // / grabbed axis.
-        m_dragMode  = DragMode::NONE;
+        m_viewport.dragMode  = DragMode::NONE;
         ResetManipDragState();          // drop handle + zero accumulators + clear active-drag
         return 0;
     }
@@ -296,12 +296,12 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
 
         int mx = (short)LOWORD(lp);
         int my = (short)HIWORD(lp);
-        m_lastCursorX = mx;
-        m_lastCursorY = my;
+        m_viewport.lastCursorX = mx;
+        m_viewport.lastCursorY = my;
 
         // Manipulator drag. TRANSLATE: accumulate precision-
-        // scaled per-move axis-param deltas (m_manipAccumT += (now - prev) * factor)
-        // and apply newPos = startPos + axis*m_manipAccumT — with factor==1 this
+        // scaled per-move axis-param deltas (m_viewport.manipAccumT += (now - prev) * factor)
+        // and apply newPos = startPos + axis*m_viewport.manipAccumT — with factor==1 this
         // telescopes to (now - grab), i.e. the old absolute-from-grab; factor=0.2 while
         // Shift is held gives a finer drag with no jump on toggle. ROTATE: accumulate
         // wrapped, precision-scaled per-move ring-angle deltas onto the snapshot
@@ -310,7 +310,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // free) and ROTATE rounds the driven Euler component to 15° (both finer by the
         // same factor while Shift held). Only set + emit here so the picker spinners
         // track live; persistence is deferred to LMB-up.
-        if (m_dragMode == DragMode::MANIPULATE && m_manipAxis >= 0)
+        if (m_viewport.dragMode == DragMode::MANIPULATE && m_viewport.manipAxis >= 0)
         {
             // [gizmo-drag-teardown] A drag continues only while the object is still
             // selected AND unlocked. An out-of-band clear / mod-switch / new-file /
@@ -318,32 +318,32 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             // before reading or applying any move — we must never drag a stale/gone/
             // frozen object. Fully end the gesture like the per-site drag-end tail, but
             // WITHOUT committing (we must not persist a stale transform): ResetManipDragState
-            // zeroes accumulators + clears the engine active-drag guides; clear m_dragMode +
+            // zeroes accumulators + clears the engine active-drag guides; clear m_viewport.dragMode +
             // ReleaseCapture so the eventual LBUTTONUP doesn't commit a phantom dirty/registry
-            // write. Set m_dragMode=NONE BEFORE ReleaseCapture so the WM_CAPTURECHANGED it posts
+            // write. Set m_viewport.dragMode=NONE BEFORE ReleaseCapture so the WM_CAPTURECHANGED it posts
             // sees NONE and no-ops. Reuses the unit-tested freeze/lock predicate (RefLock.h).
             if (!RefLockResolveSelected(engine->IsReferenceObjectSelected(),
                                         engine->IsReferenceLocked()))
             {
                 ResetManipDragState();
-                m_dragMode = DragMode::NONE;
+                m_viewport.dragMode = DragMode::NONE;
                 ReleaseCapture();
                 return 0;
             }
             const float factor = (wp & MK_SHIFT) ? 0.2f : 1.0f;   // read wParam, NOT GetKeyState
             bool moved = false;
-            if (m_manipKind == Engine::ManipHandle::TRANSLATE)
+            if (m_viewport.manipKind == Engine::ManipHandle::TRANSLATE)
             {
                 float tNow;
-                if (engine->ManipulatorAxisParam((short)mx, (short)my, m_manipAxis,
-                                                 m_manipStartPos, tNow))
+                if (engine->ManipulatorAxisParam((short)mx, (short)my, m_viewport.manipAxis,
+                                                 m_viewport.manipStartPos, tNow))
                 {
-                    m_manipAccumT += (tNow - m_manipPrevT) * factor;   // precision-scaled per-move delta
-                    m_manipPrevT   = tNow;
-                    const D3DXVECTOR3 ax(m_manipAxis == 0 ? 1.0f : 0.0f,
-                                         m_manipAxis == 1 ? 1.0f : 0.0f,
-                                         m_manipAxis == 2 ? 1.0f : 0.0f);
-                    D3DXVECTOR3 newPos = m_manipStartPos + ax * m_manipAccumT;   // note: NOT const now
+                    m_viewport.manipAccumT += (tNow - m_viewport.manipPrevT) * factor;   // precision-scaled per-move delta
+                    m_viewport.manipPrevT   = tNow;
+                    const D3DXVECTOR3 ax(m_viewport.manipAxis == 0 ? 1.0f : 0.0f,
+                                         m_viewport.manipAxis == 1 ? 1.0f : 0.0f,
+                                         m_viewport.manipAxis == 2 ? 1.0f : 0.0f);
+                    D3DXVECTOR3 newPos = m_viewport.manipStartPos + ax * m_viewport.manipAccumT;   // note: NOT const now
                     if (engine->GetSnapEnabled())                  // snap X/Y to grid; Z (height) free
                     {
                         const float step = engine->GetGridSpacing() * factor;    // finer step when Shift held
@@ -356,35 +356,35 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                     // (not just a successful projection) avoids a phantom undo
                     // step from a zero-delta first move — notably under snap,
                     // where a tiny move can round back to the grab point.
-                    if (!m_manipUndoCaptured && newPos != m_manipStartPos) {
+                    if (!m_viewport.manipUndoCaptured && newPos != m_viewport.manipStartPos) {
                         if (dispatcher) dispatcher->CaptureReferenceTransformUndoPoint();
-                        m_manipUndoCaptured = true;
+                        m_viewport.manipUndoCaptured = true;
                     }
-                    engine->SetReferenceObjectTransform(newPos, m_manipStartRot);
-                    m_readoutKind = "translate";
-                    m_readoutLabels[0] = manipreadout::AxisName(m_manipAxis);
-                    m_readoutValues[0] = (&newPos.x)[m_manipAxis];
-                    m_readoutN = 1; m_readoutDecimals = 1;
+                    engine->SetReferenceObjectTransform(newPos, m_viewport.manipStartRot);
+                    m_viewport.readoutKind = "translate";
+                    m_viewport.readoutLabels[0] = manipreadout::AxisName(m_viewport.manipAxis);
+                    m_viewport.readoutValues[0] = (&newPos.x)[m_viewport.manipAxis];
+                    m_viewport.readoutN = 1; m_viewport.readoutDecimals = 1;
                     moved = true;
                 }
             }
-            else if (m_manipKind == Engine::ManipHandle::PLANE)
+            else if (m_viewport.manipKind == Engine::ManipHandle::PLANE)
             {
                 float uNow, vNow;
-                // Anchor to the FIXED grab position (m_manipStartPos), NOT the live object
+                // Anchor to the FIXED grab position (m_viewport.manipStartPos), NOT the live object
                 // origin -- decomposing against the moving object fed its own motion back
                 // into the delta and oscillated the position (mirrors the arrow's
-                // ManipulatorAxisParam, which also anchors to m_manipStartPos).
-                if (engine->ManipulatorPlaneOffset((short)mx, (short)my, m_manipAxis, m_manipStartPos, uNow, vNow))
+                // ManipulatorAxisParam, which also anchors to m_viewport.manipStartPos).
+                if (engine->ManipulatorPlaneOffset((short)mx, (short)my, m_viewport.manipAxis, m_viewport.manipStartPos, uNow, vNow))
                 {
-                    m_manipAccumU += (uNow - m_manipPrevU) * factor;   // precision-scaled per-move
-                    m_manipAccumV += (vNow - m_manipPrevV) * factor;
-                    m_manipPrevU = uNow;  m_manipPrevV = vNow;
+                    m_viewport.manipAccumU += (uNow - m_viewport.manipPrevU) * factor;   // precision-scaled per-move
+                    m_viewport.manipAccumV += (vNow - m_viewport.manipPrevV) * factor;
+                    m_viewport.manipPrevU = uNow;  m_viewport.manipPrevV = vNow;
                     // Compose via the unit-tested pure helper (basis = (normal+1,normal+2);
                     // ground normal 2 -> (X,Y); Z stays == start, structurally).
                     float np[3];
-                    planehandle::ComposePlanePos(&m_manipStartPos.x, m_manipAxis,
-                                                 m_manipAccumU, m_manipAccumV, np);
+                    planehandle::ComposePlanePos(&m_viewport.manipStartPos.x, m_viewport.manipAxis,
+                                                 m_viewport.manipAccumU, m_viewport.manipAccumV, np);
                     D3DXVECTOR3 newPos(np[0], np[1], np[2]);
                     if (engine->GetSnapEnabled())
                     {
@@ -396,20 +396,20 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                         if (step > 0.0f) { newPos.x = roundf(newPos.x / step) * step;
                                            newPos.y = roundf(newPos.y / step) * step; }
                     }
-                    if (!m_manipUndoCaptured && newPos != m_manipStartPos) {
+                    if (!m_viewport.manipUndoCaptured && newPos != m_viewport.manipStartPos) {
                         if (dispatcher) dispatcher->CaptureReferenceTransformUndoPoint();
-                        m_manipUndoCaptured = true;
+                        m_viewport.manipUndoCaptured = true;
 #ifndef NDEBUG
                         Log("[Plane] grab-capture axis=%d accumUV=(%.3f,%.3f) newPos=(%.3f,%.3f,%.3f)\n",
-                            m_manipAxis, m_manipAccumU, m_manipAccumV, newPos.x, newPos.y, newPos.z);
+                            m_viewport.manipAxis, m_viewport.manipAccumU, m_viewport.manipAccumV, newPos.x, newPos.y, newPos.z);
 #endif
                     }
-                    engine->SetReferenceObjectTransform(newPos, m_manipStartRot);
-                    { int pu, pv; manipreadout::InPlaneAxes(m_manipAxis, pu, pv);
-                      m_readoutKind = "plane";
-                      m_readoutLabels[0] = manipreadout::AxisName(pu); m_readoutValues[0] = (&newPos.x)[pu];
-                      m_readoutLabels[1] = manipreadout::AxisName(pv); m_readoutValues[1] = (&newPos.x)[pv];
-                      m_readoutN = 2; m_readoutDecimals = 1; }
+                    engine->SetReferenceObjectTransform(newPos, m_viewport.manipStartRot);
+                    { int pu, pv; manipreadout::InPlaneAxes(m_viewport.manipAxis, pu, pv);
+                      m_viewport.readoutKind = "plane";
+                      m_viewport.readoutLabels[0] = manipreadout::AxisName(pu); m_viewport.readoutValues[0] = (&newPos.x)[pu];
+                      m_viewport.readoutLabels[1] = manipreadout::AxisName(pv); m_viewport.readoutValues[1] = (&newPos.x)[pv];
+                      m_viewport.readoutN = 2; m_viewport.readoutDecimals = 1; }
                     // active-drag (which drives the dim + faint X/Y guides) was set once at
                     // grab and never changes for a plane drag -- no per-move re-set needed
                     // (matches the TRANSLATE branch; only ROTATE re-sets, to feed live angles).
@@ -419,7 +419,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             else   // ROTATE
             {
                 float aNow;
-                if (engine->ManipulatorRingAngle((short)mx, (short)my, m_manipAxis, aNow))
+                if (engine->ManipulatorRingAngle((short)mx, (short)my, m_viewport.manipAxis, aNow))
                 {
                     auto wrapPi = [](float a) {
                         const float twoPi = 2.0f * D3DX_PI;
@@ -427,14 +427,14 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                         while (a <= -D3DX_PI) a += twoPi;
                         return a;
                     };
-                    m_manipAccumAngle += wrapPi(aNow - m_manipPrevAngle) * factor;   // precision
-                    m_manipPrevAngle   = aNow;
+                    m_viewport.manipAccumAngle += wrapPi(aNow - m_viewport.manipPrevAngle) * factor;   // precision
+                    m_viewport.manipPrevAngle   = aNow;
                     // Euler component this ring drives (m_referenceRotation = [yaw=Z,
                     // pitch=X, roll=Y]): ring axis 2(Z)->yaw(.x), 0(X)->pitch(.y),
                     // 1(Y)->roll(.z).
-                    const int comp = (m_manipAxis == 2) ? 0 : (m_manipAxis == 0) ? 1 : 2;
-                    D3DXVECTOR3 newRot = m_manipStartRot;
-                    (&newRot.x)[comp] += m_manipAccumAngle * (180.0f / D3DX_PI);
+                    const int comp = (m_viewport.manipAxis == 2) ? 0 : (m_viewport.manipAxis == 0) ? 1 : 2;
+                    D3DXVECTOR3 newRot = m_viewport.manipStartRot;
+                    (&newRot.x)[comp] += m_viewport.manipAccumAngle * (180.0f / D3DX_PI);
                     if (engine->GetSnapEnabled())                  // snap rotation to 15deg (3deg w/ Shift)
                     {
                         const float s = 15.0f * factor;
@@ -445,26 +445,26 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                     // mutating (engine still at the grab-time transform → PRE
                     // state). Gating on a real change avoids a phantom undo step
                     // from a zero-delta first move (e.g. snap rounding back).
-                    if (!m_manipUndoCaptured && newRot != m_manipStartRot) {
+                    if (!m_viewport.manipUndoCaptured && newRot != m_viewport.manipStartRot) {
                         if (dispatcher) dispatcher->CaptureReferenceTransformUndoPoint();
-                        m_manipUndoCaptured = true;
+                        m_viewport.manipUndoCaptured = true;
                     }
-                    engine->SetReferenceObjectTransform(m_manipStartPos, newRot);
-                    m_readoutKind = "rotate";
+                    engine->SetReferenceObjectTransform(m_viewport.manipStartPos, newRot);
+                    m_viewport.readoutKind = "rotate";
                     // Label = the WORLD AXIS the ring spins about (X/Y/Z); the value is the
                     // rotation about that axis = the Euler component RingComp(axis) selects.
-                    m_readoutLabels[0] = manipreadout::AxisName(m_manipAxis);
-                    m_readoutValues[0] = (&newRot.x)[comp];
-                    m_readoutN = 1; m_readoutDecimals = 0;
+                    m_viewport.readoutLabels[0] = manipreadout::AxisName(m_viewport.manipAxis);
+                    m_viewport.readoutValues[0] = (&newRot.x)[comp];
+                    m_viewport.readoutN = 1; m_viewport.readoutDecimals = 0;
                     // Push the active-drag AFTER snap so the rotate sweep's "applied" radial
                     // tracks the orientation the object ACTUALLY shows (snapped / precision-scaled),
                     // not the raw accumulator -- under snap the two would diverge by up to the snap
                     // step. Derive the applied angle from the final Euler delta in this ring's plane;
-                    // with snap off this reduces to grab + m_manipAccumAngle (unchanged behavior).
-                    Engine::ManipHandle activeH; activeH.kind = m_manipKind; activeH.axis = m_manipAxis;
-                    const float appliedRad = m_manipGrabAngle
-                        + ((&newRot.x)[comp] - (&m_manipStartRot.x)[comp]) * (D3DX_PI / 180.0f);
-                    if (engine) engine->SetManipulatorActiveDrag(activeH, m_manipGrabAngle, appliedRad);
+                    // with snap off this reduces to grab + m_viewport.manipAccumAngle (unchanged behavior).
+                    Engine::ManipHandle activeH; activeH.kind = m_viewport.manipKind; activeH.axis = m_viewport.manipAxis;
+                    const float appliedRad = m_viewport.manipGrabAngle
+                        + ((&newRot.x)[comp] - (&m_viewport.manipStartRot.x)[comp]) * (D3DX_PI / 180.0f);
+                    if (engine) engine->SetManipulatorActiveDrag(activeH, m_viewport.manipGrabAngle, appliedRad);
                     moved = true;
                 }
             }
@@ -474,10 +474,10 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                 // The HEAVY full-snapshot (drives the picker's numeric spinners)
                 // stays throttled to ~30 Hz so a fast drag doesn't flood the bridge;
                 // the final exact transform emits on release (commit).
-                if ((now - m_lastManipEmitTick) >= 33)
+                if ((now - m_viewport.lastManipEmitTick) >= 33)
                 {
                     dispatcher->EmitEngineStateChanged();
-                    m_lastManipEmitTick = now;
+                    m_viewport.lastManipEmitTick = now;
                 }
                 // The readout pill payload is tiny (nx/ny + a few values). It looked
                 // "laggy / stuttery" because it was chained to the 30 Hz snapshot gate
@@ -493,11 +493,11 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                     vp = manipreadout::ProjectToViewport(engine->GetReferencePosition(),
                                                          engine->GetViewProjection(), vw, vh);
                 nlohmann::json vals = nlohmann::json::array(), labels = nlohmann::json::array();
-                for (int i = 0; i < m_readoutN; ++i) { vals.push_back(m_readoutValues[i]); labels.push_back(m_readoutLabels[i]); }
+                for (int i = 0; i < m_viewport.readoutN; ++i) { vals.push_back(m_viewport.readoutValues[i]); labels.push_back(m_viewport.readoutLabels[i]); }
                 dispatcher->EmitManipulatorDrag({
-                    {"active", true}, {"kind", m_readoutKind},
+                    {"active", true}, {"kind", m_viewport.readoutKind},
                     {"nx", vp.nx}, {"ny", vp.ny}, {"visible", vp.visible},
-                    {"labels", labels}, {"values", vals}, {"decimals", m_readoutDecimals},
+                    {"labels", labels}, {"values", vals}, {"decimals", m_viewport.readoutDecimals},
                 });
             }
             return 0;
@@ -506,17 +506,17 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // Hover feedback: when idle (not dragging), highlight the
         // handle under the cursor. PickManipulatorHandle returns NONE unless an object
         // is selected, so this is a cheap no-op when there's nothing to hover.
-        if (m_dragMode == DragMode::NONE)
+        if (m_viewport.dragMode == DragMode::NONE)
             engine->SetManipulatorHover(engine->PickManipulatorHandle((short)mx, (short)my));
 
         // Legacy parity: in OBJECT_Z drag (placing a cursor-bound preview),
         // only Z tracks the drag. X/Y stay frozen at the click position so
         // the user can rake the mouse vertically to set height without the
         // preview sliding sideways. Matches the legacy editor.
-        if (m_dragMode == DragMode::OBJECT_Z)
+        if (m_viewport.dragMode == DragMode::OBJECT_Z)
         {
-            long y = my - m_dragStartY;
-            D3DXVECTOR3 diff = m_dragStartCam.Target - m_dragStartCam.Position;
+            long y = my - m_viewport.dragStartY;
+            D3DXVECTOR3 diff = m_viewport.dragStartCam.Target - m_viewport.dragStartCam.Position;
             float len = D3DXVec3Length(&diff);
             D3DXVECTOR3 pos = m_mouseCursor.GetPosition();
             pos.z = -static_cast<float>(y) * len / 1000.0f;
@@ -539,9 +539,9 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // status bar, throttled. 33 ms ≈ 30 Hz — fast enough to read,
         // slow enough that the bridge channel doesn't bottleneck.
         const DWORD now = GetTickCount();
-        if (dispatcher && (now - m_lastCursorEmitTick) >= 33u)
+        if (dispatcher && (now - m_viewport.lastCursorEmitTick) >= 33u)
         {
-            m_lastCursorEmitTick = now;
+            m_viewport.lastCursorEmitTick = now;
             dispatcher->EmitCursorPosition3D(cursorWorld.x, cursorWorld.y, cursorWorld.z);
 #ifndef NDEBUG
             // Throttled diagnostic for the
@@ -561,20 +561,20 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
 #endif
         }
 
-        if (m_dragMode == DragMode::NONE) return 0;
+        if (m_viewport.dragMode == DragMode::NONE) return 0;
 
-        long x = mx - m_dragStartX;
-        long y = my - m_dragStartY;
+        long x = mx - m_viewport.dragStartX;
+        long y = my - m_viewport.dragStartY;
 
-        Engine::Camera camera = m_dragStartCam;
+        Engine::Camera camera = m_viewport.dragStartCam;
         D3DXVECTOR3    orthVec;
-        D3DXVECTOR3    diff = m_dragStartCam.Position - m_dragStartCam.Target;
+        D3DXVECTOR3    diff = m_viewport.dragStartCam.Position - m_viewport.dragStartCam.Target;
 
         // Orthogonal vector in the camera plane (as in the legacy editor).
         D3DXVec3Cross(&orthVec, &diff, &camera.Up);
         D3DXVec3Normalize(&orthVec, &orthVec);
 
-        if (m_dragMode == DragMode::ROTATE)
+        if (m_viewport.dragMode == DragMode::ROTATE)
         {
             // Orbit Position around Target. Z rotation around camera-up
             // axis (horizontal drag); XY rotation around orthVec
@@ -586,7 +586,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             D3DXVec3TransformCoord(&camera.Position, &diff, &rotate);
             camera.Position += camera.Target;
         }
-        else if (m_dragMode == DragMode::MOVE)
+        else if (m_viewport.dragMode == DragMode::MOVE)
         {
             // Translate Target (Position rides along). Multiplier scales
             // with distance so a far camera moves proportionally faster —
@@ -602,7 +602,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             camera.Target  += (float)y * multiplier * Up;
             camera.Position = diff + camera.Target;
         }
-        else if (m_dragMode == DragMode::ZOOM)
+        else if (m_viewport.dragMode == DragMode::ZOOM)
         {
             // Scale (Position - Target) by a sqrt(distance)-based
             // factor. Floor at 1.0f to prevent flipping through the
@@ -631,7 +631,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
     //
     // Cursor-coords-on-KEYDOWN: WM_KEYDOWN's lParam is repeat-count +
     // scan-code + flags — NOT mouse coords. Legacy reads `LOWORD(lParam),
-    // HIWORD(lParam)` and gets garbage; instead we use m_lastCursorX/Y
+    // HIWORD(lParam)` and gets garbage; instead we use m_viewport.lastCursorX/Y
     // cached from WM_MOUSEMOVE. Fallback (cache stale or zero at boot):
     // GetCursorPos + ScreenToClient.
     // -----------------------------------------------------------------
@@ -654,8 +654,8 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // fall back to GetCursorPos+ScreenToClient if the cache hasn't
         // been seeded (e.g. user pressed Shift before moving the mouse
         // over the viewport at all).
-        int cx = m_lastCursorX;
-        int cy = m_lastCursorY;
+        int cx = m_viewport.lastCursorX;
+        int cy = m_viewport.lastCursorY;
         if (cx == 0 && cy == 0)
         {
             POINT pt = {};
@@ -705,9 +705,9 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // WM_CAPTURECHANGED may not fire for the hidden popup). Commit the moved transform so it isn't
         // lost, then clear drag + active-guide state. A spurious archC focus-churn mid-drag would also end
         // the drag, but commit preserves the position (accepted tradeoff -- a captured drag rarely churns).
-        if (m_dragMode == DragMode::MANIPULATE) {
+        if (m_viewport.dragMode == DragMode::MANIPULATE) {
             if (dispatcher) dispatcher->CommitReferenceObjectTransform();
-            m_dragMode  = DragMode::NONE;
+            m_viewport.dragMode  = DragMode::NONE;
             ResetManipDragState();          // drop handle + zero accumulators + clear active-drag
         }
         // Defensive: if the viewport loses focus while Shift is held
@@ -735,23 +735,23 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // any cursor-bound Shift spawn. Distinct from the OS WM_KILLFOCUS above
         // (suppressed for Win32 focus churn) so a real blur can't leak the
         // attached preview. Tear down an in-flight OBJECT_Z
-        // placement drag first: m_dragMode = NONE BEFORE ReleaseCapture (the gizmo
+        // placement drag first: m_viewport.dragMode = NONE BEFORE ReleaseCapture (the gizmo
         // teardown order). No-op when nothing is attached / no drag.
         //
         // Preserve the WM_KILLFOCUS MANIPULATE behavior the renderer blur used to
         // trigger (it previously routed through WM_KILLFOCUS): commit an in-flight
         // gizmo drag so its moved transform isn't lost. Idempotent — if the OS
-        // WM_KILLFOCUS also fires, whichever runs first sets m_dragMode=NONE and
+        // WM_KILLFOCUS also fires, whichever runs first sets m_viewport.dragMode=NONE and
         // the other skips.
-        if (m_dragMode == DragMode::MANIPULATE)
+        if (m_viewport.dragMode == DragMode::MANIPULATE)
         {
             if (dispatcher) dispatcher->CommitReferenceObjectTransform();
-            m_dragMode = DragMode::NONE;
+            m_viewport.dragMode = DragMode::NONE;
             ResetManipDragState();
         }
-        if (m_dragMode == DragMode::OBJECT_Z)
+        if (m_viewport.dragMode == DragMode::OBJECT_Z)
         {
-            m_dragMode = DragMode::NONE;
+            m_viewport.dragMode = DragMode::NONE;
             ReleaseCapture();
         }
         if (ParticleSystemInstance* attached = LiveAttachedSystem())
@@ -782,7 +782,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
     {
         // Wheel-zoom only when no drag is in progress (as in the legacy editor).
         // wParam high word is the wheel delta in WHEEL_DELTA units (120).
-        if (m_dragMode != DragMode::NONE || !engine) return 0;
+        if (m_viewport.dragMode != DragMode::NONE || !engine) return 0;
 
         Engine::Camera camera = engine->GetCamera();
         D3DXVECTOR3    diff   = camera.Position - camera.Target;

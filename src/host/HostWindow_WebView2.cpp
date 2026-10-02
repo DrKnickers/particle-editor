@@ -366,8 +366,8 @@ HRESULT HostWindowImpl::InitWebView2()
     // disjunction: "isolate the profile" and "suppress blocking modals" are the
     // same question — is anyone there? — and they must not drift apart.
     const bool captureIsolation =
-        !IsFullyInteractiveSession(!m_captureAlo.empty() || !m_captureRef.empty(),
-                                   m_automationMode,
+        !IsFullyInteractiveSession(m_runMode == RunMode::Capture,
+                                   IsAutomationMode(),
                                    useTestHost);
     std::wstring userDataFolder = m_perfWebViewProfile.empty()
         ? ComputeUserDataFolder(captureIsolation)

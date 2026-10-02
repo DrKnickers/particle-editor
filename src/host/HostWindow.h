@@ -10,7 +10,7 @@
 //   - the BridgeDispatcher, LayoutBroker, and AcceleratorBridge
 //
 // The implementation lives in HostWindow.cpp and HostWindow_*.cpp. It grew
-// out of src/host/viewport_poc.cpp, and keeps that PoC's
+// out of an early composition proof of concept, and keeps that PoC's
 // ICoreWebView2Controller2::put_DefaultBackgroundColor({0,0,0,0}) fix
 // (a transparent WebView2 background).
 #ifndef HOST_HOST_WINDOW_H

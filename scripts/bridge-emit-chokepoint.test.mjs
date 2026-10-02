@@ -27,7 +27,7 @@ import { fileURLToPath } from "node:url";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const hostDir = join(repoRoot, "src", "host");
 const EXCLUDED_DIRS = new Set(["third_party", "spike", "generated"]);
-const EXCLUDED_FILES = new Set(["viewport_poc.cpp"]);
+const EXCLUDED_FILES = new Set();
 
 // Blank out comments and string/char literal CONTENTS (keeping the quotes and
 // every newline), so a comment that quotes `m_emit(env.dump())` or a URL in a

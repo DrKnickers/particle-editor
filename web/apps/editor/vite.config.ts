@@ -44,7 +44,7 @@ export default defineConfig({
   },
   base: "./",
   server: {
-    port: 5174,        // 5173 is used by viewport-poc; pick a fresh port for the real app
+    port: 5174,        // Must match kDevServerPort in src/host/HostWindowImpl.h
     strictPort: true,
   },
   build: { outDir: "dist", emptyOutDir: true },

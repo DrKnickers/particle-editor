@@ -458,50 +458,69 @@ struct HostWindowImpl
     // ring) was grabbed; LMB drag moves/rotates the object (wins over camera orbit
     // only when a handle is actually under the cursor at press).
     enum class DragMode { NONE, MOVE, ROTATE, ZOOM, OBJECT_Z, MANIPULATE };
-    DragMode        m_dragMode      = DragMode::NONE;
-    Engine::Camera  m_dragStartCam  = {};
-    int             m_dragStartX    = 0;
-    int             m_dragStartY    = 0;
-    // Manipulator drag state: the grabbed handle (kind + axis),
-    // the transform snapshot at grab, and the no-jump anchors. TRANSLATE 
-    // accumulates precision-scaled per-move axis-param deltas: each WM_MOUSEMOVE adds
-    // (tNow - m_manipPrevT) * factor to m_manipAccumT (factor = 0.2 while Shift held,
-    // else 1.0) and applies newPos = startPos + axis*m_manipAccumT. m_manipGrabT0 is
-    // the axis param at press (seeds m_manipPrevT so the first move's delta is 0 -> no
-    // jump). With factor==1 throughout, m_manipAccumT telescopes to (tNow - grabT0),
-    // matching the old absolute-from-grab formula; a mid-drag Shift toggle only rescales
-    // subsequent deltas (no jump, since m_manipPrevT tracks the raw param). ROTATE
-    // accumulates wrapped, precision-scaled per-move ring angle deltas
-    // (m_manipGrabAngle/Prev/Accum) onto the snapshot rotation.
-    Engine::ManipHandle::Kind m_manipKind = Engine::ManipHandle::NONE;
-    int             m_manipAxis        = -1;
-    D3DXVECTOR3     m_manipStartPos    = D3DXVECTOR3(0, 0, 0);
-    D3DXVECTOR3     m_manipStartRot    = D3DXVECTOR3(0, 0, 0);
-    float           m_manipGrabT0      = 0.0f;
-    float           m_manipPrevT       = 0.0f;   // translate accumulate-per-move: last raw axis param
-    float           m_manipAccumT      = 0.0f;   // accumulated (precision-scaled) translate offset from grab
-    float           m_manipPrevU       = 0.0f;   // plane drag: last raw in-plane U
-    float           m_manipPrevV       = 0.0f;   //                     last raw in-plane V
-    float           m_manipAccumU      = 0.0f;   //   accumulated (precision-scaled) U offset from grab
-    float           m_manipAccumV      = 0.0f;   //   accumulated V offset from grab
-    float           m_manipGrabAngle   = 0.0f;   // ring angle at grab (rad)
-    float           m_manipPrevAngle   = 0.0f;   // previous-move ring angle (rad)
-    float           m_manipAccumAngle  = 0.0f;   // accumulated rotation (rad)
-    // Per-gesture latch: false until the FIRST per-move mutation
-    // of a manipulator drag pushes its (one) pre-mutation undo point. A grab
-    // that never moves the object captures nothing — no phantom undo step.
-    bool            m_manipUndoCaptured = false;
-    // ~30 Hz throttle for the per-move engine/state/changed emit (the snapshot is
-    // heavy; the gizmo render still moves every frame via SetReferenceObjectTransform).
-    DWORD           m_lastManipEmitTick = 0;
+    struct ViewportInteraction
+    {
+        DragMode        dragMode      = DragMode::NONE;
+        Engine::Camera  dragStartCam  = {};
+        int             dragStartX    = 0;
+        int             dragStartY    = 0;
+        // Manipulator drag state: the grabbed handle (kind + axis),
+        // the transform snapshot at grab, and the no-jump anchors. TRANSLATE 
+        // accumulates precision-scaled per-move axis-param deltas: each WM_MOUSEMOVE adds
+        // (tNow - manipPrevT) * factor to manipAccumT (factor = 0.2 while Shift held,
+        // else 1.0) and applies newPos = startPos + axis*manipAccumT. manipGrabT0 is
+        // the axis param at press (seeds manipPrevT so the first move's delta is 0 -> no
+        // jump). With factor==1 throughout, manipAccumT telescopes to (tNow - grabT0),
+        // matching the old absolute-from-grab formula; a mid-drag Shift toggle only rescales
+        // subsequent deltas (no jump, since manipPrevT tracks the raw param). ROTATE
+        // accumulates wrapped, precision-scaled per-move ring angle deltas
+        // (manipGrabAngle/Prev/Accum) onto the snapshot rotation.
+        Engine::ManipHandle::Kind manipKind = Engine::ManipHandle::NONE;
+        int             manipAxis        = -1;
+        D3DXVECTOR3     manipStartPos    = D3DXVECTOR3(0, 0, 0);
+        D3DXVECTOR3     manipStartRot    = D3DXVECTOR3(0, 0, 0);
+        float           manipGrabT0      = 0.0f;
+        float           manipPrevT       = 0.0f;   // translate accumulate-per-move: last raw axis param
+        float           manipAccumT      = 0.0f;   // accumulated (precision-scaled) translate offset from grab
+        float           manipPrevU       = 0.0f;   // plane drag: last raw in-plane U
+        float           manipPrevV       = 0.0f;   //                     last raw in-plane V
+        float           manipAccumU      = 0.0f;   //   accumulated (precision-scaled) U offset from grab
+        float           manipAccumV      = 0.0f;   //   accumulated V offset from grab
+        float           manipGrabAngle   = 0.0f;   // ring angle at grab (rad)
+        float           manipPrevAngle   = 0.0f;   // previous-move ring angle (rad)
+        float           manipAccumAngle  = 0.0f;   // accumulated rotation (rad)
+        // Per-gesture latch: false until the FIRST per-move mutation
+        // of a manipulator drag pushes its (one) pre-mutation undo point. A grab
+        // that never moves the object captures nothing — no phantom undo step.
+        bool            manipUndoCaptured = false;
+        // ~30 Hz throttle for the per-move engine/state/changed emit (the snapshot is
+        // heavy; the gizmo render still moves every frame via SetReferenceObjectTransform).
+        DWORD           lastManipEmitTick = 0;
 
-    // Readout pill scratch: each MANIPULATE branch fills these post-snap;
-    // the throttle gate projects the gizmo origin and emits one event.
-    std::string m_readoutKind;                 // "translate" | "plane" | "rotate"
-    std::string m_readoutLabels[2];            // axis / euler names
-    float       m_readoutValues[2] = {0,0};    // absolute values
-    int         m_readoutN = 0;                // 1 or 2
-    int         m_readoutDecimals = 1;         // 1 for units, 0 for degrees
+        // Readout pill scratch: each MANIPULATE branch fills these post-snap;
+        // the throttle gate projects the gizmo origin and emits one event.
+        std::string readoutKind;                 // "translate" | "plane" | "rotate"
+        std::string readoutLabels[2];            // axis / euler names
+        float       readoutValues[2] = {0,0};    // absolute values
+        int         readoutN = 0;                // 1 or 2
+        int         readoutDecimals = 1;         // 1 for units, 0 for degrees
+
+        // lastCursorX/Y: cache of the most recent (x,y) seen by
+        // WM_MOUSEMOVE. Used as the spawn coords on WM_KEYDOWN VK_SHIFT
+        // because WM_KEYDOWN's lParam is NOT cursor coords (a legacy
+        // main.cpp bug passed garbage). Fallback if the cache is
+        // stale: GetCursorPos + ScreenToClient.
+        int             lastCursorX = 0;
+        int             lastCursorY = 0;
+        // last GetTickCount() at which we pushed a
+        // `cursor/position-3d` event. Throttled to ~30 Hz so the
+        // WebView2 message channel isn't saturated by WM_MOUSEMOVE
+        // (which fires per-pixel). The legacy status bar updates per
+        // WM_MOUSEMOVE since SendMessage is free in-process; over the
+        // bridge a 33 ms minimum interval is a good compromise.
+        DWORD           lastCursorEmitTick = 0;
+    };
+    ViewportInteraction m_viewport;
 
     // Re-validate the cursor-bound Shift-preview borrow before ANY use. See the
     // m_attachedParticleSystem note below: Engine::Clear() frees the pointee
@@ -525,17 +544,17 @@ struct HostWindowImpl
 
     // The invariant tail every MANIPULATE drag-end shares: drop the grabbed handle, zero the
     // accumulators, and clear the engine's active-drag (guide/sweep/dim) state. Per-site Commit /
-    // ReleaseCapture / m_dragMode handling stays at the call site -- only this shared tail is factored
+    // ReleaseCapture / m_viewport.dragMode handling stays at the call site -- only this shared tail is factored
     // out so a new end-site can't forget the active-drag clear (the bug WM_KILLFOCUS originally had).
     void ResetManipDragState()
     {
-        m_manipAxis = -1;
-        m_manipKind = Engine::ManipHandle::NONE;
-        m_manipAccumT = 0.0f;
-        m_manipAccumAngle = 0.0f;
-        m_manipAccumU = 0.0f;
-        m_manipAccumV = 0.0f;
-        m_manipUndoCaptured = false;   // next grab starts a fresh gesture
+        m_viewport.manipAxis = -1;
+        m_viewport.manipKind = Engine::ManipHandle::NONE;
+        m_viewport.manipAccumT = 0.0f;
+        m_viewport.manipAccumAngle = 0.0f;
+        m_viewport.manipAccumU = 0.0f;
+        m_viewport.manipAccumV = 0.0f;
+        m_viewport.manipUndoCaptured = false;   // next grab starts a fresh gesture
         if (engine) engine->SetManipulatorActiveDrag(Engine::ManipHandle(), 0.0f, 0.0f);
         // hide the readout pill (ResetManipDragState is called from the 4
         // capture-drag-end sites: LBUTTONUP, RBUTTONDOWN, CAPTURECHANGED, KILLFOCUS).
@@ -564,22 +583,9 @@ struct HostWindowImpl
     // Shift-spawn (the non-null precondition never clears) and puts LMB-down
     // into a placement drag for an instance that no longer exists.
     //
-    // m_lastCursorX/Y: cache of the most recent (x,y) seen by
-    // WM_MOUSEMOVE. Used as the spawn coords on WM_KEYDOWN VK_SHIFT
-    // because WM_KEYDOWN's lParam is NOT cursor coords (a legacy
-    // main.cpp bug passed garbage). Fallback if the cache is
-    // stale: GetCursorPos + ScreenToClient.
+    // Shared with RenderD3D9 and the dispatcher; keep these at host scope.
     MouseCursor             m_mouseCursor;
     ParticleSystemInstanceHandle m_attachedParticleSystem;
-    int                     m_lastCursorX = 0;
-    int                     m_lastCursorY = 0;
-    // last GetTickCount() at which we pushed a
-    // `cursor/position-3d` event. Throttled to ~30 Hz so the
-    // WebView2 message channel isn't saturated by WM_MOUSEMOVE
-    // (which fires per-pixel). The legacy status bar updates per
-    // WM_MOUSEMOVE since SendMessage is free in-process; over the
-    // bridge a 33 ms minimum interval is a good compromise.
-    DWORD                   m_lastCursorEmitTick = 0;
 
     // viewport/input bridge surface owner. Constructed
     // alongside the AlphaCompositor in WM_CREATE; holds a raw HWND for the
@@ -643,9 +649,11 @@ struct HostWindowImpl
 
     bool        useDevUi   = false;  // --dev-ui: navigate to Vite HMR server
     bool        useTestHost = false; // --test-host: CDP :9222 + DevTools
+    enum class RunMode { Interactive, Capture, Drive, Record };
+    const RunMode m_runMode;
     // --capture mode: load m_captureAlo,
     // render m_captureFrames frames, write engine RT to m_capturePng,
-    // then quit. Both paths empty = normal interactive run.
+    // then quit. These are capture inputs; m_runMode selects the pump branch.
     std::wstring m_captureAlo;
     // --capture-ref <objectName>: render a game reference object (with its
     // shadow) headlessly instead of a particle system. Mutually exclusive
@@ -670,20 +678,14 @@ struct HostWindowImpl
     // WebMessageReceived to this thread's message pump), so a plain non-atomic
     // bool is correct: no atomic/volatile needed.
     bool         m_uiReady = false;
-    // --drive <script.json>: scripted non-CDP composite capture. m_driveMode
-    // (true only in drive mode) routes the drive pump branch and its exit
-    // code. Persistence isolation (settings/MRU/mod-layer/autosave, per-PID
-    // WebView2 profile + log) is m_automationMode below, which --record shares,
-    // so a --drive run never perturbs a concurrently-running daily-driver editor.
+    // --drive and --record share persistence/profile/log isolation, but have
+    // separate run-loop branches. --test-host remains an orthogonal flag.
     std::wstring m_driveScriptPath;
-    bool         m_driveMode = false;
-    // --record <timeline.json>: deterministic clip recording. m_recordMode routes
-    // the record pump branch; m_automationMode (drive OR record) gates persistence
-    // — keep them separate so a --record run takes the persistence isolation but
-    // enters the RECORD branch, never the drive branch.
     std::wstring m_recordScriptPath;
-    bool         m_recordMode = false;
-    bool         m_automationMode = false;
+    bool IsAutomationMode() const
+    {
+        return m_runMode == RunMode::Drive || m_runMode == RunMode::Record;
+    }
     // True only when a human is present to dismiss a blocking modal — i.e. NOT in
     // any headless mode (capture / drive-or-record / test-host). Every fatal or
     // preflight MessageBoxW is gated on this so a headless run never hangs on a
@@ -691,7 +693,7 @@ struct HostWindowImpl
     bool IsFullyInteractive() const
     {
         return IsFullyInteractiveSession(
-            !m_captureAlo.empty() || !m_captureRef.empty(), m_automationMode, useTestHost);
+            m_runMode == RunMode::Capture, IsAutomationMode(), useTestHost);
     }
     int          m_recordTimelineFps = 0;    // latched at timeline-Init success; locks the
                                              // stats-tick FPS readout to the clip's virtual rate
@@ -937,6 +939,13 @@ struct HostWindowImpl
         , fileManager(fil)
         , useDevUi(options.useDevUi)
         , useTestHost(options.useTestHost)
+        // main.cpp rejects capture/drive/record combinations. For direct callers,
+        // preserve the old pump precedence: Drive, then Record, then Capture.
+        // Both capture inputs are allowed; CaptureRunner still prefers captureRef.
+        , m_runMode(!options.driveScriptPath.empty() ? RunMode::Drive
+                    : !options.recordScriptPath.empty() ? RunMode::Record
+                    : (!options.captureAlo.empty() || !options.captureRef.empty())
+                        ? RunMode::Capture : RunMode::Interactive)
         , m_captureAlo(options.captureAlo)
         , m_captureRef(options.captureRef)
         , m_capturePng(options.capturePng)
@@ -948,10 +957,7 @@ struct HostWindowImpl
         , m_captureHasSunI(options.hasSunIntensity)
         , m_captureSunIntensity(options.sunIntensity)
         , m_driveScriptPath(options.driveScriptPath)
-        , m_driveMode(!options.driveScriptPath.empty())
         , m_recordScriptPath(options.recordScriptPath)
-        , m_recordMode(!options.recordScriptPath.empty())
-        , m_automationMode(!options.driveScriptPath.empty() || !options.recordScriptPath.empty())
         , m_perfWebViewProfile(options.perfWebViewProfile)
         , layout(nullptr)
         , accelerator()
@@ -977,7 +983,7 @@ struct HostWindowImpl
         // Automation must isolate the palette BEFORE the saved mod stack is
         // restored: RestoreLastLayerStack activates a mod, which otherwise
         // loads the user's persisted pins/recents before OpenLog/Run begins.
-        if (m_automationMode)
+        if (IsAutomationMode())
             TexturePalette::Store::Instance().SetEphemeral(true);
         // discover installed mods and restore the
         // previously-active one from the registry before any UI shows.
