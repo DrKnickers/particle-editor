@@ -171,6 +171,7 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
         // reports success), permanently short-circuiting this replay. (pre-PR review.)
         m_lastMaximizedSent = -1;
         EmitWindowStateIfChanged();
+        EmitViewportUnavailable();
         // Same replay for autosave health, and for the
         // same reason: it is emitted only on a CHANGE, so a web reload would
         // otherwise drop a live "recovery net is stale" warning and not restore
@@ -1109,7 +1110,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
 //      controller's RootVisualTarget into the webview visual + Commits.
 // A failure in any step posts WM_APP_COMPOSITION_FATAL: composition is
 // required and there is no HWND fallback. Only the engine-visual attach
-// after step 3 is a soft failure (chrome stays usable).
+// after step 3 keeps interactive chrome usable, but is fatal for automation.
 // ---------------------------------------------------------------------
 HRESULT HostWindowImpl::OnCompositionControllerReady(
     HRESULT chr, ICoreWebView2CompositionController* ctl)
@@ -1240,7 +1241,7 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
             // prevent. There is no HWND fallback: signal a fatal error.
             // PostMessage so this callback unwinds before the modal + exit.
             // (Engine-visual attach below is DIFFERENT — that failure keeps
-            // the chrome usable, so it stays soft.)
+            // the chrome usable, so interactive sessions show a notice.)
             Log("[host] composition: Compositor::AttachWebView2 FAILED hr=0x%08lx — composition-class failure\n", bhr);
             PostMessageW(hMain, WM_APP_COMPOSITION_FATAL, static_cast<WPARAM>(bhr), 0);
             return bhr;
@@ -1256,12 +1257,8 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
         if (!IsIconic(hMain) && clientW > 0 && clientH > 0)
             m_compositor->SetSize(clientW, clientH);
 
-        // Attach engine visual BEHIND the
-        // WebView2 visual. On failure, log
-        // and continue with composition mode intact: chrome works,
-        // viewport area stays empty (there is no
-        // HWND fallback). The per-frame render loop composites a
-        // successful attachment; an unsuccessful one leaves the viewport empty.
+        // Attach engine visual behind WebView2. Missing preview pixels keep
+        // interactive editing available with a notice; automation must fail.
         if (engine && engine->GetSharedTextureHandle())
         {
             HANDLE sharedTex = engine->GetSharedTextureHandle();
@@ -1269,18 +1266,19 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
             HRESULT ehr = m_compositor->AttachEngineVisual(sharedTex, clientW, clientH, engineLuid);
             if (FAILED(ehr))
             {
-                Log("[host] composition: AttachEngineVisual hr=0x%08lx — composition mode continues with engine visual NOT attached (viewport area will be empty)\n", ehr);
-                // Do NOT PostMessage(WM_APP_COMPOSITION_FATAL) — that
-                // path is for chrome-itself-broken failures; engine-
-                // attach failures keep the chrome usable in composition
-                // mode.
+                Log("[host] composition: AttachEngineVisual hr=0x%08lx — engine visual NOT attached\n", ehr);
+                MarkViewportUnavailable("The graphics frame could not be attached to the viewport.", ehr);
+                if (m_compositionFatalPending) return ehr;
             }
         }
         else
         {
-            Log("[host] composition: skipping AttachEngineVisual (engine=%p sharedHandle=%p) — composition mode continues without engine pixels\n",
+            Log("[host] composition: skipping AttachEngineVisual (engine=%p sharedHandle=%p) — no engine pixels\n",
                 engine.get(),
                 engine ? engine->GetSharedTextureHandle() : nullptr);
+            MarkViewportUnavailable(engine ? "The graphics preview has no shared frame surface."
+                                           : "The 3D engine could not be initialized.", E_FAIL);
+            if (m_compositionFatalPending) return E_FAIL;
         }
 
         // Inject the DComp Compositor into the

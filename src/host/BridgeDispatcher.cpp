@@ -1615,6 +1615,17 @@ void BridgeDispatcher::EmitSpawnerActiveCount(int count)
     m_emit(env);
 }
 
+void BridgeDispatcher::EmitViewportUnavailable(const std::string& reason)
+{
+    if (!m_emit) return;
+    json env = {
+        {"type",    "evt"},
+        {"kind",    "viewport/unavailable"},
+        {"payload", {{"reason", reason}}},
+    };
+    m_emit(env);
+}
+
 bool BridgeDispatcher::EmitWindowState(bool maximized)
 {
     if (!m_emit) return false;   // web not wired yet — caller replays on app/ready

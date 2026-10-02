@@ -270,6 +270,8 @@ public:
     // wired yet, so the caller can replay on app/ready — same contract as
     // EmitWindowState above.
     bool EmitAutosaveHealth(bool healthy);
+    // Host retains the reason and replays on app/ready when the page reloads.
+    void EmitViewportUnavailable(const std::string& reason);
 
     // Editor-level file state.
     //

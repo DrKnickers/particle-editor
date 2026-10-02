@@ -315,6 +315,9 @@
     <ClInclude Include="host\CompositionStartupPolicy.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="host\ViewportUnavailablePolicy.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
     <ClInclude Include="host\HostMessages.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>

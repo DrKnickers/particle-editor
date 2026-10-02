@@ -337,6 +337,14 @@ const MOCK_ATLAS_PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACA
 
 export class MockBridge implements Bridge {
   private events = new EventHub<{ [K in EventKind]: EventOf<K> }>("MockBridge");
+  private viewportUnavailable: EventOf<"viewport/unavailable"> | null = null;
+
+  /** Browser dev: window.bridge.setViewportUnavailable("Graphics frame attach failed.").
+   *  Retained for late subscriptions, just like the native host-session failure. */
+  setViewportUnavailable(reason: string): void {
+    this.viewportUnavailable = { kind: "viewport/unavailable", payload: { reason } };
+    this.emit(this.viewportUnavailable);
+  }
 
   /** In-mock "active spawner instance count". Bumped
    *  by Manual spawner/trigger (by burstSize), zeroed by spawner/stop. The
@@ -397,7 +405,10 @@ export class MockBridge implements Bridge {
   }
 
   on<K extends EventKind>(kind: K, handler: (e: EventOf<K>) => void): () => void {
-    return this.events.on(kind, handler);
+    const unsubscribe = this.events.on(kind, handler);
+    if (kind === "viewport/unavailable" && this.viewportUnavailable)
+      handler(this.viewportUnavailable as EventOf<K>);
+    return unsubscribe;
   }
 
   // ---------------------------------------------------------------- internals

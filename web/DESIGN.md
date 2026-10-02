@@ -81,6 +81,13 @@
 
 ## Components & interaction
 
+- **Unavailable 3D preview:** a persistent `role=alert` banner inside the
+  viewport uses panel/text/danger-foreground tokens and the shared banner
+  shadow. It gives the host's reason, confirms editing/saving is available,
+  and points to graphics-driver updates and the log. No dismiss or expiry;
+  the host replays on page reload and bridges retain it across layout resets.
+  In browser dev, trigger with `window.bridge.setViewportUnavailable(reason)`.
+
 - **Radix primitives** for menus/dialogs/popovers/tabs/selects/tooltips; the
   shared `Modal` owns dialog chrome + frozen-viewport backdrop; `ToolPanel`
   owns docked tool panes (incl. focus management: chrome-triggered

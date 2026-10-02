@@ -235,6 +235,13 @@ describe("PanelLayout — Reset panel layout", () => {
 });
 
 describe("PanelLayout — DOM structure", () => {
+  it("renders the unavailable-preview alert inside the viewport quadrant", () => {
+    const bridge = makeBridgeStub();
+    renderPanelLayout(bridge);
+    bridge.emit("viewport/unavailable", { reason: "No shared preview surface." });
+    expect(screen.getByTestId("quadrant-viewport")).toContainElement(screen.getByRole("alert"));
+  });
+
   it("renders all five quadrant testIDs when Spawner is visible", () => {
     const bridge = makeStubBridge();
     renderPanelLayout(bridge);

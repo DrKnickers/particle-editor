@@ -35,6 +35,7 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 - Saving a particle file, and every autosave, now flushes it to disk before it replaces the old copy, so a crash or power cut right after saving can't leave a damaged file
 - New and Open can no longer throw away unsaved changes made just before you clicked them; the editor asks to save first
 - A game XML file whose read stops before its end now fails with an error instead of hanging the editor, and a mod nickname or saved game folder longer than 255 characters is no longer cut short
+- When the 3D preview can't start (for example, the graphics device or the engine frame fails to attach), the viewport now shows a notice saying so instead of staying blank
 
 ### Security
 

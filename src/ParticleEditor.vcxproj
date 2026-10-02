@@ -197,6 +197,7 @@
     <ClInclude Include="host\AsyncFrameEncoder.h" />
     <ClInclude Include="host\ClipPathTokens.h" />
     <ClInclude Include="host\CompositionStartupPolicy.h" />
+    <ClInclude Include="host\ViewportUnavailablePolicy.h" />
     <ClInclude Include="host\HostMessages.h" />
     <ClInclude Include="host\ModulePath.h" />
     <ClInclude Include="host\PerfTrace.h" />

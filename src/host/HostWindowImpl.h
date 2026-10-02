@@ -80,6 +80,7 @@
 #include "ModulePath.h"               // host::ModuleDirectory (grow-until-it-fits module path)
 #include "StartupCallbackAdapter.h"   // guarded one-shot WebView2 creation callbacks
 #include "CompositionStartupPolicy.h" // second WebView2 create's synchronous failure channel
+#include "ViewportUnavailablePolicy.h" // missing engine pixels: notice or automation exit
 
 #include "AcceleratorBridge.h"
 #include "AlphaCompositor.h"
@@ -602,6 +603,8 @@ struct HostWindowImpl
     // Latches a posted runtime composition fatal so no later render tick can
     // submit more D3D11 work before the message-loop handler exits.
     bool                                      m_compositionFatalPending = false;
+    // Persistent for this host session; replayed after every page reload.
+    std::string                               m_viewportUnavailableReason;
     ComPtr<ICoreWebView2CompositionController> m_compositionController;
     // Frameless title bar: QI of the composition controller for
     // GetNonClientRegionAtPoint (WM_NCHITTEST caption drag). Null on an older
@@ -1042,6 +1045,8 @@ struct HostWindowImpl
     // (MessageBox) and exit the process rather than leave a black window.
     // [[noreturn]]: flushes host.log, shows the dialog, then ExitProcess.
     [[noreturn]] void FailFatalComposition(HRESULT hr);
+    void MarkViewportUnavailable(const char* reason, HRESULT hr);
+    void EmitViewportUnavailable();
 
     // WebView2 process-failure recovery. The decisions
     // live in WebViewCrashPolicy.h; this is the wiring. m_webDead is the one

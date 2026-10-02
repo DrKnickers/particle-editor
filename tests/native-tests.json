@@ -240,6 +240,7 @@
       "uses": ["expat", "dxsdk", "webview2"],
       "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
+    "test_viewport_unavailable_policy": {},
     "test_webmessage_ingress_policy": {},
     "test_webview_crash_policy": {},
     "test_webview_modal_policy": {

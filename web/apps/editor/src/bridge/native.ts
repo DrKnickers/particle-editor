@@ -38,6 +38,7 @@ export class NativeBridge implements Bridge {
   private pending = new Map<RequestId, Pending>();
   private events = new EventHub<{ [K in EventKind]: EventOf<K> }>("NativeBridge");
   private idCounter = 0;
+  private viewportUnavailable: EventOf<"viewport/unavailable"> | null = null;
   private disposed = false;
   // Optional per-request timeout. OFF by default: several requests are
   // interactive and legitimately block for a long time — the native file
@@ -112,7 +113,12 @@ export class NativeBridge implements Bridge {
   }
 
   on<K extends EventKind>(kind: K, handler: (e: EventOf<K>) => void): () => void {
-    return this.events.on(kind, handler);
+    const unsubscribe = this.events.on(kind, handler);
+    // A layout reset remounts the viewport without another app/ready. Replay
+    // this persistent condition to late subscribers as well as on page reload.
+    if (kind === "viewport/unavailable" && this.viewportUnavailable)
+      handler(this.viewportUnavailable as EventOf<K>);
+    return unsubscribe;
   }
 
   private onMessage(raw: unknown): void {
@@ -137,6 +143,8 @@ export class NativeBridge implements Bridge {
         p.reject(err);
       }
     } else {
+      if (msg.kind === "viewport/unavailable")
+        this.viewportUnavailable = { kind: msg.kind, payload: msg.payload } as EventOf<"viewport/unavailable">;
       this.events.emit(msg.kind, { kind: msg.kind, payload: msg.payload } as Event);
     }
   }

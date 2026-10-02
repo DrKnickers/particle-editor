@@ -1357,6 +1357,8 @@ export function isRefusal(r: unknown): r is { ok: false; error?: string } {
 // ============================================================================
 
 export type Event =
+  // Persistent host-session failure: replayed on app/ready after page reloads.
+  | { kind: "viewport/unavailable";   payload: { reason: string } }
   | { kind: "engine/state/changed";   payload: EngineStateDto }
   | { kind: "emitters/tree/changed";  payload: EmitterTreeDto }
   | { kind: "emitters/selected";      payload: { id: number | null } }

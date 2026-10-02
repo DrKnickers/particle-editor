@@ -451,6 +451,33 @@ void HostWindowImpl::Log(const char* fmt, ...)
     ExitProcess(1);
 }
 
+void HostWindowImpl::EmitViewportUnavailable()
+{
+    if (dispatcher && !m_viewportUnavailableReason.empty())
+        dispatcher->EmitViewportUnavailable(m_viewportUnavailableReason);
+}
+
+void HostWindowImpl::MarkViewportUnavailable(const char* reason, HRESULT hr)
+{
+    if (DecideViewportUnavailable(IsFullyInteractive()) == ViewportUnavailableAction::Exit)
+    {
+        m_compositionFatalPending = true;
+        Log("[host] composition: 3D preview unavailable: %s (hr=0x%08lx) — automation exiting\n",
+            reason, static_cast<unsigned long>(hr));
+        if (!PostMessageW(hMain, WM_APP_COMPOSITION_FATAL, static_cast<WPARAM>(hr), 0))
+            FailFatalComposition(hr);
+        return;
+    }
+
+    // Preserve the first, most specific failure (e.g. alpha init rather than
+    // the later missing shared handle). No automatic expiry or dismissal.
+    if (m_viewportUnavailableReason.empty())
+        m_viewportUnavailableReason = reason;
+    Log("[host] composition: 3D preview unavailable: %s (hr=0x%08lx) — editing remains available\n",
+        reason, static_cast<unsigned long>(hr));
+    EmitViewportUnavailable();
+}
+
 // ---------- WebView2 process failure ----------
 
 // ProcessFailed handler. Runs on the UI thread inside a WebView2 callback, so
@@ -1324,9 +1351,12 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             }
             catch (const std::exception& e)
             {
-                Log("[host] AlphaCompositor init failed: %s — engine will Present directly\n", e.what());
+                Log("[host] AlphaCompositor init failed: %s — 3D preview unavailable\n", e.what());
+                engine->SetAlphaCompositor(nullptr);
+                layout.SetAlphaCompositor(nullptr);
                 alphaCompositor.reset();
                 m_inputDispatcher.reset();
+                MarkViewportUnavailable("The graphics preview surface could not be initialized.", E_FAIL);
             }
         }
 
