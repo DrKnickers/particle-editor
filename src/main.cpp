@@ -56,8 +56,8 @@ using namespace std;
 #include "MouseCursor.h"
 
 
-// Emitter duplicate-name helper (relocated here when the old EmitterList.cpp
-// was removed). Returns "<base>_<n>" where <n> is one more than the
+// Emitter duplicate-name helper (relocated here from the legacy Win32
+// editor). Returns "<base>_<n>" where <n> is one more than the
 // highest numeric suffix already in use among emitters in `system` whose name
 // matches `<base>` or `<base>_<digits>`. If `sourceName` itself ends in
 // `_<digits>` that suffix is stripped first, so duplicating "Foo_3" repeatedly
@@ -144,7 +144,7 @@ static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv, v
 		    arg == L"--perf-trace-mode" ||
 		    arg == L"--perf-artifact-dir" ||
 		    arg == L"--perf-webview-profile" ||
-		    arg == L"--gen-nt5-fixture" ||
+		    arg == L"--gen-singleton-link-fixture" ||
 		    arg == L"--gen-a11y-fixture" ||
 		    arg == L"--gen-smoke-test" ||
 		    arg == L"--frames" ||
@@ -330,7 +330,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		const std::vector<std::wstring> argv = parseCommandLine();
 		bool devUi    = false;
 		bool testHost = false;
-		// --gen-nt5-fixture <path>: one-shot CLI to produce a
+		// --gen-singleton-link-fixture <path>: one-shot CLI to produce a
 		// .alo file with a known legacy singleton link group. Used
 		// to exercise the load-time enforcement sweep at file/open.
 		// Since the production save path always runs through
@@ -339,7 +339,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		// file. This flag bypasses BridgeDispatcher entirely and
 		// constructs the singleton state directly via the
 		// ParticleSystem API + SaveParticleSystem.
-		std::wstring genNt5FixturePath;
+		std::wstring genSingletonLinkFixturePath;
 		std::wstring genA11yFixturePath;
 		std::wstring genSmokeTestPath;   // [shaded-smoke] all-three test particle
 		// [shaded-smoke] --smoke-color <warm|grey>: color ramp for the gen-smoke-test
@@ -464,9 +464,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 				++i;
 				continue;
 			}
-			if (argv[i] == L"--gen-nt5-fixture" && i + 1 < argv.size())
+			if (argv[i] == L"--gen-singleton-link-fixture" && i + 1 < argv.size())
 			{
-				genNt5FixturePath = argv[i + 1];
+				genSingletonLinkFixturePath = argv[i + 1];
 			}
 			if (argv[i] == L"--gen-a11y-fixture" && i + 1 < argv.size())
 			{
@@ -610,7 +610,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			});
 		}
 #endif
-		if (!genNt5FixturePath.empty())
+		if (!genSingletonLinkFixturePath.empty())
 		{
 			auto sys = std::make_unique<ParticleSystem>();
 			sys->addRootEmitter();
@@ -618,7 +618,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			auto& emitters = sys->getEmitters();
 			if (emitters.size() < 2 || !emitters[0] || !emitters[1])
 			{
-				fwprintf(stderr, L"gen-nt5-fixture: failed to add 2 root emitters\n");
+				fwprintf(stderr, L"gen-singleton-link-fixture: failed to add 2 root emitters\n");
 				return 2;
 			}
 			// Put both in link group 1 (transient — valid 2-member
@@ -630,16 +630,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			emitters[1]->linkGroup = 1;
 			emitters[0]->linkGroup = 0;
 			std::string err;
-			const bool ok = SaveParticleSystem(sys.get(), genNt5FixturePath, &err);
+			const bool ok = SaveParticleSystem(sys.get(), genSingletonLinkFixturePath, &err);
 			if (!ok)
 			{
-				fwprintf(stderr, L"gen-nt5-fixture: SaveParticleSystem failed: %hs\n",
+				fwprintf(stderr, L"gen-singleton-link-fixture: SaveParticleSystem failed: %hs\n",
 				         err.c_str());
 				return 2;
 			}
-			fwprintf(stderr, L"gen-nt5-fixture: wrote %s "
+			fwprintf(stderr, L"gen-singleton-link-fixture: wrote %s "
 			                 L"(emitter 0 linkGroup=0, emitter 1 linkGroup=1 — singleton)\n",
-			         genNt5FixturePath.c_str());
+			         genSingletonLinkFixturePath.c_str());
 			return 0;
 		}
 		// [shaded-smoke] --gen-smoke-test <path>: one root emitter set up to exercise the

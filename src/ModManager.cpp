@@ -78,7 +78,7 @@ static vector<wstring> ReadLastLayers()
 
 // Returns false when the stack could NOT be persisted (key open or value write
 // failed), so a locked or policy-blocked registry doesn't look like a
-// successful save and the bridge doesn't answer {ok:true} (2026-07 audit).
+// successful save and the bridge doesn't answer {ok:true}.
 // LastLayers is authoritative, so its failure is the caller's business.
 static bool WriteLastLayers(const vector<wstring>& layers)
 {
@@ -228,7 +228,7 @@ bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers, bool allow
 
     // 2. Registry persistence is DEFERRED to after the engine reload below, so a
     //    failed shader reload never records a stack the next launch cannot render
-    //    (release-audit #5). The in-memory stack + content roots are applied now.
+    //    The in-memory stack + content roots are applied now.
 
     // 3. Texture palette follows the primary layer. (The current path busts
     //    its own base64 thumbnail cache via the bridge palette refresh —
@@ -248,8 +248,8 @@ bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers, bool allow
         m_engine->ReloadTextures();
     }
 
-    // 5. Persist the stack to the registry ONLY if the reload succeeded
-    //    (release-audit #5): LastLayers is authoritative; LastMod = primary is a
+    // 5. Persist the stack to the registry ONLY if the reload succeeded.
+    //    LastLayers is authoritative; LastMod = primary is a
     //    write-only best-effort record (nothing in the editor reads it anymore).
     //    On a failed reload we leave the registry untouched so the next launch boots
     //    the last-known-good stack, not one whose shaders failed to load.

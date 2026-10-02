@@ -113,9 +113,9 @@ namespace
     // or a 0x602 connection leaf as a CONTAINER. Without a kind check the
     // container-expecting sub-loops below would walk sibling chunks and consume
     // the parent's -1 terminator, double-popping ChunkReader's depth to -1
-    // (Debug assert / Release OOB read at ChunkReader.cpp:52); the mini-chunk
-    // walkers would hit nextMini()'s assert(m_size >= 0) at ChunkReader.cpp:11.
-    // Reject the file instead (issue #487). After next(), size() == m_size, so
+    // (Debug assert / Release OOB read in ChunkReader::next); the mini-chunk
+    // walkers would hit ChunkReader::nextMini()'s former assert(m_size >= 0).
+    // Reject the file instead. After next(), size() == m_size, so
     // size() < 0 <=> container (m_size == -1), size() >= 0 <=> data leaf.
     inline void VerifyContainer(ChunkReader& r) { Verify(r.size() < 0); }
     inline void VerifyDataLeaf(ChunkReader& r)  { Verify(r.size() >= 0); }
@@ -156,7 +156,7 @@ namespace
     // id) by walking its name(1) / value(2) mini-chunks.
     AloShaderParam ReadParam(ChunkReader& r, AloShaderParam::Kind kind)
     {
-        VerifyDataLeaf(r);   // param chunk is a data leaf; nextMini() needs m_size >= 0 (#487)
+        VerifyDataLeaf(r);   // param chunk is a data leaf; nextMini() needs m_size >= 0
         AloShaderParam p;
         p.kind = kind;
         ChunkType mt;
@@ -196,7 +196,7 @@ namespace
     void ReadSubMeshMaterial(ChunkReader& r, AloSubMesh& sm,
                              size_t& shaderParamsTotal)
     {
-        VerifyContainer(r);   // #487
+        VerifyContainer(r);
         ChunkType t;
         while ((t = r.next()) != -1)
         {
@@ -221,7 +221,7 @@ namespace
     // r is positioned inside a 0x10000 submesh-geometry container.
     void ReadGeometry(ChunkReader& r, AloSubMesh& sm)
     {
-        VerifyContainer(r);   // #487
+        VerifyContainer(r);
         bool sawOldVertex = false;
         ChunkType t;
         while ((t = r.next()) != -1)
@@ -275,7 +275,7 @@ namespace
                     break;
             }
         }
-        // FINAL consistency re-check (2026-07 audit, deep fuzz round 16752).
+        // FINAL consistency re-check (found by a deep test_alo_fuzz run).
         //
         // CHUNK_VERTEX_NEW and CHUNK_INDICES each validate their blob size
         // against sm.vertexCount / sm.primitiveCount AT THE MOMENT THEY ARE
@@ -310,7 +310,7 @@ namespace
     void ReadMesh(ChunkReader& r, AloMesh& mesh, size_t& subMeshesTotal,
                   size_t& shaderParamsTotal)
     {
-        VerifyContainer(r);   // #487
+        VerifyContainer(r);
         ChunkType t;
         while ((t = r.next()) != -1)
         {
@@ -362,7 +362,7 @@ namespace
     // that loaded before. The consumer flags a degenerate placement.
     void ReadBone(ChunkReader& r, AloBone& bone)
     {
-        VerifyContainer(r);   // #487
+        VerifyContainer(r);
         ChunkType t;
         while ((t = r.next()) != -1)
         {
@@ -399,7 +399,7 @@ namespace
     // tolerant, but a child-count flood is structurally malformed and rejected.
     void ReadSkeleton(ChunkReader& r, std::vector<AloBone>& bones)
     {
-        VerifyContainer(r);   // #487
+        VerifyContainer(r);
         ChunkType t;
         while ((t = r.next()) != -1)
         {
@@ -423,14 +423,14 @@ namespace
     // connection entries is rejected before growing the vector without bound.
     void ReadConnections(ChunkReader& r, std::vector<AloConnection>& conns)
     {
-        VerifyContainer(r);   // #487
+        VerifyContainer(r);
         ChunkType t;
         while ((t = r.next()) != -1)
         {
             if (t == CHUNK_CONN_OBJECT)
             {
                 Verify(conns.size() < kMaxAloConnections);
-                VerifyDataLeaf(r);   // 0x602 is a data leaf; nextMini() needs m_size >= 0 (#487)
+                VerifyDataLeaf(r);   // 0x602 is a data leaf; nextMini() needs m_size >= 0
                 AloConnection c;
                 ChunkType mt;
                 while ((mt = r.nextMini()) != -1)
@@ -464,7 +464,7 @@ AloModel LoadAloModel(IFile* file)
     {
         if (t == CHUNK_MESH)
         {
-            // Aggregate cap (2026-07 audit). Every 0x0400 container costs a
+            // Aggregate cap. Every 0x0400 container costs a
             // Mesh whether or not it carries a payload, and this loop was bounded
             // only by the file size — unlike the bone and connection loops below,
             // which have had their caps all along.

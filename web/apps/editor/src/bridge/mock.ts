@@ -132,7 +132,7 @@ function isMutating(kind: Request["kind"]): boolean {
   if (kind === "engine/set/model-shadows") return false;
   if (kind === "engine/set/soft-shadows") return false;
   // Ground-plane visibility is a global VIEW preference (registry-persisted,
-  // not part of the .alo document); native host no longer marks dirty (#617).
+  // not part of the .alo document); native host no longer marks dirty.
   if (kind === "engine/set/ground") return false;
   // stats/set-frozen is a test-only knob; never mutating.
   if (kind === "stats/set-frozen") return false;
@@ -302,7 +302,7 @@ const MOCK_LAYERS: readonly { path: string; label: string; parentLabel?: string;
 // load-failed status path + the solid-colour fallback indicator.
 const MOCK_MISSING_DOMES = new Set<string>(["Broken_Sky"]);
 
-// Layout-lane seed for the texture palette (#683). Browser mode's palette is
+// Layout-lane seed for the texture palette. Browser mode's palette is
 // deliberately inert (no per-mod Store), so the tests-web geometry spec seeds
 // entries through the dev-only window.__paletteTest seam, which calls
 // seedMockPalette. null = unseeded = the inert default.
@@ -1027,7 +1027,7 @@ export class MockBridge implements Bridge {
       // and manual entry. The native host backs these with
       // TexturePalette::Store + EncodeThumbnailPng. The layout lane seeds
       // entries via seedMockPalette (dev seam window.__paletteTest) so
-      // tests-web can measure a POPULATED popover's geometry (#683).
+      // tests-web can measure a POPULATED popover's geometry.
       case "textures/palette/list": {
         const seeded = getSeededMockPalette();
         if (seeded) {
@@ -1102,10 +1102,8 @@ export class MockBridge implements Bridge {
       //
       // Returns a fixed 3-emitter mock tree regardless of path. Lets the
       // Import Emitters modal exercise the checkbox tree in browser
-      // mode + Vitest. The native host forward-defers with a friendly
-      // error (the legacy ImportEmitters_LoadFile path requires
-      // FileManager + ParticleSystem which the new-UI host doesn't yet
-      // own).
+      // mode + Vitest. The native host loads the real .alo into a
+      // temporary ParticleSystem instead.
       case "emitters/preview-from-file":
         // stableId parity with the native preview tree (BuildEmitterTreeNode
         // emits it; synthetic root uses the reserved 0). The preview tree is

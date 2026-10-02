@@ -79,8 +79,8 @@ const APP_EXE = resolve(repoRoot, args.exe);
 // Verdict for a test binary that exited 0 but printed `SKIP: <case> (<reason>)`
 // for one or more of its cases.
 //
-// Exported so scripts/gate-integrity.test.mjs can exercise it directly: this is
-// the decision the 2026-07 audit filed. #687 made these skips VISIBLE,
+// Exported so scripts/gate-integrity.test.mjs can exercise it directly. An
+// earlier fix made these skips VISIBLE,
 // and stopped there on the reasoning that "the capability genuinely is absent on
 // some machines, and failing there would punish a legitimate environment". That
 // is true of the machine that never had the capability and false of the machine
@@ -90,7 +90,7 @@ const APP_EXE = resolve(repoRoot, args.exe);
 //
 // So: FAIL by default, and let an environment that genuinely cannot run the case
 // say so out loud with --allow-missing-capabilities. Same shape as
-// --allow-missing-exe above and as the gate's own --allow-missing <lane> (#706):
+// --allow-missing-exe above and as the gate's own --allow-missing <lane>:
 // a missing capability is a decision someone makes explicitly, not a silence.
 export function selfSkipVerdict(skippedCount, allowMissingCapabilities) {
   if (skippedCount === 0) return { ok: true, note: "" };
@@ -186,7 +186,7 @@ async function main() {
 
   const results = [];
   // Cases a binary self-skipped because a capability probe failed. Reported at
-  // the end so a green run states plainly what it did NOT exercise (2026-07 audit).
+  // the end so a green run states plainly what it did NOT exercise.
   const skippedCases = [];
   for (const { name, label, exe } of runs) {
     const started = Date.now();
@@ -223,7 +223,7 @@ async function main() {
     // test_clip_save_confinement does exactly that when `mklink /J` or 8.3
     // short-name lookup is unavailable — and then still exit 0. Reading only the
     // exit code made a self-skipped junction/short-path confinement case
-    // indistinguishable from a passing one (2026-07 audit). A self-skipped
+    // indistinguishable from a passing one. A self-skipped
     // case now FAILS the lane unless explicitly allowed — see selfSkipVerdict.
     const r = spawnSync(exe, NEEDS_EXE.has(name) ? [APP_EXE] : [], {
       cwd: repoRoot,

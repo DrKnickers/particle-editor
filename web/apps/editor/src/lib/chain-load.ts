@@ -1,7 +1,7 @@
 import type { EmitterTreeNode, SpawnParamsDto } from "@particle-editor/bridge-schema";
 
 // Soft chain warning. Advisory only — nothing in the editor blocks
-// on this. Spec: docs/superpowers/specs/2026-06-10-chain-warning-design.md.
+// on this.
 
 // Vanilla effects run tens-to-hundreds alive; the v1 chain-test bomb was
 // millions. 10k flags genuinely explosive chains without nagging
@@ -57,9 +57,9 @@ const MIN_PARENT_LIFETIME = 1 / 60;
 // A(parent)/L(parent) and each death-child emitter lives ≈ the child's own
 // particle lifetime L(child), so the concurrent child-emitter count is
 // A(parent)·L(child)/L(parent) — the lifetime rule scaled by L(child)/L(parent).
-// This mirrors the engine (spawnOnDeath fires once in KillParticle,
-// EmitterInstance.cpp:679) and fixes the old uniform rule's exponential
-// over-projection of death chains (#562): long-lived parents die rarely, so
+// This mirrors the engine (spawnOnDeath fires once in
+// EmitterInstance::KillParticle) and fixes the old uniform rule's exponential
+// over-projection of death chains: long-lived parents die rarely, so
 // their death children shrink toward zero instead of multiplying. Per-emitter E
 // still assumes continuous emission — a smaller, documented over-count for
 // one-shot death emitters, kept so the estimate stays one simple rule.
@@ -75,7 +75,7 @@ function linkMultiplier(node: EmitterTreeNode, parentLifetime: number): number {
 // crosses `threshold` (default `CHAIN_WARN_THRESHOLD`). A(node) = A(parent) ×
 // linkMultiplier(node): lifetime children multiply by E (one child emitter per
 // alive parent particle); death children multiply by E·L(child)/L(parent) (one
-// child emitter per parent DEATH — see linkMultiplier / #562).
+// child emitter per parent DEATH — see linkMultiplier).
 export function estimateChainLoad(
   root: EmitterTreeNode,
   // Configurable guard cap when the overload guard is enabled; the
@@ -113,7 +113,7 @@ export function estimateChainLoad(
 /** Total estimated steady-state alive particles for ONE placed instance
  *  of the whole system: Σ over every node of its cumulative alive
  *  estimate (A(node) = A(parent) × linkMultiplier(node); roots start at A = E,
- *  death children scale by E·L(child)/L(parent) — see linkMultiplier / #562).
+ *  death children scale by E·L(child)/L(parent) — see linkMultiplier).
  *  Drives the preemptive overload gate (engine/set/estimated-load) —
  *  the SAME walk + estimator as the ⚠ chain warning, so the gate and
  *  the glyph can never disagree. */

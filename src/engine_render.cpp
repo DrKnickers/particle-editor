@@ -1,6 +1,5 @@
 // engine_render.cpp — the render/update/post-processing/shader-reload cluster of the Engine class,
-// moved verbatim out of engine.cpp (Phase B translation-unit split —
-// tasks/2026-07-06-heavyweight-refactor-plan.md). SAME class, same header
+// moved verbatim out of engine.cpp (a translation-unit split). SAME class, same header
 // (engine.h); this is a file split, not a class split. Cluster-local
 // file-scope statics moved with their consumers; helpers shared across
 // TUs are declared in engine_internal.h with one definition.
@@ -17,7 +16,7 @@
 #include "Resources/resource.h"
 #include "ParticleSystemInstance.h"  // instance Update/Render*/IsDead in the frame loop
 #include "EmitterInstance.h"         // EmitterInstance::Vertex (ground/bloom/compose quads)
-#include "ParticleMipFilter.h"       // #481 ALO_PARTICLE_MIPFILTER override (MODE_*)
+#include "ParticleMipFilter.h"       // ALO_PARTICLE_MIPFILTER override (MODE_*)
 #include "host/AlphaCompositor.h"    // present path
 #include "host/ModulePath.h"
 #include "SphericalHarmonics.h"      // ambient SPH floor in the scene pass
@@ -561,7 +560,7 @@ void Engine::Update()
 
     // Update existing instances.
     //
-    // [D2] Paused-idle skip: when the sim clock is FROZEN (paused preview,
+    // Paused-idle skip: when the sim clock is FROZEN (paused preview,
     // GetTimeF returns the pause anchor) this loop re-walks every particle
     // with an unchanged currentTime — kills/resets/curve evaluations all
     // recompute last frame's results (pure CPU waste that scales with the
@@ -822,7 +821,7 @@ bool Engine::Render()
     m_pDevice->SetRenderState(D3DRS_ZENABLE,      TRUE);
     m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 
-    // Particle mip sampling (#481): draw the non-heat particle pass with
+    // Particle mip sampling: draw the non-heat particle pass with
     // MIPFILTER = NONE on both texture stages. The Prim* particle shaders —
     // unlike every mesh shader, which declares MIPFILTER=LINEAR in its
     // sampler_state / FIXEDFUNCTION state block — declare NO sampler
@@ -837,7 +836,7 @@ bool Engine::Render()
     // observed result, not a probed copy of the game's literal sampler
     // calls (instrumenting swfoc.exe is the open follow-up); the env
     // override below exists to A/B against the old behavior at runtime:
-    //   ALO_PARTICLE_MIPFILTER=linear   -> pre-#481 trilinear
+    //   ALO_PARTICLE_MIPFILTER=linear   -> the former trilinear default
     //   ALO_PARTICLE_MIPFILTER=bias:<f> -> trilinear with LOD bias <f>
     // The bracket saves/restores all four touched sampler states so
     // nothing leaks into later passes regardless of mode.
@@ -1063,7 +1062,7 @@ bool Engine::Render()
 	const LONGLONG _ptBloom1 = EngQpcNow();   // bloom ends / distort begins
 	// Now render to the heat texture.
 	//
-	// [D3] Zero-heat skip: with no live heat particles this pass only
+	// Zero-heat skip: with no live heat particles this pass only
 	// re-clears the distort RT to the neutral normal (129,128,255) and
 	// scans instances to draw nothing — skip it once the RT is ALREADY
 	// neutral. The composite below is untouched: it still samples the
@@ -1167,8 +1166,7 @@ bool Engine::Render()
 		// The present result WAS discarded. It is the only cheap signal that the
 		// device has gone bad — Microsoft's guidance is to call CheckDeviceState
 		// when a present fails rather than polling it per frame — so a failure
-		// here raises the latch the top of Render() reads next frame
-		// (2026-07 audit).
+		// here raises the latch the top of Render() reads next frame.
 		const HRESULT presentHr = m_pDevice->Present(NULL, NULL, NULL, NULL);
 		NotifyPresentResult(presentHr);
 	}

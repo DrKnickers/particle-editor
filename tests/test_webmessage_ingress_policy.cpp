@@ -1,5 +1,4 @@
-// Regression test for the bridge-ingress size cap (src/host/WebMessageIngressPolicy.h,
-// 2026-07 audit).
+// Regression test for the bridge-ingress size cap (src/host/WebMessageIngressPolicy.h).
 //
 // OnWebMessage parses the whole inbound string, so before the cap one
 // postMessage could drive an arbitrarily large allocation on the UI thread.
@@ -11,8 +10,7 @@
 // callback the policy is used from lives in HostWindow.cpp, which pulls in
 // WebView2 + D3D9 and cannot be linked here. What is pinned is the boundary,
 // which is where an off-by-one would hide -- exactly the failure mode the
-// spawn-depth cap in this same audit round proved was worth asserting from
-// both sides.
+// spawn-depth cap proved was worth asserting from both sides.
 
 #include "host/WebMessageIngressPolicy.h"
 #include "ResourceLimits.h"

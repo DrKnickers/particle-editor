@@ -347,7 +347,7 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 ### Security
 
 - A mod-supplied texture name inside an `.alo` can no longer reach files outside the mod folder. The traversal guard rejected `..` but not `.. ` (with a trailing space), which Windows resolves to the same parent directory — the whole dots-and-spaces family is now rejected, in both the asset-name and capture-path guards
-- Close the last mod-asset allocation gap from the #413 audit: whole-file reads of textures, models, and shaders now reject an oversized file before allocating its buffer, so a safe-named but very large mod asset can no longer force a huge memory allocation
+- Close the last mod-asset allocation gap: whole-file reads of textures, models, and shaders now reject an oversized file before allocating its buffer, so a safe-named but very large mod asset can no longer force a huge memory allocation
 - Extend the malformed/malicious mod-file hardening to every place the editor reads mod assets — skydome and ground textures, reference models, palette previews, and the game-object catalog — so a path in any of them stays inside the mod folder, with hard size limits that reject oversized or malformed data
 - Harden the editor against malformed or maliciously crafted mod files: untrusted `.alo`, `.meg`, and `.xml` files are now rejected cleanly instead of risking a crash, and a texture/shader name embedded in an `.alo` can no longer reach outside the mod folder or trigger an outbound network request when the file is opened
 - Web UI host enforces an origin allow-list, blocking off-origin navigation, popups, and permission requests
@@ -409,3 +409,8 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 - Malformed .alo files with out-of-range spawn indices now load with a warning instead of crashing
 - Deleting an emitter with live particles no longer crashes the editor
 - Overlapping emitters now stack in the same order as the game
+
+[Unreleased]: https://github.com/DrKnickers/particle-editor/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/DrKnickers/particle-editor/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/DrKnickers/particle-editor/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/DrKnickers/particle-editor/releases/tag/v0.3.0

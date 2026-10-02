@@ -1,8 +1,8 @@
-// Vitest unit tests for AtlasPickerPane click-to-assign (Task 9).
+// Vitest unit tests for AtlasPickerPane click-to-assign.
 // Verifies: single-key direct assign, multi-same-frame direct assign,
 // multi-diff confirm dialog, and no-key no-op.
 //
-// [#572] The grid is ONE <canvas> — clicks are hit-tested by pointer math, not
+// The grid is ONE <canvas> — clicks are hit-tested by pointer math, not
 // per-cell DOM. jsdom's getBoundingClientRect is all-zeros, so a synthetic click
 // at a cell's grid-local center (frameCenter) resolves to that frame. jsdom
 // geometry: 16-cell atlas → 4 cols × 50px cells, gap 4 (step 54).

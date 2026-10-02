@@ -1,4 +1,4 @@
-// atlas-preview-cache.ts — mod-stack-keyed preview cache (Task 12).
+// atlas-preview-cache.ts — mod-stack-keyed preview cache.
 //
 // Caches "textures/get-preview" responses keyed by (modStack, filename).
 // Only successful (status === "ok") results are cached; non-ok results

@@ -3,13 +3,12 @@
 //
 // --capture / --capture-ref one-shot: load a .alo (or resolve a reference
 // object), render N deterministic frames, write the engine RT + a composite
-// PNG, exit. Extracted from HostWindowImpl::Run's inline capture segments
-// (Phase C of tasks/2026-07-06-heavyweight-refactor-plan.md), following the
-// DriveRunner/ClipRunner hook shape: the shared message pump stays in Run();
+// PNG, exit. Extracted from HostWindowImpl::Run's inline capture segments,
+// following the DriveRunner/ClipRunner hook shape: the shared message pump stays in Run();
 // this runner owns setup (Init), the per-pump-iteration capture step (Tick),
 // and the exit-code mapping (ExitCode).
 //
-// Init's setup segment is the verbatim move (see the .cpp's alias prelude).
+// Init's setup segment binds Run()'s names through the .cpp's alias prelude.
 // Tick's pacing / layout-gate / frame-count / exit-code state machine lives in
 // CaptureTicker, which this runner wires to the live host through hooks so the
 // machine itself is unit-tested (tests/test_capture_runner.cpp). Genuinely

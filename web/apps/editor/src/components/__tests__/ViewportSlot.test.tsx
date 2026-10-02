@@ -63,7 +63,7 @@ describe("ViewportSlot — render surface", () => {
   });
 });
 
-// ─── Phase 2 input forwarding ────────────────────────────────
+// ─── Input forwarding ────────────────────────────────────────
 //
 // These tests assert the DOM event → bridge.request wiring. The pure-
 // function encoders are exercised in lib/__tests__/viewport-input.test.ts;
@@ -398,7 +398,7 @@ describe("ViewportSlot — dock-slide RO suppression (Item 3)", () => {
     expect(sceneRectCalls(bridge)).toBe(before); // …and is dropped
   });
 
-  // [resize-perf C1] `send` dedupes on (rect, DPR) — in jsdom every
+  // `send` dedupes on (rect, DPR) — in jsdom every
   // getBoundingClientRect is zeros, so the rect never changes and a repeat
   // fire is (correctly) dropped. Tests that assert a fire RESULTS in a send
   // must make the send unique; bumping devicePixelRatio (part of the dedupe

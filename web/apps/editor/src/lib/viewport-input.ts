@@ -1,4 +1,4 @@
-// Phase 2 — DOM-event → ViewportInputEvent encoders.
+// DOM-event → ViewportInputEvent encoders.
 //
 // The host's InputDispatcher consumes the `viewport/input` bridge
 // surface as Win32 messages; the engine's existing viewport WNDPROC
@@ -17,8 +17,8 @@ export const MK_SHIFT   = 0x0004;
 export const MK_CONTROL = 0x0008;
 export const MK_MBUTTON = 0x0010;
 
-// One wheel notch = WHEEL_DELTA = 120 units. The engine's wheel
-// handler at HostWindow.cpp:1350 divides by WHEEL_DELTA to get the
+// One wheel notch = WHEEL_DELTA = 120 units. The engine's WM_MOUSEWHEEL
+// handler (HostWindowImpl::ViewportWndProc) divides by WHEEL_DELTA to get the
 // notch count, so we quantise here to keep the sign + magnitude
 // stable across DOM-event units (which vary by platform).
 export const WHEEL_DELTA = 120;
@@ -45,7 +45,7 @@ export function encodeMkButtons(
 // DOM `deltaY` is positive when the user scrolls DOWN; Win32
 // WM_MOUSEWHEEL is positive when the wheel rotates AWAY from the user
 // (canonical "scroll-up" direction). The engine's handler treats
-// positive as "zoom in" per the math at HostWindow.cpp:1360 (it
+// positive as "zoom in" per the math in that handler (it
 // negates internally). To preserve the existing user-visible
 // behaviour (wheel up = zoom in) we flip the sign here.
 export function quantiseWheelDelta(domDeltaY: number): number {

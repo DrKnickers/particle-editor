@@ -3,8 +3,7 @@
 //
 // Private helpers shared between the Engine translation units
 // (engine.cpp + engine_render.cpp / engine_reference.cpp /
-// engine_environment.cpp) — Phase B of
-// tasks/2026-07-06-heavyweight-refactor-plan.md. Rule: a helper used by more
+// engine_environment.cpp). Rule: a helper used by more
 // than one engine TU gets its declaration HERE and exactly ONE non-static
 // definition in its primary-consumer TU — never a per-TU static copy (two
 // same-name TU-local statics would compile and silently diverge).
@@ -21,8 +20,7 @@ double   EngQpcUs(LONGLONG a, LONGLONG b);
 
 // Apply a sub-mesh's authored material params (index-parallel handles) to
 // the effect (defined in engine_environment.cpp; used by skydome mesh
-// rendering AND reference-object rendering — kept in lockstep, DRY audit
-// cpp-engine-0).
+// rendering AND reference-object rendering — kept in lockstep).
 #include <vector>
 struct AloShaderParam;
 void ApplyAloMaterialParams(ID3DXEffect* fx,

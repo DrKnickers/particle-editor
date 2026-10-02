@@ -1,4 +1,4 @@
-// ShortcutsDialog — Help → Keyboard Shortcuts… (design follow-ups, F1).
+// ShortcutsDialog — Help → Keyboard Shortcuts…
 //
 // A curated reference for every keyboard surface in the editor. The app-wide
 // accelerator section mirrors lib/use-app-accelerators.ts (`ACCEL_COMBOS` +

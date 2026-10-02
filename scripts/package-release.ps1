@@ -189,7 +189,7 @@ if ($OutZip) {
 
     # EXACT-SET contract, not a subset check. A subset check would let a zip carry an extra file
     # (a stray canary, a leftover .pdb, an unrelated dll) or be missing a required artifact and still
-    # pass -- both demonstrated by the 2026-07 audit's negative controls. The zip must equal the
+    # pass -- both demonstrated by negative controls. The zip must equal the
     # staged tree exactly: nothing added between staging and compression, nothing dropped. The staged
     # tree is itself asserted above.
     $stagedRel = @(

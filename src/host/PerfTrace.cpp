@@ -159,7 +159,7 @@ void Emit(nlohmann::json event)
     AddCommonFields(event);
     if (g_config.mode == SinkMode::Null) return;
     if (!g_file) return;
-    // Non-throwing on invalid UTF-8 (2026-09-30 audit H1): a span's error
+    // Non-throwing on invalid UTF-8: a span's error
     // text can carry raw file-name bytes, and Span::~Span calls End -> Emit,
     // so a throwing dump() here would terminate from a destructor.
     const std::string line = event.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);

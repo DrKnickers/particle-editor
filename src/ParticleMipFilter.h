@@ -3,17 +3,17 @@
 #include <cstring>
 #include <cmath>
 
-// #481: ALO_PARTICLE_MIPFILTER env-override parser for the particle draw
-// bracket's mip sampling (engine.cpp, non-heat particle loop).
+// ALO_PARTICLE_MIPFILTER env-override parser for the particle draw
+// bracket's mip sampling (engine_render.cpp, non-heat particle loop).
 //
 //   unset / "" / unrecognized -> MODE_NONE   (mip 0 only — the default)
-//   "linear"                  -> MODE_LINEAR (pre-#481 trilinear, the rollback/A-B path)
+//   "linear"                  -> MODE_LINEAR (the former trilinear default, the rollback/A-B path)
 //   "bias:<f>" (finite float) -> MODE_BIAS   (trilinear + LOD bias <f>)
 //
 // Pure + header-only so tests/test_particle_mipfilter.cpp can unit-test it
 // without a D3D device. `recognized` is false only for a non-empty value that
-// matched no form (caller logs it once — a typo'd override silently behaving
-// like the default was review finding #3 on the #481 plan).
+// matched no form (caller logs it once, so a typo'd override can't silently
+// behave like the default).
 struct ParticleMipFilterMode
 {
     enum Mode { MODE_NONE = 0, MODE_LINEAR = 1, MODE_BIAS = 2 };

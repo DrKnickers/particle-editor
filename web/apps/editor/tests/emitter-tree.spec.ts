@@ -20,7 +20,7 @@ test.beforeAll(async ({ cdpPage }) => {
 
 test("sidebar renders the emitter tree from the live particle system", async () => {
   // The host seeds a fresh ParticleSystem with one root emitter on
-  // construction (see HostWindow.cpp:1274-1275: `addRootEmitter`). So
+  // construction (see HostWindow.cpp: `addRootEmitter`). So
   // the tree should show at least one treeitem row.
   const treeContainer = page.locator('[data-testid="emitter-tree"]');
   await expect(treeContainer).toBeVisible();

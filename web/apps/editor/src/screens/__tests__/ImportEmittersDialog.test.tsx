@@ -315,7 +315,7 @@ describe("ImportEmittersDialog", () => {
     expect(screen.getByRole("button", { name: /^Import$/ })).toBeDisabled();
   });
 
-  // ── import outcome (post-#348) ────────────────────────────────────
+  // ── import outcome ────────────────────────────────────────────────
   it("imported:0 keeps the modal open, shows an error, and keeps the tree", async () => {
     const bridge = makeImportBridge(0);
     const onOpenChange = vi.fn();

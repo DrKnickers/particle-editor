@@ -135,7 +135,7 @@ test("emitters/duplicate-with-index-increment via the bridge appends a new emitt
     });
 
     // Wait (bounded) for the tree/changed event rather than assuming it lands
-    // within one microtask — under load the WebView2 host can deliver it late (#600).
+    // within one microtask — under load the WebView2 host can deliver it late.
     await new Promise<void>((resolve) => {
       const deadline = Date.now() + 2000;
       const poll = () => {
@@ -170,7 +170,7 @@ test("emitters/duplicate-with-index-increment via the bridge appends a new emitt
   }, result.newId);
 });
 
-// ── 3b. Increment Index (batch) → N chained copies in one call (#575) ─
+// ── 3b. Increment Index (batch) → N chained copies in one call ─
 
 test("emitters/duplicate-with-index-increment-many chains N copies in one call and fires one tree burst", async () => {
   const result = await page.evaluate(async () => {
@@ -193,7 +193,7 @@ test("emitters/duplicate-with-index-increment-many chains N copies in one call a
     });
 
     // Wait (bounded) for the batch's tree burst rather than assuming it lands
-    // within one microtask — under load the WebView2 host can deliver it late (#600).
+    // within one microtask — under load the WebView2 host can deliver it late.
     await new Promise<void>((resolve) => {
       const deadline = Date.now() + 2000;
       const poll = () => {
@@ -203,7 +203,7 @@ test("emitters/duplicate-with-index-increment-many chains N copies in one call a
       poll();
     });
     // Settle briefly so any one-per-copy bursts would have arrived, then stop
-    // listening: the batch must fire exactly ONE burst for N copies (#575's
+    // listening: the batch must fire exactly ONE burst for N copies (the batch's
     // single-captureUndo contract), which the count assertion below verifies.
     await new Promise((resolve) => setTimeout(resolve, 150));
     off();
@@ -223,7 +223,7 @@ test("emitters/duplicate-with-index-increment-many chains N copies in one call a
 
   expect(result.newIds).toHaveLength(3);
   expect(new Set(result.newIds).size).toBe(3);   // three distinct copies
-  expect(result.treeEvents).toBe(1); // exactly one burst for the batch (#575), not one-per-copy
+  expect(result.treeEvents).toBe(1); // exactly one burst for the batch, not one-per-copy
   expect(result.afterCount).toBe(result.beforeCount + 3);
 
   // Cleanup: delete the copies (highest id first so lower ids stay valid).
@@ -355,7 +355,7 @@ test("undo restores the pre-mutation linkGroups (atomicity of capture + sweep)",
   //
   // Cross-reference: snap-restore handler at
   // [BridgeDispatcher.cpp's undo/perform block](../../src/host/BridgeDispatcher.cpp)
-  // uses head-of-history auto-capture to reconcile the new-UI's
+  // uses head-of-history auto-capture to reconcile the editor UI's
   // PRE-mutation captureUndo convention with UndoStack's
   // POST-mutation cursor invariant.
   await page.keyboard.press("Escape").catch(() => {});
@@ -458,7 +458,7 @@ test("undo restores the pre-mutation linkGroups (atomicity of capture + sweep)",
 
 test("load-time sweep — opening a legacy .alo with a singleton group auto-demotes it; dirty bit stays clean", async () => {
   // The fixture `tests/fixtures/singleton-emitter.alo` was produced by
-  // `ParticleEditor.exe --gen-nt5-fixture <path>` (see main.cpp's
+  // `ParticleEditor.exe --gen-singleton-link-fixture <path>` (see main.cpp's
   // argv branch) and contains a state no sweep-aware codepath can
   // produce: emitter 0 at linkGroup=0, emitter 1 at linkGroup=1
   // (alone — a legacy singleton). On file/open, the host's
@@ -573,7 +573,7 @@ test("deleting one member of a 2-member link group demotes the survivor", async 
 
 // ── 5. A structural mutation reaches an already-PLACED instance ──────
 //
-// 2026-07 audit. A ParticleSystemInstance spawns its root emitters ONCE,
+// A ParticleSystemInstance spawns its root emitters ONCE,
 // in its constructor, and Engine::OnParticleSystemChanged only visited the
 // emitters that already existed — it never created or removed any. So an
 // emitter added by Add Root / Paste / Import / Duplicate / reparent-to-root
@@ -581,7 +581,7 @@ test("deleting one member of a 2-member link group demotes the survivor", async 
 // Emitter's destructor tears its live instances down), addition did not, and
 // that asymmetry is what made it look like "the tree updated, so it worked".
 //
-// Same user-visible shape as the set-properties gap fixed in #682: the tree
+// Same user-visible shape as the earlier set-properties gap: the tree
 // row appears, the placed effect ignores it.
 //
 // This is the first test of live-instance state at all — engine/query/
@@ -715,7 +715,7 @@ test("reparenting a root removes only its stale root instance from an already-pl
 
 // ── file/open must not carry the previous document's selection ───────
 //
-// 2026-07 audit. m_selectedEmitterId is a POSITIONAL index, and only
+// m_selectedEmitterId is a POSITIONAL index, and only
 // file/new ever reset it. file/open and autosave-recover swapped the bound
 // ParticleSystem and emitted tree/state events but left the selection alone,
 // so an id selected in the old document survived into the new one. When that

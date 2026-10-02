@@ -1,6 +1,6 @@
-// Task 2.4 contract tests: Background picker wired against the *real*
+// Contract tests: Background picker wired against the *real*
 // native bridge inside ParticleEditor.exe --test-host. Sibling
-// of bridge-native.spec.ts (Task 2.2.1) — same CDP-attach harness, same
+// of bridge-native.spec.ts — same CDP-attach harness, same
 // `window.bridge` host-object channel.
 //
 //   - engine/set/skydome-slot        (bundled slot mutation)
@@ -8,7 +8,7 @@
 //   - engine/set/skydome-custom-path (custom slot persistence)
 //   - engine/set/ground-texture       (actual-slot/applied load contract)
 //   - engine/set/ground-slot-custom-path (local/remote path boundary)
-//   - undo/perform                   (handler dispatch, Task 2.4 surface)
+//   - undo/perform                   (handler dispatch)
 //
 // skydome-slot / skydome-custom-path are exercised here purely as a
 // native-bridge contract (the host's registry startup-restore still drives
@@ -39,7 +39,7 @@ test.beforeAll(async ({ cdpPage }) => {
 });
 
 test("Background popover opens from the toolbar dropdown trigger", async () => {
-  // Task 2.2: the old BackgroundPicker slide-in ToolPanel was replaced by a
+  // The old BackgroundPicker slide-in ToolPanel was replaced by a
   // Radix Popover triggered from the Toolbar's Group 4 dropdown. The
   // dropdown button still carries aria-label="Background", but the
   // mounted content is now a popover wrapper (data-radix-popper-content-wrapper)
@@ -423,7 +423,7 @@ test("clearing an active custom skydome path succeeds without hiding real load f
 
 test("undo/perform dispatches end-to-end and resolves with a boolean `applied`", async () => {
   // This spec asserts only that the undo/perform handler is wired
-  // end-to-end through the bridge (its original Task 2.4 intent).
+  // end-to-end through the bridge (its original intent).
   // It originally asserted `applied:false` on the premise that no
   // captures existed yet — that premise is stale: undo capture landed
   // with the emitter work (functional coverage lives in

@@ -8,7 +8,7 @@ type DragActive = Extract<Event, { kind: "engine/manipulator/drag" }>["payload"]
 // translate/plane show ~111px axis arrows (nothing on the up-right diagonal), but the
 // ROTATE ring is larger — ~baseLen*1.15 ≈ 128px screen radius (engine.cpp
 // kRingRadiusScale) — so the pill must sit further out for a rotate drag or it lands
-// on the ring (the readability issue from the s55 live review).
+// on the ring and is hard to read.
 const OFFSET_AXIS = 72;
 const OFFSET_RING = 112;
 // Sign off the ROUNDED magnitude so a tiny negative (e.g. -0.04 at 1dp) renders

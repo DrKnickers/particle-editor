@@ -3,14 +3,14 @@
 #include <vector>
 #include <cwctype>
 
-// --record output-directory confinement (2026-07 audit).
+// --record output-directory confinement.
 //
 // ClipTimeline validates `out` as a relative, traversal-free path — which stops
 // a timeline escaping the launch directory, but NOT from destroying an
 // arbitrary EXISTING directory under it. The publish step is an unconditional
 // `remove_all(recordOutDir)` followed by a rename, so a timeline whose `out`
 // happened to name a real directory ("captures", "docs", "src") silently
-// deleted it. The audit proved this with an actual Release run: `out: "victim"`
+// deleted it. A real Release run proved this: `out: "victim"`
 // exited 0 and the sentinel file inside was gone.
 //
 // The fix is NOT to forbid overwriting — re-shooting a clip into the same
@@ -27,7 +27,7 @@ namespace recordsafety {
 // A file a --record publish is allowed to have created itself:
 //   frame_00000.png … frame_99999.png
 //   cursor-sidecar.json
-//   pump-trace.txt   (PR 12: flag-gated pump-schedule trace, PE_RECORD_TRACE)
+//   pump-trace.txt   (flag-gated pump-schedule trace, PE_RECORD_TRACE)
 inline bool IsRecordArtifactName(const std::wstring& name)
 {
     if (name == L"cursor-sidecar.json") return true;
@@ -79,8 +79,8 @@ inline bool MayReplaceOutputDir(bool exists,
 
 // The same decision for a path the caller has inspected on disk, covering the
 // cases MayReplaceOutputDir can't see from a listing alone. Used for BOTH the
-// output dir at publish and the `<out>.tmp` staging dir at setup (2026-10-01
-// audit HX4: the setup step used to `remove_all(<out>.tmp)` with no check).
+// output dir at publish and the `<out>.tmp` staging dir at setup (the setup step
+// used to `remove_all(<out>.tmp)` with no check).
 //
 // `isDirectory` — false when something other than a directory sits at the
 //                 path (a stray FILE named `<out>.tmp` must not be deleted).

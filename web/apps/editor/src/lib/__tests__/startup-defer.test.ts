@@ -1,4 +1,4 @@
-// Tranche E / perf-audit P1a: non-paint-critical startup bridge requests are
+// Non-paint-critical startup bridge requests are
 // DEFERRED to the first idle slot after first paint; paint-critical ones stay
 // eager. Uses a controllable fake requestIdleCallback (queue + flush) that
 // OVERRIDES the synchronous stub in test-setup, so we can observe the

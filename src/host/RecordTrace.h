@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-// --record pump-schedule trace (PR 12 / an-audit-finding). A flag-gated (PE_RECORD_TRACE)
+// --record pump-schedule trace. A flag-gated (PE_RECORD_TRACE)
 // oracle that records, per emitted frame, the ORDERED sequence of pump phase
 // tokens AS THEY EXECUTE. Its whole purpose is a before/after byte-compare
 // across the RecordSession extraction: the barrier/ack/grab pump is the

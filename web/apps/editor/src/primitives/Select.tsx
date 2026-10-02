@@ -57,7 +57,7 @@ export function Select({
             span — white-space:nowrap + overflow-hidden + ellipsis apply to
             the selected-label text through the wrapper. min-w-0 lets this
             flex child shrink so long labels (e.g. "Diffuse transparent")
-            ellipsize instead of wrapping onto a second line (#573). */}
+            ellipsize instead of wrapping onto a second line. */}
         <span className="min-w-0 truncate">
           <RadixSelect.Value placeholder={placeholder}>{selected?.label ?? ""}</RadixSelect.Value>
         </span>

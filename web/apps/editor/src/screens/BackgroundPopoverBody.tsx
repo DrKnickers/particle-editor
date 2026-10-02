@@ -18,7 +18,7 @@
 // snapshot now carries a per-slot load status (skydomePrimaryStatus /
 // skydomeSecondaryStatus) so the picker surfaces that failure and an
 // active-mode indicator instead of showing the dome as if it applied. (The
-// former "custom skydome texture" slots were removed here in S49 — the new UI
+// former "custom skydome texture" slots were removed here — the editor UI
 // is Game dome + Solid colour only.)
 //
 // State: one-shot `engine/state/snapshot` at mount + a live
@@ -82,7 +82,7 @@ export function BackgroundPopoverBody({ bridge }: BodyProps) {
   const secondaryStatus: SkydomeSlotStatus = snapshot?.skydomeSecondaryStatus ?? "none";
   const backgroundHex = snapshot ? colorrefToHex(snapshot.background) : "#000000";
   // The legacy bundled/custom texture-dome slot (0 = Off → solid colour). The
-  // new UI no longer manages slots 1-11, but a value persisted from a prior
+  // editor UI no longer manages slots 1-11, but a value persisted from a prior
   // session still drives the engine's RenderSkydome() fallback, so we must read
   // it to report the active mode honestly (see legacyTextureActive below).
   const selectedSlot = snapshot?.skydomeSlot ?? 0;

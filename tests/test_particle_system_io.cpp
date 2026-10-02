@@ -10,8 +10,8 @@
 //   - load  = PhysicalFile(path, READ) + ParticleSystem(IFile*)
 //   - save  = AtomicWriteParticleSystem (flushed temp, then rename; section I)
 // and the exception taxonomy the wrappers convert to false+errorOut:
-//   - nonexistent path       -> FileNotFoundException  (files.cpp:53-59)
-//   - unwritable path        -> FileNotFoundException / IOException (files.cpp:56-63)
+//   - nonexistent path       -> FileNotFoundException  (PhysicalFile ctor)
+//   - unwritable path        -> FileNotFoundException / IOException (PhysicalFile ctor)
 //   - corrupt / non-.alo file -> BadFileException family / ReadException
 // Every failure below must surface as a wexception-derived throw (what the
 // wrapper reports) and NEVER as a crash or a silent success.
@@ -37,7 +37,7 @@
 #include <utility>
 #include <vector>
 
-// Link stub -- see test_alo_roundtrip.cpp:36-39. ~Emitter calls
+// Link stub -- see test_alo_roundtrip.cpp. ~Emitter calls
 // ParticleSystemInstance::RemoveEmitter whose real body is D3D-coupled; no
 // EmitterInstance is registered here.
 void ParticleSystemInstance::RemoveEmitter(EmitterInstance*) {}
@@ -50,7 +50,7 @@ static int g_failed = 0;
 
 using Emitter = ParticleSystem::Emitter;
 
-// ---- unique temp dir (pattern from test_palette_store.cpp:51-74) -----------
+// ---- unique temp dir (pattern from test_palette_store.cpp) -----------------
 static std::wstring g_tempDir;
 static std::vector<std::wstring> g_tempFiles;
 
@@ -120,7 +120,7 @@ static std::unique_ptr<ParticleSystem> loadFrom(const std::wstring& path, bool& 
     PhysicalFile* f = NULL;
     try
     {
-        f = new PhysicalFile(path);   // READ is the default mode (files.h:59)
+        f = new PhysicalFile(path);   // READ is the default mode (files.h)
     }
     catch (wexception&) { return nullptr; }
     catch (...)         { other = true; return nullptr; }
@@ -238,8 +238,8 @@ int main()
             }
         }
 
-        // Saving over an existing file truncates + rewrites (CREATE_ALWAYS,
-        // files.cpp:51) -- the second image must still load cleanly.
+        // Saving over an existing file truncates + rewrites (CREATE_ALWAYS in
+        // the PhysicalFile ctor) -- the second image must still load cleanly.
         ps.setName("IoRoundTrip2");
         CHECK(saveTo(ps, path, other) && !other, "overwrite-save succeeds");
         rp = loadFrom(path, other);
@@ -338,7 +338,7 @@ int main()
         }
     }
 
-    // ---- G: spawn-chain depth is capped on load (2026-07 audit) ------
+    // ---- G: spawn-chain depth is capped on load ------
     //
     // kMaxAloEmitters (65536) bounds how MANY emitters a file may carry and
     // says nothing about their ARRANGEMENT, so a single chain of tens of

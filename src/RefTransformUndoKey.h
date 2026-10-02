@@ -9,7 +9,7 @@
 //
 // A `engine/set/reference-object-transform` request carries the WHOLE transform
 // (6 floats) every time, so to give the SAME per-field undo granularity as the
-// rest of the new UI we diff the incoming components against the current ones
+// rest of the editor UI we diff the incoming components against the current ones
 // and key the coalesce on WHICH components changed:
 //   - An X-spinner edit and a Y-spinner edit hash differently -> separate undo
 //     steps; one spinner's wheel/arrow burst keeps the same hash -> one step.

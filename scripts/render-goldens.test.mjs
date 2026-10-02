@@ -18,7 +18,7 @@ import {
 test("golden capture env removes every inherited ALO hook", () => {
   const inherited = {
     PATH: "kept",
-    ALO_LT7_TEST_OBJECT: "non-empty-object",
+    ALO_TEST_REFERENCE_OBJECT: "non-empty-object",
     alo_capture_subviewport: "non-empty-subviewport",
     AlO_PARTICLE_MIPFILTER: "LINEAR",
     ALO_SHADER_DIAG: "caller-controlled",
@@ -27,7 +27,7 @@ test("golden capture env removes every inherited ALO hook", () => {
   const env = buildGoldenCaptureEnv(inherited, false);
 
   assert.deepEqual(env, { PATH: "kept" });
-  assert.equal(inherited.ALO_LT7_TEST_OBJECT, "non-empty-object");
+  assert.equal(inherited.ALO_TEST_REFERENCE_OBJECT, "non-empty-object");
   assert.equal(inherited.ALO_SHADER_DIAG, "caller-controlled");
 });
 

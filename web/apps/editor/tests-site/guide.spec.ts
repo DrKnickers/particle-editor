@@ -13,7 +13,7 @@ declare global {
 
 // Derive the guide's pages, order, and section count from nav.json — the SAME single
 // source of truth build-guide.mjs renders the sidebar from — so this spec can't silently
-// drift when a page is added or removed (as it did between #593 and #599: 15 → 19 pages).
+// drift when a page is added or removed (as it once did, going from 15 to 19 pages).
 const NAV = JSON.parse(
   readFileSync(
     resolve(dirname(fileURLToPath(import.meta.url)), "../../../../site/guide-src/nav.json"),
@@ -25,7 +25,7 @@ const GUIDE_SLUGS = ALL_GUIDE_PAGES.filter((p) => p.publish !== false).map((p) =
 const UNPUBLISHED_SLUGS = ALL_GUIDE_PAGES.filter((p) => p.publish === false).map((p) => p.slug);
 const SECTION_COUNT = NAV.sections.filter((s) => s.pages.some((p) => p.publish !== false)).length;
 
-// After Phase 2 each `<!-- Media: id -->` anchor is expanded (by build-guide.mjs, from the
+// Each `<!-- Media: id -->` anchor is expanded (by build-guide.mjs, from the
 // wiki-media manifest) into a <video>/<img> embed — except the one manual in-game-proof shot,
 // which stays an inert comment. The EXACT ordered filenames below (not just counts) are the
 // contract: they lock each page's ids AND their order, so a duplicated/swapped/renamed anchor

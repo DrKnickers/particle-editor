@@ -9,8 +9,8 @@ import { Select } from "@/primitives/Select";
 import { Spinner } from "@/primitives/Spinner";
 import { Tip } from "@/primitives/Tip";
 
-// Blend mode dropdown options — mirrors the legacy `BlendModes[]` table
-// at [src/UI/Emitter.cpp:20-31]. The engine has additional blend mode
+// Blend mode dropdown options — mirrors the legacy Win32 editor's
+// `BlendModes[]` table. The engine has additional blend mode
 // values (8, 9, 10, 13) but the legacy UI doesn't expose them via the
 // dropdown — keep parity here.
 export const BLEND_MODE_OPTIONS: { value: number; label: string }[] = [
@@ -28,16 +28,15 @@ export const BLEND_MODE_OPTIONS: { value: number; label: string }[] = [
 
 // BLEND_BUMP (==11) forces face-camera orientation. Mirrors the legacy
 // `forceFace = (emitter->blendMode == ParticleSystem::BLEND_BUMP)`
-// at [src/UI/Emitter.cpp:167] — only the BLEND_BUMP value triggers
+// — only the BLEND_BUMP value triggers
 // the cascade, not BLEND_DECAL_BUMPMAP.
 export const BLEND_BUMP = 11;
 
 // Ground-interaction dropdown options — mirrors the legacy
-// `GroundBehaviors[]` table at [src/UI/Emitter.cpp:35-40]. Values are
+// `GroundBehaviors[]` table. Values are
 // the engine enum index (0..3); the `IDS_GROUND_BEHAVIOR_BOUNCE`
 // string-id is the 3rd entry (value 2), and legacy cascades enable
-// `bounciness` only when this value is picked
-// (see [src/UI/Emitter.cpp:190]).
+// `bounciness` only when this value is picked.
 export const GROUND_BEHAVIOR_OPTIONS: { value: number; label: string }[] = [
   { value: 0, label: "None" },
   { value: 1, label: "Disappear" },
@@ -47,8 +46,8 @@ export const GROUND_BEHAVIOR_OPTIONS: { value: number; label: string }[] = [
 export const GROUND_BEHAVIOR_BOUNCE = 2;
 
 // Emit-from-mesh dropdown options — mirrors the legacy
-// `EmitModes[]` table at [src/UI/Emitter.cpp:44-49]. Values match
-// `ParticleSystem::EMIT_*` constants at [src/ParticleSystem.h:66-69]:
+// `EmitModes[]` table. Values match
+// `ParticleSystem::EMIT_*` constants in src/ParticleSystem.h:
 // EMIT_DISABLE=0, EMIT_RANDOM_VERTEX=1, EMIT_RANDOM_MESH=2,
 // EMIT_EVERY_VERTEX=3.
 export const EMIT_FROM_MESH_OPTIONS: { value: number; label: string }[] = [
@@ -60,7 +59,7 @@ export const EMIT_FROM_MESH_OPTIONS: { value: number; label: string }[] = [
 export const EMIT_FROM_MESH_DISABLE = 0;
 
 // Random-Param group type dropdown options — mirrors the engine
-// `GT_*` constants at [src/ParticleSystem.h:20-24]: GT_EXACT=0,
+// `GT_*` constants in src/ParticleSystem.h: GT_EXACT=0,
 // GT_BOX=1, GT_CUBE=2, GT_SPHERE=3, GT_CYLINDER=4.
 export const GROUP_TYPE_OPTIONS: { value: number; label: string }[] = [
   { value: 0, label: "Exact" },
@@ -235,7 +234,7 @@ export function FieldText({
 // texture palette (TexturePalettePopover). Every non-empty commit — manual
 // blur, Browse, or palette apply — funnels through `commit`, which also
 // fires `textures/palette/touch-recent` so recents stay warm (legacy
-// parity with Emitter.cpp's three TouchRecent sites).
+// parity with the legacy emitter dialog's three TouchRecent sites).
 export function TexturePickerField({
   label,
   value,
@@ -363,15 +362,15 @@ export function FieldSpinner({
   /** When true, displays `100 - value*100` (rounded to integer) and
    *  commits `(100 - displayed) / 100`. Forces min=0, max=100. Used for
    *  `randomLifetimePerc` and `randomScalePerc` per legacy IDC_SPINNER13/14
-   *  inverted convention (see Emitter.cpp:487, 492). */
+   *  inverted convention. */
   displayInvertedPercent?: boolean;
   /** When set, displays `value * displayScale` and commits `typed /
    *  displayScale`. The engine stores these as a normalised ratio; the
    *  legacy panel applied this scale purely as a display transform. Pass
    *  `min`/`max`/`step`/`decimals` in DISPLAY space. Used for
    *  `randomRotationAverage` (×360, -180..180°) and `randomRotationVariance`
-   *  (×100, 0..100) per legacy IDC_SPINNER16/17 (see Emitter.cpp:498-499,
-   *  828-829). Mutually exclusive with `displayInvertedPercent`. */
+   *  (×100, 0..100) per legacy IDC_SPINNER16/17.
+   *  Mutually exclusive with `displayInvertedPercent`. */
   displayScale?: number;
   /** Optional input-column boost for spinners whose values exceed the
    *  default 58 px width (e.g. "Tail length:" running up to 4-digit
@@ -596,7 +595,7 @@ export function GroupBody({
             step={0.1}
             onCommit={(v) => onChange({ sphereRadius: v })}
           />
-          {/* `sphereEdge` is an engine boolean (EmitterInstance.cpp:205):
+          {/* `sphereEdge` is an engine boolean (EmitterInstance.cpp):
               nonzero → spawn at the full radius (on the surface), zero →
               random radius (throughout the volume). Legacy surfaces it as
               a "Constrain to surface" checkbox; mirror that here. */}
@@ -638,7 +637,7 @@ export function GroupBody({
               </div>
             </div>
           </div>
-          {/* `cylinderEdge` is an engine boolean (EmitterInstance.cpp:215),
+          {/* `cylinderEdge` is an engine boolean (EmitterInstance.cpp),
               same surface-constraint semantics as `sphereEdge` — surface it
               as legacy's "Constrain to surface" checkbox. */}
           <FieldCheckbox

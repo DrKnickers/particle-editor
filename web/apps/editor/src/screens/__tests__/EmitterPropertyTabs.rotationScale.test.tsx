@@ -16,8 +16,8 @@ const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 // PRM-4 / PRM-5: the legacy panel displays rotation average as
 // `stored * 360` (integer degrees, -180..180) and commits `typed / 360`,
 // and rotation variance as `stored * 100` (integer 0..100) committing
-// `typed / 100` (Emitter.cpp:498-499, 828-829). The host serialises the
-// raw stored ratio, so the display transform must live in the new UI.
+// `typed / 100`. The host serialises the
+// raw stored ratio, so the display transform must live in the web UI.
 // `displayScale` is the general form of that transform.
 describe("FieldSpinner displayScale (rotation average / variance)", () => {
   it("displays value * scale (average: 0.25 -> 90°)", () => {

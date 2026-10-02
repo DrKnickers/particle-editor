@@ -1,4 +1,4 @@
-// One reset for every piece of MockBridge state (audit MW4).
+// One reset for every piece of MockBridge state.
 //
 // MockBridge reads and writes module-level Zustand stores (plus the palette
 // seed in mock.ts) that every `new MockBridge()` in a test file shares. Call

@@ -56,10 +56,10 @@ describe("useAtlasAutoOpen", () => {
   });
 });
 
-// --- Non-reactive observation fix (#549 audit follow-up). The hook now reads
+// --- Non-reactive observation fix. The hook now reads
 // the atlas context via a NON-reactive subscription so CurveEditorPanel's own
 // publish no longer re-renders it. These tests lock in that fix and the
-// equivalence subtleties the plan review surfaced. ---
+// equivalence subtleties review surfaced. ---
 describe("useAtlasAutoOpen — non-reactive context observation", () => {
   it("a context publish does NOT re-render the host (the self-feedback fix)", () => {
     renders = 0;

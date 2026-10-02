@@ -57,7 +57,7 @@ export function ToolPanel({
   closing = false,
   bodyScroll = true,
 }: ToolPanelProps) {
-  // Focus management (design pass, B4). Non-modal dialog, so no trap — just:
+  // Focus management. Non-modal dialog, so no trap — just:
   // (1) INITIAL FOCUS, only for explicit chrome-triggered opens: if the
   //     element focused at mount lives in the toolbar or menubar (the panel
   //     launchers), move focus onto the panel container so a keyboard user

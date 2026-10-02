@@ -3,7 +3,7 @@
 // BridgeWire.h — the ONE place a host->UI bridge envelope becomes wire text,
 // and the one exception guard every request goes through on its way there.
 //
-// WHY (2026-09-30 audit H1). Emitter names, texture names and other strings
+// WHY: emitter names, texture names and other strings
 // read from .alo/.meg files are raw 8-bit bytes, not UTF-8. nlohmann's
 // default dump() throws type_error 316 on the first invalid UTF-8 byte, and
 // before this header there were ~40 independent `env.dump()` calls between

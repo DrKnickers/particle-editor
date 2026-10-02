@@ -1,4 +1,4 @@
-// Shared, typed Bridge stub for Vitest suites (audit MW4).
+// Shared, typed Bridge stub for Vitest suites.
 //
 // Replaces the per-file `make*Bridge` factories that each hand-rolled
 // `{ request: vi.fn(), on: vi.fn() } as unknown as Bridge`. Responses are keyed

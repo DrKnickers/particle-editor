@@ -174,7 +174,7 @@ describe("viewport pill light scrim (composited WCAG AA)", () => {
 
 // The DARK scrim now appears over backdrops up to bright (the raised flip
 // threshold), so its glyphs must stay legible composited over WHITE (worst case)
-// and NEUTRAL — not just over the dark backdrops #365 originally assumed.
+// and NEUTRAL — not just over the dark backdrops originally assumed.
 function darkScrimBlock(): string {
   const blocks = [...componentsCss.matchAll(/\.vp-overlay\s*\{([^}]*)\}/g)];
   const m = blocks.find((b) => b[1]!.includes("--vp-scrim-bg"));

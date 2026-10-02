@@ -1,6 +1,6 @@
 // Vitest unit tests for AtlasPickerPane.
 //
-// [#572] The frame grid is ONE <canvas> (role="listbox") — there are no
+// The frame grid is ONE <canvas> (role="listbox") — there are no
 // per-frame DOM cells anymore. jsdom has no canvas, so these tests can't inspect
 // pixels; they verify the a11y layer instead: the listbox + its single active
 // option (referenced by aria-activedescendant), aria-setsize/-selected/-disabled,
@@ -457,7 +457,7 @@ describe("AtlasPickerPane", () => {
     // now an imperatively-positioned overlay over the hovered cell.
     setup({ textureSize: 16 });
     const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
-    // Visibility is opacity-driven (design pass: the overlay fades via
+    // Visibility is opacity-driven (the overlay fades via
     // .atlas-hover-fade instead of a display pop; it stays mounted).
     const overlay = screen.getByTestId("atlas-hover-overlay");
     expect(overlay.style.opacity).toBe("0");
@@ -615,7 +615,7 @@ describe("AtlasPickerPane", () => {
     await waitFor(() => expect(screen.getByText(/could not be read/i)).toBeTruthy());
   });
 
-  // ── readiness split (perf-audit P1b) ──────────────────────────────────────
+  // ── readiness split ───────────────────────────────────────────────────────
   it("a placeholder (no-texture) releases the dock gate via atlasTerminalFirstPaint without mounting the grid", async () => {
     setup({ textureSize: 16, colorTexture: "" });
     await waitFor(() => expect(useDockAnim.getState().atlasTerminalFirstPaint).toBe(true));

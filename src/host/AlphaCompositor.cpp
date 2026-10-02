@@ -373,7 +373,7 @@ bool AlphaCompositor::CaptureSnapshotJpegBase64(std::string& outBase64, int& out
             return false;
 
         // offscreenRT is the engine's *currently bound* slot-0 render target
-        // (engine.cpp:674/943, left bound at :1017; the snapshot runs between
+        // (Engine::Render binds it and leaves it bound; the snapshot runs between
         // Render calls, outside BeginScene/EndScene). StretchRect from the
         // active RT can fail D3DERR_INVALIDCALL, so park slot 0 on the swap-
         // chain back buffer just for the blit, then restore. We touch ONLY

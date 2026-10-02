@@ -1,5 +1,5 @@
 // AtlasConfirmDialog — confirmation dialog for setting a new frame index
-// when multiple selected keys have differing current values (Task 9).
+// when multiple selected keys have differing current values.
 //
 // Uses the shared Modal compound-component API:
 //   <Modal bridge open onOpenChange title size="sm">

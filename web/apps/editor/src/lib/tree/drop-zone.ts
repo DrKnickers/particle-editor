@@ -49,7 +49,7 @@ export function isDescendant(
 }
 
 /** Auto-pick the reparent slot for a drop on `target`. Matches the
- *  legacy auto-pick from `EmitterList.cpp`:
+ *  legacy Win32 editor's emitter-list auto-pick:
  *    - both free → "lifetime"
  *    - only lifetime free → "lifetime"
  *    - only death free → "death"

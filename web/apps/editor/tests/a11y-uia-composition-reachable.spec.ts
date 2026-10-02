@@ -37,9 +37,9 @@
 // lazy-init state, leaving composition mode with no UIA
 // visibility into the React content.
 //
-// History: the original Phase 0 probe found composition mode's
+// History: the original probe found composition mode's
 // host HWND had "zero UIA descendants" and concluded cross-mode
-// equality was infeasible. That was overstated — Phase 0 didn't have
+// equality was infeasible. That was overstated — the probe didn't have
 // the enabling changes (--force-renderer-accessibility +
 // uia_inspector warmup) that wake up Blink's a11y. With those, the
 // React tree IS reachable in composition mode. The hybrid lanes are
@@ -93,8 +93,8 @@ test.describe("a11y/uia-composition-reachable [composition]", () => {
     const tree = await captureUIA(hostHwnd, "composition-backbone-check", { depth: 20 });
 
     // (1) Root is AloHostMain. Defensive sanity — confirms we captured
-    // the right HWND (matches the class registered in
-    // src/host/HostWindow.cpp:73).
+    // the right HWND (matches kHostWindowClassName in
+    // src/host/HostWindowImpl.h).
     expect(tree.ClassName).toBe("AloHostMain");
 
     // (2) Chromium chrome is intact: Chrome_WidgetWin_1 wrapper is

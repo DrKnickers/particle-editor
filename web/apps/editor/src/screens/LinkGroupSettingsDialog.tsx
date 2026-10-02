@@ -1,6 +1,6 @@
 // LinkGroupSettingsDialog.
 //
-// Link-group settings surface in the new UI. On open, fetches the link-group's
+// Link-group settings surface. On open, fetches the link-group's
 // current exempt-field set via `linkGroups/list-exempt-fields` and
 // renders a checkbox-per-field list. OK commits the toggles via
 // `linkGroups/set-exempt-fields`; Cancel discards. Reset All sets all
@@ -11,12 +11,11 @@
 // on edit). Unchecked = EXEMPT (per-emitter, no propagation). This is
 // the opposite of the underlying `LinkExemptFlags` data model — the
 // flag is named "exempt" so true=per-emitter. The wire / dialog
-// inverts before crossing the data/UI boundary, matching legacy
-// `LinkGroupSettings_PopulateChecks` at [src/UI/EmitterList.cpp:2466].
+// inverts before crossing the data/UI boundary, matching the legacy
+// Win32 editor's `LinkGroupSettings_PopulateChecks`.
 //
-// The full legacy table (kLinkSettingsFields at
-// [src/UI/EmitterList.cpp:2381]) covers ~50 fields grouped by
-// category. The new-UI dialog uses the same wire-name set as the C++
+// The full legacy table (kLinkSettingsFields) covers ~50 fields grouped by
+// category. This dialog uses the same wire-name set as the C++
 // host's `kLinkFieldTable` in BridgeDispatcher.cpp; the list of names
 // is rendered in fetch order so the host owns the canonical column
 // list (a future field addition lands on both sides with one host
@@ -35,7 +34,7 @@ import { useTreeContextStore } from "@/lib/tree/tree-context";
 // Display labels for the wire-name field set. Names not in this map
 // fall back to the wire name itself so a future field addition still
 // renders (just without a friendly label). Mirrors the labels in the
-// legacy `kLinkSettingsFields` table at [src/UI/EmitterList.cpp:2381].
+// legacy Win32 editor's `kLinkSettingsFields` table.
 const FIELD_LABELS: Readonly<Record<string, string>> = {
   colorTexture:            "Color texture",
   normalTexture:           "Normal texture",

@@ -11,14 +11,14 @@
 // (PrintWindow reads the DWM composition surface); overlap is fine.
 //
 // The clip table below is the EXECUTABLE transcription of the recipes in
-// tasks/clips/README.md — the README stays the human authority for the *why*
-// of every crop/trim/crossfade value; table entries cite their README lines.
+// the maintainer-only clip README (tasks/clips/) — the README stays the human
+// authority for the *why* of every crop/trim/crossfade value.
 // `--dry-run` prints the exact commands so the two can be diffed.
 //
 // Failure classification (no auto-retry in v1 — exit 3 is NOT reliably
 // transient: it also covers bad open paths / preflight key misses / press-
 // target misses, ClipRunner.cpp): the summary names the failure class and
-// prints the exact solo rerun command. Plan: tasks/todo.md.
+// prints the exact solo rerun command.
 
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
@@ -32,7 +32,7 @@ const lockPath = join(repoRoot, "clips", ".render-all.lock");
 const localAppData = process.env.LOCALAPPDATA || "";
 
 // ---------------------------------------------------------------------------
-// Clip table — transcribed from tasks/clips/README.md (encode + gate blocks).
+// Clip table — transcribed from the clip README (encode + gate blocks).
 // partialScan runs for EVERY clip (capture-race dropout guard the sampled
 // SSIM/seam gates can't see — README "Capture-clean gate"); its --start is
 // the clip's encode trim (frames before the trim never ship) and its crop is
@@ -40,7 +40,7 @@ const localAppData = process.env.LOCALAPPDATA || "";
 // ---------------------------------------------------------------------------
 const CLIPS = [
   {
-    name: "hero",                               // README.md:37-87
+    name: "hero",
     timeline: "tasks/clips/hero.timeline.json",
     frames: "clips/hero",
     encode: ["--frames", "clips/hero", "--fps", "60", "--loop", "crossfade", "--crossfade", "1.0",
@@ -71,7 +71,7 @@ const CLIPS = [
     partialScan: { start: 0 },
   },
   {
-    name: "faith",                              // README.md:88-125
+    name: "faith",
     timeline: "tasks/clips/faith.timeline.json",
     frames: "clips/faith",
     encode: ["--frames", "clips/faith", "--fps", "60", "--loop", "crossfade", "--crossfade", "1.0",
@@ -85,7 +85,7 @@ const CLIPS = [
     partialScan: { start: 120 },
   },
   {
-    name: "f02",                                // README.md:128-146
+    name: "f02",
     timeline: "tasks/clips/f02.timeline.json",
     frames: "clips/f02",
     encode: ["--frames", "clips/f02", "--fps", "60", "--loop", "crossfade", "--crossfade", "0.5",
@@ -98,7 +98,7 @@ const CLIPS = [
     partialScan: { start: 195 },
   },
   {
-    name: "f02-reorder",                        // README.md:180-211 (frames dir is clips/f02r)
+    name: "f02-reorder",                        // (frames dir is clips/f02r)
     timeline: "tasks/clips/f02-reorder.timeline.json",
     frames: "clips/f02r",
     encode: ["--frames", "clips/f02r", "--fps", "60", "--start", "60",
@@ -112,7 +112,7 @@ const CLIPS = [
     partialScan: { start: 60 },
   },
   {
-    name: "f04",                                // README.md:156-179 (3200x1460 frames; scale:4)
+    name: "f04",                                // (3200x1460 frames; scale:4)
     timeline: "tasks/clips/f04.timeline.json",
     frames: "clips/f04",
     encode: ["--frames", "clips/f04", "--fps", "60", "--start", "60", "--loop", "none",
@@ -127,7 +127,7 @@ const CLIPS = [
     partialScan: { start: 60, crop: "1786:1400:330:30" },
   },
   {
-    name: "spawner",                             // README.md:237-254 (added #503, wired here)
+    name: "spawner",
     timeline: "tasks/clips/spawner.timeline.json",
     frames: "clips/spawner",
     encode: ["--frames", "clips/spawner", "--fps", "60", "--loop", "none",

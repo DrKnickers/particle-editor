@@ -9,7 +9,7 @@ export type ResolvedTheme = "dark" | "light";
 
 const KEY = "alo:theme";
 
-// Theme-flip cross-fade (design pass): a temporary html.theme-transition class
+// Theme-flip cross-fade: a temporary html.theme-transition class
 // scopes a ~150ms color transition to the flip (components.css). 220ms removal
 // gives the 150ms transition slack without lingering. Skipped on first apply
 // (boot must not fade in from the wrong palette), under --record (frame

@@ -69,7 +69,7 @@ test("Help → About opens the modal and displays /Version \\d+/", async () => {
 test("Edit → Rescale dialog opens and closes via DOM gestures", async () => {
   // UI-presence subtest: click Edit → Rescale, dialog mounts, click
   // OK, dialog detaches. The full *contract* (rescale-system → state/changed)
-  // is exercised in the separate `tests/host-state-plumbing.spec.ts:115`
+  // is exercised in the separate `tests/host-state-plumbing.spec.ts`
   // and the assertion below; this test just locks the menu→modal→close
   // gesture path through Radix.
   await page.keyboard.press("Escape").catch(() => {});

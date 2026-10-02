@@ -1,8 +1,8 @@
 // Contract tests: drive the *real* native bridge inside
 // ParticleEditor.exe --test-host via CDP. These specs exist to
 // catch schema drift between the TypeScript MockBridge (covered by
-// Vitest) and the C++ BridgeDispatcher — a failure mode
-// the plan called out as a risk.
+// Vitest) and the C++ BridgeDispatcher — a known failure
+// mode.
 //
 // Channel: in --test-host mode, App.tsx swaps `window.bridge` for a
 // TestHostBridge that routes requests through WebView2's host-object
@@ -149,7 +149,7 @@ test("engine/set/background round-trips a COLORREF", async () => {
     // a test that mutates engine state and walks away leaves every later test
     // running against it — this one left the background gray for the rest of
     // the run, and nothing downstream asserted the default, so a regression in
-    // background restoration would have gone unnoticed (2026-07 audit).
+    // background restoration would have gone unnoticed.
     const before = (await b.request({
       kind: "engine/state/snapshot",
       params: {},

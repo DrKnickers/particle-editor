@@ -1,4 +1,4 @@
-// InputDispatcher — Phase 2 input forwarding.
+// InputDispatcher — viewport input forwarding.
 //
 // Receives `viewport/input` bridge requests from the renderer's DOM
 // event handlers on the in-DOM <canvas>, decodes the discriminated

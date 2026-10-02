@@ -1,6 +1,6 @@
-// Kind handlers for the window/layout/viewport/host/app/debug/stats + singles
-// bridge domain(s), moved out of DispatchInternal's ladder (Phase A dispatch
-// split -- tasks/2026-07-06-heavyweight-refactor-plan.md).
+// Bridge request handlers for the window/*, layout/*, viewport/*, host/*,
+// app/*, debug/* and stats/* kinds, plus a few single kinds.
+// BridgeDispatcher::DispatchInternal routes requests here via TryDispatchShell.
 
 #include "BridgeDispatcher.h"
 #include "BridgeDispatchShared.h"
@@ -27,8 +27,7 @@ namespace host {
 
 bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
 {
-    // DispatchInternal-local aliases so the moved ladder blocks below stay
-    // verbatim (plan #3A transforms only).
+    // Short local names for the request fields used by the handlers below.
     const json&        params = ctx.params;
     const std::string& kind   = ctx.kind;
 

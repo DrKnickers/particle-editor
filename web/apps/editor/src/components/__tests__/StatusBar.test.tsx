@@ -44,7 +44,7 @@ describe("StatusBar", () => {
     emit("engine/state/changed", { paused: true });
     expect(screen.getByText("PAUSED")).toBeInTheDocument();
     emit("engine/state/changed", { paused: false });
-    // usePresence keeps the tag mounted through its exit fade (design pass);
+    // usePresence keeps the tag mounted through its exit fade;
     // jsdom fires no animationend, so unmount lands on the timeout fallback.
     await waitFor(() =>
       expect(screen.queryByText("PAUSED")).not.toBeInTheDocument(),
@@ -90,7 +90,7 @@ describe("StatusBar", () => {
     expect(cleared.className).not.toContain("text-warning-fg");
   });
 
-  // The #549 Profiler audit found StatusBar re-rendered all five cells on every
+  // A React Profiler audit found StatusBar re-rendered all five cells on every
   // ~30 Hz cursor/position-3d event. The stats cells are now memoized: a cursor
   // move re-renders the parent (cursor cell only), NOT the stats cells.
   it("does not re-render the stats cells on a cursor move (memo)", () => {
@@ -129,7 +129,7 @@ describe("StatusBar", () => {
     expect(screen.getByText("Cursor").nextElementSibling).toHaveTextContent("—");
   });
 
-  // Autosave health (2026-07 audit). Before this the `wrote` bool fed
+  // Autosave health. Before this the `wrote` bool fed
   // nothing but a debug-log format string, so a failing autosave was invisible:
   // the user kept editing believing the crash-recovery net was live.
   describe("autosave health", () => {

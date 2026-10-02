@@ -1,8 +1,8 @@
-// Playwright specs for the CurveEditorPanel (Task 2.6 + hybrid
+// Playwright specs for the CurveEditorPanel (and its hybrid
 // focus-channel restore).
 //
 // The lower-right quadrant's per-emitter EmitterPropertyPanel +
-// TrackEditor surfaces were replaced in Task 2.6 by an always-on
+// TrackEditor surfaces were replaced by an always-on
 // CurveEditorPanel at the bottom of the centre column. The hybrid
 // focus-channel restore re-introduces the edit affordances (mode
 // toggle, interpolation toggle, lock-to combo, Time/Value spinners,

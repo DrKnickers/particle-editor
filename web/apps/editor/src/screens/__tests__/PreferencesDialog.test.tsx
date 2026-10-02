@@ -191,7 +191,7 @@ describe("PreferencesDialog", () => {
 
   // The Max-particles ▲/▼ steppers must step from the value VISIBLE in the
   // field (the uncommitted draft), not the last-committed guard value — else a
-  // typed-but-unblurred edit is silently discarded (the s63 stepper regression).
+  // typed-but-unblurred edit is silently discarded (a past stepper regression).
   it("stepper ▲/▼ step from the visible draft, not the committed value", () => {
     const { bridge, request } = makePrefsBridge(); // default cap 10000
     render(<PreferencesDialog bridge={bridge} open onOpenChange={() => {}} />);

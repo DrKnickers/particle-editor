@@ -8,7 +8,7 @@
 // this hook is mounted by CurveEditorPanel, which ALSO publishes to the atlas
 // context from its own effect. A reactive `useAtlasContext` selector here would
 // re-render CurveEditorPanel every time it published — a self-feedback loop
-// (~4 commits per emitter selection; #549 audit follow-up). So we observe the
+// (~4 commits per emitter selection). So we observe the
 // context NON-reactively: replay the current value once at mount, then
 // `subscribeAtlasContext` for changes. The subscription does not re-render.
 //

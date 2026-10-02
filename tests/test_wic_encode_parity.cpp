@@ -1,8 +1,8 @@
-// [R3b] Pixel-parity + format pin for the WIC PNG encoder
+// Pixel-parity + format pin for the WIC PNG encoder
 // (src/host/WicEncode.cpp) against the GDI+ encoder it replaces in
 // AsyncFrameEncoder (src/host/WindowCapture.cpp EncodeBgraToPng).
 //
-// Pins (tasks/2026-07-07-perf-followups-plan.md §5):
+// Pins:
 //  1. Same deterministic BGRA buffer through BOTH encoders -> decoded RGB is
 //     byte-identical per pixel (PNG is lossless; only compression may differ).
 //     Odd dimensions (257x131) so a stride/rounding bug can't hide.

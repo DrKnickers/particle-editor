@@ -47,7 +47,7 @@ describe("wrapFrame mirrors the engine's index % side² torus", () => {
     expect(wrapFrame(27, 25)).toBe(2);
     // NOTE: negative values on a non-power-of-two count intentionally diverge
     // from the engine's (unsigned int) cast (documented in wrapFrame); positive
-    // overflow — the reported #563 case — matches exactly.
+    // overflow — the index == count case — matches exactly.
   });
   it("floored-modulo for negatives stays in [0,count)", () => {
     expect(wrapFrame(-1, 4)).toBe(3);

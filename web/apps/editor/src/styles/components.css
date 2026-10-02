@@ -46,7 +46,7 @@
   .drag-chip-enter { animation: none; }
 }
 
-/* ---- Design-pass motion additions (audit 2026-07-18) ----
+/* ---- Motion additions ----
    Shared entrance/presence classes for the surfaces that previously
    hard-cut. All reuse the popover fade keyframes; every class here is
    covered by the reduced-motion block below AND the [data-recording]
@@ -81,7 +81,7 @@
    imperatively on mousemove; only opacity transitions, position snaps). */
 .atlas-hover-fade { transition: opacity var(--motion-fast-in) var(--ease-entrance); }
 
-/* Static skeletons (design follow-ups, F5). Shape-matched loading stand-ins
+/* Static skeletons. Shape-matched loading stand-ins
    for panel content — deliberately NO shimmer/pulse (calm register; also
    means zero new motion to gate for reduced-motion/--record). */
 .skeleton-row {
@@ -90,7 +90,7 @@
   background: var(--panel-2);
 }
 
-/* Invalid-input language (design pass, C4). The app's first shared error
+/* Invalid-input language. The app's first shared error
    vocabulary for fields: anything flagged aria-invalid paints the danger
    border (foreground variant — AA on both themes). !important so it wins
    over per-site focus border shifts for the duration of the invalid state. */
@@ -278,7 +278,7 @@ html.theme-transition body * {
   font-size: 12px;
   cursor: pointer;
   font-family: inherit;
-  /* Fast-tier hover/press feedback (design pass). transform included so the
+  /* Fast-tier hover/press feedback. transform included so the
      :active scale eases instead of snapping; properties enumerated, never
      `all` (the Radix data-state open/close must not pick up transitions). */
   transition:
@@ -304,7 +304,7 @@ html.theme-transition body * {
   color: var(--accent);
 }
 .tb-btn.playing { color: var(--success-fg); }
-/* F3: pressed (LMB-down) feedback — lighter bg + slight scale, distinct
+/* Pressed (LMB-down) feedback — lighter bg + slight scale, distinct
    from the accent-soft toggled state. Wins during the press because it's
    declared last; skipped while disabled. */
 .tb-btn:active:not(:disabled) { background: var(--panel-3); transform: scale(0.96); }
@@ -399,7 +399,7 @@ html.theme-transition body * {
     transform var(--motion-fast-out) var(--ease-entrance);
 }
 .panel-header .icon-btn:hover { background: var(--hover); color: var(--text); }
-.panel-header .icon-btn:active { background: var(--panel-3); transform: scale(0.96); } /* F3 */
+.panel-header .icon-btn:active { background: var(--panel-3); transform: scale(0.96); } /* pressed feedback */
 .panel-header .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .panel-body {
@@ -421,8 +421,8 @@ html.theme-transition body * {
    this layout container lives here. */
 .tree-actions {
   display: flex;
-  justify-content: center; /* F2: center the group so it stays balanced on pane resize */
-  gap: 2px;                /* F2: match the main toolbar's compact icon spacing */
+  justify-content: center; /* center the group so it stays balanced on pane resize */
+  gap: 2px;                /* match the main toolbar's compact icon spacing */
   padding: 4px 8px;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
@@ -735,8 +735,8 @@ html.theme-transition body * {
 }
 
 /* Per-axis micro-label above each spinner in a Vec3 cluster (X / Y /
-   Z labels stacked above their Spinner). Matches legacy IDD_EMITTER_PROPS3
-   (.rc:352-354) which puts individual "X" / "Y" / "Z" LTEXTs above
+   Z labels stacked above their Spinner). Matches the legacy Win32 editor's
+   emitter dialog, which puts individual "X" / "Y" / "Z" LTEXTs above
    the acceleration spinners; the same convention reads through for
    Min/Max/Value rows in the RandomParam clusters. */
 .axis-cell {

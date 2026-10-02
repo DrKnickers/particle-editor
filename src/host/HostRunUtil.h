@@ -3,8 +3,7 @@
 //
 // Tiny QPC + path helpers shared by HostWindowImpl::Run's pump and the
 // one-shot runners (CaptureRunner). Formerly HostWindow.cpp file-statics;
-// hoisted (inline, one logical definition) for the Phase C extraction —
-// tasks/2026-07-06-heavyweight-refactor-plan.md.
+// inline here so there is one logical definition.
 
 #include <windows.h>
 

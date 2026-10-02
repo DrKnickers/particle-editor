@@ -1,9 +1,7 @@
 // CaptureRunner.cpp — the --capture / --capture-ref one-shot, extracted
-// verbatim from HostWindowImpl::Run (Phase C of
-// tasks/2026-07-06-heavyweight-refactor-plan.md). Init's alias prelude binds
-// the old Run()-scope names to the Deps references so the moved setup segment
-// below is unchanged apart from reading the CLI values from m_params and
-// recording failures on the ticker. The per-frame state machine is
+// from HostWindowImpl::Run. Init's alias prelude binds the Run()-scope
+// names to the Deps references; the setup segment reads the CLI values
+// from m_params and records failures on the ticker. The per-frame state machine is
 // CaptureTicker; this file wires its hooks to the live host.
 
 #include "CaptureRunner.h"
@@ -94,7 +92,7 @@ void CaptureRunner::Init()
         // Deterministic sim/shader time for --capture-ref too: freeze the
         // preview clock at a fixed anchor (stepped 1/60 per counted frame in
         // the capture loop) so m_time-consuming mesh shaders render
-        // identically every run. Mirrors the --capture .alo path (#481).
+        // identically every run. Mirrors the --capture .alo path.
         FreezePreviewClockAt(0.0f);
         {
             const ReferenceObjectStatus refStatus = engine->GetReferenceObjectStatus();

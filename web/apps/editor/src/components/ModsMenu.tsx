@@ -72,8 +72,8 @@ export function ModsMenu({ bridge, onMenuValueChange }: ModsMenuProps) {
   };
   // Compare canonical paths case-insensitively, ignoring trailing slashes.
   const setLayerStack = async (paths: string[]) => {
-    // Surface a failed apply instead of silently proceeding as if it worked
-    // (release-audit #5). On failure the host did NOT persist the stack; we still
+    // Surface a failed apply instead of silently proceeding as if it worked.
+    // On failure the host did NOT persist the stack; we still
     // re-fetch so the menu reflects the host's ACTUAL state.
     try {
       const r = await bridge.request({ kind: "mods/set-layers", params: { paths } });
@@ -134,7 +134,7 @@ export function ModsMenu({ bridge, onMenuValueChange }: ModsMenuProps) {
   useEffect(() => {
     let cancelled = false;
     // Prime the mods list at mount — DEFERRED to the first idle slot after first
-    // interactive paint (perf-audit P1a startup fan-out). Active mod arrives via
+    // interactive paint (trims startup bridge fan-out). Active mod arrives via
     // the eager snapshot; the list changes rarely and the live engine/state/changed
     // subscription above keeps it current, so the initial fetch is non-paint-critical.
     const cancelModsSeed = runWhenIdle(() => { if (!cancelled) void refreshModsList(); });
@@ -289,7 +289,7 @@ export function ModsMenu({ bridge, onMenuValueChange }: ModsMenuProps) {
                   alignOffset={-4}
                 >
                   {/* focus-within accent border = the keyboard-focus cue for the
-                      borderless input inside (design pass; was focus-invisible). */}
+                      borderless input inside (was focus-invisible). */}
                   <div className="mb-1 flex h-[var(--row-h)] items-center gap-1.5 rounded-[var(--radius-sm)] border border-border-2 bg-bg-3 px-2 transition-colors motion-reduce:transition-none focus-within:border-accent">
                     <Search className="size-3 shrink-0 text-text-3" strokeWidth={1.5} />
                     <input

@@ -10,10 +10,10 @@
 // useSeedFileState → formatWindowTitle). Deep behavior lives in the
 // per-component suites.
 
-// BOOT-CLEAN PARITY (issue #488, fixed): AppShell's startup pushes
+// BOOT-CLEAN PARITY (fixed): AppShell's startup pushes
 // (engine/set/msaa-level, engine/set/model-shadows, engine/set/soft-shadows)
 // are view-only preferences the native host explicitly never marks dirty
-// (BridgeDispatch_Engine.cpp:426-458). MockBridge's isMutating() now excludes
+// (BridgeDispatch_Engine.cpp). MockBridge's isMutating() now excludes
 // all three, matching the host — so the app boots CLEAN under the mock and
 // the title assertions below require no `● ` dirty prefix.
 
@@ -94,7 +94,7 @@ describe("App — smoke render against the MockBridge", () => {
       expect(useFileStateStore.getState().currentFilePath).toBe("C:/mods/fire.alo");
     });
     await waitFor(() => {
-      // Boots CLEAN (no `● ` dirty prefix) — see header note (#488).
+      // Boots CLEAN (no `● ` dirty prefix) — see header note.
       expect(document.title).toBe("fire.alo — Particle Editor");
     });
     // file/recent/list seed landed too.

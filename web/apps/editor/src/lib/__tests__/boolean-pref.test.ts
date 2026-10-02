@@ -1,4 +1,4 @@
-// Pins the shared boolean-pref backing (DRY audit web-bridge-state-4): the
+// Pins the shared boolean-pref backing: the
 // "1"/"0" encoding, the legacy "true" decode, the absent->default path, and the
 // SILENT quota/private-mode catch (previously uncovered — no module test stubbed
 // a throwing localStorage).

@@ -1,5 +1,5 @@
 // Vitest unit tests for BloomSection (the bloom controls folded into the
-// Lighting pane, session 11; formerly BloomPanel).
+// Lighting pane; formerly BloomPanel).
 // Verifies: Enable checkbox + 3 Spinners (Strength / Cutoff / Size) render;
 // changing Strength dispatches engine/set/bloom-strength with the new value.
 

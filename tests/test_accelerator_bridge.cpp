@@ -3,16 +3,16 @@
 // WebView2 swallows them.
 //
 // Covers, per the source:
-//   - every named key in VkFromName's table incl. aliases (AcceleratorBridge.cpp:14-51)
+//   - every named key in VkFromName's table incl. aliases
 //   - single-char A..Z / 0..9 keys and the F1..F24 range (+F0/F25 rejects)
 //   - modifier parsing: order-insensitive, whitespace-trimmed, case-insensitive,
-//     Ctrl/Control alias (ParseCombo, AcceleratorBridge.cpp:61-86)
+//     Ctrl/Control alias (ParseCombo)
 //   - unrecognised key names are silently dropped at registration and can
-//     never match (RegisterCombos, AcceleratorBridge.cpp:99-103)
-//   - TryDispatch requires EXACT modifier equality (AcceleratorBridge.cpp:112-118):
+//     never match (RegisterCombos)
+//   - TryDispatch requires EXACT modifier equality:
 //     near-misses (extra/missing/different modifiers) return false, emit nothing
 //   - the emitted payload is the ORIGINAL combo string, verbatim
-//   - RegisterCombos REPLACES the previous list entirely (AcceleratorBridge.cpp:91-104)
+//   - RegisterCombos REPLACES the previous list entirely
 //
 // Mirrors tests/test_webview_modal_policy.cpp's shape. Standalone console exe;
 // see the test_accelerator_bridge entry in tests/native-tests.json.
@@ -69,7 +69,7 @@ int main()
 {
     std::printf("test_accelerator_bridge\n");
 
-    // ---- A: the documented React set (AcceleratorBridge.h:4-5) -------------
+    // ---- A: the documented React set (AcceleratorBridge.h header) ----------
     {
         AcceleratorBridge b;
         b.RegisterCombos({ "Ctrl+S", "Ctrl+Z", "Ctrl+Shift+Z", "Delete", "F5" });
@@ -102,7 +102,7 @@ int main()
         CHECK(!d.handled && d.emits == 0, "unregistered key returns false, emits nothing");
     }
 
-    // ---- B: the full named-key table (AcceleratorBridge.cpp:25-41) ---------
+    // ---- B: the full named-key table (VkFromName) --------------------------
     {
         struct { const char* name; UINT vk; } table[] = {
             { "Delete", VK_DELETE }, { "Del", VK_DELETE },
@@ -164,7 +164,7 @@ int main()
     }
 
     // ---- E: unrecognised keys are dropped at registration ------------------
-    // vk==0 combos are silently ignored (AcceleratorBridge.cpp:99-103); a
+    // vk==0 combos are silently ignored (RegisterCombos); a
     // valid combo registered alongside must keep working.
     {
         AcceleratorBridge b;

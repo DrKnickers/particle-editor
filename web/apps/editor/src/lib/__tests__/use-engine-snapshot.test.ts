@@ -1,5 +1,5 @@
 // Pins the load-bearing contract of useEngineField (the extracted dropdown
-// hook, DRY audit web-screens-0): seed from engine/state/snapshot, track
+// hook): seed from engine/state/snapshot, track
 // engine/state/changed, and — critically — SWALLOW a rejected request (return
 // undefined, never console.warn). The transitive dropdown tests always resolve
 // `request`, so this branch was previously unguarded.

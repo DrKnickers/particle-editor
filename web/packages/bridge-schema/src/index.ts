@@ -107,7 +107,7 @@ export type LightingSettingsDto = {
 
 // ─── Spawner DTO ──────────────────────────
 //
-// Mirrors `SpawnerConfig` at [src/SpawnerDriver.h:18]. Defaults match
+// Mirrors `SpawnerConfig` in src/SpawnerDriver.h. Defaults match
 // `SpawnerConfig()` (Auto mode, disabled, burst 1, no spacing, 10 s
 // interval, origin, 5 s lifetime, no jitter). `enabled` is meaningful
 // only in Auto mode (toggle the recurring schedule); Manual mode bursts
@@ -314,9 +314,9 @@ export type EngineStateDto = {
   bloomSize: number;                // GetBloomSize()
 
   // Leave particles after instance death. Defaults true —
-  // matches ParticleSystem's constructor seed at [ParticleSystem.cpp:956].
+  // matches the ParticleSystem constructor's seed.
   // Read via ParticleSystem::getLeaveParticles(); persisted with the
-  // particle system (chunk-serialised at [ParticleSystem.cpp:948]).
+  // particle system (chunk-serialised in ParticleSystemSerialization.cpp).
   leaveParticles: boolean;
 
   // Debug
@@ -336,7 +336,7 @@ export type EngineStateDto = {
   gravity: Vec3;                    // GetGravity()
 
   // Spawner. Defaults mirror SpawnerConfig()'s
-  // initialiser at [src/SpawnerDriver.h:18] — Auto mode + disabled +
+  // initialiser in src/SpawnerDriver.h — Auto mode + disabled +
   // burst 1 + 0 s spacing + 10 s interval + origin + 5 s lifetime + no
   // jitter. The native host owns this config (m_spawnerConfig on
   // BridgeDispatcher) for snapshot parity; mutations route through
@@ -423,7 +423,8 @@ export type LayerRef = {
 // truth even though the HWND is hidden.
 //
 // `deltaY` is WHEEL_DELTA units (120 per notch, positive = away-from-
-// user / "zoom in" per the existing handler at HostWindow.cpp:1350).
+// user / "zoom in" per the host's WM_MOUSEWHEEL handler in
+// HostWindow_Viewport.cpp).
 // The renderer normalises DOM `WheelEvent.deltaY` to this convention
 // (DOM is opposite-sign; multiply by -1 and quantise to ±120 per
 // notch).
@@ -432,11 +433,12 @@ export type LayerRef = {
 // `event.keyCode` which is legacy but still populated for every key
 // the engine could care about. `repeat` is `event.repeat` — the host
 // stamps lParam bit-30 from this so the engine's WM_KEYDOWN repeat
-// filter at HostWindow.cpp:1296 works unchanged.
+// filter (HostWindow_Viewport.cpp) works unchanged.
 //
-// `blur` corresponds to `window.blur` — the host posts WM_KILLFOCUS
-// to the popup so the defensive cursor-bound-spawn cleanup at
-// HostWindow.cpp:1325 runs when the user Alt-Tabs away mid-Shift-hold.
+// `blur` corresponds to `window.blur` — the host posts WM_APP_VIEWPORT_BLUR
+// (not WM_KILLFOCUS, whose handler deliberately keeps the spawn alive) so the
+// defensive cursor-bound-spawn cleanup in the WM_APP_VIEWPORT_BLUR handler
+// (HostWindow_Viewport.cpp) runs when the user Alt-Tabs away mid-Shift-hold.
 export type ViewportInputEvent =
   | { type: "mousemove"; x: number; y: number; buttons: number }
   | { type: "mousedown" | "mouseup"; button: "left" | "right" | "middle";
@@ -453,9 +455,8 @@ export type ViewportInputEvent =
 // names are intrinsic to the array position — `TRACK_NAMES[i]` is
 // authoritative for both sides of the bridge.
 //
-// `keys` are sorted ascending by time. Time is in 0..100 (matches
-// legacy `CurveEditor_SetHorzRange(hEditor, 0.0f, 100.0f, true)` at
-// [src/UI/TrackEditor.cpp:58]). Value range is per-track and computed
+// `keys` are sorted ascending by time. Time is in 0..100 (matches the
+// legacy Win32 track editor's horizontal range). Value range is per-track and computed
 // React-side, not on the wire — the schema carries raw values.
 //
 // `interpolation` maps the native enum:
@@ -492,10 +493,9 @@ export type TrackDto = {
    *  owns its own keys. Only the first four channels
    *  (red/green/blue/alpha) participate in locking; the engine
    *  forbids locking for scale/index/rotationSpeed regardless of
-   *  what's sent. Per the legacy semantic at
-   *  [TrackEditor.cpp:90-110](src/UI/TrackEditor.cpp:90) and the
-   *  pointer-identity model in
-   *  [ParticleSystem.cpp:428](src/ParticleSystem.cpp:428). */
+   *  what's sent. Per the legacy Win32 track editor's semantic and the
+   *  `tracks[]` → `trackContents[]` pointer-identity model on
+   *  `ParticleSystem::Emitter` (src/ParticleSystem.h). */
   lockedTo: TrackName | null;
 };
 
@@ -516,7 +516,7 @@ export const TRACK_NAMES: readonly TrackName[] = Object.freeze([
 // ─── Emitter properties DTO ──────────────
 //
 // Mirrors every editable field on `ParticleSystem::Emitter`
-// ([src/ParticleSystem.h:71-204]). Grouped by the UI tab that surfaces
+// (src/ParticleSystem.h). Grouped by the UI tab that surfaces
 // the field (Basic / Appearance / Physics) so a reviewer can see at a
 // glance what's wired where. The Basic group is wired to
 // `EmitterPropertyTabs`; Appearance + Physics ride this DTO so later
@@ -546,12 +546,11 @@ export type GroupDto = {
 };
 
 export type EmitterPropertiesDto = {
-  // ── Basic ── ([ParticleSystem.h:140] name, :154 linkToSystem,
-  // :162 randomRotation, :165 useBursts, :168 lifetime, :169 initialDelay,
-  // :170 burstDelay, :175 randomLifetimePerc, :174 randomScalePerc,
-  // :178 parentLinkStrength, :180-181 randomRotationAverage/Variance,
-  // :184-185 freezeTime/skipTime, :188 nBursts, :189 index,
-  // :192 nParticlesPerSecond, :194 nParticlesPerBurst).
+  // ── Basic ── (Emitter fields: name, linkToSystem, randomRotation,
+  // useBursts, lifetime, initialDelay, burstDelay, randomLifetimePerc,
+  // randomScalePerc, parentLinkStrength, randomRotationAverage/Variance,
+  // freezeTime/skipTime, nBursts, index, nParticlesPerSecond,
+  // nParticlesPerBurst).
   name: string;
   lifetime: number;
   initialDelay: number;
@@ -572,11 +571,10 @@ export type EmitterPropertiesDto = {
   parentLinkStrength: number;
   index: number;
 
-  // ── Appearance ── ([ParticleSystem.h:141-142 colorTexture/
-  // normalTexture, :156 doColorAddGrayscale, :157 affectedByWind,
-  // :158 isHeatParticle, :160 hasTail, :161 noDepthTest,
-  // :164 isWorldOriented, :177 tailSize, :182 randomColors,
-  // :190 blendMode, :191 textureSize, :193 nTriangles).
+  // ── Appearance ── (Emitter fields: colorTexture/normalTexture,
+  // doColorAddGrayscale, affectedByWind, isHeatParticle, hasTail,
+  // noDepthTest, isWorldOriented, tailSize, randomColors, blendMode,
+  // textureSize, nTriangles).
   colorTexture: string;
   normalTexture: string;
   blendMode: number;
@@ -600,12 +598,11 @@ export type EmitterPropertiesDto = {
   noDepthTest: boolean;
   affectedByWind: boolean;
 
-  // ── Physics ── ([ParticleSystem.h:155 objectSpaceAcceleration,
-  // :159 isWeatherParticle, :166 emitFromMesh, :167 gravity,
-  // :171 inwardSpeed, :172 inwardAcceleration, :173 acceleration,
-  // :176 weatherCubeSize, :179 weatherCubeDistance, :183 bounciness,
-  // :186 emitFromMeshOffset, :187 weatherFadeoutDistance,
-  // :195 groundBehavior). `groups` is :145.
+  // ── Physics ── (Emitter fields: objectSpaceAcceleration,
+  // isWeatherParticle, emitFromMesh, gravity, inwardSpeed,
+  // inwardAcceleration, acceleration, weatherCubeSize, weatherCubeDistance,
+  // bounciness, emitFromMeshOffset, weatherFadeoutDistance,
+  // groundBehavior, groups).
   acceleration: Vec3;
   gravity: number;
   inwardSpeed: number;
@@ -660,7 +657,7 @@ export type Request =
   // (automation and --test-host runs are exempt).
   | { kind: "file/new";                   params: { discardUnsaved?: true } }
   | { kind: "file/open";                  params: { path?: string; filter?: "alo" | "skydome" | "ground"; discardUnsaved?: true } }   // path undef = native picker; filter selects lpstrFilter (default "alo")
-  | { kind: "file/pick-open";             params: { filter?: "alo" | "skydome" | "ground" } }   // NON-MUTATING picker: returns the chosen path WITHOUT loading it as the active doc (release-audit #2)
+  | { kind: "file/pick-open";             params: { filter?: "alo" | "skydome" | "ground" } }   // NON-MUTATING picker: returns the chosen path WITHOUT loading it as the active doc
   | { kind: "file/save";                  params: { path?: string } }   // path undef = native picker
   | { kind: "file/save-as";               params: Record<string, never> } // always opens native picker
   | { kind: "file/recent/list";           params: Record<string, never> }
@@ -740,11 +737,11 @@ export type Request =
 
   // Engine setters — leave particles after instance death.
   // Mirrors ParticleSystem::setLeaveParticles / getLeaveParticles
-  // ([src/ParticleSystem.h:343,347]). When true (default), particles
+  // (src/ParticleSystem.h). When true (default), particles
   // continue to live after their owning instance is killed (the
   // instance just stops spawning); when false the engine destroys
   // the instance + its remaining particles immediately. Honored by
-  // Engine::KillParticleSystem at [src/engine.cpp:197].
+  // Engine::KillParticleSystem.
   | { kind: "engine/set/leave-particles";     params: { enabled: boolean } }
 
   // Engine setters — debug / camera / lighting
@@ -801,19 +798,19 @@ export type Request =
   // and rendering right now. Native-only — browser mode has no engine.
   | { kind: "engine/query/live-instances";     params: Record<string, never> }
 
-  // Settings (cross-mode registry persistence). Legacy persists lighting
-  // under HKCU\Software\AloParticleEditor; the new UI reads it back so
-  // settings round-trip between the two UIs.
+  // Settings (registry persistence). Lighting persists under
+  // HKCU\Software\AloParticleEditor (the legacy Win32 editor's keys); the
+  // editor reads it back on start.
   //   - `settings/lighting` (get) returns the full raw lighting split
   //     (intensity/colour kept separate, angles in degrees) the panel
   //     seeds its displayed controls from — incl. the Force Align flag.
   //   - `settings/lighting-force-align/set` writes just the
   //     `LightingForceFillAlignment` REG_DWORD on toggle.
   //   - `settings/lighting/set` writes the FULL raw split back to the
-  //     registry (all 16 light values + the flag) so the new UI's edits
+  //     registry (all 16 light values + the flag) so the editor's edits
   //     and its Reset persist — otherwise a value the legacy dialog wrote
   //     (e.g. a stale ambient) reappears on every reopen/restart and the
-  //     new UI can never overwrite it. Same key names as the GET above.
+  //     editor can never overwrite it. Same key names as the GET above.
   // Host returns canonical defaults (get) / no-ops the writes (set) under
   // `--test-host` so the dialog-lighting a11y golden stays deterministic —
   // unless ALO_SETTINGS_LIVE is set (the test seam that drives the real
@@ -855,8 +852,8 @@ export type Request =
   // alias whose keys auto-track the target's. `lockTo: null` restores
   // the channel to its own trackContents (unlock). The engine only
   // honours locking for red/green/blue/alpha and only "later-channel
-  // locks to earlier-channel" pairs (mirrors legacy
-  // [TrackEditor.cpp:90-110](src/UI/TrackEditor.cpp:90)); other
+  // locks to earlier-channel" pairs (mirrors the legacy Win32 track
+  // editor); other
   // combinations are silently rejected with an ok response.
   | { kind: "emitters/set-track-lock";
       params: { id: number; channel: TrackName; lockTo: TrackName | null } }
@@ -877,7 +874,7 @@ export type Request =
   | { kind: "emitters/add-track-key";
       params: { id: number; track: TrackName; time: number; value: number } }
   // batch: insert every key under ONE undo entry, so a multi-key curve paste
-  // is a single Ctrl+Z (2026-07 audit). Each key is dedupe-bumped
+  // is a single Ctrl+Z. Each key is dedupe-bumped
   // independently, so response.keys are the ACTUAL inserted (time, value)
   // pairs, aligned to the input order.
   | { kind: "emitters/add-track-keys";
@@ -887,7 +884,7 @@ export type Request =
   | { kind: "emitters/duplicate";                       params: { id: number } }
   | { kind: "emitters/duplicate-many";                  params: { ids: number[] } }   // batch: duplicate each; response.newIds are the copies, aligned to input order
   | { kind: "emitters/delete";                          params: { id: number } }
-  | { kind: "emitters/delete-many";                     params: { ids: number[] } }   // batch: delete each subtree under ONE undo entry, so a multi-root delete is a single Ctrl+Z (2026-07 audit). Ids are POSITIONS, so the host re-resolves each one inside the loop
+  | { kind: "emitters/delete-many";                     params: { ids: number[] } }   // batch: delete each subtree under ONE undo entry, so a multi-root delete is a single Ctrl+Z. Ids are POSITIONS, so the host re-resolves each one inside the loop
 
   | { kind: "emitters/rename";                          params: { id: number; name: string } }
   | { kind: "emitters/duplicate-with-index-increment";  params: { id: number; delta: number } }
@@ -926,9 +923,8 @@ export type Request =
   | { kind: "emitters/reorder-many";        params: { ids: number[]; rootIndex: number } }   // batch drag-reorder: move selected roots to land contiguous at gap rootIndex; response.newIds follow them (input order)
   // Visibility ops for the EmitterTree panel
   // toolbar. `set-visible` flips a single emitter's `visible` flag
-  // without touching its children (matches legacy
-  // `EmitterList_ToggleEmitterVisibility`). `set-all-visible` walks
-  // the whole tree (matches legacy `EmitterList_SetAllEmitterVisibility`).
+  // without touching its children; `set-all-visible` walks the whole
+  // tree (both match the legacy Win32 editor's emitter list).
   // Both emit `emitters/tree/changed` + `engine/state/changed`.
   | { kind: "emitters/set-visible";         params: { id: number; visible: boolean } }
   | { kind: "emitters/set-all-visible";     params: { visible: boolean } }
@@ -1097,7 +1093,7 @@ export type Request =
   // Cascade reset for the View → Reset View Settings
   // menu. Pushes engine defaults for background, ground, bloom,
   // skydome, and lighting in one host-side action (one emit of
-  // engine/state/changed at the end). Mirrors the legacy main.cpp
+  // engine/state/changed at the end). Mirrors the legacy Win32 editor,
   // which prompts Yes/No and then resets the same surface. The
   // confirmation dialog lives React-side via Radix AlertDialog;
   // the dispatcher's job is purely to apply the defaults.
@@ -1389,7 +1385,7 @@ export type Event =
   // so the TitleBar swaps the maximize↔restore glyph + applies the maximized
   // overhang padding. MockBridge never emits it (browser mode has no window).
   | { kind: "window/state";           payload: { maximized: boolean } }
-  // Autosave health (2026-07 audit). `healthy:false` means the last
+  // Autosave health. `healthy:false` means the last
   // autosave write FAILED, so the crash-recovery net is stale — the newest
   // recoverable state is older than what is on screen. Emitted only on a
   // CHANGE, and replayed on app/ready like window/state.

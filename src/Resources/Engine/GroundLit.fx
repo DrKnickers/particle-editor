@@ -1,10 +1,10 @@
 ///////////////////////////////////////////////////////////////////////////////
 // GroundLit.fx — bump-mapped terrain lighting for the editor's ground plane.
 //
-// Faithful in spirit to the game's TerrainMeshBump.fx "bump+spec" path
-// (reference/foc-shaders/TerrainMeshBump.fx), adapted for the editor's ground:
+// Faithful in spirit to the game's TerrainMeshBump.fx "bump+spec" path,
+// adapted for the editor's ground:
 //   - Cloud-shadow and fog-of-war texture multiplies REMOVED (no editor
-//     equivalent — see tasks/todo.md for scope).
+//     equivalent).
 //   - Self-contained: the one AlamoEngine.fxh helper we use (SPH fill) is
 //     inlined, because the editor loads this as a standalone RCDATA blob via
 //     D3DXCreateEffect (no #include resolution at runtime).

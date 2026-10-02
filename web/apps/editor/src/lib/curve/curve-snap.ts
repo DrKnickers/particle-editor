@@ -1,4 +1,4 @@
-// curve-snap.ts — pure snap-to-grid math for the curve editor (#618).
+// curve-snap.ts — pure snap-to-grid math for the curve editor.
 //
 // The curve canvas draws `gridCells` major divisions per axis with a finer
 // minor sub-grid (`GRID_SUBDIVISIONS` per major cell). When the snap-to-grid

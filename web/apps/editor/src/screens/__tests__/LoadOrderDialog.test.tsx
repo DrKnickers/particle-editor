@@ -69,7 +69,7 @@ describe("LoadOrderDialog", () => {
     await waitFor(() => screen.getByRole("button", { name: "Move Core up" }));
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     // Failure is surfaced, the dialog stays open, and onApplied is NOT called —
-    // the host did not persist a broken stack (release-audit #5).
+    // the host did not persist a broken stack.
     expect(await screen.findByTestId("load-order-error")).toBeInTheDocument();
     expect(onApplied).not.toHaveBeenCalled();
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
@@ -187,7 +187,7 @@ describe("LoadOrderDialog", () => {
     });
   });
 
-  // ── Phase 0: the drag-gesture abort/latch/teardown edge cases that
+  // ── The drag-gesture abort/latch/teardown edge cases that
   // were previously uncovered (only commit + sub-threshold + modal-close were
   // tested). Each abort case PAIRS a positive control (the chip appears, so the
   // drag genuinely activated on this fixture — a broken geometry mock would fail

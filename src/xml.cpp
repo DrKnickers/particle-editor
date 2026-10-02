@@ -16,8 +16,8 @@ XMLNode::XMLNode(XMLNode* parent, const XML_Char* name, const XML_Char **atts)
 
 	// Expat passes attributes as a NULL-terminated [name0, val0, name1,
 	// val1, ...] array. Advance by pairs — without the `atts += 2` this
-	// loop spun forever (100% CPU) on any element carrying >=1 attribute
-	// (audit G10). The `atts[1]` guard also tolerates a malformed
+	// loop spun forever (100% CPU) on any element carrying >=1 attribute.
+	// The `atts[1]` guard also tolerates a malformed
 	// odd-length array rather than reading past the terminator.
 	while (atts && atts[0] && atts[1])
 	{
@@ -79,7 +79,7 @@ static void checkEmpty(XMLNode* node)
 	}
 }
 
-// Audit F-XML (untrusted mod XML): Expat has no nesting or element-count limit
+// Untrusted mod XML: Expat has no nesting or element-count limit
 // of its own, so these caps are ours. The handlers below stop the parser rather
 // than throw: C++ exceptions must not unwind through Expat's C frames. A cap
 // trip surfaces as the normal XML_Parse==0 ParseException; any other C++
@@ -95,7 +95,7 @@ static thread_local unsigned long g_xmlDepth  = 0;
 // Depth alone left a shallow-but-enormous document unbounded, and the 64 MiB
 // input cap is not a substitute: each element becomes an XMLNode with a child
 // vector and an attribute map, so the heap cost is a large multiple of the
-// bytes on disk (2026-07 audit).
+// bytes on disk.
 static thread_local unsigned long g_xmlNodes  = 0;
 // Total Expat [name,value] attribute pairs seen in THIS parse. Attribute maps
 // are owned by XMLNode, so this is document-wide for the same reason g_xmlNodes
@@ -289,16 +289,16 @@ void XMLTree::parse(IFile* file)
 	XML_SetElementHandler(parser, onStartElement, onEndElement);
 	XML_SetCharacterDataHandler(parser, onCharacterData);
 	XML_SetUnknownEncodingHandler(parser, onUnknownEncoding, NULL);   // tolerate encoding='ASCII'
-	g_xmlParser = parser;   // F-XML: for onEntityDecl's / onStartElement's XML_StopParser
+	g_xmlParser = parser;   // for onEntityDecl's / onStartElement's XML_StopParser
 	g_xmlDepth  = 0;        // fresh depth per parse (thread_local survives across calls)
 	g_xmlNodes  = 0;        // ...and a fresh element count
 	g_xmlAttributes = 0;    // ...and fresh document-wide attribute accounting
 	g_xmlError  = nullptr;  // ...and no handler exception carried over
-	XML_SetEntityDeclHandler(parser, onEntityDecl);        // F-XML: reject custom entity declarations
+	XML_SetEntityDeclHandler(parser, onEntityDecl);        // reject custom entity declarations
 
 	try
 	{
-		// F-XML: cap total input so a crafted untrusted mod XML can't drive an
+		// Cap total input so a crafted untrusted mod XML can't drive an
 		// unbounded read/parse. Real game XML is well under this.
 		unsigned long total = 0;
 		while (!file->eof())

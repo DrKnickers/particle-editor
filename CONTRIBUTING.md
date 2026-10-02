@@ -6,7 +6,7 @@ Thanks for the interest. This fork is a side project, so review can take days ra
 
 Open an issue using the **Bug report** template. The most useful reports include:
 
-- The editor version (Help → About: it'll say *"Particle Editor v0.2.0"* or whichever).
+- The editor version (Help → About: it'll say *"Particle Editor v0.4.1"* or similar).
 - Your OS / Windows version.
 - The mod loaded at the time, if any.
 - Exact reproduction steps — what was clicked / opened / edited, in what order.
@@ -19,9 +19,17 @@ If the editor crashed and produced a dialog with an exception trace, paste that 
 The workflow is conventional:
 
 1. **Fork → branch → commit → PR against `master`.** All work goes through PRs, including from maintainers.
-2. **Build before opening.** *Debug | x64* and *Release | x64* must both compile clean. The public mirror CI runs these automatically once your PR is open; the private working repo has GitHub Actions disabled entirely, so all verification there is local (`node scripts/run-all-tests.mjs`).
+2. **Build before opening.** *Debug | x64* and *Release | x64* must both compile clean. The public repository's CI runs these automatically once your PR is open.
 3. **PR body uses the established shape** — *Summary* + *Test plan checklist*. Match the existing PRs; readers and maintainers rely on it.
 4. **One feature per PR.** Bundle the docs update for that feature into the same PR. Don't mix unrelated changes — easier to review, easier to revert.
+
+### How an accepted PR lands
+
+The public `master` is published from the maintainer's working repository, so a PR is not merged on GitHub directly — a merge there would be overwritten by the next publish. Instead:
+
+1. The PR is reviewed and discussed here as usual.
+2. Once accepted, the change is applied to the working repository with credit to you, and goes through the full test gate there.
+3. It reaches public `master` with the next publish, and the PR is closed with a pointer to the commit that carries it.
 
 ### Commit messages
 
@@ -31,14 +39,14 @@ Conventional Commits (`feat:` / `fix:` / `docs:` / `refactor:` / `chore:`) for t
 
 The codebase has been around since 2008 and inherits Mike.NL's GlyphX-era style. Match the surrounding code:
 
-- Win32 + D3D9 + C++. No new dependencies without prior discussion.
-- Plain `LTEXT` / `BUTTON` / `STATIC` controls in the `.rc`s. New custom controls go under `src/UI/`.
-- Resource IDs are clustered by feature — `IDC_SPAWNER_*` in the 1300s, `IDC_BLOOM_*` in the 1400s, etc. Pick the next sequential ID in the right cluster.
-- `ParticleEditor.rc` is the hand-authored application resource source; `EmbeddedWebAssets.rc` is generated. Keep `.rc` files UTF-8 with BOM, no exceptions — the encoding has historically been a source of mojibake bugs.
+- Win32 + D3D9 + C++17 for the host, React + TypeScript for the UI. No new dependencies without prior discussion.
+- **Where logic goes.** Decision logic that needs no window, device, or WebView goes in a small header under `src/` (for example `SpawnSchedule.h`, tested by `tests/test_spawn_schedule.cpp`) with its own `tests/test_<name>.cpp`, listed in `tests/native-tests.json` so `node scripts/run-native-unit-tests.mjs` builds and runs it. The host code in `src/host/` then calls it. Keep those headers free of Win32/D3D types so the test builds stay fast.
+- **Layering.** `src/host/` is the WebView2 host and bridge; the rest of `src/` is the particle engine, file formats, and policy headers. Some core files still include host headers: `main.cpp` starts the host and its capture modes, the engine uses the compositor and module-path helpers, and a few files borrow the string-conversion, registry, perf-trace, and image-encoding helpers. `src/UI/` holds the texture palette's data and thumbnail code rather than UI, since the legacy Win32 UI is gone. Don't add new core→host includes.
+- `ParticleEditor.rc` is the hand-authored application resource source (version info, icon, bitmaps, shaders, skydome textures, strings — no dialogs); `EmbeddedWebAssets.rc` is generated. Keep `.rc` files UTF-8 with BOM, no exceptions — the encoding has historically been a source of mojibake bugs. New resource IDs go in `src/Resources/resource.h`; take the next free number and bump `_APS_NEXT_RESOURCE_VALUE`.
 
 ### What goes where in docs
 
-- **[CHANGELOG.md](CHANGELOG.md)** — public-facing release history. A feature PR adds one user-facing bullet under `## [Unreleased]` when it lands (no bullet for non-user-facing changes — docs, CI, internal refactors); cutting a release rolls that section up. Format rules live in the file's preamble.
+- **[CHANGELOG.md](CHANGELOG.md)** — public-facing release history. A feature PR adds one user-facing bullet under `## [Unreleased]` when it lands (no bullet for non-user-facing changes — docs, CI, internal refactors); cutting a release rolls that section up. Follow the existing bullets: present tense, the user's point of view, no trailing period, ending with the PR link.
 
 ## Build — it takes TWO builds
 
@@ -59,9 +67,23 @@ See [`README.md`](README.md) for runtime details.
 node scripts/run-all-tests.mjs
 ```
 
-That is the whole verification recipe: it runs every automated layer in dependency order — web typecheck, Vitest (~1,230 tests), the web bundle build, script tests, mock-browser Playwright, static-site Playwright, all standalone C++ unit tests (`tests/test_*.cpp`, built in parallel from `tests/native-tests.json`), both MSBuild configs, the native Playwright suite against the real `ParticleEditor.exe`, render-golden image comparisons (`scripts/render-goldens.mjs`; bless intentional rendering changes with `--update`), the `--record` frame smoke, and the `--drive` pixel smoke with its assertion scenarios — and exits nonzero if anything fails, with a per-lane summary. Expect the full run to take minutes (it rebuilds everything on purpose; a green gate on stale binaries is worse than a slow one).
+That is the whole verification recipe: it runs every automated layer in dependency order — web typecheck, Vitest, the web bundle build, script tests, mock-browser Playwright, static-site Playwright, all standalone C++ unit tests (`tests/test_*.cpp`, built in parallel from `tests/native-tests.json`), both MSBuild configs, the native Playwright suite against the real `ParticleEditor.exe`, render-golden image comparisons (`scripts/render-goldens.mjs`; bless intentional rendering changes with `--update`), the `--record` frame smoke, and the `--drive` pixel smoke with its assertion scenarios — and exits nonzero if anything fails, with a per-lane summary. Expect the full run to take minutes (it rebuilds everything on purpose; a green gate on stale binaries is worse than a slow one).
 
 Useful flags: `--list` (lane names), `--lane vitest,cpp-unit` (subset), `--allow-missing drive-smoke` (downgrade a missing prereq to a visible SKIP on machines without the game install), `--skip-build` (unsafe, for iterating). Individual lanes remain available directly: `pnpm --filter ./apps/editor test` / `test:web` / `test:native`, and `node scripts/run-native-unit-tests.mjs --filter <name>` for a single C++ test.
+
+**Not on Windows, or no game install?** The web half runs anywhere Node 22+ and pnpm 10+ do (see `web/package.json`); the public CI runs these on Ubuntu. From `web/`:
+
+```
+pnpm install
+pnpm --filter ./apps/editor lint
+pnpm --filter ./apps/editor build
+pnpm --filter ./apps/editor test
+pnpm --filter ./apps/editor test:scripts
+pnpm --filter ./apps/editor exec playwright install chromium
+pnpm --filter ./apps/editor test:web
+```
+
+The C++ builds and the native lanes need Windows, Visual Studio, and the DirectX SDK, and some also need the game install; CI builds both C++ configurations on every PR.
 
 ## Static analysis
 

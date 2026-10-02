@@ -62,7 +62,6 @@ public:
 	// hot-reload doesn't flash it; OnLostDevice releases everything
 	// because under D3D9Ex the D3DX helpers create D3DPOOL_DEFAULT
 	// textures that must be released before IDirect3DDevice9::Reset.
-	// See tasks/post-audit-followups.md F6.
 	virtual void OnLostDevice() = 0;
 };
 
@@ -196,7 +195,7 @@ public:
 	// (absolute paths, front = highest precedence). Each path is kept if the folder
 	// exists (existence only — NOT Data\Art-gated, matching the old unconditional
 	// mod-root push) and de-duplicated case-insensitively; rebuilds modContentRoots.
-	// Additive — SetModPath/SetSubmods remain the active mutators in Phase 1.
+	// The stack-aware successor to SetModPath/SetSubmods; ModManager drives it.
 	void SetLayers(const std::vector<std::wstring>& absoluteLayers) override;
 	const std::vector<std::wstring>& GetContentRoots() const override { return modContentRoots; }
 

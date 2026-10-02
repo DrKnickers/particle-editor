@@ -5,8 +5,8 @@ import { captureDomA11y } from "./helpers/a11y-dom-snapshot";
 import { CHROME_SURFACES, seedCanonicalUiState } from "./helpers/a11y-surfaces";
 import "./helpers/toMatchJSONGolden";
 
-// Absolute path because the editor's CWD is repo-root (per run-native-tests.mjs:66),
-// not the tests dir — see the matching comment in a11y-chrome.spec.ts (HWND lane).
+// Absolute path because the editor's CWD is repo-root (per run-native-tests.mjs),
+// not the tests dir.
 // ESM-equivalent of __dirname (package is "type": "module").
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE_PATH = path.resolve(__dirname, "fixtures/a11y-base-state.alo");

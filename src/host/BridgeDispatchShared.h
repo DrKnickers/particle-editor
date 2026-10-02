@@ -1,10 +1,10 @@
 #pragma once
 //
-// Declarations for the file-scope helpers that DispatchInternal's ladder
-// blocks call, shared between BridgeDispatcher.cpp and the per-domain
+// Declarations for the file-scope helpers that the bridge kind handlers
+// call, shared between BridgeDispatcher.cpp and the per-domain
 // dispatch TUs (BridgeDispatch_*.cpp). Bridge-side counterpart of the
-// engine_internal.h rule in tasks/2026-07-06-heavyweight-refactor-plan.md:
-// every helper keeps exactly ONE production definition. Most live in
+// rule in engine_internal.h: every helper keeps exactly ONE production
+// definition. Most live in
 // BridgeDispatcher.cpp; cohesive extracted helpers may live in a dedicated
 // production TU such as RecentFiles.cpp. Never add a per-TU static copy.
 // Helpers used only by BridgeDispatcher.cpp's own dispatch plumbing
@@ -75,7 +75,7 @@ LinkExemptFlags MakeNewlySharedMask(const LinkExemptFlags& oldFlags,
                                     const LinkExemptFlags& proposed);
 
 // Tree / state snapshot builders.
-// `depth` is the recursion backstop (2026-07 audit) and is not part of
+// `depth` is the recursion backstop and is not part of
 // the wire shape -- callers always start a root at 0. ValidateEmitterGraph caps
 // chain depth at load/import, but it is never called from the bridge mutation
 // path, so the serializer refuses to recurse past the same cap on its own.

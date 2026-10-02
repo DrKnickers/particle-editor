@@ -113,7 +113,7 @@ export function useSeedFileState(bridge: Bridge): void {
       .catch((err) => console.warn("[file-state] snapshot failed:", err));
 
     // 2. Seed recent files from file/recent/list — DEFERRED to the first idle slot
-    //    after first interactive paint (perf-audit P1a startup fan-out). The
+    //    after first interactive paint (startup fan-out). The
     //    snapshot above stays EAGER (it drives currentFilePath/dirty -> document
     //    title); the recent list is non-paint-critical (the File→Recent menu shows
     //    empty until it lands, then live recent/changed events keep it current).
@@ -202,7 +202,7 @@ function decideSaveChanges(dirty: boolean, action: PendingActionFn): void {
   if (!dirty) {
     // Fire-and-forget: the action may be a file op that rejects (runFileOp
     // re-throws after surfacing the error). Swallow so it never escapes as an
-    // unhandled promise rejection (#489).
+    // unhandled promise rejection.
     Promise.resolve(action({ discardUnsaved: false })).catch((err) =>
       console.warn("[file-state] pending action failed:", err),
     );

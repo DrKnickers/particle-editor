@@ -504,7 +504,7 @@ HRESULT Compositor::Init()
     // composition-less session still fails after the attempts (the caller's
     // FailFatalComposition stays the final fallback). NOTE: whether a real
     // 0x8007139F actually clears on retry is UNPROVEN — this is a mitigation,
-    // pending an on-CRD log; see tasks/2026-07-07-compositor-init-retry-plan.md.
+    // pending an on-CRD log.
     //
     // Sleep (not a message pump) between attempts is a deliberate, conservative
     // choice: Init runs on the WebView2 STA env-completion callback before the
@@ -590,8 +590,8 @@ HRESULT Compositor::AttachWebView2(ICoreWebView2CompositionController* ctl)
     }
     HRESULT hr;
 
-    // Create the target. Topmost=TRUE matches spike line 440 +
-    // sample line 919. An earlier attempt tried both TRUE and FALSE;
+    // Create the target. Topmost=TRUE matches the spike's BuildVisualTree
+    // and the WebView2APISample. An earlier attempt tried both TRUE and FALSE;
     // topmost wasn't the failure mode but matches the working sample.
     hr = m_impl->device->CreateTargetForHwnd(
         m_impl->hwnd, TRUE, m_impl->target.GetAddressOf());
@@ -634,8 +634,8 @@ HRESULT Compositor::AttachWebView2(ICoreWebView2CompositionController* ctl)
     // list-order, last-drawn-on-top). The MSDN naming is
     // counterintuitive: "insertAbove=TRUE + NULL ref" actually means
     // "behind all," NOT "above all." Bisected via the spike's
-    // --no-engine smoke mode; see dxgi_spike.cpp:489-494 for the
-    // long-form comment.
+    // --no-engine smoke mode; see the long-form comment in the
+    // spike's BuildVisualTree.
     hr = m_impl->rootVisual->AddVisual(m_impl->webviewVisual.Get(), FALSE, nullptr);
     if (FAILED(hr))
     {
@@ -962,7 +962,7 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
     }
 
     // 4. Composition swapchain. Format + alpha + buffer count match
-    // dxgi_spike.cpp:377-396 exactly — that combination works on the
+    // the spike's InitD3D11AndSwapchain exactly — that combination works on the
     // user's RTX 3080 per the spike measurements.
     DXGI_SWAP_CHAIN_DESC1 scDesc = {};
     scDesc.Width  = static_cast<UINT>(w);
@@ -979,7 +979,7 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
     // The production engine's particle blend states (additive for
     // fire, alpha-blend for smoke, etc.) leave the engine RT's alpha
     // channel in an arbitrary state — the engine never cared because
-    // legacy UpdateLayeredWindow uses the popup's STAMPED
+    // the old UpdateLayeredWindow path used the popup's STAMPED
     // alpha (from AlphaCompositor::Composite), not the RT's alpha.
     //
     // Under DXGI with PREMULTIPLIED, DComp interpreted the RT's RGB
@@ -1045,7 +1045,7 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
     // referenceVisual=nullptr)` actually places this visual at the
     // BEGINNING of the children list (= rendered FIRST = BEHIND all
     // siblings) — bisected from spike's --no-engine smoke mode (see
-    // dxgi_spike.cpp:488-495 long comment). The webview was
+    // the long comment in the spike's BuildVisualTree). The webview was
     // added via AttachWebView2 with (FALSE, nullptr) which places it
     // at the END of the children list (= rendered LAST = IN FRONT of
     // all siblings). So after this AddVisual call the children list
@@ -1229,7 +1229,7 @@ ComposedFrameResult Compositor::CompositeEngineFrame(
         // If `sharedTex` pointer changes mid-run WITHOUT a preceding
         // [COMP-engine-resize] entry, OpenSharedResource silently
         // returned a different texture — the spike's documented
-        // wrong-handle failure mode at dxgi_spike.cpp:355-357.
+        // wrong-handle failure mode (see InitD3D11AndSwapchain in the spike).
         snprintf(buf, sizeof(buf),
                  "[COMP-engine-handle-hash] handle=%p sharedTex=%p backBuffer=%p texSize=%dx%d",
                  m_impl->engineHandleCached,

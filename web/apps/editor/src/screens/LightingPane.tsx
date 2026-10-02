@@ -351,8 +351,8 @@ export function LightingPane({ bridge, onClose, closing }: Props) {
 
   // Ambient is pushed with alpha w=1 — game-faithful. The engine folds scene
   // ambient into its SPH lighting as `ambient.xyz * ambient.w`
-  // (src/SphericalHarmonics.cpp:76), so w gates the per-vertex mesh ambient
-  // floor; per Petroglyph's shaders (reference/foc-shaders/AlamoEngine.fxh)
+  // (src/SphericalHarmonics.cpp), so w gates the per-vertex mesh ambient
+  // floor; per Petroglyph's shaders (AlamoEngine.fxh in the game's shader source)
   // production Mesh*/RSkin* light ambient ONLY via that SPH path, so w=1
   // reproduces the game's mesh brightness. The host startup restore
   // (HostWindow.cpp `ambientToVec4`) and this React `ambientToVec4` push the

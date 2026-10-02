@@ -34,6 +34,6 @@ export const MENU_SEPARATOR = "my-1 h-px bg-panel-2";
 
 /** Top-level menubar trigger (File / Edit / … / Mods). focus-ring: keyboard
  *  focus on a CLOSED trigger was invisible (outline-none with no replacement)
- *  — a 2.4.7 gap the PRODUCT.md conformance check caught. */
+ *  — a WCAG 2.4.7 (Focus Visible) gap. */
 export const MENUBAR_TRIGGER =
   "px-2 py-1 text-xs font-medium text-text-2 transition-colors motion-reduce:transition-none hover:bg-bg-2 rounded data-[state=open]:bg-bg-2 data-[state=open]:text-text outline-none focus-ring select-none cursor-default";

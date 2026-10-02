@@ -124,7 +124,7 @@ private:
 };
 
 // ============================================================================
-// New-UI bridge thumbnails
+// Bridge thumbnails
 //
 // The palette popover lives in React (WebView2), so thumbnails must
 // cross the bridge as image data rather than being blitted to a Win32
@@ -170,7 +170,7 @@ PreviewResult GetTexturePreview(const std::wstring& filename,
                                 int maxBound = 1024,
                                 bool flattenAlpha = true);
 
-// [C3] Async split of GetTexturePreview. DecodeTexturePreviewBgra runs the
+// Async split of GetTexturePreview. DecodeTexturePreviewBgra runs the
 // DEVICE-BOUND half on the UI thread (file/MEG read + D3DX decode into a
 // SCRATCH texture + optional alpha flatten + one tightly-packed pixel copy);
 // the returned raw BGRA can then be PNG-encoded + base64'd on a worker via

@@ -98,8 +98,8 @@ export function makeDefaultEngineState(): EngineStateDto {
     bloomSize:     0.1,
 
     // Leave particles after instance death. Default true
-    // matches the native ParticleSystem constructor at
-    // [ParticleSystem.cpp:956].
+    // matches the native ParticleSystem constructor
+    // (ParticleSystem.cpp).
     leaveParticles: true,
 
     heatDebug: false,
@@ -160,10 +160,10 @@ export function snapshotEngineState(): EngineStateDto {
 //
 // Lives outside the EngineStateDto because it's host state, not engine
 // state — the native host backs this with the Windows registry under
-// `HKEY_CURRENT_USER\Software\AloParticleEditor` (matches legacy's
-// AddToHistory / GetHistory at [src/main.cpp:650-768]). The mock stores
+// `HKEY_CURRENT_USER\Software\AloParticleEditor` (host/RecentFiles.cpp,
+// same layout as the legacy editor's history). The mock stores
 // the same list in-memory; the contract is the order (most-recent
-// first), the cap (9 entries — `NUM_HISTORY_ITEMS` in legacy main.cpp),
+// first), the cap (9 entries — `kMaxRecentFiles` in RecentFiles.cpp),
 // and the dedupe rule (a re-saved path moves to the front, not a
 // duplicate entry).
 
@@ -364,7 +364,7 @@ function maxIdIn(tree: EmitterTreeDto): number {
 }
 
 /** Generate a duplicate-suffix name. Mirrors `GenerateDuplicateName`
- *  at [src/UI/EmitterList.cpp:309]: strips a trailing `_<digits>` if
+ *  in src/main.cpp: strips a trailing `_<digits>` if
  *  present, then appends `_<next>` where next is `max+1` across all
  *  emitters whose name shares the same base. */
 export function generateDuplicateName(
@@ -507,7 +507,7 @@ export function duplicateWithIndexIncrement(
 
 /** Batch of `count` CHAINED duplicates: each copy is made from the PREVIOUS
  *  copy (feeding its newId back in), mirroring the host's single-undo
- *  `emitters/duplicate-with-index-increment-many` (#575). `count` is clamped to
+ *  `emitters/duplicate-with-index-increment-many`. `count` is clamped to
  *  [1, 999] (the dialog spinner's range). Returns null only when the very first
  *  id is missing. */
 export function duplicateWithIndexIncrementMany(

@@ -8,8 +8,7 @@
 //     index — so a future drag-to-move can re-order keys in
 //     the underlying multiset without invalidating the selection.
 //   - Smooth (cubic-Bezier) + step (staircase) rendering branches.
-//     The control-point formula matches the legacy implementation at
-//     [src/UI/CurveEditor.cpp:289-292]:
+//     The control-point formula matches the legacy Win32 curve editor:
 //       cp1 = (p1.x + (p2.x - p1.x) / 4, p1.y)
 //       cp2 = (p1.x + (p2.x - p1.x) * 3 / 4, p2.y)
 //     Step expands each segment as [p1, (p2.x, p1.y), p2] so a single
@@ -108,8 +107,8 @@ type Props = {
   width?: number;
   height?: number;
   /** Time range. Locked to 0..100 to match legacy
-   *  `CurveEditor_SetHorzRange(hEditor, 0.0f, 100.0f, true)` at
-   *  [src/UI/CurveEditor.cpp]. Exposed as a prop so future panels
+   *  `CurveEditor_SetHorzRange(hEditor, 0.0f, 100.0f, true)` in the
+   *  legacy Win32 editor. Exposed as a prop so future panels
    *  (lifetime-curve sub-editors) can override. */
   timeMin?: number;
   timeMax?: number;
@@ -199,14 +198,14 @@ type Props = {
   marqueeRef?: Ref<CurveMarqueeHandle>;
   /** Morph-suppress ref, owned by CurveEditorPanel so its spinner/commit
    *  handlers can SNAP (not glide) a value/time edit they already applied
-   *  optimistically — the same mechanism the canvas drag uses (#610/#613).
+   *  optimistically — the same mechanism the canvas drag uses.
    *  When provided it replaces the internal ref, so both the canvas drag
    *  (here) and the panel's spinners write to one shared suppress slot. */
   suppressRef?: MutableRefObject<SuppressedMove>;
   /** When true, dragged/inserted keys snap to the minor sub-grid on both
-   *  axes (#618). Owned + persisted by CurveEditorPanel. */
+   *  axes. Owned + persisted by CurveEditorPanel. */
   snapEnabled?: boolean;
-  /** Keyboard navigation on the focused plot SVG (design pass, B1). The SVG
+  /** Keyboard navigation on the focused plot SVG. The SVG
    *  is a single Tab stop; arrows map to actions the PARENT executes against
    *  its selection + spinner-commit handlers (no mutation logic lives in the
    *  renderer): Left/Right cycle key selection in time order, Up/Down switch
@@ -215,7 +214,7 @@ type Props = {
   onKeyboardNav?: (action: CurveKeyboardNavAction) => void;
 };
 
-/** Keyboard actions the plot SVG can request from its parent (B1). */
+/** Keyboard actions the plot SVG can request from its parent. */
 export type CurveKeyboardNavAction =
   | { kind: "select-step"; dir: 1 | -1 }
   | { kind: "select-edge"; edge: "first" | "last" }
@@ -261,8 +260,8 @@ function unproject(px: number, min: number, max: number, length: number): number
 }
 
 /** Build the SVG path `d` string for a smooth (cubic-Bezier) curve
- *  through the given points. Mirrors the legacy formula at
- *  [src/UI/CurveEditor.cpp:289-292]: control points sit at 1/4 and
+ *  through the given points. Mirrors the legacy curve editor's formula:
+ *  control points sit at 1/4 and
  *  3/4 of the horizontal distance, sharing y with the segment's
  *  start / end key respectively. Returns "" when there are fewer
  *  than 2 points (no segment to render). */
@@ -285,7 +284,7 @@ function buildSmoothPath(points: ReadonlyArray<{ x: number; y: number }>): strin
 
 /** Build the staircase polyline points for step interpolation. For
  *  each (p1, p2) pair, emits the horizontal leg at p1.y then the
- *  vertical jump to p2.y. Per legacy [src/UI/CurveEditor.cpp:300-318]
+ *  vertical jump to p2.y. In the legacy curve editor
  *  the horizontal leg uses the "line pen" and the vertical leg the
  *  "step pen" — visual differentiation is deferred; the
  *  shape is identical either way. */
@@ -801,7 +800,7 @@ function MultiChannelCurves({
   const [measured, setMeasured] = useState<{ width: number; height: number }>(
     { width: propWidth, height: propHeight },
   );
-  // [design pass B1] True while the plot SVG itself holds keyboard focus —
+  // True while the plot SVG itself holds keyboard focus —
   // gates the sr-only status region below so screen readers hear selection
   // changes during keyboard nav, but mouse drags (which also change the
   // selection) stay silent.
@@ -843,7 +842,7 @@ function MultiChannelCurves({
   for (let i = 0; i <= GRID_CELLS; i++) {
     horizontalLines.push((i / GRID_CELLS) * height);
   }
-  // Faint minor sub-grid (#618): GRID_SUBDIVISIONS minor cells per major
+  // Faint minor sub-grid: GRID_SUBDIVISIONS minor cells per major
   // cell. Skip the indices that coincide with a major line (i % subdiv === 0)
   // so the majors aren't double-stroked (and read at full weight).
   const minorCells = GRID_CELLS * GRID_SUBDIVISIONS;
@@ -959,7 +958,7 @@ function MultiChannelCurves({
   // ── Morph animation. The suppress slot is SHARED: the canvas drag (below)
   // records into it, and — when CurveEditorPanel passes its own `suppressRef` —
   // so do the panel's spinner/commit handlers, so a value/time edit that was
-  // already applied optimistically SNAPS instead of gliding (#610/#613). A
+  // already applied optimistically SNAPS instead of gliding. A
   // local fallback keeps standalone callers (no suppressRef) working. dragRef
   // must be declared before this hook so the isDragging closure captures it.
   const localSuppressRef = useRef<SuppressedMove>(null);
@@ -1123,7 +1122,7 @@ function MultiChannelCurves({
     // (applyGroupShift) and in the render preview below.
     if (drag.isGroup && selectedKeyTimes) {
       const rawTime = unproject(x, timeMin, timeMax, width);
-      // Snap (#618) is ANCHOR-based: snap the grabbed key's own target
+      // Snap is ANCHOR-based: snap the grabbed key's own target
       // position to the grid, so the whole selection shifts by that snapped
       // delta (non-anchor keys keep their relative spacing). Value snaps to
       // the visible canvas range; time to [timeMin,timeMax]. Snap happens
@@ -1138,7 +1137,7 @@ function MultiChannelCurves({
       }
       // Bound the rigid shift against the nearest keys that stay put (unselected
       // keys, selected borders, endpoints) so no moving key lands on another
-      // key's time (#619). Same clamp the commit uses (computeGroupMoves), so
+      // key's time. Same clamp the commit uses (computeGroupMoves), so
       // this preview and the commit agree. Returns 0 for an all-border selection.
       dTime = clampGroupTimeShift(
         focusLayer.track.keys.map((k) => k.time),
@@ -1164,7 +1163,7 @@ function MultiChannelCurves({
     // the curve visually); the value is then clamped to the focus
     // channel's engine bounds below so the commit stays legal.
     let nextValue = unproject(height - y, canvasVMin, canvasVMax, height);
-    // Snap (#618): snap to the VISIBLE grid — time to [timeMin,timeMax],
+    // Snap: snap to the VISIBLE grid — time to [timeMin,timeMax],
     // value to the canvas range (what the grid draws) — BEFORE the
     // border/neighbour and focus clamps so multiset invariants still hold.
     // When a snapped stop collides with a neighbour the eps-clamp wins and the
@@ -1371,13 +1370,13 @@ function MultiChannelCurves({
       // Pointer Y → value through the CANVAS range (the visible grid), then
       // clamp to the focus channel's engine bounds below — the host inserts
       // the received value verbatim (it does NOT clamp), so an out-of-range
-      // value would otherwise create an illegal key (#618 review).
+      // value would otherwise create an illegal key.
       let value = unproject(height - y, canvasVMin, canvasVMax, height);
       if (snapEnabled) {
         const snappedTime = snapToGrid(time, timeMin, timeMax);
         // Border keys always occupy timeMin/timeMax; the host resolves a
         // colliding insert by nudging +0.001, which at timeMax lands OUT of
-        // range (#618 review). Only take the snapped time when its stop is
+        // range. Only take the snapped time when its stop is
         // free; otherwise keep the raw drop time (which the host can nudge
         // safely inward).
         if (focusLayer === null || !focusLayer.track.keys.some((k) => k.time === snappedTime)) {
@@ -1442,7 +1441,7 @@ function MultiChannelCurves({
     return p;
   });
 
-  // [design pass B1] sr-only polite status: what the keyboard selection is,
+  // sr-only polite status: what the keyboard selection is,
   // announced only while the SVG holds focus (see kbdFocused above).
   const statusChannel = focusChannel != null ? channels.find((c) => c.id === focusChannel) ?? null : null;
   const statusKeys = statusChannel !== null
@@ -1478,7 +1477,7 @@ function MultiChannelCurves({
       data-insert-mode={insertMode ? "true" : "false"}
       data-dragging={drag !== null ? "true" : "false"}
       // role=group + tabIndex: the plot is a single Tab stop with its own
-      // keyboard nav (design pass, B1) — it stopped being a static image.
+      // keyboard nav — it stopped being a static image.
       role="group"
       tabIndex={focusEnabled && onKeyboardNav ? 0 : undefined}
       aria-label={`Multi-channel curve plot, ${layers.length} channels. Arrow keys select keys and switch channels; hold Ctrl to nudge.`}
@@ -1584,7 +1583,7 @@ function MultiChannelCurves({
           The grid does NOT shift with the focus channel's range —
           it's a fixed 10×10 reference. Per-channel value ranges
           are surfaced via the axis labels rendered below. */}
-      {/* Faint minor sub-grid (#618) — rendered BEFORE the major grid so the
+      {/* Faint minor sub-grid — rendered BEFORE the major grid so the
           major lines paint on top at full weight. */}
       <g data-testid="curve-subgrid" stroke="var(--curve-subgrid)" strokeWidth={0.5} pointerEvents="none">
         {minorVerticalLines.map((x, i) => (

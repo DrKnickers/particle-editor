@@ -753,7 +753,7 @@ int main(int argc, char** argv) {
     }
 
     // ---- skeleton (0x200) + connections (0x600) decode ---------------
-    std::printf("[lt7-skeleton]\n");
+    std::printf("[skeleton]\n");
     {
         float rootM[12] = { 1,0,0,0, 0,1,0,0, 0,0,1,0 };   // identity
         // Base bone: a 90deg rotation + a z translation, stored COLUMN-MAJOR:
@@ -782,7 +782,7 @@ int main(int argc, char** argv) {
         CHECK(m.connections.size() == 1 && m.connections[0].boneIndex == 1, "connection boneIndex=1 (Base)");
         CHECK(m.meshes.size() == 1, "mesh still decoded alongside skeleton/connections");
     }
-    std::printf("[lt7-tolerant]\n");
+    std::printf("[tolerant]\n");
     {
         // (a) No skeleton / connections at all -> empty vectors, mesh still loads.
         AloModel m = parseBytes(assemble({ mesh("plain", { { material("MeshGloss.fx", {}), geometry(4, 2, "alD3dVertNU2") } }) }));

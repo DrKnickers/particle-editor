@@ -1,5 +1,4 @@
-// Vitest contract tests for the UIA accessibility-tree normalizer
-// (Phase 3 a11y close-out).
+// Vitest contract tests for the UIA accessibility-tree normalizer.
 //
 // The normalizer is the pure-TS foundation under the snapshot tests:
 // before any golden comparison, raw UIA trees are run through

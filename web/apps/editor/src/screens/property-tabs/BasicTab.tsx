@@ -204,10 +204,9 @@ export function BasicTab({
         </div>
 
         {/* Lifetime fields moved here from Emitter Timing to match
-            legacy IDD_EMITTER_PROPS1 (.rc:449,461,466). Minimum lifetime
+            legacy IDD_EMITTER_PROPS1. Minimum lifetime
             uses displayInvertedPercent: the stored ratio (0..1) displays
-            as `100 - val*100` rounded — matches IDC_SPINNER14 at
-            [Emitter.cpp:487,795]. */}
+            as `100 - val*100` rounded — matches legacy IDC_SPINNER14. */}
         <FieldSpinner
           label="Maximum lifetime:"
           value={properties.lifetime}

@@ -24,7 +24,7 @@ vector<unsigned char> ReadAndReleaseCapped(IFile* file, unsigned long maxBytes)
 	{
 		// PhysicalFile::read throws on a ReadFile failure (I/O error, vanished
 		// volume). Without this, the throw skipped the Release below and leaked
-		// the file's HANDLE on every failed load attempt (2026-07 audit).
+		// the file's HANDLE on every failed load attempt.
 		file->Release();
 		throw;
 	}

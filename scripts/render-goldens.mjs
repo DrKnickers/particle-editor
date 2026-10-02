@@ -11,7 +11,7 @@
 // regress to the checkerboard placeholder fails loudly instead of being
 // compared, or worse blessed, as placeholder pixels).
 // Sim determinism: --capture seeds the particle PRNG and steps a frozen
-// preview clock exactly 1/60 s per counted frame (HostWindow.cpp, #481), so
+// preview clock exactly 1/60 s per counted frame (HostWindow.cpp), so
 // consecutive captures are bit-identical even for RNG-using fixtures.
 // Threshold calibrated 2026-07-02 from two measurements: consecutive captures
 // of the same scene are BIT-IDENTICAL (SSIM exactly 1.0, equal hashes — the
@@ -71,7 +71,7 @@ export const SCENES = [
     fixture: join(fixturesDir, "singleton-emitter.alo"),
     requireTexGate: ["P_PARTICLE_MASTER.TGA", "P_PARTICLE_DEPTH_MASTER.TGA"],
   },
-  // #481 regression guard: bump-mode (blend 11) emitter with hard alpha-cutout
+  // Regression guard: bump-mode (blend 11) emitter with hard alpha-cutout
   // sprites at small on-screen size. Guards the particle-bracket MIPFILTER=NONE
   // default end-to-end: a regression to trilinear re-smears the cutouts into
   // dark blobs and drops SSIM to ~0.998 (measured; gate is 0.9995). The

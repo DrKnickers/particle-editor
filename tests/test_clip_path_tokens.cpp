@@ -1,5 +1,5 @@
 // Unit test for ExpandPathTokens (src/host/ClipPathTokens.h) — the ${TOKEN}
-// expander behind --record's install-relative timeline paths (#494 follow-up).
+// expander behind --record's install-relative timeline paths.
 // Pure header, no Windows/json/DX. Contract:
 //   - ${NAME} -> tokens[NAME]; multiple/positional tokens all expand
 //   - no ${...}     -> unchanged, err empty (even with an empty table)

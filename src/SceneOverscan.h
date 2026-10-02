@@ -7,7 +7,7 @@
 // rect (an "overscan" guard band) so particles near the edge don't pop/clip as
 // the rect animates or reattaches; DirectComposition then clips back to the true
 // rect. Both LayoutBroker's normal apply AND its reemit path must feed the engine
-// the SAME overscanned rect (release-audit #10 — reemit previously replayed the
+// the SAME overscanned rect (reemit previously replayed the
 // raw true rect, reintroducing edge artifacts).
 
 struct SceneViewport

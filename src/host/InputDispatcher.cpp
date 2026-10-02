@@ -139,8 +139,7 @@ bool InputDispatcher::Dispatch(const nlohmann::json& params)
         // browser). Post the PRIVATE WM_APP_VIEWPORT_BLUR, NOT WM_KILLFOCUS:
         // the viewport's OS WM_KILLFOCUS is deliberately suppressed (Win32 focus
         // churn would otherwise kill a cursor-bound Shift spawn). The private
-        // message's handler ends the cursor-bound spawn on a real blur
-        // (release-audit #7).
+        // message's handler ends the cursor-bound spawn on a real blur.
         PostMessageW(m_viewport, WM_APP_VIEWPORT_BLUR, 0, 0);
         return true;
     }

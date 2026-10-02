@@ -1,5 +1,5 @@
 // Regression test for the host->UI bridge serializer and dispatch guard
-// (src/host/BridgeWire.h, 2026-09-30 audit H1).
+// (src/host/BridgeWire.h).
 //
 // Emitter names are the raw bytes of an .alo's 0x16 chunk, not UTF-8. One
 // emitter named "\xE9..." made nlohmann's default dump() throw type_error 316

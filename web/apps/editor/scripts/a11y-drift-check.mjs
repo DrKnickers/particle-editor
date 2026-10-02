@@ -1,4 +1,4 @@
-// a11y-goldens drift check (Phase 1). Regenerates the composition golden
+// a11y-goldens drift check. Regenerates the composition golden
 // lane on the current tree and reports drift. Reuses run-native-tests.mjs for
 // capture. (The legacy `[hwnd]` lane was removed with the legacy UI.)
 //
@@ -234,7 +234,7 @@ function main() {
   }
   // Preflight git only (a real .exe). `node` is process.execPath (always
   // present). Do NOT probe pnpm: it's a Windows .CMD shim that shell:false
-  // cannot launch (run-native-tests.mjs:60) — and the orchestrator never
+  // cannot launch (see run-native-tests.mjs) — and the orchestrator never
   // invokes pnpm anyway (it spawns `node` directly).
   const g = spawnSync("git", ["--version"], { shell: false, encoding: "utf8" });
   if (g.error) die("git not found on PATH.");

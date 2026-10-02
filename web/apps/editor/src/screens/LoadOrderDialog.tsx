@@ -70,7 +70,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
     // Await the host result: notify + close ONLY if the apply (incl. the shader
     // reload) succeeded. On failure/reject keep the dialog open with an error so
     // the user can adjust and retry — and the host did NOT persist a broken stack
-    // (release-audit #5 — previously this fire-and-forgot and closed regardless).
+    // (previously this fire-and-forgot and closed regardless).
     void (async () => {
       try {
         const r = await bridge.request({ kind: "mods/set-layers", params: { paths: order } });
@@ -142,7 +142,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
               Available mods
             </div>
             {/* focus-within accent border = the keyboard-focus cue for the
-                borderless input inside (design pass; was focus-invisible). */}
+                borderless input inside (was focus-invisible). */}
             <div className="mb-2 flex h-[var(--row-h)] items-center gap-1.5 rounded-[var(--radius-sm)] border border-border-2 bg-bg-3 px-2 transition-colors motion-reduce:transition-none focus-within:border-accent">
               <Search className="size-3 shrink-0 text-text-3" strokeWidth={1.5} />
               <input

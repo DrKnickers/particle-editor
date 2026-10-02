@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <cstddef>
 
-// Pure draw-order decision for a ParticleSystemInstance render pass (#574, #609).
+// Pure draw-order decision for a ParticleSystemInstance render pass.
 //
 // Two pure pieces cooperate:
 //
@@ -19,23 +19,23 @@
 //   2. ComputeEmitterDrawOrder — the unchanged sort primitive: filter live
 //      instances by heat pass, then STABLE-sort ascending by their draw key.
 //
-// ─── The engine's draw order (#609) ──────────────────────────────────────────
+// ─── The engine's draw order ─────────────────────────────────────────────────
 // The game paints a PARENT emitter ON TOP OF its children — i.e. a child draws
 // BEHIND its parent — and orders siblings/roots by authored list position
-// (OBSERVED in-game; #609 corrected the earlier #574 premise, which sorted
+// (OBSERVED in-game; this corrected an earlier premise, which sorted
 // purely by rank and so drew a later-ranked child on top of its parent). The
 // post-order walk models exactly this: within a family every descendant is
 // emitted before the node itself (so the parent's key is greater → drawn last →
 // on top), and siblings (and roots) are visited in ascending authored rank (so
 // a higher-ranked sibling still draws on top of a lower-ranked one, preserving
-// the #574 sibling fix). Rank still resolves order between UNRELATED emitters;
+// the earlier sibling fix). Rank still resolves order between UNRELATED emitters;
 // tree depth resolves it between an ancestor and its descendant.
 //
 // `parentRank[r]` is the authored POSITION of emitter r's parent (its slot in
 // the ParticleSystem's emitter list), or SIZE_MAX when r is a root (parent ==
 // NULL). Emitters are addressed by position in [0, n) — position, not the
-// mutable Emitter::index mirror, so a bridge index-patch can't desync the keys
-// (#609). Returns `key`, indexed by position: `key[r]` is r's post-order slot
+// mutable Emitter::index mirror, so a bridge index-patch can't desync the keys.
+// Returns `key`, indexed by position: `key[r]` is r's post-order slot
 // (lower = drawn earlier = further back). Defensive against a malformed forest
 // (a parent position out of range, self-referential, or on a cycle): such nodes
 // are treated as roots / swept in position order at the end, so every position

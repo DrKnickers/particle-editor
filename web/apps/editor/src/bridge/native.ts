@@ -39,7 +39,7 @@ export class NativeBridge implements Bridge {
   private events = new EventHub<{ [K in EventKind]: EventOf<K> }>("NativeBridge");
   private idCounter = 0;
   private disposed = false;
-  // Optional per-request timeout (G12). OFF by default: several requests are
+  // Optional per-request timeout. OFF by default: several requests are
   // interactive and legitimately block for a long time — the native file
   // dialog behind file/open, emitters/import-from-file reading a chosen file —
   // so a blanket timeout would reject valid slow operations. The teardown
@@ -56,12 +56,12 @@ export class NativeBridge implements Bridge {
     this.requestTimeoutMs = opts?.requestTimeoutMs;
     wv.addEventListener?.("message", (e) => this.onMessage(e.data));
     // Fail every outstanding request closed on page teardown rather than
-    // leaving permanently-pending promises + leaked map entries (G12).
+    // leaving permanently-pending promises + leaked map entries.
     window.addEventListener?.("beforeunload", () => this.dispose());
   }
 
   /** Reject and clear every outstanding request — call on host disconnect /
-   *  page teardown so callers fail closed instead of hanging forever (G12). */
+   *  page teardown so callers fail closed instead of hanging forever. */
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
@@ -102,7 +102,7 @@ export class NativeBridge implements Bridge {
       } catch (err) {
         // stringify or postMessage threw AFTER we registered the pending
         // entry — clean it up and reject rather than leak a forever-pending
-        // promise + map entry (G12).
+        // promise + map entry.
         if (timer !== undefined) clearTimeout(timer);
         this.pending.delete(id);
         traceBridgeRequestEnd(req.kind, id, "async", startMs, "error", err instanceof Error ? err.message : String(err));

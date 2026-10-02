@@ -10,7 +10,7 @@
 #include <cstdio>      // [shader-gate] headless diagnostic logging (stdout)
 #include <set>
 #include "AssetPathSafety.h"
-#include "ResourceLimits.h"   // kMaxTextureAssetBytes (asset-read size caps, #415)
+#include "ResourceLimits.h"   // kMaxTextureAssetBytes (asset-read size caps)
 #include "Resources/resource.h"
 using namespace std;
 
@@ -110,8 +110,7 @@ FileManager::FileManager(const vector<wstring>& basepaths)
 					// handing the file to MegaFile (which takes its own AddRef).
 					// The old new-inside-new form leaked that reference on every
 					// path — permanently pinning the Win32 HANDLE when a
-					// malformed MEG made the MegaFile constructor throw
-					// (2026-07 audit).
+					// malformed MEG made the MegaFile constructor throw.
 					PhysicalFile* file = new PhysicalFile(filename);   // rc=1
 					try
 					{
@@ -324,7 +323,7 @@ IDirect3DTexture9* TextureManager::getTexture(IDirect3DDevice9* pDevice, string 
 	// textures.insert() silently no-ops on the existing key (std::map does
 	// not overwrite), leaving the map holding the OLD texture while the
 	// unconditional AddRef stranded the NEW one at refcount 1, referenced by
-	// nothing (2026-07 audit).
+	// nothing.
 	//
 	// +1 to the caller matches what every other return path hands back.
 	{
@@ -495,7 +494,7 @@ Effect* ShaderManager::getShader(IDirect3DDevice9* pDevice, string filename)
 	// defect: the direct "file exists as specified" path below short-circuits
 	// before load() (which owns the lookup) is ever reached, so a repeat call
 	// recompiled the effect from disk and then stranded it at refcount 1 when
-	// shaders.insert() no-oped on the existing key (2026-07 audit).
+	// shaders.insert() no-oped on the existing key.
 	{
 		ShaderMap::iterator cached = shaders.find(filename);
 		if (cached != shaders.end())

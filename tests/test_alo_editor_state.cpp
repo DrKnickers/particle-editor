@@ -1,6 +1,5 @@
 // Regression test for emitter state that a save + reload (and therefore every
-// undo/redo, which round-trips through the same writer and reader) used to drop
-// (2026-10 audit).
+// undo/redo, which round-trips through the same writer and reader) used to drop.
 //
 //  (a) Property 0x11. readProperties stored it in `unknown11` but writeProperties
 //      never wrote it, so the first save or undo lost it. No shipped particle

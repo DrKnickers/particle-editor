@@ -83,7 +83,7 @@
 
 - **Radix primitives** for menus/dialogs/popovers/tabs/selects/tooltips; the
   shared `Modal` owns dialog chrome + frozen-viewport backdrop; `ToolPanel`
-  owns docked/overlay tool windows (incl. focus management: chrome-triggered
+  owns docked tool panes (incl. focus management: chrome-triggered
   opens focus the panel, close restores the opener, auto-open never steals).
 - **Shared primitives are the single source** for their look
   (`src/primitives/`): `Button` (primary / danger / secondary), `IconButton`
@@ -105,8 +105,9 @@
 - **Focus:** one canonical ring — `.focus-ring` / `.focus-ring-inset`
   (keyboard-only). Borderless inputs get wrapper `focus-within:border-accent`.
 - **Collections are single Tab stops** (roving tabindex): emitter tree,
-  atlas grid (aria-activedescendant listbox — the exemplar), texture palette,
-  color swatch grids (`useRovingIndex` for new consumers).
+  atlas grid (aria-activedescendant listbox — the exemplar), color swatch
+  grids (`useRovingIndex` for new consumers). Known gap: the texture palette
+  still gives each cell two Tab stops (apply and pin).
 - **States:** every control ships default/hover/focus/active/disabled —
   the bar for new work; one known latent gap: `.text-input` has no disabled
   styling (unreachable today, FieldText exposes no disabled prop). Disabled

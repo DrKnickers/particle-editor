@@ -64,8 +64,8 @@ public:
     // field to a spinner exceeded it.
     static const DWORD COALESCE_WINDOW_MS = 1500;
     static const size_t MAX_ENTRIES = 100;
-    // Aggregate byte budget, the companion to the entry cap above (2026-07
-    // audit). MAX_ENTRIES bounds HOW MANY snapshots are resident and
+    // Aggregate byte budget, the companion to the entry cap above.
+    // MAX_ENTRIES bounds HOW MANY snapshots are resident and
     // says nothing about their size: a typical snapshot is well under 100 KB
     // (~10 MB for a full stack), but snapshot size scales with emitter and
     // track-key count, both of which run to five figures under the .alo caps —
@@ -164,7 +164,7 @@ public:
     // a mutation, so live becomes skewed ahead), cleared by Undo()/Redo()
     // (navigation re-syncs live to the entry it just restored).
     //
-    // The new-UI captures PRE-mutation, so after a fresh edit cursor ==
+    // The editor UI captures PRE-mutation, so after a fresh edit cursor ==
     // Depth() AND live is skewed — undo/perform's head-of-history
     // auto-capture relies on that to snapshot live before stepping back.
     // But cursor == Depth() is ALSO true right after a Redo() (redo to

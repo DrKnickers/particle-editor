@@ -86,7 +86,7 @@ inline bool IsAllowedBridgeKind(const std::string& kind)
     if (kind == "engine/set/soft-shadows")     return true;
     // Render-state setter like the rest of this block, and the only way a drive
     // step can put a real game dome on the device — which is what the
-    // GPU-resource assertion needs (2026-07 audit). Persistence is not a concern
+    // GPU-resource assertion needs. Persistence is not a concern
     // here: PersistSkydomeIndex is already gated on PersistsUserState(), which
     // is false in --drive (automation mode) by construction.
     if (kind == "engine/set/skydome-slot")     return true;

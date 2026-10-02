@@ -1,4 +1,4 @@
-// Vitest tests for EmitterPropertyTabs (Phase 4.1).
+// Vitest tests for EmitterPropertyTabs.
 //
 // Covered:
 //   - Renders the placeholder when no emitter is selected.
@@ -161,7 +161,7 @@ describe("EmitterPropertyTabs", () => {
     });
     // The three triggers exist and announce their inactive state.
     // Radix Tabs in jsdom doesn't reliably switch on fireEvent.click
-    // (the known pointer-event flake from the lessons), so we assert
+    // (a known pointer-event flake), so we assert
     // structurally: the triggers are present and the Basic content is
     // active (single source of truth via data-state).
     expect(screen.getByTestId("tab-trigger-appearance")).toBeInTheDocument();

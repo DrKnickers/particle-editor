@@ -1,11 +1,11 @@
-// Real-browser layout guard for the Atlas Picker grid (the centering fix from
-// #287). jsdom can't measure layout (clientWidth=0), so this runs in headless
+// Real-browser layout guard for the Atlas Picker grid (the centering
+// fix). jsdom can't measure layout (clientWidth=0), so this runs in headless
 // Chromium via the Vite dev server (mock app). It opens the picker over a 64-cell
 // atlas through the DEV test seam (window.__atlasTest) and measures real geometry.
 import { test, expect, type Page } from "@playwright/test";
 
 const PANEL = '[role="dialog"][aria-label="Atlas Frames"]';
-// Post-#572 the grid is a single <canvas> inside a fixed-size mx-auto box; there
+// The grid is a single <canvas> inside a fixed-size mx-auto box; there
 // are no per-cell elements. Centering + column count are read off the box + the
 // geometry the canvas publishes (data-atlas-cols/-cell/-gap).
 const CANVAS = '[data-testid="atlas-canvas"]';
@@ -56,7 +56,7 @@ test.describe("Atlas Picker grid layout (real browser)", () => {
     // its center is a faithful stand-in for the old per-cell block center.
     expect(m.cols).toBeGreaterThan(0);
     expect(Math.abs(m.boxWidth - m.expectedWidth)).toBeLessThanOrEqual(1);
-    // The #287 fix (ToolPanel bodyScroll={false} + scrollbar-gutter both-edges +
+    // The centering fix (ToolPanel bodyScroll={false} + scrollbar-gutter both-edges +
     // justify-center / mx-auto box) centers the grid; a regression to a one-sided
     // gutter would push it ~7-15px off. Allow ±3px for sub-pixel + scrollbar rounding.
     expect(Math.abs(m.offset)).toBeLessThanOrEqual(3);

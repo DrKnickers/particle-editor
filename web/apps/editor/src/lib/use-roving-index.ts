@@ -1,5 +1,5 @@
 // use-roving-index.ts — single-tab-stop roving focus for a flat collection
-// of focusable items (design pass, B5).
+// of focusable items.
 //
 // The collection exposes ONE Tab stop (the active item, tabIndex=0; all
 // others -1); Arrow keys move the active index and focus follows. With
@@ -9,10 +9,10 @@
 // active stop (onFocus), so mouse and keyboard stay in sync.
 //
 // Deliberately minimal: no wrap-around, no typeahead, no selection state —
-// selection stays the consumer's concern (aria-selected etc.). New consumers
-// (TexturePalette, ColorButton) share this; the three pre-existing bespoke
-// implementations (AtlasPickerPane, ImportEmittersDialog,
-// ReferenceObjectPopoverBody) are intentionally NOT retrofitted (surgical rule).
+// selection stays the consumer's concern (aria-selected etc.). ColorButton
+// uses it. The texture palette does not (each cell has two tabbable buttons,
+// apply and pin), and AtlasPickerPane, ImportEmittersDialog and
+// ReferenceObjectPopoverBody keep their own roving implementations.
 
 import { useRef, useState, type KeyboardEvent } from "react";
 

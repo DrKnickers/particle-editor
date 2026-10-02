@@ -1,4 +1,4 @@
-// AutosaveRecoveryDialog — crash-recovery prompt for the new UI.
+// AutosaveRecoveryDialog — crash-recovery prompt.
 //
 // On app mount the container calls `autosave/check-recovery`. If a crashed
 // prior session left an orphaned autosave (under %TEMP%\AloParticleEditor\),
@@ -27,8 +27,8 @@ import { useEffect, useState } from "react";
 import type { AutosaveOrphan, Bridge } from "@particle-editor/bridge-schema";
 import { Modal } from "@/components/Modal";
 
-/** Coarse "N units ago" relative age, mirroring legacy FormatAge
- *  (src/main.cpp:1118). `nowMs` is injectable so tests / the a11y demo route
+/** Coarse "N units ago" relative age, mirroring the legacy Win32
+ *  editor's FormatAge. `nowMs` is injectable so tests / the a11y demo route
  *  pin it for a deterministic string. */
 export function formatAutosaveAge(mtimeMs: number, nowMs: number): string {
   const diffSec = Math.max(0, Math.floor((nowMs - mtimeMs) / 1000));
@@ -53,7 +53,7 @@ type ViewProps = {
   /** Dismissed without choosing (Esc / overlay / X) — "decide later". */
   onDismiss: () => void;
   /** Error from a failed recovery attempt — keeps the dialog open so the user
-   *  can try the other tier or discard (release-audit #3). */
+   *  can try the other tier or discard. */
   error?: string | null;
 };
 
@@ -174,7 +174,7 @@ export function AutosaveRecoveryDialog({ bridge }: Props) {
     // Await the host result: only close when the recovery actually succeeded (or
     // was explicitly discarded). On `failed`, the host kept the orphan files, so
     // keep the dialog open and let the user try the other tier or discard
-    // (release-audit #3 — previously this fired-and-closed, deleting the fallback).
+    // (previously this fired-and-closed, deleting the fallback).
     void (async () => {
       try {
         const r = await bridge.request({ kind: "autosave/recover", params: { choice } });

@@ -25,8 +25,8 @@
 
 namespace host {
 
-// PNG encoder-CLSID lookup now shared via host/GdiplusEncode.h
-// (DRY audit cpp-host-1) — this used to keep its own uncached copy.
+// PNG encoder-CLSID lookup now shared via host/GdiplusEncode.h — this used
+// to keep its own uncached copy.
 
 bool GrabWindowPixels(HWND hwnd, std::vector<unsigned char>& bgra, int& w, int& h)
 {
@@ -36,7 +36,7 @@ bool GrabWindowPixels(HWND hwnd, std::vector<unsigned char>& bgra, int& w, int& 
     h = rc.bottom - rc.top;
     if (w <= 0 || h <= 0) return false;
 
-    // [R2] Persistent capture context: a --record run grabs the SAME-sized
+    // Persistent capture context: a --record run grabs the SAME-sized
     // window 30-60x/s; per-frame CreateCompatibleDC/CreateCompatibleBitmap +
     // Delete churned GDI handles and added frame jitter. Cache the DC/bitmap
     // keyed by (w,h); recreate only on size change. Single UI thread; GDI
@@ -84,8 +84,8 @@ bool EncodeBgraToPng(const unsigned char* bgra, int w, int h, const std::wstring
     CLSID clsid = {};
     if (!host::GdiplusEncoderClsid(L"image/png", clsid)) return false;
     // 32bppRGB: the X8 alpha byte from the DDB is ignored (undefined after
-    // PrintWindow); output parity vs the old HBITMAP path is gated by the
-    // per-frame SSIM acceptance in tasks/todo.md §5.
+    // PrintWindow); output parity vs the old HBITMAP path was checked with a
+    // per-frame SSIM comparison.
     Gdiplus::Bitmap gb(w, h, w * 4, PixelFormat32bppRGB,
                        const_cast<BYTE*>(bgra));
     return gb.Save(path.c_str(), &clsid, nullptr) == Gdiplus::Ok;

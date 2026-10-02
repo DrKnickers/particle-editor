@@ -1,6 +1,6 @@
-// UIA accessibility-tree normalizer for HWND-mode goldens.
+// UIA accessibility-tree normalizer for the a11y goldens.
 //
-// Purpose: take a raw UIA snapshot — produced by the Phase 3 a11y probe
+// Purpose: take a raw UIA snapshot — produced by the a11y probe
 // against the running editor host — and reduce it to a deterministic,
 // volatility-free shape suitable for snapshot-style assertions.
 //

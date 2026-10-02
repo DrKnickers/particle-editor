@@ -1,4 +1,4 @@
-// curve-group-shift.ts — shared group-drag time-shift clamp (#619).
+// curve-group-shift.ts — shared group-drag time-shift clamp.
 //
 // A multi-key group drag shifts every selected key by one rigid dTime. The
 // clamp must stop that shift before any moving key crosses a key that stays put

@@ -37,7 +37,7 @@
 // below — same principle one level down, and the same --allow-missing hatch.
 //
 // Deliberately NOT in the default gate: a11y:drift (mutates goldens; test:native
-// already runs a11y specs). test:site now runs as the `site` lane (#599) — its
+// already runs a11y specs). test:site now runs as the `site` lane — its
 // FFmpeg-dependent placeholder render degrades to a warning outside CI, so the guide
 // suite still runs without FFmpeg.
 //
@@ -126,7 +126,7 @@ const LIST = ARGS.list;
 // deliberately never sets CI — so on a box running two worktrees at once (the
 // normal workflow here) the second run silently attached to the FIRST
 // checkout's Vite/site server and tested the wrong tree. Breaking App.tsx in
-// this checkout could leave the lane green (2026-07 audit).
+// this checkout could leave the lane green.
 //
 // Set for the whole process rather than per-lane: only those two configs read
 // it, and a lane that spawns no server is unaffected. Devs running
@@ -183,8 +183,8 @@ function runExe(cmd, args, cwd = repoRoot) {
 // Like runCmdLine, but TEES: the child's output still reaches the console while
 // also being returned for inspection. Used by lanes whose runners can report
 // skipped TESTS inside an exit-0 run — the gate used to be blind to those (a
-// lane could pass while silently executing nothing), which the 2026-07 audit
-// demonstrated with a stub reporting "0 passed, 1 skipped".
+// lane could pass while silently executing nothing), as a stub reporting
+// "0 passed, 1 skipped" demonstrated.
 function runCmdLineTee(commandLine, cwd) {
   const { cmd, args, opts } = shellSpawnSpec(commandLine);
   const r = spawnSync(cmd, args, { cwd, encoding: "utf8", ...opts });
@@ -216,8 +216,7 @@ export const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x
 // discarding `error`, `signal` and stderr entirely (stdio was "ignore"). A
 // recorder that wrote frames and then crashed, or hit the timeout, passed.
 // Its whole oracle was "≥1 file named frame_N.png" plus "largest ≥ 20 KB",
-// so equally-large garbage under the right filename passed too
-// (2026-07 audit).
+// so equally-large garbage under the right filename passed too.
 export function recordSmokeVerdict({ error, signal, status, stderr, frames, maxBytes, biggest, header }) {
   const tail = (s) => String(s || "").split(/\r?\n/).filter(Boolean).slice(-4).join(" | ");
   if (error)  return `headless --record could not run: ${error}`;
@@ -242,8 +241,8 @@ export function recordSmokeVerdict({ error, signal, status, stderr, frames, maxB
 // Playwright says "4 skipped" / "3 did not run"; `node --test` says
 // "ℹ skipped 1" — noun FIRST. Only the Playwright form was matched, so the
 // `scripts` lane (node --test) always parsed 0 and its FFmpeg-dependent skips
-// stayed invisible even after they were supposedly surfaced (2026-07 audit —
-// the visibility half of that finding never actually worked).
+// stayed invisible even after they were supposedly surfaced (the visibility
+// fix never actually worked for that lane).
 // Both patterns are newline-anchored ([ \t], not \s) because every runner puts
 // its count and its noun on ONE line, while \s crosses lines and Playwright's
 // tail happens to read "  1 skipped\n  196 passed (114.5s)" — which a \s form
@@ -260,7 +259,7 @@ export function parseSkippedCount(out) {
 }
 // Declared budget of skipped TESTS a lane may report while still exiting 0.
 //
-// #687 made internal skips visible; visibility alone is not a gate. "NOTE:
+// Internal skips are reported; visibility alone is not a gate. "NOTE:
 // playwright-native: 1" reads identically whether the 1 is the known skip or a
 // freshly-broken test that quietly stopped running — the number carried no
 // claim about WHICH test, so any new skip hid behind the old one. Declaring the
@@ -299,10 +298,10 @@ export const SKIP_BUDGET = {
 };
 
 // Verdict for a lane that exited 0 while reporting `innerSkipped` skipped tests.
-// Over budget FAILS (the false-green the audit describes for the FFmpeg-dependent
+// Over budget FAILS (the false-green once seen with the FFmpeg-dependent
 // script tests); under budget passes but says the budget is now loose, because a
 // budget nobody tightens is how the number drifts upward. Exceeding it is
-// overridable with the same --allow-missing <lane> hatch #706 established, for
+// overridable with the same --allow-missing <lane> hatch as missing prereqs, for
 // the machine that genuinely lacks the capability.
 export function skipBudgetVerdict(lane, innerSkipped, allowMissing = ALLOW_MISSING, budget = SKIP_BUDGET) {
   const allowed = budget[lane]?.max ?? 0;
@@ -357,8 +356,8 @@ function findMsbuild() {
 // lane actually produced current output: an incremental no-op build legitimately
 // leaves the exe untouched, but the exe must still be NEWER than every source it
 // is built from. A stubbed/no-op'd MSBuild that exits 0 without linking leaves a
-// stale exe older than the sources, which is exactly the false green the 2026-07
-// audit demonstrated (it exited 0 with an unchanged hash and timestamp).
+// stale exe older than the sources, which is exactly the false green a negative
+// control demonstrated (it exited 0 with an unchanged hash and timestamp).
 function newestSourceMtime() {
   let newest = 0;
   const walk = (dir) => {
@@ -389,8 +388,8 @@ function newestWebSourceMtime() {
   let newest = 0;
   // Every file, ANY extension: an imported image/font under src/ or a static file
   // under public/ is a bundle input just like a .tsx, so an extension filter would
-  // miss them (reviewer round-4). But SKIP test-only files — editing a test is not a
-  // bundle change and must not block an isolated MSBuild lane (reviewer round-5).
+  // miss them. But SKIP test-only files — editing a test is not a
+  // bundle change and must not block an isolated MSBuild lane.
   const isTestFile = (n) => /\.(test|spec)\.[cm]?[jt]sx?$/i.test(n) || n === "test-setup.ts";
   const walkAll = (dir) => {
     let entries;
@@ -481,7 +480,7 @@ const skip = (note) => ({ status: "SKIP", note });
 // is locked or on the secure/logon desktop — e.g. an unattended scheduled gate
 // run firing on a locked box — DWM stops compositing and a D3D9 present yields a
 // BLACK frame, so render-goldens / drive-smoke / playwright-native fail as a
-// FALSE rendering regression (#745). Detect the clear locked case and SKIP those
+// FALSE rendering regression. Detect the clear locked case and SKIP those
 // lanes VISIBLY instead of running them into a black-frame failure. Deliberately
 // conservative: LogonUI.exe running means the secure desktop is up (locked or a
 // credential prompt) — high confidence, near-zero false positives. It does NOT
@@ -549,13 +548,13 @@ const LANES = [
       // scan a bundle built before the change under test, so reintroducing a
       // dev-only test seam could pass against yesterday's dist. The lane
       // declares deps on web-build, but `--lane scripts` on its own bypasses
-      // that (2026-07 audit).
+      // that.
       const staleDist = staleBinaryNote(distIndex, "scripts", newestSourceMtime());
       if (staleDist) return fail(staleDist);
 
       // Tee + count: several script tests self-skip when FFmpeg is absent, and
-      // the lane reported a bare PASS while their coverage never ran
-      // (2026-07 audit). Visibility was the first half; the budget below is the
+      // the lane reported a bare PASS while their coverage never ran.
+      // Visibility was the first half; the budget below is the
       // second — this lane declares no skips, so on a box with FFmpeg (where
       // these tests CAN run) a skip is a real problem and fails. A box without
       // it says so with --allow-missing scripts.
@@ -573,7 +572,7 @@ const LANES = [
     // Landing + guide static-site Playwright. Self-contained: serve.mjs hosts the
     // committed repo-root site/ (no dist/, no exe). global-setup renders placeholder
     // landing media via FFmpeg. In-gate so guide.spec can't silently go stale
-    // again (#599).
+    // again.
     run: () => {
       // The landing playback specs `test.skip()` themselves when that
       // placeholder media is absent, and the media only exists if global-setup
@@ -604,14 +603,14 @@ const LANES = [
       // lanes that produce it run AFTER this one — so the link fails with
       // LNK1181. Materialize it here (both configs) as a prereq. Building just
       // this one small static-lib project keeps the lane early and fast; a dev
-      // machine with a prior full build simply rebuilds it as a no-op. (#483)
+      // machine with a prior full build simply rebuilds it as a no-op.
       if (!SKIP_BUILD) {
         // test_startup_callback_guard compiles StartupCallbackAdapter.cpp, which
         // includes WebView2.h from the Microsoft.Web.WebView2 NuGet package. That
         // package is restored by the LATER msbuild lanes, so on a fresh checkout
         // (e.g. a scheduled gate run or CI) the header is absent and the test build fails
         // with C1083 — a false cpp-unit failure. Restore here as a prereq, the
-        // same shape as the expat static-lib prereq below. (#745)
+        // same shape as the expat static-lib prereq below.
         if (ensureRestored() !== 0) {
           return fail("NuGet restore (prereq for the WebView2-dependent unit test)");
         }
@@ -726,13 +725,13 @@ const LANES = [
     },
   },
   {
-    // #510: the ONLY lane that exercises `--record` (render-goldens uses
+    // The ONLY lane that exercises `--record` (render-goldens uses
     // --capture, drive-smoke uses --drive). Records ~15 frames of a
     // self-contained fixture .alo (no game install) and asserts the output got
-    // >0 NON-BLANK PNGs — the coverage whose absence let #510 (0-frame records)
+    // >0 NON-BLANK PNGs — the coverage whose absence once let 0-frame records
     // go unnoticed. Drives the HEADLESS path (PE_RECORD_HEADLESS=1 +
     // --record-minimized) so it guards the offscreen-composition + message-ack
-    // mechanism the #510 fix rests on (and runs without popping a window onto
+    // mechanism that fix rests on (and runs without popping a window onto
     // the gate desktop). Frame count + a max-byte floor are the pass signals: a
     // blank/black capture (e.g. composition-disabled session) yields tiny PNGs,
     // so the floor catches the loud→silent shift GrabWindowPixels would allow.
@@ -902,7 +901,7 @@ function main() {
   const blocked = results.filter((r) => r.status === "SKIP" && (r.note || "").startsWith("blocked"));
   // "lanes" is explicit on purpose: these counts have ALWAYS been lane counts,
   // but a bare "0 skipped" next to a lane that internally reported "190 passed,
-  // 4 skipped" reads as a claim about TESTS. The 2026-07 audit was misled by
+  // 4 skipped" reads as a claim about TESTS. A past review was misled by
   // exactly that, and separately showed a stubbed sub-runner reporting
   // "0 passed, 1 skipped" while the aggregate printed PASS / 0 skipped.
   console.log(

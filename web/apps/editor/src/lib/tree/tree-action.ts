@@ -1,5 +1,4 @@
-// tree-action.ts — Zustand atom for menu→tree action plumbing
-// (Phase 4.1 Fix dispatch 5).
+// tree-action.ts — Zustand atom for menu→tree action plumbing.
 //
 // The EmitterTree owns inline rename as local component state (the
 // input + focus target both live in the tree itself, so lifting state

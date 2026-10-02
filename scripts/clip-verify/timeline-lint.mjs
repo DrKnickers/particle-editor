@@ -269,7 +269,7 @@ export function lintTimeline(timeline, opts = {}) {
         warn("testid-unknown", `cursor key t=${k.t} targets '${ref}' but no such testid is in the web source — ` +
           `typo (a hover silently parks; a press exits 3), or an id passed via a variable prop the scan can't see`);
 
-      // The two never-press rules (#517: a press dispatches REAL pointer events).
+      // The two never-press rules (a press dispatches REAL pointer events).
       if (ref.startsWith("curve-key:") && (press || activate))
         err("curve-key-press", `cursor key t=${k.t} ${press ? "presses" : "activates"} '${ref}' — NEVER press/activate a ` +
           `curve key (arms CurveEditor's pointer-capture drag, which never gets its pointerup and wedges the focus ` +

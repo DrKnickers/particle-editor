@@ -97,7 +97,7 @@ TimeF GetTimeF();
 void  SetPreviewPaused(bool paused);
 bool  IsPreviewPaused();
 void  StepPreviewFrames(int frames);  // no-op when not paused
-void  FreezePreviewClockAt(TimeF anchor);  // pause at a FIXED sim time (headless capture determinism, #481)
+void  FreezePreviewClockAt(TimeF anchor);  // pause at a FIXED sim time (headless capture determinism)
 
 class ParticleSystemInstance;
 class EmitterInstance;
@@ -193,10 +193,10 @@ public:
 	void OnParticleSystemChanged(int track);
 	// Two-phase device-Reset texture lifecycle for every live emitter.
 	// Release must run before TextureManager::OnLostDevice + Reset; reacquire
-	// must run only after Reset succeeds (2026-07 re-audit).
+	// must run only after Reset succeeds.
 	void ReleaseInstanceTextures();
 	void ReacquireInstanceTextures();
-	// [D2] Force the next Update to run a full instance pass even with a
+	// Force the next Update to run a full instance pass even with a
 	// frozen clock — for mutations that change particle APPEARANCE without
 	// flowing through OnParticleSystemChanged (emitters/set-properties) or
 	// changing the instance-list size (KillParticleSystem cleanup).
@@ -374,7 +374,7 @@ public:
 	// spin, the D3D11 read may race against in-flight D3D9 writes —
 	// symptoms: tearing, one-frame-stale appearance, half-frame updates.
 	//
-	// Production port of dxgi_spike.cpp:687-697 with the same 100k-
+	// Production port of dxgi_spike.cpp's RenderD3D9Frame with the same 100k-
 	// iteration spin cap. Spike measured 0.30 ms total at 3440x1440;
 	// the spin doesn't dominate. Engine owns
 	// the query (it has the D3D9 device anyway), host orchestrates the
@@ -684,7 +684,7 @@ public:
 	const std::string& GetSkydomeSecondaryName() const { return m_skydomeSecondaryName; }
 	// Load outcome of each selected dome (set in RebuildSkydomeMeshes); the
 	// picker surfaces LoadFailed instead of silently falling back to solid colour.
-	// Live GPU-resource truth for the two dome slots (2026-07 audit). The
+	// Live GPU-resource truth for the two dome slots. The
 	// status accessors below report BOOKKEEPING — what was selected, what the
 	// reader thought resolved — which is exactly why removing mesh creation left
 	// every skydome assertion green and the viewport black. These two answer
@@ -692,7 +692,7 @@ public:
 	// the state snapshot so a drive step can assert them.
 	// The PROCEDURAL dome — always built in the default scene, so this is the one
 	// a gate lane can assert unconditionally. It is also the exact target of
-	// the audit finding's own mutation ("remove skydome mesh creation"): comment out
+	// the mutation that exposed the gap ("remove skydome mesh creation"): comment out
 	// CreateSkydomeMeshBuffers and this goes false while every status field stays
 	// "ok".
 	bool               SkydomeMeshHasGpuBuffers() const
@@ -1090,7 +1090,7 @@ private:
     int  m_maxPreviewParticles  = kDefaultMaxPreviewParticles;
     int  m_maxPreviewInstances  = kDefaultMaxPreviewParticles / kInstancesDivisor;
     int  m_spawnBudget       = kDefaultMaxPreviewParticles;
-    // D3D9Ex device-state tracking (2026-07 audit).
+    // D3D9Ex device-state tracking.
     // m_presentSuspect: raised when a Present reports anything but D3D_OK, and
     // read at the top of Render(). Microsoft recommends querying
     // CheckDeviceState only after a present fails rather than every frame, so
@@ -1163,7 +1163,7 @@ private:
 	// pass (after the full-RT Clear per the ordering rule);
 	// m_projection is computed at W/H aspect by SetSceneViewport.
 	// Survives Reset (re-applied at end of Reset to overwrite the
-	// full-RT-aspect projection rebuild at engine.cpp:1448).
+	// full-RT-aspect projection rebuild in ResetParameters).
 	int  m_sceneViewportX      = 0;
 	int  m_sceneViewportY      = 0;
 	int  m_sceneViewportW      = 0;
@@ -1333,7 +1333,7 @@ private:
 	// XML (O(content)) -- on a big mod that froze the whole window when run on the
 	// WebView2 UI thread (BridgeDispatcher::Dispatch). It now runs on a worker thread
 	// with an ISOLATED FileManager (its own MEG handles -> no seek-race against the UI
-	// thread's FileManager, files.cpp:89); the finished catalog is swapped in on the UI
+	// thread's FileManager via SubFile::read); the finished catalog is swapped in on the UI
 	// thread in Update(). A generation counter (bumped on each invalidation) discards a
 	// build whose mod/submod context changed mid-flight.
 	bool                     m_catalogWanted = false;           // someone needs the catalog (keep it warm across mod switches)
@@ -1358,7 +1358,7 @@ private:
 
 	// bump-mapped ground lighting. Effect + tangent-space vertex decl +
 	// normal-map state, mirroring the skydome effect lifecycle. Faithful port
-	// of TerrainMeshBump.fx (reference/foc-shaders/) minus cloud/FOW.
+	// of the game's TerrainMeshBump.fx minus cloud/FOW.
 	struct GroundVertex
 	{
 	    D3DXVECTOR3 Position;
@@ -1380,12 +1380,12 @@ private:
 	IDirect3DTexture9*	m_pSceneTexture;
     IDirect3DSurface9*  m_pDepthStencilSurface;
 	IDirect3DTexture9*	m_pDistortTexture;
-	// [D3] True while the distort RT verifiably holds the neutral normal
+	// True while the distort RT verifiably holds the neutral normal
 	// (129,128,255) — lets Render skip the heat clear+scan on zero-heat
 	// frames. Re-armed false wherever the RT is (re)created so a fresh
 	// surface always gets one explicit clear before the skip engages.
 	bool                m_distortRtNeutral = false;
-	// [D2] Paused-idle skip state (see Update): the last sim time a full
+	// Paused-idle skip state (see Update): the last sim time a full
 	// instance pass ran at, and the list size after it — a frozen clock
 	// with an unchanged list means the pass would only recompute itself.
 	TimeF               m_lastUpdatedSimTime       = -1.0f;

@@ -141,14 +141,14 @@ export function AtlasPickerPane({
   // the first-ever-open default so even that first open picks the settle's column
   // count — no 5→4 snap (see COLD_START_GRIDW above).
   const [gridW, setGridW] = useState<number>(() => atlasPanelCache.gridW ?? COLD_START_GRIDW);
-  // [#572] The grid is ONE <canvas> painted as a static tall image, so scrolling
+  // The grid is ONE <canvas> painted as a static tall image, so scrolling
   // needs NO re-render/redraw — we only keep a handle to the scroll container so
   // keyboard nav can scroll the roving cell into view (adjust scrollTop).
   const scrollElRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLCanvasElement | null>(null); // the listbox <canvas>
   const focusInGridRef = useRef(false);   // does the grid canvas currently hold focus?
   const restoreFocusRef = useRef(false);  // re-home focus after an atlas change?
-  const kbFocusPendingRef = useRef<number | null>(null); // [#572] cell to scroll into view after a keyboard move
+  const kbFocusPendingRef = useRef<number | null>(null); // cell to scroll into view after a keyboard move
   const roRef = useRef<ResizeObserver | null>(null);
   const lastMeasureRef = useRef<(() => void) | null>(null); // latest measure fn, called at slide settle
   const pulseTimer = useRef<number | undefined>(undefined);
@@ -401,8 +401,8 @@ export function AtlasPickerPane({
         });
     // Active mode first (synchronous) so first paint isn't gated behind the other
     // mode's decode. The INACTIVE mode is deferred to the first idle slot after
-    // first paint so it doesn't compete with the active mode's decode (perf-audit
-    // P1b). blendAlphaGated is NOT in this effect's deps: both modes load either
+    // first paint so it doesn't compete with the active mode's decode.
+    // blendAlphaGated is NOT in this effect's deps: both modes load either
     // way (active sync, inactive on idle), so priority only affects first-paint
     // latency, never correctness. blendAlphaGated is set in the same batch as
     // colorTexture on the get-properties fetch, so this effect re-runs with the
@@ -442,7 +442,7 @@ export function AtlasPickerPane({
   // (no bridge round-trip, no loading flash).
   const preview: PreviewState = blendAlphaGated ? rawPrev : flatPrev;
 
-  // [#572] The GRID is ONE <canvas> that draws each frame with a single
+  // The GRID is ONE <canvas> that draws each frame with a single
   // drawImage from the full-res `preview` image (one paint, no per-cell DOM and
   // no giant CSS data-URI). So the old downscale/`--atlas-url` machinery is gone
   // — the canvas grid takes the full-res preview directly (null while loading).
@@ -532,7 +532,7 @@ export function AtlasPickerPane({
   // !eligible) leaves preview.kind === "loading", and offIndex shows a non-grid
   // state too, so those placeholder cases are folded in explicitly. The dock gate
   // releases on THIS so a placeholder/error open no longer waits for a full grid
-  // mount (perf-audit P1b).
+  // mount.
   const terminalFirstPaint =
     !colorTexture || tooLarge || !eligible || offIndex || preview.kind !== "loading";
   useEffect(() => {
@@ -644,7 +644,7 @@ export function AtlasPickerPane({
 
   // ── keyboard navigation ─────────────────────────────────────────────
 
-  // [#572] The grid is a single <canvas> listbox, so keyboard focus stays on
+  // The grid is a single <canvas> listbox, so keyboard focus stays on
   // that ONE element (the aria-activedescendant moves, not DOM focus). "Focusing"
   // a cell therefore means: keep focus on the canvas and scroll the cell's row
   // into view by nudging the scroll container's scrollTop (canvas doesn't reflow,
@@ -690,14 +690,14 @@ export function AtlasPickerPane({
   }, [rovingTarget, colorTexture, side]);
 
   function moveTo(next: number) {
-    // [#572] `next` may be scrolled off-screen (e.g. Home/End jumps). Record it
+    // `next` may be scrolled off-screen (e.g. Home/End jumps). Record it
     // and let the layout effect below scroll it into view after the re-render
     // updates rovingTarget (→ aria-activedescendant + the redrawn focus outline).
     kbFocusPendingRef.current = next;
     setFocusIndex(next);
   }
 
-  // [#572] Scroll the pending keyboard target into view once the re-render has
+  // Scroll the pending keyboard target into view once the re-render has
   // moved rovingTarget. Runs before paint (useLayoutEffect) so the scroll is not
   // visibly deferred. Only fires for keyboard-driven moves (kbFocusPendingRef set
   // by moveTo), never on hover/selection-driven rovingTarget changes.
@@ -740,7 +740,7 @@ export function AtlasPickerPane({
   let body: React.ReactNode;
 
   if (!colorTexture) {
-    // Teaching empty state (design pass, D2): name the fix, not just the fact.
+    // Teaching empty state: name the fix, not just the fact.
     body = <Placeholder>No color texture set. Choose one under Appearance → Textures.</Placeholder>;
   } else if (tooLarge) {
     body = <Placeholder>Atlas too large to display ({side}×{side}).</Placeholder>;
@@ -762,7 +762,7 @@ export function AtlasPickerPane({
     // cached FINAL width and re-fit once at settle, so there's no single-column
     // transient and no settle-snap.
     //
-    // #572: the previous per-cell DOM (up to 1024 divs, each painting a CSS crop
+    // The previous per-cell DOM (up to 1024 divs, each painting a CSS crop
     // of a shared raster) lagged WebView2 for ~1s on open and on every scroll.
     // The canvas draws all frames once, scrolls as a static image (no redraw),
     // and hit-tests interaction by pointer math — one node instead of N.

@@ -108,7 +108,7 @@ bool DriveRunner::DoCapture(const drive::Step& s)
     // GDI exhaustion, PrintWindow FALSE, encode fail). A PrintWindow that
     // SUCCEEDS over a black-but-valid composite passes -> exit 0 does NOT
     // certify a non-black viewport. The non-black pixel gate is intentionally
-    // the smoke's job (tasks/drive-smoke.ps1); a legitimately dark scene (space
+    // the drive-smoke gate lane's job; a legitimately dark scene (space
     // backdrop) must not fail the runner.
     assert(!s.capturePath.empty());
     if (!m_capture(s.capturePath)) {

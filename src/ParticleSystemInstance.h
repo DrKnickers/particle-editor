@@ -17,10 +17,10 @@ class ParticleSystemInstance : public Object3D
     // Root emitters this instance has already accounted for, keyed by
     // Emitter::stableId. Seeded in the constructor with every root present at
     // placement; SyncRootEmitters() then spawns ONLY roots whose id isn't here
-    // yet (2026-07 audit).
+    // yet.
     //
     // Keyed by stableId rather than Emitter* on purpose: the counter is
-    // process-monotonic and never reused (ParticleSystem.cpp:145), so a stale
+    // process-monotonic and never reused (s_nextEmitterStableId), so a stale
     // entry for a deleted emitter can never false-match a later one. A raw
     // pointer would ABA if the allocator recycled the address.
     //
@@ -120,9 +120,9 @@ public:
         int instanceIndex, std::vector<LiveParticleSample>& samples) const;
 	void RenderNormal(IDirect3DDevice9* pDevice);
 	void RenderHeat(IDirect3DDevice9* pDevice);
-	// Shared rank-ordered draw pass for RenderNormal/RenderHeat (#574).
+	// Shared rank-ordered draw pass for RenderNormal/RenderHeat.
 	void RenderByRank(IDirect3DDevice9* pDevice, bool wantHeat);
-	// [D3] True when any emitter would draw in RenderHeat this frame —
+	// True when any emitter would draw in RenderHeat this frame —
 	// Engine::Render's zero-heat skip probe (see EmitterInstance::HasLiveHeat).
 	// Body in the .cpp: EmitterInstance is only fwd-declared here.
 	bool HasLiveHeat() const;
@@ -136,8 +136,8 @@ public:
 	// constructor, so an emitter added by Add Root / Paste / Import /
 	// Duplicate / a reparent-to-root never appeared on an already-placed
 	// instance — deletion propagated (via ~Emitter -> RemoveEmitter) but
-	// addition did not. Same user-visible shape as the set-properties gap
-	// fixed in #682. Idempotent; dynamic children are NOT removed here because
+	// addition did not. Same user-visible shape as the earlier set-properties
+	// gap. Idempotent; dynamic children are NOT removed here because
 	// they are parented to particles (or detached after a death event), not to
 	// the ParticleSystemInstance. m_spawnedRootIds remains one-shot history:
 	// removing a stale root must not make it eligible to spawn again.

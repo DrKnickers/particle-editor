@@ -112,7 +112,7 @@ describe("SaveChangesDialog", () => {
 
     // The failure is surfaced (not silently swallowed), the pending New/Open is
     // NOT run, and the prompt STAYS OPEN (pendingAction preserved) so the user can
-    // retry / Don't Save / Cancel — the unsaved work survives (release-audit #11).
+    // retry / Don't Save / Cancel — the unsaved work survives.
     await waitFor(() => {
       expect(useFileOpErrorStore.getState().message).toContain("read-only");
     });
@@ -136,7 +136,7 @@ describe("SaveChangesDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     // A user-cancelled save is not an error and must not run the pending op; the
-    // prompt stays open so the user can choose again (release-audit #11).
+    // prompt stays open so the user can choose again.
     await waitFor(() => {
       expect(bridge.request).toHaveBeenCalledWith(expect.objectContaining({ kind: "file/save" }));
     });
@@ -161,7 +161,7 @@ describe("SaveChangesDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     // A rejected (thrown) save is surfaced via the error store and the prompt
-    // stays open — the destructive pending op must never run (release-audit #11).
+    // stays open — the destructive pending op must never run.
     await waitFor(() => {
       expect(useFileOpErrorStore.getState().message).toContain("bridge offline");
     });

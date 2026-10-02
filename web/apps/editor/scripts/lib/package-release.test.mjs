@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-// Smoke test for scripts/package-release.ps1 (release-audit findings #1/#14): it must stage a
+// Smoke test for scripts/package-release.ps1: it must stage a
 // COMPLETE bundle and FAIL LOUDLY on any missing piece, so a release zip can never be produced
 // broken. We exercise the real PowerShell script against stub fixtures. CI's web job (Ubuntu) ships
 // `pwsh`, so this runs there; locally it skips only if no PowerShell is found (the live Windows run

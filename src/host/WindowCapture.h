@@ -8,7 +8,7 @@
 namespace host {
 
 // [record-async-encode] Split of CaptureWindowToPng for the record loop's
-// background PNG encoder (tasks/todo.md Branch B): the GRAB stays synchronous
+// background PNG encoder (AsyncFrameEncoder.h): the GRAB stays synchronous
 // on the record thread (pixels captured at the same instant as the old inline
 // path — determinism-neutral by construction); the encode+write moves to a
 // worker. Grab = PrintWindow(PW_RENDERFULLCONTENT) + GetDIBits into top-down

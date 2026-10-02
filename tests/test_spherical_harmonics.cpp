@@ -3,16 +3,16 @@
 // no device.
 //
 // The source has two compile-time branches selected by USE_PROPER_SPH
-// (SphericalHarmonics.cpp:7): the shipped build leaves it UNDEFINED, so the
-// classical fallback (lines 63-79) runs. To execute BOTH branches without
-// touching src, this test:
+// (a commented-out #define at the top of SphericalHarmonics.cpp): the shipped
+// build leaves it UNDEFINED, so the classical fallback (#ifndef branch) runs.
+// To execute BOTH branches without touching src, this test:
 //   - links src\SphericalHarmonics.cpp as-is  -> global  SPH_Calculate_Matrices
 //     (classical fallback), and
 //   - re-includes SphericalHarmonics.cpp inside a namespace with
 //     USE_PROPER_SPH defined -> propersph::SPH_Calculate_Matrices (the
-//     quadratic-form path, lines 18-61, exercising D3DXSHEvalDirectionalLight).
+//     quadratic-form path, the #ifdef branch, exercising D3DXSHEvalDirectionalLight).
 //
-// Classical expectations are derived by hand from lines 63-79:
+// Classical expectations are derived by hand from the #ifndef branch:
 //   matrices[ch]._41.._43 = sum_i Diffuse[ch] * -Direction.xyz; everything
 //   else stays zero except _44 += ambient[ch]*ambient.w ONCE PER LIGHT --
 //   including that with ZERO lights the output is all-zero regardless of
@@ -20,9 +20,9 @@
 //   Diffuse.w is ignored by the classical branch.
 // Proper-SPH expectations are property-based (epsilon compares, not brittle
 // floats): all-zero for zero lights, finiteness, the quadratic form's
-// symmetry (_12==_21 etc., _11==-_22 from lines 41-59), channel equality for
-// a white light, linearity in Diffuse.w, and the same per-light ambient
-// accumulation into _44.
+// symmetry (_12==_21 etc., _11==-_22 from the shared coefficients), channel
+// equality for a white light, linearity in Diffuse.w, and the same per-light
+// ambient accumulation into _44.
 //
 // Standalone console exe; see the test_spherical_harmonics entry in tests/native-tests.json.
 
@@ -98,7 +98,7 @@ int main()
     std::printf("[classical]\n");
 
     // ---- zero lights: all-zero even with a non-zero ambient ----------------
-    // (the ambient += sits INSIDE the per-light loop, lines 63,76-78).
+    // (the ambient += sits INSIDE the per-light loop).
     {
         D3DXMATRIX m[3];
         SPH_Calculate_Matrices(m, NULL, 0, D3DXVECTOR4(1.0f, 2.0f, 3.0f, 1.0f));

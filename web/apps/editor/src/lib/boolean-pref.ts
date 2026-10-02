@@ -1,6 +1,6 @@
 // boolean-pref.ts — shared localStorage backing for the persisted boolean
 // render preferences (soft-shadows / model-shadows), which
-// each had a byte-identical read/write pair (DRY audit web-bridge-state-4).
+// each had a byte-identical read/write pair.
 //
 // Stored as "1"/"0"; reads tolerate the legacy "true" encoding. localStorage
 // access goes through stored-pref.ts (guarded against private-mode / quota) so

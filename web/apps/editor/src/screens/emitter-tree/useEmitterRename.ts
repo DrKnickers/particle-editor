@@ -25,7 +25,7 @@ export function useEmitterRename({ bridge, restoreFocus }: UseEmitterRenameOptio
   const editingRef = useRef<RenameEditingState>(null);
   useEffect(() => { editingRef.current = editing; }, [editing]);
 
-  // [design pass B2, pre-PR fix] Rename commit/cancel unmounts the inline
+  // Rename commit/cancel unmounts the inline
   // input, which drops focus to <body> — return it to the edited row so
   // keyboard flow (F2 → Enter/Escape) continues where it was. Only when
   // focus actually fell to body: if the user clicked elsewhere mid-edit,

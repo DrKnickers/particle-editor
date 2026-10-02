@@ -1,6 +1,5 @@
-// Kind handlers for the emitters/* + linkGroups/* bridge domain(s), moved out of
-// DispatchInternal's ladder (Phase A dispatch split --
-// tasks/2026-07-06-heavyweight-refactor-plan.md).
+// Bridge request handlers for the emitters/* and linkGroups/* kinds.
+// BridgeDispatcher::DispatchInternal routes requests here via TryDispatchEmitters.
 
 #include "BridgeDispatcher.h"
 #include "BridgeDispatchShared.h"
@@ -21,7 +20,7 @@ namespace host {
 // `delta` — inserting a single t=0 key = delta when the source track is empty.
 // Mirrors legacy EmitterList_DuplicateEmitter + ShiftIndexTrack. Returns the new
 // emitter, or nullptr if the copy/insert failed. Shared by the single and the
-// batch (#575) duplicate-with-index-increment handlers.
+// batch duplicate-with-index-increment handlers.
 static ParticleSystem::Emitter* DuplicateEmitterWithIndexShift(
     ParticleSystem* sys, ParticleSystem::Emitter* source, float delta)
 {
@@ -69,8 +68,7 @@ static ParticleSystem::Emitter* DuplicateEmitterWithIndexShift(
 
 bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
 {
-    // DispatchInternal-local aliases so the moved ladder blocks below stay
-    // verbatim (plan #3A transforms only).
+    // Short local names for the request fields used by the handlers below.
     const json&        params = ctx.params;
     const std::string& kind   = ctx.kind;
 
@@ -87,7 +85,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         std::string path8 = params.value("path", std::string{});
         if (path8.empty())
         {
-            // G3: intentional sendOk — file-load-result contract; the success
+            // Nested-ok result (see BridgeRequestContext.h); the success
             // path returns ctx.SendOk({ok:true,tree}) and the Import Emitters
             // caller reads nested ok. Converting would split the contract.
             ctx.SendOk(json{{"ok", false}, {"error", "missing path"}});
@@ -98,8 +96,8 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         std::unique_ptr<ParticleSystem> tmp = LoadParticleSystem(path, &err);
         if (!tmp)
         {
-            // G3: intentional sendOk — like file/open, a load failure here is
-            // returned as nested-ok so request() won't throw; success path is
+            // Like file/open, a load failure here is returned as a nested-ok
+            // result so request() won't throw; success path is
             // ctx.SendOk({ok:true,tree}). Caller inspects nested ok.
             ctx.SendOk(json{
                 {"ok",    false},
@@ -673,7 +671,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
             }
         }
 
-        propagateLinkGroup(emit); // F4: keep link-group siblings in sync
+        propagateLinkGroup(emit); // keep link-group siblings in sync
 
         // Any patch key no branch consumed is an unknown field name → skipped.
         for (auto it = patch.begin(); it != patch.end(); ++it)
@@ -694,7 +692,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         // creation-time spawn rate forever while the auto-respawning main
         // preview read fresh values, masking the gap (v0.3.0 cold-launch
         // finding). Subsumes the previous InvalidatePausedIdleSkip() call:
-        // OnParticleSystemChanged also busts the paused-idle skip [D2], so a
+        // OnParticleSystemChanged also busts the paused-idle skip, so a
         // paused preview still repaints the edit (review finding).
         // m_spawnDelay is a PERIOD (next round schedules time+delay), so a
         // mid-flight recompute is safe; it also deliberately resets the
@@ -708,13 +706,13 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
 
     // -------- emitters/duplicate -------------------------------------
     //
-    // Mirrors legacy `EmitterList_DuplicateEmitter` at
-    // [src/UI/EmitterList.cpp:4707]. Round-trips the source through
+    // Mirrors the legacy Win32 editor's `EmitterList_DuplicateEmitter`.
+    // Round-trips the source through
     // the chunk serializer so the duplicate starts with empty
     // m_instances (a direct copy-construct would shallow-copy that
     // std::set and double-free on later deletion). The duplicate
     // becomes a root via `insertEmitterAfter`.
-    // -------- emitters/import-from-file (audit G1) ------------------
+    // -------- emitters/import-from-file ------------------
     //
     // Clone the `selected` source emitters from another `.alo` into the
     // live system as new roots, via the shared data-layer core
@@ -727,7 +725,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         // Hard failures go through sendErr (envelope ok:false) so the bridge
         // promise REJECTS and the dialog's catch surfaces the error + keeps the
         // modal open. (A nested sendOk{ok:false} would resolve as success and
-        // close the dialog silently — review finding, the G3 nested-ok trap.)
+        // close the dialog silently; see BridgeRequestContext.h.)
         if (!m_pParticleSystem || !*m_pParticleSystem)
         {
             ctx.SendErr("no particle system bound");
@@ -764,7 +762,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         }
         // Drop out-of-range picks BEFORE capturing undo. An all-out-of-range
         // request imports nothing, so it must not push an undo snapshot or
-        // dirty the document (audit-F1 'no dirty on a no-op'). In-range picks
+        // dirty the document (no dirty on a no-op). In-range picks
         // keep their order.
         const size_t srcCount = tmp->getEmitters().size();
         std::vector<size_t> validPicks;
@@ -788,7 +786,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         if (n > 0)
         {
             ctx.MarkDirty();
-            // Structural change: reach already-placed instances (2026-07 audit).
+            // Structural change: reach already-placed instances.
             if (m_engine) m_engine->OnParticleSystemChanged(-1);
             EmitEngineStateChanged();
             EmitEmittersTreeChanged();
@@ -802,8 +800,8 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         ParticleSystem::Emitter* source = getEmitterById(id);
         if (source == nullptr)
         {
-            // G3: intentional sendOk — handler success path returns
-            // ctx.SendOk({ok:true,newId}); caller reads nested ok, so all
+            // Nested-ok result (see BridgeRequestContext.h): the success path
+            // returns ctx.SendOk({ok:true,newId}); caller reads nested ok, so all
             // failures stay the same nested-ok shape to match.
             ctx.SendOk(json{{"ok", false}, {"error", "emitter not found"}});
             return true;
@@ -824,7 +822,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
             ParticleSystem::Emitter cleanCopy(reader);
 
             // Auto-suffix the name to avoid collisions; mirrors the
-            // legacy convention from EmitterList.cpp:4731.
+            // legacy editor's convention (GenerateDuplicateName).
             cleanCopy.name = GenerateDuplicateName(sys, source->name);
 
             dup = sys->insertEmitterAfter(source, cleanCopy);
@@ -832,8 +830,8 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         catch (...)
         {
             memfile->Release();
-            // G3: intentional sendOk — nested-ok failure to match the
-            // success payload the caller inspects (see above).
+            // Nested-ok failure, matching the success payload the caller
+            // inspects (see above).
             ctx.SendOk(json{{"ok", false}, {"error", "emitter copy failed"}});
             return true;
         }
@@ -841,15 +839,15 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
 
         if (dup == nullptr)
         {
-            // G3: intentional sendOk — nested-ok failure to match the
-            // success payload the caller inspects (see above).
+            // Nested-ok failure, matching the success payload the caller
+            // inspects (see above).
             ctx.SendOk(json{{"ok", false}, {"error", "insertEmitterAfter returned null"}});
             return true;
         }
         const int newId = static_cast<int>(dup->index);
         ctx.SendOk(json{{"ok", true}, {"newId", newId}});
         ctx.MarkDirty();
-        // Structural change: reach already-placed instances (2026-07 audit).
+        // Structural change: reach already-placed instances.
         if (m_engine) m_engine->OnParticleSystemChanged(-1);
         EmitEngineStateChanged();
         EmitEmittersTreeChanged();
@@ -869,8 +867,8 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
     {
         if (m_pParticleSystem == nullptr || !*m_pParticleSystem)
         {
-            // G3: intentional sendOk — handler success path returns
-            // ctx.SendOk({ok:true,newIds}); caller reads nested ok, so all
+            // Nested-ok result (see BridgeRequestContext.h): the success path
+            // returns ctx.SendOk({ok:true,newIds}); caller reads nested ok, so all
             // failures stay the same nested-ok shape to match.
             ctx.SendOk(json{{"ok", false}, {"error", "no particle system bound"}});
             return true;
@@ -889,8 +887,8 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         }
         if (sources.empty())
         {
-            // G3: intentional sendOk — nested-ok failure to match the
-            // success payload the caller inspects (see above).
+            // Nested-ok failure, matching the success payload the caller
+            // inspects (see above).
             ctx.SendOk(json{{"ok", false}, {"error", "no emitters to duplicate"}});
             return true;
         }
@@ -916,16 +914,16 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
             catch (...)
             {
                 memfile->Release();
-                // G3: intentional sendOk — nested-ok failure to match the
-                // success payload the caller inspects (see above).
+                // Nested-ok failure, matching the success payload the caller
+                // inspects (see above).
                 ctx.SendOk(json{{"ok", false}, {"error", "emitter copy failed"}});
                 return true;
             }
             memfile->Release();
             if (dup == nullptr)
             {
-                // G3: intentional sendOk — nested-ok failure to match the
-                // success payload the caller inspects (see above).
+                // Nested-ok failure, matching the success payload the caller
+                // inspects (see above).
                 ctx.SendOk(json{{"ok", false}, {"error", "insertEmitterAfter returned null"}});
                 return true;
             }
@@ -938,7 +936,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
 
         ctx.SendOk(json{{"ok", true}, {"newIds", newIds}});
         ctx.MarkDirty();
-        // Structural change: reach already-placed instances (2026-07 audit).
+        // Structural change: reach already-placed instances.
         if (m_engine) m_engine->OnParticleSystemChanged(-1);
         EmitEngineStateChanged();
         EmitEmittersTreeChanged();
@@ -948,8 +946,8 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
 
     // -------- emitters/delete ---------------------------------------
     //
-    // Mirrors legacy `EmitterList_DeleteEmitter` at
-    // [src/UI/EmitterList.cpp:4651]. ParticleSystem::deleteEmitter
+    // Mirrors the legacy Win32 editor's `EmitterList_DeleteEmitter`.
+    // ParticleSystem::deleteEmitter
     // recursively deletes a subtree. Preserve a surviving selection by stable
     // identity because every positional id above the deletion can shift.
     if (kind == "emitters/delete")
@@ -992,8 +990,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
     // cut handler below: ONE captureUndo() around the whole loop, so a
     // single Ctrl+Z reverses the whole gesture. React used to issue N
     // separate emitters/delete requests, each capturing its own undo
-    // entry, so one Ctrl+Z restored one emitter out of N (2026-07
-    // audit).
+    // entry, so one Ctrl+Z restored one emitter out of N.
     //
     // An emitter id is a POSITION that shifts down as earlier siblings
     // vanish, so — exactly as in cut — sort descending and re-resolve
@@ -1057,8 +1054,8 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
 
     // -------- emitters/rename ---------------------------------------
     //
-    // Legacy uses an inline tree-view edit (EmitterList_RenameEmitter
-    // at line 4814 → TreeView_EditLabel). The new-UI flow uses a modal,
+    // The legacy editor used an inline tree-view edit (EmitterList_RenameEmitter
+    // → TreeView_EditLabel). The editor UI uses a modal,
     // dispatched here as a plain setName. Capture-undo guards against
     // mid-edit Ctrl-Z weirdness.
     if (kind == "emitters/rename")
@@ -1087,7 +1084,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
     // Track mutations. Both handlers
     // resolve the emitter by id, look up the named track on `tracks[]`
     // (the slot pointer aliasing — see the comment block in
-    // ParticleSystem.h:148), then mutate the underlying multiset /
+    // ParticleSystem.h on Emitter::trackContents), then mutate the underlying multiset /
     // enum directly. Border keys (first + last in time order on the
     // multiset, which is already ordered by Key::operator<) are
     // silently skipped by delete-track-keys per legacy semantics;
@@ -1173,7 +1170,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         ctx.SendOk(json::object());
         if (removed > 0)
         {
-            propagateLinkGroup(target); // F4: sync link-group siblings
+            propagateLinkGroup(target); // sync link-group siblings
             // Re-seat live particle track cursors — the erase(s) above
             // invalidated any cursor pointing at a removed key (see the
             // set-track-key handler for the full rationale).
@@ -1234,14 +1231,14 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         captureUndo();
         track->interpolation = next;
 
-        propagateLinkGroup(target); // F4: sync link-group siblings
+        propagateLinkGroup(target); // sync link-group siblings
         ctx.SendOk(json::object());
         ctx.MarkDirty();
         // Interpolation is read during particle update, and a PAUSED preview
         // skips its idle update unless something invalidates it — so choosing
         // Smooth / Step / Linear updated the curve panel while the placed
         // preview kept drawing the OLD interpolation until you unpaused or
-        // stepped a frame (2026-07 audit). Same broadcast every other
+        // stepped a frame. Same broadcast every other
         // track mutation already sends.
         if (m_engine) m_engine->OnParticleSystemChanged(-1);
         EmitEmittersTreeChanged();
@@ -1252,9 +1249,8 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
 
     // -------- emitters/set-track-lock ------------------------------
     //
-    // Per-channel track lock. The legacy combo at
-    // [TrackEditor.cpp:90-110](src/UI/TrackEditor.cpp:90) and the
-    // file-load consolidation at [ParticleSystem.cpp:428] use the
+    // Per-channel track lock. The legacy editor's track-lock combo and the
+    // file-load consolidation in ParticleSystem.cpp use the
     // *pointer identity* of `emit->tracks[i]` as the source of
     // truth for lock state: `tracks[i] == &trackContents[j]` (with
     // `i != j`) means channel `i` is read-only and displays
@@ -1337,7 +1333,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         captureUndo();
         target->tracks[channelIdx] = desired;
 
-        propagateLinkGroup(target); // F4: sync link-group siblings
+        propagateLinkGroup(target); // sync link-group siblings
         // Re-seat live particle track cursors for this channel. The lock
         // repointed tracks[channelIdx] at a DIFFERENT KeyMap, so existing
         // cursors (iterators into the old container) would be compared
@@ -1430,7 +1426,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         track->keys.erase(it);
         track->keys.insert(ParticleSystem::Emitter::Track::Key(newTime, newValue));
 
-        propagateLinkGroup(target); // F4: sync link-group siblings
+        propagateLinkGroup(target); // sync link-group siblings
         // Re-seat the live per-particle track cursors. EmitterInstance
         // caches multiset iterators (prev/next) into tracks[trackIdx]->keys
         // for every live particle; the erase above invalidated any cursor
@@ -1514,7 +1510,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         captureUndo();
         track->keys.insert(ParticleSystem::Emitter::Track::Key(time, value));
 
-        propagateLinkGroup(target); // F4: sync link-group siblings
+        propagateLinkGroup(target); // sync link-group siblings
         // Re-seat live particle track cursors. insert() doesn't invalidate
         // existing iterators, but a key added BETWEEN a particle's prev/next
         // cursors would be skipped (stale interpolation) until the cursors
@@ -1533,8 +1529,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
     // The multi-key curve-paste gesture: every key inserted under ONE
     // captureUndo(), so a single Ctrl+Z reverses the whole paste. React
     // used to issue one add-track-key per clipboard key, each capturing
-    // its own undo entry, so one Ctrl+Z removed one key of a paste
-    // (2026-07 audit).
+    // its own undo entry, so one Ctrl+Z removed one key of a paste.
     //
     // Per-key validation, the dedupe-by-epsilon bump and the returned
     // ACTUAL (time, value) are identical to the singular handler above;
@@ -1625,7 +1620,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
             inserted.push_back(json{{"time", time}, {"value", pk.value}});
         }
 
-        propagateLinkGroup(target); // F4: sync link-group siblings
+        propagateLinkGroup(target); // sync link-group siblings
         // Re-seat live particle track cursors ONCE for the whole batch —
         // same rationale as the singular handler's per-insert re-seat.
         if (m_engine != nullptr) m_engine->OnParticleSystemChanged(trackIdx);
@@ -1639,11 +1634,10 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
 
     // -------- emitters/duplicate-with-index-increment ---------------
     //
-    // Legacy `EmitterList_DuplicateEmitter(hWnd, indexDelta)` at
-    // [src/UI/EmitterList.cpp:4707]. Duplicate first (same path as
-    // above), then shift the TRACK_INDEX track on the duplicate by
-    // `delta` via `ShiftIndexTrack` (legacy helper at
-    // [src/UI/EmitterList.cpp:2307]). The shift adds `delta` to every
+    // Legacy `EmitterList_DuplicateEmitter(hWnd, indexDelta)`. Duplicate
+    // first (same path as above), then shift the TRACK_INDEX track on the
+    // duplicate by `delta` (the legacy editor's `ShiftIndexTrack`
+    // behaviour). The shift adds `delta` to every
     // keyframe value; if the track is empty, inserts a single key at
     // t=0 with value=delta.
     if (kind == "emitters/duplicate-with-index-increment")
@@ -1670,7 +1664,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         const int newId = static_cast<int>(dup->index);
         ctx.SendOk(json{{"newId", newId}});
         ctx.MarkDirty();
-        // Structural change: reach already-placed instances (2026-07 audit).
+        // Structural change: reach already-placed instances.
         if (m_engine) m_engine->OnParticleSystemChanged(-1);
         EmitEngineStateChanged();
         EmitEmittersTreeChanged();
@@ -1682,7 +1676,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
     // Batch of `count` CHAINED duplicates in ONE undo step: each copy is made
     // from the PREVIOUS copy (not the original source), so its index track
     // climbs by `delta` per step (source 0, delta 1, count 3 -> +1, +2, +3).
-    // response.newIds are the copies in creation order. (#575)
+    // response.newIds are the copies in creation order.
     if (kind == "emitters/duplicate-with-index-increment-many")
     {
         int id = params.value("id", -1);
@@ -1714,7 +1708,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
                     // it resyncs to the partial state (reversible in one undo via
                     // the single captureUndo above) instead of going stale.
                     ctx.MarkDirty();
-                    // Structural change: reach already-placed instances (2026-07 audit).
+                    // Structural change: reach already-placed instances.
                     if (m_engine) m_engine->OnParticleSystemChanged(-1);
                     EmitEngineStateChanged();
                     EmitEmittersTreeChanged();
@@ -1728,7 +1722,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
 
         ctx.SendOk(json{{"newIds", newIds}});
         ctx.MarkDirty();
-        // Structural change: reach already-placed instances (2026-07 audit).
+        // Structural change: reach already-placed instances.
         if (m_engine) m_engine->OnParticleSystemChanged(-1);
         EmitEngineStateChanged();
         EmitEmittersTreeChanged();
@@ -1761,7 +1755,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
     //
     // Write the per-group exempt set. ParticleSystem normalises an
     // all-default value back out of the map (see
-    // [src/ParticleSystem.h:351]); calling with the v1 default fields
+    // ParticleSystem::setLinkExemptFlags); calling with the v1 default fields
     // therefore leaves the on-disk chunk untouched, matching legacy
     // save behaviour.
     if (kind == "linkGroups/set-exempt-fields")
@@ -1783,8 +1777,8 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         captureUndo();
         sys->setLinkExemptFlags(groupId, flags);
 
-        // LNK settings surface — faithful to legacy settings-OK
-        // (EmitterList.cpp:2841): when a field transitions exempt→shared and
+        // LNK settings surface — faithful to the legacy editor's
+        // settings-OK handler: when a field transitions exempt→shared and
         // members disagree, resolve it by copying the canonical (members[0],
         // first-in-tree-order) value to every sibling for exactly the
         // newly-shared fields (the diff mask). Only the newly-shared fields
@@ -1954,7 +1948,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
     // Read-only preview for the settings dialog: which existing members the
     // PROPOSED exempt set would overwrite to the canonical (members[0],
     // first-in-tree-order) value when a now-exempt field becomes SHARED.
-    // Mirrors the legacy settings-OK disagreement scan (EmitterList.cpp:2841):
+    // Mirrors the legacy editor's settings-OK disagreement scan:
     // only fields transitioning exempt(stored)→shared(proposed) count, diffed
     // per non-canonical member. set-exempt-fields resolves it on commit.
     // No mutation, no undo, no events.
@@ -2034,7 +2028,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         }
         ctx.SendOk(json{{"newId", static_cast<int>(child->index)}});
         ctx.MarkDirty();
-        // Structural change: reach already-placed instances (2026-07 audit).
+        // Structural change: reach already-placed instances.
         if (m_engine) m_engine->OnParticleSystemChanged(-1);
         EmitEngineStateChanged();
         EmitEmittersTreeChanged();
@@ -2066,7 +2060,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         }
         ctx.SendOk(json{{"newId", static_cast<int>(child->index)}});
         ctx.MarkDirty();
-        // Structural change: reach already-placed instances (2026-07 audit).
+        // Structural change: reach already-placed instances.
         if (m_engine) m_engine->OnParticleSystemChanged(-1);
         EmitEngineStateChanged();
         EmitEmittersTreeChanged();
@@ -2094,7 +2088,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         }
         ctx.SendOk(json{{"newId", static_cast<int>(child->index)}});
         ctx.MarkDirty();
-        // Structural change: reach already-placed instances (2026-07 audit).
+        // Structural change: reach already-placed instances.
         if (m_engine) m_engine->OnParticleSystemChanged(-1);
         EmitEngineStateChanged();
         EmitEmittersTreeChanged();
@@ -2283,7 +2277,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
     //   - groupId  >  0             → join that existing group
     //   - groupId === -1            → create a new group
     //
-    // F4: this drives the LinkGroup.h API (Create/Join/Leave) rather
+    // This drives the LinkGroup.h API (Create/Join/Leave) rather
     // than stamping `e->linkGroup` raw. That stamp set the membership ID
     // (so the bracket gutter drew) but NEVER synchronised the members'
     // non-exempt fields, so the group had no behavioural effect — the
@@ -2423,8 +2417,9 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
     // call). The wire shape never carries "auto".
     if (kind == "emitters/drop")
     {
-        // G3: every failure in this handler is an intentional sendOk —
-        // the success path returns ctx.SendOk({ok:true}) and the EmitterTree
+        // Every failure in this handler is a nested-ok result (see
+        // BridgeRequestContext.h): the success path returns
+        // ctx.SendOk({ok:true}) and the EmitterTree
         // caller dispatches drops as `void bridge.request(...)`
         // (fire-and-forget). Converting to sendErr would both split this
         // handler's nested-ok contract and turn the fire-and-forget calls
@@ -2516,7 +2511,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
             ctx.SendOk(json{{"ok", true}});
             ctx.MarkDirty();
             reselectMovedEmitter();
-            // Structural change: reach already-placed instances (2026-07 audit).
+            // Structural change: reach already-placed instances.
             if (m_engine) m_engine->OnParticleSystemChanged(-1);
             EmitEngineStateChanged();
             EmitEmittersTreeChanged();
@@ -2537,8 +2532,9 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
     // moved roots' final indices as newIds (a contiguous run).
     if (kind == "emitters/reorder-many")
     {
-        // G3: every failure in this handler is an intentional sendOk — the
-        // success path returns ctx.SendOk({ok:true,newIds}) and the JS caller
+        // Every failure in this handler is a nested-ok result (see
+        // BridgeRequestContext.h): the success path returns
+        // ctx.SendOk({ok:true,newIds}) and the JS caller
         // (lib/tree/emitter-reorder.ts reorderManyEmitters) reads nested ok as
         // control flow: `const r = await request(...); if (!r.ok) return;`.
         // Converting to sendErr would make request() throw, defeating that
@@ -2757,7 +2753,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         if (!newIds.empty())
         {
             ctx.MarkDirty();
-            // Structural change: reach already-placed instances (2026-07 audit).
+            // Structural change: reach already-placed instances.
             if (m_engine) m_engine->OnParticleSystemChanged(-1);
             EmitEngineStateChanged();
             EmitEmittersTreeChanged();
@@ -2816,7 +2812,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         }
         ctx.SendOk(json{{"newId", static_cast<int>(child->index)}});
         ctx.MarkDirty();
-        // Structural change: reach already-placed instances (2026-07 audit).
+        // Structural change: reach already-placed instances.
         if (m_engine) m_engine->OnParticleSystemChanged(-1);
         EmitEngineStateChanged();
         EmitEmittersTreeChanged();

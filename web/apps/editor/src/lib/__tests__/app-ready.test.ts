@@ -2,8 +2,8 @@
 // gate the composite-window screenshot on real chrome being painted.
 //
 // Scope note (honest): jsdom cannot prove the signal fires *after first paint*
-// in AppShell — that timing claim is owned by the host.log `ui-ready=1`
-// assertion in tasks/capture-refobj.ps1. These tests cover only the shim's
+// in AppShell — that timing claim is owned by a host.log `ui-ready=1`
+// assertion in a maintainer capture script. These tests cover only the shim's
 // contract: it posts the exact wire the host needles for, no-ops without
 // WebView2, and never throws.
 

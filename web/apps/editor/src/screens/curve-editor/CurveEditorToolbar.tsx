@@ -168,7 +168,7 @@ export function CurveEditorToolbar({
 
       <Divider />
 
-      {/* Snap-to-grid toggle (#618). A global editor preference — stays
+      {/* Snap-to-grid toggle. A global editor preference — stays
           enabled even while the channel is locked (it changes future edits,
           not the current channel's data). */}
       <IconButton

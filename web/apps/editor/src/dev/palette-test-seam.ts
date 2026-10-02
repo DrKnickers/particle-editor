@@ -1,8 +1,8 @@
 // DEV-ONLY test seam for the Playwright "web" layout lane (tests-web/*.spec.ts).
 //
 // Browser mode's texture palette is deliberately inert (no per-mod Store), so a
-// layout spec could never measure a POPULATED popover — and #683 (the palette
-// growing past a small window with its lower tiles unreachable) is only
+// layout spec could never measure a POPULATED popover — and the palette
+// growing past a small window, lower tiles unreachable, is only
 // reproducible with enough entries to overflow. This seam seeds the mock
 // bridge's palette with N synthetic entries; the spec then opens the popover
 // through the real UI (select emitter → Appearance → palette button) and

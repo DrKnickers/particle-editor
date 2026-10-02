@@ -1,6 +1,6 @@
-// Vitest: SystemLoadChip (overload-indicator-consistency spec, Part 2).
+// Vitest: SystemLoadChip.
 // Predictive system-total warning: visible exactly when the NEXT spawn
-// attempt would be refused by the #138 gate —
+// attempt would be refused by the spawn-time overload gate —
 // (instances + 1) × systemLoad > cap, guard enabled.
 import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, act, waitFor } from "@testing-library/react";
@@ -73,7 +73,7 @@ describe("SystemLoadChip", () => {
     act(() => {
       writeOverloadGuard({ enabled: true, maxParticles: 10_000 });
     });
-    // usePresence keeps the chip mounted through its exit fade (design pass);
+    // usePresence keeps the chip mounted through its exit fade;
     // jsdom fires no animationend, so unmount lands on the timeout fallback.
     await waitFor(() =>
       expect(screen.queryByTestId("system-load-chip")).not.toBeInTheDocument(),

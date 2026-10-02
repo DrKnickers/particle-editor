@@ -3,13 +3,12 @@
 // Drives the live mock app (vite dev, MockBridge) under a set of scripted
 // interactions and reads per-component React <Profiler> commit counts from the
 // DEV-only window.__profilerAudit seam (src/dev/profiler-audit.ts), which wraps
-// the five #532 components at their App.tsx / PanelLayout.tsx mount sites.
+// the five audited components at their App.tsx / PanelLayout.tsx mount sites.
 //
 // Goal: a RANKED table of remaining re-render sources — not a pass/fail gate.
 // The spec asserts only that the harness itself works (each interaction produces
 // the commits it must, so a broken measurement fails loudly); it does NOT assert
-// rankings. Results are attached + console-logged; the ranked table is transcribed
-// by hand into tasks/2026-07-07-react-profiler-audit-plan.md.
+// rankings. Results are attached + console-logged for a person to rank.
 //
 // Metric note (soundness-1): a per-id count is a SUBTREE commit count — onRender
 // fires when that Profiler's subtree commits, which includes descendants. Rank by
@@ -157,9 +156,9 @@ test("react re-render audit: per-component commit counts under scripted interact
   });
 
   // --- AtlasPickerPane: open via the atlas seam, then hover several frames.
-  //     Post-#572 the grid is a single <canvas> (no per-cell DOM); hover is
+  //     The grid is a single <canvas> (no per-cell DOM); hover is
   //     imperative (rAF canvas repaint) — expected to NOT re-render the panel;
-  //     this confirms the #532 protection. Required: seedAtlas must exist and the
+  //     this confirms the panel stays out of the hover path. Required: seedAtlas must exist and the
   //     grid must mount, so a 0 here is a real finding, not an absence. ---
   let atlasFramesHovered = 0;
   const atlasSeedable = await page.evaluate(

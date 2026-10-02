@@ -1,7 +1,7 @@
-// Stage 3 gate — prove the resource migration landed in the BUILT binary.
+// Prove the resource migration landed in the BUILT binary.
 //
-// When the legacy localized resource files (ParticleEditor.en.rc / .de.rc,
-// resource.en.h / .de.h) were deleted, the shared IDS_* error/query strings the
+// When the legacy localized resource files (English and German .rc/.h)
+// were deleted, the shared IDS_* error/query strings the
 // surviving engine/IO/host code LoadString()s had to be migrated into the kept
 // Resources\resource.h + a new STRINGTABLE in ParticleEditor.rc. A clean compile
 // does NOT prove the strings resolve at runtime: a missing STRINGTABLE entry

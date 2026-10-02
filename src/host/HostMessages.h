@@ -28,10 +28,10 @@ static const UINT WM_APP_QUIT_CONFIRMED = WM_APP + 2;
 // viewport receives from Win32 focus churn (which is deliberately suppressed to
 // preserve a cursor-bound Shift spawn). The ViewportWndProc handler ENDS the
 // cursor-bound spawn (and tears down an in-flight OBJECT_Z placement drag) so a
-// real blur can't leak the attached preview (release-audit #7).
+// real blur can't leak the attached preview.
 static const UINT WM_APP_VIEWPORT_BLUR = WM_APP + 3;
 
-// [C3] Posted by PreviewEncodeWorker once per finished background preview
+// Posted by PreviewEncodeWorker once per finished background preview
 // encode. The wndproc handler calls BridgeDispatcher::DrainPreviewResults,
 // which caches the dataUri + emits `textures/preview-ready` so the web
 // refetches (now a cache hit). Posted from the worker thread — PostMessage

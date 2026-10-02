@@ -1,23 +1,9 @@
 // React-rendered menu bar using Radix UI Menubar.
 //
-// Restructured to legacy top-level order
+// Top-level order follows the legacy Win32 editor's menu:
 //   File / Edit / Emitters / Mods / View / Help
-// (legacy [src/ParticleEditor.en.rc:565-630]). Changes vs the original
-// 5-menu shape:
-//   - Added top-level `Emitters` menu with New Emitter submenu
-//     (Root / Lifetime Child / Death Child), Rename Emitter (via
-//     `tree-action` atom), Rescale Emitter… (via `tree-context`
-//     atom), Spawner… (was under Tools), plus disabled placeholders
-//     for Toggle Visibility / Show All / Hide All (design lock —
-//     wiring deferred to a future polish batch).
-//   - Promoted `Mods` from a Tools submenu to a top-level menu.
-//     Placeholder list unchanged (dynamic mod detection still
-//     deferred).
-//   - Moved `Lighting…` and `Bloom Settings…` from Tools to View.
-//   - Removed `Tools` menu entirely (its remaining item, Spawner,
-//     lives in Emitters now).
-// All items wired to existing bridge calls + atoms; deferred items
-// log a `[Menu] X — TODO` marker and render as `disabled`.
+// `Mods` is its own component (ModsMenu). Items call existing bridge
+// requests and atoms.
 
 import { useState } from "react";
 import * as Menubar from "@radix-ui/react-menubar";
@@ -683,7 +669,7 @@ export function MenuBar({
 
     <PreferencesDialog bridge={bridge} open={prefsOpen} onOpenChange={setPrefsOpen} />
 
-    {/* Help -> Keyboard Shortcuts... (design follow-ups, F1) */}
+    {/* Help -> Keyboard Shortcuts... */}
     <ShortcutsDialog bridge={bridge} open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
 
     {/* Confirm prompt for View → Reset View Settings.

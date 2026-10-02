@@ -7,7 +7,7 @@
 // the lambdas capture `this` — never reached them. And WM_DESTROY does not stop
 // the pump (PostQuitMessage only posts WM_QUIT, delivered after the queue
 // drains), so a completion the runtime already queued still dispatches against
-// a torn-down owner (2026-07 audit).
+// a torn-down owner.
 //
 // The case that matters is #3: a token issued BEFORE the owner existed no more,
 // read AFTER the owner is gone. That is the exact use-after-free shape, and it

@@ -64,7 +64,7 @@ struct SpawnerConfig
 class SpawnerDriver
 {
 public:
-    // Hard caps. See tasks/todo.md for rationale.
+    // Hard caps.
     static const int   MAX_ACTIVE_INSTANCES   = 50;
     static const int   MAX_SPAWNS_PER_FRAME   = 5;
     static const int   MAX_BURST_SIZE         = 10;

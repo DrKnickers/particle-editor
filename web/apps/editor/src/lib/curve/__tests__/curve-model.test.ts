@@ -44,7 +44,7 @@ describe("valueRangeForTrack", () => {
 });
 
 // Moved verbatim from CurveEditorPanel.test.tsx (pure function, no component).
-// ─── computeGroupMoves — group-drag clamp (#619 collision, #620 value bounds) ──
+// ─── computeGroupMoves — group-drag clamp (collision + value bounds) ──
 describe("computeGroupMoves (#619/#620)", () => {
   const keys = [
     { time: 0, value: 0 },

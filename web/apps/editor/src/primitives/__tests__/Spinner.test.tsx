@@ -46,7 +46,7 @@ describe("Spinner", () => {
     expect(onChange).toHaveBeenCalledWith(2500);
   });
 
-  // F7: wheel steps a flat 0.1 on decimal fields (regardless of `step`).
+  // Wheel steps a flat 0.1 on decimal fields (regardless of `step`).
   it("scroll-wheel steps 0.1 on a decimal field", () => {
     const onChange = vi.fn();
     render(
@@ -57,7 +57,7 @@ describe("Spinner", () => {
     expect(onChange).toHaveBeenCalledWith(5.1);
   });
 
-  // F7: Shift coarsens the wheel step by ×10 (0.1 → 1 on a decimal field).
+  // Shift coarsens the wheel step by ×10 (0.1 → 1 on a decimal field).
   it("scroll-wheel with Shift steps ×10", () => {
     const onChange = vi.fn();
     render(
@@ -68,7 +68,7 @@ describe("Spinner", () => {
     expect(onChange).toHaveBeenCalledWith(6);
   });
 
-  // F6: dragging the text INPUT must NOT scrub the value (it selects text).
+  // Dragging the text INPUT must NOT scrub the value (it selects text).
   it("dragging the text input does not change the value", () => {
     const onChange = vi.fn();
     render(
@@ -81,7 +81,7 @@ describe("Spinner", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  // F6: dragging the ARROW COLUMN vertically scrubs the value.
+  // Dragging the ARROW COLUMN vertically scrubs the value.
   it("dragging the arrow column scrubs the value", () => {
     const onChange = vi.fn();
     render(
@@ -95,7 +95,7 @@ describe("Spinner", () => {
     expect(onChange).toHaveBeenLastCalledWith(25);
   });
 
-  // #614: the scrub must emit through the LATEST onChange, not the one captured
+  // The scrub must emit through the LATEST onChange, not the one captured
   // at mousedown. A consumer (CurveEditorPanel) recreates its onChange whenever
   // the committed key state changes; a scrub that kept firing the mousedown
   // closure would carry a stale reference (frozen oldTime) and diverge.
@@ -126,7 +126,7 @@ describe("Spinner", () => {
     expect(column.className).toContain("rounded-r-[3px]");
   });
 
-  // F6: a plain click on an arrow still steps by ±step (no drag).
+  // A plain click on an arrow still steps by ±step (no drag).
   it("clicking the increment arrow steps by step", () => {
     const onChange = vi.fn();
     render(
@@ -140,7 +140,7 @@ describe("Spinner", () => {
   });
 
   // The wheel honors the field's actual step magnitude, not a flat
-  // 0.1/1. Legacy wheel stepped by the spinner's Increment (Spinner.cpp:107).
+  // 0.1/1. Legacy wheel stepped by the spinner's Increment.
   it("scroll-wheel steps by the field's step magnitude", () => {
     const onChange = vi.fn();
     render(<Spinner value={5} onChange={onChange} step={5} aria-label="s" />);
@@ -148,7 +148,7 @@ describe("Spinner", () => {
     expect(onChange).toHaveBeenCalledWith(10);
   });
 
-  // Wheel Ctrl = fine (×0.1) on a decimal field (Spinner.cpp:109);
+  // Wheel Ctrl = fine (×0.1) on a decimal field;
   // ignored on whole-number fields so it never produces fractions.
   it("scroll-wheel with Ctrl steps fine on a decimal field", () => {
     const onChange = vi.fn();
@@ -262,7 +262,7 @@ describe("Spinner", () => {
   });
 
   // Holding an arrow button auto-repeats the step (legacy
-  // hold-to-repeat, Spinner.cpp:438-455).
+  // hold-to-repeat).
   it("holding the increment arrow auto-repeats", () => {
     vi.useFakeTimers();
     try {
@@ -280,7 +280,7 @@ describe("Spinner", () => {
   });
 
   // Ctrl fine-step is ignored on whole-number fields on the keyboard path too,
-  // matching the wheel and drag (Spinner.cpp:107-117).
+  // matching the wheel and drag.
   it("Ctrl+ArrowUp stays whole on an integer field", () => {
     const onChange = vi.fn();
     render(<Spinner value={5} onChange={onChange} step={1} decimals={0} aria-label="s" />);

@@ -1,5 +1,5 @@
 // use-app-accelerators.ts — wires the legacy global keyboard accelerators
-// (ParticleEditor.en.rc:508-530) to the new UI's existing actions.
+// to the editor UI's existing actions.
 //
 // The host (AcceleratorBridge) translates registered combos and emits
 // `accelerator/pressed`; this hook dispatches each to the same bridge call
@@ -95,7 +95,7 @@ export function useAppAccelerators(bridge: Bridge): void {
         case "Ctrl+S":
           // runFileOp surfaces any failure in the error modal and then
           // re-throws; swallow the rejection here so a failing Ctrl+S never
-          // becomes an unhandled promise rejection (#489).
+          // becomes an unhandled promise rejection.
           runFileOp(bridge, { kind: "file/save", params: {} }).catch((err) =>
             console.warn("[accel] Ctrl+S save failed:", err),
           );

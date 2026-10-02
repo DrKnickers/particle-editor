@@ -1,6 +1,5 @@
 // curve-morph — pure sampling/diffing core for the curve morph
-// animation (Part B). See the spec:
-// docs/superpowers/specs/2026-06-11-curve-morph-animation-design.md
+// animation.
 //
 // The legacy smooth curve (buildSmoothPath, CurveEditor.tsx: control
 // points at 1/4 and 3/4 horizontal, cp1y=p1.y, cp2y=p2.y) reduces to

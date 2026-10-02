@@ -15,7 +15,7 @@ import {
 // tests), so vitest mounts AppearanceTab directly.
 //
 // Restructure — five sections matching legacy
-// IDD_EMITTER_PROPS2 (`src/UI/EmitterEditor.rc:381-385`):
+// IDD_EMITTER_PROPS2 (legacy Win32 editor):
 //   Textures / Random color addition / Tail / Rotation / Rendering.
 //
 // Field moves vs the prior layout:
@@ -25,13 +25,13 @@ import {
 //   - `nTriangles` dropped from the inspector entirely;
 //     the schema field is retained on the wire.
 //
-// Semantic flip on "Always face camera" (legacy IDC_CHECK16,
-// `.rc:404`): the checkbox label and meaning are inverted from
+// Semantic flip on "Always face camera" (legacy IDC_CHECK16):
+// the checkbox label and meaning are inverted from
 // `isWorldOriented`. Checkbox checked = "always face camera = yes" =
 // `isWorldOriented = false`. When `blendMode === BLEND_BUMP` the
 // cascade forces the camera-facing orientation, so the checkbox
 // displays as checked + disabled (mirrors the legacy WM_COMMAND
-// handler at [src/UI/Emitter.cpp:522-525] which flips
+// handler, which flips
 // `isWorldOriented = false` the moment the user picks bump-map; we
 // keep the property untouched here so toggling back restores the
 // user's prior choice, but the UI reflects the forced state).
@@ -55,8 +55,7 @@ export function AppearanceTab({
   const rotationEnabled = properties.randomRotation;
 
   // Display 0..1 random-colour values as 0..100% in the spinners
-  // (matches the legacy IDC_SPINNER19-26 percentage spinners at
-  // [src/UI/Emitter.cpp:243-246]).
+  // (matches the legacy IDC_SPINNER19-26 percentage spinners).
   const updateRandomColors = (idx: 0 | 1 | 2 | 3, displayed: number) => {
     const next: [number, number, number, number] = [
       properties.randomColors[0],
@@ -100,8 +99,8 @@ export function AppearanceTab({
           onCommit={(v) => onCommit({ textureSize: Math.max(1, Math.round(v)) })}
         />
         {/* Minimum scale: adopts displayInvertedPercent —
-            matches legacy IDC_SPINNER13 inversion at
-            [src/UI/Emitter.cpp:492]. The stored ratio (0..1) displays
+            matches the legacy IDC_SPINNER13 inversion.
+            The stored ratio (0..1) displays
             as `100 - val*100` and commits `(100 - displayed)/100`. */}
         <FieldSpinner
           label="Minimum scale:"
@@ -191,7 +190,7 @@ export function AppearanceTab({
           onCheckedChange={(v) => onCommit({ hasTail: v })}
           testId="appearance-has-tail"
         />
-        {/* Tail length uses unit="x" per legacy .rc:421. */}
+        {/* Tail length uses unit="x", as in the legacy dialog. */}
         <FieldSpinner
           label="Tail length:"
           value={properties.tailSize}
@@ -208,9 +207,9 @@ export function AppearanceTab({
       <Section title="Rotation">
         {/* Rotation block moved in from the Basic tab.
             The Average/Variance fields are disabled when
-            `randomRotation === false` — mirrors legacy
-            [src/UI/Emitter.cpp:201-206]. Variance carries a `± °`
-            unit prefix per legacy .rc:423. */}
+            `randomRotation === false` — mirrors the legacy
+            dialog. Variance carries a `± °` unit prefix, as in the
+            legacy dialog. */}
         <FieldCheckbox
           label="Random rotation direction"
           checked={properties.randomRotationDirection}
@@ -226,7 +225,7 @@ export function AppearanceTab({
         {/* The engine stores these as a normalised ratio; the
             legacy panel displayed average as ×360 (integer −180..180°) and
             variance as ×100 (integer 0..100), committing typed/360 and
-            typed/100 (Emitter.cpp:498-499, 828-829). The host serialises the
+            typed/100. The host serialises the
             raw ratio, so the scale transform lives here. */}
         <FieldSpinner
           label="Rotation average:"

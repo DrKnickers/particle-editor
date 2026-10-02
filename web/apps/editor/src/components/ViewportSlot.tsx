@@ -83,7 +83,7 @@ export function ViewportSlot({ bridge }: Props) {
     window.addEventListener("scroll", send, { passive: true });
     window.addEventListener("resize", send);
 
-    // Phase 1.3: matchMedia('(resolution)') fires on DPR
+    // matchMedia('(resolution)') fires on DPR
     // changes (monitor swap, browser zoom), which don't trigger
     // ResizeObserver because the CSS-pixel rect is unchanged. We
     // re-dispatch the scene-rect at the new DPR so the host can
@@ -206,8 +206,8 @@ export function ViewportSlot({ bridge }: Props) {
       try { canvas.releasePointerCapture(e.pointerId); } catch { /* not held */ }
       flushPendingMouseMove();
       // pointercancel → synthesize a mouseup so the engine's drag state
-      // unwinds (matches the WM_CAPTURECHANGED defensive cleanup at
-      // HostWindow.cpp:1169).
+      // unwinds (matches the WM_CAPTURECHANGED defensive cleanup in
+      // HostWindow_Viewport.cpp).
       send(makeMouseEvent("mouseup", e, e.clientX, e.clientY));
     };
     const onLostPointerCapture = () => {
@@ -245,8 +245,7 @@ export function ViewportSlot({ bridge }: Props) {
     };
 
     // Suppress global viewport keys while any blocking modal is open — otherwise a
-    // key pressed with focus on a modal button drives the viewport behind it
-    // (release-audit #12).
+    // key pressed with focus on a modal button drives the viewport behind it.
     const onKeyDown = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target) || useModalOpen.getState().count > 0) return;
       if (e.key === "Shift" && !pointerOverCanvas()) return;
@@ -268,7 +267,6 @@ export function ViewportSlot({ bridge }: Props) {
     // When a modal OPENS (count 0→1), end any cursor-bound Shift spawn before the
     // key-suppression above engages — opening a modal doesn't fire window.blur, so
     // without this the spawn would survive (and its kill-keyup would be suppressed).
-    // (#7↔#12 integration.)
     let prevModalCount = useModalOpen.getState().count;
     const unsubModalOpen = useModalOpen.subscribe((s) => {
       if (prevModalCount === 0 && s.count > 0) {
@@ -329,7 +327,7 @@ export function ViewportSlot({ bridge }: Props) {
         data-testid="viewport-canvas"
         className="absolute inset-0 w-full h-full"
       />
-      {/* Post-deletion empty-state hint (design follow-ups, F3). A fresh
+      {/* Post-deletion empty-state hint. A fresh
           Untitled always has one host-created default emitter, so this shows
           only after the user deletes everything — the biggest region of the
           screen otherwise goes silently blank. Presence-faded; pointer-
@@ -351,7 +349,7 @@ export function ViewportSlot({ bridge }: Props) {
   );
 }
 
-// See the mount-site comment (F3). Split out so the 4Hz-adjacent stores it
+// See the mount-site comment. Split out so the 4Hz-adjacent stores it
 // subscribes to never re-render the input-forwarding parent.
 function ViewportEmptyHint({ bridge }: Props) {
   const tree = useEmitterTree(bridge);

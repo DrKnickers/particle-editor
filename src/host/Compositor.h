@@ -151,7 +151,7 @@ public:
     // Create the DComp V1 device + target (idempotent — calling
     // again is a no-op if already up). Returns S_OK on success;
     // failure HRESULT is logged via the LogFn and propagated to the
-    // caller for env-var-gated fallback to HWND mode.
+    // caller, which treats it as fatal (there is no HWND fallback).
     HRESULT Init();
 
     // Build the visual tree with the WebView2 composition surface
@@ -181,8 +181,8 @@ public:
     // swapchain, build the engine IDCompositionVisual, insert it
     // BEHIND the WebView2 visual (via AddVisual(engine, TRUE, nullptr)
     // — the spike-bisected MSDN-naming inversion places "behind all
-    // siblings"; see Compositor.cpp's body + dxgi_spike.cpp:488 for
-    // the long-form comment), and SetContent(swapchain). Idempotent
+    // siblings"; see Compositor.cpp's body and the spike's BuildVisualTree
+    // for the long-form comment), and SetContent(swapchain). Idempotent
     // on identical (sharedTexture, w, h). A different handle triggers
     // re-open via the lazy detection in CompositeEngineFrame.
     //
@@ -191,8 +191,7 @@ public:
     // leaves the engine visual NOT attached. Caller logs
     // [COMP-engine-fail] and continues with composition mode intact
     // (chrome works in composition mode; viewport area is empty).
-    // By design, a failure here does NOT chain into the HWND-mode
-    // fallback.
+    // By design, a failure here is not fatal.
     //
     // Engine-side cross-device sync (D3D9 event query) is owned by
     // Engine; host orchestrates the spin between engine->Render() and

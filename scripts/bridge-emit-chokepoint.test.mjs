@@ -1,6 +1,6 @@
 // Guard: every host->UI bridge envelope is serialized in ONE place.
 //
-// 2026-09-30 audit H1: emitter names are raw .alo bytes, and nlohmann's default
+// Emitter names are raw .alo bytes, and nlohmann's default
 // dump() throws type_error 316 on invalid UTF-8. The bridge had ~40 independent
 // `m_emit(env.dump())` / `res.dump()` sites, so one emitter named "\xE9" threw
 // through a WebView2 COM callback. The fix made the chokepoint structural:
@@ -185,8 +185,8 @@ test("HostWindow's emit lambda is the serializer, and its other .dump() calls ar
   const hw = sources.find((s) => basename(s.file) === "HostWindow.cpp");
   assert.ok(hw, "src/host/HostWindow.cpp not found");
   // The lambda handed to BridgeDispatcher carries every event and async
-  // response to the UI; reverting it to env.dump() would reopen H1 for all
-  // of them.
+  // response to the UI; reverting it to env.dump() would reopen the
+  // invalid-UTF-8 throw for all of them.
   const lambda = /auto\s+emitFn\s*=\s*\[[^\]]*\]\s*\(\s*const\s+nlohmann::json\s*&\s*\w+\s*\)\s*\{([\s\S]*?)\n\s*\};/.exec(hw.code);
   assert.ok(lambda, "the emitFn lambda (const nlohmann::json&) was not found in HostWindow.cpp");
   assert.match(lambda[1], /SerializeBridgeEnvelope\s*\(/, "emitFn must serialize through host::SerializeBridgeEnvelope");

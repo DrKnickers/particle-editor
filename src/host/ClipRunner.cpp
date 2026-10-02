@@ -158,7 +158,7 @@ ClipRunner::Status ClipRunner::Tick() {
             {"target",   {cv.target.x,   cv.target.y,   cv.target.z}},
             {"up",       {cv.up.x,       cv.up.y,       cv.up.z}},
         };
-        // [R5] Post-t1 the orbit holds a constant pose — skip the re-send.
+        // Post-t1 the orbit holds a constant pose — skip the re-send.
         // Cache cleared by any at-event (see step 3).
         if (p == m_lastCamSent) continue;
         if (!DispatchKind("engine/set/camera", p)) { m_done = true; return Status::Done; }
@@ -172,7 +172,7 @@ ClipRunner::Status ClipRunner::Tick() {
     // fight — the restore's held `from` would clobber the resting value during the
     // lead-in. After t1 the tween still dispatches (holds `to`), so later tweens in
     // the list win the overlap; that's how a high→low→high arc is expressed.
-    // [R5] Per-TARGET winner dedupe: evaluate every active tween in list
+    // Per-TARGET winner dedupe: evaluate every active tween in list
     // order first (later-in-list wins — the documented overlap semantics:
     // the engine only ever saw the LAST write per frame anyway), then
     // dispatch one winner per (id, track, keyTime) target, and only when
@@ -239,7 +239,7 @@ ClipRunner::Status ClipRunner::Tick() {
         } else if (!DispatchKind(ev.kind, ev.params)) {
             m_done = true; return Status::Done;
         } else {
-            // [R5] A bridge at-event may have changed the same state a tween
+            // A bridge at-event may have changed the same state a tween
             // hold covers (camera pose, a key's value) — drop BOTH dedupe
             // caches so the holds re-assert on the next frame. Conservative
             // (any bridge at-event clears everything); at-events are sparse.

@@ -10,7 +10,7 @@
 
 namespace host {
 
-// ---------- Run: --record setup (extracted from Run, PR 12 an-audit-finding) ----------
+// ---------- Run: --record setup (extracted from Run) ----------
 
 bool HostWindowImpl::SetupRecordArm(RecordSession& rec)
 {
@@ -90,7 +90,7 @@ bool HostWindowImpl::SetupRecordArm(RecordSession& rec)
                     // (b) resize the WINDOW to tl.width x tl.height via SetWindowPos
                     //     -> WM_WINDOWPOSCHANGED -> LayoutBroker -> Engine::ResetForResize.
                     //     CaptureWindowToPng grabs the WINDOW rect (GetWindowRect,
-                    //     WindowCapture.cpp:31), so the window size IS the emitted
+                    //     in GrabWindowPixels), so the window size IS the emitted
                     //     frame size — set it directly so frames are exactly
                     //     tl.width x tl.height (the engine viewport is the client
                     //     sub-rect, a bit smaller after chrome).
@@ -98,7 +98,7 @@ bool HostWindowImpl::SetupRecordArm(RecordSession& rec)
                                  SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
 
                     // (b2) render the WebView chrome at tl.scale device-pixel ratio so
-                    //      a zoomed crop (e.g. the F4 mod picker) stays sharp: the same
+                    //      a zoomed crop (e.g. the mod-picker clip) stays sharp: the same
                     //      CSS layout (width/scale wide) rasterizes at higher device px.
                     //      MUST disable ShouldDetectMonitorScaleChanges first or WebView2's
                     //      auto-detection reverts our value to the monitor DPI. Pinned for
@@ -180,7 +180,6 @@ bool HostWindowImpl::SetupRecordArm(RecordSession& rec)
                         // stall. An offscreen-but-visible window stays full-size and
                         // normally composited — correct + fast grab (headless ~90s
                         // minimized -> ~30s offscreen) — while invisible to the user.
-                        // (#510)
                         SetWindowPos(hMain, nullptr, -32000, -32000, 0, 0,
                                      SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
                         Log("[record] window moved offscreen for headless capture\n");
@@ -245,7 +244,7 @@ bool HostWindowImpl::SetupRecordArm(RecordSession& rec)
                     // (f) output dirs: render to <out>.tmp, move on success.
                     rec.outDir = host::Utf8ToWide(tl.out);
                     rec.tmpDir = rec.outDir + L".tmp";
-                    // HX4: clearing <out>.tmp is the same remove_all as the
+                    // Clearing <out>.tmp is the same remove_all as the
                     // publish, so it gets the same check — a directory (or a
                     // file) that happens to sit at that name and isn't a
                     // previous run's staging output is refused, not deleted.
@@ -266,7 +265,7 @@ bool HostWindowImpl::SetupRecordArm(RecordSession& rec)
 
                     // (g) hooks.
                     const std::wstring tmpDir = rec.tmpDir;
-                    // [PR 12] flag-gated pump-schedule trace. Written INTO the
+                    // Flag-gated pump-schedule trace (RecordTrace.h). Written INTO the
                     // output dir (allowlisted in RecordOutputSafety so the next
                     // run doesn't treat it as a foreign file); off by default so
                     // 60fps token logging never perturbs a normal record. The
@@ -292,7 +291,7 @@ bool HostWindowImpl::SetupRecordArm(RecordSession& rec)
                             }
                         }
                     }
-                    // Branch B: start the background encoder BEFORE the hooks
+                    // Start the background encoder BEFORE the hooks
                     // capture it. Ctor pre-warms the PNG CLSID on this (UI)
                     // thread (GdiplusEncode.h's cache is not first-call
                     // thread-safe) and spawns the single worker.
@@ -352,12 +351,12 @@ bool HostWindowImpl::SetupRecordArm(RecordSession& rec)
                                 { TranslateMessage(&mw); DispatchMessage(&mw); }
                                 if (m_lastAckedFrame >= frameId) { acked = true; break; }
                                 // A dead web will never ack; stop now and let the
-                                // pump end the run (HX1) instead of waiting out
+                                // pump end the run instead of waiting out
                                 // the deadline frame after frame.
                                 if (m_webDead) break;
                                 if (rf > 0 && QpcMs(PerfQpcNow() - s, rf) >= dl) break;
                                 if (!m_recordHeadless) RenderD3D9();
-                                // [R4] Message-aware wait: the ack ARRIVES as a
+                                // Message-aware wait: the ack ARRIVES as a
                                 // window message, so wake the instant it posts
                                 // instead of sleeping a fixed 1/4 ms past it.
                                 // Cap keeps the foreground path's render cadence
@@ -395,7 +394,7 @@ bool HostWindowImpl::SetupRecordArm(RecordSession& rec)
                             // above), so it composites normally AND can't be occluded
                             // by any other window. That makes the fast foreground
                             // capture path below (barrier + GrabWindowPixels) both
-                            // correct and occlusion-immune for headless too. (#510
+                            // correct and occlusion-immune for headless too. (This
                             // replaced the old ~50ms/frame CapturePreview + CPU-
                             // composite path with this ~20ms window grab.)
                             if (m_recordHeadless && !m_headlessAckOk)
@@ -408,12 +407,12 @@ bool HostWindowImpl::SetupRecordArm(RecordSession& rec)
                             }
 
                             // [record-timing] barrier (present+flush loop) and
-                            // png are timed separately. Branch B: png is now
+                            // png are timed separately. png is now
                             // GRAB + ENQUEUE only — the compress+write runs on
                             // the encoder worker (AsyncFrameEncoder.h), so the
                             // png segment no longer contains the zlib cost.
                             //
-                            // [R1] Adaptive barrier: the fixed 3x flush existed
+                            // Adaptive barrier: the fixed 3x flush existed
                             // because Present1'd engine frames land on DComp's
                             // NEXT composition pass — 3 was a safe worst case.
                             // Probe the global compositor frame counter
@@ -431,7 +430,7 @@ bool HostWindowImpl::SetupRecordArm(RecordSession& rec)
                             const bool probe0 =
                                 SUCCEEDED(DwmGetCompositionTimingInfo(nullptr, &ti0));
                             if (!probe0) m_recordTiming.barrierProbeFailed = true;
-                            // [PR 12 trace] barrier phase token — the CONFIGURED
+                            // Pump-trace barrier phase token — the CONFIGURED
                             // policy (cap + compositor-advance target), emitted at
                             // the loop's implementation site. Runtime flush count
                             // and probe outcome stay OUT (timing-dependent → they
@@ -457,7 +456,7 @@ bool HostWindowImpl::SetupRecordArm(RecordSession& rec)
                                 }
                             }
                             const LONGLONG b1 = PerfQpcNow();
-                            // [PR 12 trace] grab token, adjacent to the real
+                            // Pump-trace grab token, adjacent to the real
                             // GrabWindowPixels — so a refactor that moves the grab
                             // above the barrier within this lambda reorders the
                             // trace line (a token at the pump's callback entry

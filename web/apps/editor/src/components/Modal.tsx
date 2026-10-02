@@ -121,7 +121,7 @@ export function Modal({
   }, [open]);
 
   // Mark a blocking modal open so the viewport suppresses global keys while this
-  // dialog is up (release-audit #12). Keyed on `open` — Modal stays mounted and
+  // dialog is up. Keyed on `open` — Modal stays mounted and
   // toggles `open`; the cleanup decrements on close OR unmount and is
   // StrictMode-safe (open→inc, cleanup→dec net correctly across the dev double-invoke).
   useEffect(() => {

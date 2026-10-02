@@ -1,6 +1,6 @@
-// Unit test for src/host/RecordOutputSafety.h (2026-07 audit).
+// Unit test for src/host/RecordOutputSafety.h.
 //
-// The audit proved with an actual Release run that a --record timeline whose
+// An actual Release run proved that a --record timeline whose
 // `out` named an existing directory deleted that directory's contents: it
 // created victim/sentinel-do-not-preserve.txt, ran with out:"victim", got exit
 // 0, and the sentinel was gone. `out` validation rejects absolute paths,
@@ -36,7 +36,7 @@ int main()
     CHECK(IsRecordArtifactName(L"frame_99999.png"), "frame_99999.png is a record artifact");
     CHECK(IsRecordArtifactName(L"frame_7.png"),     "short digit run still counts");
     CHECK(IsRecordArtifactName(L"cursor-sidecar.json"), "cursor sidecar is a record artifact");
-    CHECK(IsRecordArtifactName(L"pump-trace.txt"),  "PR 12 pump trace is a record artifact");
+    CHECK(IsRecordArtifactName(L"pump-trace.txt"),  "the pump trace is a record artifact");
 
     CHECK(!IsRecordArtifactName(L"pump-trace.json"),   "trace with wrong extension -> not an artifact");
     CHECK(!IsRecordArtifactName(L"trace.txt"),         "other .txt -> not an artifact");
@@ -55,7 +55,7 @@ int main()
 
     {
         // The normal re-shoot: the directory holds only the previous run's output
-        // (including a PR 12 pump trace when PE_RECORD_TRACE was set).
+        // (including a pump trace when PE_RECORD_TRACE was set).
         const std::vector<std::wstring> prior = {
             L"frame_00000.png", L"frame_00001.png", L"frame_00002.png",
             L"cursor-sidecar.json", L"pump-trace.txt",
@@ -64,7 +64,7 @@ int main()
               "dir holding ONLY prior record output (+ pump trace): safe to replace (re-shoot works)");
     }
 
-    // --- the audit's repro: a foreign file must block the publish -----------
+    // --- the original repro: a foreign file must block the publish ---------
     {
         const std::vector<std::wstring> victim = { L"sentinel-do-not-preserve.txt" };
         const bool may = MayReplaceOutputDir(true, victim, why);
@@ -101,7 +101,7 @@ int main()
     {
         const std::vector<std::wstring> victim = { L"thesis.docx" };
         CHECK(!MayReplaceRecordDir(true, true, true, victim, why),
-              "wrapper: a foreign file in <out>.tmp is REFUSED (HX4)");
+              "wrapper: a foreign file in <out>.tmp is REFUSED");
     }
     CHECK(!MayReplaceRecordDir(true, false, true, {}, why),
           "wrapper: a FILE sitting at the path is refused, never deleted");

@@ -6,7 +6,7 @@
 // (production-bundle guard, scripts/lib/no-test-seam-in-prod.test.mjs) greps the
 // built dist to prove `__profilerAudit` / `profiler-audit` are absent.
 //
-// Design (see tasks/2026-07-07-react-profiler-audit-plan.md §3 + §7):
+// Design:
 //  - The five audited mount sites (App.tsx: Toolbar, StatusBar; PanelLayout.tsx:
 //    EmitterTree, CurveEditorPanel, AtlasPickerPane) are each wrapped, behind an
 //    `import.meta.env.DEV` gate, in React's built-in <Profiler>. Their onRender

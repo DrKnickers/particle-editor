@@ -1,5 +1,4 @@
-// WicEncode.cpp — see WicEncode.h. [R3b] of
-// tasks/2026-07-07-perf-followups-plan.md.
+// WicEncode.cpp — see WicEncode.h.
 
 #include "WicEncode.h"
 

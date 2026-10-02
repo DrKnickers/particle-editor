@@ -111,7 +111,7 @@ describe("EmitterTree", () => {
     // --record clip targets (same id emitters/move/select use). Assert every id
     // 0..5 is present exactly once — a prefix count alone would pass with a
     // duplicated or malformed id, but the timeline depends on the exact contract.
-    // (Tag-agnostic: the row surface is a focusable div since the B2 un-nest.)
+    // (Tag-agnostic: the row surface is a focusable div, not a button.)
     for (let id = 0; id < 6; id += 1) {
       expect(document.querySelectorAll(`[data-testid="emitter-row:${id}"]`)).toHaveLength(1);
     }
@@ -1186,7 +1186,7 @@ describe("chain-warning glyph tracks the configurable guard cap", () => {
     await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
     // waitFor (not an immediate query): if a transient over-cap estimate
     // flashed the chip during load, usePresence holds it mounted through the
-    // ~200ms exit fade before unmounting (design pass).
+    // ~200ms exit fade before unmounting.
     await waitFor(() =>
       expect(screen.queryByTestId("system-load-chip")).not.toBeInTheDocument(),
     );

@@ -1,4 +1,4 @@
-// Regression test for MegaFile header validation (src/MegaFiles.cpp, audit G9).
+// Regression test for MegaFile header validation (src/MegaFiles.cpp).
 //
 // A .meg is: [uint32 numStrings][uint32 numFiles]
 //            numStrings x [uint16 len][len bytes]

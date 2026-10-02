@@ -4,8 +4,8 @@
 # Proves the ONE thing no gate lane covers: the artifact a user downloads -- the
 # zip built by scripts/package-release.ps1, extracted somewhere that is not the
 # repo, on a profile with NO dev state -- starts, serves its embedded UI, and can
-# open and render a real game .alo. This is the release-readiness Phase 2 exit
-# criterion from the release-readiness plan, automated.
+# open and render a real game .alo. This is the release cold-launch check,
+# automated.
 #
 # What it does, in order:
 #   1. (unless -SkipBuild) builds the web bundle then the Release exe -- web

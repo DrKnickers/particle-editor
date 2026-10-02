@@ -2,7 +2,7 @@
 // credits, and GitHub link. No bridge call; version + build date are baked
 // at build time via Vite `define` (see vite.config.ts).
 //
-// Ported from src/main.cpp's AboutProc. The native Win32 About dialog and
+// Ported from the legacy Win32 editor's About dialog. That dialog and
 // the `--legacy-ui` opt-out were removed; this React modal is now
 // the sole About surface.
 
@@ -19,7 +19,7 @@ const BUILD_DATE = (import.meta.env.VITE_BUILD_DATE as string | undefined) ?? "u
 // The PUBLIC repo — the user-facing project home. Must never point at the
 // private repo: this string ships inside the exe's embedded web bundle, so a
 // private URL here 404s for every user (it leaked exactly that way in the
-// first v0.3.0 zip before the public flip's binary audit caught it).
+// first v0.3.0 zip until a check of the shipped binary caught it).
 const GITHUB_URL = "https://github.com/DrKnickers/particle-editor";
 
 type Props = {

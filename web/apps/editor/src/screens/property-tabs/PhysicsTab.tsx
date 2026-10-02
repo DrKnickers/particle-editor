@@ -12,7 +12,7 @@ import {
 
 // Random-param group ordering — `EmitterPropertiesDto.groups` is the
 // on-wire projection of `ParticleSystem::Emitter::groups[NUM_GROUPS]`.
-// Engine constants at [src/ParticleSystem.h:28-30]:
+// Engine constants in src/ParticleSystem.h:
 //   GROUP_SPEED    = 0  → "Initial speed"   (rendered in PhysicsTab)
 //   GROUP_LIFETIME = 1  → "Lifetime"        (NOT rendered; schema
 //                                            retained for round-trip
@@ -26,7 +26,7 @@ import {
 // pointer-event flake), so vitest mounts PhysicsTab directly.
 //
 // Restructure — four sections matching legacy
-// IDD_EMITTER_PROPS3 (`src/UI/EmitterEditor.rc:347-417`):
+// IDD_EMITTER_PROPS3 (legacy Win32 editor):
 //   Initial position / Initial speed / Acceleration / Ground
 //   interaction.
 //
@@ -35,7 +35,7 @@ import {
 //     Basic, now under Initial speed. Inline `* 100` / `/ 100` math
 //     since this is the only non-inverted display-percent consumer.
 //   - `affectedByWind` moved IN from Appearance, now under Initial
-//     speed (matches legacy IDD_EMITTER_PROPS3, .rc:350).
+//     speed (matches legacy IDD_EMITTER_PROPS3).
 //   - `emitFromMesh` + `emitFromMeshOffset` moved OUT to Basic >
 //     Connection.
 //   - `isWeatherParticle` + `weatherCubeSize` + `weatherCubeDistance`
@@ -45,16 +45,15 @@ import {
 //     tree; schema array still carries 3 entries, we just don't
 //     render index 1.
 //
-// Weather-mode disable cascade (matches legacy
-// [src/UI/Emitter.cpp:175-190]): when `isWeatherParticle === true`,
+// Weather-mode disable cascade (matches the legacy emitter dialog):
+// when `isWeatherParticle === true`,
 // the following controls disable — `groups[2]` (Initial position),
 // `parentLinkStrength` (Parent speed inherit), `acceleration[0..2]`
 // (X/Y/Z), `gravity`, `inwardAcceleration`,
 // `objectSpaceAcceleration`, `groundBehavior`, and `bounciness`. The
 // following STAY ENABLED under weather: `inwardSpeed`, `groups[0]`
 // (Initial speed), `affectedByWind`. Bounciness has an additional
-// gate: only enabled when `groundBehavior === GROUND_BEHAVIOR_BOUNCE`
-// ([src/UI/Emitter.cpp:190]).
+// gate: only enabled when `groundBehavior === GROUND_BEHAVIOR_BOUNCE`.
 export function PhysicsTab({
   properties,
   onCommit,
@@ -97,7 +96,7 @@ export function PhysicsTab({
           onCommit={(v) => onCommit({ inwardSpeed: v })}
         />
         {/* Parent speed inherit — schema field is float in [0,1]; legacy
-            displays as integer percent (Emitter.cpp:488 commits
+            displays as integer percent (it committed
             `GetUIInteger(...) / 100.0f`). Inline `* 100` / `/ 100` math
             here so we don't grow a new FieldSpinner prop for a single
             consumer. If a third consumer emerges, hoist a
@@ -124,8 +123,7 @@ export function PhysicsTab({
       <Section title="Acceleration" unit="units/s²">
         {/* Acceleration X/Y/Z — 3-spinner cluster. Spans the .form-row
             input + unit columns since 3 spinners don't fit in 92px.
-            Combined "X / Y / Z:" label per legacy IDD_EMITTER_PROPS3
-            (.rc:350). */}
+            Combined "X / Y / Z:" label per legacy IDD_EMITTER_PROPS3. */}
         <div className="form-row form-row-cluster items-start">
           {/* No unit here — the "Acceleration" section header carries
               "units/s²" for every field in the section (keeping this label short
@@ -199,8 +197,7 @@ export function PhysicsTab({
           testId="physics-ground-behavior-trigger"
           widthBoost="mid"
         />
-        {/* Legacy bounciness was an unbounded float (Emitter.cpp:259-266,
-            506). Don't clamp to [0,1] — a modder can use >1 (super-elastic) and
+        {/* Legacy bounciness was an unbounded float. Don't clamp to [0,1] — a modder can use >1 (super-elastic) and
             existing files outside [0,1] must round-trip on edit. */}
         <FieldSpinner
           label="Bounciness:"

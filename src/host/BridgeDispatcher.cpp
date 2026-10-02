@@ -3,7 +3,7 @@
 #include "AcceleratorBridge.h"
 #include "BridgeDispatchShared.h"
 #include "BridgeRequestContext.h"
-#include "BridgeWire.h"     // SerializeBridgeEnvelope / RunGuardedDispatch (audit H1)
+#include "BridgeWire.h"     // SerializeBridgeEnvelope / RunGuardedDispatch
 #include "InputDispatcher.h"
 #include "LayoutBroker.h"
 #include "WindowCapture.h"
@@ -97,7 +97,7 @@ bool ParseCssColorToColorRef(const std::string& in, COLORREF& out)
     return true;
 }
 
-// Defined in src/main.cpp (relocated there when the legacy EmitterList.cpp
+// Defined in src/main.cpp (moved there when the legacy Win32 emitter list
 // was removed); reused by the host's emitter-mutation handlers.
 // Declared extern here so the dispatcher can link against it without a
 // header dependency on main.cpp.
@@ -191,8 +191,8 @@ Engine::LightType ParseLightWhich(const std::string& s)
 
 // Persist the skydome selection to HKCU\Software\AloParticleEditor
 // using the SAME value names/types as the legacy `WriteSkydomeIndex` /
-// `WriteSkydomeCustomPath` (legacy Win32 UI, since removed), so a dome chosen in the new
-// UI survives restart AND round-trips with the legacy picker. The new-UI
+// `WriteSkydomeCustomPath` (legacy Win32 UI, since removed), so a dome chosen in the editor
+// UI survives restart AND round-trips with the legacy picker. The bridge
 // skydome handlers previously only marked the doc dirty (no registry write),
 // so a daily-driver selection was silently lost on restart — these close that
 // gap. Callers gate the write on m_testHost/m_settingsLive (mirroring
@@ -214,7 +214,7 @@ void PersistSkydomeCustomPath(int slot, const std::wstring& path)
 
 // Persist the game-dome environment selection (context + the two chosen
 // GameObject Names) under the same hive. New REG keys (legacy has no equivalent);
-// the new-UI startup restore reads them back. Empty name => delete the value.
+// the host's startup restore reads them back. Empty name => delete the value.
 void PersistSkydomeEnvironment(int context, const std::wstring& primaryName,
                                       const std::wstring& secondaryName)
 {
@@ -225,7 +225,7 @@ void PersistSkydomeEnvironment(int context, const std::wstring& primaryName,
 
 // Persist the solid-colour background (same BackgroundColor REG_DWORD as
 // legacy WriteBackgroundColor). The solid-colour option lives
-// in the same Background picker as the skydome and had the identical new-UI gap.
+// in the same Background picker as the skydome and had the identical gap.
 void PersistBackgroundColor(COLORREF color)
 {
     WriteRegDword(L"BackgroundColor", static_cast<DWORD>(color));
@@ -234,9 +234,9 @@ void PersistBackgroundColor(COLORREF color)
 // Persist the ground-plane visibility (ShowGround REG_DWORD 0/1) under the same
 // hive. Ground is a GLOBAL VIEW preference — restored on launch by HostWindow's
 // [view-restore] path and honored headless by CaptureRunner; it is NOT part of
-// the .alo document. The new-UI ground handler previously only called SetGround
+// the .alo document. The bridge ground handler previously only called SetGround
 // (no registry write), so a toggled-off ground silently reverted to the ctor
-// default (on) every restart (issue #617). Callers gate on
+// default (on) every restart. Callers gate on
 // m_testHost/m_settingsLive like the sibling settings so the a11y harness never
 // mutates the dev-box registry.
 void PersistShowGround(bool enabled)
@@ -246,7 +246,7 @@ void PersistShowGround(bool enabled)
 
 // Persist the imported reference object (selected Name) + its visibility +
 // transform, plus the unit-grid toggle/spacing, under the same hive. New REG
-// keys; the new-UI startup restore reads them back. Empty Name => delete.
+// keys; the host's startup restore reads them back. Empty Name => delete.
 // Transform + grid spacing are REG_BINARY floats (6 and 1 respectively).
 void PersistReferenceObjectName(const std::wstring& name)
 {
@@ -308,8 +308,8 @@ const char* SkyStatusToString(SkydomeSlotStatus s)
 }
 
 // Wire-name ↔ LinkExemptFlags::member mapping.
-// Mirrors the legacy field table at [src/UI/EmitterList.cpp:2381]
-// (kLinkSettingsFields), but uses camelCase field names that match the
+// Mirrors the legacy Win32 editor's field table (kLinkSettingsFields),
+// but uses camelCase field names that match the
 // schema's wire surface. Excludes `name` (intrinsically exempt;
 // settings dialog doesn't display it) and the `unknownXX` set (no
 // inspector representation). The dispatcher converts the wire's
@@ -434,7 +434,7 @@ LinkExemptFlags LinkExemptFlagsFromJsonArray(const json& arr)
 // field exempt EXCEPT those transitioning exempt(old)→shared(proposed).
 // DiffNonExemptParams / copySharedParamsFrom then act on exactly the
 // newly-shared fields — the precise set the legacy settings-OK warned about
-// and resolved (EmitterList.cpp:2841). `name` is forced exempt (never shared).
+// and resolved. `name` is forced exempt (never shared).
 LinkExemptFlags MakeNewlySharedMask(const LinkExemptFlags& oldFlags,
                                     const LinkExemptFlags& proposed)
 {
@@ -449,8 +449,8 @@ LinkExemptFlags MakeNewlySharedMask(const LinkExemptFlags& oldFlags,
 }
 
 // walk a ParticleSystem and build an EmitterTreeNode-shaped JSON
-// tree. Mirrors the schema definition at
-// web/packages/bridge-schema/src/index.ts:91. Children are computed
+// tree. Mirrors the EmitterTreeNode schema in
+// web/packages/bridge-schema/src/index.ts. Children are computed
 // from each emitter's `spawnDuringLife` / `spawnOnDeath` indices in
 // the same order as legacy `ImportEmitters_AddTreeItem` (during-life
 // before on-death) so the import dialog tree matches.
@@ -459,13 +459,13 @@ LinkExemptFlags MakeNewlySharedMask(const LinkExemptFlags& oldFlags,
 // `role` is derived from how this emitter is attached to its parent's
 // spawn slot (lifetime vs death); top-level emitters return "root".
 // The sentinel for "no spawn child" is `(size_t)-1` — matches the
-// legacy EmitterList.cpp usage at e.g. [src/UI/EmitterList.cpp:1349].
+// legacy Win32 editor's usage.
 json BuildEmitterTreeNode(const ParticleSystem* sys, size_t idx, size_t depth)
 {
     if (sys == nullptr || idx >= sys->getEmitters().size()) return json::object();
     const ParticleSystem::Emitter& emit = sys->getEmitter(idx);
     json children = json::array();
-    // Recursion backstop (2026-07 audit). ValidateEmitterGraph caps chain
+    // Recursion backstop. ValidateEmitterGraph caps chain
     // depth on load and import, but it is NOT called from any bridge mutation
     // path, so this walk cannot assume the cap holds. Emit the node without its
     // children rather than descending -- a truncated subtree is a visible,
@@ -597,7 +597,7 @@ json BuildEngineStateSnapshot(Engine* engine,
         // unloadable dome instead of silently showing the solid background.
         {"skydomePrimaryStatus",   SkyStatusToString(engine->GetSkydomePrimaryStatus())},
         {"skydomeSecondaryStatus", SkyStatusToString(engine->GetSkydomeSecondaryStatus())},
-        // GPU-resource truth, not bookkeeping (2026-07 audit). Every field
+        // GPU-resource truth, not bookkeeping. Every field
         // above reports what was SELECTED or what the reader THOUGHT resolved, so
         // deleting the mesh-creation call left them all correct and the viewport
         // black. These two are read straight off the live VB/IB handles, so they
@@ -636,7 +636,7 @@ json BuildEngineStateSnapshot(Engine* engine,
         {"bloomCutoff",           engine->GetBloomCutoff()},
         {"bloomSize",             engine->GetBloomSize()},
 
-        // Task 2.7 — leave particles after instance death. Read from
+        // Leave particles after instance death. Read from
         // the active ParticleSystem (passed in by caller); defaults true
         // when no system is bound.
         {"leaveParticles",        leaveParticles},
@@ -738,7 +738,7 @@ void BridgeDispatcher::SetEngine(Engine* engine)
 
 void BridgeDispatcher::Dispatch(const std::string& jsonRequest)
 {
-    // [B1] Any coalesced trailing broadcast lands BEFORE this request's
+    // Any coalesced trailing broadcast lands BEFORE this request's
     // response — preserving the bridge-contract ordering (state events
     // never arrive after a response that post-dates them).
     FlushPendingEmits();
@@ -773,7 +773,7 @@ void BridgeDispatcher::Dispatch(const std::string& jsonRequest)
 
 std::string BridgeDispatcher::DispatchSync(const std::string& jsonRequest)
 {
-    // [B1] See Dispatch — pending evt before the next response.
+    // See Dispatch — pending evt before the next response.
     FlushPendingEmits();
     json parsed;
     try
@@ -821,7 +821,7 @@ json BridgeDispatcher::DispatchParsed(const json& parsed, const char* mode)
 
     // Every exception escaping a kind handler -- not only nlohmann's
     // type errors -- becomes an ok:false envelope with the request's id.
-    // Before audit H1 only json::exception was caught, so a std::exception
+    // Previously only json::exception was caught, so a std::exception
     // from the file/engine layer reached the WebView2 / COM callback.
     return RunGuardedDispatch(parsed,
         [&]() -> json
@@ -943,10 +943,10 @@ void BridgeDispatcher::reconcileSelectionAfterDeletion(unsigned int stableId)
 // timeline. Behavior for the ~30 particle-edit call sites is unchanged.
 void BridgeDispatcher::captureUndo(DWORD coalesceKey) { CaptureUndoPoint(coalesceKey); }
 
-// F4: link-group propagation. After a shared (non-exempt) field is
+// Link-group propagation. After a shared (non-exempt) field is
 // edited on a linked emitter, copy its non-exempt params to every
-// group sibling — the new-UI equivalent of the legacy post-edit
-// chokepoint in CaptureUndo (src/main.cpp). MUST be called AFTER the
+// group sibling — the bridge equivalent of the legacy editor's post-edit
+// chokepoint in CaptureUndo. MUST be called AFTER the
 // mutation; the pre-mutation captureUndo() snapshots the whole
 // system, so a single Ctrl+Z restores the entire group atomically.
 // No-op for unlinked emitters (linkGroup == 0).
@@ -998,7 +998,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
 
     // One request context serves the whole dispatch. Its envelope helpers
     // (SetRes with id-patched-last, SendOk/SendErr, RequireEngine, MarkDirty)
-    // are the former ladder lambdas verbatim — see BridgeRequestContext.h.
+    // are declared in BridgeRequestContext.h.
     BridgeRequestContext ctx{*this, id, kind, params};
 
     if (kind.empty())
@@ -1007,9 +1007,8 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return ctx.res;
     }
 
-    // Per-domain handlers (BridgeDispatch_*.cpp — the Phase A split of the
-    // former 4,800-line kind ladder; tasks/2026-07-06-heavyweight-refactor-
-    // plan.md). Kinds are exact-match and mutually exclusive, so the call
+    // Per-domain handlers (BridgeDispatch_*.cpp, one file per kind
+    // family). Kinds are exact-match and mutually exclusive, so the call
     // order carries no semantics.
     if (TryDispatchEngine(ctx) || TryDispatchEmitters(ctx) ||
         TryDispatchFile(ctx)   || TryDispatchAssets(ctx)   ||
@@ -1055,14 +1054,14 @@ void BridgeDispatcher::EmitEmittersTreeChanged()
 {
     if (!m_emit) return;
     const unsigned long long now = GetTickCount64();
-    // [#510] Record-only coalesce: skip building + pushing the tree if the last
+    // Record-only coalesce: skip building + pushing the tree if the last
     // push was < kRecordEmitThrottleMs ago, so a record's rapid host-side edits
     // don't flood the web with re-fetches. Leading-edge; continuous edits still
     // deliver ~30 Hz.
     if (m_recordEmitThrottle) {
         if (now - m_lastTreeEmitTick < kRecordEmitThrottleMs) return;
     }
-    // [B1] Live trailing coalesce (see the header field block). Automation
+    // Live trailing coalesce (see the header field block). Automation
     // (m_automationMode: drive asserts must see every change) is exempt.
     else if (!m_automationMode && now - m_lastTreeEmitTick < kEmitCoalesceMs) {
         m_treeEmitPending = true;
@@ -1198,11 +1197,11 @@ void BridgeDispatcher::EmitEngineStateChanged()
 {
     if (!m_emit || !m_engine) return;
     const unsigned long long now = GetTickCount64();
-    // [#510] Record-only coalesce (see EmitEmittersTreeChanged).
+    // Record-only coalesce (see EmitEmittersTreeChanged).
     if (m_recordEmitThrottle) {
         if (now - m_lastStateEmitTick < kRecordEmitThrottleMs) return;
     }
-    // [B1] Live trailing coalesce (see the header field block). Automation
+    // Live trailing coalesce (see the header field block). Automation
     // (m_automationMode: drive asserts must see every change) is exempt.
     else if (!m_automationMode && now - m_lastStateEmitTick < kEmitCoalesceMs) {
         m_stateEmitPending = true;
@@ -1230,7 +1229,7 @@ void BridgeDispatcher::EmitEngineStateChangedNow()
     m_emit(env);
 }
 
-// [C3] Insert (or overwrite) a preview cache entry at MRU; evict at cap.
+// Insert (or overwrite) a preview cache entry at MRU; evict at cap.
 void BridgeDispatcher::PreviewCachePut(const std::string& key, PreviewCacheEntry entry)
 {
     if (auto it = m_previewLruIdx.find(key); it != m_previewLruIdx.end())
@@ -1248,7 +1247,7 @@ void BridgeDispatcher::PreviewCachePut(const std::string& key, PreviewCacheEntry
     }
 }
 
-// [C3] UI thread, under the WM_APP_PREVIEW_READY handler: cache each
+// UI thread, under the WM_APP_PREVIEW_READY handler: cache each
 // finished encode and tell the web to refetch. Stale-epoch results are
 // dropped (mod switched while the encode was in flight).
 void BridgeDispatcher::DrainPreviewResults()
@@ -1276,7 +1275,7 @@ void BridgeDispatcher::DrainPreviewResults()
 
 void BridgeDispatcher::FlushPendingEmits()
 {
-    // Trailing edge of the [B1] live coalesce. Emit order matches the
+    // Trailing edge of the live coalesce. Emit order matches the
     // paired-broadcast order every mutating handler uses (tree first,
     // then state), so a web listener that refetches on tree/changed sees
     // the settled state snapshot arrive after it, same as a direct emit.
@@ -1379,8 +1378,8 @@ void BridgeDispatcher::EmitRecentChanged()
 // PS), then OnParticleSystemChanged(-1) + ReloadTextures so the
 // engine re-binds + re-acquires textures for the restored system.
 // Wrapped in UndoStack::BeginApplying/EndApplying so the swap doesn't
-// recursively trigger a Capture(). Cross-reference legacy
-// RestoreFromSnapshot at src/main.cpp:916 for the original pattern.
+// recursively trigger a Capture(). Same pattern as the legacy
+// editor's RestoreFromSnapshot.
 void BridgeDispatcher::ApplyUndoSnapshot(const std::vector<char>& buf,
                                          size_t selIdx,
                                          const UndoStack::EditorAux& aux)
@@ -1504,8 +1503,8 @@ void BridgeDispatcher::ApplyUndoSnapshot(const std::vector<char>& buf,
 // layer matches the render layer's existing filter at
 // computeLinkGroupBrackets (web/apps/editor/src/lib/tree/link-group-colors.ts).
 // Called from emitters/delete + linkGroups/set-membership (the two
-// mutation paths that can leave a group with exactly one member —
-// see the ROADMAP for the enumeration) AND from file/open
+// mutation paths that can leave a group with exactly one member)
+// AND from file/open
 // after binding a loaded ParticleSystem (so older saved files
 // with singletons self-correct on load). Callers handle their own
 // captureUndo() / SetDirty() — the sweep itself is silent on both.

@@ -1,7 +1,7 @@
 #pragma once
 
 // GROUND_BOUNCE catch-up: advance a particle's parabola through every bounce
-// that happened before time `t` (2026-10 audit).
+// that happened before time `t`.
 //
 // A particle's motion is stored as a parabola (position, speed, acceleration
 // from `positionTime`) plus the time of its next ground contact (`bounceTime`).

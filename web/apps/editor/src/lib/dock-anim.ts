@@ -25,7 +25,7 @@ type DockAnimStore = {
   /** True while a host-interpolated dock slide is in flight. */
   animating: boolean;
   setAnimating: (v: boolean) => void;
-  /** Atlas readiness, SPLIT (perf-audit P1b first-open):
+  /** Atlas readiness, SPLIT (first-open cost):
    *  - atlasTerminalFirstPaint: the picker has reached ANY terminal first-paint
    *    state — the cell grid OR a placeholder (missing / broken / off-index /
    *    too-large / no-texture). PanelLayout's OPEN-slide effect (atlas dock only)

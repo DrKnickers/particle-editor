@@ -559,8 +559,8 @@ void LayoutBroker::ReemitSceneRect()
     // Re-emit the cached scene-rect onto the DComp Compositor + Engine. The DComp
     // transform takes the TRUE main-client rect; the engine viewport takes the
     // OVERSCANNED rect via ComputeOverscanViewport -- the SAME guard band the
-    // normal apply path uses, so reemit can't reintroduce edge artifacts
-    // (release-audit #10). SetCompositor replays state onto a newly-attached
+    // normal apply path uses, so reemit can't reintroduce edge artifacts.
+    // SetCompositor replays state onto a newly-attached
     // compositor; idempotence guards inside SetEngineVisualTransform +
     // SetSceneViewport make repeated calls from popup-origin changes effectively free.
     if (m_dcompCompositor && m_sceneW > 0 && m_sceneH > 0)

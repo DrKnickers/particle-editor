@@ -17,7 +17,7 @@
 
 #include <cstring>
 #include <stdexcept>
-#include "StringConv.h"   // host::Utf8ToWide / WideToUtf8 (consolidated, DRY audit cpp-host-0)
+#include "StringConv.h"   // host::Utf8ToWide / WideToUtf8 (shared host copy)
 #include "BridgeWire.h"   // SerializeBridgeEnvelope (non-throwing on invalid UTF-8)
 #include "third_party/nlohmann/json.hpp"
 

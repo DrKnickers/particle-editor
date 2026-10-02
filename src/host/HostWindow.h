@@ -1,17 +1,18 @@
-// HostWindow — the top-level Win32 window for the new UI. Owns:
+// HostWindow — the editor's top-level Win32 window. Owns:
 //   - the parent HWND (the editor's main window)
-//   - the D3D9 viewport child HWND (sibling-of-WebView2 composition)
-//   - the WebView2 controller + view, navigating to the bundled React app
+//   - the D3D9 viewport HWND: a hidden WS_POPUP owned by the parent that
+//     only carries the D3D9 device; the engine frame is presented through
+//     the DirectComposition tree (Compositor), behind the WebView2 visual
+//   - the WebView2 composition controller + view, navigating to the
+//     bundled React app
 //   - the live Engine instance (constructed with parent as hFocus and
-//     viewport-child as hDevice, matching legacy main.cpp's wiring)
+//     the viewport popup as hDevice)
 //   - the BridgeDispatcher, LayoutBroker, and AcceleratorBridge
 //
-// The implementation lives in HostWindow.cpp and HostWindow_*.cpp. Most of
-// the composition code is a port of src/host/viewport_poc.cpp (commit
-// cf39762, polished 4b23425) — including the two visual-gate fixes:
-//   1) ICoreWebView2Controller2::put_DefaultBackgroundColor({0,0,0,0})
-//   2) InvalidateRect on the viewport child after creation, to seed
-//      the first paint and suppress the white-flash on startup.
+// The implementation lives in HostWindow.cpp and HostWindow_*.cpp. It grew
+// out of src/host/viewport_poc.cpp, and keeps that PoC's
+// ICoreWebView2Controller2::put_DefaultBackgroundColor({0,0,0,0}) fix
+// (a transparent WebView2 background).
 #ifndef HOST_HOST_WINDOW_H
 #define HOST_HOST_WINDOW_H
 
@@ -50,7 +51,7 @@ public:
     HostWindow(const HostWindow&)            = delete;
     HostWindow& operator=(const HostWindow&) = delete;
 
-    // Registers window classes, creates the parent + viewport-child HWNDs,
+    // Registers window classes, creates the parent + viewport popup HWNDs,
     // initialises D3D9 + WebView2 + Engine, runs the message loop. Returns
     // WM_QUIT's wParam (process exit code).
     int Run(int nCmdShow);

@@ -1,5 +1,5 @@
 // dump_skydome_uv.cpp -- characterize a skydome .alo's geometry + AUTHORED UVs
-// to decide whether its longitude seam needs a wholesale UV remap (#247's
+// to decide whether its longitude seam needs a wholesale UV remap (the skydome seam investigation's
 // SphericalReUV, which throws away authored UVs) or just a targeted de-wrap of
 // the closure-bridge triangles. Pure: AloModel + ChunkReader + files; no engine,
 // no D3D, no GPU -> deterministic, fast, CI-able.
@@ -17,7 +17,7 @@
 //     total U range) -> is the seam a single closure meridian or scattered?
 //   - position-duplication: coincident-position groups carrying >1 distinct U
 //     (intentional seam/pole duplication) vs single-U (welded interior)
-//   - the #247 "shared-edge U-mismatch %": position-shared edges whose U
+//   - the "shared-edge U-mismatch %": position-shared edges whose U
 //     disagrees across the triangles sharing them -> distinguishes a clean
 //     sphere + one seam from genuinely incoherent UVs.
 
@@ -239,7 +239,7 @@ namespace
                     n ? radialDotSum / n : 0.0, multiVtx, creased, maxAngle);
         std::printf("    seam(multi-U) positions that are ALSO normal-creased = %zu  (>0 => MeshGloss specular seam => NORMAL WELD fixes it, no UV remap)\n", multiUcreased);
 
-        // ---- #247 metric: shared position-edge U-mismatch ----
+        // ---- seam metric: shared position-edge U-mismatch ----
         // Key each undirected edge by its two position keys; record the U at each
         // endpoint. An edge shared by 2+ triangles whose U disagrees at a shared
         // position endpoint is a "mismatch". A clean sphere mismatches ONLY along
@@ -275,7 +275,7 @@ namespace
             ++sharedEdges;
             if (spread(kv.second.uA) > 1e-3f || spread(kv.second.uB) > 1e-3f) ++mismatched;
         }
-        std::printf("    #247 metric: shared position-edges=%zu  U-mismatched=%zu (%.1f%%)\n",
+        std::printf("    seam metric: shared position-edges=%zu  U-mismatched=%zu (%.1f%%)\n",
                     sharedEdges, mismatched, sharedEdges ? 100.0*mismatched/sharedEdges : 0.0);
         std::printf("    (clean sphere: mismatch%% ~ the one seam ring (small). ~31%% scattered = genuinely incoherent.)\n\n");
     }

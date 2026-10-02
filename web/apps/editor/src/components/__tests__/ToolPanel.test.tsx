@@ -70,7 +70,7 @@ describe("ToolPanel", () => {
   });
 
   it("closing marks data-state='closing' so a sliding-out panel is excluded from the open-dialog selector", () => {
-    // Regression guard (session 24): while the dock slides shut, the panel
+    // Regression guard: while the dock slides shut, the panel
     // stays mounted for the exit animation but must NOT present as an open,
     // closeable dialog — else a click landing in the ~260ms window (the
     // harness's closeAnyPanel, or a fast user) targets the shrinking/

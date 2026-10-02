@@ -64,7 +64,7 @@ public:
     // the web never re-derives it (it cannot — the answer lives in the shaders).
     //
     // Ground truth: each mode renders through ShaderNames[blendMode] (see
-    // src/engine.cpp — the table dispatched at EmitterInstance.cpp:979 via
+    // src/engine_render.cpp — the table dispatched in EmitterInstance::Render via
     // Engine::GetShader). A mode is alpha-gated iff that shader's pass sets
     // SrcBlend = SRCALPHA:
     //   2  PrimAlpha, 5 PrimDepthSpriteAlpha, 7 PrimDiffuseAlpha,
@@ -72,8 +72,8 @@ public:
     // NOT gated: 0 PrimOpaque, 1 PrimAdditive, 3/6 modulate, 4 depth-additive,
     // 8/9 stencil, 10 heat, and — note — 12 PrimDecalBumpAlpha, which blends
     // DestBlend=SRCCOLOR / SrcBlend=DESTCOLOR (a decal MULTIPLY, alpha-independent)
-    // (reference/foc-shaders/Engine/PrimDecalBumpAlpha.fx:152-154). For 2/5/7 the
-    // fixed-function switch at EmitterInstance.cpp:718 agrees (m_alphaSrcBlend ==
+    // (the game's PrimDecalBumpAlpha.fx). For 2/5/7 the fixed-function switch in
+    // EmitterInstance::onParticleSystemChanged agrees (m_alphaSrcBlend ==
     // D3DBLEND_SRCALPHA); the shader-only modes 11/12/13 fall through that switch,
     // so the shader — not the switch — is authoritative. If a shader's SrcBlend
     // changes, update this AND tests/test_blend_mode_classify.cpp.
@@ -158,7 +158,6 @@ public:
 		// pointer slot for each (`+0x1108` deathChild, `+0x1110` lifeChild,
 		// proved from `StarWarsG.exe::FUN_14015ed60` and `EAW Terrain
 		// Editor.exe::FUN_140134b50`, both 2968-byte writer functions).
-		// See `tasks/multi_child_emitter_investigation.md`.
 		size_t   spawnOnDeath;
 		size_t   spawnDuringLife;
 		Emitter* parent;

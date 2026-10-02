@@ -11,8 +11,8 @@ namespace {
 
 // Recent-files registry helpers.
 //
-// Storage layout matches legacy's `AddToHistory` / `GetHistory` in
-// src/main.cpp:650-768 — values under `HKCU\Software\AloParticleEditor`
+// Storage layout matches the legacy editor's `AddToHistory` / `GetHistory`
+// — values under `HKCU\Software\AloParticleEditor`
 // keyed by filename, with the FILETIME payload encoded as REG_BINARY.
 // The list is ordered most-recent-first by reading the FILETIME values
 // and sorting descending. The cap of 9 (`kMaxRecentFiles`) mirrors the
@@ -101,7 +101,7 @@ std::vector<std::wstring> ReadRecentFiles()
     return out;
 }
 
-// Add (or move-to-top) `path` in the registry. Mirrors legacy AddToHistory:
+// Add (or move-to-top) `path` in the registry. Mirrors the legacy AddToHistory:
 // write the FILETIME for "now" under the path-as-key, then physically delete
 // valid MRU entries beyond the cap. Returns the capped most-recent-first list.
 std::vector<std::wstring> WriteRecentFile(const std::wstring& path)

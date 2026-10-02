@@ -97,8 +97,8 @@ async function seedTexturePreviewStatus(): Promise<string> {
     // next request is a cache hit). Returning that first `pending` straight to
     // the caller made it read as "game texture data unreachable" — so with
     // PE_REQUIRE_GAME_TEXTURES newly set, these specs failed on a machine whose
-    // textures were perfectly reachable, just not decoded YET (2026-07 audit,
-    // found while fixing a sibling lane).
+    // textures were perfectly reachable, just not decoded YET (found
+    // while fixing a sibling lane).
     //
     // Poll to a terminal answer. `error` still means genuinely unavailable,
     // which is what the skip is for.
@@ -175,7 +175,7 @@ async function cleanup(id: number, times: number[]) {
   });
 }
 
-// Helper — click frame N on the single <canvas> grid (post-#572: no per-cell
+// Helper — click frame N on the single <canvas> grid (no per-cell
 // DOM). Reads the grid geometry the canvas publishes (data-atlas-cols/-cell/
 // -gap), computes frame N's center relative to the canvas top-left, and clicks
 // there — the inverse of the component's frameFromEvent hit-test.

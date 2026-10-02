@@ -2,19 +2,19 @@
 // config clamping, burst-rate math, and the burst/interval state machine.
 //
 // Coverage, per the source:
-//   - ClampSpawnerConfig against every hard cap (SpawnerDriver.cpp:64-81),
-//     which also exercises the file-static Clamp/ClampInt/ClampVec helpers
-//     (SpawnerDriver.cpp:41-60) at their boundaries -- they are in an anonymous
-//     namespace, so this public wrapper is the only reachable surface.
-//   - ComputeBurstsPerSec cycle math + the 1e-4 floor (SpawnerDriver.cpp:129-136)
+//   - ClampSpawnerConfig against every hard cap, which also exercises the
+//     file-static Clamp/ClampInt/ClampVec helpers at their boundaries -- they
+//     are in an anonymous namespace, so this public wrapper is the only
+//     reachable surface.
+//   - ComputeBurstsPerSec cycle math + the 1e-4 floor
 //   - SetConfig clamps, and resets the schedule ONLY on mode/enable changes,
-//     never on parameter tweaks (SpawnerDriver.cpp:91-127)
-//   - Tick/Trigger NULL guards and dt sanitization (SpawnerDriver.cpp:145-156)
-//   - Auto interval countdown -> burst start (SpawnerDriver.cpp:159-169)
-//   - the live-instance cap dropping a burst (SpawnerDriver.cpp:187-193)
-//   - the NULL-spawn hard-guard disabling the driver (SpawnerDriver.cpp:211-222)
+//     never on parameter tweaks
+//   - Tick/Trigger NULL guards and Tick's dt sanitization
+//   - Auto interval countdown -> burst start (Tick)
+//   - the live-instance cap dropping a burst (Tick)
+//   - the NULL-spawn hard-guard disabling the driver (Tick)
 //   - position stamping + jitter bounds, observed through the spawn call
-//     (SpawnerDriver.cpp:195-197)
+//     (Tick)
 //
 // The engine seam: SpawnerDriver only calls two NON-VIRTUAL Engine members
 // (SpawnParticleSystem + ActiveSpawnerInstanceCount). engine.cpp is
@@ -61,7 +61,7 @@ ParticleSystemInstance* Engine::SpawnParticleSystem(const ParticleSystem&, Objec
         g_lastSpawnPos = parent->GetPosition();
         g_lastSpawnVel = parent->GetVelocity();
     }
-    return NULL;   // gate-refusal path: SpawnerDriver.cpp:211-222 must disarm
+    return NULL;   // gate-refusal path: Tick's NULL-spawn hard-guard must disarm
 }
 
 int Engine::ActiveSpawnerInstanceCount() const
@@ -89,7 +89,7 @@ int main()
 {
     std::printf("test_spawner_driver\n");
 
-    // ---- A: ClampSpawnerConfig vs every hard cap (SpawnerDriver.cpp:64-81) --
+    // ---- A: ClampSpawnerConfig vs every hard cap ----------------------------
     {
         SpawnerConfig c;
         c.burstSize         = 0;
@@ -145,7 +145,7 @@ int main()
            "boundary values pass through unclamped");
     }
 
-    // ---- B: ComputeBurstsPerSec (SpawnerDriver.cpp:129-136) -----------------
+    // ---- B: ComputeBurstsPerSec ---------------------------------------------
     {
         SpawnerConfig c;
         c.mode = SpawnerConfig::Mode::Manual;
@@ -197,7 +197,7 @@ int main()
         CHECK(g_spawnCalls == before, "Trigger with NULL system/engine arms nothing");
     }
 
-    // ---- E: Trigger is Manual-only (SpawnerDriver.cpp:147) ------------------
+    // ---- E: Trigger is Manual-only ------------------------------------------
     {
         SpawnerDriver d;
         SpawnerConfig c;
@@ -236,7 +236,7 @@ int main()
     }
 
     // ---- G: parameter tweak does NOT reset the interval timer ---------------
-    // (SpawnerDriver.cpp:97-127: only mode/enable changes touch the schedule.)
+    // (SetConfig: only mode/enable changes touch the schedule.)
     {
         SpawnerDriver d;
         SpawnerConfig c;
@@ -251,7 +251,7 @@ int main()
               "param tweak preserved the running countdown (0.9+0.2 crosses 1.0)");
     }
 
-    // ---- H: re-enabling reschedules a FULL interval (SpawnerDriver.cpp:120-126)
+    // ---- H: re-enabling reschedules a FULL interval (SetConfig) ------------
     {
         SpawnerDriver d;
         SpawnerConfig c;
@@ -267,7 +267,7 @@ int main()
         CHECK(g_spawnCalls == before + 1, "burst fires one full interval after re-enable");
     }
 
-    // ---- I: live-instance cap drops the burst (SpawnerDriver.cpp:187-193) ---
+    // ---- I: live-instance cap drops the burst -------------------------------
     {
         g_activeCount = SpawnerDriver::MAX_ACTIVE_INSTANCES;
         SpawnerDriver d;
@@ -316,7 +316,7 @@ int main()
         CHECK(g_spawnCalls == before + 1, "armed manual burst begins on the next positive tick");
     }
 
-    // ---- K: invalid-dt sanitization (SpawnerDriver.cpp:181) -----------------
+    // ---- K: invalid-dt sanitization -----------------------------------------
     // Negative or >1s deltas are coerced to 1/60, so 30 such ticks advance 0.5s.
     {
         g_activeCount = 0;
@@ -333,7 +333,7 @@ int main()
     }
 
     // ---- L: jitter keeps spawns inside cfg.position +/- jitter --------------
-    // JitterAxis/Jitter (SpawnerDriver.cpp:21-31) are file-static; their
+    // JitterAxis/Jitter (SpawnerDriver.cpp) are file-static; their
     // contract is observable through the stamped anchor position.
     {
         g_activeCount = 0;

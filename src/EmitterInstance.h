@@ -92,7 +92,7 @@ public:
 	// Re-fetch the two D3D textures after a device Reset. Narrower than
 	// onParticleSystemChanged(-1) ON PURPOSE: that also recomputes composites and
 	// re-syncs root emitters, and spawning emitters mid-device-reset is not what
-	// a Reset should do (2026-07 audit).
+	// a Reset should do.
 	void  ReleaseDeviceTextures();
 	void  ReacquireDeviceTextures(const Engine& engine);
 	int   Update(TimeF currentTime);
@@ -100,7 +100,7 @@ public:
 	void  Render(IDirect3DDevice9* pDevice);
 	void  StopSpawning();
 	bool  IsHeatEmitter() const   { return !m_engine.GetHeatDebug() && m_emitter.isHeatParticle; }
-	// [D3] Zero-heat skip probe: a heat emitter with live particles. Cheap
+	// Zero-heat skip probe: a heat emitter with live particles. Cheap
 	// (two flags + a size check) — Engine::Render polls this per frame to
 	// skip the distort RT clear + RenderHeat scan when nothing would draw.
 	bool  HasLiveHeat()   const   { return !m_primitives.empty() && IsHeatEmitter(); }
@@ -108,11 +108,11 @@ public:
 	// Authored rank = the wrapped emitter's position in the ParticleSystem's
 	// emitter list (kept in sync on add/remove/reorder — ParticleSystem.cpp).
 	// Drives the rank-ordered draw pass so lazily-spawned children honor their
-	// list position vs siblings instead of always drawing last (#574).
+	// list position vs siblings instead of always drawing last.
 	size_t GetSourceRank() const  { return m_emitter.index; }
 	// The wrapped source emitter — its stable identity (pointer) lets the draw
 	// pass map an instance to its authored-list POSITION without trusting the
-	// mutable Emitter::index mirror (#609). Never null; owned by the ParticleSystem.
+	// mutable Emitter::index mirror. Never null; owned by the ParticleSystem.
 	const ParticleSystem::Emitter* GetSourceEmitter() const { return &m_emitter; }
 	ParticleSystemInstance& GetSystem() { return m_system; }
 

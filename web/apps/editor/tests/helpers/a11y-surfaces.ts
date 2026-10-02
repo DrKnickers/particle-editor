@@ -22,8 +22,7 @@ async function dismissModals(page: Page) {
 
 // Radix keeps dismissed content — INCLUDING its dismissable layer, which
 // swallows pointer events — mounted while data-state="closed", and the
-// 2026-07-18 design pass put .popover-animate (110ms exit) on the menubar
-// dropdowns. Returning from teardown before that finishes leaves the dying
+// menubar dropdowns carry .popover-animate (110ms exit). Returning from teardown before that finishes leaves the dying
 // layer eating the NEXT surface's setup click, which surfaced as 30s
 // actionability timeouts on menubar-edit-open / menubar-view-open — flaky by
 // nature, since a retry starts from a clean page. captureDomA11y already waits
@@ -61,7 +60,7 @@ async function awaitExitAnimations(page: Page) {
 export async function seedCanonicalUiState(page: Page): Promise<void> {
   await page.evaluate(() => {
     localStorage.setItem("alo:theme", "light");
-    // Right-dock = "spawner" (session 11; was the legacy
+    // Right-dock = "spawner" (was the legacy
     // `alo:spawner-visible=true`). The Spawner occupies the shared
     // right-dock slot for every full-page golden; the dialog-lighting
     // surface swaps it to Lighting for its own capture.
@@ -84,7 +83,7 @@ export async function seedCanonicalUiState(page: Page): Promise<void> {
 // callers). Reusing the existing testid here is the surgical fix.
 // MenuBar triggers are Radix Menubar.Trigger which renders as
 // `<button>` with the menu name as direct text, so `button:has-text`
-// selectors work as the plan expects.
+// selectors work.
 
 export const CHROME_SURFACES: SurfaceCapture[] = [
   {
@@ -282,7 +281,7 @@ export const DIALOG_SURFACES: SurfaceCapture[] = [
         .click();
     },
   },
-  // dialog-bloom-settings removed (session 11): Bloom settings folded into
+  // dialog-bloom-settings removed: Bloom settings folded into
   // the Lighting pane as a section, so they're captured by dialog-lighting.
 
   {
@@ -403,10 +402,9 @@ export const KEYBOARD_SURFACES: SurfaceCapture[] = [
 // ─── Custom-primitive surfaces ────────────────────────────────────────
 //
 // CurveEditor canvas:
-//   The plan referenced `[data-testid="curve-editor-canvas"]`, which
+//   An earlier draft referenced `[data-testid="curve-editor-canvas"]`, which
 //   doesn't exist. `data-testid="curve-editor-svg"` is already on the
-//   interactive SVG canvas at CurveEditor.tsx:802 and CurveEditor.tsx:1473
-//   (two render paths — single-channel and multi-channel). The SVG has no
+//   interactive SVG canvas in CurveEditor.tsx. The SVG has no
 //   `tabIndex`, so `.click()` delivers pointer-active state rather than
 //   keyboard focus — the surface id `curve-editor-focused` captures the
 //   cursor-active UIA tree, which is what the goldens will pin down.
@@ -416,11 +414,11 @@ export const KEYBOARD_SURFACES: SurfaceCapture[] = [
 //   the golden file, not a selector.
 //
 // Spinner:
-//   The plan referenced `[data-testid="spinner-emit-rate"]` — a
+//   An earlier draft referenced `[data-testid="spinner-emit-rate"]` — a
 //   placeholder name that doesn't correspond to any real field. The
 //   closest semantically correct control on the Basic tab is
 //   "Particles/second:" (the `nParticlesPerSecond` FieldSpinner under the
-//   Continuous stream radiogroup at EmitterPropertyTabs.tsx:491). This is
+//   Continuous stream radiogroup in EmitterPropertyTabs.tsx). This is
 //   the first spinner on the Basic tab that represents a continuous
 //   emission-rate quantity (analogous to "emit rate" in plain language).
 //   The surgical fix: added optional `testId?: string` prop to
@@ -429,7 +427,7 @@ export const KEYBOARD_SURFACES: SurfaceCapture[] = [
 //   forwards onto FieldSpinner's outermost `.form-row` div, which already
 //   wraps the input. No change to the generic Spinner.tsx primitive.
 //   The surface selector targets `input` inside that row (the focusable
-//   element), matching the plan's `.focus()` approach.
+//   element), for the `.focus()` approach.
 
 export const CUSTOM_PRIMITIVE_SURFACES: SurfaceCapture[] = [
   {

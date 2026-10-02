@@ -2,7 +2,7 @@
 // (New / Open / Recent) when the in-memory particle system is dirty.
 //
 // Mirrors the legacy `DoCheckChanges`
-// (`MessageBox MB_YESNOCANCEL`) in the legacy main.cpp:
+// (`MessageBox MB_YESNOCANCEL`) in the legacy Win32 editor:
 //   - Save (Yes) → call file/save; if it succeeds, run the pending
 //     action. If save was cancelled (ok:false), abort.
 //   - Don't Save (No) → run the pending action immediately, telling it the
@@ -50,7 +50,7 @@ export function SaveChangesDialog({ bridge }: Props) {
     // pending New/Open and close. On ANY failure OR user-cancel, KEEP this prompt
     // open (do NOT clear pendingAction) and do NOT run the destructive pending op:
     // the unsaved work must survive, and the user can retry Save, Don't Save, or
-    // Cancel from the still-open prompt (release-audit #11 — previously a failed
+    // Cancel from the still-open prompt (previously a failed
     // save silently closed the prompt and abandoned the pending op).
     try {
       const r = await runFileOp(bridge, { kind: "file/save", params: {} });
@@ -96,7 +96,7 @@ export function SaveChangesDialog({ bridge }: Props) {
           onClick={() =>
             // "Don't Save" runs the parked action (Ctrl+O/Ctrl+N), which may
             // reject; runFileOp already surfaces file failures, so swallow to
-            // avoid an unhandled promise rejection (#489).
+            // avoid an unhandled promise rejection.
             void handleDiscard().catch((err) =>
               console.warn("[save-prompt] discard action failed:", err),
             )

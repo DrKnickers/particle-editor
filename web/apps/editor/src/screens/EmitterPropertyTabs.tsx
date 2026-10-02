@@ -2,8 +2,8 @@
 // Three tabs (Basic / Appearance / Physics) driven by Radix Tabs. Their form
 // fields commit through `emitters/set-properties { id, patch: { ... } }`.
 //
-// Replaces the legacy `src/UI/Emitter.cpp` modal (873 LOC, ~150 control
-// IDs). Mirrors the legacy tab structure 1:1: Basic / Appearance /
+// Replaces the legacy Win32 editor's emitter-properties modal (~150
+// control IDs). Mirrors the legacy tab structure 1:1: Basic / Appearance /
 // Physics.
 //
 // Bridge surface:

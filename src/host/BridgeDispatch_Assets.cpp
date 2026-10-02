@@ -1,6 +1,5 @@
-// Kind handlers for the textures/* + mods/* bridge domain(s), moved out of
-// DispatchInternal's ladder (Phase A dispatch split --
-// tasks/2026-07-06-heavyweight-refactor-plan.md).
+// Bridge request handlers for the textures/* and mods/* kinds.
+// BridgeDispatcher::DispatchInternal routes requests here via TryDispatchAssets.
 
 #include "BridgeDispatcher.h"
 #include "BridgeDispatchShared.h"
@@ -21,8 +20,7 @@ namespace host {
 
 bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
 {
-    // DispatchInternal-local aliases so the moved ladder blocks below stay
-    // verbatim (plan #3A transforms only).
+    // Short local names for the request fields used by the handlers below.
     const json&        params = ctx.params;
     const std::string& kind   = ctx.kind;
 
@@ -117,9 +115,9 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
 
     if (kind == "mods/set-layers")
     {
-        // G3: intentional sendOk — handler's success path also returns
-        // ctx.SendOk({ok,stack}) where ok may itself be false; caller reads
-        // nested ok as the discriminator, so failure stays the same shape.
+        // Nested-ok result (see BridgeRequestContext.h): the success path
+        // also returns ctx.SendOk({ok,stack}) where ok may itself be false;
+        // caller reads nested ok, so failure stays the same shape.
         if (!m_modManager) { ctx.SendOk(json{{"ok", false}, {"error", "ModManager not bound"}}); return true; }
         auto currentStackJson = [this]() {
             json stack = json::array();
@@ -150,11 +148,11 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
         // `err` distinguishes the two ways ok can be false. Both React call
         // sites render a supplied `error` verbatim and otherwise fall back to
         // "the mod shaders failed to reload" — which is an actively misleading
-        // diagnosis when the real problem was the registry write (2026-07 audit).
+        // diagnosis when the real problem was the registry write.
         std::string err;
         bool ok = m_modManager->SetLayerStack(paths, !(m_testHost && !m_settingsLive), &err);
         TexturePalette::ClearBridgeThumbCache();
-        // [C3] Same lifecycle for the preview LRU: a same-named texture from
+        // Same lifecycle for the preview LRU: a same-named texture from
         // the new stack must not serve the old stack's pixels. The epoch bump
         // (inside PreviewCacheClear) also invalidates in-flight encodes.
         PreviewCacheClear();
@@ -174,8 +172,7 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
     // basename (or "" if cancelled). The React side commits the result
     // through emitters/set-properties — same path the text input uses.
     // Like file/open, GetOpenFileNameW runs a nested message loop while
-    // the JS caller awaits. Mirrors legacy LoadTexture
-    // (src/UI/Emitter.cpp:83).
+    // the JS caller awaits. Mirrors the legacy Win32 editor's LoadTexture.
     if (kind == "textures/browse")
     {
         std::string slot = "color";
@@ -233,7 +230,7 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
     //
     // Expose the per-mod frequently-used texture palette
     // (TexturePalette::Store, already repointed at the active mod by
-    // ModManager::SelectMod) to the new UI.
+    // ModManager::SelectMod) to the editor UI.
     if (kind == "textures/palette/list")
     {
         std::string slot = "color";
@@ -309,7 +306,7 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
                 {"flattenAlpha", flattenAlpha}
             });
 
-        // [C3] LRU hit: full result, synchronously — repeats cost nothing.
+        // LRU hit: full result, synchronously — repeats cost nothing.
         const std::string cacheKey = filename + (flattenAlpha ? "|1" : "|0");
         if (auto hit = m_previewLruIdx.find(cacheKey); hit != m_previewLruIdx.end())
         {
@@ -380,9 +377,10 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
         {
             // The only user-reachable failure (entry exists + mod active) is
             // the pins-full cap; no-mod/malformed never happen from the UI.
-            // G3: intentional sendOk — not an error, a "nothing changed" cap
-            // result the UI handles as normal (carries reason, not error);
-            // success path also returns ctx.SendOk({ok:true,pinned}).
+            // Nested-ok result (see BridgeRequestContext.h): not an error,
+            // a "nothing changed" cap result the UI handles as normal
+            // (carries reason, not error); success path also returns
+            // ctx.SendOk({ok:true,pinned}).
             ctx.SendOk(json{{"ok", false}, {"reason", "pins-full"}});
             return true;
         }

@@ -1,6 +1,6 @@
 // Project-file parity for src/ParticleEditor.vcxproj and its .filters.
 //
-// The two drifted apart unguarded (2026-09-30 audit MC4): ~25 items had no
+// The two drifted apart unguarded: ~25 items had no
 // filter entry, and ~40 on-disk headers — the header-only policy headers,
 // version.h — were missing from the project, so Visual Studio's solution search
 // could not see them. These guards keep:

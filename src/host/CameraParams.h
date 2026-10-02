@@ -1,7 +1,7 @@
 #ifndef HOST_CAMERA_PARAMS_H
 #define HOST_CAMERA_PARAMS_H
 
-// engine/set/camera parameter validation (2026-10-01 audit HX2).
+// engine/set/camera parameter validation.
 //
 // The handler used to pass JsonToVec3 results straight to Engine::SetCamera,
 // and JsonToVec3 maps a missing or malformed field to (0,0,0). A coincident

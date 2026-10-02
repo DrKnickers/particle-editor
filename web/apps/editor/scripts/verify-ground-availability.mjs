@@ -11,8 +11,8 @@
 //   2. selects each game-sourced slot (grass=1, sand=2, snow=3) and re-reads
 //      groundTexture -- if the install resolves the texture the selection sticks;
 //      if it had failed, ReloadGroundTexture would bounce the index back to 0.
-// Exit 0 = all assertions pass. The viewport itself is black under CDP (expected
-// -- see docs/CAPTURE_MODES.md); this checks the host/engine logic, not pixels.
+// Exit 0 = all assertions pass. The viewport itself is black under CDP
+// (expected); this checks the host/engine logic, not pixels.
 // For a faithful RENDER of the grass ground use the non-CDP --drive path.
 import { chromium } from "@playwright/test";
 import { spawn } from "node:child_process";

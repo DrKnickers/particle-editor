@@ -1,5 +1,5 @@
-// NativeBridge error/teardown-path tests — complements native.test.ts (G12
-// request-lifecycle). This file drives the *incoming* message surface
+// NativeBridge error/teardown-path tests — complements native.test.ts
+// (request lifecycle). This file drives the *incoming* message surface
 // (onMessage) plus the teardown branches native.test.ts leaves uncovered:
 // malformed/unparseable payloads, unknown/duplicate response ids, host error
 // replies, event fan-out before/after (un)subscribe, beforeunload-driven

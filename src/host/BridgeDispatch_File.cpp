@@ -1,6 +1,5 @@
-// Kind handlers for the file/* + autosave/* + undo/* bridge domain(s), moved out of
-// DispatchInternal's ladder (Phase A dispatch split --
-// tasks/2026-07-06-heavyweight-refactor-plan.md).
+// Bridge request handlers for the file/*, autosave/* and undo/* kinds.
+// BridgeDispatcher::DispatchInternal routes requests here via TryDispatchFile.
 
 #include "BridgeDispatcher.h"
 #include "BridgeDispatchShared.h"
@@ -79,8 +78,7 @@ static void CorruptRecoveryCandidateForTest(bool testHost,
 
 bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
 {
-    // DispatchInternal-local aliases so the moved ladder blocks below stay
-    // verbatim (plan #3A transforms only).
+    // Short local names for the request fields used by the handlers below.
     const json&        params = ctx.params;
     const std::string& kind   = ctx.kind;
 
@@ -179,7 +177,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
 
     // -------- undo/perform --------
     //
-    // New-UI mutation handlers call captureUndo() PRE-mutation, so the
+    // Bridge mutation handlers call captureUndo() PRE-mutation, so the
     // snapshot at entries[cursor-1] represents the state BEFORE the
     // most recent mutation — not the current live state. UndoStack's
     // Undo() is built around the legacy POST-mutation convention
@@ -250,8 +248,8 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
 
     // -------- file/new --------
     // replace the host-owned ParticleSystem with a fresh empty
-    // one + one root emitter (mirrors legacy DoNewFile at
-    // src/main.cpp:1289). Clear editor path / dirty.
+    // one + one root emitter (mirrors the legacy Win32 editor's
+    // DoNewFile). Clear editor path / dirty.
     if (kind == "file/new")
     {
         // Never drop unsaved work the user has not chosen to discard; the web
@@ -265,8 +263,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         // shift-click-to-spawn: if the user is mid-Shift-hold when
         // they hit file/new, kill the cursor-bound instance before
         // dropping the ParticleSystem it was spawned from. Mirrors the
-        // legacy DoNewFile teardown sequence for `attachedParticleSystem`
-        // at src/main.cpp:1289-1305.
+        // legacy DoNewFile teardown sequence for `attachedParticleSystem`.
         if (m_pAttachedParticleSystem && *m_pAttachedParticleSystem && m_engine)
         {
             fprintf(stderr, "[ArchC-kill] file/new killing attached=%p\n",
@@ -288,8 +285,8 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
             m_selectedEmitterId = 0;
         }
         // render loop: notify Engine that the ParticleSystem pointer
-        // it knows about is now stale. Mirrors legacy DoNewFile at
-        // src/main.cpp:1207 (Clear() then OnParticleSystemChanged(-1))
+        // it knows about is now stale. Mirrors legacy DoNewFile
+        // (Clear() then OnParticleSystemChanged(-1))
         // so the engine drops cached instances + per-emitter state.
         if (m_engine)
         {
@@ -298,7 +295,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         }
         // Reset undo stack — prior session's entries reference the
         // now-freed ParticleSystem and would crash a future restore.
-        // Mirrors legacy LoadFile at src/main.cpp:1103.
+        // Mirrors the legacy editor's LoadFile.
         if (m_undo) m_undo->Clear();
         // Refresh the "saved" reference snapshot — the fresh-with-
         // one-root state is the new dirty-bit baseline. Mutate + Ctrl+Z
@@ -346,7 +343,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
     //   - file/pick-open (and the skydome/ground TEXTURE filter variants)
     //     return the chosen path WITHOUT touching the document — no commit
     //     to m_currentFilePath, recents, events, dirty reset, or engine load
-    //     (release-audit #2: a Browse must never replace the active document).
+    //     (a Browse must never replace the active document).
     //   - file/open with the default .alo filter commits the path into
     //     m_currentFilePath, pushes to recents, fires recent/changed +
     //     engine/state/changed, and clears dirty; the ParticleSystem load is
@@ -436,9 +433,10 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
             if (!GetOpenFileNameW(&ofn))
             {
                 // User cancelled / dialog failure.
-                // G3: intentional sendOk — user-cancel is not an error; the
-                // file/* family deliberately returns failures as sendOk so
-                // request() won't throw (caller reads nested ok).
+                // Nested-ok result (see BridgeRequestContext.h): user-cancel
+                // is not an error; the file/* family deliberately returns
+                // failures as sendOk so request() won't throw (caller reads
+                // nested ok).
                 ctx.SendOk(json{{"ok", false}, {"error", "user-cancelled"}});
                 return true;
             }
@@ -449,7 +447,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         // loading it into the host (no document swap, undo clear, dirty reset,
         // recents, or engine touch). Used by Import Emitters' Browse and the
         // texture pickers so a Browse can never replace the active dirty
-        // document (release-audit #2).
+        // document.
         if (kind == "file/pick-open")
         {
             ctx.SendOk(json{{"ok", true}, {"path", WideToUtf8(path)}});
@@ -476,8 +474,8 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
             // Don't touch m_currentFilePath / recents on failure —
             // matches legacy LoadFile behaviour (history append only
             // happens after a successful parse).
-            // G3: intentional sendOk — file/open returns failures as
-            // ctx.SendOk({ok:false}) by design so request() won't throw; the
+            // Nested-ok result (see BridgeRequestContext.h): file/open returns
+            // failures as ctx.SendOk({ok:false}) by design so request() won't throw; the
             // success path returns ctx.SendOk({ok:true,path}) and the caller
             // reads nested ok. Converting would split this handler's contract.
             ctx.SendOk(json{{"ok", false}, {"error", err.empty() ? std::string("load failed") : err}});
@@ -511,8 +509,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         // mutations re-fire the sweep via the same helper.
         EnforceSingleMemberLinkGroups();
         // Reset undo stack — prior session's entries reference the
-        // now-freed ParticleSystem. Mirrors legacy LoadFile at
-        // src/main.cpp:1103.
+        // now-freed ParticleSystem. Mirrors the legacy editor's LoadFile.
         if (m_undo) m_undo->Clear();
         // Refresh the "saved" reference snapshot — the just-loaded
         // state IS the saved file's content. Captured AFTER the
@@ -579,9 +576,10 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
 
             if (!GetSaveFileNameW(&ofn))
             {
-                // G3: intentional sendOk — user-cancel is not an error; the
-                // file/* family returns failures as sendOk so request() won't
-                // throw (success path is ctx.SendOk({ok:true,path})).
+                // Nested-ok result (see BridgeRequestContext.h): user-cancel
+                // is not an error; the file/* family returns failures as
+                // sendOk so request() won't throw (success path is
+                // ctx.SendOk({ok:true,path})).
                 ctx.SendOk(json{{"ok", false}, {"error", "user-cancelled"}});
                 return true;
             }
@@ -591,7 +589,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         // actually write the host-owned ParticleSystem to disk.
         if (m_pParticleSystem == nullptr || !*m_pParticleSystem)
         {
-            // G3: intentional sendOk — same dual-result contract as the
+            // Nested-ok result, same shape as the
             // success path below (ctx.SendOk({ok:true,path})); caller reads
             // nested ok. Converting would split this handler's contract.
             ctx.SendOk(json{{"ok", false}, {"error", "particle system not bound"}});
@@ -607,7 +605,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         std::string err;
         if (!SaveParticleSystem(m_pParticleSystem->get(), path, &err))
         {
-            // G3: intentional sendOk — see above; failure stays nested-ok so
+            // See above; failure stays nested-ok so
             // it matches the success payload shape the caller inspects.
             ctx.SendOk(json{{"ok", false}, {"error", err.empty() ? std::string("save failed") : err}});
             return true;
@@ -623,8 +621,8 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         SetDirty(false);
         // The work is now on disk — this session's autosave is
         // redundant. Delete it so a clean exit leaves no orphan to prompt
-        // for. Further edits re-create it on the next tick. (Mirrors legacy
-        // main.cpp DeleteOurSession-after-save.)
+        // for. Further edits re-create it on the next tick. (Mirrors the legacy
+        // editor's DeleteOurSession-after-save.)
         Autosave::DeleteOurSession();
         EmitRecentChanged();
         EmitEngineStateChanged();
@@ -659,9 +657,9 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
 
         if (!GetSaveFileNameW(&ofn))
         {
-            // G3: intentional sendOk — user-cancel is not an error; the
-            // file/* family returns failures as sendOk so request() won't
-            // throw (success path is ctx.SendOk({ok:true,path})).
+            // Nested-ok result (see BridgeRequestContext.h): user-cancel is
+            // not an error; the file/* family returns failures as sendOk so
+            // request() won't throw (success path is ctx.SendOk({ok:true,path})).
             ctx.SendOk(json{{"ok", false}, {"error", "user-cancelled"}});
             return true;
         }
@@ -670,7 +668,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         // actually write to disk.
         if (m_pParticleSystem == nullptr || !*m_pParticleSystem)
         {
-            // G3: intentional sendOk — same dual-result contract as the
+            // Nested-ok result, same shape as the
             // success path below (ctx.SendOk({ok:true,path})); caller reads
             // nested ok. Converting would split this handler's contract.
             ctx.SendOk(json{{"ok", false}, {"error", "particle system not bound"}});
@@ -683,7 +681,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         std::string err;
         if (!SaveParticleSystem(m_pParticleSystem->get(), path, &err))
         {
-            // G3: intentional sendOk — see above; failure stays nested-ok so
+            // See above; failure stays nested-ok so
             // it matches the success payload shape the caller inspects.
             ctx.SendOk(json{{"ok", false}, {"error", err.empty() ? std::string("save failed") : err}});
             return true;
@@ -778,7 +776,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
     // the temp path never enters recents. For discard, leave the boot
     // document untouched. The orphan files are consumed (deleted) ONLY on a
     // successful recover or an explicit discard — a FAILED load keeps them so the
-    // other tier (or the next launch) can still recover (release-audit #3).
+    // other tier (or the next launch) can still recover.
     if (kind == "autosave/recover")
     {
         if (!m_hasPendingOrphan)

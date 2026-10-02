@@ -1,6 +1,6 @@
 // Standard Win32 + COM + WebView2 + D3D9 PoC for the hybrid app
-// composition strategy. NOT shipped — diagnostic-only binary used during
-// the Phase 1 acceptance gate.
+// composition strategy. NOT shipped — diagnostic-only binary used to
+// prove the composition approach before the host was built.
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <shellapi.h>

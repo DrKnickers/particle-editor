@@ -15,8 +15,8 @@ const node = (id: number, name: string, children: EmitterTreeNode[] = []): Emitt
 const tree = { root: node(-1, "root", [node(0, "a", [node(1, "a1"), node(2, "a2")]), node(3, "b")]) } as unknown as EmitterTreeDto;
 
 // Records every request so a spec can assert HOW MANY landed, not just which
-// ids — a multi-root delete is one gesture and must ride one batched request
-// (2026-07 audit). `deleteCalls()` returns one entry per delete request,
+// ids — a multi-root delete is one gesture and must ride one batched request.
+// `deleteCalls()` returns one entry per delete request,
 // each holding that request's id list, so `[[3,1,0]]` reads as "one request
 // carrying three ids" and `[[3],[1],[0]]` as the per-item fan-out it replaced.
 function recordingBridge() {
@@ -73,7 +73,7 @@ describe("performDelete", () => {
     expect(deleteCalls()).toEqual([[3, 1, 0]]);
   });
 
-  // 2026-07 audit. Three roots used to mean three emitters/delete
+  // Three roots used to mean three emitters/delete
   // requests, each capturing its own undo entry host-side, so one Ctrl+Z
   // restored one emitter out of a three-emitter gesture. The batched request
   // is what makes ONE captureUndo() possible on the native side.
@@ -86,7 +86,7 @@ describe("performDelete", () => {
   });
 });
 
-// Release-audit #8: parent+descendant selections must collapse to roots so a
+// Parent+descendant selections must collapse to roots so a
 // shifting positional id never deletes the wrong node.
 describe("collapseToRoots (#8)", () => {
   it("drops a descendant whose ancestor is also selected", () => {

@@ -10,7 +10,7 @@ declare global {
 // Cross-page topbar invariants. styles.css hard-cuts the topbar out of the cross-document
 // view-transition fade, which only looks right if every page renders pixel-identical nav
 // geometry — same links, same order, and exactly one .motion-toggle slot per page. These
-// tests survived the What's New page (whats-new.html, retired after #655): the invariants
+// tests survived the What's New page (whats-new.html, since retired): the invariants
 // they pin belong to the site, not to any one page.
 
 test.beforeEach(async ({ page }) => {

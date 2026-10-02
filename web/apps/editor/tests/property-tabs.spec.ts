@@ -1,4 +1,4 @@
-// Phase 4.1 — EmitterPropertyTabs Playwright specs.
+// EmitterPropertyTabs Playwright specs.
 //
 // 1. Selecting an emitter shows the property tabs in the lower-left
 //    quadrant + the track editor in the lower-right quadrant
@@ -35,7 +35,7 @@ test("selecting an emitter shows property tabs (lower-left) + track editor (lowe
   await expect(page.locator('[data-testid="tab-trigger-appearance"]')).toBeVisible();
   await expect(page.locator('[data-testid="tab-trigger-physics"]')).toBeVisible();
 
-  // Curve editor (always-on bottom row, Task 2.6) visible
+  // Curve editor (always-on bottom row) visible
   // simultaneously. The new CurveEditorPanel replaced the per-emitter
   // EmitterPropertyPanel that used to live in the lower-right quadrant.
   const curvePanel = page.locator('[data-testid="curve-editor-panel"]');

@@ -1,6 +1,6 @@
-// Kind handlers for the spawner/* + preview/* + settings/lighting* bridge
-// domains, moved out of DispatchInternal's ladder (Phase A dispatch split --
-// tasks/2026-07-06-heavyweight-refactor-plan.md).
+// Bridge request handlers for the spawner/*, preview/* and settings/lighting*
+// kinds. BridgeDispatcher::DispatchInternal routes requests here via
+// TryDispatchSpawner.
 
 #include "BridgeDispatcher.h"
 #include "BridgeDispatchShared.h"
@@ -14,8 +14,7 @@ namespace host {
 
 bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
 {
-    // DispatchInternal-local aliases so the moved ladder blocks below stay
-    // verbatim (plan #3A transforms only).
+    // Short local names for the request fields used by the handlers below.
     const json&        params = ctx.params;
     const std::string& kind   = ctx.kind;
 
@@ -69,8 +68,8 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
     // -------- settings/lighting-force-align/set ----------------------
     //
     // Cross-mode write of the `LightingForceFillAlignment` REG_DWORD
-    // (WriteLightingBool) so a toggle in the new UI is
-    // seen by legacy. No-op under --test-host (so the a11y harness never
+    // (WriteLightingBool) so a toggle in the editor UI is
+    // seen by the legacy editor. No-op under --test-host (so the a11y harness never
     // mutates the dev box's registry) UNLESS ALO_SETTINGS_LIVE lifts the
     // gate for the CDP test seam.
     if (kind == "settings/lighting-force-align/set")
@@ -86,12 +85,12 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
 
     // -------- settings/lighting/set ----------------------------------
     //
-    // Full write-back of the raw lighting split the new-UI LightingPanel
+    // Full write-back of the raw lighting split the web LightingPanel
     // holds in state. Writes the SAME 16 value names the GET handler reads
-    // (and the legacy dialog read/wrote) so edits + Reset in the new UI survive a reopen/restart
+    // (and the legacy dialog read/wrote) so edits + Reset in the editor UI survive a reopen/restart
     // and stay in sync with legacy. Without this, anything the legacy
     // dialog persisted (e.g. a stale ambient COLORREF) reappears on every
-    // load and the new UI can't overwrite it.
+    // load and the editor UI can't overwrite it.
     //
     // Same --test-host gate as the force-align write above: no-op under the
     // a11y harness unless ALO_SETTINGS_LIVE lifts it (the CDP test seam),
@@ -144,7 +143,7 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
     // snapshots/events, and applies that same struct to a bound driver.
     //
     // Note: spawner config is session state (matches legacy: "never
-    // written into the .alo" per SpawnerDriver.h:16). It deliberately
+    // written into the .alo" per SpawnerDriver.h). It deliberately
     // does NOT set dirty=true.
     if (kind == "spawner/start")
     {

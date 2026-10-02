@@ -252,7 +252,7 @@ inline bool IsAllowedRecordKind(const std::string& kind) {
     // dialog; .alo not written back). `id` is the 0-based array index and a move
     // shifts the array, so sequential moves in one timeline must account for the
     // shift. The reorder only changes a LIVE preview's draw order after a respawn
-    // (spawner/stop+start+trigger) — see tasks/clips/README.md.
+    // (spawner/stop+start+trigger).
     if (kind == "emitters/move") return true;
     // emitters/set-track-key is also drivable as a discrete at-event (not just by
     // the continuous track-key tween) — a clip uses it for distinct atlas-frame
@@ -470,7 +470,7 @@ inline bool ParseTimeline(const std::string& json, Timeline& out, std::string& e
     out.fps = (int)fpsD; out.width = (int)wD; out.height = (int)hD; out.durationMs = durD;
 
     // Optional render scale (WebView chrome DPR). >1 renders the UI at higher pixel
-    // density so a zoomed crop (e.g. the F4 mod picker) stays sharp. Cursor point
+    // density so a zoomed crop (e.g. the mod-picker clip) stays sharp. Cursor point
     // coords are device px, so author them at width/height scale; element refs
     // auto-scale (getBoundingClientRect × devicePixelRatio). Default 1.0.
     if (j.contains("scale")) {

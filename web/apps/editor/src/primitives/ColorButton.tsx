@@ -78,13 +78,13 @@ export function ColorButton({
   const [pickerColor, setPickerColor] = useState<RgbColor>(value);
   const [originalColor, setOriginalColor] = useState<RgbColor>(value);
   const [hexText, setHexText] = useState<string>(rgbToHex(value).slice(1).toUpperCase());
-  // Transient invalid flag for the hex field (design pass, C4): a rejected
+  // Transient invalid flag for the hex field: a rejected
   // commit used to silently revert with zero feedback; now the field flashes
   // the shared aria-invalid danger border until the next valid input.
   const [hexInvalid, setHexInvalid] = useState(false);
   const [open, setOpen] = useState(false);
 
-  // Roving tabindex per swatch grid (design pass, B5): one Tab stop each
+  // Roving tabindex per swatch grid: one Tab stop each
   // instead of 48 sequential stops through the picker.
   const basicRoving = useRovingIndex(BASIC_COLORS.length, { columns: 8 });
   const customRoving = useRovingIndex(slots.length, { columns: 8 });
@@ -115,7 +115,7 @@ export function ColorButton({
       onChange(rgb);
     } else {
       // Revert hex text to the current picker color on invalid input, and
-      // flag the field so the rejection is visible (C4).
+      // flag the field so the rejection is visible.
       setHexInvalid(true);
       setHexText(rgbToHex(pickerColor).slice(1).toUpperCase());
     }
@@ -183,8 +183,8 @@ export function ColorButton({
           onOpenAutoFocus={(e) => e.preventDefault()}
           onEscapeKeyDown={handleCancel}
         >
-          {/* Basic colors — 4 rows × 8 columns = 32 slots. Roving tabindex
-              (design pass, B5): each grid is ONE Tab stop; arrows move within
+          {/* Basic colors — 4 rows × 8 columns = 32 slots. Roving tabindex:
+              each grid is ONE Tab stop; arrows move within
               it (Up/Down jump a row of 8). */}
           <div className="mb-2">
             <div className="mb-1 text-3xs text-text-3">Basic colors</div>

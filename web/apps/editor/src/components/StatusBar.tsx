@@ -7,8 +7,8 @@
 //
 // The four stats cells live in a React.memo'd StatsCells child so the ~30 Hz
 // cursor updates (which re-render this parent) SKIP them — they only re-render
-// when `stats` actually changes (stats/tick, 4 Hz). See the #549 Profiler audit:
-// StatusBar was re-rendering all five cells on every cursor move.
+// when `stats` actually changes (stats/tick, 4 Hz). A React Profiler audit found
+// StatusBar re-rendering all five cells on every cursor move.
 import { memo, useEffect, useId, useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { useEngineField } from "@/lib/use-engine-snapshot";
@@ -84,11 +84,11 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
   // (engine/state snapshot + changed → EngineStateDto.paused) so the
   // status bar shows the paused state without a new bridge command.
   const paused = useEngineField(bridge, (s) => s.paused) ?? false;
-  // Presence fade for the PAUSED tag (design pass) — fast tier, so the
+  // Presence fade for the PAUSED tag — fast tier, so the
   // indicator eases in/out instead of popping with the 4 Hz cadence around it.
   const pausedPresence = usePresence(paused, PAUSED_EXIT_MS);
 
-  // Transient action feedback (F4): latest-wins message from the
+  // Transient action feedback: latest-wins message from the
   // status-feedback store, auto-cleared after STATUS_FEEDBACK_CLEAR_MS —
   // epoch-guarded so a rapid follow-up action restarts the timer instead of
   // being clipped by the previous one's clear.
@@ -135,7 +135,7 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
         setCursor(null);
       }
     });
-    // Autosave health (2026-07 audit). Durable state, deliberately NOT a
+    // Autosave health. Durable state, deliberately NOT a
     // toast: a failed autosave stays failed until a write succeeds, so a
     // warning that expired on a timer would tell the user the recovery net
     // recovered when nothing of the sort happened. The host emits only on a
@@ -166,7 +166,7 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
           pane). Feedback and PAUSED each own a PERSISTENT polite live region
           (a live region must pre-exist its content change to fire, and
           sharing one region would interleave/re-announce unrelated
-          messages — plan-review finding). Feedback sits LEFT of the
+          messages). Feedback sits LEFT of the
           right-anchored pair and truncates, so the hint never moves. */}
       <div className="ml-auto flex min-w-0 items-center gap-3">
         <span role="status" aria-live="polite" className="min-w-0" data-testid="status-feedback">

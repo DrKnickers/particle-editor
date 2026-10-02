@@ -1,6 +1,6 @@
 // Vitest unit test for the IncrementIndexDialog.
 // Verifies that the modal renders the delta + repeat spinners and OK fires
-// `emitters/duplicate-with-index-increment-many` with both values (#575).
+// `emitters/duplicate-with-index-increment-many` with both values.
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";

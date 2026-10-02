@@ -1,6 +1,6 @@
 // GroundPopoverBody — picker content for the ground plane: a show/hide master
 // toggle plus a grid of texture slots. Ported from the native
-// `GroundTexturePickerProc` in the legacy main.cpp, it is the editor's sole
+// `GroundTexturePickerProc` in the legacy Win32 editor, it is the editor's sole
 // ground-texture surface.
 //
 // Slot layout (mirrors Engine::kGroundTextureCount=8 / kGroundSolidColorSlot=4):

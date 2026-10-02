@@ -27,7 +27,7 @@
 //     and the subsequent getBoundingClientRect rely on the rect
 //     matching the viewport pixels exactly. Placing the testID on
 //     our own `.relative h-full` div keeps the geometry identical to
-//     today's App.tsx:234 site.
+//     original App.tsx viewport site.
 //   - The library's Panel renders a wrapper div (className lands on
 //     a nested DOM node); the testID on our inner div keeps the
 //     rect semantics unambiguous.
@@ -444,7 +444,7 @@ export function PanelLayout({ bridge }: Props) {
       // immediately. Otherwise (cold open) clear any stale readiness and wait for
       // THIS open's false→true edge. Gating on TERMINAL first paint (not a full
       // grid mount) lets a placeholder/error/off-index open slide promptly instead
-      // of waiting out the timeout (perf-audit P1b).
+      // of waiting out the timeout.
       const readyAtRun = useDockAnim.getState().atlasTerminalFirstPaint;
       if (readyAtRun) {
         fire("already_ready"); // re-open: picker already at terminal first paint via caches → start now
@@ -733,7 +733,7 @@ export function PanelLayout({ bridge }: Props) {
         >
           {/* Keyed by the DISPLAYED panel so swapping tools in the open dock
               (Spawner ↔ Atlas ↔ Lighting) remounts this wrapper and replays
-              the entrance fade — the swap used to hard-cut (design pass).
+              the entrance fade — the swap used to hard-cut.
               Open/close itself stays the flex-grow dock slide above; resizes
               don't change the key, so they never retrigger the fade. Rendered
               only while a panel is displayed, preserving the closed dock's

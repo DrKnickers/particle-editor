@@ -1,5 +1,4 @@
-// Regression test for the XML DoS guards (src/xml.cpp, audit F-XML + the
-// 2026-07 pre-release audit).
+// Regression test for the XML DoS guards (src/xml.cpp).
 //
 // Guard 1 (entity expansion): added when the bundled Expat (2.1.0) predated
 // the 2.4.0 billion-laughs amplification cap; kept as defence in depth. Legit
@@ -207,7 +206,7 @@ int main()
     }
 
     // --- D: BREADTH. A shallow document with millions of siblings must be
-    // rejected (2026-07 audit). The depth guard above does nothing here —
+    // rejected. The depth guard above does nothing here —
     // this document is two levels deep — and kMaxXmlFileBytes is no stand-in,
     // because every element becomes an XMLNode carrying a child vector and an
     // attribute map. The heap cost is a large multiple of the bytes on disk,

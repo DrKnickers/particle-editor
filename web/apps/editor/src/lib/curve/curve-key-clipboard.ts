@@ -1,6 +1,6 @@
 // curve-key-clipboard.ts — in-app clipboard for curve track keys.
 //
-// Legacy `CurveEditor.cpp` used a process-wide Win32 clipboard format
+// The legacy Win32 curve editor used a process-wide Win32 clipboard format
 // (`RegisterClipboardFormat("Alamo_EmitterTrackKeys")`) so copied keys
 // survived across the editor and even across applications. The web app has
 // no host buffer for individual track keys, and cross-*application* paste

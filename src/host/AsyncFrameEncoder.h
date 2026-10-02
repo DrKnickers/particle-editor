@@ -1,15 +1,15 @@
 #pragma once
-// AsyncFrameEncoder — Branch B of the record speedup (tasks/todo.md §3).
+// AsyncFrameEncoder — background PNG encode for the --record frame loop.
 //
 // Moves the record loop's per-frame PNG compress+write off the record thread:
 // measured at 56-62 ms/frame = 54-55% of all tick time (the [record-timing]
-// Phase-0 numbers), it was the single largest serial cost. The GRAB stays on
+// baseline), it was the single largest serial cost. The GRAB stays on
 // the record thread (WindowCapture.h GrabWindowPixels) so pixel content is
 // identical to the old inline path by construction; only zlib/PNG and the
 // disk write run here, on ONE background worker.
 //
-// Review-driven requirements (tasks/todo.md §3 Branch B + risks 3/4):
-//  - [R3b] The worker encodes via WIC (WicEncode.h), NOT GDI+ — the old
+// Requirements:
+//  - The worker encodes via WIC (WicEncode.h), NOT GDI+ — the old
 //    GDI+ CLSID pre-warm is gone with its consumer (the worker no longer
 //    touches GdiplusEncode.h's cache, so that concurrency axis is closed
 //    by construction). The worker initializes MTA COM for WIC itself.
@@ -36,7 +36,7 @@
 #include <utility>
 #include <vector>
 
-#include "WicEncode.h"     // [R3b] WIC PNG core for the worker (GDI+ stays for one-shots)
+#include "WicEncode.h"     // WIC PNG core for the worker (GDI+ stays for one-shots)
 
 namespace host {
 
@@ -56,7 +56,7 @@ public:
                                LogFn log = nullptr)
         : m_maxBytes(maxQueuedBytes), m_log(std::move(log))
     {
-        // [R3b] No GDI+ CLSID pre-warm anymore: the worker encodes via WIC
+        // No GDI+ CLSID pre-warm anymore: the worker encodes via WIC
         // and never reads GdiplusEncode.h's cache (see the header comment).
         m_worker = std::thread([this] { WorkerLoop(); });
     }
@@ -75,7 +75,7 @@ public:
         std::unique_lock<std::mutex> lk(m_mu);
         if (m_failed) return false;
         const size_t bytes = f.bgra.size();
-        // [R3] Time the cap-block: when the queue is full this wait inherits
+        // Time the cap-block: when the queue is full this wait inherits
         // the worker's PNG-encode variance INTO frame time, invisibly — the
         // record-timing summary reads these so back-pressure is a first-class
         // number, not a mystery bump in the png/capture buckets.
@@ -100,7 +100,7 @@ public:
         return true;
     }
 
-    // [R3] Back-pressure telemetry for the record-timing summary: total ms
+    // Back-pressure telemetry for the record-timing summary: total ms
     // spent blocked on the queue cap + how often, and queue high-water marks.
     struct QueueStats { double waitMsTotal; unsigned waitCount;
                         size_t bytesHighWater; size_t depthHighWater; };
@@ -138,7 +138,7 @@ public:
 private:
     void WorkerLoop()
     {
-        // [R3b] WIC needs COM on this thread (the worker is a bare
+        // WIC needs COM on this thread (the worker is a bare
         // std::thread — nothing initialized COM here before). MTA: the
         // factory is created + used only on this thread. A failed init is
         // not fatal here — the WIC encode below will fail loudly and latch
@@ -165,7 +165,7 @@ private:
                 m_space.notify_all();
             }
             if (alreadyFailed) continue;   // failed runs discard, not encode
-            // [R3b] WIC core (FilterOption=None) replacing the GDI+ encode —
+            // WIC core (FilterOption=None) replacing the GDI+ encode —
             // measured ≈49 ms/frame at 3200×1460 on GDI+; see WicEncode.h.
             if (!host::EncodeBgraToPngWic(f.bgra.data(), f.w, f.h, f.path))
             {
@@ -192,7 +192,7 @@ private:
     bool                    m_finished = false;
     std::wstring            m_failedPath;
     LogFn                   m_log;
-    // [R3] back-pressure telemetry (guarded by m_mu; see GetQueueStats).
+    // back-pressure telemetry (guarded by m_mu; see GetQueueStats).
     double                  m_queueWaitMsTotal = 0.0;
     unsigned                m_queueWaitCount   = 0;
     size_t                  m_bytesHighWater   = 0;

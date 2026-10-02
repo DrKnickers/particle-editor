@@ -347,7 +347,7 @@ type RowProps = {
   // non-null when this row sits on a chain whose estimated alive
   // count crosses the warning threshold (guard cap, or the 10k advisory).
   chainWarning: ChainWarning | null;
-  // [design pass] True on the render where this row first appears (add/
+  // True on the render where this row first appears (add/
   // paste/duplicate) — the li wears .row-fade-in for its mount.
   entering: boolean;
 };
@@ -444,7 +444,7 @@ function EmitterRow({
           EmitterTree list (see the flatRows map), not a per-row overlay, so the
           rows shift to reveal where the dragged emitter(s) will land. This row
           only paints the reparent onto-ring (reparentTintClass, below). */}
-      {/* [design pass B2] Row surface is a focusable DIV, not a <button> —
+      {/* Row surface is a focusable DIV, not a <button> —
           the visibility toggle inside is a real <button> now, and
           button-in-button is invalid HTML with ambiguous AT semantics.
           Roving tabindex: the PRIMARY row is the tree's single Tab stop
@@ -553,10 +553,10 @@ function EmitterRow({
                 : {}),
             }}
           >
-            {/* F1: visibility toggle on the LEFT (replaces the old role
+            {/* Visibility toggle on the LEFT (replaces the old role
                 dot). Always rendered so the grid columns stay stable
                 during inline rename. */}
-            {/* [design pass B2] Real <button> now that the row wrapper is a
+            {/* Real <button> now that the row wrapper is a
                 div (was span[role=button] nested in a button — invalid).
                 Native Enter/Space activation; keydown stops propagating so
                 the row's own activation handler doesn't double-fire. Roving:
@@ -744,12 +744,9 @@ function EmitterRow({
 }
 
 // ─── Panel-header toolbar ────────────────────────────────────────────
-// Restore the legacy panel toolbar from
-// src/UI/EmitterList.cpp:3016. Layout matches legacy ordering:
-//   [New ▾] [Delete] [▲ Move Up] [▼ Move Down]   (this batch)
-//   [👁]    [Show All] [Hide All]                (next batch)
-// All four buttons here use bridge calls that already exist in the
-// schema — no host-side work needed.
+// Restores the legacy Win32 editor's emitter-list toolbar, in legacy order:
+//   [New ▾] [Duplicate] [Delete] [▲ Move Up] [▼ Move Down] [Show All] [Hide All]
+// Every button uses an existing bridge call.
 
 // The footer buttons are IconButton's "tree" variant (28px square, matching
 // the main toolbar's `.tb-btn` height); the New Emitter dropdown wears the
@@ -1159,7 +1156,7 @@ export function EmitterTree({ bridge }: Props) {
 
   const recording = useRecording();
 
-  // [design pass] Entrance fade for newly ADDED rows (add/paste/duplicate).
+  // Entrance fade for newly ADDED rows (add/paste/duplicate).
   // Sibling reflow is the FLIP glide below; this covers the new row itself,
   // which used to pop in. Track every stableId ever rendered; a row whose id
   // is unseen this render wears .row-fade-in for its mount. Exempt: the
@@ -1177,16 +1174,16 @@ export function EmitterTree({ bridge }: Props) {
   }, [flatRows, recording]);
   useEffect(() => {
     // Replace (not accumulate): the set is "the PREVIOUS render's ids", so it
-    // can't grow unboundedly across a session (pre-PR review). A stableId
+    // can't grow unboundedly across a session. A stableId
     // deleted and re-added later fades in again — correct, it IS an add.
     seenStableIdsRef.current = new Set(flatRows.map((r) => r.node.stableId));
   }, [flatRows]);
 
-  // [design follow-ups, F7] Exit ghosts: a DELETED row fades out at its last
+  // Exit ghosts: a DELETED row fades out at its last
   // position (absolute overlay in scroll-content space) while its siblings
   // FLIP-glide to close the gap — the removal used to pop. Metadata for
   // vanished rows comes from the PREVIOUS render's flatRows (the FLIP
-  // position map only holds offsets — plan-review finding); coordinates
+  // position map only holds offsets); coordinates
   // from the position snapshot taken in the same layout effect. Skipped
   // while a drag/indicator is active (the gap spacer corrupts tops), under
   // reduced-motion and --record, and on bulk rebuilds (undo/redo mints
@@ -1196,7 +1193,7 @@ export function EmitterTree({ bridge }: Props) {
   const prevRowMetaRef = useRef<Map<number, { name: string; depth: number }>>(new Map());
   const EXIT_GHOST_MS = 200; // popover-pop-out (110ms, `both`) + removal slack
   // Removal timers, cleared on unmount so a late timeout can't setState on a
-  // dead component (pre-PR review).
+  // dead component.
   const ghostTimersRef = useRef<Set<number>>(new Set());
   useEffect(() => {
     const timers = ghostTimersRef.current;
@@ -1218,7 +1215,7 @@ export function EmitterTree({ bridge }: Props) {
     }
     flipPositionsRef.current = next;
 
-    // [F7] Detect removals against the snapshot we just replaced.
+    // Exit ghosts: detect removals against the snapshot we just replaced.
     const reduceMotion =
       typeof window.matchMedia === "function" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -1741,10 +1738,10 @@ export function EmitterTree({ bridge }: Props) {
     treeContainerRef,
   });
 
-  // [F7] Ghost nodes, rendered by whichever branch owns the tree area right
+  // Exit-ghost nodes, rendered by whichever branch owns the tree area right
   // now: the relative scroll container (normal case) or the emptied-tree
   // state (a mass delete removes the container in the same commit — the
-  // ghosts must not vanish with it; pre-PR review). Tops are scroll-content
+  // ghosts must not vanish with it). Tops are scroll-content
   // coordinates; the empty branch occupies the same slot, close enough for
   // a 200ms decorative fade.
   const exitGhostNodes = exitGhosts.map((g) => (
@@ -1773,7 +1770,7 @@ export function EmitterTree({ bridge }: Props) {
       data-primary-id={primaryId ?? ""}
       data-dragging-id={draggingId ?? ""}
       data-editing-id={editing?.id ?? ""}
-      // [design pass B2] -1: rows rove (the primary row is the tree's Tab
+      // -1: rows rove (the primary row is the tree's Tab
       // stop), so the container no longer takes its own stop — but it stays
       // programmatically focusable for the initial-load / remount-restore
       // focus paths above.
@@ -1792,7 +1789,7 @@ export function EmitterTree({ bridge }: Props) {
     >
       {tree !== null && <SystemLoadChip bridge={bridge} systemLoad={systemLoad} />}
       {tree === null ? (
-        // Shape-matched static skeleton (design follow-ups, F5) with an
+        // Shape-matched static skeleton with an
         // sr-only status so AT still hears the loading→loaded transition.
         <div role="status" className="flex-1 min-h-0 px-1 pt-1">
           <span className="sr-only">Loading emitters…</span>
@@ -1803,7 +1800,7 @@ export function EmitterTree({ bridge }: Props) {
           </div>
         </div>
       ) : rootChildren.length === 0 ? (
-        // Teaching empty state (design pass, D1): say what belongs here and
+        // Teaching empty state: say what belongs here and
         // point at the next action instead of the old bare "(no emitters)".
         <div
           role="status"
@@ -1902,7 +1899,7 @@ export function EmitterTree({ bridge }: Props) {
             />
           )}
           </ul>
-          {/* [F7] Exit ghosts (shared nodes — also rendered by the emptied-
+          {/* Exit ghosts (shared nodes — also rendered by the emptied-
               tree branch below, whose deletes have no scroll container). */}
           {exitGhostNodes}
           {/* Marquee (rubber-band) selection rectangle. */}

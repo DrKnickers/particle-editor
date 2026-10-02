@@ -1736,7 +1736,7 @@ describe("selected-key inverted-core marker geometry", () => {
   });
 });
 
-// ─── Sub-grid + snap-to-grid (#618) ──────────────────────────────────────────
+// ─── Sub-grid + snap-to-grid ────────────────────────────────────────────────
 //
 // Multi-channel path only (production). Canvas is 600×300, time [0,100],
 // value [0,1]. Grid: 10 major cells, 5 minor subdivisions → 50 minor cells,
@@ -1858,7 +1858,7 @@ describe("CurveEditor — snap-to-grid drag (#618)", () => {
   });
 });
 
-// ─── Group-drag snap (#618) ──────────────────────────────────────────────────
+// ─── Group-drag snap ────────────────────────────────────────────────────────
 const SNAP_GROUP_CHANNELS: ChannelDef[] = [
   { id: "red", label: "Red", color: "red", defaultOn: true, trackName: "red" },
 ];
@@ -1936,7 +1936,7 @@ describe("CurveEditor — group-drag snap (#618)", () => {
   });
 });
 
-// ─── Insert snap (#618) — incl. the endpoint-collision + focus-clamp guards ──
+// ─── Insert snap — incl. the endpoint-collision + focus-clamp guards ──
 const SNAP_INSERT_CHANNELS: ChannelDef[] = [
   { id: "red", label: "Red", color: "red", defaultOn: true, trackName: "red" },
 ];
@@ -2016,7 +2016,7 @@ describe("CurveEditor — insert snap (#618)", () => {
   });
 });
 
-// ─── Group-drag collision bound (#619) ───────────────────────────────────────
+// ─── Group-drag collision bound ─────────────────────────────────────────────
 describe("CurveEditor — group drag bounds against unselected keys (#619)", () => {
   const CH: ChannelDef[] = [
     { id: "red", label: "Red", color: "red", defaultOn: true, trackName: "red" },

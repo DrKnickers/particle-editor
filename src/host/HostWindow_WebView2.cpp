@@ -18,7 +18,7 @@ namespace {
 
 // RAII owner for a CoTaskMemAlloc'd string handed out by a WebView2 getter
 // (get_Source / TryGetWebMessageAsString / get_WebMessageAsJson), so an early
-// return or an exception can never leak it (2026-09-30 audit H1).
+// return or an exception can never leak it.
 struct CoTaskMemString
 {
     LPWSTR p = nullptr;
@@ -124,7 +124,7 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
 
     // [resize-perf] bridge message rate, tallied PER
     // KIND (the user's live splitter drag showed ~104/s of NON-scene-rect
-    // traffic the dimension audit hadn't ranked; attribution found it was
+    // traffic that earlier profiling hadn't ranked; attribution found it was
     // viewport/input at mouse rate). Extracting the kind is a cheap
     // substring scan next to the UTF16→8 + JSON parse that follows.
     // 1 Hz emit of the top kinds; idle emits nothing by construction.
@@ -171,7 +171,7 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
         // reports success), permanently short-circuiting this replay. (pre-PR review.)
         m_lastMaximizedSent = -1;
         EmitWindowStateIfChanged();
-        // Same replay for autosave health (2026-07 audit), and for the
+        // Same replay for autosave health, and for the
         // same reason: it is emitted only on a CHANGE, so a web reload would
         // otherwise drop a live "recovery net is stale" warning and not restore
         // it until the health flipped again — which, once broken, it may never
@@ -355,8 +355,8 @@ HRESULT HostWindowImpl::InitWebView2()
 {
     // Any session with no human at the keyboard gets a throwaway per-PID
     // profile. This used to list capture and automation but NOT --test-host,
-    // which therefore shared the daily driver's stable profile (2026-07
-    // audit) — and the comment on ComputeUserDataFolder already explains why
+    // which therefore shared the daily driver's stable profile — and the
+    // comment on ComputeUserDataFolder already explains why
     // that hurts: the runtime LOCKS the user-data folder, so a --test-host run
     // launched beside the live editor fails env-creation outright. That makes it
     // a flake source for the playwright-native GATE lane, not just a nuisance.
@@ -377,7 +377,7 @@ HRESULT HostWindowImpl::InitWebView2()
         !m_perfWebViewProfile.empty() ? " (perf profile)" :
         captureIsolation ? " (isolated capture profile)" : "");
 
-    // Task 2.2: when --test-host is set, pass --remote-debugging-port=9222
+    // When --test-host is set, pass --remote-debugging-port=9222
     // to the underlying Chromium runtime so Playwright (and any CDP client)
     // can attach. Opt-in only: production launches use nullptr options.
     // CoreWebView2EnvironmentOptions is the SDK's ready-made implementation
@@ -426,8 +426,8 @@ HRESULT HostWindowImpl::InitWebView2()
                     // runtime discards this HRESULT, and Run() already took the
                     // SYNCHRONOUS success from
                     // CreateCoreWebView2EnvironmentWithOptions. The result was a
-                    // live window with no UI, no bridge, and exit code 0
-                    // (2026-07 audit). Terminal failure instead, the
+                    // live window with no UI, no bridge, and exit code 0.
+                    // Terminal failure instead, the
                     // same treatment the Compositor::Init failure below gets.
                     FailFatalComposition(FAILED(envHr) ? envHr : E_FAIL);   // [[noreturn]]
                 }
@@ -456,7 +456,8 @@ HRESULT HostWindowImpl::InitWebView2()
 
                 // QI for Environment3 — exposes
                 // CreateCoreWebView2CompositionController. Confirmed
-                // available in SDK 1.0.3967.48 (WebView2.h:42610).
+                // available in SDK 1.0.3967.48 (ICoreWebView2Environment3
+                // in WebView2.h).
                 ComPtr<ICoreWebView2Environment3> env3;
                 HRESULT qihr = env->QueryInterface(IID_PPV_ARGS(&env3));
                 if (FAILED(qihr) || !env3)
@@ -505,13 +506,11 @@ HRESULT HostWindowImpl::InitWebView2()
 
 // ---------------------------------------------------------------------
 // Shared per-controller setup. Runs after
-// either CreateCoreWebView2Controller (HWND mode) or
-// CreateCoreWebView2CompositionController (+ QI to ICoreWebView2Controller)
-// completes. Every WebView2 wire-up (transparent bg, DevTools, host-object
-// proxy, AcceleratorKeyPressed, put_Bounds, app.local mapping,
-// add_WebMessageReceived, Navigate) is on the base ICoreWebView2Controller
-// or ICoreWebView2 interfaces both modes inherit — so this method runs
-// unchanged in both.
+// CreateCoreWebView2CompositionController completes and the composition
+// controller is QI'd to ICoreWebView2Controller. Every WebView2 wire-up
+// (transparent bg, DevTools, host-object proxy, AcceleratorKeyPressed,
+// put_Bounds, app.local mapping, add_WebMessageReceived, Navigate) is on
+// the base ICoreWebView2Controller or ICoreWebView2 interfaces.
 // ---------------------------------------------------------------------
 HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* controller)
 {
@@ -519,9 +518,8 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     webController = controller;
     controller->get_CoreWebView2(&webView);
 
-    // PROVEN FIX (PoC visual gate, polish 4b23425):
-    // Force the WebView2 surface to fully transparent so
-    // the sibling D3D9 child HWND is visible through the
+    // Force the WebView2 surface to fully transparent so the
+    // engine visual composited behind it is visible through the
     // viewport slot's transparent <div>.
     ComPtr<ICoreWebView2Controller2> ctrl2;
     if (SUCCEEDED(controller->QueryInterface(IID_PPV_ARGS(&ctrl2))))
@@ -565,8 +563,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                 // Microsoft documents as TRUE on ICoreWebView2Settings
                 // (get_AreDevToolsEnabled: "The default value is TRUE").
                 // F12 therefore opened DevTools on the privileged editor page,
-                // where the native bridge is reachable from the console
-                // (2026-07 audit).
+                // where the native bridge is reachable from the console.
                 settings->put_AreDevToolsEnabled(FALSE);
                 Log("[host] production: DevTools disabled\n");
             }
@@ -590,7 +587,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
         }
     }
 
-    // Task 2.2.1: expose hostBridge via AddHostObjectToScript
+    // Expose hostBridge via AddHostObjectToScript
     // (--test-host only). WebView2 drops postMessage under
     // CDP attachment; the host-object
     // channel is on a separate marshalling path and works,
@@ -633,7 +630,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
         }
     }
 
-    // Task 1.6: intercept registered accelerator keys before
+    // Intercept registered accelerator keys before
     // WebView2 routes them to the page. ICoreWebView2Controller
     // exposes add_AcceleratorKeyPressed for exactly this purpose;
     // we only set Handled=TRUE when the combo matches the
@@ -707,7 +704,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
         Log("[host] DocumentTitleChanged handler registered\n");
     }
 
-    // Fit to client. Skip a minimized/degenerate seed (#509 same-class guard):
+    // Fit to client. Skip a minimized/degenerate seed (same guard as WM_SIZE):
     // a 0-area put_Bounds makes WebView2 stop rendering; a later positive-size
     // WM_SIZE (→ ResizeWebViewToClient) re-seeds. Non-iconic startup is the
     // normal case, so this is a no-op except a rare start-minimized launch.
@@ -716,14 +713,11 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     if (!IsIconic(hMain) && bounds.right - bounds.left > 0 && bounds.bottom - bounds.top > 0)
         controller->put_Bounds(bounds);
 
-    // Viewport is now a top-level WS_POPUP
-    // owned by hMain (created in WM_CREATE). DWM
-    // composites top-level popups as their own
-    // layer in screen space, above any child HWND's
-    // DComp surface (including WebView2). No
-    // SetWindowRgn cut-out is required, no z-order
-    // promotion is needed — owned popups naturally
-    // stay above their owner.
+    // The viewport is a top-level WS_POPUP owned by hMain
+    // (created in WM_CREATE) and hidden once the window is
+    // up; the engine frame reaches the screen through the
+    // DComp engine visual, so no SetWindowRgn cut-out or
+    // z-order promotion is needed here.
 
     // Production mode: the React app loads from the stable virtual origin
     // https://app.local/, whose requests the WebResourceRequested handler
@@ -745,8 +739,8 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
             [this](ICoreWebView2*,
                    ICoreWebView2WebMessageReceivedEventArgs* args) noexcept -> HRESULT
             {
-                // No exception may unwind into WebView2's COM dispatcher
-                // (2026-09-30 audit H1): the dispatcher's own guard turns a
+                // No exception may unwind into WebView2's COM dispatcher:
+                // the dispatcher's own guard turns a
                 // handler throw into an error envelope, and this catch-all is
                 // the backstop for everything around it (parse, log, perf).
                 // The CoTaskMem strings are RAII-owned, so nothing leaks either.
@@ -761,8 +755,8 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                     // success branch, so a failing/empty get_Source skipped it and
                     // fell straight through to OnWebMessage — the comment above
                     // promised the message "must not reach the native bridge", but
-                    // the control flow granted exactly that on a COM error
-                    // (2026-07 audit). No confirmed origin, no dispatch.
+                    // the control flow granted exactly that on a COM error.
+                    // No confirmed origin, no dispatch.
                     CoTaskMemString src;
                     const HRESULT srcHr = args->get_Source(&src.p);
                     if (FAILED(srcHr) || !src.p)
@@ -777,7 +771,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                             "source %ls\n", src.p);
                         return S_OK;
                     }
-                    // Size cap on both ingress paths (2026-07 audit).
+                    // Size cap on both ingress paths.
                     // OnWebMessage parses the whole string, so without this one
                     // postMessage drives an unbounded UI-thread allocation. Checked
                     // AFTER the origin gate so an untrusted sender never gets even
@@ -845,7 +839,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                 // FAIL CLOSED, same as the WebMessage source check above: a
                 // failing/empty get_Uri used to skip the whole block WITHOUT
                 // put_Cancel, so a navigation we could not identify was allowed
-                // to proceed (2026-07 audit). An unidentifiable target
+                // to proceed. An unidentifiable target
                 // is exactly the one to refuse — the app's own load reports its
                 // URI fine, so cancelling here costs nothing legitimate.
                 LPWSTR uri = nullptr;
@@ -1026,7 +1020,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
         // the first navigation reproduces the blank-window / ERR_NAME_NOT_RESOLVED
         // failure this change eliminates. A failed registration must therefore be
         // terminal, not swallowed — same fail-closed treatment the removed folder
-        // mapping got (2026-07 audit).
+        // mapping got.
         if (FAILED(wrrHr))
         {
             Log("[host] add_WebResourceRequested(app.local) failed hr=0x%08lx\n", wrrHr);
@@ -1060,7 +1054,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                 return S_OK;
             }).Get(), &navCompletedTok);
 
-    // Renderer / browser process failure (2026-10-01 audit HX1). Without this a
+    // Renderer / browser process failure. Without this a
     // crashed renderer left a dead page — and with a dirty document a window
     // whose close was vetoed forever, waiting on a prompt the dead page could
     // never show. Registered before Navigate so a crash during the first load
@@ -1081,8 +1075,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
 
     // Navigate to the React app. Navigate returns SYNCHRONOUSLY on whether the
     // request was accepted at all, and that HRESULT was dropped — a rejected
-    // URL left the window blank with nothing in the log and a zero exit code
-    // (2026-07 audit).
+    // URL left the window blank with nothing in the log and a zero exit code.
     if (useDevUi)
     {
         Log("[host] dev-ui: Navigate to Vite dev server\n");
@@ -1106,19 +1099,17 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
 
 // ---------------------------------------------------------------------
 // Composition controller completion callback.
-// Mirrors dxgi_spike.cpp:OnCompositionControllerReady. Order:
+// Mirrors OnCompositionControllerReady in spike/dxgi_spike.cpp. Order:
 //   1. Stash the composition controller (kept alive for WM_DESTROY).
 //   2. QI down to ICoreWebView2Controller and run the shared
-//      FinishWebView2ControllerSetup. All wire-up post-step is identical
-//      to HWND mode (transparent bg, AcceleratorKeyPressed, put_Bounds,
-//      Navigate, ...).
+//      FinishWebView2ControllerSetup (transparent bg,
+//      AcceleratorKeyPressed, put_Bounds, Navigate, ...).
 //   3. Build the DComp tree NOW (deferred — must happen AFTER
 //      the controller exists). Compositor::AttachWebView2 plugs the
 //      controller's RootVisualTarget into the webview visual + Commits.
-// If step 3 fails: it's the opaque-white failure mode. Log and return; the
-// editor still has the controller wired so the rest of the host stays
-// alive, but the visual tree won't show anything. Per the acceptance
-// criteria, this is the load-bearing observation.
+// A failure in any step posts WM_APP_COMPOSITION_FATAL: composition is
+// required and there is no HWND fallback. Only the engine-visual attach
+// after step 3 is a soft failure (chrome stays usable).
 // ---------------------------------------------------------------------
 HRESULT HostWindowImpl::OnCompositionControllerReady(
     HRESULT chr, ICoreWebView2CompositionController* ctl)
@@ -1236,10 +1227,8 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
     }
 
     // Build the visual tree. This is the load-bearing call — if it
-    // returns S_OK but the editor renders opaque white, we are in the
-    // documented opaque-white failure mode. Per the acceptance gate:
-    // STOP, capture binary + log + screenshot, surface to user. Do
-    // not iterate beyond the 24h cap.
+    // returns S_OK but the editor renders opaque white, the tree is
+    // wired wrong (the opaque-white failure mode).
     if (m_compositor)
     {
         HRESULT bhr = m_compositor->AttachWebView2(ctl);
@@ -1258,7 +1247,7 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
         }
         // Seed the tree to the current client size so the first paint
         // is sized correctly. SetSize commits internally. Skip a
-        // minimized/degenerate seed (#509 same-class guard): a 0-/negative-area
+        // minimized/degenerate seed (same guard as WM_SIZE): a 0-/negative-area
         // SetSize corrupts the surface; a later positive-size WM_SIZE re-seeds.
         RECT r;
         GetClientRect(hMain, &r);
@@ -1270,8 +1259,8 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
         // Attach engine visual BEHIND the
         // WebView2 visual. On failure, log
         // and continue with composition mode intact: chrome works,
-        // viewport area stays empty (explicit
-        // no-chain-into-HWND-mode). The per-frame render loop composites a
+        // viewport area stays empty (there is no
+        // HWND fallback). The per-frame render loop composites a
         // successful attachment; an unsuccessful one leaves the viewport empty.
         if (engine && engine->GetSharedTextureHandle())
         {

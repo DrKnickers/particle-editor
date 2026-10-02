@@ -57,9 +57,9 @@ public:
 // In this architecture, the engine renders into
 // a SCENE sub-rect of the popup HWND and m_projection is built at
 // scene-rect aspect (per-pixel FoV referenced to scene-H, see
-// src/engine.cpp:1540 SetSceneViewport). But Engine::Render restores the
-// D3D9 device viewport to FULL-RT before returning (src/engine.cpp:687-
-// 699), so reading the device viewport here produces a viewport /
+// Engine::SetSceneViewport). But Engine::Render restores the
+// D3D9 device viewport to FULL-RT before returning, so reading the
+// device viewport here produces a viewport /
 // projection mismatch — D3DXVec3Unproject normalises (x - 0) / RT_W to
 // NDC and feeds it into a projection that expected (x - sceneX) /
 // sceneW. The world ray lands at the wrong NDC point, off by the

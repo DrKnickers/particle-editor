@@ -288,7 +288,7 @@
            only — no DXSDK, just Win10 SDK + WebView2 SDK. Compositor.cpp
            doesn't use d3dx9 or any other DXSDK-only API so isolation is
            safe. Other files in the project keep DXSDK first as before. -->
-      <!-- F9 (audit): use the SDK macros instead of a hardcoded 10.0.26100.0
+      <!-- Use the SDK macros instead of a hardcoded 10.0.26100.0
            path so the build is portable to any installed Win10 SDK.
            $(WindowsSDKVersion) carries a trailing backslash by MSBuild
            convention. Still REPLACES the path (no DXSDK) for this file. -->

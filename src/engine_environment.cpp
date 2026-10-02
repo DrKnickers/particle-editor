@@ -1,6 +1,5 @@
 // engine_environment.cpp — the ground + skydome environment cluster of the Engine class,
-// moved verbatim out of engine.cpp (Phase B translation-unit split —
-// tasks/2026-07-06-heavyweight-refactor-plan.md). SAME class, same header
+// moved verbatim out of engine.cpp (a translation-unit split). SAME class, same header
 // (engine.h); this is a file split, not a class split. Cluster-local
 // file-scope statics moved with their consumers; helpers shared across
 // TUs are declared in engine_internal.h with one definition.
@@ -17,8 +16,8 @@
 using namespace std;
 
 // slot 0 is Off (no resource); slots 1-8 map to bundled skydome textures.
-// RCDATA entries for IDR_SKYDOME_* are added in Task 5; until then,
-// FindResource for slots 1-8 returns NULL and ReloadSkydomeTexture returns false.
+// The IDR_SKYDOME_* RCDATA entries live in ParticleEditor.rc; if one is missing,
+// FindResource returns NULL and ReloadSkydomeTexture returns false.
 static const int kSkydomeBundledResources[Engine::kSkydomeBundledCount] = {
     0,                       // 0: Off
     IDR_SKYDOME_SPACE,       // 1
@@ -436,8 +435,7 @@ bool Engine::SetGroundSlotCustomPath(int slot, const std::wstring& path)
     // Refuse a path that points at another machine. Enforced HERE rather than in
     // the bridge handler because the registry restore at startup calls this
     // setter too — guarding only the handler would leave a stored UNC path
-    // replaying on every launch, which is the durable half of the finding
-    // (2026-07 audit).
+    // replaying on every launch, which is the durable half of the problem.
     if (!IsLocalCustomAssetPath(path)) return false;
     m_groundSlotCustomPaths[slot] = path;
     // If the mutated slot is currently selected, reload the engine's
@@ -829,8 +827,8 @@ static SkydomeBlend SkydomeBlendFor(const std::string& shaderName)
 // Apply a sub-mesh's authored material params (index-parallel handles) to the
 // effect: each param -> its sampler/uniform via the .fx Texture=(X) link;
 // params absent from this shader (NULL handle) are skipped. This loop was
-// byte-identical in RenderSkydomeMesh and RenderReferenceObject (DRY audit
-// cpp-engine-0) — extracted so the two stay in lockstep. ONLY the param loop is
+// byte-identical in RenderSkydomeMesh and RenderReferenceObject — extracted
+// so the two stay in lockstep. ONLY the param loop is
 // shared; the surrounding uniform-bind blocks legitimately diverge (the
 // ref-object path binds object-space eye/light + a skinned bone palette) and
 // stay inline at each call site.
@@ -914,7 +912,7 @@ static D3DXMATRIX MakeSkydomeBillboardWorld(const D3DXVECTOR3& eyePos,
 
 // Draw one decoded .alo dome: each sub-mesh runs its OWN named game
 // shader 1:1 (Skydome.fx / MeshGloss.fxo / MeshAdditive.fx). Mirrors the
-// particle per-frame binding template (engine.cpp:746) but binds the REAL world
+// particle per-frame binding template (Engine::Render) but binds the REAL world
 // matrix (Skydome.fx computes world_pos/world_normal for SH) instead of the
 // identity the particle path uses. Saves + restores the full render-state delta
 // any sub-mesh may touch so the dome can't leak blend/zwrite/cull/decl into the
@@ -987,7 +985,7 @@ void Engine::RenderSkydomeMesh(SkydomeMesh& mesh, const D3DXMATRIX& world)
             : world;
         D3DXMATRIX subWvp = subWorld * m_view * m_projection;
 
-        // Engine semantics: the verbatim particle binding template (engine.cpp:746)
+        // Engine semantics: the verbatim particle binding template (Engine::Render)
         // but with the REAL world matrix -- the dome shaders compute world_pos /
         // world_normal for SH diffuse + (MeshGloss) specular -- not the identity the
         // particle path uses. Handles a shader doesn't declare are NULL -> no-op.
@@ -1437,7 +1435,7 @@ bool Engine::SetSkydomeCustomPath(int slot, const std::wstring& path)
 {
     if (DeviceCallsBlocked()) return false;
     if (slot < kSkydomeFirstCustomSlot || slot >= kSkydomeSlotCount) return false;
-    // Same guard as the ground slot above. The audit filed this against the
+    // Same guard as the ground slot above. The original fix covered the
     // ground handler only; this sibling took its path exactly as unvalidated,
     // and unlike the ground slot the bridge PERSISTS it — so this is the one
     // that survives a restart. Capping one of a pair is not capping the pair.

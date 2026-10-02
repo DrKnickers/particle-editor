@@ -1,5 +1,4 @@
-// Unit test for engine/set/camera validation (src/host/CameraParams.h,
-// 2026-10-01 audit HX2).
+// Unit test for engine/set/camera validation (src/host/CameraParams.h).
 //
 // The handler used to map a missing field to (0,0,0) and hand any camera to
 // Engine::SetCamera; a coincident eye/target or a zero/parallel up vector made

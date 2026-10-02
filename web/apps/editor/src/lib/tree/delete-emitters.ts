@@ -71,7 +71,7 @@ export function writeConfirmDelete(value: boolean): void {
 // recursively host-side, so issuing a separate delete for a selected descendant
 // is both redundant AND the source of the stale-positional-id footgun (deleting
 // the parent shifts indices, so a later stale id resolves to the wrong node).
-// Pure; unit-tested (release-audit #8).
+// Pure; unit-tested.
 export function collapseToRoots(ids: number[], tree: EmitterTreeDto | null): number[] {
   if (ids.length <= 1 || !tree) return [...ids];
   const selected = new Set(ids);
@@ -101,8 +101,8 @@ export function collapseToRoots(ids: number[], tree: EmitterTreeDto | null): num
 // ONE batched emitters/delete-many, not one emitters/delete per root: the host
 // captures a single undo entry around its whole loop, so one Ctrl+Z reverses
 // the whole gesture. The per-root fan-out this replaced captured N undo
-// entries, and a single Ctrl+Z restored one emitter out of N (2026-07
-// audit). Batching for a single id is harmless — delete-many with one id is
+// entries, and a single Ctrl+Z restored one emitter out of N. Batching for
+// a single id is harmless — delete-many with one id is
 // the same capture, sweep and events as delete — and matches duplicateEmitters,
 // which sends duplicate-many unconditionally.
 export function performDelete(bridge: Bridge, ids: number[], tree: EmitterTreeDto | null): void {
@@ -123,7 +123,7 @@ export function performDelete(bridge: Bridge, ids: number[], tree: EmitterTreeDt
 type DeleteConfirmStore = {
   // `tree` is the tree snapshot captured when the confirm opened — confirm-time
   // revalidation compares it by reference against the live tree to detect a
-  // structural change that would make the captured ids stale (release-audit #8).
+  // structural change that would make the captured ids stale.
   pending: { ids: number[]; impact: DeleteImpact; tree: EmitterTreeDto | null } | null;
   open: (ids: number[], impact: DeleteImpact, tree: EmitterTreeDto | null) => void;
   clear: () => void;
@@ -149,7 +149,7 @@ export function requestDeleteEmitters(bridge: Bridge, ids: number[]): void {
 // Called by <DeleteConfirmDialog> when the user confirms. Re-validates against the
 // CURRENT tree: if it changed since the confirm opened (an emitters/tree/changed
 // landed), the captured positional ids are stale, so ABORT rather than delete the
-// wrong nodes (release-audit #8). Otherwise collapse-to-roots + delete against the
+// wrong nodes. Otherwise collapse-to-roots + delete against the
 // live tree. Always clears the pending state.
 export function confirmPendingDelete(bridge: Bridge): void {
   const pending = useDeleteConfirmStore.getState().pending;

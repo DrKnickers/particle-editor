@@ -87,12 +87,12 @@ public:
 // read, empty file, or null pointer (Releases the non-null file before throwing).
 // This is the raw primitive (== ReadAndReleaseCapped(file, 0)); for any read of a
 // mod-influenced ASSET prefer ReadAndReleaseCapped with a ResourceLimits.h cap, so
-// a safe-named but pathologically large file can't force a huge allocation (#415).
+// a safe-named but pathologically large file can't force a huge allocation.
 std::vector<unsigned char> ReadAndRelease(IFile* file);
 
 // Like ReadAndRelease, but rejects a file whose size() exceeds `maxBytes` BEFORE
 // allocating — so a safe-named but pathologically large loose/MEG-backed asset
-// can't force a huge allocation (#415). Throws ReadException on oversize, empty,
+// can't force a huge allocation. Throws ReadException on oversize, empty,
 // null, or partial read (Releases the non-null file before throwing). `maxBytes
 // == 0` means "no cap" — identical to ReadAndRelease. Callers pass the relevant
 // cap from ResourceLimits.h (kMaxTextureAssetBytes / kMaxAloModelBytes /

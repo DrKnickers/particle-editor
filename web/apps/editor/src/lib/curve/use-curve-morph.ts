@@ -5,9 +5,6 @@
 // fill) via one shared rAF loop — the FLIP/dock-anim direct-DOM-write
 // idiom, no per-frame setState.
 //
-// Markers (glide/pop/ghost) are Task 3 — not in this file yet.
-// This task covers line + fill only.
-//
 // Fill: only the FOCUS channel has a fill (matching the static layer
 // which only draws the gradient under the focus curve). The overlay
 // replicates the static gradient exactly: a self-contained <defs>
@@ -474,7 +471,7 @@ export function useCurveMorph(args: {
       const change = classifyTrackChange(p.track, c.track);
       if (change === "none") continue;
 
-      // Drag-commit suppression (Task 4 wires the recording; here we only
+      // Drag-commit suppression (the curve editor records it; here we only
       // consume. If suppressRef.current is null, this is a no-op).
       const sup = suppressRef.current;
       if (

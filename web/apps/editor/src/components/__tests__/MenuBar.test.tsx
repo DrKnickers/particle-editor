@@ -421,7 +421,7 @@ describe("MenuBar — Mods menu (layer stacking)", () => {
     useFileOpErrorStore.getState().clear();
   });
 
-  // The boot mods/list seed is deferred to the first idle slot (perf-audit P1a):
+  // The boot mods/list seed is deferred to the first idle slot:
   // not fetched before first paint; fetched after the idle flush. (Overrides the
   // synchronous rIC stub in test-setup with a controllable queue.)
   it("defers the boot mods/list seed to idle", async () => {

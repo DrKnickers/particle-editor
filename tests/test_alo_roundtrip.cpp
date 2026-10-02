@@ -2,7 +2,7 @@
 //
 // Two parts:
 //
-//  (a) ROUND-TRIP FIDELITY (audit C1 feasible proof). SaveParticleSystem's
+//  (a) ROUND-TRIP FIDELITY. SaveParticleSystem's
 //      temp-then-rename atomicity (ParticleSystemIO.cpp + AtomicSave.cpp) is
 //      linked and fault-injected by test_particle_system_io. The proof here
 //      for the save path is round-trip fidelity: build a ParticleSystem via the
@@ -11,12 +11,13 @@
 //      broken writer/reader (the thing a temp-then-rename guards the on-disk copy
 //      against) surfaces here as a fidelity failure.
 //
-//  (b) MALFORMED CORPUS (audit A2/A3/A4 + string terminator). Craft .alo chunk
-//      byte images that must be REJECTED with BadFileException (not crash) or, for
-//      the two documented CLAMP fixes, load with the field clamped rather than
-//      throwing. The valid envelopes are produced by serializing a real system and
-//      byte-patching one field to its crafted value (located by a unique sentinel),
-//      so each image stays structurally valid up to the targeted corruption.
+//  (b) MALFORMED CORPUS (nTriangles, group type, track interpolation, string
+//      terminator). Craft .alo chunk byte images that must be REJECTED with
+//      BadFileException (not crash) or, for the two documented CLAMP fixes,
+//      load with the field clamped rather than throwing. The valid envelopes
+//      are produced by serializing a real system and byte-patching one field
+//      to its crafted value (located by a unique sentinel), so each image stays
+//      structurally valid up to the targeted corruption.
 //
 // See the test_alo_roundtrip entry in tests/native-tests.json.
 
@@ -233,13 +234,13 @@ static void buildOne(ParticleSystem& ps)
     // value of 1 would make 04 04 01 00 00 00 ambiguous with the scale-track
     // IT_SMOOTH sentinel used in b4 below.
     e->blendMode    = ParticleSystem::BLEND_SCANLINES; // 13
-    // Sentinel for the A2 nTriangles mini-chunk (0x05). The writer stores
+    // Sentinel for the nTriangles mini-chunk (0x05). The writer stores
     // max(1,nTriangles)-1, so this writes 0x11111111 -> unique to find.
     e->nTriangles   = 0x11111112ul;
-    // Sentinel group type for the A3 patch. write() forces groups[1].type=1,
-    // so use groups[0]; 0x22 is a valid (<5) type at write time.
+    // Sentinel group type for the b5 patch. write() forces groups[1].type=1,
+    // so use groups[0]; GT_CYLINDER (4) is a valid (<5) type at write time.
     e->groups[ParticleSystem::GROUP_SPEED].type = ParticleSystem::GT_CYLINDER; // 4
-    // Sentinel interpolation for the A4 patch on the scale track (>=4 = float).
+    // Sentinel interpolation for the b4 patch on the scale track (>=4 = float).
     // IT_SMOOTH (1) is used by NO other track by default (only TRACK_INDEX is
     // IT_STEP; the rest are IT_LINEAR), so 04 04 01 00 00 00 is unique.
     e->trackContents[ParticleSystem::TRACK_SCALE].interpolation = Track::IT_SMOOTH; // 1
@@ -296,7 +297,7 @@ static void appendRootSibling(Bytes& image, const Bytes& sibling)
            (rootHeader & 0x80000000u) + rootPayload + (uint32_t)sibling.size());
 }
 
-// ---- hardening: absolute normal-chunk size cap (2026-07 audit) --------------
+// ---- hardening: absolute normal-chunk size cap --------------------------------
 // A crafted .alo whose top-level chunk claims a payload within its parent bound
 // (the whole file) but over kMaxAloChunkBytes must be rejected by
 // ChunkReader::next(). The cap previously guarded only mini-chunks, so a
@@ -495,7 +496,7 @@ int main()
     }
 
     // --- link-exempt (0x0003) hardening: a corrupt packed size/count must be
-    // rejected, not drive an unbounded read or allocation (release-audit).
+    // rejected, not drive an unbounded read or allocation.
     {
         ParticleSystem ps;
         buildOne(ps);
@@ -575,7 +576,7 @@ int main()
         }
     }
 
-    // --- b3: A2 nTriangles = 0xFFFFFFFF must CLAMP to 1 (loads, not throws).
+    // --- b3: nTriangles = 0xFFFFFFFF must CLAMP to 1 (loads, not throws).
     // Stored value is 0x11111111 inside mini-chunk 0x05 (header bytes 05 04).
     {
         Bytes img = good;
@@ -587,18 +588,18 @@ int main()
             putU32(img, (size_t)at + 2, 0xFFFFFFFFul);   // crafted raw 0xFFFFFFFF
             bool other = false; ParticleSystem* rp = NULL;
             bool ok = loads(img, &rp, other);
-            CHECK(ok && !other && rp, "A2: nTriangles=0xFFFFFFFF still LOADS (clamp, no throw)");
+            CHECK(ok && !other && rp, "nTriangles=0xFFFFFFFF still LOADS (clamp, no throw)");
             if (rp)
             {
                 CHECK(rp->getEmitters().size() == 1 &&
                       rp->getEmitters()[0]->nTriangles == 1,
-                      "A2: nTriangles clamped to 1 (no +1 wrap to 0)");
+                      "nTriangles clamped to 1 (no +1 wrap to 0)");
                 delete rp;
             }
         }
     }
 
-    // --- b4: A4 interpolation = 0x7FFFFFFF must CLAMP to IT_LINEAR (loads).
+    // --- b4: interpolation = 0x7FFFFFFF must CLAMP to IT_LINEAR (loads).
     // The scale track (index 4) interpolation is written IT_SMOOTH (1) in a
     // mini-chunk 0x04 (header bytes 04 04). Only this track is IT_SMOOTH (all
     // others are IT_LINEAR/IT_STEP by default), so 04 04 01 00 00 00 is unique.
@@ -612,18 +613,18 @@ int main()
             putU32(img, (size_t)at + 2, 0x7FFFFFFFul);   // crafted out-of-range enum
             bool other = false; ParticleSystem* rp = NULL;
             bool ok = loads(img, &rp, other);
-            CHECK(ok && !other && rp, "A4: interpolation=0x7FFFFFFF still LOADS (clamp, no throw)");
+            CHECK(ok && !other && rp, "interpolation=0x7FFFFFFF still LOADS (clamp, no throw)");
             if (rp && rp->getEmitters().size() == 1)
             {
                 Track::InterpolationType got =
                     rp->getEmitters()[0]->trackContents[ParticleSystem::TRACK_SCALE].interpolation;
-                CHECK(got == Track::IT_LINEAR, "A4: out-of-range interpolation clamped to IT_LINEAR");
+                CHECK(got == Track::IT_LINEAR, "out-of-range interpolation clamped to IT_LINEAR");
             }
             delete rp;
         }
     }
 
-    // --- b5: A3 Group.type = 0xDEADBEEF (>= NUM_GROUP_TYPES) -> BadFileException.
+    // --- b5: Group.type = 0xDEADBEEF (>= NUM_GROUP_TYPES) -> BadFileException.
     // groups[GROUP_SPEED].type was set to GT_CYLINDER (4); it is blitted raw as
     // the first 4 bytes of the 0x1101 group payload. 04 00 00 00 also matches the
     // interpolation IT_LINEAR mini-chunks, so anchor on the *group* by including
@@ -640,7 +641,7 @@ int main()
         if (at >= 0)
         {
             putU32(img, (size_t)at, 0xDEADBEEFul);   // out-of-range group type
-            expectBadFile(img, "A3: Group.type=0xDEADBEEF (>= NUM_GROUP_TYPES) -> BadFileException");
+            expectBadFile(img, "Group.type=0xDEADBEEF (>= NUM_GROUP_TYPES) -> BadFileException");
         }
     }
 

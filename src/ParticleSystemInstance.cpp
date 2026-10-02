@@ -116,7 +116,7 @@ int ParticleSystemInstance::Update(TimeF currentTime)
 
 // Draw the emitters matching `wantHeat` back-to-front per the authored emitter
 // TREE, not m_emitters spawn order: a parent draws ON TOP OF its children, and
-// siblings/roots order by authored list POSITION (#574, #609). Root-only systems
+// siblings/roots order by authored list POSITION. Root-only systems
 // are a no-op ordering (each root's key is just its position). The pure pieces —
 // post-order draw keys over the authored tree, then a heat-filtered stable sort
 // by key — live in EmitterDrawOrder.h (unit-tested, tests/test_emitter_draw_order.cpp);
@@ -126,7 +126,7 @@ int ParticleSystemInstance::Update(TimeF currentTime)
 // Emitter::index — is deliberate: index is a mutable mirror the bridge can
 // overwrite (BridgeDispatch_Emitters `emit->index = ...`), and a desynced index
 // could silently collapse a parent's and child's keys and put the child back on
-// top (#609 review). Position is the true authored order and each Emitter* is a
+// top. Position is the true authored order and each Emitter* is a
 // stable identity, so we map both the parent links and every live instance
 // through the same Emitter*->position table.
 void ParticleSystemInstance::RenderByRank(IDirect3DDevice9* pDevice, bool wantHeat)

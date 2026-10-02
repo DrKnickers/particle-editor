@@ -34,8 +34,8 @@ function quoteAttr(value: string): string {
   return JSON.stringify(value);
 }
 
-// An atlas-tile ref points at frame N on the single <canvas> grid (post-#572,
-// no per-cell DOM); every other ref maps to a plain CSS selector.
+// An atlas-tile ref points at frame N on the single <canvas> grid (no
+// per-cell DOM); every other ref maps to a plain CSS selector.
 type RefTarget = { atlasTile: false; selector: string } | { atlasTile: true; frame: number };
 
 function selectorForRef(ref: string): RefTarget | null {

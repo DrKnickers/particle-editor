@@ -1,4 +1,4 @@
-// motion-coverage.spec.ts — regression fence for the 2026-07-18 design pass
+// motion-coverage.spec.ts — regression fence for the motion rule
 // ("no hard cuts"). Two layers:
 //
 //   1. INVARDS (computed-style invariants): the high-traffic interactive

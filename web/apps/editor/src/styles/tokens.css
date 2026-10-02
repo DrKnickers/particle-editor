@@ -36,7 +36,7 @@
      = ~4.05:1, sub-AA). CAUTION: on lighter surfaces the ratio shrinks —
      ~4.27:1 on --panel-3 (#2a2a2a), below AA for normal text. Safe for
      large/secondary text everywhere, but don't treat this token as
-     universally AA (design audit 2026-07-18). */
+     universally AA. */
   --accent: #4ea3ff;
   --accent-2: #2f7fd4;
   --accent-soft: rgba(78, 163, 255, 0.16);
@@ -65,7 +65,7 @@
   --danger-fg: #e06c75;
   --success-fg: #6fbf7a;
   --warning-fg: #e0a14b;
-  /* Tertiary text FOR PANEL SURFACES (design follow-ups, F6). --text-3 is AA
+  /* Tertiary text FOR PANEL SURFACES. --text-3 is AA
      against --bg only; this variant clears AA on the panel ramp too
      (#999999 on --panel-3 #2a2a2a ≈ 5.0:1). Scope: on-panel fine print
      (spinner unit suffixes and similar) — not a general text color. */
@@ -115,7 +115,7 @@
      themes match at the same alpha so the visual weight is
      consistent regardless of background. */
   --curve-grid: rgba(255, 255, 255, 0.08);
-  /* Faint minor sub-grid (#618): ~half the major-grid alpha so the
+  /* Faint minor sub-grid: ~half the major-grid alpha so the
      finer lines read as a whisper under the major divisions. */
   --curve-subgrid: rgba(255, 255, 255, 0.035);
   --curve-axis: #525252;
@@ -198,7 +198,7 @@
   /* Light-theme grid: ~8% black to match the dark-theme alpha so
      the grid is uniformly subtle across themes. */
   --curve-grid: rgba(0, 0, 0, 0.08);
-  /* Faint minor sub-grid (#618): ~half the major-grid alpha, black to
+  /* Faint minor sub-grid: ~half the major-grid alpha, black to
      match the light-theme major grid. */
   --curve-subgrid: rgba(0, 0, 0, 0.035);
   --curve-axis: rgba(0, 0, 0, 0.45);

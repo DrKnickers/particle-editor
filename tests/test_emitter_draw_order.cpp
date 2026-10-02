@@ -1,10 +1,10 @@
 // Unit test for EmitterDrawOrder.h — the pure draw-order decision behind
-// ParticleSystemInstance::RenderByRank (#574, #609).
+// ParticleSystemInstance::RenderByRank.
 //
 // Two pieces:
 //   * ComputeAuthoredDrawKeys — post-order keys over the authored emitter tree:
-//     a child draws BEHIND its parent (parent on top, #609), siblings/roots by
-//     rank (#574).
+//     a child draws BEHIND its parent (parent on top), siblings/roots by
+//     rank.
 //   * ComputeEmitterDrawOrder — heat-filtered stable sort of live instances by
 //     their draw key.
 // No engine/D3D dependency: the decision is pure data.
@@ -79,7 +79,7 @@ static void test_stable_among_equal_ranks()
     ASSERT_ORDER(ComputeEmitterDrawOrder(k, false), Order{1, 0, 2});
 }
 
-// ─── ComputeAuthoredDrawKeys — post-order over the authored tree (#574, #609) ──
+// ─── ComputeAuthoredDrawKeys — post-order over the authored tree ───────────────
 
 // An empty forest yields no keys.
 static void test_keys_empty()
@@ -95,10 +95,10 @@ static void test_keys_root_only_is_identity()
     ASSERT_ORDER(ComputeAuthoredDrawKeys({ ROOT, ROOT, ROOT }), Order{0, 1, 2});
 }
 
-// THE #609 fix. Parent = root rank 0; child = rank 1 whose parent is rank 0.
+// THE parent-on-top fix. Parent = root rank 0; child = rank 1 whose parent is rank 0.
 // Post-order visits the child first (key 0) then the parent (key 1): the child's
 // key is LOWER, so it draws first (behind) and the parent draws last (on top) —
-// the opposite of the pre-#609 pure-rank behaviour that drew the child on top.
+// the opposite of the earlier pure-rank behaviour that drew the child on top.
 static void test_keys_child_draws_behind_parent()
 {
     ASSERT_ORDER(ComputeAuthoredDrawKeys({ ROOT, 0 }), Order{1, 0});
@@ -111,7 +111,7 @@ static void test_keys_grandchild_post_order()
     ASSERT_ORDER(ComputeAuthoredDrawKeys({ ROOT, 0, 1 }), Order{2, 1, 0});
 }
 
-// #574 preserved: a child whose rank sits between two roots still honours the
+// Sibling rank order preserved: a child whose rank sits between two roots still honours the
 // tree. Roots rank 0 and 1; a child rank 2 parented to root 1. Post-order:
 // root0 (key 0), then root1's subtree = child2 (key 1) before root1 (key 2).
 // So the child draws behind its parent root1, and root0's key stays lowest.
@@ -128,7 +128,7 @@ static void test_keys_two_families_group_by_root()
     ASSERT_ORDER(ComputeAuthoredDrawKeys({ ROOT, ROOT, 0, 1 }), Order{1, 3, 0, 2});
 }
 
-// Higher-ranked SIBLING still draws on top (rank order among siblings, #574):
+// Higher-ranked SIBLING still draws on top (rank order among siblings):
 // parent rank 0 with two children, life=rank 1 and death=rank 2. Post-order
 // visits children ascending (child1 key 0, child2 key 1) then parent (key 2),
 // so child2 draws over child1 and the parent over both.
@@ -145,7 +145,7 @@ static void test_keys_cycle_falls_back_to_rank()
     ASSERT_ORDER(ComputeAuthoredDrawKeys({ 1, 0 }), Order{0, 1});
 }
 
-// End-to-end through both pieces: the #609 parent/child, drawn via the keys.
+// End-to-end through both pieces: the parent-on-top case, drawn via the keys.
 // authored: parent rank 0 (root), child rank 1. drawKey = {1, 0}. Two live
 // instances — parent (rank 0) and child (rank 1) — must draw child then parent.
 static void test_end_to_end_parent_on_top()

@@ -61,7 +61,7 @@ test("native composition suite runs with no ALO_HOSTING_MODE override", () => {
 });
 
 test("click on Background toolbar dropdown opens the popover (click routing under composition)", async () => {
-  // Mirrors the existing tools.spec.ts:166 test. If composition-controller wiring regresses
+  // Mirrors the toolbar-dropdown popover tests in tools.spec.ts. If composition-controller wiring regresses
   // (e.g. RootVisualTarget binding fails silently), this would fail
   // because React's onClick wouldn't fire.
   await page.keyboard.press("Escape").catch(() => {});
@@ -118,8 +118,7 @@ test("wheel over the viewport canvas zooms the engine camera under composition",
   // wheel listener in CurveEditorPanel), asserted curve-layer counts rather
   // than wheel behaviour, and self-skipped on every machine because it looked
   // for an SVG that only mounts when an emitter is SELECTED while its setup
-  // only tried to ADD one — via `emitters/add`, which is not a bridge kind
-  // (2026-07 audit adjudication).
+  // only tried to ADD one — via `emitters/add`, which is not a bridge kind.
 
   const readCamera = () =>
     page.evaluate(async () => {
@@ -148,7 +147,7 @@ test("wheel over the viewport canvas zooms the engine camera under composition",
   expect(camDistance(after)).toBeLessThan(camDistance(before));
 
   // Restore, so later cases in this file inherit the camera they expected
-  // (2026-07 audit — shared engine state must not leak between cases).
+  // (shared engine state must not leak between cases).
   await page.evaluate(async (cam) => {
     const b = window.bridge!;
     await b.request({ kind: "engine/set/camera", params: cam });
@@ -219,7 +218,7 @@ test("bridge round-trip preserved under composition (engine/set/bloom snapshot)"
   // A bridge mutation + snapshot is the cleanest end-to-end
   // verification that composition-mode hosting hasn't accidentally
   // broken postMessage / TestHostBridge wiring. Mirrors the
-  // tools.spec.ts:118 pattern but as a focused composition gate
+  // tools.spec.ts Enable Bloom test's pattern but as a focused composition gate
   // rather than a Bloom-panel-UI-flow test.
   const before = await page.evaluate(async () => {
     const b = window.bridge!;

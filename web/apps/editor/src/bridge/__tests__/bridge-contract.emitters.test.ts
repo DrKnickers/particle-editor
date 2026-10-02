@@ -197,7 +197,7 @@ describe("MockBridge contract — emitters/*", () => {
     // duplicate's name with a `(+delta)` marker, and because each copy is made
     // from the PREVIOUS copy, the marker compounds — the 3 copies (in creation
     // order) carry 1, 2, then 3 markers. Copying the original 3× would give 1
-    // marker each. This is the load-bearing #575 behavior (the index climbs).
+    // marker each. This is the load-bearing behavior (the index climbs).
     const marks = (name: string) => (name.match(/\(\+2\)/g) ?? []).length;
     const copies = after.root.children.slice(beforeCount); // the 3 new copies
     expect(copies.map((c) => marks(c.name))).toEqual([1, 2, 3]);
@@ -631,7 +631,7 @@ describe("MockBridge dirty-bit for batch structural mutations", () => {
     expect((await b.request({ kind: "engine/state/snapshot", params: {} })).dirty).toBe(false);
   });
 
-  // Refused / no-op clipboard + structural mutations (WX7): each returns its
+  // Refused / no-op clipboard + structural mutations: each returns its
   // refusal shape and must leave the document clean, as its handler comments
   // promise and as the native host does (markDirty only on the success branch).
   const isDirty = async (b: MockBridge) =>

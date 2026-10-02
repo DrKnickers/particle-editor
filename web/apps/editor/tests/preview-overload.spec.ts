@@ -144,7 +144,7 @@ const MANUAL_SPAWNER_1: SpawnerParamsDto = {
 };
 
 // ─────────────────────────────────────────────────────────────────────
-// Preemptive estimate-gate specs (overload hard-guard, session 38).
+// Preemptive estimate-gate specs (overload hard-guard).
 //
 // These exercise the NEW gate: the web pushes a per-instance alive
 // estimate (engine/set/estimated-load); the engine refuses a placement
@@ -158,7 +158,7 @@ const MANUAL_SPAWNER_1: SpawnerParamsDto = {
 //
 // Every spec restores: guard 10k + estimate 0 + engine/action/clear in
 // finally, so the gate is inert for the bomb specs that share this host.
-// All caps ≤ 2k (#134 LOW-cap discipline).
+// All caps ≤ 2k (keep caps LOW).
 // ─────────────────────────────────────────────────────────────────────
 
 test("cumulative spawn gate refuses the over-cap placement and clears the preview", async () => {
@@ -365,7 +365,7 @@ test("a disabled guard bypasses the estimate gate (instance placed, no refusal)"
   await bridgeRequest(page, { kind: "stats/set-frozen", params: { frozen: false } });
   await bridgeRequest(page, { kind: "engine/set/paused", params: { paused: false } });
   // Guard DISABLED: the hard gate is OFF regardless of the estimate
-  // (#123 "uncapped is an explicit power-user choice").
+  // ("uncapped is an explicit power-user choice").
   await bridgeRequest(page, { kind: "engine/set/overload-guard", params: { enabled: false, maxParticles: 1_000 } });
   // A huge estimate that WOULD be refused if the guard were enabled.
   await bridgeRequest(page, { kind: "engine/set/estimated-load", params: { perInstance: 5_000 } });

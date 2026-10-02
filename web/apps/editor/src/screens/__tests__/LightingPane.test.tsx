@@ -105,7 +105,7 @@ describe("LightingPane", () => {
   it("Reset pushes ambient with alpha 1 (game-faithful) and shadow with alpha 0", () => {
     // Lockstep guard for the load==Reset invariant. The engine folds ambient
     // into the SPH lighting as `ambient.xyz * ambient.w`
-    // (src/SphericalHarmonics.cpp:76), so w gates the mesh ambient floor; the
+    // (src/SphericalHarmonics.cpp), so w gates the mesh ambient floor; the
     // game lights ambient only via that SPH path, so the faithful value is
     // w=1. The load path (host `ambientToVec4` / legacy `AmbientToVec4`) pushes
     // ambient with w=1 too, so Reset must match or it diverges from load.

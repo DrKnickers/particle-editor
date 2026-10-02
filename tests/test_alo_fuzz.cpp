@@ -7,26 +7,27 @@
 // u32 length/count-field corruption) plus an exhaustive truncation sweep, and
 // asserts for every mutant:
 //   - no crash / no hang (bounded loop; the gate runner enforces a timeout),
-//   - failures surface ONLY as the DOCUMENTED error path (AloModel.h:159-163:
-//     WrongFileException / BadFileException -- WrongFile derives from BadFile
-//     -- or ReadException for truncation), never any other exception type,
+//   - failures surface ONLY as the DOCUMENTED error path (LoadAloModel's
+//     contract in AloModel.h: WrongFileException / BadFileException --
+//     WrongFile derives from BadFile -- or ReadException for truncation),
+//     never any other exception type,
 //   - a mutant that still loads "cleanly" satisfies the decoder's structural
 //     invariants (never silent success with garbage): every sub-mesh's vertex
 //     blob is empty (legacy/skip path) or exactly vertexCount * 144 B with
-//     1 <= vertexCount <= 0xFFFF (AloModel.cpp:198-201), index bytes match
-//     primitiveCount * 6 with primitiveCount <= 1M (AloModel.cpp:214-217),
-//     and bones/connections respect their 4096 caps (AloModel.cpp:328,351;
-//     ResourceLimits.h:17-18).
+//     1 <= vertexCount <= 0xFFFF (kAloMaxVertices), index bytes match
+//     primitiveCount * 6 with primitiveCount <= 1M (kAloMaxPrimitives),
+//     and bones/connections respect their 4096 caps (kMaxAloBones /
+//     kMaxAloConnections in ResourceLimits.h).
 //
-// DISPATCH-KIND FLIPS (now COVERED, issue #487): flipping the container/data
-// kind of a chunk type the decoder dispatches on used to crash it -- a chunk
+// DISPATCH-KIND FLIPS (now COVERED): flipping the container/data kind of a
+// chunk type the decoder dispatches on used to crash it -- a chunk
 // expected as a CONTAINER but arriving as DATA (e.g. skeleton 0x200 as a data
 // chunk) made the sub-reader's `while (r.next() != -1)` walk escape the chunk,
 // consume SIBLING chunks plus the parent's -1 terminator, and double-pop
-// ChunkReader::m_curDepth to -1 (Debug assert ChunkReader.cpp:52 / Release OOB
-// read of m_offsets[-1]); same class via nextMini's `assert(m_size >= 0)`
-// (ChunkReader.cpp:11) when a mini-chunk host (0x10102-0x10106 / 0x602) was
-// flipped to a container. AloModel.cpp now guards its dispatch sites
+// ChunkReader::m_curDepth to -1 (a Debug assert / Release OOB read of
+// m_offsets[-1] in ChunkReader::next); same class via ChunkReader::nextMini's
+// former `assert(m_size >= 0)` when a mini-chunk host (0x10102-0x10106 /
+// 0x602) was flipped to a container. AloModel.cpp now guards its dispatch sites
 // (VerifyContainer / VerifyDataLeaf) so these mutants take the documented
 // BadFile path instead. The former expectedKindMismatch() skip has been
 // removed, so the fuzzer now exercises this whole class rather than dodging it.
@@ -263,8 +264,8 @@ int main()
     // (length/count/type field) overwrite at a random offset.
     //
     // 2000 by default keeps the cpp-unit gate lane fast. ALO_FUZZ_ROUNDS raises
-    // it for a deep audit pass (the 2026-07 release audit asked for >= 10,000
-    // per parser family) without making every gate run pay for it. The xorshift
+    // it for a deep pass (>= 10,000 rounds per parser family) without making
+    // every gate run pay for it. The xorshift
     // seed is fixed either way, so round N is identical across runs and a
     // failure at round N reproduces exactly.
     {

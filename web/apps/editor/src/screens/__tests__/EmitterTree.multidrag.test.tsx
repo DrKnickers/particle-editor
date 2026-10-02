@@ -1,9 +1,9 @@
-// Vitest render tests for the EmitterTree multi-selection drag preview
-// (Tasks 6 + 7). With a multi-root selection, a pointer drag past the
+// Vitest render tests for the EmitterTree multi-selection drag preview.
+// With a multi-root selection, a pointer drag past the
 // activation threshold over another root must:
-//   - dispatch emitters/reorder-many on release (Task 6),
+//   - dispatch emitters/reorder-many on release,
 //   - render a make-room gap at the drop point + a cursor chip following the
-//     pointer (Task 7 — preview D).
+//     pointer.
 //
 // The single-drag path (emitters/drop) is covered by EmitterTree.test.tsx;
 // here we only exercise the additive multi-drag branch.
@@ -174,7 +174,7 @@ describe("EmitterTree multi-drag preview", () => {
     expect(reorder.params).toEqual({ ids: [0, 3], rootIndex: 3 });
   });
 
-  // --- Preview polish (session 32) ---
+  // --- Preview polish ---
 
   /** Roots A(0, child A1=1), B(3), C(5) — for subtree-dim assertions. */
   function fixtureWithChildren(): EmitterTreeDto {
@@ -368,7 +368,7 @@ describe("EmitterTree multi-drag preview", () => {
     expect(calls.find((c) => c.kind === "emitters/drop")).toBeUndefined();
   });
 
-  // ── Phase 0: the EmitterTree drag must also abort on window blur
+  // ── The EmitterTree drag must also abort on window blur
   // (alt-tab) and tab-hide (visibilitychange) — same teardown the tree/changed
   // case proves, via the focus-loss listeners attached on activation. Each pairs
   // the positive control (gap + dragging appear) with the negative (release

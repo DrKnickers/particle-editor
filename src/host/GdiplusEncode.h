@@ -1,6 +1,6 @@
 #pragma once
 // GdiplusEncode.h — the one GDI+ image-encoder CLSID lookup + base64 encoder
-// for the host/UI image-export paths (DRY audit 2026-06-22, cpp-host-1).
+// for the host/UI image-export paths.
 // Consolidates four copy-pasted encoder-CLSID lookups (AlphaCompositor's PNG +
 // JPEG, WindowCapture's PNG, PaletteThumbs' PNG — differing only by MIME) and
 // two byte-identical Base64Encode copies (AlphaCompositor + PaletteThumbs).

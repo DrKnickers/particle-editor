@@ -172,7 +172,7 @@ function AppShell() {
   }, [currentFilePath, dirty]);
 
   // Wire the legacy global keyboard accelerators to
-  // the new UI's existing actions. The host (AcceleratorBridge) translates
+  // the editor UI's existing actions. The host (AcceleratorBridge) translates
   // the registered combos and emits `accelerator/pressed`; the hook routes
   // each to the same bridge call the matching menu item uses.
   useAppAccelerators(bridge);
@@ -187,7 +187,7 @@ function AppShell() {
   useEffect(() => {
     // Startup milestone spans for the perf lane (no-ops when tracing is off):
     // app.shell-mounted bracketed against app.first-interactive-paint measures the
-    // critical startup window (perf-audit P1a).
+    // critical startup window.
     emitPerfTrace({ eventName: "app.shell-mounted", eventType: "instant" });
     let inner = 0;
     const outer = requestAnimationFrame(() => {
@@ -204,7 +204,7 @@ function AppShell() {
   }, []);
   // (Removed the redundant startup engine/state/snapshot dev-log here — its data is
   // already fetched by the eager Toolbar/MenuBar/StatusBar consumers; the duplicate
-  // was pure startup bridge fan-out, perf-audit P1a.)
+  // was pure startup bridge fan-out.)
 
   // Data-loss BLOCKER: the native frame-X / Alt-F4 on a dirty doc
   // emits `app/close-requested` from the host (it can't render the React
@@ -363,7 +363,7 @@ function AppShell() {
 
           {/* Toolbar — 4 groups (File · Edit · View · Render) */}
           {/* DEV-only <Profiler> for the re-render audit (tests-web/profiler-audit.spec.ts);
-              folds away in prod builds. See tasks/2026-07-07-react-profiler-audit-plan.md. */}
+              folds away in prod builds. */}
           {import.meta.env.DEV ? (
             <Profiler
               id="Toolbar"

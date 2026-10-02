@@ -10,7 +10,7 @@
 //             { type: "res",  id, ok: false, error }
 //   event   : { type: "evt",  kind, payload }
 //
-// Task 2.1 surface:
+// Core engine/layout kinds:
 //   - layout/viewport-rect              → LayoutBroker::Apply(...)
 //   - register-accelerators             → AcceleratorBridge::RegisterCombos
 //   - engine/state/snapshot             → full EngineStateDto (every getter)
@@ -48,7 +48,7 @@
 #include "../ParticleSystem.h"   // full def needed for ParticleSystem::Emitter* in getEmitterById
 #include "../MouseCursor.h"       // by-value record-preview anchor (preview/* record kinds)
 #include "../SpawnerDriver.h"     // dispatcher-owned clamped SpawnerConfig
-#include "PreviewEncodeWorker.h"   // [C3] async texture-preview encode
+#include "PreviewEncodeWorker.h"   // async texture-preview encode
 
 class Engine;
 class ParticleSystemInstance;
@@ -60,14 +60,14 @@ namespace host {
 class AcceleratorBridge;
 class LayoutBroker;
 class InputDispatcher;
-struct BridgeRequestContext;   // BridgeRequestContext.h (Phase A dispatch split)
+struct BridgeRequestContext;   // BridgeRequestContext.h (per-request handler context)
 
 class BridgeDispatcher
 {
 public:
     // Envelopes are handed over as JSON, never as text: the receiver
     // serializes them through host::SerializeBridgeEnvelope (BridgeWire.h),
-    // so no emit site can throw on a non-UTF-8 name (2026-09-30 audit H1).
+    // so no emit site can throw on a non-UTF-8 name.
     using EmitFn = std::function<void(const nlohmann::json& envelope)>;
 
     // `useTestHost` mirrors HostWindow's `--test-host` flag. When true,
@@ -107,7 +107,7 @@ public:
     // main window — set this in HostWindow once hMain exists).
     void SetHostHwnd(HWND hwnd) { m_hostHwnd = hwnd; }
 
-    // [C3] Async texture-preview pipeline. The get-preview handler serves LRU
+    // Async texture-preview pipeline. The get-preview handler serves LRU
     // hits synchronously; a miss decodes on the UI thread (device-bound) and
     // hands the raw pixels to PreviewEncodeWorker, answering {status:pending}.
     // The worker PostMessages WM_APP_PREVIEW_READY; the wndproc calls
@@ -117,7 +117,7 @@ public:
     // GdiplusShutdown (the worker encodes via GDI+).
     void DrainPreviewResults();
     void ShutdownPreviewWorker() { if (m_previewWorker) m_previewWorker->Finish(); }
-    // Enable the record-only emit throttle (issue #510). Set true ONLY for a
+    // Enable the record-only emit throttle. Set true ONLY for a
     // --record run (never --drive). See m_recordEmitThrottle.
     void SetRecordEmitThrottle(bool on) { m_recordEmitThrottle = on; }
 
@@ -139,13 +139,13 @@ public:
     // `ppSystem` is a pointer-to-pointer because file/new and file/open
     // replace the *current* unique_ptr<ParticleSystem> instance — the
     // dispatcher must always read through the host's slot, never cache
-    // its own copy. Mirrors legacy `info->particleSystem`.
+    // its own copy. Mirrors the legacy editor's `info->particleSystem`.
     //
     // `spawner` is a single owned instance whose config is mutated via
     // `SetConfig` and inspected via `GetConfig`. The host constructs
     // and tears it down; the dispatcher holds a borrow.
     //
-    // `fileManager` is the same file manager that legacy main.cpp uses
+    // `fileManager` is the same file manager main.cpp creates
     // (FileManager from createFileManager); passed in so future host-
     // routed loaders that need it (the EaW VFS lookup) can reuse it,
     // even though `LoadParticleSystem` / `SaveParticleSystem` go
@@ -266,7 +266,7 @@ public:
     // glyph. Returns false if the web isn't wired yet (m_emit null) so the host
     // can replay the state once React is ready (see HostWindowImpl).
     bool EmitWindowState(bool maximized);
-    // Autosave health (2026-07 audit). Returns false when the web isn't
+    // Autosave health. Returns false when the web isn't
     // wired yet, so the caller can replay on app/ready — same contract as
     // EmitWindowState above.
     bool EmitAutosaveHealth(bool healthy);
@@ -416,10 +416,10 @@ private:
     // "async" / "sync" (span field + log line).
     nlohmann::json DispatchParsed(const nlohmann::json& parsed, const char* mode);
 
-    // ---- Per-domain kind dispatchers (Phase A split) ----
+    // ---- Per-domain kind dispatchers ----
     // Each lives in its own TU (BridgeDispatch_<Domain>.cpp), holds that
-    // domain's `kind ==` handlers moved out of DispatchInternal's ladder,
-    // and returns true when it handled `kind` (response written via ctx).
+    // domain's `kind ==` handlers, and returns true when it handled `kind`
+    // (response written via ctx).
     // DispatchInternal calls all six in sequence; kinds are exact-match and
     // mutually exclusive, so call order carries no semantics.
     friend struct BridgeRequestContext;   // RequireEngine/MarkDirty need privates
@@ -445,10 +445,10 @@ private:
     bool ComputeCanUndo() const;
 
     // Deserialize a ParticleSystem snapshot from an UndoStack entry and
-    // swap it into the host-owned slot. Mirrors legacy
-    // `RestoreFromSnapshot` at src/main.cpp:916 — same teardown
+    // swap it into the host-owned slot. Mirrors the legacy editor's
+    // `RestoreFromSnapshot` — same teardown
     // ordering (kill attached → engine Clear → swap → OnPSChanged →
-    // ReloadTextures), adapted for the new-UI host-state plumbing.
+    // ReloadTextures), adapted for the host-state plumbing.
     // Selection scalar is restored from the snapshot's captured
     // selectedIndex; out-of-range maps to -1 (no selection). Wrapped
     // in UndoStack::BeginApplying/EndApplying so the swap doesn't
@@ -487,7 +487,7 @@ private:
     // the engine's ref-transform aux). coalesceKey 0 = never coalesce
     // (structural ops must never fold across an add/delete/move).
     void captureUndo(DWORD coalesceKey = 0);
-    // F4 link-group propagation: after a shared (non-exempt) field edit on a
+    // Link-group propagation: after a shared (non-exempt) field edit on a
     // linked emitter, copy non-exempt params to every group sibling. MUST run
     // AFTER the mutation; reseats all live cursor iterators via
     // Engine::OnParticleSystemChanged(-1) at this single choke point.
@@ -534,10 +534,10 @@ private:
     // settings/* write uses (cf. BridgeDispatch_Assets.cpp mods/set-layers).
     // Before this existed the MRU sites checked only the automation flag, so every
     // playwright-native (--test-host) file open/save wrote its test path into
-    // the daily driver's real Recent Files menu (2026-07 audit follow-up).
+    // the daily driver's real Recent Files menu.
     bool PersistsUserState() const { return !m_automationMode && !(m_testHost && !m_settingsLive); }
 
-    // --record throttle (issue #510): during a clip record the driver scrubs
+    // --record throttle: during a clip record the driver scrubs
     // curves host-side, firing emitters/tree/changed + engine/state/changed far
     // faster than the capture rate. Each push makes the web re-fetch the whole
     // tree/props/tracks/mods, which saturates the web thread and starves the
@@ -551,7 +551,7 @@ private:
     unsigned long long m_lastStateEmitTick  = 0;
     static constexpr unsigned long long kRecordEmitThrottleMs = 33;
 
-    // Live-mode trailing coalesce (perf remediation B1): interactive drags
+    // Live-mode trailing coalesce: interactive drags
     // call the two broadcasts at pointer-move rate, and each emit serializes
     // a full engine-state snapshot / the whole emitter tree. The FIRST emit
     // in a burst still goes out immediately (leading edge — spinners track
@@ -559,15 +559,15 @@ private:
     // delivered by FlushPendingEmits() (call sites documented on its decl).
     // Worst-case staleness is one display frame (idle-branch flush), or one
     // stats tick (250 ms) inside a modal dialog's own pump. NOT active in
-    // --record (#510's leading-edge throttle owns that mode — its clip gates
+    // --record (the record throttle above owns that mode — its clip gates
     // assert the ~30 Hz cadence) and NOT in --drive (m_automationMode, which
     // covers drive and record: a drive-assert must see every change, per the
-    // #510 note above).
+    // throttle note above).
     bool               m_stateEmitPending = false;
     bool               m_treeEmitPending  = false;
     static constexpr unsigned long long kEmitCoalesceMs = 16;
 
-    // Unconditional builders behind the coalesce gates (the pre-B1 bodies).
+    // Unconditional builders behind the coalesce gates.
     void EmitEngineStateChangedNow();
     void EmitEmittersTreeChangedNow();
 
@@ -593,7 +593,7 @@ private:
     ::ModManager*      m_modManager = nullptr;  // mods/* surface
     InputDispatcher*   m_input      = nullptr;  // viewport/input
 
-    // [C3] Preview LRU + in-flight dedupe + epoch (see DrainPreviewResults).
+    // Preview LRU + in-flight dedupe + epoch (see DrainPreviewResults).
     // Key = "<filename>|<0/1 flattenAlpha>" (maxBound is a handler constant).
     // Epoch bumps on mod-stack changes (next to ClearBridgeThumbCache) so a
     // result encoded pre-switch can never populate the post-switch cache.
@@ -610,7 +610,7 @@ private:
     static constexpr size_t kPreviewLruCap = 64;
     std::unique_ptr<host::PreviewEncodeWorker> m_previewWorker;
     void PreviewCachePut(const std::string& key, PreviewCacheEntry entry);
-    // [C3] Mod-stack change: drop everything + bump the epoch so in-flight
+    // Mod-stack change: drop everything + bump the epoch so in-flight
     // worker results (old stack's pixels) are discarded on arrival.
     size_t PreviewCacheClear()
     {
@@ -623,7 +623,7 @@ private:
         // clearing the queue removed that bound at the one moment the queue was
         // about to grow: the palette re-requests everything, each key now
         // misses both the LRU and the dedupe gate, and the previous epoch's jobs
-        // stay queued at up to 4 MB of raw BGRA each (2026-07 audit).
+        // stay queued at up to 4 MB of raw BGRA each.
         // Their results would be discarded on arrival anyway, so dropping them
         // here costs nothing and is the only thing keeping the two structures
         // in step.
@@ -672,7 +672,7 @@ private:
     // "no saved baseline yet" (boot state); restores always stay
     // dirty in that case. Replaces the legacy
     // UndoStack::MarkSaved/IsAtSavedState pair, which doesn't fit
-    // the new-UI's PRE-mutation captureUndo convention — the cursor
+    // the bridge's PRE-mutation captureUndo convention — the cursor
     // after undo lands on the pre-mutation snapshot, not the
     // post-save snapshot, so the legacy isSavedState flag misses.
     std::vector<char>         m_savedSnapshot;
@@ -683,8 +683,8 @@ private:
     // and stashes it here so `autosave/recover` can consume its temp paths
     // without a re-scan. recover consumes the stash (clear + DeleteOrphan the
     // files) ONLY on a successful recover or an explicit discard; a FAILED load
-    // leaves the stash intact so the other tier / next launch can still recover
-    // (release-audit #3). `m_hasPendingOrphan` guards an empty stash (recover
+    // leaves the stash intact so the other tier / next launch can still recover.
+    // `m_hasPendingOrphan` guards an empty stash (recover
     // with no prior check, or a double recover).
     Autosave::OrphanSession   m_pendingOrphan{};
     bool                      m_hasPendingOrphan = false;
@@ -705,7 +705,7 @@ private:
     // Process-local emitter clipboard. One
     // buffer per copied subtree, serialised via the same
     // `MemoryFile` + `Emitter::write(writer, copy=true)` pattern as
-    // import-from-file (BridgeDispatcher.cpp:1607). `emitters/
+    // emitters/import-from-file. `emitters/
     // copy` and `emitters/cut` replace the entire vector each call;
     // `emitters/paste` reads it back. Empty vector = "clipboard is
     // empty"; paste in that case is a silent no-op. Doesn't span

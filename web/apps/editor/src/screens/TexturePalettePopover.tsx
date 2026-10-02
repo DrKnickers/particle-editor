@@ -52,10 +52,10 @@ export function TexturePalettePopover({ bridge, slot, onApply, tip, children }: 
         trigger
       )}
       <Popover.Portal>
-        {/* #683: at small window sizes the palette grew past the window and
+        {/* At small window sizes the palette grew past the window and
             the lower tiles were unreachable — Radix flips/shifts on collision
             but never shrinks content. Cap the CONTAINER to Radix's measured
-            available space (the #228 skydome-picker lesson) and scroll inside;
+            available space and scroll inside;
             collisionPadding keeps a visible gutter at the window edge. */}
         <AnimatedPopover
           align="end"

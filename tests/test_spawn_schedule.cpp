@@ -1,5 +1,4 @@
-// Regression test for the spawn-rate reconcile clamp (src/SpawnSchedule.h,
-// 2026-07 audit).
+// Regression test for the spawn-rate reconcile clamp (src/SpawnSchedule.h).
 //
 // onParticleSystemChanged recomputes m_spawnDelay on a rate edit but the next
 // spawn was scheduled against the OLD delay. Raise the rate on a slow emitter

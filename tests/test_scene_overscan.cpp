@@ -1,4 +1,4 @@
-// Unit test for src/SceneOverscan.h pure helper (Tranche D / finding #10).
+// Unit test for src/SceneOverscan.h pure helper.
 // Header-only, no engine/Win32 deps — links only this TU.
 #include <cstdio>
 #include "SceneOverscan.h"

@@ -1,22 +1,22 @@
 // Spinner.tsx — numeric input primitive.
 //
-// Behaviors (ported from legacy src/UI/Spinner.cpp):
+// Behaviors (ported from the legacy Win32 editor's spinner control):
 //   - Up/down arrow buttons: always visible (matches legacy Win32
 //     UDS_ALIGNRIGHT spin button), increment/decrement by `step`.
-//   - Scroll-wheel adjust (F7): wheel-up increments, wheel-down
+//   - Scroll-wheel adjust: wheel-up increments, wheel-down
 //     decrements. Base step = the field's `step` (legacy Increment).
 //     Shift = ×10 (coarse); Ctrl = ×0.1 (fine) on decimal fields, ignored
-//     on whole-number fields so it never yields a fraction (Spinner.cpp:107-117).
-//   - Drag-to-adjust (F6): vertical mouse-Y drag on the ARROW COLUMN
+//     on whole-number fields so it never yields a fraction.
+//   - Drag-to-adjust: vertical mouse-Y drag on the ARROW COLUMN
 //     (not the text input — dragging the input selects text). Shift =
 //     coarse (×10), Ctrl = fine — matching the wheel and keyboard arrows.
 //   - Hold-to-repeat: pressing and holding an arrow button auto-repeats the
-//     step after a short delay (legacy Spinner.cpp:438-455).
+//     step after a short delay (as the legacy spinner did).
 //   - Scientific notation parse: "1e-3", "2.5E4", etc.
 //   - Range clamp: clamp to [min, max] on blur/commit; NOT on keystroke.
 //   - Unit suffix: greyed-out text after the number.
 //   - onChange fires on commit (Enter/blur/arrow/wheel/drag-release), NOT on
-//     every keystroke. Avoids bridge spam from Screens 4/5/6.
+//     every keystroke, so typing doesn't spam the bridge.
 //   - density: row height override per call ("tight"=22px, "default"=26px, "loose"=32px).
 
 import { useEffect, useRef, useState, useCallback, type KeyboardEvent } from "react";
@@ -31,13 +31,13 @@ const ROW_HEIGHT: Record<SpinnerDensity, string> = {
   loose: "var(--row-h-lg)",
 };
 
-// F6: pixels of vertical movement on the arrow column before a press is
+// Pixels of vertical movement on the arrow column before a press is
 // treated as a value-scrub rather than a click.
 const DRAG_THRESHOLD_PX = 3;
 
 // Hold-to-repeat on the arrow buttons: initial delay before auto-repeat
 // kicks in, then the interval between repeats (≈20/s). Mirrors the legacy
-// keyboard-repeat cadence (Spinner.cpp:558-559).
+// spinner's keyboard-repeat cadence.
 const HOLD_DELAY_MS = 350;
 const HOLD_REPEAT_MS = 50;
 
@@ -156,7 +156,7 @@ export function Spinner({
   // are bound ONCE at mousedown. Without this, a continuous gesture keeps firing
   // the onChange captured at press time; when the consumer recreates its handler
   // per committed value (CurveEditorPanel does, keyed on the selected key) the
-  // gesture carries a stale closure and diverges after the first tick (#614).
+  // gesture carries a stale closure and diverges after the first tick.
   // The wheel handler already does this via wheelDepsRef.
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
@@ -263,8 +263,8 @@ export function Spinner({
       // base step = the field's actual `step` (legacy Increment),
       // so a step=5 field nudges by 5 and a step=0.25 field by 0.25.
       // Shift = ×10 (coarse). Ctrl = ×0.1 (fine) on decimal fields only;
-      // whole-number fields ignore Ctrl so the wheel never yields a fraction
-      // (Spinner.cpp:107-117). Display precision (2dp default) is decoupled
+      // whole-number fields ignore Ctrl so the wheel never yields a fraction.
+      // Display precision (2dp default) is decoupled
       // from this nudge granularity.
       const base = d.step;
       const fine = d.stepIsWhole ? base : base / 10;
@@ -281,7 +281,7 @@ export function Spinner({
     return () => el.removeEventListener("wheel", onWheelNative);
   }, []);
 
-  // F6: value-scrub lives on the arrow column ONLY. The text input is a
+  // Value-scrub lives on the arrow column ONLY. The text input is a
   // plain field, so a horizontal drag across it selects text for partial
   // edits (the old behaviour scrubbed the value from the input and blocked
   // selection). A plain click on an arrow still steps by ±step (the
@@ -352,14 +352,14 @@ export function Spinner({
         heldValue.current = next;
         setText(fmt(next));
         pendingBase.current = valueRef.current;
-        onChangeRef.current(next); // latest handler — see onChangeRef (#614)
+        onChangeRef.current(next); // latest handler — see onChangeRef
       }, HOLD_REPEAT_MS);
     }, HOLD_DELAY_MS);
 
     // Scrub emission is COALESCED to one onChange per animation frame (latest
     // value wins), flushed on release. Raw mousemove can outrun the frame rate
     // (125Hz+ mice), and heavy consumers (CurveEditorPanel writes the track
-    // optimistically + round-trips the bridge per emission, #613) fall behind
+    // optimistically + round-trips the bridge per emission) fall behind
     // when every pixel fires — the displayed text still updates per move, so
     // the field itself never feels throttled. Per-gesture locals: each press
     // owns its own rAF/pending state, dropped with the listeners on release.
@@ -371,7 +371,7 @@ export function Spinner({
       const v = scrubPendingVal;
       scrubPendingVal = null;
       pendingBase.current = valueRef.current;
-      onChangeRef.current(v); // latest handler — see onChangeRef (#614)
+      onChangeRef.current(v); // latest handler — see onChangeRef
     };
 
     // A pointer event from a DIFFERENT pointer than the one that started this
@@ -552,7 +552,7 @@ export function Spinner({
         </span>
       )}
       {/* Up/down arrow column — always visible, mirrors Win32 spin
-          button. Disabled state fades them to match the input. F6: also
+          button. Disabled state fades them to match the input. Also
           the value-scrub affordance — mousedown here starts a drag-scrub
           (ns-resize cursor); a plain click on a button steps by ±step. */}
       <div

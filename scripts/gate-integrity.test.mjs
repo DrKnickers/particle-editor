@@ -1,5 +1,5 @@
-// Guards for the gate's own trustworthiness, from the 2026-07 release audit's
-// negative controls. Each of these was a demonstrated FALSE GREEN: the gate
+// Guards for the gate's own trustworthiness, from negative controls run
+// against the gate. Each of these was a demonstrated FALSE GREEN: the gate
 // reported success while the thing it claimed to verify had not happened.
 
 import { test } from "node:test";
@@ -54,7 +54,7 @@ test("staleBinaryNote reports a missing exe rather than passing", () => {
 });
 
 test("parseSkippedCount sees skipped tests inside an otherwise-green runner", () => {
-  // The real playwright-native line the audit found: a PASSING lane whose
+  // A real playwright-native line: a PASSING lane whose
   // aggregate then printed "0 skipped".
   assert.equal(parseSkippedCount("  190 passed, 4 skipped (108.5s)"), 4);
   // The stub that made the whole gate report PASS with zero skips.
@@ -68,8 +68,8 @@ test("parseSkippedCount sees skipped tests inside an otherwise-green runner", ()
 
 test("parseSkippedCount reads `node --test`'s reversed word order (the scripts lane was always 0)", () => {
   // The real tail of `pnpm run test:scripts`. Matching only Playwright's
-  // "<n> skipped" made this lane's skips unreadable, so the surfacing added for
-  // the 2026-07 audit never fired for the one lane it was written for.
+  // "<n> skipped" made this lane's skips unreadable, so the skip surfacing
+  // never fired for the one lane it was written for.
   const nodeSummary = ["ℹ pass 159", "ℹ fail 0", "ℹ cancelled 0", "ℹ skipped 1", "ℹ todo 0"].join("\n");
   assert.equal(parseSkippedCount(nodeSummary), 1);
   // A clean node run must still read 0 — the overreach direction, and the one
@@ -89,7 +89,7 @@ test("parseSkippedCount does not read a count off the NEXT line (\\s crosses new
   assert.equal(parseSkippedCount("Slow test file: tests\\emitter-drag.spec.ts 42\n  3 skipped\n"), 3);
 });
 
-// ── record-smoke oracle (2026-07 audit) ──────────────────────────────────────
+// ── record-smoke oracle ──────────────────────────────────────────────────────
 //
 // This lane is how we claim headless recording works, and it could not fail:
 // it captured the child's spawn result and then used `status` ONLY inside
@@ -104,7 +104,7 @@ test("recordSmokeVerdict passes a genuine run", () => {
 });
 
 test("recordSmokeVerdict FAILS a recorder that wrote frames and then crashed (the record-smoke false green)", () => {
-  // Exactly the green-preserving mutation from the audit: good-looking frames,
+  // Exactly the green-preserving mutation: good-looking frames,
   // nonzero exit. The old lane passed this.
   const v = recordSmokeVerdict({ status: 1, stderr: "D3D9 device lost; aborting", ...OK_FRAME });
   assert.ok(v, "expected a failure verdict");
@@ -145,9 +145,9 @@ test("recordSmokeVerdict still catches the blank-frame and no-frame cases it alw
   );
 });
 
-// ── skip-as-pass: internal skips (2026-07 audit) ───────────────────────
+// ── skip-as-pass: internal skips ───────────────────────────────────────
 // One mechanism at two levels. A capability probe fails, the test skips, the
-// exit code stays 0. #687 made both VISIBLE and stopped there, so the gate
+// exit code stays 0. An earlier fix made both VISIBLE and stopped there, so the gate
 // could still go green around coverage that did not run. These verdicts are
 // what turn that visibility into a gate.
 
@@ -229,7 +229,7 @@ test("selfSkipVerdict leaves a clean binary alone", () => {
 
 test("selfSkipVerdict downgrades to a VISIBLE skip under --allow-missing-capabilities", () => {
   // The over-eager fix here suppresses the note along with the failure, which
-  // restores exactly the silence the audit finding is about.
+  // restores exactly the silence this guard exists to prevent.
   const v = selfSkipVerdict(2, true);
   assert.equal(v.ok, true);
   assert.match(v.note, /2 case\(s\) SKIPPED/);

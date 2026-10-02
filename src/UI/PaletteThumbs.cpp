@@ -1,4 +1,4 @@
-// PaletteThumbs.cpp — thumbnail decode → base64 PNG for the new-UI texture
+// PaletteThumbs.cpp — thumbnail decode → base64 PNG for the editor's texture
 // palette.
 //
 // Self-contained on purpose: it reuses the *technique* of the legacy popup's
@@ -11,7 +11,7 @@
 //
 // The PNG-encoder-CLSID lookup and base64 encoder are shared via
 // host/GdiplusEncode.h (host::GdiplusEncoderClsid / host::Base64Encode),
-// consolidated from AlphaCompositor's former copies by a DRY audit.
+// consolidated from AlphaCompositor's former copies.
 
 #include "TexturePalette.h"
 #include "../utils.h"     // WideToAnsi
@@ -105,7 +105,7 @@ bool ReadTextureBytes(IFileManager* fm, const wstring& filename, vector<char>& o
 
     const unsigned long size = file->size();
     // A safe name can still resolve to a huge asset; cap before the allocation so
-    // an adversarial mod can't force a giant resize off file->size() (#415).
+    // an adversarial mod can't force a giant resize off file->size().
     if (size > kMaxTextureAssetBytes) { file->Release(); return false; }
     out.resize(size);
     // A truncated read must fail, not silently hand a zero-padded
@@ -126,7 +126,7 @@ bool ReadTextureBytes(IFileManager* fm, const wstring& filename, vector<char>& o
 // non-square texture encodes correctly. Honors lr.Pitch on the source read.
 // Returns false on any D3D/GDI+ failure. Extracted (and de-squared) from the
 // PNG-encode block previously inlined in DecodeToPngBytes.
-// [C3] Extract a tightly-packed BGRA copy of level 0 so the texture can be
+// Extract a tightly-packed BGRA copy of level 0 so the texture can be
 // released before any (possibly off-thread) encode touches the pixels.
 static bool CopyTexturePackedBgra(IDirect3DTexture9* tex, int w, int h, vector<uint8_t>& outBgra)
 {
@@ -150,7 +150,7 @@ static bool CopyTexturePackedBgra(IDirect3DTexture9* tex, int w, int h, vector<u
     return true;
 }
 
-// [C3] Thin wrapper: copy the texture's pixels, then hand off to the
+// Thin wrapper: copy the texture's pixels, then hand off to the
 // namespace-scoped (worker-callable) TexturePalette::EncodePackedBgraToPngBytes.
 bool EncodeTextureToPngBytes(IDirect3DTexture9* tex, int w, int h, vector<uint8_t>& outPng)
 {
@@ -190,7 +190,7 @@ ThumbStatus DecodeToPngBytes(IFileManager* fm, IDirect3DDevice9* device,
 
 namespace TexturePalette {
 
-// [C3] Pure-CPU half of the preview path: packed BGRA -> PNG bytes via GDI+.
+// Pure-CPU half of the preview path: packed BGRA -> PNG bytes via GDI+.
 // Public (declared in the header) so PreviewEncodeWorker can call it OFF the
 // UI thread — safe PROVIDED the GDI+ encoder CLSID cache was pre-warmed on
 // the UI thread first (GdiplusEncoderClsid's cache is not first-call
@@ -421,7 +421,7 @@ PreviewPixels DecodeTexturePreviewBgra(const std::wstring& filename,
         }
     }
 
-    // [C3] Stop at raw pixels: one tightly-packed copy off the SCRATCH
+    // Stop at raw pixels: one tightly-packed copy off the SCRATCH
     // texture, then release it. The PNG encode + base64 (the measured bulk
     // of the cost) can run on a worker from here.
     const bool copied = CopyTexturePackedBgra(tex, tw, th, out.bgra);

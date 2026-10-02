@@ -1,4 +1,4 @@
-// NativeBridge request-lifecycle tests (audit G12) — the pending-request
+// NativeBridge request-lifecycle tests — the pending-request
 // map must not leak a forever-pending promise when postMessage throws or
 // the page tears down, and an opt-in timeout reclaims a dropped response.
 

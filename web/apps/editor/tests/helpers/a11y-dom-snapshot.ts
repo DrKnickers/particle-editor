@@ -76,7 +76,7 @@ export async function captureDomA11y(page: Page): Promise<string> {
   // Tooltip + menu/popover exit-animation settle. Keyboard-focus surfaces open
   // a Radix tooltip on the focused control (instant, deterministic); the
   // PREVIOUS tab stop's tooltip, and any menu a surface was opened via (the
-  // 2026-07-18 design pass put .popover-animate on the menubar dropdowns, e.g.
+  // menubar dropdowns carry .popover-animate, e.g.
   // View → Lighting…), play a 110ms Radix exit while data-state="closed". A
   // snapshot taken mid-exit nondeterministically includes the dying subtree —
   // kbd-tab-cycle-stop-2, kbd-emitter-rename-mode, dialog-lighting and

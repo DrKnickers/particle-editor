@@ -5,8 +5,7 @@
 // VERTEX level: an exported `.alo` stores raw object-space coordinates with no scale
 // or unit conversion, and those coordinates are vertex-identical to the MEG-extracted
 // shipped assets (n=3 meshes / 2 object classes; a 1% scale would stand ~4.5 orders
-// above the float-precision floor and be detected). See the measurement report:
-//   docs/measurements/2026-06-17-eaw-unit-scale-and-scale-factor.md
+// above the float-precision floor and be detected).
 // So there is NO length conversion factor -- this constant is 1.0 by measurement,
 // and exists as the single documented anchor rather than a magic literal.
 //

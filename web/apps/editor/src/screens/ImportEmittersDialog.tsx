@@ -140,7 +140,7 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
     try {
       // Non-mutating picker: returns the chosen path WITHOUT loading it as the
       // active document, so browsing for an import source can never replace the
-      // current (possibly dirty) document (release-audit #2).
+      // current (possibly dirty) document.
       const r = await bridge.request({ kind: "file/pick-open", params: {} });
       if (!r.ok) {
         // User cancelled the picker or browser-mode rejected — leave

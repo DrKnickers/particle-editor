@@ -9,13 +9,13 @@
 //       and        vitest.config.ts  (test-time mirror of that inject)
 //
 // To bump the version, edit the four lines below ONLY. Follow SemVer
-// (MAJOR.MINOR.PATCH) — see VERSIONING.md for the bump rules and the 1.0.0
-// trigger. PE_VERSION_STR must match the three integers above it.
+// (MAJOR.MINOR.PATCH); while pre-1.0, bump MINOR for new features and
+// PATCH for fixes. PE_VERSION_STR must match the three integers above it.
 //
 // This is the fork's own version line (0.x). The "1.5" historically shown
 // here was upstream's number (Mike Lankamp's GlyphX Particle Editor); that
-// lineage now lives as a credit line in the About dialogs, not as the
-// version. See git tags v0.1.0 / v0.2.0 for the release history.
+// lineage now lives as a credit line in the About dialog, not as the
+// version.
 // ---------------------------------------------------------------------------
 
 #define PE_VERSION_MAJOR 0

@@ -143,7 +143,7 @@ namespace
 
     // Texture resolution: bare leaf name -> Data\Art\Textures\, with the
     // engine's .tga->.dds fallback (game ships compiled .dds). Mirrors
-    // SkydomeMesh::loadMaterialTexture (#165).
+    // SkydomeMesh::loadMaterialTexture.
     IDirect3DTexture9* loadTextureExact(IDirect3DDevice9* dev, IFileManager& fm, const std::string& path)
     {
         IFile* file = fm.getFile(path);

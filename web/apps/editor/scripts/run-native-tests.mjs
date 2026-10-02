@@ -253,7 +253,7 @@ async function main() {
       "tests/undo-navigation.spec.ts",
       "tests/emitter-import.spec.ts",
       // Non-UTF-8 emitter name end to end: responses + tree/changed event
-      // carry U+FFFD instead of the host throwing (bridge serializer, audit H1).
+      // carry U+FFFD instead of the host throwing (bridge serializer).
       "tests/bridge-utf8-safety.spec.ts",
       "tests/emitter-drag.spec.ts",
       "tests/emitter-keyboard.spec.ts",
@@ -330,8 +330,7 @@ async function main() {
       // paste-as-child) call test.skip() when game data can't be reached, and
       // nothing ever set PE_REQUIRE_GAME_TEXTURES — so on a box with the game
       // installed they still silently self-skipped, and breaking atlas
-      // assignment or ParticleSystem::reparentEmitter left the lane green
-      // (2026-07 audit).
+      // assignment or ParticleSystem::reparentEmitter left the lane green.
       //
       // Gated on the registry game path rather than forced: a machine with no
       // install genuinely cannot run them, and failing there would punish a

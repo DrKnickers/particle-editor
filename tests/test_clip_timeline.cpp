@@ -452,7 +452,7 @@ int main()
 
     // ExpandTimelineTokens: ${GAME} reaches openPath + mods/set-layers.paths,
     // expands exactly once, leaves non-path params (ui/set-picker-search text)
-    // untouched, and fails loud on an unknown token. (#494 portability follow-up.)
+    // untouched, and fails loud on an unknown token.
     {
         const std::map<std::string, std::string> tok = {{"GAME", "D:/g/corruption"}};
 

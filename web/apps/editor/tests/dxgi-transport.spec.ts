@@ -10,8 +10,8 @@
 //      actively running, not stalled).
 //   3. `[COMP-engine-handle-hash]` shows stable resource identity
 //      (sharedTex + backBuffer COM-object addresses don't drift mid-
-//      run — the spike's dxgi_spike.cpp:355-357 documented "wrong
-//      handle silently returns different texture" failure mode would
+//      run — the "wrong handle silently returns different texture"
+//      failure mode would
 //      surface as a sharedTex pointer change here).
 //   4. No `[COMP-engine-fail]` lines (any failure path in
 //      Compositor.cpp emits this prefix).
@@ -147,7 +147,8 @@ test("[COMP-engine-handle-hash] resource identity is stable across the smoke win
   // Each handle should have exactly ONE (sharedTex, backBuffer) tuple
   // associated with it. Multiple tuples for the same handle would
   // mean COM-object identity drifted without a handle change — the
-  // spike's wrong-handle failure mode at dxgi_spike.cpp:355-357.
+  // wrong-handle failure mode documented at OpenSharedResource in
+  // src/host/spike/dxgi_spike.cpp.
   for (const [handle, tupleSet] of handleSpans) {
     expect(
       tupleSet.size,

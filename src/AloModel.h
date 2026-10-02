@@ -147,7 +147,7 @@ bool AloIsNonVisibleShader(const std::string& shaderName);
 // reference renderer phase-sorts + blends each sub-mesh the way the game does.
 // The shipped .fxo's SB blocks are compiled out (ALAMO_STATE_BLOCKS 0), so the
 // APP applies the blend -- this is the source of "which blend".
-// Grounded in the FoC Mesh*/RSkin* corpus (reference/foc-shaders): additive =
+// Grounded in the game's FoC Mesh*/RSkin* shaders: additive =
 // ONE/ONE (MeshAdditive*, and the name-mismatched MeshShield), alpha =
 // SRCALPHA/INVSRCALPHA (MeshAlpha*), Heat/Shadow/Occluded are non-opaque-visible
 // scaffolding phases, everything else (MeshGloss/Bump/Collision/SolidColor...) is

@@ -64,9 +64,8 @@ IDR_SHADER_GROUND_LIT   RCDATA                  "Resources\\Engine\\GroundLit.fx
 IDB_GROUND              RCDATA                  "Resources\\dirt.bmp"
 
 // Skydome textures. Declared RCDATA so D3DXCreateTextureFromFileInMemory
-// can load them. Procedural-gradient TGA placeholders today; a follow-up
-// PR can replace with curated equirectangular DDS (BC1) assets without
-// touching the loader.
+// can load them. Procedural-gradient TGAs from
+// tools/generate_skydome_textures.py.
 IDR_SKYDOME_SPACE       RCDATA                  "Resources\\skydomes\\space.tga"
 IDR_SKYDOME_ATMOSPHERE  RCDATA                  "Resources\\skydomes\\atmosphere.tga"
 IDR_SKYDOME_SUNSET      RCDATA                  "Resources\\skydomes\\sunset.tga"
@@ -136,8 +135,8 @@ END
 //
 // the shared error/query strings the surviving engine/IO/host code
 // LoadString()s, migrated here (LANG_NEUTRAL, so they resolve under any
-// system locale) from the now-deleted ParticleEditor.en.rc when the legacy
-// localized .rc/.h files were removed. Ids are defined in Resources\resource.h.
+// system locale) from the legacy English .rc when the legacy localized
+// .rc/.h files were removed. Ids are defined in Resources\resource.h.
 //
 
 STRINGTABLE

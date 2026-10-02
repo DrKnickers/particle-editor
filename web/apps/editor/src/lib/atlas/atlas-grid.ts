@@ -1,5 +1,6 @@
 // Pure atlas math, mirrors the engine: side=floor(sqrt(max(1,textureSize)))
-// (EmitterInstance.cpp:698); frame k -> col=k%side, row=floor(k/side) (:638-641).
+// (EmitterInstance::onParticleSystemChanged); frame k -> col=k%side,
+// row=floor(k/side) (EmitterInstance::UpdateParticle).
 export const ATLAS_MAX_SIDE = 32;
 export function gridSide(textureSize: number): number {
   const n = Number.isFinite(textureSize) ? Math.max(1, Math.floor(textureSize)) : 1;
@@ -14,7 +15,7 @@ export function resolveFrame(value: number, side: number): number | null {
   return f < 0 || f > side * side - 1 ? null : f;
 }
 // Wrap an out-of-range index-curve value into [0, count) — mirrors the engine,
-// which samples col = texIndex % side (explicit, EmitterInstance.cpp:641) and
+// which samples col = texIndex % side (explicit, in EmitterInstance::UpdateParticle) and
 // row via the D3D9-default WRAP texture addressing, so the net displayed cell is
 // texIndex % side² (a torus). An index of `count` therefore shows frame 0. The
 // picker wraps to match, so it highlights the same cell the engine draws.

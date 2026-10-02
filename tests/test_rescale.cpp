@@ -3,17 +3,17 @@
 //
 // Table-driven over both emitter rate modes and both scale axes, with every
 // expected value derived by hand from the source:
-//   - time-field scaling            (Rescale.cpp:20-23)
-//   - bursts-mode exact-integer flip to Particles/Second (Rescale.cpp:26-36):
+//   - time-field scaling
+//   - bursts-mode exact-integer flip to Particles/Second:
 //     burstDelay *= timeScale, then n = (int)(1/burstDelay*10000+0.5)/10000;
 //     flips ONLY when (int)n == n && nParticlesPerBurst == 1 && nBursts == 0
-//   - Particles/Second inverse (Rescale.cpp:38-53): n = pps/timeScale; a
+//   - Particles/Second inverse: n = pps/timeScale; a
 //     non-integer n switches to infinite-burst mode (burstDelay = 1/n)
-//   - speed group + speed scalars scale by 1/timeScale (Rescale.cpp:56-62)
-//   - weather particles skip the whole rate/speed block (Rescale.cpp:24)
-//   - size block (Rescale.cpp:66-89): scale-track VALUES, position + speed
+//   - speed group + speed scalars scale by 1/timeScale
+//   - weather particles skip the whole rate/speed block
+//   - size block: scale-track VALUES, position + speed
 //     groups, speed scalars, gravity and tailSize all scale by sizeScale
-//   - scale == 1.0f is a strict no-op for its block (Rescale.cpp:18,66)
+//   - scale == 1.0f is a strict no-op for its block
 //
 // All chosen inputs are exactly representable and scaled by powers of two, so
 // float comparisons below are exact unless noted. Standalone console exe; see
@@ -41,7 +41,7 @@ using Emitter = ParticleSystem::Emitter;
 using Group   = ParticleSystem::Emitter::Group;
 using Track   = ParticleSystem::Emitter::Track;
 
-// Fill the 13 float fields DoRescaleGroup touches (Rescale.cpp:5-14) with
+// Fill the 13 float fields DoRescaleGroup (Rescale.cpp) touches with
 // distinct exact values base+1 .. base+13, and stamp the fields it must NOT
 // touch (type / sphereEdge / cylinderEdge) with sentinels.
 static void fillGroup(Group& g, float base)
@@ -88,7 +88,7 @@ int main()
 {
     std::printf("test_rescale\n");
 
-    // ---- A: scale 1.0 / 1.0 is a strict no-op (Rescale.cpp:18,66) ----------
+    // ---- A: scale 1.0 / 1.0 is a strict no-op ------------------------------
     {
         Emitter e; prime(e);
         e.nParticlesPerSecond = 7;
@@ -104,7 +104,7 @@ int main()
     }
 
     // ---- B: timeScale=2, PPS mode, integer result stays PPS ----------------
-    // n = 10 / 2 = 5.0; (int)5.0 == 5.0 -> stays Particles/Second (line 49-52).
+    // n = 10 / 2 = 5.0; (int)5.0 == 5.0 -> stays Particles/Second.
     {
         Emitter e; prime(e);
         e.useBursts = false;
@@ -128,7 +128,7 @@ int main()
     }
 
     // ---- C: timeScale=2, PPS mode, fractional result switches to bursts ----
-    // n = 5 / 2 = 2.5; (int)2.5 != 2.5 -> infinite-burst mode (lines 40-48):
+    // n = 5 / 2 = 2.5; (int)2.5 != 2.5 -> infinite-burst mode:
     // useBursts=true, nBursts=0, burstDelay = 1/2.5 = 0.4f, perBurst=1.
     {
         Emitter e; prime(e);
@@ -144,7 +144,7 @@ int main()
 
     // ---- D: timeScale=2, bursts mode, exact-integer flip back to PPS -------
     // burstDelay 0.25*2 = 0.5; n = (int)(1/0.5*10000+0.5)/10000 = 20000/10000
-    // = 2.0; (int)2.0 == 2.0 && perBurst==1 && nBursts==0 -> flip (lines 28-35).
+    // = 2.0; (int)2.0 == 2.0 && perBurst==1 && nBursts==0 -> flip.
     {
         Emitter e; prime(e);
         e.useBursts          = true;
@@ -197,7 +197,7 @@ int main()
               "bursts: non-integer 1/delay stays bursts, delay scaled");
     }
 
-    // ---- H: weather particle skips the rate/speed block (line 24) ----------
+    // ---- H: weather particle skips the rate/speed block --------------------
     {
         Emitter e; prime(e);
         e.isWeatherParticle   = true;

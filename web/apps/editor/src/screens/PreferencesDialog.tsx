@@ -170,8 +170,8 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
 
           {/* PREVIEW */}
           {/* [guard-config] Preview overload guard. OFF is fully uncapped —
-              the pre-#121 behavior that CAN OOM the editor; the warning
-              line states the trade (autosave #41 is the backstop). */}
+              the old behavior that CAN OOM the editor; the warning
+              line states the trade (autosave is the backstop). */}
           <SectionCard title="Preview">
             <div className="flex items-center justify-between gap-3 px-3 py-[9px]">
               <span className="text-xs text-text">Limit preview particle count</span>
@@ -196,7 +196,7 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
                 Max preview particles
               </label>
               {/* focus-within accent border = the keyboard-focus cue for the
-                  borderless input inside (design pass; was focus-invisible). */}
+                  borderless input inside (was focus-invisible). */}
               <div className="flex h-[var(--row-h-sm)] w-28 items-center overflow-hidden rounded-[var(--radius-sm)] border border-border-2 bg-bg-3 transition-colors motion-reduce:transition-none focus-within:border-accent">
                 <input
                   id="pref-overload-max"

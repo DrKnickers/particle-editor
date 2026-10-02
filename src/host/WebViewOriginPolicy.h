@@ -16,7 +16,7 @@
 // add_NavigationStarting (cancel off-origin nav) and the WebMessageReceived
 // handler (drop messages from an untrusted document source).
 //
-// Extracted from HostWindow.cpp unchanged (2026-09-30 audit H1 follow-up) for
+// Extracted from HostWindow.cpp unchanged for
 // the same reason as WebMessageIngressPolicy.h: HostWindow.cpp pulls in WebView2
 // + D3D9 and cannot be linked by the standalone test harness, so the boundary
 // was untested. tests/test_webview_origin_policy.cpp pins it.

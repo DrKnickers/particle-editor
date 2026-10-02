@@ -2,7 +2,7 @@
 //
 // Single-spinner modal that triggers
 // `emitters/duplicate-with-index-increment`. Mirrors legacy
-// `ShowIncrementDialog` at [src/UI/EmitterList.cpp:2354] — the legacy
+// `ShowIncrementDialog` from the legacy Win32 editor — the legacy
 // dialog uses a spin control with range 1..999 and a default of 1.
 //
 // Driven by the `tree-context` atom; mounts at App level.

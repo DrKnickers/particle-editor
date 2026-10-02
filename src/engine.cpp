@@ -10,7 +10,7 @@
 #include "engine.h"
 #include "engine_internal.h"
 #include "exceptions.h"
-#include "ResourceLimits.h"   // kMaxTextureAssetBytes (asset-read size caps, #415)
+#include "ResourceLimits.h"   // kMaxTextureAssetBytes (asset-read size caps)
 #include "Resources/resource.h"
 #include "ParticleSystemInstance.h"
 #include "EmitterInstance.h"
@@ -96,7 +96,7 @@ bool IsPreviewPaused()
     return g_previewPaused;
 }
 
-// #481 capture determinism: pause the preview clock at a FIXED sim time.
+// Capture determinism: pause the preview clock at a FIXED sim time.
 // SetPreviewPaused(true) freezes at the current (process-age-dependent) wall
 // time, which leaves any m_time-consuming shader (scanline scroll, heat phase)
 // run-dependent even under seeded RNG + fixed frame stepping. Headless capture
@@ -202,7 +202,7 @@ bool Engine::KillParticleSystem(ParticleSystemInstanceHandle handle)
 	}
 
 	instance->Detach();
-	// [D2] The killed instance's emitter teardown + count decay happen
+	// The killed instance's emitter teardown + count decay happen
 	// inside Update's instance pass — make sure a paused frame runs it
 	// (the kill doesn't change the top-level list size until then).
 	InvalidatePausedIdleSkip();
@@ -530,7 +530,7 @@ void Engine::ApplyParticleSystemChanged(int track)
 	// structural emitter handlers send. Re-sync placed instances against the
 	// authored root list there: an instance only spawns roots in its
 	// constructor, so Add Root / Paste / Import / Duplicate / reparent-to-root
-	// never reached one placed earlier (2026-07 audit). Gated on track < 0
+	// never reached one placed earlier. Gated on track < 0
 	// so a per-track curve edit doesn't pay for the scan.
 	//
 	// Safe on the system-REPLACEMENT paths (file/new, file/open, recover,
@@ -543,7 +543,7 @@ void Engine::ApplyParticleSystemChanged(int track)
 		instance->onParticleSystemChanged(*this, track);
 		if (track < 0) instance->SyncRootEmitters(now);
 	}
-	// [D2] Bust the paused-idle skip: while paused, on-screen particles
+	// Bust the paused-idle skip: while paused, on-screen particles
 	// only reflect an edit when the Update loop re-evaluates their curves
 	// at the frozen time — a paused curve/property edit must repaint now,
 	// not on unpause. (-1 can never equal a real GetTimeF value.)
@@ -632,9 +632,9 @@ void Engine::SetCamera( const Camera& camera )
 	// A camera move changes GetBillboardMatrix(), and screen-oriented
 	// (!isWorldOriented) particles bake that matrix into their vertices on the
 	// CPU in EmitterInstance::UpdateParticle. While the preview is paused the
-	// sim clock is frozen, so the [D2] paused-idle skip in UpdateParticles would
+	// sim clock is frozen, so the paused-idle skip in UpdateParticles would
 	// otherwise elide the re-bake and the quads freeze edge-on as the view
-	// orbits (#576). Force one more Update pass when the camera actually moves.
+	// orbits. Force one more Update pass when the camera actually moves.
 	// Guarded on a REAL change so a static paused frame (no orbit) still skips
 	// and the idle-recompute elision is preserved.
 	if (camera.Position != m_eye.Position
@@ -876,7 +876,7 @@ void Engine::ReleaseDeviceResourcesForReset()
 	// Each EmitterInstance owns separate +1 references to its color and normal
 	// textures. Drop those before the texture manager drops its cache refs;
 	// otherwise DEFAULT-pool textures remain live across Reset and Reset fails
-	// with D3DERR_INVALIDCALL (2026-07 re-audit).
+	// with D3DERR_INVALIDCALL.
 	ReleaseInstanceTextures();
 	// D3DX texture helpers (D3DXCreateTextureFromFileInMemory,
 	// D3DXCreateTextureFromResource) silently substitute D3DPOOL_DEFAULT
@@ -980,7 +980,7 @@ void Engine::ReacquireDeviceResourcesAfterReset()
 	// re-apply the cached scene
 	// viewport so its projection aspect ratio survives Reset.
 	// ResetParameters() above rebuilt m_projection at FULL-RT aspect via
-	// D3DXMatrixPerspectiveFovRH (engine.cpp:1448), overwriting whatever
+	// D3DXMatrixPerspectiveFovRH, overwriting whatever
 	// scene-rect-aspect projection SetSceneViewport had set last. Without
 	// this re-apply, the first frame after Reset would render at
 	// full-RT aspect until React's next layout/scene-rect dispatch
@@ -1227,11 +1227,12 @@ void Engine::IssueEndFrameQuery()
 }
 
 // WaitEndFrameQuery spins on GetData with the spike's 100k cap (see
-// dxgi_spike.cpp:687-697 for the original). On timeout, logs once and
-// returns — degraded mode where the D3D11 CopyResource may read
-// partially-finished VRAM (visible tearing). Safer than blocking the
-// host message pump indefinitely on a hung GPU. Returns the spin count
-// (0 = signalled on the first poll) so the host can log GPU-wait pressure.
+// RenderD3D9Frame in src/host/spike/dxgi_spike.cpp for the original). On
+// timeout, logs once and returns — degraded mode where the D3D11
+// CopyResource may read partially-finished VRAM (visible tearing). Safer
+// than blocking the host message pump indefinitely on a hung GPU. Returns
+// the spin count (0 = signalled on the first poll) so the host can log
+// GPU-wait pressure.
 //
 // [resize-perf] The wait now YIELDS between polls past a short
 // tight burst. The original no-yield spin burned a full core while the
@@ -1321,8 +1322,8 @@ LUID Engine::GetAdapterLuid() const
 // boundary). Post-process passes restore the cached viewport before
 // running.
 //
-// The projection-matrix shape mirrors ResetParameters at
-// engine.cpp:1518: D3DXMatrixPerspectiveFovRH @ 45° FOV, near=1.0,
+// The projection-matrix shape mirrors ResetParameters:
+// D3DXMatrixPerspectiveFovRH @ 45° FOV, near=1.0,
 // far=1000, then the engine's _33 / _43 overrides that flip Z. The
 // only thing that varies is the aspect: (w / h) here instead of
 // (BackBufferWidth / BackBufferHeight) there. Duplicated inline
@@ -1363,9 +1364,10 @@ void Engine::SetSceneViewportUnchecked(int x, int y, int w, int h)
 			m_projection._33 = -1.0f;
 			m_projection._43 = -2 * n;
 			// Push to device + recompute m_viewProjection so shader
-			// effects (engine.cpp:613, 616) see the fresh matrix. Without
-			// this, the device keeps the stale projection until something
-			// else calls SetCamera (visible as "aspect snaps on click").
+			// effects (bound per frame in Engine::Render) see the fresh
+			// matrix. Without this, the device keeps the stale projection
+			// until something else calls SetCamera (visible as "aspect snaps
+			// on click").
 			D3DXMatrixMultiply(&m_viewProjection, &m_view, &m_projection);
 			if (m_pDevice)
 			{
@@ -1384,7 +1386,7 @@ void Engine::SetSceneViewportUnchecked(int x, int y, int w, int h)
 		return;
 	}
 
-	// [black-line fix, session 10] Defensive clamp to the engine RT. The
+	// Defensive clamp to the engine RT. The
 	// caller (LayoutBroker) guard-bands the scene viewport a few px beyond the
 	// DComp clip so the D3D9Ex->D3D11 shared-surface edge incoherency lands
 	// outside the clip. The surrounding chrome guarantees margin so the band
@@ -1452,9 +1454,9 @@ void Engine::SetSceneViewportUnchecked(int x, int y, int w, int h)
 	m_projection._33 = -1.0f;
 	m_projection._43 = -2 * n;
 	// Push the new projection to the device + recompute m_viewProjection
-	// for shader-effect consumers (engine.cpp:613, 616). Without these,
-	// the device retains whatever projection SetCamera last pushed
-	// (typically from boot) until SetCamera fires again — visible as
+	// for shader-effect consumers (bound per frame in Engine::Render).
+	// Without these, the device retains whatever projection SetCamera last
+	// pushed (typically from boot) until SetCamera fires again — visible as
 	// "aspect snaps to correct on click in viewport" because click
 	// triggers a camera op which calls SetCamera and finally pushes
 	// the latest m_projection.
@@ -1514,7 +1516,7 @@ void Engine::ResetParameters()
 			SAFE_RELEASE(m_pSceneTexture);
 			throw runtime_error("Unable to create texture");
 		}
-		// [D3] Fresh RT contents are undefined — force one neutral clear
+		// Fresh RT contents are undefined — force one neutral clear
 		// before the zero-heat skip may engage (see Render's heat pass).
 		m_distortRtNeutral = false;
 
@@ -1910,7 +1912,7 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 	InitSkydomeMesh();
 	// compile the skydome HLSL effect and cache its parameter handles.
 	// Graceful-degrade: if compile fails m_pSkydomeEffect stays NULL and the
-	// render pass (Task 4) will guard on it and skip skydome rendering.
+	// skydome render pass guards on it and skips skydome rendering.
 	InitSkydomeEffect();
 	// ground-lighting effect + tangent-space decl + flat-normal fallback.
 	// Graceful-degrade identically: on compile failure m_pGroundEffect stays
@@ -1922,10 +1924,10 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 #ifndef NDEBUG
 	// bring-up driver (debug only): load a reference object by .alo path so
 	// the rigid-multi-part render core can be feel-tested before the picker.
-	//   set ALO_LT7_TEST_OBJECT=Data\Art\Models\AI_Bunker_Turret1.alo
+	//   set ALO_TEST_REFERENCE_OBJECT=Data\Art\Models\AI_Bunker_Turret1.alo
 	{
 		char buf[512];
-		if (GetEnvironmentVariableA("ALO_LT7_TEST_OBJECT", buf, sizeof(buf)) > 0)
+		if (GetEnvironmentVariableA("ALO_TEST_REFERENCE_OBJECT", buf, sizeof(buf)) > 0)
 		{
 			std::string aloPath = buf;
 			fprintf(stderr, "[RefObj] test driver: loading '%s'\n", aloPath.c_str());

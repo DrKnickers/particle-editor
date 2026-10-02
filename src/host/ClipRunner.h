@@ -9,7 +9,7 @@
 
 namespace host {
 
-class RecordTrace;   // flag-gated pump-schedule trace (RecordTrace.h); PR 12
+class RecordTrace;   // flag-gated pump-schedule trace (RecordTrace.h)
 
 // Drives a parsed --record timeline forward, ONE emitted frame per Tick().
 // Unlike DriveRunner (which never blocks), each Tick performs a full frame
@@ -42,7 +42,7 @@ public:
     void SetHooks(DispatchFn d, StepFn s, CursorFn c, AckFn a, CaptureFn cap, LogFn log,
                   UiPushFn ui = {}, AckDataFn ackData = {});
 
-    // Flag-gated pump-schedule trace (PR 12). Non-null only under
+    // Flag-gated pump-schedule trace. Non-null only under
     // PE_RECORD_TRACE; the runner emits its ordered per-frame phase tokens
     // (step / cursor-tick / at-events / ack) and calls EndFrame, while the
     // host's capture lambda emits the barrier/grab tokens into the SAME sink —
@@ -74,7 +74,7 @@ private:
     size_t m_nextAt = 0;         // index of the next un-fired at-event (ats are sorted)
     bool   m_done = false;
     std::map<std::string, std::string> m_pathTokens;   // ${TOKEN} table (host-supplied, pre-Init)
-    // [R5] Tween dispatch dedupe — the last VALUE sent per continuous track.
+    // Tween dispatch dedupe — the last VALUE sent per continuous track.
     // Post-t1 holds re-evaluate to the same number every frame; re-dispatching
     // burns a bridge round-trip + a web re-render per frame for no state
     // change. Deduped at the TARGET level: all tweens on a target evaluate in
@@ -92,7 +92,7 @@ private:
 
     bool m_targetCursor = false;          // cursor track uses semantic targets
     nlohmann::json m_sidecar = nlohmann::json::array();  // verify sidecar (target run only)
-    RecordTrace* m_trace = nullptr;       // flag-gated pump trace (PR 12); host-owned, may be null
+    RecordTrace* m_trace = nullptr;       // flag-gated pump trace; host-owned, may be null
 
     bool m_preflighted = false;
     bool Preflight();       // track-key targets exist + save confinement; false + exit 3 on miss

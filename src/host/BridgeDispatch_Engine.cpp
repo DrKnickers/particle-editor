@@ -1,6 +1,5 @@
-// Kind handlers for the engine/* bridge domain(s), moved out of
-// DispatchInternal's ladder (Phase A dispatch split --
-// tasks/2026-07-06-heavyweight-refactor-plan.md).
+// Bridge request handlers for the engine/* kinds.
+// BridgeDispatcher::DispatchInternal routes requests here via TryDispatchEngine.
 
 #include "BridgeDispatcher.h"
 #include "BridgeDispatchShared.h"
@@ -18,8 +17,7 @@ namespace host {
 
 bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
 {
-    // DispatchInternal-local aliases so the moved ladder blocks below stay
-    // verbatim (plan #3A transforms only).
+    // Short local names for the request fields used by the handlers below.
     const json&        params = ctx.params;
     const std::string& kind   = ctx.kind;
 
@@ -138,7 +136,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         // restored on launch; not part of the .alo document) — so, like the
         // sibling view toggles (paused / overload-guard / msaa / model-shadows),
         // it must NOT mark the document dirty. Persist it so a toggled-off
-        // ground survives restart (#617).
+        // ground survives restart.
         const bool enabled = params.value("enabled", false);
         m_engine->SetGround(enabled);
         ctx.SendOk(json::object());
@@ -187,8 +185,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         int slot = params.value("slot", -1);
         std::string p = params.value("path", std::string{});
         // The setter's bool was dropped here, so a refused path still answered
-        // {ok:true} — the silent-success shape, telling the user it took when it did not
-        // (2026-07 audit).
+        // {ok:true} — the silent-success shape, telling the user it took when it did not.
         if (!m_engine->SetGroundSlotCustomPath(slot, Utf8ToWide(p)))
         {
             ctx.SendErr("ground slot path rejected: bad slot, or a network/device path");
@@ -225,8 +222,8 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         int slot = params.value("slot", -1);
         std::string p = params.value("path", std::string{});
         std::wstring wpath = Utf8ToWide(p);
-        // Check BEFORE persisting: writing a refused path to the registry is
-        // what made this the durable half of that finding — the startup restore would
+        // Check BEFORE persisting: writing a refused path to the registry
+        // would make the refusal durable — the startup restore would
         // replay it on every launch.
         if (!m_engine->SetSkydomeCustomPath(slot, wpath))
         {
@@ -430,10 +427,9 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         EmitEngineStateChanged();
         return true;
     }
-    // Task 2.7 — leave particles after instance death. Persisted with
-    // the ParticleSystem (chunk-serialised at [ParticleSystem.cpp:948])
-    // so dirty must flip. Engine::KillParticleSystem honors the flag at
-    // [src/engine.cpp:197].
+    // Leave particles after instance death. Persisted with the
+    // ParticleSystem (chunk-serialised in ParticleSystemSerialization.cpp)
+    // so dirty must flip. Engine::KillParticleSystem honors the flag.
     if (kind == "engine/set/leave-particles")
     {
         bool enabled = params.value("enabled", true);
@@ -457,8 +453,10 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         }
         else
         {
-            // G3: HARD FAIL — success path is a bare ctx.SendOk(json::object())
-            // with no nested ok, so no caller reads nested ok here. Sibling
+            // Hard failure (SendErr), not the nested-ok result contract (see
+            // BridgeRequestContext.h): the success path is a bare
+            // ctx.SendOk(json::object()) with no nested ok, so no caller reads
+            // nested ok here. Sibling
             // engine/set/* handlers already sendErr (via requireEngine) for
             // the not-ready case from the same `void bridge.request` call
             // sites; converting aligns this outlier with them.
@@ -479,7 +477,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
     {
         if (!ctx.RequireEngine(kind.c_str())) return true;
         // Refuse a degenerate camera instead of handing the engine a NaN
-        // view matrix (audit HX2) — see CameraParams.h.
+        // view matrix — see CameraParams.h.
         CameraParams p;
         if (const char* why = ReadCameraParams(params, p))
         {
@@ -615,12 +613,12 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
     // -------- engine/action/reset-view-settings ----------------------
     //
     // Cascade reset for the View → Reset View Settings
-    // menu. Mirrors the legacy main.cpp reset path: pushes engine defaults
+    // menu. Mirrors the legacy editor's reset path: pushes engine defaults
     // for background, ground (visibility + Z + texture), bloom (off +
     // canonical strength/cutoff/size), and skydome (Off slot). Lighting
     // reset rides with the lighting reset (separate handler around Force Align).
     //
-    // Defaults match the Engine constructor (engine.cpp:1690-1715) —
+    // Defaults match the Engine constructor —
     // kept in sync by hand because there's only one canonical value
     // each. Editor state (current path, dirty bit, selection) is left
     // alone since it isn't a "view setting."
@@ -677,7 +675,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         if (!ctx.RequireEngine(kind.c_str())) return true;
         m_engine->InvalidateSkydomeListCache();   // explicit disk re-read -> refresh skydome XML too
         m_engine->ReloadTextures();
-        // [C3] Reload re-reads the same filenames with NEW pixels, so the
+        // Reload re-reads the same filenames with NEW pixels, so the
         // (stack, filename)-keyed preview LRU + thumb cache are stale even
         // though the stack didn't change. Drop both (the epoch bump also
         // invalidates any in-flight encode). Mirrors the web bumpTextureEpoch.
@@ -717,7 +715,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
     // landed — rescale-emitter twenty lines below has called captureUndo()
     // since — but the stale comment read as a deliberate accepted limitation,
     // so every reader skipped past it and one Ctrl+Z after a whole-system
-    // rescale silently restored nothing (2026-07 audit).
+    // rescale silently restored nothing.
     if (kind == "engine/action/rescale-system")
     {
         float durPct  = params.value("durationScalePercent", 100.0f);
@@ -735,8 +733,8 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         captureUndo();
         // Walk every emitter, not just roots — DoRescaleEmitter only
         // touches per-emitter scalar fields and doesn't recurse, so we
-        // need to iterate the flat list. Mirrors the loop at
-        // src/Rescale.cpp:181 used by RescaleParticleSystem.
+        // need to iterate the flat list, as the legacy editor's
+        // RescaleParticleSystem loop did.
         auto& emitters = sys->getEmitters();
         for (size_t i = 0; i < emitters.size(); ++i)
         {
@@ -746,10 +744,10 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         ctx.SendOk(json::object());
         ctx.MarkDirty();
         // Rescaling rewrites per-emitter scalars AND clears/rebuilds the Scale
-        // key container (src/Rescale.cpp:69-75), which live EmitterInstances
+        // key container (DoRescaleEmitter), which live EmitterInstances
         // hold cached track cursors into. Without this an already-placed
-        // instance keeps its creation-time composite values, exactly as it did
-        // for set-properties before #682 (2026-07 audit).
+        // instance keeps its creation-time composite values, exactly as it
+        // once did for set-properties.
         if (m_engine) m_engine->OnParticleSystemChanged(-1);
         EmitEngineStateChanged();
         // Emitter parameters changed → notify the React tree so the
@@ -810,7 +808,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
     }
     // Read-only live-simulation counters, straight off the Engine getters.
     //
-    // Added by the 2026-07 audit: the bridge could describe the AUTHORED
+    // Why it exists: the bridge could describe the AUTHORED
     // ParticleSystem in detail (emitters/list) but exposed NOTHING about the
     // live instances rendered from it, so a whole class of defects — a placed
     // instance not seeing a structural edit, not seeing a rescale,

@@ -19,7 +19,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // rendering happens on the main-loop idle path
         // (PeekMessage-drain → render). WM_PAINT just validates the
         // invalid region so Windows doesn't keep firing it. Same pattern
-        // as legacy src/main.cpp's main loop, where WM_PAINT also does
+        // as the legacy editor's main loop, where WM_PAINT also did
         // nothing visible and the idle render owns the pipeline.
         PAINTSTRUCT ps;
         BeginPaint(hwnd, &ps);
@@ -33,7 +33,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
     // ---------------------------------------------------------------
     // viewport interaction — camera controls.
     //
-    // Mirrors the legacy handler in the legacy main.cpp. The math
+    // Mirrors the legacy editor's handler. The math
     // for MOVE / ROTATE / ZOOM is lifted verbatim from legacy so the
     // user's muscle-memory carries over: drag delta scales /2.0f for
     // rotate (full-window-width drag ≈ 180°), distance/1000 for
@@ -82,7 +82,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // by an earlier WM_KEYDOWN VK_SHIFT or by the fallback below),
         // LMB-down enters OBJECT_Z drag mode for height adjustment. LMB-up
         // will then detach the preview, placing it permanently in the scene.
-        // Matches the legacy main.cpp. Do NOT enter a camera drag
+        // Matches the legacy editor. Do NOT enter a camera drag
         // — placement is the entire intent of this click while a preview
         // is alive.
         if (ParticleSystemInstance* attached = LiveAttachedSystem())
@@ -258,7 +258,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // it is no longer parented to m_mouseCursor. The user can
         // then click again (while still holding Shift) to spawn a
         // fresh preview, repeating the click-to-place gesture.
-        // Matches the legacy main.cpp.
+        // Matches the legacy editor.
         if (ParticleSystemInstance* attached = LiveAttachedSystem())
         {
             Log("[ArchC-engine] LMB-up placing attached=%p (Detach, system stays alive)\n",
@@ -512,7 +512,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // Legacy parity: in OBJECT_Z drag (placing a cursor-bound preview),
         // only Z tracks the drag. X/Y stay frozen at the click position so
         // the user can rake the mouse vertically to set height without the
-        // preview sliding sideways. Matches the legacy main.cpp.
+        // preview sliding sideways. Matches the legacy editor.
         if (m_dragMode == DragMode::OBJECT_Z)
         {
             long y = my - m_dragStartY;
@@ -525,12 +525,12 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         }
 
         // shift-click-to-spawn: always-update cursor block, regardless
-        // of (non-OBJECT_Z) drag mode. Mirrors the legacy main.cpp
+        // of (non-OBJECT_Z) drag mode. Mirrors the legacy editor
         // — without this, the attached ParticleSystemInstance (parented to
         // m_mouseCursor via Object3D) wouldn't track the mouse during
         // Shift-hold. Cache the (x,y) so WM_KEYDOWN can use it for the
         // spawn coords (WM_KEYDOWN's lParam is NOT mouse coords; a
-        // legacy main.cpp bug).
+        // legacy editor bug).
         D3DXVECTOR3 cursorWorld;
         GetCursorPos3D(engine.get(), (short)mx, (short)my, cursorWorld);
         m_mouseCursor.SetPosition(cursorWorld);
@@ -570,7 +570,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         D3DXVECTOR3    orthVec;
         D3DXVECTOR3    diff = m_dragStartCam.Position - m_dragStartCam.Target;
 
-        // Orthogonal vector in the camera plane (legacy line 2997-2998).
+        // Orthogonal vector in the camera plane (as in the legacy editor).
         D3DXVec3Cross(&orthVec, &diff, &camera.Up);
         D3DXVec3Normalize(&orthVec, &orthVec);
 
@@ -607,7 +607,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             // Scale (Position - Target) by a sqrt(distance)-based
             // factor. Floor at 1.0f to prevent flipping through the
             // target. -y so dragging up zooms in (matches legacy).
-            // olddist > 0 guard (audit HX2): a coincident eye/target would
+            // olddist > 0 guard: a coincident eye/target would
             // divide by zero and push a NaN camera into the engine.
             float olddist = D3DXVec3Length(&diff);
             if (olddist > 0.0f)
@@ -627,7 +627,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
     //
     // Hold Shift over the viewport to spawn an instance of the active
     // ParticleSystem parented to m_mouseCursor. Drag the mouse to fling
-    // it around; release Shift to kill it. Matches the legacy main.cpp.
+    // it around; release Shift to kill it. Matches the legacy editor.
     //
     // Cursor-coords-on-KEYDOWN: WM_KEYDOWN's lParam is repeat-count +
     // scan-code + flags — NOT mouse coords. Legacy reads `LOWORD(lParam),
@@ -734,7 +734,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // Genuine renderer viewport blur (window.blur via InputDispatcher) -- end
         // any cursor-bound Shift spawn. Distinct from the OS WM_KILLFOCUS above
         // (suppressed for Win32 focus churn) so a real blur can't leak the
-        // attached preview (release-audit #7). Tear down an in-flight OBJECT_Z
+        // attached preview. Tear down an in-flight OBJECT_Z
         // placement drag first: m_dragMode = NONE BEFORE ReleaseCapture (the gizmo
         // teardown order). No-op when nothing is attached / no drag.
         //
@@ -780,7 +780,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
 
     case WM_MOUSEWHEEL:
     {
-        // Wheel-zoom only when no drag is in progress (legacy line 3046).
+        // Wheel-zoom only when no drag is in progress (as in the legacy editor).
         // wParam high word is the wheel delta in WHEEL_DELTA units (120).
         if (m_dragMode != DragMode::NONE || !engine) return 0;
 
@@ -788,7 +788,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         D3DXVECTOR3    diff   = camera.Position - camera.Target;
 
         float olddist = D3DXVec3Length(&diff);
-        // Same olddist > 0 guard as the drag-zoom path (audit HX2).
+        // Same olddist > 0 guard as the drag-zoom path.
         if (!(olddist > 0.0f)) return 0;
         float wheel   = (float)((SHORT)HIWORD(wp)) / (float)WHEEL_DELTA;
         float newdist = max(1.0f, olddist - sqrtf(olddist) * wheel);

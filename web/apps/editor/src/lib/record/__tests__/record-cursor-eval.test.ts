@@ -238,7 +238,7 @@ describe("record-cursor-eval — element target resolution", () => {
   });
 
   it("gates atlas-tile refs on the dock being settled (grid mounted AND not animating)", () => {
-    // Post-#572 the grid is a single <canvas>; the resolver reads its geometry
+    // The grid is a single <canvas>; the resolver reads its geometry
     // from the data-attrs (no per-cell DOM) and computes frame N's center.
     addEl(
       {
@@ -301,7 +301,7 @@ describe("record-cursor-eval — element target resolution", () => {
 
   // Pins current behavior: `resolved` carries the DESTINATION entry (ok:true);
   // the departure's failure surfaces only as the frame's top-level ok:false.
-  // (The source comment at record-cursor-eval.ts:136-141 was corrected to
+  // (The source comment in evalRecordCursor was corrected to
   // match — it used to claim a per-entry ok:false report that never existed.)
   it("heads to the destination (ok:false) when the departure element vanished mid-transit", () => {
     addEl({ "data-testid": "to" }, { left: 100, top: 100, width: 20, height: 20 });

@@ -87,7 +87,7 @@ expect.extend({
       // A gate run must NEVER take this branch. Update mode overwrites the
       // golden and returns pass unconditionally, so any regression reachable
       // while it is active gets blessed into the baseline and the suite goes
-      // green on the broken output (2026-07 audit). Refusing here means
+      // green on the broken output. Refusing here means
       // the blessing stays a deliberate, human-initiated act — which is what
       // it was always meant to be.
       if (process.env.PE_GATE_NO_REUSE) {
@@ -154,7 +154,7 @@ expect.extend({
 });
 
 // Type augmentation — Playwright extends matchers via the global
-// PlaywrightTest.Matchers interface (see playwright/types/test.d.ts:8551).
+// PlaywrightTest.Matchers interface (see playwright/types/test.d.ts).
 // `declare module "@playwright/test"` does NOT work because the public
 // .d.ts re-exports from "playwright/test" and never declares a `Matchers`
 // interface in its own module namespace.

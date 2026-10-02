@@ -8,7 +8,7 @@
 namespace host {
 
 // HKCU key under which ALL editor state persists (recent files, view state,
-// spawner config, lighting). Mirrors legacy main.cpp's registry layout.
+// spawner config, lighting). Mirrors the legacy editor's registry layout.
 constexpr const wchar_t* kRegistryKeyPath = L"Software\\AloParticleEditor";
 // Per-mod display names, one REG_SZ per mod path, in a child of the key above.
 constexpr const wchar_t* kRegModNicknamesPath = L"Software\\AloParticleEditor\\ModNicknames";

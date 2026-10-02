@@ -1,4 +1,4 @@
-// Unit tests for the rigid group time-shift clamp (#619).
+// Unit tests for the rigid group time-shift clamp.
 import { describe, it, expect } from "vitest";
 import { clampGroupTimeShift } from "../curve-group-shift";
 

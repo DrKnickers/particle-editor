@@ -37,8 +37,7 @@ ChunkType ChunkReader::nextMini()
 	}
 
 	// Validate the untrusted mini-chunk size against the parent's remaining bytes
-	// AND an absolute cap before trusting it for offset math / later allocations
-	// (release-audit #13: absolute max chunk/string sizes for ALO parsing).
+	// AND an absolute cap before trusting it for offset math / later allocations.
 	const long miniSize = (long)letohl(hdr.size);
 	const long avail    = m_offsets[m_curDepth] - (long)m_file->tell();
 	if (miniSize < 0 || miniSize > avail || (unsigned long)miniSize > kMaxAloChunkBytes)
@@ -92,8 +91,8 @@ ChunkType ChunkReader::next()
 	unsigned long size = letohl(hdr.size);
 	const long payloadSize = (long)(size & 0x7FFFFFFF);
 	const long parentRemaining = m_offsets[m_curDepth] - (long)m_file->tell();
-	// Parent-relative bound AND the absolute kMaxAloChunkBytes cap (release-audit
-	// #13). The cap previously guarded only mini-chunks (nextMini); a normal
+	// Parent-relative bound AND the absolute kMaxAloChunkBytes cap. The cap
+	// previously guarded only mini-chunks (nextMini); a normal
 	// chunk's only bound was its parent, and the top-level parent is the whole
 	// file — so a multi-GiB crafted .alo could still authorize a huge single
 	// chunk. Real chunks sit far below the cap.
@@ -159,7 +158,7 @@ string ChunkReader::readString()
 	{
 		throw BadFileException();
 	}
-	if ((unsigned long)len > kMaxAloStringBytes) // absolute cap (release-audit #13)
+	if ((unsigned long)len > kMaxAloStringBytes) // absolute cap
 	{
 		throw BadFileException();
 	}

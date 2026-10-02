@@ -1,4 +1,4 @@
-// Real-browser layout guard for the texture palette popover (#683).
+// Real-browser layout guard for the texture palette popover.
 //
 // At small window sizes the palette grew past the editor window and its lower
 // tiles were unreachable — Radix flips/shifts a colliding popover but never

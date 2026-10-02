@@ -1,5 +1,5 @@
 // Unit test for ParseParticleMipFilter (src/ParticleMipFilter.h) — the
-// ALO_PARTICLE_MIPFILTER override parser behind the #481 particle mip-sampling
+// ALO_PARTICLE_MIPFILTER override parser behind the particle mip-sampling
 // bracket. Pure header, no D3D. Contract under test:
 //   unset/empty        -> MODE_NONE, recognized
 //   "linear" (any case)-> MODE_LINEAR, recognized

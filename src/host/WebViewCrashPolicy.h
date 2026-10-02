@@ -1,6 +1,6 @@
 #pragma once
 
-// WebView2 process-failure policy (2026-10-01 audit HX1).
+// WebView2 process-failure policy.
 //
 // The editor's whole UI — menus, title bar, panels, the viewport canvas — lives
 // in the WebView2 page, so a dead web process leaves a window the user can't

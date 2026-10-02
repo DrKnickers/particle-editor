@@ -26,7 +26,7 @@ export default defineConfig({
     exclude: ["node_modules/**", "dist/**", "tests/**"],
     environment: "jsdom",
     setupFiles: ["./src/test-setup.ts"],
-    // Report-only coverage (no thresholds yet — see tasks/todo.md follow-ups).
+    // Report-only coverage (no thresholds yet).
     // Run via `pnpm test:coverage`; plain `pnpm test` skips instrumentation.
     // Scoped to src/ so Playwright helpers and node scripts don't dilute the
     // numbers. Only true test-support files are excluded — shipped-but-

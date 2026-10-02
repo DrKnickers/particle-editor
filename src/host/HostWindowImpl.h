@@ -65,7 +65,7 @@
 #include "HostWindow.h"
 #include "Run.h"
 #include "WindowCapture.h"  // host::CaptureWindowToPng (factored out for --capture/--snap-window)
-#include "StringConv.h"     // host::Utf8ToWide / WideToUtf8 (consolidated, DRY audit cpp-host-0)
+#include "StringConv.h"     // host::Utf8ToWide / WideToUtf8 (shared host copy)
 #include "generated/EmbeddedWebAssets.h"  // embedded React bundle manifest (RCDATA) served on app.local
 #include "CaptureGoldenProfile.h"
 #include "LightingSettings.h"
@@ -110,11 +110,11 @@
 #include "../Autosave.h"  // two-tier autosave timers + clean-exit cleanup
 #include "DriveRunner.h"   // --drive: scripted non-CDP composite capture
 #include "ClipRunner.h"    // --record: deterministic clip recording (PNG sequence)
-#include "RecordTrace.h"   // --record: flag-gated pump-schedule trace (PR 12)
+#include "RecordTrace.h"   // --record: flag-gated pump-schedule trace
 #include "RecordOutputSafety.h"  // --record: refuse to remove_all a non-output dir
-#include "CaptureRunner.h" // --capture/--capture-ref: one-shot render + PNG (Phase C split)
+#include "CaptureRunner.h" // --capture/--capture-ref: one-shot render + PNG
 #include "HostRunUtil.h"   // PerfQpcNow/PerfQpcFreq/QpcMs/DeriveSibling (shared with the runners)
-#include "AsyncFrameEncoder.h"   // --record Branch B: background PNG encode (tasks/todo.md §3)
+#include "AsyncFrameEncoder.h"   // --record: background PNG encode
 
 using namespace Microsoft::WRL;
 
@@ -144,7 +144,7 @@ inline std::string ReadFileUtf8(const std::wstring& path)
 
 // --record: inspect `dir` on disk and ask recordsafety::MayReplaceRecordDir
 // whether it may be remove_all'd. Used for the output dir at publish AND the
-// `<out>.tmp` staging dir at setup (2026-10-01 audit HX4). A listing error is
+// `<out>.tmp` staging dir at setup. A listing error is
 // reported as such rather than read as "empty".
 inline bool MayReplaceRecordDirOnDisk(const std::wstring& dir, std::wstring& reason)
 {
@@ -272,7 +272,7 @@ struct PerfStage
     void   reset()        { sumUs = 0.0; maxUs = 0.0; n = 0; over16 = over33 = over50 = 0; }
 };
 
-// PR 12 (an-audit-finding): per-run --record state. The record arm's ~460-line setup+gate
+// Per-run --record state. The record arm's ~460-line setup+gate
 // used to inline in Run(); it now delegates to HostWindowImpl::SetupRecordArm,
 // and these shared per-run values (formerly scattered Run() locals) travel in
 // one struct. The hot-path capture/ack hooks stay HostWindowImpl-bound (they
@@ -289,7 +289,7 @@ struct RecordSession
 
 // DComp-present barrier policy (was Run()-scope; hoisted to file scope so the
 // capture hook inside SetupRecordArm still sees it). Recorded verbatim in the
-// PR 12 pump trace as the CONFIGURED policy the adaptive loop must honor —
+// pump trace (RecordTrace.h) as the CONFIGURED policy the adaptive loop must honor —
 // weakening either value (cap 3->1, advance 2->1) grabs a composition cycle
 // early and MUST change the trace, not just the runtime flush count.
 constexpr int kBarrierPresents          = 3;   // DComp-present barrier / adaptive ceiling
@@ -324,7 +324,7 @@ struct HostWindowImpl
     EventRegistrationToken          webMessageTok = {};
     // Navigation / new-window / permission policy tokens.
     // Registered alongside webMessageTok in InitWebView2 and removed in
-    // WM_DESTROY (mirroring the G5 webMessageTok lifecycle). The handlers
+    // WM_DESTROY (mirroring the webMessageTok lifecycle). The handlers
     // enforce the IsApprovedWebViewOrigin allow-list (cancel off-origin
     // top-level navigation), deny all popups, and deny every permission
     // request — defence-in-depth against a redirected/compromised renderer.
@@ -348,7 +348,7 @@ struct HostWindowImpl
     // captures `this`. The two WebView2 CREATION callbacks have no token to
     // unsubscribe — they are one-shot completions the runtime owns — so they
     // get the liveness guard instead, retired at the top of WM_DESTROY and
-    // checked before either callback touches `this` (2026-07 audit).
+    // checked before either callback touches `this`.
     host::StartupCallbackGuard      m_startupGuard;
     // TME_LEAVE arming state. WebView2 needs a
     // COREWEBVIEW2_MOUSE_EVENT_KIND_MOUSE_LEAVE input when the pointer
@@ -369,7 +369,7 @@ struct HostWindowImpl
     // WM_DESTROY so Engine never dereferences a freed compositor.
     std::unique_ptr<host::AlphaCompositor> alphaCompositor;
 
-    // host-state plumbing — the new-UI host owns the live
+    // host-state plumbing — the host owns the live
     // ParticleSystem (replaced on file/new and file/open) and a single
     // SpawnerDriver (config mutated via SetConfig). The BridgeDispatcher
     // gets pointer-to-pointer access via BindHostState so its handlers
@@ -430,7 +430,7 @@ struct HostWindowImpl
 
     // render loop bookkeeping. m_lastRenderTime drives dt for the
     // per-frame SpawnerDriver::Tick — matches the legacy
-    // `g_spawnerLastFrameTime` flow in the legacy main.cpp. First frame
+    // `g_spawnerLastFrameTime` flow in the legacy editor. First frame
     // sees dt == 0 (sentinel value 0.0f means "not yet rendered"), same
     // as the legacy first-frame initialisation.
     //
@@ -443,7 +443,7 @@ struct HostWindowImpl
     int                                m_lastEmittedActiveCount = -1;
 
     // viewport interaction (camera controls). Mirror of the legacy
-    // main.cpp drag-state. On WM_LBUTTONDOWN /
+    // editor's drag-state. On WM_LBUTTONDOWN /
     // WM_RBUTTONDOWN we snapshot the camera + cursor XY, then
     // WM_MOUSEMOVE deltas are applied relative to the snapshot
     // (matches legacy "drag relative to start" feel — releasing and
@@ -452,7 +452,7 @@ struct HostWindowImpl
     // OBJECT_Z: cursor-bound preview is being dragged for placement.
     // Only Z (height) tracks the drag delta; X/Y stay frozen at the
     // click position. WM_LBUTTONUP detaches the preview (place it).
-    // Matches the legacy main.cpp.
+    // Matches the legacy editor.
     // MANIPULATE: a manipulator handle (translate arrow or rotate
     // ring) was grabbed; LMB drag moves/rotates the object (wins over camera orbit
     // only when a handle is actually under the cursor at press).
@@ -541,9 +541,8 @@ struct HostWindowImpl
         if (dispatcher) dispatcher->EmitManipulatorDrag({ {"active", false} });
     }
 
-    // shift-click-to-spawn. Mirror of legacy
-    // `info->mouseCursor` + `info->attachedParticleSystem` at
-    // src/main.cpp:369-399 / 2945-2966.
+    // shift-click-to-spawn. Mirror of the legacy editor's
+    // `info->mouseCursor` + `info->attachedParticleSystem`.
     //
     // m_mouseCursor: Object3D whose position is set from screen-space
     // mouse moves (WM_MOUSEMOVE → GetCursorPos3D unproject) and whose
@@ -598,7 +597,7 @@ struct HostWindowImpl
     // wire-up (put_Bounds, AcceleratorKeyPressed, etc.) works unchanged. Kept
     // here so WM_DESTROY can release the composition-specific reference before
     // releasing the base controller (the teardown ordering matters per the
-    // spike's Shutdown sequence in dxgi_spike.cpp:783).
+    // spike's Shutdown sequence in spike/dxgi_spike.cpp).
     std::unique_ptr<host::Compositor>          m_compositor;
     // Latches a posted runtime composition fatal so no later render tick can
     // submit more D3D11 work before the message-loop handler exits.
@@ -704,7 +703,7 @@ struct HostWindowImpl
     nlohmann::json m_lastAckCursor;          // {x,y,vis,press}
     nlohmann::json m_lastAckResolved = nlohmann::json::array();  // [{ref,x,y,ok}]
     // [record-timing] Per-segment QPC accumulators for the record frame loop
-    // (permanent Phase-0 instrumentation, tasks/todo.md §3). The four segments
+    // (permanent instrumentation). The four segments
     // are accumulated inside the ClipRunner hooks (dispatch/ack lambdas;
     // barrier/png split inside the capture lambda); the Tick call site pushes
     // one entry per frame. Buckets are exhaustive by construction:
@@ -719,7 +718,7 @@ struct HostWindowImpl
         double curDispatch = 0, curAck = 0, curBarrier = 0, curPng = 0;
         double setupMs = 0.0;        // record-branch start -> first Tick
         bool   sawFirstTick = false;
-        // [R1] adaptive-barrier accounting: total DwmFlush presents across
+        // adaptive-barrier accounting: total DwmFlush presents across
         // the run (avg = total/frames in the summary) and whether the
         // composition-timing probe ever failed (permanent fixed-3 fallback
         // must be VISIBLE, not silent).
@@ -727,7 +726,7 @@ struct HostWindowImpl
         bool     barrierProbeFailed  = false;
     };
     RecordTiming m_recordTiming;
-    // --record pump-schedule trace (PR 12): non-null only under PE_RECORD_TRACE.
+    // --record pump-schedule trace: non-null only under PE_RECORD_TRACE.
     // Owned here (outlives m_clipRunner within Run); the capture lambda emits its
     // barrier/grab tokens and the runner emits step/tick/ack + EndFrame, both
     // into this one sink. See RecordTrace.h.
@@ -743,7 +742,7 @@ struct HostWindowImpl
     // synchronously via flushSync, no rAF-present dependency) + the same
     // PrintWindow/GrabWindowPixels grab the foreground path uses, run with the
     // record window OFFSCREEN (see --record-minimized) so the machine is free.
-    // (#510 replaced the old CapturePreview + CPU-composite path.) Env gate
+    // (This replaced the old CapturePreview + CPU-composite path.) Env gate
     // PE_RECORD_HEADLESS=1. Probed once; see the ack + capture hooks.
     bool m_recordHeadless = [] {
         wchar_t b[8] = {};
@@ -751,7 +750,7 @@ struct HostWindowImpl
             && b[0] != L'0';
     }();
     // --record-minimized: run the record window OUT OF SIGHT during a headless
-    // render so the machine is free. Since #510 this moves the window OFFSCREEN
+    // render so the machine is free. This moves the window OFFSCREEN
     // (a minimized window throttles DWM composition, which the window grab needs
     // — see the SetWindowPos in the record branch), NOT SW_MINIMIZE despite the
     // flag name. Only meaningful WITH PE_RECORD_HEADLESS. This is the mechanism
@@ -763,15 +762,15 @@ struct HostWindowImpl
     // update, so capturing would publish a STALE frame. ClipRunner only aborts
     // TARGET clips on an ack timeout (literal clips continue), so the headless
     // capture hook checks this and fails the frame (exit 4) for BOTH — a
-    // withheld ack is never silently captured. (pre-PR review finding 1.)
+    // withheld ack is never silently captured.
     bool m_headlessAckOk = true;
     // End-of-run summary (also emitted on the record watchdog so a timed-out
     // run still yields its measurement). p99/max reported beside p95 because
-    // the 2000 ms ack deadline is fatal at p100, not p95 (plan §4 risk 1).
+    // the 2000 ms ack deadline is fatal at p100, not p95.
     // Defined in-class: the enclosing region around the file's later helpers
     // is an anonymous namespace, where a host::HostWindowImpl member can't be
     // defined (C2888). (std::min) parenthesized against windows.h's min macro.
-    // [R3] Snapshot of the encoder's back-pressure stats, taken just before
+    // Snapshot of the encoder's back-pressure stats, taken just before
     // the summary is logged (the encoder object lives in Run()'s locals).
     host::AsyncFrameEncoder::QueueStats m_recordEncoderStats = {};
 
@@ -806,7 +805,7 @@ struct HostWindowImpl
         line("barrier",  rt.barrier);
         line("png",      rt.png);
         line("frame",    rt.frame);
-        // [R1] Adaptive-barrier proof line: avg flushes/frame (fixed-3 was
+        // Adaptive-barrier proof line: avg flushes/frame (fixed-3 was
         // the old behavior; ~2.0 = adaptive working) + loud fallback flag.
         if (!rt.barrier.empty() || rt.barrierFlushTotal > 0)
             Log("[record-timing] barrier-adaptive avg=%.2f flushes/frame%s\n",
@@ -814,7 +813,7 @@ struct HostWindowImpl
                     : static_cast<double>(rt.barrierFlushTotal)
                       / static_cast<double>(rt.frame.size()),
                 rt.barrierProbeFailed ? "  (PROBE FAILED — fixed-3 fallback)" : "");
-        // [R3] Encoder back-pressure: time the grab thread spent BLOCKED on
+        // Encoder back-pressure: time the grab thread spent BLOCKED on
         // the 128 MB queue cap (silently folded into png/capture before) +
         // queue high-water marks — the second-worker/faster-encoder
         // decision datum.
@@ -825,7 +824,7 @@ struct HostWindowImpl
                 m_recordEncoderStats.depthHighWater);
     }
 
-    // [E5] Frame-pacing budget from the monitor the window actually sits on
+    // Frame-pacing budget from the monitor the window actually sits on
     // (the old startup-only EnumDisplaySettings(nullptr) read the PRIMARY
     // display: it capped a 144 Hz secondary at 60 and over-drove a 60 Hz
     // secondary from a 144 Hz primary). Recomputed on WM_DISPLAYCHANGE and
@@ -859,7 +858,7 @@ struct HostWindowImpl
                 static_cast<unsigned long>(hz), 1000.0 / static_cast<double>(hz));
     }
 
-    // [C4] Deferred-autosave latch (see the WM_TIMER autosave note): the
+    // Deferred-autosave latch (see the WM_TIMER autosave note): the
     // timer tick latches; the paced idle branch services right after a
     // presented frame when no mouse capture / size-move is active. force
     // = the busy-override (pending a full RECENT interval). The WM_DESTROY
@@ -889,7 +888,7 @@ struct HostWindowImpl
             tier == Autosave::Tier::Recent ? "recent" : "stable",
             PerfUsSince(t0) / 1000.0,
             force ? " (busy-override)" : "");
-        // Tell the UI (2026-07 audit). `wrote` previously fed nothing but
+        // Tell the UI. `wrote` previously fed nothing but
         // the format string above, so a failing autosave was invisible outside a
         // debug log: the user kept editing believing the recovery net was live
         // when the newest recoverable state was silently falling behind.
@@ -959,8 +958,8 @@ struct HostWindowImpl
         // does for the dispatcher's settings and mods/set-layers writes. None of
         // these runs may rewrite the daily driver's persisted mod stack: with a
         // mod folder temporarily unavailable (unmounted drive), a capture run
-        // would otherwise ghost-drop those layers and PERSIST the reduced stack
-        // (2026-07 audit follow-up). Startup RestoreLastLayerStack never writes
+        // would otherwise ghost-drop those layers and PERSIST the reduced stack.
+        // Startup RestoreLastLayerStack never writes
         // regardless. Computed from the ctor arguments, not the m_* flags: this
         // member is declared (so initialized) before them.
         , modManager(std::make_unique<ModManager>(&fil, gameRoots_,
@@ -994,7 +993,7 @@ struct HostWindowImpl
     void OpenLog();
     bool RunDriveSelftest(const std::string& kind, int timeoutMs);
 
-    // PR 12 (an-audit-finding): the --record arm's one-time setup — timeline parse + mod
+    // The --record arm's one-time setup — timeline parse + mod
     // check + startup gate (resize/pause/open/catalog/settles) + hook wiring.
     // Moved out of Run() (was a ~460-line inline block). Returns true if the
     // run should quit (bad timeline exit 2 / failed open exit 3 / unsafe
@@ -1044,7 +1043,7 @@ struct HostWindowImpl
     // [[noreturn]]: flushes host.log, shows the dialog, then ExitProcess.
     [[noreturn]] void FailFatalComposition(HRESULT hr);
 
-    // WebView2 process-failure recovery (2026-10-01 audit HX1). The decisions
+    // WebView2 process-failure recovery. The decisions
     // live in WebViewCrashPolicy.h; this is the wiring. m_webDead is the one
     // flag the rest of the host reads: WM_CLOSE stops vetoing (the page that
     // would answer the save prompt is gone), the pump ends a headless run with
@@ -1068,7 +1067,7 @@ struct HostWindowImpl
     void CloseAfterWebDeath(HWND hwnd);
 
     // One idempotent release of every WebView2 / composition / engine COM
-    // object (2026-09-30 audit MH1). Called from WM_DESTROY and again at the end of Run()
+    // object. Called from WM_DESTROY and again at the end of Run()
     // so automation exits — which leave the pump without destroying hMain —
     // also release everything before CoUninitialize.
     void ReleaseHostComObjects();

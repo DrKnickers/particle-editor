@@ -1,8 +1,8 @@
 // SystemLoadChip — predictive system-total overload warning at the top of
-// the emitter tree (overload-indicator-consistency spec, Part 2).
+// the emitter tree.
 //
-// The per-row ⚠ glyph is per-emitter / per-single-instance; the #138 gate
-// compares SYSTEM total × placed-instance count. This chip covers the two
+// The per-row ⚠ glyph is per-emitter / per-single-instance; the spawn-time
+// overload gate compares SYSTEM total × placed-instance count. This chip covers the two
 // multipliers the glyph can't: visible exactly when the NEXT spawn attempt
 // would be refused — (instances + 1) × systemLoad > cap, guard enabled.
 // (Current-placed-state semantics would be self-erasing: the engine
@@ -15,7 +15,7 @@
 // works as a per-instance authoring signal in browser dev.
 //
 // Styling: amber-tinted band + normal text colour (readable in both
-// themes for free — the #121 light-mode amber-text lesson), with the
+// themes for free — amber TEXT fails contrast in light mode), with the
 // TriangleAlert in the same amber as the per-row glyph.
 import { useEffect, useState } from "react";
 import { TriangleAlert } from "lucide-react";
@@ -45,7 +45,7 @@ export function SystemLoadChip({
   const projected = (instances + 1) * systemLoad;
   const visible =
     guard.enabled && systemLoad > 0 && projected > guard.maxParticles;
-  // Presence fade (design pass): the chip used to pop in/out; usePresence keeps
+  // Presence fade: the chip used to pop in/out; usePresence keeps
   // it mounted through the .fade-animate exit so the warning eases away.
   const presence = usePresence(visible, SLOW_EXIT_MS);
   if (!presence.mounted) return null;

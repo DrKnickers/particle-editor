@@ -1,4 +1,4 @@
-// Vitest unit tests for the shared form primitives (audit MU1–MU4):
+// Vitest unit tests for the shared form primitives:
 // SegmentedControl (radio-group keyboard model), Checkbox (native input +
 // data-state mirror), IconButton (one label → aria-label + tooltip,
 // tipWhenDisabled wrapper, toggle aria-pressed) and cn()'s knowledge of the

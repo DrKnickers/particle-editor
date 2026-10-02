@@ -1,6 +1,5 @@
 // engine_reference.cpp — the reference-object render/shadow/manipulator/picking/catalog cluster of the Engine class,
-// moved verbatim out of engine.cpp (Phase B translation-unit split —
-// tasks/2026-07-06-heavyweight-refactor-plan.md). SAME class, same header
+// moved verbatim out of engine.cpp (a translation-unit split). SAME class, same header
 // (engine.h); this is a file split, not a class split. Cluster-local
 // file-scope statics moved with their consumers; helpers shared across
 // TUs are declared in engine_internal.h with one definition.
@@ -26,7 +25,7 @@
 using namespace std;
 
 // Live reference-object world = rotation then translation. The engine is
-// Z-UP (m_eye.Up = (0,0,1); see the Z-up note ~engine.cpp:2213), so "yaw"
+// Z-UP (m_eye.Up = (0,0,1), set in the Engine constructor), so "yaw"
 // (heading -- turning while staying upright) is rotation about world Z, NOT the
 // Y axis D3DXMatrixRotationYawPitchRoll would use. Build the Z-up analogue
 // explicitly: yaw->Z, pitch->X, roll->Y, with yaw applied LAST (outermost) so it
@@ -1087,7 +1086,7 @@ void Engine::RenderUnitGrid()
     if (cells <= 0) return;
     const float z = m_groundZ + 0.05f;              // tiny lift above the ground quad
 
-    // [D5] Vertex cache: the build is O(cells) over 144-byte vertices
+    // Vertex cache: the build is O(cells) over 144-byte vertices
     // (~6.4k at spacing 1) and its only variable inputs are spacing and
     // groundZ (extent / colors / major cadence are the literals below) —
     // rebuilding every visible frame was pure heap+CPU churn. File-static

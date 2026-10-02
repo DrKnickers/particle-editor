@@ -46,8 +46,8 @@ type Props = {
   bridge: Bridge;
 };
 
-/** Hard caps from `SpawnerDriver` — mirror the C++ constants at
- *  [src/SpawnerDriver.h:50-57] so the panel clamps where the host would
+/** Hard caps from `SpawnerDriver` — mirror the C++ constants in
+ *  src/SpawnerDriver.h so the panel clamps where the host would
  *  clamp anyway. */
 const MAX_BURST_SIZE = 10;
 const MAX_SPACING_SEC = 10;
@@ -98,7 +98,7 @@ export function SpawnerPane({ bridge }: Props) {
         // Shape guard: a snapshot without `spawner` (stub bridges in
         // tests) must not clobber the default config — this panel's
         // contract is that `config` is never undefined (useState note
-        // above). Latent until B3's useSyncExternalStore store made
+        // above). Latent until a useSyncExternalStore-backed store made
         // React flush the queued undefined synchronously.
         // A local commit made before the snapshot resolved is newer too
         // (its echo is skipped below, so a stale seed would stick).

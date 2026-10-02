@@ -1,6 +1,6 @@
 // GroundPopover — toolbar button + Radix Popover for the
-// GroundPopoverBody body. Mirrors BackgroundPopover
-// from Task 2.2: a trigger with a preview swatch + ChevronDown opens
+// GroundPopoverBody body. Mirrors BackgroundPopover:
+// a trigger with a preview swatch + ChevronDown opens
 // a popover containing the existing picker body markup.
 
 import { ChevronDown } from "lucide-react";
@@ -23,7 +23,7 @@ export function GroundPopover({ bridge }: Props) {
   const bundled = BUNDLED_GROUND_SLOTS.find((s) => s.slot === slot);
   // #888888 depicts the engine's default solid ground color (scene state,
   // not UI chrome) — intentionally outside the token system, like the
-  // BackgroundPopover scene swatches (theming audit 2026-07-18).
+  // BackgroundPopover scene swatches.
   const swatchStyle: React.CSSProperties = slot === SOLID_COLOR_SLOT
     ? { backgroundColor: groundSolidColor === undefined ? "#888888" : colorrefToHex(groundSolidColor) }
     : bundled

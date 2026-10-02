@@ -12,18 +12,18 @@
   /* html must also be transparent — the browser's system canvas paints white
      when the html element has no background, even if body is transparent. */
   html, #root { background: transparent; }
-  /* Phase 4.1 transparency follow-up: body must NOT carry an opaque background.
+  /* Transparency: body must NOT carry an opaque background.
      WebView2 is set to transparent (DefaultBackgroundColor {0,0,0,0}) so
-     the D3D9 viewport sibling-HWND can show through transparent HTML
+     the D3D9 engine frame, composited behind it, can show through transparent HTML
      regions. Opaque chrome (header, toolbar, side panels, status bar,
      track editor, modals) carries `bg-bg` (token-backed) on its own
-     root after Task 1.6's sweep; the viewport quadrant inside `App.tsx`
+     root; the viewport quadrant inside `App.tsx`
      stays transparent end-to-end so the native viewport is visible.
      Browser-mode (`pnpm dev` without the host) shows the default white
      page in the viewport rect — that is intentional. */
   body {
     /* bg-transparent (NOT browser-default white) so the WebView2 transparent
-       surface composites onto the D3D9 viewport sibling-HWND in host mode.
+       surface composites over the D3D9 engine frame in host mode.
        In browser mode (`pnpm dev`), this shows whatever the browser fills
        transparent pages with (usually white). text-text uses the new
        token; font-family / font-size / font-feature-settings / user-select

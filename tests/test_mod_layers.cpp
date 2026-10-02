@@ -92,7 +92,7 @@ int main()
     }
 
     // --- ShouldPersistLayers: persist the layer stack to the registry only when
-    //     the post-apply shader reload succeeded (Tranche B / finding #5). ---
+    //     the post-apply shader reload succeeded. ---------------------------
     CHECK(ShouldPersistLayers(true) == true);    // reload ok  -> persist
     CHECK(ShouldPersistLayers(false) == false);  // reload bad -> do NOT persist
 

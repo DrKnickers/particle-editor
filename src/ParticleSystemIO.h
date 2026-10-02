@@ -2,10 +2,9 @@
 #define PARTICLE_SYSTEM_IO_H
 
 // Pure-IO helpers for reading / writing ParticleSystem to/from `.alo`
-// files on disk. Factored out of `DoOpenFile` / `DoSaveFile` /
-// `ImportEmitters_LoadFile` in src/main.cpp so that the new-UI host
-// (HostWindow + BridgeDispatcher) can call them without touching the
-// APPLICATION_INFO* legacy plumbing.
+// files on disk. Factored out of the legacy Win32 editor's open / save /
+// import-emitters paths so that the host (HostWindow + BridgeDispatcher)
+// can call them directly.
 //
 // Both helpers swallow `wexception` from the loader/writer machinery
 // internally and report success/failure via the return value — callers

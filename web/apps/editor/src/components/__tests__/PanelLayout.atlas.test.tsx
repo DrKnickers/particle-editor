@@ -1,4 +1,4 @@
-// Vitest: atlas branch in the right-dock slot (Task 10).
+// Vitest: atlas branch in the right-dock slot.
 //
 // Verifies that setting the right-dock to "atlas" renders
 // AtlasPickerPane's ToolPanel header "Atlas Frames" inside the

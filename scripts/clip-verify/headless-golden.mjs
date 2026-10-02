@@ -5,7 +5,7 @@
 // resize borders excluded — the two paths differ structurally there: legacy is
 // the full window, headless is WebView client content only). Reports per-frame
 // SSIM + per-pixel MAE/max across a sample of frames and gates on calibrated
-// thresholds (Stage-1 fidelity acceptance, tasks/todo.md §6 / design §6).
+// thresholds (the headless path's fidelity acceptance).
 //
 // Default crops (green-color-edit @ 1280x960 window; empirically calibrated):
 //   legacy 1280x960 -> crop 1264:921:8:31  (drop 8px side border + 31px title bar;

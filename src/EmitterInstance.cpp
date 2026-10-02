@@ -690,8 +690,7 @@ int EmitterInstance::KillParticle(TimeF currentTime, Particle& particle)
 // D3DX texture helpers silently use DEFAULT (see TextureManager::OnLostDevice).
 // The cache drops its own references there, but THESE two are separate, owning
 // references — so nothing freed them and nothing re-fetched them, and the
-// emitter went on binding a handle the device had invalidated
-// (2026-07 audit).
+// emitter went on binding a handle the device had invalidated.
 void EmitterInstance::ReleaseDeviceTextures()
 {
 	SAFE_RELEASE(m_pColorTexture);
@@ -718,7 +717,7 @@ void EmitterInstance::onParticleSystemChanged(const Engine& engine, int track)
 		// The next spawn was scheduled against the OLD delay, and recomputing
 		// m_spawnDelay above does not move it — so raising the rate on a slow
 		// emitter changed nothing until the old delay elapsed, and the slider
-		// looked dead for up to a full second (2026-07 audit).
+		// looked dead for up to a full second.
 		// Clamp only after the authored initialDelay has elapsed: never collapse
 		// that first wait, defer a spawn, or drag an overdue one forward.
 		m_nextSpawnTime = ReconcileNextSpawnTime(m_nextSpawnTime, GetTimeF(),
@@ -1029,7 +1028,7 @@ void EmitterInstance::Render(IDirect3DDevice9* pDevice)
                 // state read INSIDE BeginPass — i.e. exactly what the .fxo pass set
                 // (or failed to set) for this draw. This is the probe that
                 // discriminates "shader pass carries its blend/alpha-test state"
-                // from "the draw inherits stale state" for issue #481. Same
+                // from "the draw inherits stale state". Same
                 // ALO_SHADER_DIAG gate as norm-dbg, so production runs stay silent.
                 if (NormDiagEnabled() && i == 0)
                 {
@@ -1047,7 +1046,7 @@ void EmitterInstance::Render(IDirect3DDevice9* pDevice)
                         pDevice->GetRenderState(D3DRS_ALPHAFUNC,       &afunc);
                         pDevice->GetRenderState(D3DRS_ZWRITEENABLE,    &zw);
                         // Sampler mip state read INSIDE BeginPass proves the engine's
-                        // particle-bracket setting (engine.cpp, #481) survives the
+                        // particle-bracket setting (engine_render.cpp) survives the
                         // effect pass — the Prim* .fxo passes set no sampler state,
                         // so these must report the bracket's values at the draw.
                         DWORD mip0=0,mip1=0,bias0=0,bias1=0;

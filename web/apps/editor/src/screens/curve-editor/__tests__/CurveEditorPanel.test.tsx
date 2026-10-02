@@ -1760,7 +1760,7 @@ describe("CurveEditorPanel — multi-key average edit", () => {
 
   it("commits float32-canonical group values so a large edit doesn't glide on refetch (#620 review)", async () => {
     // The engine stores/echoes float32. A group edit must commit the fround'd
-    // value (like the single-key path, #613) — otherwise the raw double in the
+    // value (like the single-key path) — otherwise the raw double in the
     // morph-suppress fails movesMatch against the float32 refetch and the key
     // glides (the effect grows past |v|~840 where the float32 quantum exceeds
     // KEY_MATCH_EPS). Values 20/40/60 shifted +0.1 → none float32-exact.
@@ -1797,7 +1797,7 @@ describe("CurveEditorPanel — multi-key average edit", () => {
     // (value 20) and drag it up to the display max (dValue ≈ +60). The higher
     // selected keys (40, 60) would reach 100/120; the commit must clamp them to
     // the display max 80 (what the on-canvas preview shows), NOT the wide spinner
-    // bounds — otherwise the curve jumps on release (#620).
+    // bounds — otherwise the curve jumps on release.
     const { bridge } = makeStubBridgeMultiInterior(0);
     await selectScaleInterior(bridge);
     const svg = screen.getByTestId("curve-editor-svg") as unknown as SVGSVGElement;
@@ -1931,7 +1931,7 @@ describe("CurveEditorPanel — right-click deselect", () => {
 });
 
 // Copy / Cut / Paste of selected curve keys via Ctrl+C / X / V,
-// matching legacy CurveEditor.cpp CopyKeys / PasteKeys. Window-scoped (SVG
+// matching the legacy Win32 editor's CopyKeys / PasteKeys. Window-scoped (SVG
 // clicks don't move DOM focus into the panel), with a TYPING_TAGS guard and
 // an emitter-tree-origin guard so the two clipboards never both fire.
 describe("CurveEditorPanel — key copy/cut/paste", () => {
@@ -1945,8 +1945,8 @@ describe("CurveEditorPanel — key copy/cut/paste", () => {
     fireEvent.click(el, additive ? { ctrlKey: true } : {});
   }
 
-  // One Ctrl+V rides ONE emitters/add-track-keys carrying every clipboard key
-  // (2026-07 audit). The per-key fan-out it replaced captured a separate
+  // One Ctrl+V rides ONE emitters/add-track-keys carrying every clipboard key.
+  // The per-key fan-out it replaced captured a separate
   // undo entry per key host-side, so a single Ctrl+Z undid one key of a paste.
   function addTrackKeysCalls(bridge: { request: ReturnType<typeof vi.fn> }) {
     return bridge.request.mock.calls
@@ -1993,7 +1993,7 @@ describe("CurveEditorPanel — key copy/cut/paste", () => {
     await waitFor(() => expect(panel.getAttribute("data-selected-key-count")).toBe("1"));
   });
 
-  // 2026-07 audit. The discriminating case: with the old per-key fan-out
+  // The discriminating case: with the old per-key fan-out
   // a two-key paste produced TWO emitters/add-track-key requests, and each
   // handler captured its own undo entry — so one Ctrl+Z removed one key of a
   // two-key paste. A single-key paste passes either way, which is why the
@@ -2314,7 +2314,7 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
     expect(timeInput().disabled).toBe(true);     // time still pinned for all-border
   });
 
-  // #610 regression: the live-spinner state write is COALESCED to an animation
+  // Regression: the live-spinner state write is COALESCED to an animation
   // frame, not committed synchronously on every pointer-move. This is the fix
   // for the curve trailing the cursor during a drag — unthrottled per-move
   // re-renders of this large panel starved the renderer's rAF curve reshape.
@@ -2389,7 +2389,7 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
     }
   });
 
-  // #613 regression: a SINGLE-key Value spinner edit must update the curve
+  // Regression: a SINGLE-key Value spinner edit must update the curve
   // IMMEDIATELY (optimistic track write, no bridge round-trip) and SNAP (no
   // morph glide). matchMedia is stubbed so morphs are enabled — a revert of the
   // suppress would mount the morph overlay, and a revert of the optimistic
@@ -2446,7 +2446,7 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
     }
   });
 
-  // #613 regression (scrub race): every set-track-key echoes tree/changed →
+  // Regression (scrub race): every set-track-key echoes tree/changed →
   // get-tracks. During a rapid spinner scrub those refetch responses land LATE,
   // carrying pre-edit snapshots; without the edit-epoch guard they overwrite the
   // optimistic tracks and yank the curve backwards ("curve lags the key"). This
@@ -2545,7 +2545,7 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
     expect(Number(keyAt25().getAttribute("cy"))).toBeCloseTo(cyAt09, 1);
   });
 
-  // #613 review regression: the epoch guard must NOT invalidate the
+  // Regression: the epoch guard must NOT invalidate the
   // authoritative SELECTION-change fetch. Editing the still-visible OLD emitter
   // mid-switch bumps the epoch; if the new emitter's fetch were epoch-guarded it
   // would be discarded and — with no tree/changed to re-fetch — the panel would
@@ -2639,7 +2639,7 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
   });
 });
 
-// ─── Snap-to-grid toggle persistence (#618) ──────────────────────────────────
+// ─── Snap-to-grid toggle persistence ────────────────────────────────────────
 describe("CurveEditorPanel — snap-to-grid toggle (#618)", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -2711,7 +2711,7 @@ describe("CurveEditorPanel — snap-to-grid toggle (#618)", () => {
   });
 });
 
-// ─── #614: a continuous TIME-spinner scrub must keep tracking the moving key ──
+// ─── A continuous TIME-spinner scrub must keep tracking the moving key ──
 describe("CurveEditorPanel — time-spinner scrub tracks the moving key (#614)", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -2738,7 +2738,7 @@ describe("CurveEditorPanel — time-spinner scrub tracks the moving key (#614)",
 
       // Select the interior key at t=25. findAll (not getAll): the SVG mounts
       // before the async tracks fetch renders the key circles — a sync getAll
-      // raced it under CPU load (the #614 flake).
+      // raced it under CPU load (a past flake).
       const keyAt25 = (await screen.findAllByTestId("curve-key")).find(
         (k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "red",
       )!;
@@ -2774,10 +2774,10 @@ describe("CurveEditorPanel — time-spinner scrub tracks the moving key (#614)",
   });
 });
 
-// 2026-07 audit. Four mutation completions write SELECTION state
+// Four mutation completions write SELECTION state
 // (selectedKeyTimes / optimisticSelected) with no check that the emitter and
 // focus channel they were issued for are still the live ones. The fetch path
-// has guarded this since #613 via `inFlightFor` + the edit epoch; the mutation
+// already guards this via `inFlightFor` + the edit epoch; the mutation
 // path did not.
 //
 // The filed one-liner ("a key applied to emitter A lands on B") describes the
@@ -3068,7 +3068,7 @@ describe("CurveEditorPanel — optimistic spinner value reconciles with refetch"
   });
 });
 
-// The per-key right-click menu is a Radix ContextMenu (audit MU3): a real
+// The per-key right-click menu is a Radix ContextMenu: a real
 // role="menu" with focus management and Escape-to-close, opened at the
 // pointer by replaying the key's right-click on the menu's trigger.
 describe("CurveEditorPanel — key context menu", () => {
@@ -3135,7 +3135,7 @@ describe("CurveEditorPanel — key context menu", () => {
   });
 });
 
-// Each channel row holds two separate controls (audit MU3): the visibility
+// Each channel row holds two separate controls: the visibility
 // checkbox and the "Edit <channel> curve" toggle button. The old row was a
 // role="button" wrapped around the checkbox, and its Space handler swallowed
 // the key before it reached the checkbox.

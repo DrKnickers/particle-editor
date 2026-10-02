@@ -1,6 +1,6 @@
 // file-op.ts — wraps file/save|open|save-as so non-cancel failures surface
 // in a single App-level error modal instead of being silently discarded.
-// `bridge` is passed in (App.tsx:35 owns the only instance; it is a prop,
+// `bridge` is passed in (App.tsx owns the only instance; it is a prop,
 // not a module singleton). Touches only the error store and the file-state
 // prompt slot, so it is callable from non-component code
 // (use-app-accelerators.ts). replaceDocument is the New / Open entry point.
@@ -63,7 +63,7 @@ export async function runFileOp(
     // A REJECTED request (bridge not ready, transport error) bypasses the
     // {ok:false} path below — surface it in the same error store so the failure
     // is visible, then re-throw so the caller can keep its prompt open and not
-    // run a destructive pending action (release-audit #11).
+    // run a destructive pending action.
     useFileOpErrorStore.getState().show(messageFor(req.kind, String(err)));
     throw err;
   }

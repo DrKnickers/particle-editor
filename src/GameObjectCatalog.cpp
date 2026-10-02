@@ -166,7 +166,7 @@ namespace
 
         // De-dup as we collect so the file-count cap bounds DISTINCT names: a
         // flood of duplicate <File> entries must not push a later legitimate file
-        // past kMaxCatalogXmlFileCount (release-audit follow-up). Downstream dedup
+        // past kMaxCatalogXmlFileCount. Downstream dedup
         // stays as a belt-and-suspenders no-op on this already-unique list.
         std::set<std::string> seen;
         for (unsigned i = 0; i < root->getNumChildren(); ++i)
@@ -186,7 +186,7 @@ namespace
     // Phase-1 READ (SERIAL): slurp one listed file's raw bytes via the
     // FileManager into `bytes`. This and readFileList are the ONLY catalog-build
     // accesses to `fm` -- the parallel parse below never touches it, so the MEG
-    // handle's shared seek pointer is never raced (files.cpp:89). Missing file ->
+    // handle's shared seek pointer (SubFile::read) is never raced. Missing file ->
     // empty (skipped downstream). A MEG-packed file's SubFile clamps the read to
     // its own extent, so reading size() bytes from offset 0 yields exactly it.
     void readObjectFileBytes(IFileManager& fm, const std::string& fileName,
@@ -221,7 +221,7 @@ namespace
 
     // Phase-2 PARSE (PARALLEL-SAFE): parse one file's already-read bytes
     // into `entries` in document order. Uses a private MemoryFile + a private
-    // XMLTree (XML_ParserCreate per call, no global state -- xml.cpp:125), so
+    // XMLTree (XML_ParserCreate per call in XMLTree::parse, no global state), so
     // concurrent calls on distinct buffers share NO mutable state. Crucially it
     // does NOT dedup: first-wins is applied once, serially, by the ordered merge
     // (so within-file first-wins is preserved by document order + insert-if-absent).
@@ -312,7 +312,7 @@ namespace
             // Surface the otherwise-SILENT drop -- this is what hid the encoding='ASCII'
             // bug (1/3 of one mod's core files threw -> their units + Variant_Of parents vanished with
             // no signal). Unconditional: a Release user's incomplete picker was
-            // undiagnosable with this behind NDEBUG (2026-07 audit). A brief stderr
+            // undiagnosable with this behind NDEBUG. A brief stderr
             // interleave from parallel workers is harmless.
             fprintf(stderr, "[Catalog] object file dropped (XML parse failed): %s\n", fileName.c_str());
         }
@@ -347,7 +347,7 @@ namespace
         return cap;
     }
 
-    // Phase 2: resolve one object's model. Own model wins; otherwise walk the
+    // Resolve one object's model (phase 4). Own model wins; otherwise walk the
     // Variant_Of chain to the first ancestor with a model. Returns empty if the
     // chain dead-ends (no model), references a missing parent, or is cyclic.
     // Keys are folded to lower case so a variant that references its parent with
@@ -472,7 +472,7 @@ namespace
         size_t i = 0;
         while ((i = text.find("[\"", i)) != std::string::npos)
         {
-            // Count cap, not just the byte cap above (2026-07 audit). The
+            // Count cap, not just the byte cap above. The
             // file-size check bounds the INPUT; it does not bound how many names
             // that input can produce, and at ~6 bytes per `["x"]` a legal-sized
             // file still yields millions of set inserts. Stop scanning rather
@@ -568,7 +568,7 @@ namespace
         return true;
     }
 
-    // Phase 2 for HardPoints: an object's own <HardPoints> list wins; otherwise
+    // HardPoints counterpart (phase 4): an object's own <HardPoints> list wins; otherwise
     // INHERIT the first ancestor's list up the Variant_Of chain (replace-or-inherit,
     // NOT merge -- a variant that declares <HardPoints> overrides its parent's entirely;
     // one that declares none uses the parent's). Mirrors resolveModel (cross-file +
@@ -674,7 +674,7 @@ namespace
 }
 
 // Parses the object XMLs across threads (each file is independent), keeping
-// READ serial (only one thread touches the FileManager / MEG handle, files.cpp:89)
+// READ serial (only one thread touches the FileManager / MEG handle's seek pointer)
 // and the first-wins MERGE + Variant_Of RESOLUTION serial. The four phases:
 //   1. read  (serial)   -- slurp every listed file's bytes via fm
 //   2. parse (parallel) -- each blob -> its own RawEntry list (document order)

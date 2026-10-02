@@ -334,8 +334,8 @@ describe("PanelLayout — DOM structure", () => {
     // Modal.tsx does
     //   document.querySelector('[data-testid="quadrant-viewport"]')
     // and reads getBoundingClientRect on the result. The testID must
-    // land on a div with `position: relative` (same semantics as today's
-    // App.tsx:234) so positioned children (ViewportPill, tool panels,
+    // land on a div with `position: relative` (same semantics as the original
+    // App.tsx viewport) so positioned children (ViewportPill, tool panels,
     // Modal portal img) lay out correctly. We assert the testID node
     // is the `.relative h-full` wrapper, not a library-injected outer.
     const node = screen.getByTestId("quadrant-viewport");

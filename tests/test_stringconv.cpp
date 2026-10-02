@@ -1,5 +1,5 @@
 // Unit tests for the host UTF-8 <-> UTF-16 helpers (src/host/StringConv.h),
-// the pair consolidated from 3 copies by the DRY-audit cpp-host-0 work (#299).
+// the pair consolidated from 3 copies.
 // Pins the invariants that consolidation centralized: round-trip fidelity, the
 // empty-string path (the HostBridgeProxy concern), and embedded-NUL handling
 // (the helpers convert by .size(), NOT a NUL-terminated -1 length — so a string

@@ -1,10 +1,11 @@
 // HostWindow — see HostWindow.h for the design overview.
 //
-// Most of this file is a port of src/host/viewport_poc.cpp, split into
-// instance methods on a singleton-style HostWindow + Impl pair. The PoC
-// proved the composition pattern (WebView2 surface set transparent, D3D9
-// sibling child HWND layered on top, layout/viewport-rect drives
-// SetWindowPos). We carry those decisions forward verbatim.
+// This file grew out of src/host/viewport_poc.cpp, split into instance
+// methods on a singleton-style HostWindow + Impl pair. The PoC proved the
+// transparent-WebView2 pattern with a sibling D3D9 child HWND; the host now
+// presents the engine through a DirectComposition visual behind the
+// WebView2 visual instead (see Compositor.h), with the D3D9 device on a
+// hidden owned popup.
 //
 // The HostWindowImpl struct itself is declared in HostWindowImpl.h; its
 // WebView2, viewport and --record methods live in HostWindow_WebView2.cpp,
@@ -66,7 +67,7 @@ static bool WebView2RuntimeInstalled()
 //
 // The grow-until-it-fits GetModuleFileNameW loop that used to live inline here
 // now lives in host::ModuleDirectory (ModulePath.h) — the fixed-MAX_PATH form
-// it replaced truncated silently under a long extraction path (2026-07 audit).
+// it replaced truncated silently under a long extraction path.
 static std::wstring BundledWebView2SetupPath()
 {
     const std::wstring dir = host::ModuleDirectory();
@@ -207,7 +208,7 @@ bool IsKnownPerfTraceMode(const std::wstring& mode)
 }
 
 // UTF-8 ↔ UTF-16 conversions now live in StringConv.h (host::Utf8ToWide /
-// WideToUtf8), shared with BridgeDispatcher + HostBridgeProxy (DRY audit cpp-host-0).
+// WideToUtf8), shared with BridgeDispatcher + HostBridgeProxy.
 
 LRESULT CALLBACK HostMainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 LRESULT CALLBACK HostViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
@@ -220,7 +221,7 @@ LRESULT CALLBACK HostViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 
 // File-scope pointer chased by the WndProc thunks below. Set by
 // HostWindowImpl::Run before any window is created, cleared after the
-// message loop returns. Single-instance is fine because Task 1.3
+// message loop returns. Single-instance is fine because the editor
 // only ever runs one host window per process.
 struct HostWindowImpl;
 HostWindowImpl* g_self = nullptr;
@@ -450,7 +451,7 @@ void HostWindowImpl::Log(const char* fmt, ...)
     ExitProcess(1);
 }
 
-// ---------- WebView2 process failure (2026-10-01 audit HX1) ----------
+// ---------- WebView2 process failure ----------
 
 // ProcessFailed handler. Runs on the UI thread inside a WebView2 callback, so
 // it only decides, logs, and either calls Reload() or posts WM_APP_WEB_DEAD —
@@ -605,7 +606,7 @@ void HostWindowImpl::CloseAfterWebDeath(HWND hwnd)
     DestroyWindow(hwnd);
 }
 
-// One idempotent teardown for every COM object the host holds (2026-09-30 audit MH1).
+// One idempotent teardown for every COM object the host holds.
 // WM_DESTROY calls it on an interactive close; Run() calls it again after the
 // pump so an automation exit (which never destroys hMain) also releases
 // everything BEFORE CoUninitialize — a COM Release after CoUninitialize is
@@ -684,7 +685,7 @@ void HostWindowImpl::ReleaseHostComObjects()
     // CoUninitialize() at the end of Run() — a COM call past teardown.
     webEnv.Reset();
     // Release composition controller +
-    // DComp tree. Order matters per dxgi_spike.cpp:783-818:
+    // DComp tree. Order matters (same as Shutdown in spike/dxgi_spike.cpp):
     // controller is released AFTER webController->Close() (which
     // already settles WebView2's pending work) and BEFORE
     // m_compositor.reset() (so the Compositor's defensive
@@ -777,9 +778,9 @@ void HostWindowImpl::RenderD3D9()
     // shift-click-to-spawn: refresh cursor velocity from
     // QueryPerformanceCounter deltas before the engine sees it. The
     // attached ParticleSystemInstance reads MouseCursor::GetVelocity
-    // through its Object3D parent chain during Update. Mirrors legacy
-    // the legacy main.cpp — the legacy render loop calls UpdateVelocity
-    // unconditionally each frame whether or not a system is attached.
+    // through its Object3D parent chain during Update. Mirrors the
+    // legacy editor, whose render loop called UpdateVelocity
+    // unconditionally each frame whether or not a system was attached.
     m_mouseCursor.UpdateVelocity();
 
     const LONGLONG perfT0 = PerfQpcNow();
@@ -1039,7 +1040,7 @@ static void ApplyRestoredSettings(Engine* engine, const host::RestoredSettings& 
 
     // Game-dome environment: battle context + the two chosen GameObject Names.
     // This restore block runs after the device is up, so SetSkydomeEnvironment
-    // resolves + uploads the meshes now (the only place the new UI re-resolves a
+    // resolves + uploads the meshes now (the only place the editor re-resolves a
     // name-based selection).
     if (s.hasSkydomeEnv)
     {
@@ -1073,10 +1074,10 @@ static void ApplyRestoredSettings(Engine* engine, const host::RestoredSettings& 
     if (s.refLocked) engine->SetReferenceLocked(*s.refLocked);
     // Name LAST so the mesh loads once with the transform in place; guard on
     // non-empty so an unset selection doesn't clobber a debug
-    // ALO_LT7_TEST_OBJECT env-hook mesh.
+    // ALO_TEST_REFERENCE_OBJECT env-hook mesh.
     //
     // In headless --capture mode NEVER restore the persisted reference object:
-    // the capture supplies its own object (the ALO_LT7_TEST_OBJECT env hook, or
+    // the capture supplies its own object (the ALO_TEST_REFERENCE_OBJECT env hook, or
     // --capture-ref via SetReferenceObject below), and restoring here would both
     // clobber that mesh AND force the capture script to mutate the registry to
     // suppress it — which, if the script is interrupted, wipes the user's saved
@@ -1091,9 +1092,9 @@ static void ApplyRestoredSettings(Engine* engine, const host::RestoredSettings& 
         engine->SetReferenceObjectSelected(false);
     }
 
-    // [lighting-restore, session 12] Restore the persisted lighting (sun /
+    // [lighting-restore] Restore the persisted lighting (sun /
     // fill1 / fill2 angles + colours + intensities, ambient, shadow) so the
-    // new-UI viewport opens with the user's saved lights instead of engine ctor
+    // viewport opens with the user's saved lights instead of engine ctor
     // defaults. Mirrors the legacy `PushLightingToEngine` (native Win32 UI,
     // since removed) field-for-field, including the Force-Align fill-angle
     // computation: when the LightingForceFillAlignment flag is ON the fill
@@ -1123,8 +1124,8 @@ static void ApplyRestoredSettings(Engine* engine, const host::RestoredSettings& 
     };
     // Ambient pushes alpha w=1 — game-faithful. The engine folds scene ambient
     // into its SPH lighting as ambient.xyz * ambient.w
-    // (src/SphericalHarmonics.cpp:76), so w gates the per-vertex mesh ambient
-    // floor; per Petroglyph's shaders (reference/foc-shaders/AlamoEngine.fxh)
+    // (SphericalHarmonics.cpp), so w gates the per-vertex mesh ambient
+    // floor; per Petroglyph's shaders (the game's AlamoEngine.fxh)
     // production Mesh*/RSkin* light ambient ONLY via that SPH path, so w=1
     // reproduces the game's mesh brightness. This and the React
     // `ambientToVec4` (LightingPane.tsx) push the same w=1, so load == Reset
@@ -1184,23 +1185,18 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_CREATE:
     {
         // Viewport is a top-level WS_POPUP window OWNED by main
-        // (not a WS_CHILD). DWM composites top-level popups as their
-        // own layer in screen space, above any child HWND's DComp
-        // surface — including WebView2's. WS_EX_NOACTIVATE prevents
-        // the popup from stealing focus on click (camera drag still
-        // works because mouse capture is explicit in ViewportWndProc).
-        // WS_EX_TOOLWINDOW keeps the popup out of the taskbar.
+        // (not a WS_CHILD). It carries the Engine's D3D9 device and is
+        // hidden once the window is up (see Run): the engine frame
+        // reaches the screen through the DComp engine visual, and input
+        // arrives via InputDispatcher. WS_EX_NOACTIVATE prevents
+        // the popup from stealing focus; WS_EX_TOOLWINDOW keeps it out
+        // of the taskbar.
         //
         // Ownership semantics: an owned popup follows the owner's
         // minimize/restore state, gets destroyed when the owner is
         // destroyed, and stays z-ordered above the owner. Position
         // is in SCREEN coords; LayoutBroker translates from main-
         // client coords via ClientToScreen.
-        // WS_EX_LAYERED + UpdateLayeredWindow(ULW_ALPHA) replaces
-        // the earlier SetWindowRgn cut-out. The AlphaCompositor pushes a
-        // pre-multiplied ARGB bitmap each tick, the OS composites the
-        // popup onto the WebView2 underneath, and software alpha stamps
-        // carve soft-edged holes for chrome occlusion rects.
         hViewport = CreateWindowExW(
             WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
             kHostViewportClassName, L"",
@@ -1218,7 +1214,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // live device internally below, targeting this viewport HWND.
 
         // Construct the Engine now that both HWNDs exist. hFocus = parent,
-        // hDevice = viewport child — same wiring as legacy main.cpp.
+        // hDevice = viewport popup — same wiring as the legacy editor.
         try
         {
             engine = std::make_unique<Engine>(
@@ -1229,10 +1225,10 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             // SelectMod() calls can hot-swap shaders + textures.
             if (modManager) modManager->SetEngine(engine.get());
 
-            // [bloom-restore, session 10] Restore bloom config from the
-            // registry (HKCU\Software\AloParticleEditor), mirroring legacy
-            // main.cpp's startup restore (SetBloom* from ReadBloom*). The
-            // new-UI host previously skipped this, so the engine kept its
+            // [bloom-restore] Restore bloom config from the
+            // registry (HKCU\Software\AloParticleEditor), mirroring the legacy
+            // editor's startup restore (SetBloom* from ReadBloom*). The
+            // host previously skipped this, so the engine kept its
             // strength=0 constructor default and toggling "Enable bloom"
             // produced NO visible glow even when the user has saved bloom
             // settings from the legacy editor. Same value names/types legacy
@@ -1306,7 +1302,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 engine->SetAlphaCompositor(alphaCompositor.get());
                 engine->SetCompositionCompositor(m_compositor.get());
                 // Arm the eager reference-object catalog prefetch now
-                // that the new-UI render path is up.
+                // that the render path is up.
                 engine->ArmCatalogPrefetch();
                 layout.SetAlphaCompositor(alphaCompositor.get());
                 Log("[host] AlphaCompositor up (%ldx%ld)\n",
@@ -1334,8 +1330,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             }
         }
 
-        // Seed the first paint (suppresses white-flash on startup; see
-        // PoC visual gate notes in the task brief).
+        // Seed the first paint (suppresses white-flash on startup).
         InvalidateRect(hViewport, nullptr, FALSE);
 
         // Start the 4 Hz stats timer. Fires every 250 ms and emits a
@@ -1343,11 +1338,11 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         SetTimer(hwnd, kStatsTimerId, 250, nullptr);
 
         // Two-tier autosave timers (30 s recent / 5 min stable),
-        // mirroring the legacy main.cpp. Gated on !useTestHost so harness
+        // mirroring the legacy editor. Gated on !useTestHost so harness
         // runs never write autosave files — those would orphan into a
         // recovery prompt for the user's real editor. WM_TIMER latches the
-        // dirty-gated write (see the [C4] note below). Also gated on
-        // !captureMode ([C4] review): a --capture run skips the paced idle
+        // dirty-gated write (see the DEFERRED autosave note below). Also gated
+        // on !captureMode: a --capture run skips the paced idle
         // branch that services the latch, so its pending write could only
         // land via the busy-override — and an ephemeral capture has no
         // business writing recovery files anyway (same orphan-prompt
@@ -1363,7 +1358,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_TIMER:
         if (wp == kStatsTimerId && dispatcher)
         {
-            // [B1] Heartbeat flush: modal dialogs (file pickers etc.) run
+            // Heartbeat flush: modal dialogs (file pickers etc.) run
             // their own message pump, which starves the paced idle branch —
             // but still dispatches WM_TIMER, so a coalesced trailing
             // broadcast is at worst one stats tick (250 ms) stale there.
@@ -1387,7 +1382,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // when nothing changed since the last save (no point autosaving an
         // unmodified saved file).
         //
-        // [C4] DEFERRED: the timer no longer writes inline — a WM_TIMER can
+        // DEFERRED: the timer no longer writes inline — a WM_TIMER can
         // fire mid-gesture (gizmo drag, splitter, modal resize pump) and the
         // serialize+temp-write+rename then stalls the UI thread at the worst
         // moment. The tick just latches m_autosavePending; the paced idle
@@ -1463,8 +1458,8 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             // frameY) would invert it to a NEGATIVE-height client rect —
             // GetClientRect then reports win=0x-1, which zeroes the D3D9
             // backbuffer and drives the React viewport layout degenerate,
-            // stalling the headless --record-minimized capture (#509, a #508
-            // regression). Leave DefWindowProc's (0-height, non-inverted) rect
+            // stalling the headless --record-minimized capture. Leave
+            // DefWindowProc's (0-height, non-inverted) rect
             // as-is while iconic; a later positive-size WM_SIZE re-seeds the
             // client size on restore. (The compositor/WebView sinks apply the
             // same non-positive-size policy at their own sites — the WebView2
@@ -1569,7 +1564,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         {
             RECT r;
             GetClientRect(hwnd, &r);
-            // A minimized/degenerate client rect (#509: WM_NCCALCSIZE could even
+            // A minimized/degenerate client rect (WM_NCCALCSIZE could even
             // yield a NEGATIVE height) must not reach the compositor — a 0- or
             // negative-area SetSize corrupts the surface. Same non-positive-size
             // policy as ResizeWebViewToClient's put_Bounds sink; a later
@@ -1718,13 +1713,13 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
 
     case WM_DISPLAYCHANGE:
-        // [E5] Display mode changed (resolution/refresh-rate switch, monitor
+        // Display mode changed (resolution/refresh-rate switch, monitor
         // hot-plug): re-derive the pacing budget. DefWindowProc continues.
         UpdatePacingBudget(hwnd);
         break;
 
     case WM_APP_PREVIEW_READY:
-        // [C3] Background preview encode finished — cache + notify the web
+        // Background preview encode finished — cache + notify the web
         // (BridgeDispatcher::DrainPreviewResults emits textures/preview-ready).
         if (dispatcher) dispatcher->DrainPreviewResults();
         return 0;
@@ -1751,11 +1746,11 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // driver (the idle pump is starved in here). The
         // kResizeSettleTimerId one-shot is a safety net that re-resets
         // only if a mid-gesture reset failed.
-        // [E5] A move can land the window on a different monitor —
+        // A move can land the window on a different monitor —
         // re-derive the pacing budget from that monitor's refresh rate.
         if (MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY) != m_pacingMonitor)
             UpdatePacingBudget(hwnd);
-        // [C1] Position-only ticks (window drags: SWP_NOSIZE set) skip the
+        // Position-only ticks (window drags: SWP_NOSIZE set) skip the
         // predict/render chain — the client extent is unchanged, so
         // PredictAndApply would early-out into RefreshScreenPosition anyway,
         // and the unconditional RenderD3D9 was pure extra work on top of the
@@ -1842,7 +1837,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // prompt File→Exit uses; swallow the default destroy until React replies
         // (it dispatches app/quit → WM_APP_QUIT_CONFIRMED below).
         // A dead web can't show that prompt or send app/quit, so it never
-        // vetoes (HX1); an interactive session closes through the native
+        // vetoes; an interactive session closes through the native
         // recovery path instead of an unanswerable veto.
         if (ShouldVetoClose(dispatcher && dispatcher->GetDirty(), m_automationMode, useTestHost,
                             /*webAlive*/!m_webDead))
@@ -1908,7 +1903,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         // Every WebView2 / composition / engine COM object, in the documented
         // order — shared with the end of Run() so automation exits release the
-        // same set (2026-09-30 audit MH1).
+        // same set.
         ReleaseHostComObjects();
         PostQuitMessage(0);
         return 0;
@@ -1981,7 +1976,7 @@ int HostWindowImpl::Run(int nCmdShow)
 
     // DPI awareness — PMv2 so child-window coords are physical pixels and
     // match what React sends from getBoundingClientRect under WebView2.
-    // The PoC ran with this and the visual gate passed.
+    // viewport_poc.cpp ran with this too.
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
     // COM init — WebView2 needs an STA. main.cpp doesn't call
@@ -2085,8 +2080,8 @@ int HostWindowImpl::Run(int nCmdShow)
     // Frameless custom title bar: force a WM_NCCALCSIZE re-evaluation so the native
     // caption is dropped immediately (the web TitleBar replaces it), and extend the
     // DWM frame a hair so the window keeps its drop shadow + smooth resize. The
-    // {0,0,0,1} margin is the review's shadow-only starting point — DEVICE-VERIFY
-    // the shadow (and watch for a 1px top hairline) and tune if needed.
+    // {0,0,0,1} margin is a shadow-only starting point; on a new display
+    // setup, check the shadow (and watch for a 1px top hairline) and tune it.
     {
         if (!SetWindowPos(hMain, nullptr, 0, 0, 0, 0,
                           SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE))
@@ -2122,7 +2117,7 @@ int HostWindowImpl::Run(int nCmdShow)
     // wired in WM_CREATE when the Engine is built.
     // Every event and async response reaches the UI through here, serialized
     // by host::SerializeBridgeEnvelope (BridgeWire.h): invalid UTF-8 (raw
-    // .alo/.meg name bytes) becomes U+FFFD instead of throwing (audit H1).
+    // .alo/.meg name bytes) becomes U+FFFD instead of throwing.
     auto emitFn = [this](const nlohmann::json& env)
     {
         if (!webView) return;
@@ -2134,7 +2129,7 @@ int HostWindowImpl::Run(int nCmdShow)
                                                     /*automationMode*/m_automationMode);
     dispatcher->SetUndoStack(&undoStack);
     dispatcher->SetHostHwnd(hMain);
-    // [#510] Throttle the panel-refresh broadcasts during a --record run only
+    // Throttle the panel-refresh broadcasts during a --record run only
     // (NOT --drive, whose asserts must see every state change) so the driver's
     // rapid host-side edits don't saturate the web + starve the capture/ack loop.
     dispatcher->SetRecordEmitThrottle(!m_recordScriptPath.empty());
@@ -2160,7 +2155,7 @@ int HostWindowImpl::Run(int nCmdShow)
     // dispatcher. file/new and file/open below will swap the
     // particleSystem unique_ptr; the dispatcher reads through
     // `*m_pParticleSystem` to always see the current instance.
-    // Mirrors legacy seed: DoNewFile() at src/main.cpp:1289 starts
+    // Mirrors the legacy editor's seed: its DoNewFile() started
     // with an empty ParticleSystem + one root emitter, so do the
     // same here for parity with the React UI's "fresh untitled" state.
     particleSystem = std::make_unique<ParticleSystem>();
@@ -2245,7 +2240,7 @@ int HostWindowImpl::Run(int nCmdShow)
     UpdateWindow(hMain);
 
     // --capture: construct the one-shot runner (setup + per-frame tick +
-    // exit mapping now live in CaptureRunner.cpp — Phase C split). Init
+    // exit mapping live in CaptureRunner.cpp). Init
     // performs the exact swap+notify load sequence file/open uses (or the
     // synchronous --capture-ref catalog resolve); the pump below then
     // renders m_captureFrames frames and the runner writes the PNGs.
@@ -2270,7 +2265,7 @@ int HostWindowImpl::Run(int nCmdShow)
     // idle-render. The blocking variant produces no continuous WM_PAINT
     // events, so the per-frame spawner tick + engine render had no driver.
     // Now: drain queued messages, then render on idle, loop until
-    // WM_QUIT. Mirrors the legacy main.cpp.
+    // WM_QUIT. Mirrors the legacy editor.
     //
     // No IsDialogMessage routing — the host has no modeless Win32
     // dialogs; tool panels live in React under WebView2 (which has its
@@ -2297,7 +2292,7 @@ int HostWindowImpl::Run(int nCmdShow)
     MSG m = {};
     bool quit = false;
 
-    // [E5] Budget from the window's own monitor (helper logs the paced-to
+    // Budget from the window's own monitor (helper logs the paced-to
     // line); WM_DISPLAYCHANGE + monitor moves recompute it live.
     UpdatePacingBudget(hMain);
     LONGLONG nextFrameQpc = PerfQpcNow();
@@ -2334,7 +2329,7 @@ int HostWindowImpl::Run(int nCmdShow)
             }
         }
         if (quit) break;
-        // HX1: a headless run whose web process died can't make progress — no
+        // A headless run whose web process died can't make progress — no
         // app/ready, no frame acks, no composite — so end it now with
         // kWebProcessFailedExitCode instead of waiting out a watchdog. An
         // interactive session closes through WM_APP_WEB_DEAD instead.
@@ -2498,22 +2493,22 @@ int HostWindowImpl::Run(int nCmdShow)
                 if (tickStatus == host::ClipRunner::Status::Done)
                 {
                     rec.exitCode = m_clipRunner->ExitCode();
-                    // Branch B: drain + join the background encoder BEFORE the
+                    // Drain + join the background encoder BEFORE the
                     // publish decision — .tmp is never renamed on a dirty
                     // drain (a queued frame's write can fail after its Tick
-                    // already returned success; plan risk 4).
+                    // already returned success).
                     if (rec.encoder && !rec.encoder->Finish() && rec.exitCode == 0)
                     {
                         Log("[record] async encode failed at %ls\n",
                             rec.encoder->FailedPath().c_str());
                         rec.exitCode = 4;
                     }
-                    // [PR 12] close the trace before the publish rename — an open
+                    // Close the pump trace before the publish rename — an open
                     // file handle inside rec.tmpDir would fail the tmp -> out
                     // move on Windows (sharing violation), same reason the encoder
                     // is drained first. The per-frame flushes already persisted it.
                     m_recordTrace.reset();
-                    // HX1: a web process that died during the run leaves frames
+                    // A web process that died during the run leaves frames
                     // nobody can vouch for (the pump then ends the run with
                     // kWebProcessFailedExitCode) — never publish them.
                     if (rec.exitCode == 0 && m_webDead)
@@ -2521,7 +2516,7 @@ int HostWindowImpl::Run(int nCmdShow)
                         Log("[record] web process failed during the run -- not publishing\n");
                         rec.exitCode = webviewcrash::kWebProcessFailedExitCode;
                     }
-                    // Validate, THEN replace (HX3). Everything that can still fail
+                    // Validate, THEN replace. Everything that can still fail
                     // the run is checked against <out>.tmp first; the previous good
                     // output in <out> is touched only once the new one is complete.
                     // On any failure both stay as they are.
@@ -2599,7 +2594,7 @@ int HostWindowImpl::Run(int nCmdShow)
                             }
                         }
                     }
-                    // [R3] Snapshot queue stats before the summary reads them.
+                    // Snapshot queue stats before the summary reads them.
                     if (rec.encoder) m_recordEncoderStats = rec.encoder->GetQueueStats();
                     LogRecordTimingSummary(rec.freqQpc > 0
                         ? QpcMs(PerfQpcNow() - rec.startQpc, rec.freqQpc) : 0.0);
@@ -2613,7 +2608,7 @@ int HostWindowImpl::Run(int nCmdShow)
                     // [record-timing] a timed-out run still yields its numbers.
                     if (rec.encoder) m_recordEncoderStats = rec.encoder->GetQueueStats();
                     LogRecordTimingSummary(elapsedMs);
-                    // Branch B: join the encoder before quitting (exit 5 stands
+                    // Join the background encoder before quitting (exit 5 stands
                     // regardless of the drain result).
                     if (rec.encoder) rec.encoder->Finish();
                     rec.exitCode = 5; quit = true;
@@ -2637,11 +2632,11 @@ int HostWindowImpl::Run(int nCmdShow)
             if (now >= nextFrameQpc)
             {
                 RenderD3D9();
-                // [B1] Deliver any live-coalesced trailing broadcast once per
+                // Deliver any live-coalesced trailing broadcast once per
                 // display frame — the primary flush path (the DispatchSync-top
                 // and stats-timer flushes cover pump-starved cases).
                 if (dispatcher) dispatcher->FlushPendingEmits();
-                // [C4] Service a deferred autosave in the same idle slot —
+                // Service a deferred autosave in the same idle slot —
                 // after the present, never mid-gesture (see the latch note).
                 ServicePendingAutosave(false);
                 // Schedule from "now", not "+= budget": a slow frame must
@@ -2669,8 +2664,8 @@ int HostWindowImpl::Run(int nCmdShow)
             RenderD3D9();
 
             // --capture: the runner owns pacing, the layout gate, the
-            // frame count, and the RT+composite writes (CaptureRunner.cpp,
-            // Phase C split). Done => the one-shot is finished; quit the pump.
+            // frame count, and the RT+composite writes (CaptureRunner.cpp).
+            // Done => the one-shot is finished; quit the pump.
             if (captureMode &&
                 captureRunner.Tick() == host::CaptureRunner::TickResult::Done)
             {
@@ -2699,15 +2694,15 @@ int HostWindowImpl::Run(int nCmdShow)
     // still held. Release them through the SAME path WM_DESTROY uses, at the
     // same point in the sequence (pump done, before the worker joins and GDI+
     // shutdown), so their final Release() precedes CoUninitialize on EVERY exit
-    // path (2026-09-30 audit MH1). Idempotent: after an interactive teardown it is a no-op.
+    // path. Idempotent: after an interactive teardown it is a no-op.
     ReleaseHostComObjects();
 
     g_self = nullptr;
-    // Branch B: a WM_QUIT escape from the pump (user closed the record window)
+    // A WM_QUIT escape from the pump (user closed the record window)
     // bypasses the Done/watchdog joins above — the encoder worker MUST be
     // joined before GdiplusShutdown or it races process-level GDI+ teardown.
     if (rec.encoder) rec.encoder->Finish();
-    // [C3] Join the preview-encode worker for the same reason — it encodes
+    // Join the preview-encode worker for the same reason — it encodes
     // via GDI+ and must not race process-level GDI+ teardown.
     if (dispatcher) dispatcher->ShutdownPreviewWorker();
     // Matching shutdown for the GdiplusStartup above. Safe
@@ -2718,7 +2713,7 @@ int HostWindowImpl::Run(int nCmdShow)
     // failure (e.g. RPC_E_CHANGED_MODE) there is nothing of ours to undo.
     if (SUCCEEDED(coHr)) CoUninitialize();
     CloseLog();
-    // A headless run whose web process died (HX1) — whatever stage it reached,
+    // A headless run whose web process died — whatever stage it reached,
     // its output can't be trusted, and a --record run never published.
     if (webDeadAbort) return webviewcrash::kWebProcessFailedExitCode;
     // In --capture mode we break the loop via

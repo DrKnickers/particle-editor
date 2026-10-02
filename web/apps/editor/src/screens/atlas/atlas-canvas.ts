@@ -22,7 +22,7 @@ function cssVar(el: Element, name: string, fallback: string): string {
   return v || fallback;
 }
 
-/** [#572] Paint the WHOLE atlas onto the grid canvas in ONE pass: every frame
+/** Paint the WHOLE atlas onto the grid canvas in ONE pass: every frame
  *  via a single drawImage, a dark scrim washing dead cells toward the panel
  *  gray, an always-on frame-index badge, the amber selection ring on
  *  `highlight`, and the blue focus outline on `rovingTarget` (when focused).

@@ -1,6 +1,6 @@
 #pragma once
 // StringConv.h — the one UTF-8 ↔ UTF-16 (std::wstring) conversion pair for the
-// host layer (DRY audit 2026-06-22, cpp-host-0). Consolidates: BridgeDispatcher's
+// host layer. Consolidates: BridgeDispatcher's
 // Utf8ToWide/WideToUtf8 and HostWindow's Utf8ToUtf16/Utf16ToUtf8 (two byte-identical
 // pairs that had drifted in NAME only), plus HostBridgeProxy's INLINED BSTR
 // conversions (same underlying MultiByteToWideChar/WideCharToMultiByte calls,

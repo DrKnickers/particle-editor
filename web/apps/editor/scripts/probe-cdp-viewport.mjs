@@ -1,6 +1,5 @@
 // probe-cdp-viewport.mjs -- the H1/H2 measurement harness for the
 // "can CDP + a faithful D3D9 viewport coexist?" experiment.
-// Spec: docs/experiments/2026-06-21-cdp-viewport-coexistence-probe.md
 //
 //   node scripts/probe-cdp-viewport.mjs --tag baseline [--out-dir C:\tmp\cdp-probe]
 //        [--background 0x3A6EA5] [--settle 2000] [--exe <ParticleEditor.exe>]
@@ -12,13 +11,14 @@
 // device render anything under CDP?" discriminator), settles, then captures BOTH:
 //   - <tag>-engineRT.png   via debug/capture-frame  -- the ENGINE SCENE RT readback
 //                          (AlphaCompositor::CaptureSnapshotToFile). This is the
-//                          DECISIVE signal: near-black => #283 bug holds; the bg
+//                          DECISIVE signal: near-black => the black-viewport bug holds; the bg
 //                          colour => the device rendered under CDP.
 //   - <tag>-composite.png  via debug/capture-window -- the full PrintWindow composite
 //                          (cross-check: React chrome present + viewport not a black hole).
 //
 // To test a lever you change the BUILD, not a flag here:
-//   H1: rebuild the host with --disable-gpu appended at HostWindow.cpp:1182, re-run --tag h1.
+//   H1: rebuild the host with --disable-gpu appended to the WebView2
+//       AdditionalBrowserArguments (HostWindow_WebView2.cpp), re-run --tag h1.
 //   H2: set ALO_PROBE_ADAPTER in this process's env (inherited by the spawned child) +
 //       rebuild the host with the CreateDeviceEx adapter override, re-run --tag h2.
 //

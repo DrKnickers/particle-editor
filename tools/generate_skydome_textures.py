@@ -1,9 +1,10 @@
 #!/usr/bin/env python
-"""Procedural placeholder skydome texture generator.
+"""Procedural skydome texture generator.
 
-Generates 8 equirectangular TGA files (1024x512, 24-bit RGB) with simple
-colour ramps representing each skydome scene. These are v1 placeholders;
-production-quality BC1 DDS assets are a follow-up PR.
+Generates the 8 bundled equirectangular TGA files (1024x512, 24-bit RGB) in
+src/Resources/skydomes/ with simple colour ramps representing each skydome
+scene. These are the shipped procedural skydome textures, embedded in the exe
+as RCDATA.
 """
 
 import os

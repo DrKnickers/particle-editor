@@ -23,7 +23,7 @@
 #define IDR_SHADER_SKYDOME              150
 
 // 8 bundled skydome textures (slots 1-8 in the picker dialog).
-// RCDATA entries added in Task 5 will point at src/Resources/skydomes/*.tga.
+// Their RCDATA entries (ParticleEditor.rc) point at src/Resources/skydomes/*.tga.
 #define IDR_SKYDOME_SPACE               151
 #define IDR_SKYDOME_ATMOSPHERE          152
 #define IDR_SKYDOME_SUNSET              153
@@ -34,7 +34,7 @@
 #define IDR_SKYDOME_INDOOR              158
 
 // Bump-mapped terrain lighting for the ground plane. Faithful port of
-// the game's TerrainMeshBump.fx (reference/foc-shaders/) minus cloud/FOW.
+// the game's TerrainMeshBump.fx minus cloud/FOW.
 #define IDR_SHADER_GROUND_LIT           159
 
 // Shared error/query STRINGTABLE ids migrated here from the now-deleted

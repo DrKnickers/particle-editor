@@ -1,4 +1,4 @@
-// Unit tests for the pure snap-to-grid math (#618).
+// Unit tests for the pure snap-to-grid math.
 import { describe, it, expect } from "vitest";
 import {
   snapToGrid,

@@ -490,7 +490,7 @@ void ParticleSystem::ValidateEmitterGraph()
     // 2 = done. Iterative (not recursive) so a deep chain can't overflow the
     // stack HERE -- but the same graph is walked recursively downstream by
     // BuildEmitterTreeNode and deleteEmitter, which is why depth needs bounding
-    // and not merely surviving (2026-07 audit). The DFS stack size IS the
+    // and not merely surviving. The DFS stack size IS the
     // current depth, so the cap rides along for free.
     std::vector<int> color(n, 0);
     for (size_t root = 0; root < n; root++)

@@ -2,7 +2,7 @@
 #include <string>
 #include <map>
 
-// #494 follow-up: ${TOKEN} expansion for --record timeline paths, so a clip can
+// ${TOKEN} expansion for --record timeline paths, so a clip can
 // reference install-relative locations (e.g. the active mod) without hardcoding
 // an absolute machine path. The host supplies the token table — GAME resolves to
 // the editor's configured game root (HKCU\Software\AloParticleEditor\GameDataPath,

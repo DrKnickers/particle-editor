@@ -67,7 +67,7 @@ export const AtlasFrameGrid = memo(function AtlasFrameGrid({
     gridRef.current = el;
   }, [gridRef]);
 
-  // [design pass] The canvas samples tokens via getComputedStyle at draw time,
+  // The canvas samples tokens via getComputedStyle at draw time,
   // so a theme flip would leave it painted in the OLD palette. Watch
   // <html data-theme> and bump a revision: once immediately (custom properties
   // flip in the same frame), and once after the ~220ms theme-transition window
@@ -76,7 +76,7 @@ export const AtlasFrameGrid = memo(function AtlasFrameGrid({
   const [themeRev, setThemeRev] = useState(0);
   useEffect(() => {
     // Settle-timer is tracked so rapid flips coalesce and unmount can't
-    // leak a pending setState (pre-PR review).
+    // leak a pending setState.
     let settleTimer: number | undefined;
     const mo = new MutationObserver(() => {
       setThemeRev((n) => n + 1);
@@ -128,7 +128,7 @@ export const AtlasFrameGrid = memo(function AtlasFrameGrid({
     onHover(k); // drives the hero preview (via hoverRef; no re-render)
     const ov = overlayRef.current;
     if (!ov) return;
-    // [design pass] Opacity (not display) so the highlight fades via the
+    // Opacity (not display) so the highlight fades via the
     // .atlas-hover-fade transition instead of popping; the position jump
     // between cells stays instant (only opacity transitions).
     if (k === null || deadCells.has(k)) { ov.style.opacity = "0"; return; }

@@ -1,4 +1,4 @@
-// Playwright config for Task 2.2 contract tests against the native bridge.
+// Playwright config for contract tests against the native bridge.
 //
 // The harness (scripts/run-native-tests.mjs) launches
 // ParticleEditor.exe --test-host in the background, waits for

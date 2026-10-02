@@ -1,5 +1,4 @@
-// Regression test for the GROUND_BOUNCE catch-up loop (src/BounceCatchUp.h,
-// 2026-10 audit).
+// Regression test for the GROUND_BOUNCE catch-up loop (src/BounceCatchUp.h).
 //
 // The loop in EmitterInstance::UpdateParticle advanced bounceTime by one arc per
 // bounce and only stopped when a bounce left v_z exactly 0. bounciness = -1 sent

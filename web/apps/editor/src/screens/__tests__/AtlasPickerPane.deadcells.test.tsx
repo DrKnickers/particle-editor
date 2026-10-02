@@ -3,12 +3,12 @@
 // active a11y option, and non-selectable (mouse AND keyboard); the confirm modal re-checks
 // at commit.
 //
-// [#572] The grid is ONE <canvas>, so per-cell "dimmed" pixels can't be queried in jsdom.
+// The grid is ONE <canvas>, so per-cell "dimmed" pixels can't be queried in jsdom.
 // These tests verify the OBSERVABLE contract instead: the active option (whichever cell is
 // roving) announces aria-disabled + "empty" for a dead frame, and clicks/Enter on a dead
 // frame announce "empty" and do NOT assign. The pixel logic lives in the pure
 // `deadCellsFromAlpha` (unit-tested separately); here we mock the impure `computeDeadCells`
-// shell to inject a known set — exactly the seam the plan review asked for.
+// shell to inject a known set.
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent, act, cleanup } from "@testing-library/react";
 

@@ -69,14 +69,14 @@ test("assertKnownShape rejects dist pollution before it embeds into the exe", ()
 
 test("assertKnownShape requires the Vite content-hash on /assets/ (no unhashed passthrough)", () => {
   // A hand-planted, un-hashed script/style under /assets/ must NOT slip through
-  // (and must not get immutable caching). Reviewer round-2 finding.
+  // (and must not get immutable caching).
   assert.throws(() => assertKnownShape([...COMPLETE, { urlPath: "/assets/secret.js" }]), /allowlist/);
   assert.throws(() => assertKnownShape([...COMPLETE, { urlPath: "/assets/stable.css" }]), /allowlist/);
 });
 
 test("assertKnownShape permits a legitimately HASHED static asset type (no false-reject)", () => {
   // Importing an image emits e.g. /assets/logo-AbCdEf12.svg. That must pass the
-  // shape check (reviewer round-3: a JS/CSS-only allowlist breaks image imports).
+  // shape check (a JS/CSS-only allowlist breaks image imports).
   // The stronger gate against non-Vite files is assertReferenced, exercised by the
   // real build, not this pure shape test.
   assert.doesNotThrow(() => assertKnownShape([...COMPLETE, { urlPath: "/assets/logo-AbCdEf12.svg" }]));
@@ -169,7 +169,7 @@ test("orphanAssets: files referenced by index.html / another JS / CSS url() are 
 });
 
 test("orphanAssets: a self-referencing planted script is STILL an orphan", () => {
-  // The bypass reviewer round-4 found: a planted file naming itself must not pass.
+  // A planted file naming itself must not pass.
   const files = [{ urlPath: "/assets/secret-AAAAAAAA.js" }];
   const refText = { "/assets/secret-AAAAAAAA.js": 'fetch("secret-AAAAAAAA.js")' };
   assert.deepEqual(orphanPaths(files, "<div id=root></div>", refText), ["/assets/secret-AAAAAAAA.js"]);
@@ -184,7 +184,7 @@ test("orphanAssets: a truly unreferenced file is an orphan", () => {
 
 test("orphanAssets: two plants referencing ONLY each other are both orphans (index-rooted)", () => {
   // Per-file indegree would clear both; index-rooted BFS does not, because neither
-  // is reachable from index.html. Reviewer round-5 bypass.
+  // is reachable from index.html.
   const files = [{ urlPath: "/assets/evil1-AAAAAAAA.js" }, { urlPath: "/assets/evil2-BBBBBBBB.js" }];
   const refText = {
     "/assets/evil1-AAAAAAAA.js": 'import("./evil2-BBBBBBBB.js")',

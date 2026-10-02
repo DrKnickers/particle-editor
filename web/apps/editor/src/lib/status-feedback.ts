@@ -9,8 +9,8 @@
 // `announceWhenOk` is the success write path from mutation call sites:
 // it announces after the bridge promise RESOLVES without an explicit
 // `ok: false` (fire-and-forget sites were announcing nothing before; they
-// must never announce success for a refused/failed mutation — plan-review
-// finding). Rejections stay silent (the FileOpError / console paths own
+// must never announce success for a refused/failed mutation). Rejections
+// stay silent (the FileOpError / console paths own
 // failure reporting). `fireAndReport` is the failure write path for
 // fire-and-forget user actions that have no other failure surface.
 

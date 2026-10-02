@@ -32,9 +32,9 @@ RestoredSettings ReadRestoredSettings(HKEY hKey, bool inCaptureMode)
     if (ReadRegFloat(hKey, L"BloomCutoff", f))   s.bloomCutoff = f;
     if (ReadRegFloat(hKey, L"BloomSize", f))     s.bloomSize = f;
 
-    // [view-settings-restore, session 11] Mirror legacy
-    // main.cpp's startup restore so the
-    // new-UI viewport opens with the user's persisted
+    // [view-settings-restore] Mirror the legacy
+    // editor's startup restore so the
+    // viewport opens with the user's persisted
     // background / ground / skydome instead of engine ctor
     // defaults. Same value names/types legacy reads, so
     // settings round-trip between the two UIs. Same
@@ -80,7 +80,7 @@ RestoredSettings ReadRestoredSettings(HKEY hKey, bool inCaptureMode)
     // Game-dome environment: battle context + the two chosen
     // GameObject Names. This restore block runs after the device is
     // up, so SetSkydomeEnvironment resolves + uploads the meshes now
-    // (the only place the new UI re-resolves a name-based selection).
+    // (the only place the editor re-resolves a name-based selection).
     s.skydomePrimaryName = ReadRegSz(hKey, L"SkydomePrimaryName");
     s.skydomeSecondaryName = ReadRegSz(hKey, L"SkydomeSecondaryName");
     if (!s.skydomePrimaryName.empty() || !s.skydomeSecondaryName.empty())
@@ -120,11 +120,11 @@ RestoredSettings ReadRestoredSettings(HKEY hKey, bool inCaptureMode)
         s.refLocked = (dw != 0);
     // Name LAST so the mesh loads once with the transform in
     // place; guard on non-empty so an unset selection doesn't
-    // clobber a debug ALO_LT7_TEST_OBJECT env-hook mesh.
+    // clobber a debug ALO_TEST_REFERENCE_OBJECT env-hook mesh.
     //
     // In headless --capture mode NEVER restore the persisted
     // reference object: the capture supplies its own object (the
-    // ALO_LT7_TEST_OBJECT env hook, or --capture-ref via
+    // ALO_TEST_REFERENCE_OBJECT env hook, or --capture-ref via
     // SetReferenceObject below), and restoring here would both
     // clobber that mesh AND force the capture script to mutate the
     // registry to suppress it — which, if the script is interrupted,
@@ -137,9 +137,9 @@ RestoredSettings ReadRestoredSettings(HKEY hKey, bool inCaptureMode)
             s.refName = std::move(name);
     }
 
-    // [lighting-restore, session 12] Restore the persisted
+    // [lighting-restore] Restore the persisted
     // lighting (sun / fill1 / fill2 angles + colours +
-    // intensities, ambient, shadow) so the new-UI viewport
+    // intensities, ambient, shadow) so the viewport
     // opens with the user's saved lights instead of engine
     // ctor defaults. Mirrors the legacy `PushLightingToEngine`
     // (native Win32 UI, since removed) field-for-field, including the

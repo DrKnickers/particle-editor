@@ -1,4 +1,4 @@
-// Bridge UTF-8 safety — a non-UTF-8 emitter name end to end (2026-09-30 audit H1).
+// Bridge UTF-8 safety — a non-UTF-8 emitter name end to end.
 //
 // Emitter names are the raw bytes of an .alo's name chunk, not UTF-8. Before
 // the fix, one emitter named "\xE9..." made the host's default json dump()

@@ -161,7 +161,7 @@ bool SkydomeMesh::HasResolved() const
     return false;
 }
 
-// Are there LIVE GPU buffers behind this mesh right now? (2026-07 audit.)
+// Are there LIVE GPU buffers behind this mesh right now?
 //
 // HasResolved above answers a different question — "did a shader bind?" — and
 // every existing skydome assertion is of that bookkeeping kind: which slot is
@@ -259,10 +259,10 @@ bool SkydomeMesh::Load(IFileManager& fm, const std::string& aloPath)
             // The dome's authored UVs are uploaded verbatim -- faithful to the asset.
             // A tiled UV-sphere dome (e.g. the vanilla space starfields) bakes a
             // closure-meridian seam; we render it as the game does. A UV re-map was
-            // tried (#247) and removed: any lat-long re-projection that erases the seam
+            // tried and removed: any lat-long re-projection that erases the seam
             // introduces a pole singularity + aspect distortion + a tiling tradeoff that
             // the non-lat-long authored unwrap avoids -- so faithful is the higher
-            // fidelity choice (investigation: docs/superpowers/specs/2026-06-23-skydome-seam-faithful.md).
+            // fidelity choice.
 
 #ifndef NDEBUG
             if (m_subMeshes.empty() && f == RF_NU2C && sm.vertexCount > 0)

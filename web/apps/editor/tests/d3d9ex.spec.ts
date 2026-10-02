@@ -18,7 +18,7 @@
 //
 //   2. Ground-texture cycle through bundled slots (0..3) + solid-colour
 //      slot (4) — exercises the CreateSolidColorTexture path migrated
-//      from D3DPOOL_MANAGED to D3DPOOL_DEFAULT (engine.cpp:1044).
+//      from D3DPOOL_MANAGED to D3DPOOL_DEFAULT (engine_environment.cpp).
 //
 //   3. Skydome cycle through bundled slots — every Reset triggered
 //      between mutations exercises the new
@@ -102,7 +102,7 @@ test("ground texture cycle through bundled slots (device-lost regression)", asyn
 });
 
 test("solid-colour ground (slot 4) ⇒ CreateSolidColorTexture under D3DPOOL_DEFAULT", async () => {
-  // CreateSolidColorTexture (engine.cpp:1044) migrated
+  // CreateSolidColorTexture (engine_environment.cpp) migrated
   // from D3DPOOL_MANAGED to D3DPOOL_DEFAULT. The first time this path
   // runs on the D3D9Ex device it allocates a fresh 1×1 RGBA texture,
   // locks it, writes the colour, unlocks. If the migration is buggy

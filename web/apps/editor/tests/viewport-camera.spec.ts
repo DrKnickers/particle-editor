@@ -67,7 +67,7 @@ test("engine/set/camera round-trips through the engine snapshot", async () => {
 });
 
 test("engine/set/camera refuses a degenerate camera and leaves the engine camera untouched", async () => {
-  // Audit HX2: a missing field used to become (0,0,0), and a coincident
+  // A missing field used to become (0,0,0), and a coincident
   // eye/target or a zero/view-parallel up vector reached Engine::SetCamera,
   // whose LookAt then filled the view matrix with NaN. The host now answers
   // ok:false (src/host/CameraParams.h) and keeps the previous camera.

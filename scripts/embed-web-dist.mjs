@@ -177,7 +177,7 @@ function scanDist() {
 // INDEX-ROOTED (a BFS): index.html seeds the reachable set, then each reachable
 // file's text pulls in the assets it names, and so on. Per-file indegree is not
 // enough — two planted scripts that reference only each other would each have a
-// referrer yet neither is reachable from the entry document. Reviewer round-5.
+// referrer yet neither is reachable from the entry document.
 // (Limit: matching is by basename, so a same-basename plant in a different dir
 // could ride on the real file's reachability — Vite's content hashes make that
 // near-impossible, and this is a build-output sanity check, not anti-tamper.)

@@ -99,8 +99,8 @@ export async function moveEmitters(
  *  resolved value for `ok: false` to decide whether to announce success — and
  *  this used to resolve `void`, so a refusal by native (e.g. a stale positional
  *  id after the document changed under the selection) still announced
- *  "Duplicated emitter — Ctrl+Z to undo" while nothing had been duplicated
- *  (2026-07 audit). Swallowing the flag here defeated a guard the
+ *  "Duplicated emitter — Ctrl+Z to undo" while nothing had been duplicated.
+ *  Swallowing the flag here defeated a guard the
  *  caller was already applying correctly. */
 export async function duplicateEmitters(
   bridge: Bridge,
