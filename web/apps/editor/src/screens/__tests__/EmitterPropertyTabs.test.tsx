@@ -62,7 +62,7 @@ function makeStubBridge(
       if (req.kind === "emitters/set-properties") {
         const p = (req.params as { patch: Partial<EmitterPropertiesDto> }).patch;
         properties = { ...properties, ...p };
-        return Promise.resolve({});
+        return Promise.resolve({ applied: Object.keys(p), skipped: [] });
       }
       return Promise.resolve({});
     }),

@@ -486,10 +486,11 @@ describe("MockBridge contract — emitters/*", () => {
     expect(before.properties.lifetime).not.toBe(5.0);
     expect(before.properties.useBursts).toBe(false);
 
-    await b.request({
+    const result = await b.request({
       kind: "emitters/set-properties",
       params: { id: 0, patch: { lifetime: 5.0, useBursts: true, nBursts: 3 } },
     });
+    expect(result).toEqual({ applied: ["lifetime", "useBursts", "nBursts"], skipped: [] });
 
     const after = await b.request({
       kind: "emitters/get-properties",
@@ -500,6 +501,42 @@ describe("MockBridge contract — emitters/*", () => {
     expect(after.properties.nBursts).toBe(3);
     // Untouched fields stay at their fixture values.
     expect(after.properties.nParticlesPerSecond).toBe(before.properties.nParticlesPerSecond);
+  });
+
+  it("emitters/set-properties skips unknown keys without storing them on repeated patches", async () => {
+    const b = new MockBridge();
+    for (const lifetime of [7.5, 8.5]) {
+      const patch = { lifetime, unknownProperty: 123 };
+      const result = await b.request({
+        kind: "emitters/set-properties",
+        params: { id: 0, patch },
+      });
+      expect(result).toEqual({ applied: ["lifetime"], skipped: ["unknownProperty"] });
+      const after = await b.request({
+        kind: "emitters/get-properties",
+        params: { id: 0 },
+      });
+      expect(after.properties.lifetime).toBe(lifetime);
+      expect(after.properties).not.toHaveProperty("unknownProperty");
+    }
+  });
+
+  it("emitters/set-properties silently ignores unknown ids with two empty lists", async () => {
+    const b = new MockBridge();
+    const before = await b.request({
+      kind: "emitters/get-properties",
+      params: { id: 999 },
+    });
+    const result = await b.request({
+      kind: "emitters/set-properties",
+      params: { id: 999, patch: { lifetime: 7.5 } },
+    });
+    expect(result).toEqual({ applied: [], skipped: [] });
+    const after = await b.request({
+      kind: "emitters/get-properties",
+      params: { id: 999 },
+    });
+    expect(after.properties).toEqual(before.properties);
   });
 });
 

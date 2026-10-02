@@ -50,6 +50,7 @@ import {
   duplicateWithIndexIncrementMany,
   findEmitterNode,
   makeDefaultEngineState,
+  makeFixtureProperties,
   moveEmitterInTree,
   pasteEmittersFromClipboard,
   pasteAsChildFromClipboard,
@@ -1187,18 +1188,34 @@ export class MockBridge implements Bridge {
 
       // ---------------- emitters/set-properties ----
       //
-      // Batch patch: apply every key in `patch` to the overlay, emit
+      // Batch patch: apply known keys in `patch` to the overlay, emit
       // tree/changed + state/changed once so the React form re-fetches
       // and any downstream consumers (selection-aware components) see
       // the mutation. Missing ids are a silent no-op (the React side
       // disables the form when no emitter is selected).
+      // Known values are not type-checked like native. The mock also
+      // accepts the derived, read-only blendAlphaGated field, which native
+      // skips; preserve this leniency for test fixtures.
       case "emitters/set-properties": {
         const cur = useMockEmitterTree.getState().tree;
         const node = findEmitterNode(cur, req.params.id);
         if (node === null || node.id === -1) {
-          return {};
+          return { applied: [], skipped: [] };
         }
-        useMockEmitterProperties.getState().patch(node.id, req.params.patch);
+        const defaults = makeFixtureProperties(node.id);
+        const applied: string[] = [];
+        const skipped: string[] = [];
+        const patch = Object.fromEntries(
+          Object.entries(req.params.patch).filter(([key]) => {
+            if (Object.prototype.hasOwnProperty.call(defaults, key)) {
+              applied.push(key);
+              return true;
+            }
+            skipped.push(key);
+            return false;
+          }),
+        );
+        useMockEmitterProperties.getState().patch(node.id, patch);
         // If the patch includes `name`, mirror it onto the tree node so
         // the EmitterTree label updates without an extra `emitters/rename`
         // round-trip.
@@ -1215,7 +1232,7 @@ export class MockBridge implements Bridge {
           kind: "engine/state/changed",
           payload: snapshotEngineState(),
         });
-        return {};
+        return { applied, skipped };
       }
 
       // ---------------- emitters/delete-track-keys --

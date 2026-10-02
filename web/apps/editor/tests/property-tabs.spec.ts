@@ -76,13 +76,16 @@ test("editing the Lifetime spinner in the Basic tab fires emitters/set-propertie
   // delivery to a numeric input under CDP can be flaky, and we want to
   // assert the round-trip (the spinner's commit semantics are covered
   // by Vitest).
-  await page.evaluate(async (id: number) => {
+  const response = await page.evaluate(async (id: number) => {
     const bridge = window.bridge;
-    await bridge!.request({
+    const patch = { lifetime: 7.5, unknownProperty: 123 };
+    return await bridge!.request({
       kind: "emitters/set-properties",
-      params: { id, patch: { lifetime: 7.5 } },
+      params: { id, patch },
     });
   }, firstId);
+  expect(response.applied).toContain("lifetime");
+  expect(response.skipped).toEqual(["unknownProperty"]);
 
   // Round-trip via get-properties.
   const result = await page.evaluate(async (id: number) => {
@@ -94,6 +97,7 @@ test("editing the Lifetime spinner in the Basic tab fires emitters/set-propertie
   }, firstId) as { properties: { lifetime: number } };
 
   expect(result.properties.lifetime).toBeCloseTo(7.5, 5);
+  expect(result.properties).not.toHaveProperty("unknownProperty");
 });
 
 test("switching to Physics tab and changing gravity round-trips via get-properties", async () => {

@@ -1,7 +1,6 @@
 // Bridge schema — single source of truth for the JSON contract between
 // the React UI and the C++ host. Imported by both web/apps/editor/'s
-// MockBridge + NativeBridge, and (eventually) consumed by the C++
-// dispatcher via a JSON-schema codegen step.
+// MockBridge + NativeBridge; the C++ dispatcher implements it manually.
 //
 // Adding a request kind — every place it has to land:
 //   1. Add its arm to the `Request` union below (params shape + a comment).
@@ -1257,13 +1256,12 @@ export interface ResponseMap {
   // special-casing the failure.
   "emitters/get-tracks": { tracks: TrackDto[] };
 
-  // Emitter properties. Read returns the
-  // full DTO; write returns an empty object after the patch is
-  // applied. Unknown id: read returns default-shaped properties
-  // (zeros + empty strings) so the form can render a disabled
-  // placeholder instead of an error; write is a silent no-op.
+  // Emitter properties. Read returns the full DTO; write lists applied
+  // and skipped patch keys. Native rejects unknown ids on both read and
+  // write. The mock is more lenient: read returns fixture defaults and
+  // write is a silent no-op with two empty lists.
   "emitters/get-properties": { properties: EmitterPropertiesDto };
-  "emitters/set-properties": Record<string, never>;
+  "emitters/set-properties": { applied: string[]; skipped: string[] };
 
   // Track mutations
   "emitters/delete-track-keys": Record<string, never>;
