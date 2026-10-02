@@ -56,55 +56,6 @@ using namespace std;
 #include "MouseCursor.h"
 
 
-// Emitter duplicate-name helper (relocated here from the legacy Win32
-// editor). Returns "<base>_<n>" where <n> is one more than the
-// highest numeric suffix already in use among emitters in `system` whose name
-// matches `<base>` or `<base>_<digits>`. If `sourceName` itself ends in
-// `_<digits>` that suffix is stripped first, so duplicating "Foo_3" repeatedly
-// yields Foo_4, Foo_5 rather than Foo_3_1, Foo_3_1_1. An emitter named exactly
-// `<base>` counts as n=0 for the purpose of picking the next free slot. Used by
-// the host's BridgeDispatcher (duplicate / import emitter paths).
-std::string GenerateDuplicateName(const ParticleSystem* system, const std::string& sourceName)
-{
-    auto trailingDigitCount = [](const std::string& s, size_t startAfter) -> size_t {
-        size_t n = 0;
-        for (size_t i = startAfter; i < s.size(); ++i)
-        {
-            if (!isdigit((unsigned char)s[i])) return 0;
-            ++n;
-        }
-        return n;
-    };
-
-    std::string base = sourceName;
-    size_t underscore = base.rfind('_');
-    if (underscore != std::string::npos && trailingDigitCount(base, underscore + 1) > 0)
-    {
-        base.resize(underscore);
-    }
-
-    int maxN = 0;
-    const std::vector<ParticleSystem::Emitter*>& emitters = system->getEmitters();
-    for (size_t i = 0; i < emitters.size(); ++i)
-    {
-        const std::string& name = emitters[i]->name;
-        if (name == base) continue;  // n=0; maxN already starts there
-        if (name.size() > base.size() + 1 &&
-            name.compare(0, base.size(), base) == 0 &&
-            name[base.size()] == '_' &&
-            trailingDigitCount(name, base.size() + 1) > 0)
-        {
-            int n = atoi(name.c_str() + base.size() + 1);
-            if (n > maxN) maxN = n;
-        }
-    }
-
-    char suffix[32];
-    sprintf_s(suffix, sizeof(suffix), "_%d", maxN + 1);
-    return base + suffix;
-}
-
-
 // EaW Gold Pack on Steam splits assets across "GameData" (base EaW) and
 // "corruption" (FoC). Pointing the editor at one means missing textures from
 // the other. If we detect either, also include the sibling.

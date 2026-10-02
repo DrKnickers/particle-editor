@@ -210,6 +210,9 @@
     <ClInclude Include="EmitterDrawOrder.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="EmitterNaming.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="GizmoRibbon.h">
       <Filter>Header Files</Filter>
     </ClInclude>

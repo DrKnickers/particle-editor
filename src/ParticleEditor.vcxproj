@@ -141,6 +141,7 @@
     <ClInclude Include="DeviceRecovery.h" />
     <ClInclude Include="DeviceState.h" />
     <ClInclude Include="EmitterDrawOrder.h" />
+    <ClInclude Include="EmitterNaming.h" />
     <ClInclude Include="GameRoots.h" />
     <ClInclude Include="GizmoRibbon.h" />
     <ClInclude Include="GizmoSizing.h" />

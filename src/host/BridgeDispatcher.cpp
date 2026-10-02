@@ -18,6 +18,7 @@
 #include "../LinkGroup.h"
 #include "../ModManager.h"
 #include "../ParticleSystem.h"
+#include "../EmitterNaming.h"
 #include "../UI/TexturePalette.h"
 #include "../ParticleSystemIO.h"
 #include "../Rescale.h"
@@ -97,12 +98,18 @@ bool ParseCssColorToColorRef(const std::string& in, COLORREF& out)
     return true;
 }
 
-// Defined in src/main.cpp (moved there when the legacy Win32 emitter list
-// was removed); reused by the host's emitter-mutation handlers.
-// Declared extern here so the dispatcher can link against it without a
-// header dependency on main.cpp.
-extern std::string GenerateDuplicateName(const ParticleSystem* system,
-                                          const std::string&     sourceName);
+// Collect the system's names for the window-free duplicate-name rule.
+std::string GenerateDuplicateName(const ParticleSystem* system, const std::string& sourceName)
+{
+    const std::vector<ParticleSystem::Emitter*>& emitters = system->getEmitters();
+    std::vector<std::string> existingNames;
+    existingNames.reserve(emitters.size());
+    for (size_t i = 0; i < emitters.size(); ++i)
+    {
+        existingNames.push_back(emitters[i]->name);
+    }
+    return NextDuplicateName(existingNames, sourceName);
+}
 
 namespace host {
 

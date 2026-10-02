@@ -102,6 +102,7 @@
       "includes": ["src/host"]
     },
     "test_emitter_draw_order": {},
+    "test_emitter_naming": {},
     "test_emitter_reorder": {
       "sources": ["src/ParticleSystem.cpp", "src/ParticleSystemSerialization.cpp", "src/ChunkReader.cpp", "src/ChunkWriter.cpp", "src/crc32.cpp", "src/files.cpp", "src/utils.cpp", "src/LinkGroup.cpp"],
       "uses": ["expat", "dxsdk", "webview2"],

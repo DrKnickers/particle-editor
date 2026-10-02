@@ -337,7 +337,7 @@ public:
     // duplicate-parent / cyclic links and rebuilds parents), and recreates
     // multi-member source link groups. `makeUniqueName` returns a collision-
     // free name for a clone given its source name — injected so the data layer
-    // stays independent of the UI's GenerateDuplicateName. Returns the count
+    // stays independent of the host's GenerateDuplicateName. Returns the count
     // imported. Used by the host's import/duplicate bridge handler.
     size_t ImportEmittersFrom(
         ParticleSystem& source,

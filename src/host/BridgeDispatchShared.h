@@ -27,7 +27,8 @@
 
 class ParticleSystem;
 
-// Emitter duplicate-name helper, implemented in src/main.cpp.
+// Emitter duplicate-name adapter, implemented in BridgeDispatcher.cpp using
+// the window-free rule in src/EmitterNaming.h.
 extern std::string GenerateDuplicateName(const ParticleSystem* system,
                                          const std::string& sourceName);
 
