@@ -71,6 +71,8 @@
 #include "SettingsRegistry.h"
 #include "WebViewModalPolicy.h"
 #include "WebMessageIngressPolicy.h"   // ShouldAcceptWebMessage (bridge ingress cap)
+#include "WebViewOriginPolicy.h"       // IsApprovedWebViewOrigin (navigation + ingress origin gate)
+#include "BridgeWire.h"                // SerializeBridgeEnvelope (the one host->UI serializer)
 #include "ModulePath.h"               // host::ModuleDirectory (grow-until-it-fits module path)
 #include "StartupCallbackAdapter.h"   // guarded one-shot WebView2 creation callbacks
 #include "CompositionStartupPolicy.h" // second WebView2 create's synchronous failure channel
@@ -145,32 +147,20 @@ constexpr UINT_PTR    kStatsTimerId          = 0x100;  // 4 Hz stats broadcast
 constexpr UINT_PTR    kResizeSettleTimerId   = 0x101;
 constexpr UINT        kResizeSettleDelayMs   = 150;
 
-// WebView2 origin allow-list. The host must trust only the
-// page it deliberately loads, not "whatever is currently navigated". Three
-// origins are legitimate:
-//   - https://app.local/     prod: the virtual origin whose requests the
-//                            WebResourceRequested handler answers from the exe's
-//                            embedded RCDATA web bundle.
-//   - http://localhost:5174/ dev: the Vite HMR server (kDevServerPort), only
-//                            when --dev-ui is active.
-//   - about:                 WebView2's own about:blank initial navigation.
-// The trailing '/' on the two host prefixes is load-bearing: it stops a
-// lookalike like https://app.local.evil.test/ from slipping through. Scheme
-// and host compare case-insensitively per RFC 3986, hence _wcsnicmp. Used by
-// add_NavigationStarting (cancel off-origin nav) and the WebMessageReceived
-// handler (drop messages from an untrusted document source).
-bool IsApprovedWebViewOrigin(PCWSTR uri, bool devUi)
+// The WebView2 origin allow-list (IsApprovedWebViewOrigin) lives in
+// WebViewOriginPolicy.h so its boundary is unit-tested.
+
+// RAII owner for a CoTaskMemAlloc'd string handed out by a WebView2 getter
+// (get_Source / TryGetWebMessageAsString / get_WebMessageAsJson), so an early
+// return or an exception can never leak it (2026-09-30 audit H1).
+struct CoTaskMemString
 {
-    if (!uri) return false;
-    const auto hasPrefix = [uri](PCWSTR prefix) -> bool
-    {
-        return _wcsnicmp(uri, prefix, wcslen(prefix)) == 0;
-    };
-    if (hasPrefix(L"https://app.local/")) return true;
-    if (hasPrefix(L"about:"))             return true;
-    if (devUi && hasPrefix(L"http://localhost:5174/")) return true;
-    return false;
-}
+    LPWSTR p = nullptr;
+    CoTaskMemString() = default;
+    CoTaskMemString(const CoTaskMemString&) = delete;
+    CoTaskMemString& operator=(const CoTaskMemString&) = delete;
+    ~CoTaskMemString() { if (p) CoTaskMemFree(p); }
+};
 
 // FPSMeasurer — ring-buffer of the last 32 frame timestamps. Originally
 // ported from the original src/main.cpp `FPSMeasurer` (since removed), but
@@ -1847,15 +1837,26 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
     // non-"req" messages) — intercept + return. Token must match the armed step.
     if (msgKind == L"drive/selftest-result")
     {
+        // Field-type guarded: json::value() throws on a non-object message or
+        // a field of the wrong type, and this runs inside the WebView2 callback.
         nlohmann::json msg = nlohmann::json::parse(WideToUtf8(json), nullptr, false);
-        if (!msg.is_discarded() && !m_selftestToken.empty()
-            && msg.value("token", std::string{}) == m_selftestToken)
+        if (msg.is_object() && !m_selftestToken.empty())
         {
-            m_selftestOk = msg.value("ok", false);
-            m_selftestDone = true;
-            if (!m_selftestOk)
-                Log("drive: selftest page-side failure: %s\n",
-                    msg.value("why", std::string("?")).c_str());
+            const auto tok = msg.find("token");
+            if (tok != msg.end() && tok->is_string()
+                && tok->get_ref<const std::string&>() == m_selftestToken)
+            {
+                const auto ok = msg.find("ok");
+                m_selftestOk = ok != msg.end() && ok->is_boolean() && ok->get<bool>();
+                m_selftestDone = true;
+                if (!m_selftestOk)
+                {
+                    const auto why = msg.find("why");
+                    Log("drive: selftest page-side failure: %s\n",
+                        why != msg.end() && why->is_string()
+                            ? why->get_ref<const std::string&>().c_str() : "?");
+                }
+            }
         }
         return;
     }
@@ -1930,7 +1931,9 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
                                         ? cur["resolved"] : nlohmann::json::array();
                 cur.erase("resolved");
                 m_lastAckCursor = std::move(cur);
-                m_lastAckCursorFrame = msg.value("frame", -1);
+                const auto frame = msg.find("frame");
+                m_lastAckCursorFrame = frame != msg.end() && frame->is_number_integer()
+                                           ? frame->get<int>() : -1;
             }
         }
         return;
@@ -2387,82 +2390,90 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     webView->add_WebMessageReceived(
         Callback<ICoreWebView2WebMessageReceivedEventHandler>(
             [this](ICoreWebView2*,
-                   ICoreWebView2WebMessageReceivedEventArgs* args) -> HRESULT
+                   ICoreWebView2WebMessageReceivedEventArgs* args) noexcept -> HRESULT
             {
-                // Reject messages whose originating document
-                // isn't an approved origin. Belt-and-suspenders with the
-                // NavigationStarting cancel — if a frame ever loaded an
-                // off-origin document, its postMessage must not reach the
-                // native bridge.
-                // FAIL CLOSED. This check used to sit entirely inside the
-                // success branch, so a failing/empty get_Source skipped it and
-                // fell straight through to OnWebMessage — the comment above
-                // promised the message "must not reach the native bridge", but
-                // the control flow granted exactly that on a COM error
-                // (2026-07 audit). No confirmed origin, no dispatch.
-                LPWSTR src = nullptr;
-                const HRESULT srcHr = args->get_Source(&src);
-                if (FAILED(srcHr) || !src)
+                // No exception may unwind into WebView2's COM dispatcher
+                // (2026-09-30 audit H1): the dispatcher's own guard turns a
+                // handler throw into an error envelope, and this catch-all is
+                // the backstop for everything around it (parse, log, perf).
+                // The CoTaskMem strings are RAII-owned, so nothing leaks either.
+                try
                 {
-                    Log("[host] G11: dropped WebMessage — source unavailable "
-                        "(hr=0x%08lx)\n", (unsigned long)srcHr);
-                    if (src) CoTaskMemFree(src);
-                    return S_OK;
-                }
-                {
-                    const bool approved = IsApprovedWebViewOrigin(src, useDevUi);
-                    if (!approved)
+                    // Reject messages whose originating document
+                    // isn't an approved origin. Belt-and-suspenders with the
+                    // NavigationStarting cancel — if a frame ever loaded an
+                    // off-origin document, its postMessage must not reach the
+                    // native bridge.
+                    // FAIL CLOSED. This check used to sit entirely inside the
+                    // success branch, so a failing/empty get_Source skipped it and
+                    // fell straight through to OnWebMessage — the comment above
+                    // promised the message "must not reach the native bridge", but
+                    // the control flow granted exactly that on a COM error
+                    // (2026-07 audit). No confirmed origin, no dispatch.
+                    CoTaskMemString src;
+                    const HRESULT srcHr = args->get_Source(&src.p);
+                    if (FAILED(srcHr) || !src.p)
                     {
-                        Log("[host] G11: dropped WebMessage from untrusted "
-                            "source %ls\n", src);
-                        CoTaskMemFree(src);
+                        Log("[host] G11: dropped WebMessage — source unavailable "
+                            "(hr=0x%08lx)\n", (unsigned long)srcHr);
                         return S_OK;
                     }
-                    CoTaskMemFree(src);
-                }
-                // Size cap on both ingress paths (2026-07 audit).
-                // OnWebMessage parses the whole string, so without this one
-                // postMessage drives an unbounded UI-thread allocation. Checked
-                // AFTER the origin gate so an untrusted sender never gets even
-                // this far, and applied to the JSON fallback below too -- a cap
-                // on one of two doors is not a cap.
-                const auto oversized = [this](const wchar_t* s, const char* which)
-                {
-                    const size_t n = wcslen(s);
-                    if (ShouldAcceptWebMessage(n, kMaxWebMessageChars)) return false;
-                    Log("[host] dropped %s WebMessage — %zu chars exceeds the "
-                        "%zu-char cap\n", which, n, kMaxWebMessageChars);
-                    return true;
-                };
-
-                LPWSTR raw = nullptr;
-                HRESULT hr1 = args->TryGetWebMessageAsString(&raw);
-                if (SUCCEEDED(hr1) && raw)
-                {
-                    if (!oversized(raw, "string")) OnWebMessage(raw);
-                    CoTaskMemFree(raw);
-                }
-                else
-                {
-                    // Fall back: maybe the page posted a JSON value
-                    // (chrome.webview.postMessage(obj) rather than
-                    // postMessage(JSON.stringify(obj))). Surface a
-                    // dedicated log so we can tell the difference
-                    // between "no event" and "event but parse failed".
-                    LPWSTR json = nullptr;
-                    HRESULT hr2 = args->get_WebMessageAsJson(&json);
-                    if (SUCCEEDED(hr2) && json)
+                    if (!IsApprovedWebViewOrigin(src.p, useDevUi))
                     {
-                        Log("[host] WMR JSON-only (%zu chars), hr1=0x%08lx\n",
-                            wcslen(json), hr1);
-                        if (!oversized(json, "json")) OnWebMessage(json);
-                        CoTaskMemFree(json);
+                        Log("[host] G11: dropped WebMessage from untrusted "
+                            "source %ls\n", src.p);
+                        return S_OK;
+                    }
+                    // Size cap on both ingress paths (2026-07 audit).
+                    // OnWebMessage parses the whole string, so without this one
+                    // postMessage drives an unbounded UI-thread allocation. Checked
+                    // AFTER the origin gate so an untrusted sender never gets even
+                    // this far, and applied to the JSON fallback below too -- a cap
+                    // on one of two doors is not a cap.
+                    const auto oversized = [this](const wchar_t* s, const char* which)
+                    {
+                        const size_t n = wcslen(s);
+                        if (ShouldAcceptWebMessage(n, kMaxWebMessageChars)) return false;
+                        Log("[host] dropped %s WebMessage — %zu chars exceeds the "
+                            "%zu-char cap\n", which, n, kMaxWebMessageChars);
+                        return true;
+                    };
+
+                    CoTaskMemString raw;
+                    HRESULT hr1 = args->TryGetWebMessageAsString(&raw.p);
+                    if (SUCCEEDED(hr1) && raw.p)
+                    {
+                        if (!oversized(raw.p, "string")) OnWebMessage(raw.p);
                     }
                     else
                     {
-                        Log("[host] WMR empty: hr1=0x%08lx hr2=0x%08lx\n",
-                            hr1, hr2);
+                        // Fall back: maybe the page posted a JSON value
+                        // (chrome.webview.postMessage(obj) rather than
+                        // postMessage(JSON.stringify(obj))). Surface a
+                        // dedicated log so we can tell the difference
+                        // between "no event" and "event but parse failed".
+                        CoTaskMemString json;
+                        HRESULT hr2 = args->get_WebMessageAsJson(&json.p);
+                        if (SUCCEEDED(hr2) && json.p)
+                        {
+                            Log("[host] WMR JSON-only (%zu chars), hr1=0x%08lx\n",
+                                wcslen(json.p), hr1);
+                            if (!oversized(json.p, "json")) OnWebMessage(json.p);
+                        }
+                        else
+                        {
+                            Log("[host] WMR empty: hr1=0x%08lx hr2=0x%08lx\n",
+                                hr1, hr2);
+                        }
                     }
+                }
+                catch (const std::exception& e)
+                {
+                    Log("[bridge] WebMessageReceived: swallowed exception: %s\n", e.what());
+                }
+                catch (...)
+                {
+                    Log("[bridge] WebMessageReceived: swallowed unknown exception\n");
                 }
                 return S_OK;
             }).Get(), &webMessageTok);
@@ -4682,10 +4693,15 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             // Scale (Position - Target) by a sqrt(distance)-based
             // factor. Floor at 1.0f to prevent flipping through the
             // target. -y so dragging up zooms in (matches legacy).
+            // olddist > 0 guard (audit HX2): a coincident eye/target would
+            // divide by zero and push a NaN camera into the engine.
             float olddist = D3DXVec3Length(&diff);
-            float newdist = max(1.0f, olddist - sqrtf(olddist) * (float)-y);
-            D3DXVec3Scale(&camera.Position, &diff, newdist / olddist);
-            camera.Position += camera.Target;
+            if (olddist > 0.0f)
+            {
+                float newdist = max(1.0f, olddist - sqrtf(olddist) * (float)-y);
+                D3DXVec3Scale(&camera.Position, &diff, newdist / olddist);
+                camera.Position += camera.Target;
+            }
         }
 
         engine->SetCamera(camera);
@@ -4858,6 +4874,8 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         D3DXVECTOR3    diff   = camera.Position - camera.Target;
 
         float olddist = D3DXVec3Length(&diff);
+        // Same olddist > 0 guard as the drag-zoom path (audit HX2).
+        if (!(olddist > 0.0f)) return 0;
         float wheel   = (float)((SHORT)HIWORD(wp)) / (float)WHEEL_DELTA;
         float newdist = max(1.0f, olddist - sqrtf(olddist) * wheel);
         D3DXVec3Scale(&camera.Position, &diff, newdist / olddist);
@@ -5055,7 +5073,7 @@ bool HostWindowImpl::SetupRecordArm(RecordSession& rec)
                     if (m_recordHeadless && webView)
                     {
                         nlohmann::json hm = {{"type","ui/record-headless"}};
-                        webView->PostWebMessageAsJson(host::Utf8ToWide(hm.dump()).c_str());
+                        webView->PostWebMessageAsJson(host::Utf8ToWide(SerializeBridgeEnvelope(hm)).c_str());
                     }
 
                     // Run the record window out of sight for a machine-free render.
@@ -5078,7 +5096,7 @@ bool HostWindowImpl::SetupRecordArm(RecordSession& rec)
                     //      recorded clip shows a clean layout + more curve editor.
                     {
                         nlohmann::json hp = {{"type","ui/hide-panel"}};
-                        if (webView) webView->PostWebMessageAsJson(host::Utf8ToWide(hp.dump()).c_str());
+                        if (webView) webView->PostWebMessageAsJson(host::Utf8ToWide(SerializeBridgeEnvelope(hp)).c_str());
                     }
 
                     // (e2) focus the curve panel on each track-key tween's channel so
@@ -5088,7 +5106,7 @@ bool HostWindowImpl::SetupRecordArm(RecordSession& rec)
                     for (const auto& tk : tl.trackKeys)
                     {
                         nlohmann::json fm = {{"type","ui/focus-channel"},{"channel", tk.track}};
-                        if (webView) webView->PostWebMessageAsJson(host::Utf8ToWide(fm.dump()).c_str());
+                        if (webView) webView->PostWebMessageAsJson(host::Utf8ToWide(SerializeBridgeEnvelope(fm)).c_str());
                     }
 
                     // (e3) let React APPLY the (e1)/(e2) pushes before frame capture.
@@ -5127,7 +5145,7 @@ bool HostWindowImpl::SetupRecordArm(RecordSession& rec)
                     {
                         const nlohmann::json trackMsg = clip::BuildCursorTrackJson(tl.cursor);
                         if (webView)
-                            webView->PostWebMessageAsJson(host::Utf8ToWide(trackMsg.dump()).c_str());
+                            webView->PostWebMessageAsJson(host::Utf8ToWide(SerializeBridgeEnvelope(trackMsg)).c_str());
                     }
 
                     // (f) output dirs: render to <out>.tmp, move on success.
@@ -5203,7 +5221,7 @@ bool HostWindowImpl::SetupRecordArm(RecordSession& rec)
                             const double cy = y - (org.y - wr.top);
                             nlohmann::json m = {{"type","ui/cursor"},{"x",cx},{"y",cy},
                                                 {"visible",vis},{"pressed",press},{"frame",m_recordFrame}};
-                            if (webView) webView->PostWebMessageAsJson(host::Utf8ToWide(m.dump()).c_str());
+                            if (webView) webView->PostWebMessageAsJson(host::Utf8ToWide(SerializeBridgeEnvelope(m)).c_str());
                         },
                         // ack: pumped wait for ui/frame-acked >= frameId (bounded).
                         // [record-timing] the whole hook (incl. its inner
@@ -5345,7 +5363,7 @@ bool HostWindowImpl::SetupRecordArm(RecordSession& rec)
                         [this](const std::string& kind, const nlohmann::json& params){
                             nlohmann::json m = params.is_object() ? params : nlohmann::json::object();
                             m["type"] = kind;
-                            if (webView) webView->PostWebMessageAsJson(host::Utf8ToWide(m.dump()).c_str());
+                            if (webView) webView->PostWebMessageAsJson(host::Utf8ToWide(SerializeBridgeEnvelope(m)).c_str());
                         },
                         // ackData: read back the SEMANTIC-cursor ack the web side
                         // resolved for `frameId` ({cursor:{x,y,vis,press}, resolved:[...]}).
@@ -5543,10 +5561,13 @@ int HostWindowImpl::Run(int nCmdShow)
     // Construct dispatcher AFTER hMain exists (it captures the WebView2
     // pointer-to-PostWebMessageAsString via its EmitFn). engine ptr is
     // wired in WM_CREATE when the Engine is built.
-    auto emitFn = [this](const std::string& js)
+    // Every event and async response reaches the UI through here, serialized
+    // by host::SerializeBridgeEnvelope (BridgeWire.h): invalid UTF-8 (raw
+    // .alo/.meg name bytes) becomes U+FFFD instead of throwing (audit H1).
+    auto emitFn = [this](const nlohmann::json& env)
     {
         if (!webView) return;
-        std::wstring w = Utf8ToWide(js);
+        std::wstring w = Utf8ToWide(SerializeBridgeEnvelope(env));
         webView->PostWebMessageAsJson(w.c_str());
     };
     dispatcher = std::make_unique<BridgeDispatcher>(/*engine*/nullptr, layout, accelerator, emitFn,

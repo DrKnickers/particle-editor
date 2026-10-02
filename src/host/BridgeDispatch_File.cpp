@@ -310,7 +310,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
                 {"payload", json{{"id", m_selectedEmitterId < 0 ? json(nullptr)
                                                                  : json(m_selectedEmitterId)}}},
             };
-            m_emit(env.dump());
+            m_emit(env);
         }
         return true;
     }

@@ -25,6 +25,9 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 - Undo and redo no longer un-hide emitters you hid with the eye toggle
 - A colour channel you unlock now stays unlocked after save and reload, undo, or redo, even before you edit it
 - Saving a particle file that contains property 0x11 no longer drops it
+- A particle file whose emitter or texture names use non-UTF-8 characters (common in older mods) no longer breaks the editor's panels; those characters now show as a replacement mark
+- An unexpected error while applying an edit no longer leaves the panels out of step with the scene or skips the unsaved-changes prompt
+- A camera position that would produce an invalid view (eye on the target, or looking straight along the up axis) is now refused instead of blanking the viewport, and zooming all the way in can no longer break the camera
 
 ### Security
 

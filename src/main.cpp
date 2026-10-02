@@ -44,6 +44,7 @@
 #include "host/CaptureGoldenProfile.h"
 #include "host/WindowCapture.h"
 #include "host/WebViewModalPolicy.h"  // IsFullyInteractiveSession — gate the pre-host data-path picker
+#include "host/StringConv.h"          // host::WideToUtf8 — ParticleSystemIO errorOut is UTF-8
 
 #include <shlobj.h>
 #include <shlwapi.h>
@@ -539,7 +540,7 @@ std::unique_ptr<ParticleSystem> LoadParticleSystem(const std::wstring& path,
     }
     catch (wexception& e)
     {
-        if (errorOut) *errorOut = WideToAnsi(e.wwhat());
+        if (errorOut) *errorOut = host::WideToUtf8(e.wwhat());
         return nullptr;
     }
     catch (...)
@@ -555,7 +556,7 @@ std::unique_ptr<ParticleSystem> LoadParticleSystem(const std::wstring& path,
     }
     catch (wexception& e)
     {
-        if (errorOut) *errorOut = WideToAnsi(e.wwhat());
+        if (errorOut) *errorOut = host::WideToUtf8(e.wwhat());
         system.reset();
     }
     catch (...)
@@ -590,7 +591,7 @@ bool SaveParticleSystem(ParticleSystem* system, const std::wstring& path,
     }
     catch (wexception& e)
     {
-        if (errorOut) *errorOut = WideToAnsi(e.wwhat());
+        if (errorOut) *errorOut = host::WideToUtf8(e.wwhat());
         return false;
     }
     catch (...)
@@ -606,7 +607,7 @@ bool SaveParticleSystem(ParticleSystem* system, const std::wstring& path,
     }
     catch (wexception& e)
     {
-        if (errorOut) *errorOut = WideToAnsi(e.wwhat());
+        if (errorOut) *errorOut = host::WideToUtf8(e.wwhat());
         ok = false;
     }
     catch (...)

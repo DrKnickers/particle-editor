@@ -65,7 +65,10 @@ struct BridgeRequestContext;   // BridgeRequestContext.h (Phase A dispatch split
 class BridgeDispatcher
 {
 public:
-    using EmitFn = std::function<void(const std::string& json)>;
+    // Envelopes are handed over as JSON, never as text: the receiver
+    // serializes them through host::SerializeBridgeEnvelope (BridgeWire.h),
+    // so no emit site can throw on a non-UTF-8 name (2026-09-30 audit H1).
+    using EmitFn = std::function<void(const nlohmann::json& envelope)>;
 
     // `useTestHost` mirrors HostWindow's `--test-host` flag. When true,
     // settings handlers that would otherwise touch the registry return
@@ -406,6 +409,12 @@ private:
     // the returned envelope still carries `id: null` so callers can
     // serialise it unambiguously.
     nlohmann::json DispatchInternal(const nlohmann::json& reqEnvelope);
+
+    // Shared tail of Dispatch and DispatchSync once the request has parsed as
+    // a `req`: perf span + DispatchInternal under host::RunGuardedDispatch, so
+    // no exception from a kind handler escapes either door. `mode` is
+    // "async" / "sync" (span field + log line).
+    nlohmann::json DispatchParsed(const nlohmann::json& parsed, const char* mode);
 
     // ---- Per-domain kind dispatchers (Phase A split) ----
     // Each lives in its own TU (BridgeDispatch_<Domain>.cpp), holds that

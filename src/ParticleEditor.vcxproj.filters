@@ -114,6 +114,12 @@
     <ClInclude Include="host\BridgeRequestContext.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="host\BridgeWire.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\CameraParams.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
     <ClInclude Include="host\LightingSettings.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
@@ -328,6 +334,9 @@
       <Filter>Header Files\host</Filter>
     </ClInclude>
     <ClInclude Include="host\WebViewModalPolicy.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\WebViewOriginPolicy.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
   </ItemGroup>

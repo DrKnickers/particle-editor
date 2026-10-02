@@ -252,6 +252,9 @@ async function main() {
       "tests/selection-identity.spec.ts",
       "tests/undo-navigation.spec.ts",
       "tests/emitter-import.spec.ts",
+      // Non-UTF-8 emitter name end to end: responses + tree/changed event
+      // carry U+FFFD instead of the host throwing (bridge serializer, audit H1).
+      "tests/bridge-utf8-safety.spec.ts",
       "tests/emitter-drag.spec.ts",
       "tests/emitter-keyboard.spec.ts",
       "tests/track-editor.spec.ts",

@@ -8,8 +8,9 @@
 // BridgeDispatcher.cpp; cohesive extracted helpers may live in a dedicated
 // production TU such as RecentFiles.cpp. Never add a per-TU static copy.
 // Helpers used only by BridgeDispatcher.cpp's own dispatch plumbing
-// (BuildDispatchExceptionEnvelope, JsonStringField, EndDispatchSpan) stay
-// static there and are deliberately absent here.
+// (JsonStringField, EndDispatchSpan) stay static there and are deliberately
+// absent here; the wire serializer and the dispatch exception guard live in
+// BridgeWire.h.
 
 #include <cstddef>
 #include <string>

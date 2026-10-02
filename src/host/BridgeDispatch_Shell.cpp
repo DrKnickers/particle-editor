@@ -343,7 +343,7 @@ bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
                 {"kind",    "stats/frozen-changed"},
                 {"payload", {{"frozen", frozen}}},
             };
-            m_emit(env.dump());
+            m_emit(env);
         }
         ctx.SendOk(json::object());
         return true;

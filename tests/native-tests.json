@@ -67,6 +67,8 @@
       "uses": ["dxsdk"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
+    "test_bridge_wire": {},
+    "test_camera_params": {},
     "test_capture_golden_profile": {},
     "test_clip_path_tokens": {
       "includes": ["src/host"]
@@ -238,6 +240,7 @@
       "uses": ["dxsdk"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
+    "test_webview_origin_policy": {},
     "test_wic_encode_parity": {
       "sources": ["src/host/WicEncode.cpp", "src/host/WindowCapture.cpp"],
       "libs": ["gdiplus.lib", "windowscodecs.lib", "ole32.lib", "oleaut32.lib", "user32.lib", "gdi32.lib", "shlwapi.lib"]

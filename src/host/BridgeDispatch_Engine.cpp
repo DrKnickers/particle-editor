@@ -5,6 +5,7 @@
 #include "BridgeDispatcher.h"
 #include "BridgeDispatchShared.h"
 #include "BridgeRequestContext.h"
+#include "CameraParams.h"         // ReadCameraParams (engine/set/camera validation)
 
 #include "StringConv.h"           // host::Utf8ToWide / WideToUtf8
 #include "../ModManager.h"      // activeModPath in the state snapshot
@@ -477,10 +478,18 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
     if (kind == "engine/set/camera")
     {
         if (!ctx.RequireEngine(kind.c_str())) return true;
+        // Refuse a degenerate camera instead of handing the engine a NaN
+        // view matrix (audit HX2) — see CameraParams.h.
+        CameraParams p;
+        if (const char* why = ReadCameraParams(params, p))
+        {
+            ctx.SendErr(why);
+            return true;
+        }
         Engine::Camera cam;
-        cam.Position = JsonToVec3(params.value("position", json::array()));
-        cam.Target   = JsonToVec3(params.value("target",   json::array()));
-        cam.Up       = JsonToVec3(params.value("up",       json::array()));
+        cam.Position = D3DXVECTOR3(p.position);
+        cam.Target   = D3DXVECTOR3(p.target);
+        cam.Up       = D3DXVECTOR3(p.up);
         m_engine->SetCamera(cam);
         ctx.SendOk(json::object());
         ctx.MarkDirty();

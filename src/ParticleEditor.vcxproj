@@ -168,6 +168,8 @@
     <ClInclude Include="host\BridgeDispatcher.h" />
     <ClInclude Include="host\BridgeDispatchShared.h" />
     <ClInclude Include="host\BridgeRequestContext.h" />
+    <ClInclude Include="host\BridgeWire.h" />
+    <ClInclude Include="host\CameraParams.h" />
     <ClInclude Include="host\LightingSettings.h" />
     <ClInclude Include="host\RestoredSettings.h" />
     <ClInclude Include="host\SettingsRegistry.h" />
@@ -202,6 +204,7 @@
     <ClInclude Include="host\StartupCallbackGuard.h" />
     <ClInclude Include="host\WebMessageIngressPolicy.h" />
     <ClInclude Include="host\WebViewModalPolicy.h" />
+    <ClInclude Include="host\WebViewOriginPolicy.h" />
     <ClInclude Include="host\third_party\nlohmann\json.hpp" />
   </ItemGroup>
   <ItemGroup>

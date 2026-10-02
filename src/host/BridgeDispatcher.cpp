@@ -3,6 +3,7 @@
 #include "AcceleratorBridge.h"
 #include "BridgeDispatchShared.h"
 #include "BridgeRequestContext.h"
+#include "BridgeWire.h"     // SerializeBridgeEnvelope / RunGuardedDispatch (audit H1)
 #include "InputDispatcher.h"
 #include "LayoutBroker.h"
 #include "WindowCapture.h"
@@ -119,7 +120,7 @@ std::string BuildOkResponse(const std::string& id, const json& data)
         {"ok",   true},
         {"data", data},
     };
-    return env.dump();
+    return SerializeBridgeEnvelope(env);
 }
 
 // Build a `res` envelope with ok:false and given error string.
@@ -131,7 +132,7 @@ std::string BuildErrResponse(const std::string& id, const std::string& error)
         {"ok",    false},
         {"error", error},
     };
-    return env.dump();
+    return SerializeBridgeEnvelope(env);
 }
 
 // Serialise a D3DXVECTOR3/4 / Engine::Camera / Engine::Light into the
@@ -708,32 +709,6 @@ BridgeDispatcher::BridgeDispatcher(Engine* engine, LayoutBroker& layout,
 
 }
 
-// Defensive envelope for any json::exception that escapes
-// DispatchInternal. The outer try/catch in Dispatch and DispatchSync wraps
-// only json::parse; per-handler `.get<T>()` / `.value(...)` / `is_T()`
-// calls inside DispatchInternal can still throw nlohmann::json::type_error
-// when callers send malformed payloads. Pre-fix those propagated uncaught
-// into the WebView2 callback or COM dispatch path; post-fix this builds
-// a well-formed error envelope that the JS side can parse.
-static json BuildDispatchExceptionEnvelope(const json& parsed, const char* what)
-{
-    json res = {
-        {"type",  "res"},
-        {"ok",    false},
-        {"error", std::string("dispatch exception: ") + (what ? what : "(no message)")},
-    };
-    // Preserve correlation id if the request had one.
-    if (auto it = parsed.find("id"); it != parsed.end() && it->is_string())
-    {
-        res["id"] = it->get<std::string>();
-    }
-    else
-    {
-        res["id"] = nullptr;
-    }
-    return res;
-}
-
 static std::string JsonStringField(const json& parsed, const char* name)
 {
     if (auto it = parsed.find(name); it != parsed.end() && it->is_string())
@@ -793,32 +768,11 @@ void BridgeDispatcher::Dispatch(const std::string& jsonRequest)
         return;
     }
 
-    std::unique_ptr<host::perf::Span> span;
-    if (host::perf::Enabled()) {
-        span = std::make_unique<host::perf::Span>("bridge.dispatch", nlohmann::json{
-            {"bridgeMode", "async"},
-            {"bridgeKind", JsonStringField(parsed, "kind")},
-            {"requestId", JsonStringField(parsed, "id")}
-        });
-    }
-
-    // Catch json::exception escaping DispatchInternal.
-    json res;
-    try
-    {
-        res = DispatchInternal(parsed);
-        EndDispatchSpan(span.get(), res);
-    }
-    catch (const json::exception& e)
-    {
-        fprintf(stderr, "[host] BridgeDispatcher::Dispatch: type/conversion exception: %s\n", e.what());
-        if (span) span->End("error", e.what());
-        res = BuildDispatchExceptionEnvelope(parsed, e.what());
-    }
+    const json res = DispatchParsed(parsed, "async");
     // Drop responses that have no id (malformed request, can't correlate).
     if (m_emit && res.contains("id") && res["id"].is_string())
     {
-        m_emit(res.dump());
+        m_emit(res);
     }
 }
 
@@ -841,7 +795,7 @@ std::string BridgeDispatcher::DispatchSync(const std::string& jsonRequest)
             {"ok",    false},
             {"error", std::string("parse error: ") + e.what()},
         };
-        return err.dump();
+        return SerializeBridgeEnvelope(err);
     }
 
     const auto typeIt = parsed.find("type");
@@ -853,31 +807,64 @@ std::string BridgeDispatcher::DispatchSync(const std::string& jsonRequest)
             {"ok",    false},
             {"error", "expected type: \"req\""},
         };
-        return err.dump();
+        return SerializeBridgeEnvelope(err);
     }
 
+    return SerializeBridgeEnvelope(DispatchParsed(parsed, "sync"));
+}
+
+json BridgeDispatcher::DispatchParsed(const json& parsed, const char* mode)
+{
     std::unique_ptr<host::perf::Span> span;
     if (host::perf::Enabled()) {
         span = std::make_unique<host::perf::Span>("bridge.dispatch", nlohmann::json{
-            {"bridgeMode", "sync"},
+            {"bridgeMode", mode},
             {"bridgeKind", JsonStringField(parsed, "kind")},
             {"requestId", JsonStringField(parsed, "id")}
         });
     }
 
-    // Catch json::exception escaping DispatchInternal.
-    try
-    {
-        json res = DispatchInternal(parsed);
-        EndDispatchSpan(span.get(), res);
-        return res.dump();
-    }
-    catch (const json::exception& e)
-    {
-        fprintf(stderr, "[host] BridgeDispatcher::DispatchSync: type/conversion exception: %s\n", e.what());
-        if (span) span->End("error", e.what());
-        return BuildDispatchExceptionEnvelope(parsed, e.what()).dump();
-    }
+    // Every exception escaping a kind handler -- not only nlohmann's
+    // type errors -- becomes an ok:false envelope with the request's id.
+    // Before audit H1 only json::exception was caught, so a std::exception
+    // from the file/engine layer reached the WebView2 / COM callback.
+    return RunGuardedDispatch(parsed,
+        [&]() -> json
+        {
+            json res = DispatchInternal(parsed);
+            EndDispatchSpan(span.get(), res);
+            return res;
+        },
+        [&](const char* category, const char* what)
+        {
+            char line[512];
+            _snprintf_s(line, sizeof(line), _TRUNCATE,
+                        "[bridge] %s dispatch: %s exception: %s\n", mode, category, what);
+            fputs(line, stderr);
+            OutputDebugStringA(line);   // stderr goes nowhere in the Release GUI build
+            if (span) span->End("error", what);
+
+            // A json type error comes from reading a malformed param, before
+            // the handler changes anything. A std/unknown exception can come
+            // from the engine or file layer AFTER the handler already mutated
+            // the system (bad_alloc, a texture reload failing), and the
+            // handler's own MarkDirty / reseat / state events never ran. Resync
+            // so the UI, the dirty flag and the engine's cursors match what
+            // the host holds; a spurious dirty prompt is cheaper than a silent
+            // loss. Guarded: nothing may escape this error path.
+            if (strcmp(category, "type/conversion") == 0) return;
+            try
+            {
+                if (m_engine) m_engine->OnParticleSystemChanged(-1);
+                if (*m_pParticleSystem) SetDirty(true);
+                EmitEngineStateChanged();
+                EmitEmittersTreeChanged();
+            }
+            catch (...)
+            {
+                OutputDebugStringA("[bridge] resync after a dispatch exception also failed\n");
+            }
+        });
 }
 
 // ---- BridgeRequestContext members needing BridgeDispatcher privates ----
@@ -944,7 +931,7 @@ void BridgeDispatcher::reconcileSelectionAfterDeletion(unsigned int stableId)
                                    ? json(nullptr)
                                    : json(m_selectedEmitterId)}}},
     };
-    m_emit(env.dump());
+    m_emit(env);
 }
 
 // Capture-undo helper. Wraps the dispatcher's m_undo with the
@@ -1048,7 +1035,7 @@ void BridgeDispatcher::EmitAcceleratorPressed(const std::string& combo)
         {"kind",    "accelerator/pressed"},
         {"payload", {{"combo", combo}}},
     };
-    m_emit(env.dump());
+    m_emit(env);
 }
 
 void BridgeDispatcher::EmitCursorPosition3D(float x, float y, float z)
@@ -1059,14 +1046,14 @@ void BridgeDispatcher::EmitCursorPosition3D(float x, float y, float z)
         {"kind",    "cursor/position-3d"},
         {"payload", {{"x", x}, {"y", y}, {"z", z}}},
     };
-    m_emit(env.dump());
+    m_emit(env);
 }
 
 void BridgeDispatcher::EmitManipulatorDrag(const json& payload)
 {
     if (!m_emit) return;
     json env = { {"type", "evt"}, {"kind", "engine/manipulator/drag"}, {"payload", payload} };
-    m_emit(env.dump());
+    m_emit(env);
 }
 
 void BridgeDispatcher::EmitEmittersTreeChanged()
@@ -1124,7 +1111,7 @@ void BridgeDispatcher::ResetSelectionAndEmitDocumentChanged()
         {"payload", json{{"id", m_selectedEmitterId < 0 ? json(nullptr)
                                                         : json(m_selectedEmitterId)}}},
     };
-    m_emit(env.dump());
+    m_emit(env);
 }
 
 void BridgeDispatcher::EmitEmittersTreeChangedNow()
@@ -1161,7 +1148,7 @@ void BridgeDispatcher::EmitEmittersTreeChangedNow()
         {"kind",    "emitters/tree/changed"},
         {"payload", json{{"root", tree}}},
     };
-    m_emit(env.dump());
+    m_emit(env);
 }
 
 void BridgeDispatcher::CommitReferenceObjectTransform()
@@ -1245,7 +1232,7 @@ void BridgeDispatcher::EmitEngineStateChangedNow()
         {"kind",    "engine/state/changed"},
         {"payload", BuildEngineStateSnapshot(m_engine, m_currentFilePath, m_dirty, spawnerJson, m_selectedEmitterId, activeModPath, leaveParticles, canUndo, canRedo)},
     };
-    m_emit(env.dump());
+    m_emit(env);
 }
 
 // [C3] Insert (or overwrite) a preview cache entry at MRU; evict at cap.
@@ -1287,7 +1274,7 @@ void BridgeDispatcher::DrainPreviewResults()
                              {"flattenAlpha", r.flattenAlpha},
                              {"status", r.status}}},
             };
-            m_emit(env.dump());
+            m_emit(env);
         }
     }
 }
@@ -1358,7 +1345,7 @@ void BridgeDispatcher::EmitDirtyChanged()
         {"kind",    "dirty/changed"},
         {"payload", {{"dirty", m_dirty}}},
     };
-    m_emit(env.dump());
+    m_emit(env);
 }
 
 void BridgeDispatcher::EmitCloseRequested()
@@ -1369,7 +1356,7 @@ void BridgeDispatcher::EmitCloseRequested()
         {"kind",    "app/close-requested"},
         {"payload", json::object()},
     };
-    m_emit(env.dump());
+    m_emit(env);
 }
 
 void BridgeDispatcher::EmitRecentChanged()
@@ -1385,7 +1372,7 @@ void BridgeDispatcher::EmitRecentChanged()
         {"kind",    "recent/changed"},
         {"payload", {{"paths", paths}}},
     };
-    m_emit(env.dump());
+    m_emit(env);
 }
 
 // Deserialize a ParticleSystem snapshot from an UndoStack entry and
@@ -1479,7 +1466,7 @@ void BridgeDispatcher::ApplyUndoSnapshot(const std::vector<char>& buf,
                                        ? json(nullptr)
                                        : json(m_selectedEmitterId)}}},
         };
-        m_emit(env.dump());
+        m_emit(env);
     }
 
     // Restore the reference-object transform that rode with this
@@ -1585,7 +1572,7 @@ void BridgeDispatcher::EmitStatsTick(float fps, int emitters,
                     {"attemptedCount", refusal.attemptedCount},
                 }},
             };
-            m_emit(env.dump());
+            m_emit(env);
             // The engine's SpawnerDriver self-disabled on the refusal
             // (enabled=false), but the dispatcher-owned config + the web's
             // panel toggle do not yet know. Mirror spawner/stop through the
@@ -1620,7 +1607,7 @@ void BridgeDispatcher::EmitStatsTick(float fps, int emitters,
             {"overload",  overload},
         }},
     };
-    m_emit(env.dump());
+    m_emit(env);
 }
 
 void BridgeDispatcher::EmitSpawnerActiveCount(int count)
@@ -1631,7 +1618,7 @@ void BridgeDispatcher::EmitSpawnerActiveCount(int count)
         {"kind",    "spawner/active-count"},
         {"payload", {{"count", count}}},
     };
-    m_emit(env.dump());
+    m_emit(env);
 }
 
 bool BridgeDispatcher::EmitWindowState(bool maximized)
@@ -1642,7 +1629,7 @@ bool BridgeDispatcher::EmitWindowState(bool maximized)
         {"kind",    "window/state"},
         {"payload", {{"maximized", maximized}}},
     };
-    m_emit(env.dump());
+    m_emit(env);
     return true;
 }
 
@@ -1654,7 +1641,7 @@ bool BridgeDispatcher::EmitAutosaveHealth(bool healthy)
         {"kind",    "autosave/health"},
         {"payload", {{"healthy", healthy}}},
     };
-    m_emit(env.dump());
+    m_emit(env);
     return true;
 }
 

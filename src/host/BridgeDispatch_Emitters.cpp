@@ -220,7 +220,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
                 {"kind",    "emitters/selected"},
                 {"payload", json{{"id", newId < 0 ? json(nullptr) : json(newId)}}},
             };
-            m_emit(env.dump());
+            m_emit(env);
         }
 
         // engine/state/changed so the snapshot's selectedEmitterId is
@@ -2466,7 +2466,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
                             {"kind",    "emitters/selected"},
                             {"payload", json{{"id", json(m_selectedEmitterId)}}},
                         };
-                        m_emit(env.dump());
+                        m_emit(env);
                     }
                     break;
                 }

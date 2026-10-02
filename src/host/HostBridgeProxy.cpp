@@ -18,6 +18,7 @@
 #include <cstring>
 #include <stdexcept>
 #include "StringConv.h"   // host::Utf8ToWide / WideToUtf8 (consolidated, DRY audit cpp-host-0)
+#include "BridgeWire.h"   // SerializeBridgeEnvelope (non-throwing on invalid UTF-8)
 #include "third_party/nlohmann/json.hpp"
 
 #pragma comment(lib, "OleAut32.lib")
@@ -105,12 +106,14 @@ HRESULT STDMETHODCALLTYPE HostBridgeProxy::Invoke(DISPID dispIdMember, REFIID /*
             // pre-fix this concatenated e.what() into a hand-rolled JSON
             // string, so quotes/backslashes/control chars in exception
             // text would malform the JSON — defeating the entire purpose
-            // of the catch.
-            res = nlohmann::json{
+            // of the catch. Serialized via SerializeBridgeEnvelope: e.what()
+            // can carry non-UTF-8 bytes, and a default dump() would throw
+            // again from inside this catch, out of IDispatch::Invoke.
+            res = SerializeBridgeEnvelope(nlohmann::json{
                 {"type",  "res"},
                 {"ok",    false},
                 {"error", e.what() ? e.what() : "(no message)"},
-            }.dump();
+            });
         }
         catch (...)
         {
