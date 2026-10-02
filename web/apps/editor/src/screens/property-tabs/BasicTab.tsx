@@ -50,6 +50,10 @@ export function BasicTab({
   const burstsEnabled = mode === "bursts";
   const continuousEnabled = mode === "continuous";
   const weatherEnabled = mode === "weather";
+  const emitOffsetDisabled = properties.emitFromMesh === EMIT_FROM_MESH_DISABLE;
+  const emitOffsetHelp = emitOffsetDisabled
+    ? "Available when Emit mode is not Disable."
+    : "Saved in the file. This preview does not use it.";
   return (
     <div className="inspector basic-tab">
       {/* Name row — custom 60px 1fr grid per design source's
@@ -241,6 +245,7 @@ export function BasicTab({
         />
         <FieldSelect
           label="Emit mode:"
+          help="Saved in the file. This preview does not use it."
           value={properties.emitFromMesh}
           options={EMIT_FROM_MESH_OPTIONS}
           onCommit={(v) => onCommit({ emitFromMesh: v })}
@@ -249,10 +254,11 @@ export function BasicTab({
         />
         <FieldSpinner
           label="Emit offset:"
+          help={emitOffsetHelp}
           value={properties.emitFromMeshOffset}
           step={0.1}
           unit="units"
-          disabled={properties.emitFromMesh === EMIT_FROM_MESH_DISABLE}
+          disabled={emitOffsetDisabled}
           onCommit={(v) => onCommit({ emitFromMeshOffset: v })}
         />
       </Section>

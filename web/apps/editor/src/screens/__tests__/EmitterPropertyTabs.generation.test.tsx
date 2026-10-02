@@ -12,6 +12,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render as rtlRender, screen, fireEvent } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import type { ReactElement, ReactNode } from "react";
 import { BasicTab } from "../EmitterPropertyTabs";
@@ -119,6 +120,8 @@ describe("BasicTab — tri-state Generation mutex", () => {
       ["Freeze time:", "Freezes emitter time after this many seconds, counting Skip time; 0 or a value below Skip time disables freezing."],
       ["Minimum lifetime:", "Percent of maximum lifetime; each particle gets a random lifespan between that fraction and the maximum."],
       ["Link particles to instance", "Makes already-spawned particles follow the effect instance's position, without rotating them."],
+      ["Emit mode:", "Saved in the file. This preview does not use it."],
+      ["Emit offset:", "Available when Emit mode is not Disable."],
     ] as const;
     const ids: string[] = [];
     for (const [label, help] of descriptions) {
@@ -129,9 +132,49 @@ describe("BasicTab — tri-state Generation mutex", () => {
       expect(document.getElementById(id!)).toHaveTextContent(help);
     }
     expect(new Set(ids).size).toBe(descriptions.length);
-    expect(screen.getByRole("combobox", { name: "Emit mode:" })).not.toHaveAttribute("aria-describedby");
-    expect(screen.getByLabelText("Emit offset:")).not.toHaveAttribute("aria-describedby");
     expect(screen.getByLabelText("Emit offset:")).toBeDisabled();
+  });
+
+  it("disabled Emit offset explains the Emit mode dependency without committing on keyboard activation", async () => {
+    const user = userEvent.setup();
+    renderWithMode(false, false);
+    const control = screen.getByLabelText("Emit offset:");
+    const id = control.getAttribute("aria-describedby");
+    expect(control).toBeDisabled();
+    expect(id).toBeTruthy();
+    expect(document.getElementById(id!)).toHaveAttribute("hidden");
+    expect(document.getElementById(id!)).toHaveTextContent("Available when Emit mode is not Disable.");
+    const label = screen.getByText("Emit offset:");
+    expect(label).toHaveAttribute("tabindex", "0");
+    expect(label).toHaveAttribute("aria-describedby", id);
+    screen.getByRole("combobox", { name: "Emit mode:" }).focus();
+    await user.tab();
+    expect(label).toHaveFocus();
+    await user.keyboard("{Enter} ");
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it.each([1, 2, 3])("enabled Emit offset describes preview behaviour and preserves its commit payload in Emit mode %s", (emitFromMesh) => {
+    const properties = { ...makeFixtureProperties(0), emitFromMesh };
+    render(<BasicTab properties={properties} onCommit={onCommit} />);
+    const ids = ["Emit mode:", "Emit offset:"].map((label) => {
+      const control = screen.getByLabelText(label);
+      const id = control.getAttribute("aria-describedby");
+      expect(control).toBeEnabled();
+      expect(id).toBeTruthy();
+      expect(document.getElementById(id!)).toHaveAttribute("hidden");
+      expect(document.getElementById(id!)).toHaveTextContent("Saved in the file. This preview does not use it.");
+      expect(document.getElementById(id!)).not.toHaveTextContent("Available when Emit mode is not Disable.");
+      expect(screen.getByText(label)).not.toHaveAttribute("tabindex");
+      return id;
+    });
+    expect(new Set(ids).size).toBe(2);
+    const control = screen.getByLabelText("Emit offset:");
+    fireEvent.focus(control);
+    fireEvent.change(control, { target: { value: "2.5" } });
+    fireEvent.blur(control);
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    expect(onCommit).toHaveBeenCalledWith({ emitFromMeshOffset: 2.5 });
   });
 
   it("help preserves timing, minimum-lifetime and linking commit payloads", () => {
