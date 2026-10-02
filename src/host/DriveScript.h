@@ -87,8 +87,8 @@ inline bool IsAllowedBridgeKind(const std::string& kind)
     // Render-state setter like the rest of this block, and the only way a drive
     // step can put a real game dome on the device — which is what the
     // GPU-resource assertion needs (2026-07 audit). Persistence is not a concern
-    // here: PersistSkydomeIndex is already gated on !m_ephemeral, and --drive is
-    // ephemeral by construction.
+    // here: PersistSkydomeIndex is already gated on PersistsUserState(), which
+    // is false in --drive (automation mode) by construction.
     if (kind == "engine/set/skydome-slot")     return true;
     if (kind == "engine/state/snapshot")   return true;   // read-only state query (no modal/mutation/persistence) — lets assert-state check /dirty, /ground, …
     if (kind == "file/open")               return true;   // path-required (checked separately)

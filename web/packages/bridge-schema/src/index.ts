@@ -255,7 +255,7 @@ export type EngineStateDto = {
   // system has never been saved (untitled). `dirty` is true if any
   // engine mutation has occurred since the last file/new/open/save
   // success — drives the window title's `*` indicator and the
-  // SaveChangesPrompt on destructive ops (New / Open / Recent).
+  // SaveChangesDialog on destructive ops (New / Open / Recent).
   currentFilePath: string | null;
   dirty: boolean;
 
@@ -654,8 +654,12 @@ export type AutosaveOrphan = {
 
 export type Request =
   // File / recents
-  | { kind: "file/new";                   params: Record<string, never> }
-  | { kind: "file/open";                  params: { path?: string; filter?: "alo" | "skydome" | "ground" } }   // path undef = native picker; filter selects lpstrFilter (default "alo")
+  // file/new and file/open (default "alo" filter) replace the document. The
+  // host refuses them with { ok: false, error: "unsaved-changes" } while it is
+  // dirty unless `discardUnsaved: true` says the user chose Don't Save
+  // (automation and --test-host runs are exempt).
+  | { kind: "file/new";                   params: { discardUnsaved?: true } }
+  | { kind: "file/open";                  params: { path?: string; filter?: "alo" | "skydome" | "ground"; discardUnsaved?: true } }   // path undef = native picker; filter selects lpstrFilter (default "alo")
   | { kind: "file/pick-open";             params: { filter?: "alo" | "skydome" | "ground" } }   // NON-MUTATING picker: returns the chosen path WITHOUT loading it as the active doc (release-audit #2)
   | { kind: "file/save";                  params: { path?: string } }   // path undef = native picker
   | { kind: "file/save-as";               params: Record<string, never> } // always opens native picker
@@ -1129,7 +1133,7 @@ export type Request =
 // at `StaleResponseKinds`.
 export interface ResponseMap {
   // File
-  "file/new": Record<string, never>;
+  "file/new": Record<string, never> | { ok: false; error: "unsaved-changes" };
   "file/open": { ok: true; path?: string } | { ok: false; error: string };
   "file/pick-open": { ok: true; path?: string } | { ok: false; error: string };
   "file/save": { ok: true; path?: string } | { ok: false; error: string };

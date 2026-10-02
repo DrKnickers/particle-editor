@@ -14,7 +14,7 @@
 #include "engine_internal.h"
 #include "exceptions.h"
 #include "utils.h"
-#include "resource.h"
+#include "Resources/resource.h"
 #include "EmitterInstance.h"      // EmitterInstance::Vertex (world-line/tri/ribbon draws)
 #include "GizmoSizing.h"          // pure screen-uniform gizmo-handle formula
 #include "PlaneHandle.h"          // pure ground-plane handle math

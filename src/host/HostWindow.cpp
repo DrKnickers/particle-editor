@@ -515,19 +515,6 @@ std::wstring AppendQueryParam(const std::wstring& url, const wchar_t* param)
 LRESULT CALLBACK HostMainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 LRESULT CALLBACK HostViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 
-// Custom message posted when composition setup fails after the async
-// CreateCoreWebView2CompositionController dispatch, or when a live Present1
-// reports a restart-required DXGI device state. wParam carries the failure
-// HRESULT. Composition is a hard requirement, so the handler surfaces a clear
-// fatal error and exits (FailFatalComposition).
-static const UINT WM_APP_COMPOSITION_FALLBACK = WM_APP + 1;
-
-// Posted by the ProcessFailed handler when the web layer is declared dead
-// (WebViewCrashPolicy.h). Like the composition fallback above, the handler runs
-// on the message loop, off the WebView2 callback stack, because an interactive
-// session shows a modal and destroys the window from it.
-static const UINT WM_APP_WEB_DEAD = WM_APP + 5;
-
 } // namespace
 
 // -----------------------------------------------------------------------------
@@ -937,12 +924,13 @@ struct HostWindowImpl
     // WebMessageReceived to this thread's message pump), so a plain non-atomic
     // bool is correct: no atomic/volatile needed.
     bool         m_uiReady = false;
-    // --drive <script.json>: scripted non-CDP composite capture. m_ephemeral
-    // (true in drive mode) suppresses ALL persistence (settings/MRU/mod-layer/
-    // autosave) and isolates the WebView2 profile + log per-PID so a --drive
-    // run never perturbs a concurrently-running daily-driver editor.
+    // --drive <script.json>: scripted non-CDP composite capture. m_driveMode
+    // (true only in drive mode) routes the drive pump branch and its exit
+    // code. Persistence isolation (settings/MRU/mod-layer/autosave, per-PID
+    // WebView2 profile + log) is m_automationMode below, which --record shares,
+    // so a --drive run never perturbs a concurrently-running daily-driver editor.
     std::wstring m_driveScriptPath;
-    bool         m_ephemeral = false;
+    bool         m_driveMode = false;
     // --record <timeline.json>: deterministic clip recording. m_recordMode routes
     // the record pump branch; m_automationMode (drive OR record) gates persistence
     // — keep them separate so a --record run takes the persistence isolation but
@@ -1227,23 +1215,28 @@ struct HostWindowImpl
         , m_captureHasSunI(hasSunI)
         , m_captureSunIntensity(sunIntensity)
         , m_driveScriptPath(driveScriptPath)
-        , m_ephemeral(!driveScriptPath.empty())
+        , m_driveMode(!driveScriptPath.empty())
         , m_recordScriptPath(recordScriptPath)
         , m_recordMode(!recordScriptPath.empty())
         , m_automationMode(!driveScriptPath.empty() || !recordScriptPath.empty())
         , m_perfWebViewProfile(perfWebViewProfile)
         , layout(nullptr)
         , accelerator()
-        // Ephemeral = every headless mode — the same set IsFullyInteractive()
-        // excludes (capture / drive-or-record / test-host). None of them may
-        // rewrite the daily driver's persisted mod stack, and that includes the
-        // startup write-back via RestoreLastLayerStack -> SetLayerStack: with a
+        // Persistence is suppressed in every headless mode — the same set
+        // IsFullyInteractive() excludes (capture / drive-or-record / test-host),
+        // except that ALO_SETTINGS_LIVE lifts the test-host gate exactly as it
+        // does for the dispatcher's settings and mods/set-layers writes. None of
+        // these runs may rewrite the daily driver's persisted mod stack: with a
         // mod folder temporarily unavailable (unmounted drive), a capture run
         // would otherwise ghost-drop those layers and PERSIST the reduced stack
-        // (2026-07 audit follow-up). Previously only drive/record were covered.
+        // (2026-07 audit follow-up). Startup RestoreLastLayerStack never writes
+        // regardless. Computed from the ctor arguments, not the m_* flags: this
+        // member is declared (so initialized) before them.
         , modManager(std::make_unique<ModManager>(&fil, gameRoots_,
-              !driveScriptPath.empty() || !recordScriptPath.empty() ||
-              !captureAlo.empty() || !captureRef.empty() || testHost))
+              /*suppressPersistence=*/!IsFullyInteractiveSession(
+                  !captureAlo.empty() || !captureRef.empty(),
+                  !driveScriptPath.empty() || !recordScriptPath.empty(),
+                  testHost && !ReadSettingsLiveEnv())))
     {
         // [world-lit] capture lighting colours (arrays can't init in list).
         m_captureAmbient[0] = ambR; m_captureAmbient[1] = ambG; m_captureAmbient[2] = ambB;
@@ -1553,7 +1546,7 @@ void HostWindowImpl::Log(const char* fmt, ...)
 // or the WebView2 composition controller can't be brought up or kept alive,
 // the viewport would be a permanent black window, so we surface a clear modal
 // error and exit cleanly instead. Reached from synchronous setup failures and
-// the WM_APP_COMPOSITION_FALLBACK handler. host.log is flushed first so the
+// the WM_APP_COMPOSITION_FATAL handler. host.log is flushed first so the
 // failure HRESULT survives the hard exit.
 [[noreturn]] void HostWindowImpl::FailFatalComposition(HRESULT hr)
 {
@@ -1986,7 +1979,7 @@ void HostWindowImpl::RenderD3D9()
             m_compositionFatalPending = true;
             Log("[host] composition: Present1 requires restart hr=0x%08lx\n",
                 static_cast<unsigned long>(compositeResult.hr));
-            if (!PostMessageW(hMain, WM_APP_COMPOSITION_FALLBACK,
+            if (!PostMessageW(hMain, WM_APP_COMPOSITION_FATAL,
                               static_cast<WPARAM>(compositeResult.hr), 0))
             {
                 FailFatalComposition(compositeResult.hr);
@@ -2524,7 +2517,7 @@ HRESULT HostWindowImpl::InitWebView2()
                     // terminal message used by async controller failures.
                     Log("[host] composition: controller create dispatch FAILED hr=0x%08lx\n",
                         controllerCreateHr);
-                    PostMessageW(hMain, WM_APP_COMPOSITION_FALLBACK,
+                    PostMessageW(hMain, WM_APP_COMPOSITION_FATAL,
                                  static_cast<WPARAM>(controllerCreateHr), 0);
                 }
                 return controllerCreateHr;
@@ -3166,7 +3159,7 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
         // on the next message-loop iteration. PostMessage so this callback
         // can unwind first.
         HRESULT failHr = (chr == S_OK) ? E_FAIL : chr;
-        PostMessageW(hMain, WM_APP_COMPOSITION_FALLBACK, static_cast<WPARAM>(failHr), 0);
+        PostMessageW(hMain, WM_APP_COMPOSITION_FATAL, static_cast<WPARAM>(failHr), 0);
         return failHr;
     }
     m_compositionController = ctl;
@@ -3192,7 +3185,7 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
     {
         Log("[host] composition: QI to ICoreWebView2Controller failed hr=0x%08lx\n", qihr);
         // Composition is required (no HWND fallback): signal a fatal error.
-        PostMessageW(hMain, WM_APP_COMPOSITION_FALLBACK, static_cast<WPARAM>(qihr), 0);
+        PostMessageW(hMain, WM_APP_COMPOSITION_FATAL, static_cast<WPARAM>(qihr), 0);
         return qihr;
     }
 
@@ -3201,7 +3194,7 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
     {
         Log("[host] composition: shared controller setup failed hr=0x%08lx\n", setupHr);
         // Composition is required (no HWND fallback): signal a fatal error.
-        PostMessageW(hMain, WM_APP_COMPOSITION_FALLBACK, static_cast<WPARAM>(setupHr), 0);
+        PostMessageW(hMain, WM_APP_COMPOSITION_FATAL, static_cast<WPARAM>(setupHr), 0);
         return setupHr;
     }
 
@@ -3288,7 +3281,7 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
             // (Engine-visual attach below is DIFFERENT — that failure keeps
             // the chrome usable, so it stays soft.)
             Log("[host] composition: Compositor::AttachWebView2 FAILED hr=0x%08lx — composition-class failure\n", bhr);
-            PostMessageW(hMain, WM_APP_COMPOSITION_FALLBACK, static_cast<WPARAM>(bhr), 0);
+            PostMessageW(hMain, WM_APP_COMPOSITION_FATAL, static_cast<WPARAM>(bhr), 0);
             return bhr;
         }
         // Seed the tree to the current client size so the first paint
@@ -3316,7 +3309,7 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
             if (FAILED(ehr))
             {
                 Log("[host] composition: AttachEngineVisual hr=0x%08lx — composition mode continues with engine visual NOT attached (viewport area will be empty)\n", ehr);
-                // Do NOT PostMessage(WM_APP_COMPOSITION_FALLBACK) — that
+                // Do NOT PostMessage(WM_APP_COMPOSITION_FATAL) — that
                 // path is for chrome-itself-broken failures; engine-
                 // attach failures keep the chrome usable in composition
                 // mode.
@@ -4168,7 +4161,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     // HRESULT. PostMessage'd from OnCompositionControllerReady so the WebView2
     // callback unwinds before we tear down (the modal + exit happens here on
     // the message-loop thread, off the callback stack).
-    case WM_APP_COMPOSITION_FALLBACK:
+    case WM_APP_COMPOSITION_FATAL:
         FailFatalComposition(static_cast<HRESULT>(wp));   // [[noreturn]]
 
     // Cursor sync. Under composition the
@@ -5813,7 +5806,7 @@ int HostWindowImpl::Run(int nCmdShow)
     }
     Log("[host] WebView2 runtime detected — proceeding\n");
 
-    // GDI+ init for AlphaCompositor::CaptureSnapshotPng (the
+    // GDI+ init for AlphaCompositor::CaptureSnapshotJpegBase64 (the
     // modal frosted-glass backdrop). One-time per process; matching
     // Gdiplus::GdiplusShutdown runs right before CoUninitialize at the
     // bottom of this function. The two earlier early-return paths
@@ -5933,7 +5926,7 @@ int HostWindowImpl::Run(int nCmdShow)
     };
     dispatcher = std::make_unique<BridgeDispatcher>(/*engine*/nullptr, layout, accelerator, emitFn,
                                                     /*useTestHost*/useTestHost,
-                                                    /*driveMode*/m_automationMode);
+                                                    /*automationMode*/m_automationMode);
     dispatcher->SetUndoStack(&undoStack);
     dispatcher->SetHostHwnd(hMain);
     // [#510] Throttle the panel-refresh broadcasts during a --record run only
@@ -6154,7 +6147,7 @@ int HostWindowImpl::Run(int nCmdShow)
         // mode, so this must precede the !captureMode idle branch). Renders
         // every iteration; never blocks. States: wait app/ready -> build runner
         // -> one-shot DComp settle -> Tick per frame.
-        if (engine && m_ephemeral)
+        if (engine && m_driveMode)
         {
             RenderD3D9();
             const double elapsedMs = driveFreq > 0
@@ -6239,13 +6232,13 @@ int HostWindowImpl::Run(int nCmdShow)
         // --drive with a null engine (D3D9/device init failed): the drive
         // branch above can't run, so exit non-zero rather than spin forever or
         // return a silent exit-0 with nothing captured.
-        else if (m_ephemeral && !engine)
+        else if (m_driveMode && !engine)
         {
             Log("[drive] engine unavailable -- aborting drive run\n");
             driveExitCode = 5;
             quit = true;
         }
-        // --record: own top-level branch (captureMode/m_ephemeral are false in
+        // --record: own top-level branch (captureMode/m_driveMode are false in
         // record mode, so this precedes the !captureMode idle branch). States:
         // wait app/ready -> parse timeline + one-time startup gate (seed/resize/
         // pause/open/catalog) + build runner -> Tick per emitted frame.
@@ -6514,7 +6507,7 @@ int HostWindowImpl::Run(int nCmdShow)
     if (dispatcher) dispatcher->ShutdownPreviewWorker();
     // Matching shutdown for the GdiplusStartup above. Safe
     // here because the message pump has drained: no dispatcher
-    // handlers (CaptureSnapshotPng et al) can run after WM_QUIT.
+    // handlers (CaptureSnapshotJpegBase64 et al) can run after WM_QUIT.
     if (gdiplusToken) Gdiplus::GdiplusShutdown(gdiplusToken);
     // Balance CoInitializeEx only if it succeeded (S_OK or S_FALSE); after a
     // failure (e.g. RPC_E_CHANGED_MODE) there is nothing of ours to undo.
@@ -6528,7 +6521,7 @@ int HostWindowImpl::Run(int nCmdShow)
     // an explicit 0/2 so a script can detect a bad load / failed write.
     if (captureMode) return captureRunner.ExitCode();
     // --drive likewise breaks via `quit`; return the runner's explicit code.
-    if (m_ephemeral) return driveExitCode;
+    if (m_driveMode) return driveExitCode;
     if (m_recordMode) return rec.exitCode;
     return static_cast<int>(m.wParam);
 }

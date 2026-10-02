@@ -1116,7 +1116,7 @@ int main()
             hostSource.find("ClassifyComposedFrameResult(compositeResult)",
                             compositeResult);
         const size_t compositeFatalPost =
-            hostSource.find("WM_APP_COMPOSITION_FALLBACK",
+            hostSource.find("WM_APP_COMPOSITION_FATAL",
                             compositeClassify);
         const std::string compositeBinding =
             compositeResult != std::string::npos &&
@@ -2086,7 +2086,7 @@ int main()
                    Contains(layoutSource,
                             "m_engine->DeviceCallsBlocked()") &&
                    Contains(layoutSource,
-                            "CaptureSnapshotPng(") &&
+                            "CaptureSnapshotJpegBase64(") &&
                    Contains(layoutSource,
                             "CaptureSnapshotToFile("),
                    true);

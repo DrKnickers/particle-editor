@@ -19,8 +19,7 @@
 
 import { useEffect, useRef } from "react";
 import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
-import { promptSaveChanges } from "@/lib/file-state";
-import { runFileOp } from "@/lib/file-op";
+import { replaceDocument, runFileOp } from "@/lib/file-op";
 import { toggleDock } from "@/lib/right-dock";
 import { useEmitterSelectionStore } from "@/lib/emitter-selection";
 import { moveEmitters } from "@/lib/emitter-reorder";
@@ -88,14 +87,10 @@ export function useAppAccelerators(bridge: Bridge): void {
       switch (combo) {
         // ── File ──
         case "Ctrl+N":
-          promptSaveChanges(async () => {
-            await bridge.request({ kind: "file/new", params: {} });
-          });
+          replaceDocument(bridge, { kind: "file/new", params: {} });
           break;
         case "Ctrl+O":
-          promptSaveChanges(async () => {
-            await runFileOp(bridge, { kind: "file/open", params: {} });
-          });
+          replaceDocument(bridge, { kind: "file/open", params: {} });
           break;
         case "Ctrl+S":
           // runFileOp surfaces any failure in the error modal and then

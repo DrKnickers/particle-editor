@@ -407,11 +407,13 @@ void ParticleSystem::Emitter::setDefaults()
 
 	// These have an unknown function
 	unknown15 = true;
+	unknown2b = false;
 	unknown44 = false;
 	unknown11 =   0.0f;
 	has11     = false;
 	unknown3f =  50.00f;
 	unknown06 = 0;
+	unknown49 = 0;
 }
 
 //

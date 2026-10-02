@@ -248,6 +248,62 @@ int main()
     host::WriteRegSz(L"BloomEnabled", L"wrong type", testPath.c_str());
     CHECK(!Read(testPath, false).bloomEnabled);
 
+    // The shared lighting writer stores the same names/types the reader takes
+    // back (the settings/lighting bridge handlers use this pair).
+    {
+        host::LightingValues written;
+        written.sunIntensity = 0.75f;  written.sunZ = 45.0f;   written.sunTilt = 10.0f;
+        written.sunAmbient = 0x00111213; written.sunSpecular = 0x00141516;
+        written.sunDiffuse = 0x00171819; written.sunShadow = 0x001A1B1C;
+        written.forceAlign = false;
+        written.fill1Intensity = 0.25f; written.fill1Z = 100.0f; written.fill1Tilt = -5.0f;
+        written.fill1Diffuse = 0x001D1E1F;
+        written.fill2Intensity = 0.35f; written.fill2Z = 200.0f; written.fill2Tilt = -6.0f;
+        written.fill2Diffuse = 0x00202122;
+        if (HKEY k = host::OpenSettingsKeyForWrite(testPath.c_str()))
+        {
+            host::WriteLightingSettings(k, written);
+            RegCloseKey(k);
+        }
+        HKEY key = host::OpenSettingsKeyForRead(testPath.c_str());
+        CHECK(key != nullptr);
+        if (key)
+        {
+            CheckLightingSchema(key);
+            const host::LightingValues back = host::ReadLightingSettings(key);
+            CHECK(back.sunIntensity == 0.75f && back.sunZ == 45.0f && back.sunTilt == 10.0f);
+            CHECK(back.sunAmbient == 0x00111213 && back.sunSpecular == 0x00141516 &&
+                  back.sunDiffuse == 0x00171819 && back.sunShadow == 0x001A1B1C);
+            CHECK(!back.forceAlign);
+            CHECK(back.fill1Intensity == 0.25f && back.fill1Z == 100.0f &&
+                  back.fill1Tilt == -5.0f && back.fill1Diffuse == 0x001D1E1F);
+            CHECK(back.fill2Intensity == 0.35f && back.fill2Z == 200.0f &&
+                  back.fill2Tilt == -6.0f && back.fill2Diffuse == 0x00202122);
+            RegCloseKey(key);
+        }
+        const host::LightingValues defaults = host::ReadLightingSettings(nullptr);
+        CHECK(defaults.sunIntensity == host::kSunIntensityDefault &&
+              defaults.forceAlign == host::kForceAlignDefault &&
+              defaults.fill2Diffuse == host::Fill2DiffuseColorDefault());
+    }
+
+    // REG_MULTI_SZ helpers: the raw characters round-trip, and a missing or
+    // wrong-typed value reads as empty.
+    {
+        const std::wstring blob(L"C:\\one\0D:\\two\0\0", 15);
+        CHECK(host::WriteRegMultiSz(L"MultiSzProbe", blob, testPath.c_str()));
+        HKEY key = host::OpenSettingsKeyForRead(testPath.c_str());
+        CHECK(key != nullptr);
+        if (key)
+        {
+            const std::vector<wchar_t> raw = host::ReadRegMultiSz(key, L"MultiSzProbe");
+            CHECK(std::wstring(raw.begin(), raw.end()) == blob);
+            CHECK(host::ReadRegMultiSz(key, L"NoSuchMultiSz").empty());
+            CHECK(host::ReadRegMultiSz(key, L"BloomEnabled").empty());
+            RegCloseKey(key);
+        }
+    }
+
     std::printf("%s\n", g_fail ? "=== FAILED ===" : "=== ALL PASS ===");
     return g_fail ? 1 : 0;
 }

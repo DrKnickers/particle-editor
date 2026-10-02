@@ -471,7 +471,7 @@ int main()
             "ShouldFailCompositionControllerDispatch(controllerCreateHr)",
             createCall);
         const size_t fatalPost = source.find(
-            "PostMessageW(hMain, WM_APP_COMPOSITION_FALLBACK",
+            "PostMessageW(hMain, WM_APP_COMPOSITION_FATAL",
             failureCheck);
         const size_t fatalValue = source.find(
             "static_cast<WPARAM>(controllerCreateHr)", fatalPost);

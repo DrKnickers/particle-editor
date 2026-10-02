@@ -120,6 +120,42 @@ int main()
         }
     }
 
+    // --- 3. Flush() reaches FlushFileBuffers and reports its failure --------
+    // The atomic save flushes the temp before renaming it over the document;
+    // a flush that fails must throw so that rename never happens.
+    {
+        const std::wstring path = TempPath(L"pe_pfw_flush.bin");
+        DeleteFileW(path.c_str());
+
+        bool flushThrew = false;
+        try
+        {
+            PhysicalFile* f = new PhysicalFile(path, PhysicalFile::WRITE);
+            f->write("flush", 5);
+            try { f->Flush(); }
+            catch (...) { flushThrew = true; }
+            f->Release();
+        }
+        catch (...) { flushThrew = true; }
+        CHECK(!flushThrew, "Flush() on a written WRITE-mode file succeeds");
+
+        // FlushFileBuffers needs write access, so a READ handle makes it fail.
+        bool writeException = false, otherException = false;
+        PhysicalFile* r = NULL;
+        try
+        {
+            r = new PhysicalFile(path, PhysicalFile::READ);
+            r->Flush();
+        }
+        catch (WriteException&) { writeException = true; }
+        catch (...) { otherException = true; }
+        if (r) r->Release();
+        CHECK(writeException && !otherException,
+              "a failing FlushFileBuffers throws WriteException");
+
+        DeleteFileW(path.c_str());
+    }
+
     std::printf("%s\n", g_fail ? "=== FAILED ===" : "=== ALL PASS ===");
     std::printf("(%d failure%s)\n", g_fail, g_fail == 1 ? "" : "s");
     return g_fail ? 1 : 0;

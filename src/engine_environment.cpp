@@ -9,7 +9,7 @@
 #include "engine_internal.h"
 #include "exceptions.h"
 #include "utils.h"
-#include "resource.h"
+#include "Resources/resource.h"
 #include "ResourceLimits.h"   // kMaxTextureAssetBytes (asset-read caps)
 #include "AssetPathSafety.h"   // IsLocalCustomAssetPath (remote-path refusal)
 #include "AloModel.h"          // AloShaderParam members (ApplyAloMaterialParams)

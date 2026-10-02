@@ -1,9 +1,10 @@
 // CaptureRunner.cpp — the --capture / --capture-ref one-shot, extracted
 // verbatim from HostWindowImpl::Run (Phase C of
-// tasks/2026-07-06-heavyweight-refactor-plan.md). The alias preludes bind
-// the old Run()-scope names to the Deps references so the moved segments
-// below are unchanged except: the gate's `continue;` became
-// `return TickResult::Running;` and each method ends with its return.
+// tasks/2026-07-06-heavyweight-refactor-plan.md). Init's alias prelude binds
+// the old Run()-scope names to the Deps references so the moved setup segment
+// below is unchanged apart from reading the CLI values from m_params and
+// recording failures on the ticker. The per-frame state machine is
+// CaptureTicker; this file wires its hooks to the live host.
 
 #include "CaptureRunner.h"
 
@@ -11,7 +12,7 @@
 #include "CaptureGoldenProfile.h"
 #include "HostRunUtil.h"       // PerfQpcNow/PerfQpcFreq/QpcMs/DeriveSibling
 #include "SettingsRegistry.h"
-#include "WindowCapture.h"     // host::CaptureWindowToPng
+#include "WindowCapture.h"     // host::CaptureWindowToPng (the ticker's composite hook)
 
 #include "../ModManager.h"
 #include "../ParticleSystem.h"
@@ -39,6 +40,31 @@ void CaptureRunner::Log(const char* fmt, ...)
     if (m_deps.log) m_deps.log(buf);
 }
 
+CaptureRunner::CaptureRunner(Params params, Deps deps)
+    : m_params(std::move(params)), m_deps(std::move(deps)),
+      m_ticker(m_params.captureFrames, m_params.capturePng)
+{
+    m_ticker.SetHooks(
+        [](int ms) { Sleep(ms); },
+        [] {
+            const LONGLONG freq = PerfQpcFreq();
+            return freq > 0 ? QpcMs(PerfQpcNow(), freq) : -1.0;   // QPC dead: no clock
+        },
+        [this] { return m_deps.uiReady; },
+        [this] { return m_deps.sceneRectSeen; },
+        [] { StepPreviewFrames(1); },
+        m_deps.log);
+    m_ticker.SetCaptureHooks(
+        [this](const std::wstring& path) {
+            return m_deps.alphaCompositor &&
+                   m_deps.alphaCompositor->CaptureSnapshotToFile(path);
+        },
+        [this](const std::wstring& path) {
+            return host::CaptureWindowToPng(m_deps.hMain, path);
+        },
+        [this] { return WaitForUiAndSettle(); });
+}
+
 void CaptureRunner::Init()
 {
     // Old Run()-scope names -> Deps references (verbatim-move aliases).
@@ -50,9 +76,9 @@ void CaptureRunner::Init()
     if (!engine)
     {
         Log("[capture] no engine available — cannot capture\n");
-        captureFailed = true;
+        m_ticker.MarkFailed();
     }
-    else if (!m_captureRef.empty())
+    else if (!m_params.captureRef.empty())
     {
         // [reference-model-shadows] --capture-ref: build the GameObject
         // catalog SYNCHRONOUSLY (no UI thread to freeze headlessly, and
@@ -63,7 +89,7 @@ void CaptureRunner::Init()
         // active mod was already restored at startup (WM_CREATE), so the
         // catalog builds against the user's active content automatically.
         engine->BuildCatalogSync();
-        engine->SetReferenceObject(WideToAnsi(m_captureRef));
+        engine->SetReferenceObject(WideToAnsi(m_params.captureRef));
         engine->SetReferenceObjectVisible(true);
         // Deterministic sim/shader time for --capture-ref too: freeze the
         // preview clock at a fixed anchor (stepped 1/60 per counted frame in
@@ -83,13 +109,13 @@ void CaptureRunner::Init()
                 if (!engine->GetReferenceObjectBounds(wmin, wmax))
                 {
                     Log("[capture] reference object '%ls' resolved status Ok but no renderable geometry (device/resolve issue)\n",
-                        m_captureRef.c_str());
-                    captureFailed = true;
+                        m_params.captureRef.c_str());
+                    m_ticker.MarkFailed();
                 }
                 else
                 {
                     Log("[capture] reference object '%ls' resolved ok; rendering %d frames -> %ls\n",
-                        m_captureRef.c_str(), m_captureFrames, m_capturePng.c_str());
+                        m_params.captureRef.c_str(), m_params.captureFrames, m_params.capturePng.c_str());
 
                     // [capture] Frame the whole object: fit the camera to the
                     // world-space AABB so the captured image shows the entire
@@ -126,12 +152,12 @@ void CaptureRunner::Init()
                     if (shadowCount > 0)
                     {
                         Log("[capture] reference object '%ls' has %zu shadow-volume sub-mesh(es)\n",
-                            m_captureRef.c_str(), shadowCount);
+                            m_params.captureRef.c_str(), shadowCount);
                     }
                     else
                     {
                         Log("[capture] WARNING: reference object '%ls' has NO shadow-volume sub-meshes - captured image will show no model shadow\n",
-                            m_captureRef.c_str());
+                            m_params.captureRef.c_str());
                     }
                 }  // else (bounds resolved)
             }
@@ -143,15 +169,15 @@ void CaptureRunner::Init()
                     (refStatus == ReferenceObjectStatus::LoadFailed)   ? "model failed to load (corrupt or non-mesh .alo)" :
                                                                          "unknown name / mod not active";
                 Log("[capture] ERROR: reference object '%ls' did not resolve (%s)\n",
-                    m_captureRef.c_str(), reason);
-                captureFailed = true;
+                    m_params.captureRef.c_str(), reason);
+                m_ticker.MarkFailed();
             }
         }
-        if (m_captureSkydomeSlot > 0)
+        if (m_params.captureSkydomeSlot > 0)
         {
-            const bool sok = engine->SetSkydomeSlot(m_captureSkydomeSlot);
+            const bool sok = engine->SetSkydomeSlot(m_params.captureSkydomeSlot);
             Log("[capture] skydome slot %d -> %s\n",
-                m_captureSkydomeSlot, sok ? "ok" : "FAILED");
+                m_params.captureSkydomeSlot, sok ? "ok" : "FAILED");
         }
     }
     else
@@ -159,7 +185,7 @@ void CaptureRunner::Init()
         // Clear persisted game-dome selections before any mod/catalog/fixture
         // load. Those paths may parse XML and perturb the CRT PRNG; the fixed
         // seed below must remain the final seed before spawning.
-        if (m_captureGoldenProfile)
+        if (m_params.captureGoldenProfile)
         {
             engine->SetSkydomeEnvironment(
                 engine->GetSkydomeContext(), std::string(), std::string());
@@ -178,9 +204,9 @@ void CaptureRunner::Init()
             for (const auto& mod : modManager->GetMods())
             {
                 const size_t n = mod.path.size();
-                if (n > 0 && _wcsnicmp(m_captureAlo.c_str(), mod.path.c_str(), n) == 0
-                    && (m_captureAlo.size() == n
-                        || m_captureAlo[n] == L'\\' || m_captureAlo[n] == L'/'))
+                if (n > 0 && _wcsnicmp(m_params.captureAlo.c_str(), mod.path.c_str(), n) == 0
+                    && (m_params.captureAlo.size() == n
+                        || m_params.captureAlo[n] == L'\\' || m_params.captureAlo[n] == L'/'))
                 {
                     modManager->SelectMod(mod.path);
                     Log("[capture] selected mod for .alo: %ls\n", mod.path.c_str());
@@ -193,12 +219,12 @@ void CaptureRunner::Init()
         }
 
         std::string err;
-        std::unique_ptr<ParticleSystem> loaded = LoadParticleSystem(m_captureAlo, &err);
+        std::unique_ptr<ParticleSystem> loaded = LoadParticleSystem(m_params.captureAlo, &err);
         if (!loaded)
         {
             Log("[capture] LoadParticleSystem(%ls) failed: %s\n",
-                m_captureAlo.c_str(), err.c_str());
-            captureFailed = true;
+                m_params.captureAlo.c_str(), err.c_str());
+            m_ticker.MarkFailed();
         }
         else
         {
@@ -242,37 +268,32 @@ void CaptureRunner::Init()
             // Apply the requested skydome slot so a --capture run can render
             // (and verify) particles over a background skydome. Slot 0
             // (default) leaves the solid-colour background untouched.
-            if (m_captureSkydomeSlot > 0)
+            if (m_params.captureSkydomeSlot > 0)
             {
-                const bool sok = m_captureGoldenProfile
-                    ? engine->SetEmbeddedSkydomeSlotForCapture(m_captureSkydomeSlot)
-                    : engine->SetSkydomeSlot(m_captureSkydomeSlot);
+                const bool sok = m_params.captureGoldenProfile
+                    ? engine->SetEmbeddedSkydomeSlotForCapture(m_params.captureSkydomeSlot)
+                    : engine->SetSkydomeSlot(m_params.captureSkydomeSlot);
                 Log("[capture] skydome slot %d -> %s\n",
-                    m_captureSkydomeSlot, sok ? "ok" : "FAILED");
-                if (m_captureGoldenProfile && !sok)
-                    captureFailed = true;
+                    m_params.captureSkydomeSlot, sok ? "ok" : "FAILED");
+                if (m_params.captureGoldenProfile && !sok)
+                    m_ticker.MarkFailed();
             }
-            if (ShouldReadCaptureRegistryOverrides(m_captureGoldenProfile))
+            if (ShouldReadCaptureRegistryOverrides(m_params.captureGoldenProfile))
             {
                 // Honor the persisted ShowGround setting in headless --capture too.
                 // The host path (unlike main.cpp startup) never read it, so the
                 // ground was always drawn; a clean background (registry ShowGround=0)
                 // lets a capture isolate the sprite — e.g. the spin test, where
                 // terrain-through-transparency otherwise contaminates the read.
+                if (HKEY hKey = OpenSettingsKeyForRead())
                 {
-                    HKEY hKey; DWORD gval = 1, gsz = sizeof(gval), gtype = 0;
-                    if (RegOpenKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath,
-                                      0, KEY_READ, &hKey) == ERROR_SUCCESS)
+                    DWORD gval = 1;
+                    if (ReadRegDword(hKey, L"ShowGround", gval))
                     {
-                        if (RegQueryValueExW(hKey, L"ShowGround", NULL, &gtype,
-                                             (LPBYTE)&gval, &gsz) == ERROR_SUCCESS
-                            && gtype == REG_DWORD)
-                        {
-                            engine->SetGround(gval != 0);
-                            Log("[capture] ShowGround=%lu (from registry)\n", gval);
-                        }
-                        RegCloseKey(hKey);
+                        engine->SetGround(gval != 0);
+                        Log("[capture] ShowGround=%lu (from registry)\n", gval);
                     }
+                    RegCloseKey(hKey);
                 }
                 // Harness: orbit the capture camera by CaptureCamYaw (about Up) then
                 // CaptureCamPitch (about camera-right), and optionally scale distance by
@@ -280,18 +301,14 @@ void CaptureRunner::Init()
                 // raw uint32 bit pattern (read back via (int)). Absent keys = no change.
                 // Lets a headless sweep render R(theta) for the de-flicker metric.
                 {
-                    HKEY hKey; DWORD raw, gsz, gtype;
+                    DWORD raw = 0;
                     int yawC = 0, pitchC = 0; DWORD distR = 0;
                     bool haveYaw = false, havePitch = false, haveDist = false;
-                    if (RegOpenKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath,
-                                      0, KEY_READ, &hKey) == ERROR_SUCCESS)
+                    if (HKEY hKey = OpenSettingsKeyForRead())
                     {
-                        gsz = sizeof(raw);
-                        if (RegQueryValueExW(hKey, L"CaptureCamYaw",   NULL, &gtype, (LPBYTE)&raw, &gsz) == ERROR_SUCCESS && gtype == REG_DWORD) { yawC   = (int)raw; haveYaw   = true; }
-                        gsz = sizeof(raw);
-                        if (RegQueryValueExW(hKey, L"CaptureCamPitch", NULL, &gtype, (LPBYTE)&raw, &gsz) == ERROR_SUCCESS && gtype == REG_DWORD) { pitchC = (int)raw; havePitch = true; }
-                        gsz = sizeof(raw);
-                        if (RegQueryValueExW(hKey, L"CaptureCamDist",  NULL, &gtype, (LPBYTE)&raw, &gsz) == ERROR_SUCCESS && gtype == REG_DWORD) { distR  = raw;      haveDist  = true; }
+                        if (ReadRegDword(hKey, L"CaptureCamYaw",   raw)) { yawC   = (int)raw; haveYaw   = true; }
+                        if (ReadRegDword(hKey, L"CaptureCamPitch", raw)) { pitchC = (int)raw; havePitch = true; }
+                        if (ReadRegDword(hKey, L"CaptureCamDist",  raw)) { distR  = raw;      haveDist  = true; }
                         RegCloseKey(hKey);
                     }
                     if (haveYaw || havePitch || haveDist)
@@ -339,7 +356,7 @@ void CaptureRunner::Init()
                     !engine->SkydomePrimaryHasGpuBuffers() &&
                     !engine->SkydomeSecondaryHasGpuBuffers();
                 const bool skydomeMeshOk = engine->SkydomeMeshHasGpuBuffers();
-                if (!captureFailed && groundOk && skydomeOk && sourceOk &&
+                if (!m_ticker.Failed() && groundOk && skydomeOk && sourceOk &&
                     gameDomesClear && skydomeMeshOk)
                 {
                     fputs("[capture-profile] golden capture-registry-overrides=skipped "
@@ -371,7 +388,7 @@ void CaptureRunner::Init()
                         sourceOk ? "embedded" : "other",
                         gameDomesClear ? 0 : 1,
                         skydomeMeshOk ? 1 : 0);
-                    captureFailed = true;
+                    m_ticker.MarkFailed();
                 }
             }
             // [world-lit] Drive scene lighting from the --ambient / --sun /
@@ -380,35 +397,35 @@ void CaptureRunner::Init()
             // Diffuse/Specular and derives Position from a fixed z/tilt
             // (z=0, tilt=45 — same default the restore block uses), so a lit
             // shader's per-vertex response can be verified offline.
-            if (m_captureHasAmbient)
+            if (m_params.captureHasAmbient)
             {
-                engine->SetAmbient(D3DXVECTOR4(m_captureAmbient[0],
-                                               m_captureAmbient[1],
-                                               m_captureAmbient[2], 1.0f));
+                engine->SetAmbient(D3DXVECTOR4(m_params.captureAmbient[0],
+                                               m_params.captureAmbient[1],
+                                               m_params.captureAmbient[2], 1.0f));
                 Log("[capture] ambient %.3f,%.3f,%.3f\n",
-                    m_captureAmbient[0], m_captureAmbient[1], m_captureAmbient[2]);
+                    m_params.captureAmbient[0], m_params.captureAmbient[1], m_params.captureAmbient[2]);
             }
-            if (m_captureHasSun)
+            if (m_params.captureHasSun)
             {
-                const float intensity = m_captureHasSunI ? m_captureSunIntensity : 1.0f;
+                const float intensity = m_params.captureHasSunI ? m_params.captureSunIntensity : 1.0f;
                 const float zr = D3DXToRadian(0.0f);
                 const float tr = D3DXToRadian(45.0f);
                 const float c  = cosf(tr);
                 Engine::Light L = {};
                 L.Position  = D3DXVECTOR4(c * cosf(zr), c * sinf(zr), sinf(tr), 0.0f);
                 L.Direction = D3DXVECTOR4(0, 0, 0, 0);
-                L.Diffuse   = D3DXVECTOR4(m_captureSun[0] * intensity,
-                                          m_captureSun[1] * intensity,
-                                          m_captureSun[2] * intensity, 1.0f);
-                L.Specular  = D3DXVECTOR4(m_captureSun[0] * intensity,
-                                          m_captureSun[1] * intensity,
-                                          m_captureSun[2] * intensity, 1.0f);
+                L.Diffuse   = D3DXVECTOR4(m_params.captureSun[0] * intensity,
+                                          m_params.captureSun[1] * intensity,
+                                          m_params.captureSun[2] * intensity, 1.0f);
+                L.Specular  = D3DXVECTOR4(m_params.captureSun[0] * intensity,
+                                          m_params.captureSun[1] * intensity,
+                                          m_params.captureSun[2] * intensity, 1.0f);
                 engine->SetLight(Engine::LT_SUN, L);
                 Log("[capture] sun %.3f,%.3f,%.3f intensity=%.3f\n",
-                    m_captureSun[0], m_captureSun[1], m_captureSun[2], intensity);
+                    m_params.captureSun[0], m_params.captureSun[1], m_params.captureSun[2], intensity);
             }
             Log("[capture] loaded %ls; spawned instance; rendering %d frames -> %ls\n",
-                m_captureAlo.c_str(), m_captureFrames, m_capturePng.c_str());
+                m_params.captureAlo.c_str(), m_params.captureFrames, m_params.capturePng.c_str());
         }
     }
 
@@ -470,7 +487,7 @@ void CaptureRunner::Init()
     // the camera-distance shadow drift lives on. Inert unless the env is set
     // AND a reference object resolved renderable bounds. Reuses the
     // --capture-ref 3/4 fit framing so the shadow contact is clearly visible.
-    if (!captureFailed && engine)
+    if (!m_ticker.Failed() && engine)
     {
         char mbuf[64];
         if (GetEnvironmentVariableA("ALO_CAPTURE_CAM_DIST_MULT", mbuf, sizeof(mbuf)) > 0)
@@ -505,7 +522,7 @@ void CaptureRunner::Init()
     // sub-rect of the backbuffer, mimicking the live editor's panel-inset 3D view
     // — the condition under which the soft-shadow composite's mask-UV mapping
     // matters (the "floating silhouette" bug is invisible at a full-RT viewport).
-    if (!captureFailed && engine)
+    if (!m_ticker.Failed() && engine)
     {
         char sv[8];
         if (GetEnvironmentVariableA("ALO_CAPTURE_SUBVIEWPORT", sv, sizeof(sv)) > 0 && atoi(sv) != 0)
@@ -526,158 +543,83 @@ void CaptureRunner::Init()
 
 CaptureRunner::TickResult CaptureRunner::Tick()
 {
-    // Old Run()-scope / Impl-member names -> Deps references (verbatim-move
-    // aliases; m_uiReady / m_sceneRectSeen stay owned by HostWindowImpl).
-    auto&       alphaCompositor = m_deps.alphaCompositor;
-    const HWND  hMain           = m_deps.hMain;
-    const bool& m_uiReady       = m_deps.uiReady;
-    const bool& m_sceneRectSeen = m_deps.sceneRectSeen;
-    bool&       quit            = m_quit;
+    return m_ticker.Tick() == CaptureTicker::Result::Done ? TickResult::Done
+                                                           : TickResult::Running;
+}
 
-            // Pace the sim with a fixed ~16 ms wall-clock step so
-            // RenderD3D9's real-time dt advances particles a useful
-            // amount per frame (the uncapped pump would otherwise run
-            // dozens of frames in a few ms, leaving particles bunched
-            // at the spawn point and never overlapping — which is
-            // exactly the additive-over-smoke case we need to see).
+CaptureTicker::UiWait CaptureRunner::WaitForUiAndSettle()
+{
+    const bool& m_uiReady = m_deps.uiReady;
+    bool quit = false;
+
+    // Gate the composite on the app/ready first-paint signal so it captures
+    // real chrome, not a blank WebView surface. The per-PID-isolated WebView2
+    // profile makes every run a genuine browser cold start, so the wait is
+    // real: pump + render while waiting; cap at 30s so a hung UI still yields
+    // a best-effort (clearly-named) image.
+    const LONGLONG qf = PerfQpcFreq();          // cache once (freq==0 guard)
+    const LONGLONG waitStart = PerfQpcNow();
+    const double   kUiTimeoutMs = 30000.0;
+    bool timedOut = false;
+    int  waitIters = 0;
+    while (!m_uiReady && !quit)
+    {
+        // Drain FIRST — DispatchMessage is what delivers WebView2's
+        // WebMessageReceived → OnWebMessage → m_uiReady.
+        MSG mw;
+        while (PeekMessage(&mw, nullptr, 0, 0, PM_REMOVE))
+        {
+            TranslateMessage(&mw);
+            DispatchMessage(&mw);
+            if (mw.message == WM_QUIT) quit = true;
+        }
+        if (m_uiReady || quit) break;
+        const double elapsedMs = qf > 0
+            ? QpcMs(PerfQpcNow() - waitStart, qf)
+            : static_cast<double>(++waitIters) * 16.0;  // QPC-dead fallback
+        if (elapsedMs >= kUiTimeoutMs) { timedOut = true; break; }
+        RenderD3D9();  // keep the composed surface coherent while waiting
+        MsgWaitForMultipleObjectsEx(0, nullptr, 16,
+                                    QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+    }
+
+    // Settle: after a positive signal, pump + render ~150 ms so
+    // DComp has committed the WebView visual AND the deferred
+    // scene-rect crop (SetEngineVisualTransform immediate=false,
+    // applied at the next CompositeEngineFrame) has landed before
+    // the snapshot. app/ready proves React painted, not that the
+    // host-side composition has caught up.
+    if (m_uiReady && !quit)
+    {
+        const LONGLONG settleStart = PerfQpcNow();
+        for (int i = 0; !quit; ++i)
+        {
+            MSG mw;
+            while (PeekMessage(&mw, nullptr, 0, 0, PM_REMOVE))
+            {
+                TranslateMessage(&mw);
+                DispatchMessage(&mw);
+                if (mw.message == WM_QUIT) quit = true;
+            }
+            if (quit) break;
+            const double settleMs = qf > 0
+                ? QpcMs(PerfQpcNow() - settleStart, qf)
+                : static_cast<double>(i) * 16.0;
+            if (settleMs >= 150.0) break;
+            RenderD3D9();
             Sleep(16);
-            // Layout-determinism gate: hold the frame counter until React's
-            // first paint AND first layout/scene-rect have landed — the
-            // scene-rect resizes the engine RT, so counting from process
-            // start raced it and captures came out at the pre- OR
-            // post-layout size depending on system load. 10 s cap so a
-            // changed UI degrades to the old (ungated) behavior, loudly.
-            if (!(m_uiReady && m_sceneRectSeen))
-            {
-                if (m_captureGateStartQpc == 0) m_captureGateStartQpc = PerfQpcNow();
-                const LONGLONG gqf = PerfQpcFreq();
-                const double heldMs = gqf > 0
-                    ? QpcMs(PerfQpcNow() - m_captureGateStartQpc, gqf)
-                    : 10000.0;
-                if (heldMs < 10000.0)
-                    return TickResult::Running;
-                if (!m_captureGateWarned)
-                {
-                    m_captureGateWarned = true;
-                    Log("[capture] layout gate timed out (uiReady=%d sceneRect=%d) — proceeding ungated\n",
-                        (int)m_uiReady, (int)m_sceneRectSeen);
-                    // Also on stdout: an ungated capture is racy-sized, so
-                    // golden consumers (scripts/render-goldens.mjs) must be
-                    // able to SEE the degradation and fail the scene rather
-                    // than flake against a fixed-size golden.
-                    printf("[capture] layout-gate-timeout — capture size may be pre-layout\n");
-                    fflush(stdout);
-                }
-            }
-            // Advance the frozen sim clock by exactly one 60 Hz frame per
-            // COUNTED frame (no-op unless the capture spawn path paused the
-            // preview clock above). Placed after the layout gate so gate-held
-            // pump frames render the frozen scene without advancing sim time —
-            // the captured frame is then always at sim time capturedFrames/60,
-            // independent of UI cold-start duration. Consumed by the NEXT
-            // RenderD3D9 at the top of the loop.
-            StepPreviewFrames(1);
-            if (++capturedFrames >= m_captureFrames)
-            {
-                // (1) engine RT — UNCHANGED: the engine's own pre-composite
-                // pixels, captured at the exact frame target via the exact
-                // method. Only the composite below is gated on the UI.
-                const bool ok = alphaCompositor &&
-                                alphaCompositor->CaptureSnapshotToFile(m_capturePng);
-                if (!ok) captureFailed = true;
+        }
+    }
 
-                // (2) composite — the final DWM/DComp-composited window
-                // (engine viewport framed by React chrome). Gate it on the
-                // app/ready first-paint signal so it captures real chrome,
-                // not a blank WebView surface. The per-PID-isolated WebView2
-                // profile makes every run a genuine browser cold start, so
-                // the wait is real: pump + render while waiting; cap at 30s
-                // so a hung UI still yields a best-effort (clearly-named) image.
-                const LONGLONG qf = PerfQpcFreq();          // cache once (freq==0 guard)
-                const LONGLONG waitStart = PerfQpcNow();
-                const double   kUiTimeoutMs = 30000.0;
-                bool timedOut = false;
-                int  waitIters = 0;
-                while (!m_uiReady && !quit)
-                {
-                    // Drain FIRST — DispatchMessage is what delivers WebView2's
-                    // WebMessageReceived → OnWebMessage → m_uiReady.
-                    MSG mw;
-                    while (PeekMessage(&mw, nullptr, 0, 0, PM_REMOVE))
-                    {
-                        TranslateMessage(&mw);
-                        DispatchMessage(&mw);
-                        if (mw.message == WM_QUIT) quit = true;
-                    }
-                    if (m_uiReady || quit) break;
-                    const double elapsedMs = qf > 0
-                        ? QpcMs(PerfQpcNow() - waitStart, qf)
-                        : static_cast<double>(++waitIters) * 16.0;  // QPC-dead fallback
-                    if (elapsedMs >= kUiTimeoutMs) { timedOut = true; break; }
-                    RenderD3D9();  // keep the composed surface coherent while waiting
-                    MsgWaitForMultipleObjectsEx(0, nullptr, 16,
-                                                QS_ALLINPUT, MWMO_INPUTAVAILABLE);
-                }
+    const double waitedMs = qf > 0
+        ? QpcMs(PerfQpcNow() - waitStart, qf)
+        : static_cast<double>(waitIters) * 16.0;
 
-                // Settle: after a positive signal, pump + render ~150 ms so
-                // DComp has committed the WebView visual AND the deferred
-                // scene-rect crop (SetEngineVisualTransform immediate=false,
-                // applied at the next CompositeEngineFrame) has landed before
-                // the snapshot. app/ready proves React painted, not that the
-                // host-side composition has caught up.
-                if (m_uiReady && !quit)
-                {
-                    const LONGLONG settleStart = PerfQpcNow();
-                    for (int i = 0; !quit; ++i)
-                    {
-                        MSG mw;
-                        while (PeekMessage(&mw, nullptr, 0, 0, PM_REMOVE))
-                        {
-                            TranslateMessage(&mw);
-                            DispatchMessage(&mw);
-                            if (mw.message == WM_QUIT) quit = true;
-                        }
-                        if (quit) break;
-                        const double settleMs = qf > 0
-                            ? QpcMs(PerfQpcNow() - settleStart, qf)
-                            : static_cast<double>(i) * 16.0;
-                        if (settleMs >= 150.0) break;
-                        RenderD3D9();
-                        Sleep(16);
-                    }
-                }
-
-                const double waitedMs = qf > 0
-                    ? QpcMs(PerfQpcNow() - waitStart, qf)
-                    : static_cast<double>(waitIters) * 16.0;
-                // Success name only when React actually signalled first
-                // paint; a timeout OR an external WM_QUIT before the signal
-                // yields a degraded image under a DISTINCT name so it can
-                // never be mistaken for a good one (the harness greps for the
-                // non-TIMEOUT name + requires ui-ready=1).
-                const wchar_t* suffix = m_uiReady ? L"-composite" : L"-composite-TIMEOUT";
-                const char*    state  = m_uiReady ? "" : (timedOut ? " TIMEOUT" : " ABORTED");
-                const std::wstring compPath = DeriveSibling(m_capturePng, suffix);
-                // Composite is UNCONDITIONAL (attempted even if engine-RT
-                // failed) — the diagnostic composite is most valuable exactly
-                // when a render broke. quit is set AFTER it so the loop exits
-                // via `if (quit) break;` before the captureFailed bail.
-                const bool okc = host::CaptureWindowToPng(hMain, compPath);
-                Log("[capture] frame %d: engine-RT %ls -> %s; composite %ls -> %s "
-                    "(ui-ready=%d waited=%.0fms%s)\n",
-                    capturedFrames, m_capturePng.c_str(), ok ? "ok" : "FAILED",
-                    compPath.c_str(), okc ? "ok" : "FAILED",
-                    m_uiReady ? 1 : 0, waitedMs, state);
-                if (!m_uiReady)
-                    Log("[capture] WARNING: app/ready not received (%s) — composite "
-                        "may show an unpainted React surface\n",
-                        timedOut ? "30s timeout" : "window closed mid-wait");
-                // Exit code stays engine-RT-driven (captureFailed set above);
-                // a UI timeout is a host.log WARNING, not a process failure.
-                quit = true;
-            }
-
-    return quit ? TickResult::Done : TickResult::Running;
+    CaptureTicker::UiWait result;
+    result.uiReady  = m_uiReady;
+    result.timedOut = timedOut;
+    result.waitedMs = waitedMs;
+    return result;
 }
 
 }  // namespace host

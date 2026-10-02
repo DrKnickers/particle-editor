@@ -9,9 +9,10 @@
 // this runner owns setup (Init), the per-pump-iteration capture step (Tick),
 // and the exit-code mapping (ExitCode).
 //
-// The moved segments are verbatim (see the .cpp's alias preludes); state that
-// was Run()-local (`captureFailed`, `capturedFrames`) or Impl-member
-// (`m_captureGateStartQpc`, `m_captureGateWarned`) lives here now. Genuinely
+// Init's setup segment is the verbatim move (see the .cpp's alias prelude).
+// Tick's pacing / layout-gate / frame-count / exit-code state machine lives in
+// CaptureTicker, which this runner wires to the live host through hooks so the
+// machine itself is unit-tested (tests/test_capture_runner.cpp). Genuinely
 // shared pump state (m_uiReady / m_sceneRectSeen) stays on HostWindowImpl and
 // is read through const references.
 
@@ -22,6 +23,8 @@
 #include <string>
 #include <utility>
 
+#include "CaptureTicker.h"
+
 class Engine;
 class ModManager;
 class ParticleSystem;
@@ -31,25 +34,23 @@ namespace host {
 
 class AlphaCompositor;
 
-// Copies of the Impl's m_capture* CLI values. Field names match the Impl
-// members exactly — CaptureRunner privately inherits this struct so the
-// moved segments read them unchanged (m_captureAlo, m_captureFrames, ...).
+// Copies of the Impl's m_capture* CLI values, in the Impl's field order.
 struct CaptureRunnerParams {
-    std::wstring m_captureAlo;
-    std::wstring m_captureRef;
-    std::wstring m_capturePng;
-    int          m_captureFrames       = 180;
-    int          m_captureSkydomeSlot  = 0;
-    bool         m_captureGoldenProfile = false;
-    bool         m_captureHasAmbient   = false;
-    float        m_captureAmbient[3]   = {0, 0, 0};
-    bool         m_captureHasSun       = false;
-    float        m_captureSun[3]       = {0, 0, 0};
-    bool         m_captureHasSunI      = false;
-    float        m_captureSunIntensity = 1.0f;
+    std::wstring captureAlo;
+    std::wstring captureRef;
+    std::wstring capturePng;
+    int          captureFrames        = 180;
+    int          captureSkydomeSlot   = 0;
+    bool         captureGoldenProfile = false;
+    bool         captureHasAmbient    = false;
+    float        captureAmbient[3]    = {0, 0, 0};
+    bool         captureHasSun        = false;
+    float        captureSun[3]        = {0, 0, 0};
+    bool         captureHasSunI       = false;
+    float        captureSunIntensity  = 1.0f;
 };
 
-class CaptureRunner : private CaptureRunnerParams {
+class CaptureRunner {
 public:
     using Params = CaptureRunnerParams;
 
@@ -72,8 +73,7 @@ public:
 
     enum class TickResult { Running, Done };
 
-    CaptureRunner(Params params, Deps deps)
-        : CaptureRunnerParams(std::move(params)), m_deps(std::move(deps)) {}
+    CaptureRunner(Params params, Deps deps);
 
     // Holds live references + per-run counters — an accidental copy would
     // alias the same HostWindowImpl while forking failed/frame state.
@@ -96,25 +96,23 @@ public:
     // run is complete and the pump should quit.
     TickResult Tick();
 
-    bool Failed() const { return captureFailed; }
+    bool Failed() const { return m_ticker.Failed(); }
     // Same mapping the inline code returned from Run(): 2 = bad load /
     // failed write, 0 = success.
-    int ExitCode() const { return captureFailed ? 2 : 0; }
+    int ExitCode() const { return m_ticker.ExitCode(); }
 
 private:
     // printf-style forwarder so moved Log(...) call sites stay verbatim.
     void Log(const char* fmt, ...);
     // Forwarder so moved RenderD3D9() call sites stay verbatim.
     void RenderD3D9() { m_deps.renderD3D9(); }
+    // The ticker's app/ready wait: pump + render until React's first paint
+    // (30 s cap), then settle ~150 ms so the composition has caught up.
+    CaptureTicker::UiWait WaitForUiAndSettle();
 
-    Deps m_deps;
-
-    // Names match the old Run() locals / Impl members verbatim.
-    bool     captureFailed         = false;
-    int      capturedFrames        = 0;
-    LONGLONG m_captureGateStartQpc = 0;
-    bool     m_captureGateWarned   = false;
-    bool     m_quit                = false;
+    const Params  m_params;
+    Deps          m_deps;
+    CaptureTicker m_ticker;
 };
 
 }  // namespace host

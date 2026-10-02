@@ -33,53 +33,15 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
     // UNLESS ALO_SETTINGS_LIVE lifts the gate (the CDP test seam).
     if (kind == "settings/lighting")
     {
-        // Canonical defaults (matching the legacy Win32 dialog).
-        float sunI = kSunIntensityDefault, sunZ = kSunZAngleDefault, sunT = kSunTiltDefault;
-        DWORD sunDiff = SunDiffuseColorDefault(), sunSpec = SunSpecularColorDefault();
-        DWORD ambient = SunAmbientColorDefault(), shadow = SunShadowColorDefault();
-        float f1I = kFill1IntensityDefault, f1Z = kFill1ZAngleDefault, f1T = kFill1TiltDefault; DWORD f1Diff = Fill1DiffuseColorDefault();
-        float f2I = kFill2IntensityDefault, f2Z = kFill2ZAngleDefault, f2T = kFill2TiltDefault; DWORD f2Diff = Fill2DiffuseColorDefault();
-        bool  forceAlign = kForceAlignDefault;  // kLightForceAlignDefault
-
+        // Canonical defaults (matching the legacy Win32 dialog) unless the
+        // live registry is readable.
+        LightingValues v;
         const bool gated = !PersistsUserState();
         if (!gated)
         {
-            HKEY hKey = nullptr;
-            if (RegOpenKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0,
-                              KEY_READ, &hKey) == ERROR_SUCCESS)
+            if (HKEY hKey = OpenSettingsKeyForRead())
             {
-                auto readF = [&](const wchar_t* name, float& out) {
-                    float v = 0.0f; DWORD t = 0, s = sizeof(v);
-                    if (RegQueryValueExW(hKey, name, nullptr, &t,
-                                         reinterpret_cast<LPBYTE>(&v), &s) == ERROR_SUCCESS
-                        && t == REG_BINARY && s == sizeof(v) && v == v && (v - v) == 0.0f)
-                        out = v;
-                };
-                auto readDw = [&](const wchar_t* name, DWORD& out) {
-                    DWORD v = 0, t = 0, s = sizeof(v);
-                    if (RegQueryValueExW(hKey, name, nullptr, &t,
-                                         reinterpret_cast<LPBYTE>(&v), &s) == ERROR_SUCCESS
-                        && t == REG_DWORD)
-                        out = v;
-                };
-                readF(kLightSunIntensity, sunI);
-                readF(kLightSunZAngle,    sunZ);
-                readF(kLightSunTilt,      sunT);
-                readDw(kLightSunDiffuseColor,  sunDiff);
-                readDw(kLightSunSpecularColor, sunSpec);
-                readDw(kLightSunAmbientColor,  ambient);
-                readDw(kLightSunShadowColor,   shadow);
-                readF(kLightFill1Intensity, f1I);
-                readF(kLightFill1ZAngle,    f1Z);
-                readF(kLightFill1Tilt,      f1T);
-                readDw(kLightFill1DiffuseColor, f1Diff);
-                readF(kLightFill2Intensity, f2I);
-                readF(kLightFill2ZAngle,    f2Z);
-                readF(kLightFill2Tilt,      f2T);
-                readDw(kLightFill2DiffuseColor, f2Diff);
-                DWORD fa = kForceAlignDefault ? 1u : 0u;
-                readDw(kLightForceFillAlignment, fa);
-                forceAlign = (fa != 0);
+                v = ReadLightingSettings(hKey);
                 RegCloseKey(hKey);
             }
         }
@@ -93,12 +55,12 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
             };
         };
         ctx.SendOk(json{
-            {"sun",   lightJson(sunI, sunZ, sunT, sunDiff, sunSpec)},
-            {"fill1", lightJson(f1I, f1Z, f1T, f1Diff, 0)},
-            {"fill2", lightJson(f2I, f2Z, f2T, f2Diff, 0)},
-            {"ambient",    static_cast<int>(ambient)},
-            {"shadow",     static_cast<int>(shadow)},
-            {"forceAlign", forceAlign},
+            {"sun",   lightJson(v.sunIntensity, v.sunZ, v.sunTilt, v.sunDiffuse, v.sunSpecular)},
+            {"fill1", lightJson(v.fill1Intensity, v.fill1Z, v.fill1Tilt, v.fill1Diffuse, 0)},
+            {"fill2", lightJson(v.fill2Intensity, v.fill2Z, v.fill2Tilt, v.fill2Diffuse, 0)},
+            {"ambient",    static_cast<int>(v.sunAmbient)},
+            {"shadow",     static_cast<int>(v.sunShadow)},
+            {"forceAlign", v.forceAlign},
         });
         return true;
     }
@@ -139,46 +101,35 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
         const bool gated = !PersistsUserState();
         if (!gated)
         {
-            HKEY hKey = nullptr;
-            if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
-                                REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr,
-                                &hKey, nullptr) == ERROR_SUCCESS)
+            auto lf = [&](const char* k) { return params.value(k, json::object()); };
+            const json sun   = lf("sun");
+            const json fill1 = lf("fill1");
+            const json fill2 = lf("fill2");
+
+            LightingValues v;
+            v.sunIntensity = sun.value("intensity", kSunIntensityDefault);
+            v.sunZ         = sun.value("az", kSunZAngleDefault);
+            v.sunTilt      = sun.value("alt", kSunTiltDefault);
+            v.sunDiffuse   = static_cast<DWORD>(sun.value("diffuse",  static_cast<int>(SunDiffuseColorDefault())));
+            v.sunSpecular  = static_cast<DWORD>(sun.value("specular", static_cast<int>(SunSpecularColorDefault())));
+            v.sunAmbient   = static_cast<DWORD>(params.value("ambient", static_cast<int>(SunAmbientColorDefault())));
+            v.sunShadow    = static_cast<DWORD>(params.value("shadow",  static_cast<int>(SunShadowColorDefault())));
+
+            v.fill1Intensity = fill1.value("intensity", kFill1IntensityDefault);
+            v.fill1Z         = fill1.value("az", kFill1ZAngleDefault);
+            v.fill1Tilt      = fill1.value("alt", kFill1TiltDefault);
+            v.fill1Diffuse   = static_cast<DWORD>(fill1.value("diffuse", static_cast<int>(Fill1DiffuseColorDefault())));
+
+            v.fill2Intensity = fill2.value("intensity", kFill2IntensityDefault);
+            v.fill2Z         = fill2.value("az", kFill2ZAngleDefault);
+            v.fill2Tilt      = fill2.value("alt", kFill2TiltDefault);
+            v.fill2Diffuse   = static_cast<DWORD>(fill2.value("diffuse", static_cast<int>(Fill2DiffuseColorDefault())));
+
+            v.forceAlign = params.value("forceAlign", kForceAlignDefault);
+
+            if (HKEY hKey = OpenSettingsKeyForWrite())
             {
-                // Floats persist as REG_BINARY (matches ReadLightingFloat);
-                // colours + the flag as REG_DWORD (matches ReadLightingColor /
-                // ReadLightingBool).
-                auto writeF = [&](const wchar_t* name, float v) {
-                    RegSetValueExW(hKey, name, 0, REG_BINARY,
-                                   reinterpret_cast<const BYTE*>(&v), sizeof(v));
-                };
-                auto writeDw = [&](const wchar_t* name, DWORD v) {
-                    RegSetValueExW(hKey, name, 0, REG_DWORD,
-                                   reinterpret_cast<const BYTE*>(&v), sizeof(v));
-                };
-                auto lf = [&](const char* k) { return params.value(k, json::object()); };
-                const json sun   = lf("sun");
-                const json fill1 = lf("fill1");
-                const json fill2 = lf("fill2");
-
-                writeF(kLightSunIntensity,     sun.value("intensity", kSunIntensityDefault));
-                writeF(kLightSunZAngle,        sun.value("az", kSunZAngleDefault));
-                writeF(kLightSunTilt,          sun.value("alt", kSunTiltDefault));
-                writeDw(kLightSunDiffuseColor,  static_cast<DWORD>(sun.value("diffuse",  static_cast<int>(SunDiffuseColorDefault()))));
-                writeDw(kLightSunSpecularColor, static_cast<DWORD>(sun.value("specular", static_cast<int>(SunSpecularColorDefault()))));
-                writeDw(kLightSunAmbientColor,  static_cast<DWORD>(params.value("ambient", static_cast<int>(SunAmbientColorDefault()))));
-                writeDw(kLightSunShadowColor,   static_cast<DWORD>(params.value("shadow",  static_cast<int>(SunShadowColorDefault()))));
-
-                writeF(kLightFill1Intensity,   fill1.value("intensity", kFill1IntensityDefault));
-                writeF(kLightFill1ZAngle,      fill1.value("az", kFill1ZAngleDefault));
-                writeF(kLightFill1Tilt,        fill1.value("alt", kFill1TiltDefault));
-                writeDw(kLightFill1DiffuseColor, static_cast<DWORD>(fill1.value("diffuse", static_cast<int>(Fill1DiffuseColorDefault()))));
-
-                writeF(kLightFill2Intensity,   fill2.value("intensity", kFill2IntensityDefault));
-                writeF(kLightFill2ZAngle,      fill2.value("az", kFill2ZAngleDefault));
-                writeF(kLightFill2Tilt,        fill2.value("alt", kFill2TiltDefault));
-                writeDw(kLightFill2DiffuseColor, static_cast<DWORD>(fill2.value("diffuse", static_cast<int>(Fill2DiffuseColorDefault()))));
-
-                writeDw(kLightForceFillAlignment, params.value("forceAlign", kForceAlignDefault) ? 1u : 0u);
+                WriteLightingSettings(hKey, v);
                 RegCloseKey(hKey);
             }
         }

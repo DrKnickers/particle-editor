@@ -5,7 +5,8 @@
 // (`MessageBox MB_YESNOCANCEL`) in the legacy main.cpp:
 //   - Save (Yes) → call file/save; if it succeeds, run the pending
 //     action. If save was cancelled (ok:false), abort.
-//   - Don't Save (No) → run the pending action immediately.
+//   - Don't Save (No) → run the pending action immediately, telling it the
+//     user chose to discard (so it may ask the host to drop unsaved work).
 //   - Cancel → discard the pending action, close the prompt.
 //
 // The pending action is a closure stored in the file-state atom — see
@@ -35,11 +36,12 @@ export function SaveChangesDialog({ bridge }: Props) {
   const open = pendingAction !== null;
   const fileLabel = currentFilePath ? basename(currentFilePath) : "this particle system";
 
-  /** Run the pending closure and clear the slot. */
-  const runPending = async () => {
+  /** Run the pending closure and clear the slot. `discardUnsaved` is true
+   *  only for Don't Save — after a successful Save nothing is being dropped. */
+  const runPending = async (discardUnsaved: boolean) => {
     const action = useFileStateStore.getState().pendingAction;
     setPendingAction(null);
-    if (action) await action();
+    if (action) await action({ discardUnsaved });
   };
 
   const handleSave = async () => {
@@ -53,7 +55,7 @@ export function SaveChangesDialog({ bridge }: Props) {
     try {
       const r = await runFileOp(bridge, { kind: "file/save", params: {} });
       if (r.ok) {
-        await runPending();
+        await runPending(false);
       }
       // else: leave the prompt open; runFileOp already surfaced any real error.
     } catch {
@@ -63,7 +65,7 @@ export function SaveChangesDialog({ bridge }: Props) {
   };
 
   const handleDiscard = async () => {
-    await runPending();
+    await runPending(true);
   };
 
   const handleCancel = () => {

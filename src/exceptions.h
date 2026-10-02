@@ -3,7 +3,7 @@
 
 #include "types.h"
 #include "utils.h"
-#include "resource.h"
+#include "Resources/resource.h"
 #include <string>
 #include <stdexcept>
 

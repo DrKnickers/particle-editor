@@ -76,13 +76,13 @@ public:
     // (e.g. dialog-lighting's Force Align checkbox) see ctor defaults
     // regardless of the dev box's saved registry — the same determinism
     // gate the HostWindow registry-restore block uses.
-    // `driveMode` (true in --drive / --record automation): suppress ALL registry writes the same
+    // `automationMode` (true in --drive / --record): suppress ALL registry writes the same
     // way `useTestHost` does, WITHOUT enabling the test-host-only behaviors
     // (CDP port, a11y determinism). It ORs into every persist gate; the three
     // WriteRecentFile (MRU) sites gate on PersistsUserState(), which folds this
     // flag together with the test-host settings gate.
     BridgeDispatcher(Engine* engine, LayoutBroker& layout, AcceleratorBridge& accel,
-                     EmitFn emit, bool useTestHost = false, bool driveMode = false);
+                     EmitFn emit, bool useTestHost = false, bool automationMode = false);
 
     // Sets / replaces the live Engine pointer. The host can install this
     // before or after the Engine is constructed; null is treated as
@@ -526,16 +526,16 @@ private:
     // Automation mode: ORs into every persist gate + guards the MRU writes so a
     // --drive or --record run performs NO registry writes (without enabling the
     // test-host-only CDP/a11y behaviors). Set once at construction.
-    bool               m_driveMode = false;
+    bool               m_automationMode = false;
 
     // True when this run may write user-visible persistent state (the
     // recent-files MRU): not automation mode, and not a --test-host run
     // unless ALO_SETTINGS_LIVE lifted the gate — the SAME predicate every
     // settings/* write uses (cf. BridgeDispatch_Assets.cpp mods/set-layers).
-    // Before this existed the MRU sites checked only m_driveMode, so every
+    // Before this existed the MRU sites checked only the automation flag, so every
     // playwright-native (--test-host) file open/save wrote its test path into
     // the daily driver's real Recent Files menu (2026-07 audit follow-up).
-    bool PersistsUserState() const { return !m_driveMode && !(m_testHost && !m_settingsLive); }
+    bool PersistsUserState() const { return !m_automationMode && !(m_testHost && !m_settingsLive); }
 
     // --record throttle (issue #510): during a clip record the driver scrubs
     // curves host-side, firing emitters/tree/changed + engine/state/changed far
@@ -560,8 +560,9 @@ private:
     // Worst-case staleness is one display frame (idle-branch flush), or one
     // stats tick (250 ms) inside a modal dialog's own pump. NOT active in
     // --record (#510's leading-edge throttle owns that mode — its clip gates
-    // assert the ~30 Hz cadence) and NOT in --drive (m_driveMode: a
-    // drive-assert must see every change, per the #510 note above).
+    // assert the ~30 Hz cadence) and NOT in --drive (m_automationMode, which
+    // covers drive and record: a drive-assert must see every change, per the
+    // #510 note above).
     bool               m_stateEmitPending = false;
     bool               m_treeEmitPending  = false;
     static constexpr unsigned long long kEmitCoalesceMs = 16;

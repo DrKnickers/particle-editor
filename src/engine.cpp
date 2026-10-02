@@ -11,7 +11,7 @@
 #include "engine_internal.h"
 #include "exceptions.h"
 #include "ResourceLimits.h"   // kMaxTextureAssetBytes (asset-read size caps, #415)
-#include "resource.h"
+#include "Resources/resource.h"
 #include "ParticleSystemInstance.h"
 #include "EmitterInstance.h"
 #include "SphericalHarmonics.h"
@@ -1920,27 +1920,6 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 	ReloadGroundNormalTexture();
 
 #ifndef NDEBUG
-	// bring-up driver (debug only): force-load a real game dome by Name
-	// so the render core can be feel-tested before the M3 picker exists. Default
-	// launch is unaffected -- with no env var both slots stay Off.
-	// TODO(M3): remove once the React picker drives SetSkydomeEnvironment.
-	//   set ALO_MT15_TEST_DOME=<PrimaryName> [ALO_MT15_TEST_SEC=<SecondaryName>]
-	//       [ALO_MT15_TEST_CTX=land|space]   (default space)
-	{
-		char buf[256];
-		if (GetEnvironmentVariableA("ALO_MT15_TEST_DOME", buf, sizeof(buf)) > 0)
-		{
-			std::string prim = buf, sec;
-			if (GetEnvironmentVariableA("ALO_MT15_TEST_SEC", buf, sizeof(buf)) > 0) sec = buf;
-			SkydomeContext ctx = SkydomeContext::Space;
-			if (GetEnvironmentVariableA("ALO_MT15_TEST_CTX", buf, sizeof(buf)) > 0
-			    && _stricmp(buf, "land") == 0)
-				ctx = SkydomeContext::Land;
-			fprintf(stderr, "[SkyEnv] test driver: ctx=%s primary='%s' secondary='%s'\n",
-			        ctx == SkydomeContext::Land ? "land" : "space", prim.c_str(), sec.c_str());
-			SetSkydomeEnvironment(ctx, prim, sec);
-		}
-	}
 	// bring-up driver (debug only): load a reference object by .alo path so
 	// the rigid-multi-part render core can be feel-tested before the picker.
 	//   set ALO_LT7_TEST_OBJECT=Data\Art\Models\AI_Bunker_Turret1.alo

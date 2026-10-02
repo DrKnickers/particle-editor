@@ -77,6 +77,17 @@ unsigned long PhysicalFile::write(const void* buffer, unsigned long size)
 	return size;
 }
 
+void PhysicalFile::Flush()
+{
+	// Push the written bytes through the OS cache to the device, so a save
+	// that is about to replace the user's document survives a power loss or
+	// crash right after the rename.
+	if (!FlushFileBuffers(hFile))
+	{
+		throw WriteException();
+	}
+}
+
 PhysicalFile::PhysicalFile(const wstring& filename, Mode mode)
 {
 	DWORD dwDesiredAccess       = (mode == WRITE ? GENERIC_WRITE : GENERIC_READ);

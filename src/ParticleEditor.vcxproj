@@ -120,10 +120,10 @@
     <ClInclude Include="ParticleSystemInstance.h" />
     <ClInclude Include="Rescale.h" />
     <ClInclude Include="Autosave.h" />
+    <ClInclude Include="AtomicSave.h" />
     <ClInclude Include="SpawnerDriver.h" />
     <ClInclude Include="SpawnerPath.h" />
     <ClInclude Include="UndoStack.h" />
-    <ClInclude Include="resource.h" />
     <ClInclude Include="GameObjectCatalog.h" />
     <ClInclude Include="ReferenceObjectMesh.h" />
     <ClInclude Include="Resources\resource.h" />
@@ -141,6 +141,7 @@
     <ClInclude Include="DeviceRecovery.h" />
     <ClInclude Include="DeviceState.h" />
     <ClInclude Include="EmitterDrawOrder.h" />
+    <ClInclude Include="GameRoots.h" />
     <ClInclude Include="GizmoRibbon.h" />
     <ClInclude Include="GizmoSizing.h" />
     <ClInclude Include="ManipReadout.h" />
@@ -176,6 +177,7 @@
     <ClInclude Include="host\DriveScript.h" />
     <ClInclude Include="host\CaptureGoldenProfile.h" />
     <ClInclude Include="host\CaptureRunner.h" />
+    <ClInclude Include="host\CaptureTicker.h" />
     <ClInclude Include="host\DriveRunner.h" />
     <ClInclude Include="host\HostRunUtil.h" />
     <ClInclude Include="host\ClipTimeline.h" />
@@ -230,6 +232,7 @@
     <ClCompile Include="ParticleSystemInstance.cpp" />
     <ClCompile Include="Rescale.cpp" />
     <ClCompile Include="Autosave.cpp" />
+    <ClCompile Include="AtomicSave.cpp" />
     <ClCompile Include="SpawnerDriver.cpp" />
     <ClCompile Include="UndoStack.cpp" />
     <ClCompile Include="GameObjectCatalog.cpp" />
@@ -255,6 +258,7 @@
     <ClCompile Include="host\BridgeDispatch_Shell.cpp" />
     <ClCompile Include="host\BridgeDispatch_Spawner.cpp" />
     <ClCompile Include="host\CaptureRunner.cpp" />
+    <ClCompile Include="host\CaptureTicker.cpp" />
     <ClCompile Include="host\RestoredSettings.cpp" />
     <ClCompile Include="host\WicEncode.cpp">
       <!-- Same include-order override as Compositor.cpp: wincodec.h is a

@@ -14,7 +14,7 @@
 #include "engine_internal.h"
 #include "exceptions.h"
 #include "utils.h"
-#include "resource.h"
+#include "Resources/resource.h"
 #include "ParticleSystemInstance.h"  // instance Update/Render*/IsDead in the frame loop
 #include "EmitterInstance.h"         // EmitterInstance::Vertex (ground/bloom/compose quads)
 #include "ParticleMipFilter.h"       // #481 ALO_PARTICLE_MIPFILTER override (MODE_*)

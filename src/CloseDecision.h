@@ -17,3 +17,17 @@ inline bool ShouldVetoClose(bool dirty, bool ephemeral, bool testHost, bool webA
 {
     return dirty && !ephemeral && !testHost && webAlive;
 }
+
+// Data-loss guard for the bridge requests that replace the open document
+// (file/new, and file/open of an .alo): refuse while it has unsaved work unless
+// the request says the user already chose to discard it (Don't Save in the
+// web's save prompt). The web gates both on that prompt, but it decides from a
+// dirty bit that can trail the host's, so the host has the final say.
+// Automation (--drive / --record) and --test-host runs are exempt exactly as
+// ShouldVetoClose exempts them: there is no user to prompt, and their scripts
+// and contract specs replace documents freely.
+inline bool ShouldRefuseDocumentReplace(bool dirty, bool discardConfirmed,
+                                        bool automation, bool testHost)
+{
+    return dirty && !discardConfirmed && !automation && !testHost;
+}

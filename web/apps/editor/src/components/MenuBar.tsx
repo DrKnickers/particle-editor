@@ -27,7 +27,7 @@ import type {
   EmitterTreeNode,
 } from "@particle-editor/bridge-schema";
 import { promptSaveChanges, useFileState } from "@/lib/file-state";
-import { runFileOp } from "@/lib/file-op";
+import { replaceDocument, runFileOp } from "@/lib/file-op";
 import { useEngineField } from "@/lib/use-engine-snapshot";
 import { basename } from "@/lib/paths";
 import { requestDeleteEmitters } from "@/lib/delete-emitters";
@@ -153,21 +153,17 @@ export function MenuBar({
 
   // ── File menu handlers ───────────────────────────────────────────
   // All destructive ops (New / Open / Recent) route through
-  // promptSaveChanges() which gates on the current dirty flag and
-  // either runs the action immediately (clean) or pops the
+  // replaceDocument() -> promptSaveChanges(), which gates on the current
+  // dirty flag and either runs the action immediately (clean) or pops the
   // SaveChangesDialog (dirty). Save / Save As don't need the gate —
   // they ARE the save path.
 
   const handleNew = () => {
-    promptSaveChanges(async () => {
-      await bridge.request({ kind: "file/new", params: {} });
-    });
+    replaceDocument(bridge, { kind: "file/new", params: {} });
   };
 
   const handleOpen = () => {
-    promptSaveChanges(async () => {
-      await runFileOp(bridge, { kind: "file/open", params: {} });
-    });
+    replaceDocument(bridge, { kind: "file/open", params: {} });
   };
 
   const handleSave = () => {
@@ -179,9 +175,7 @@ export function MenuBar({
   };
 
   const handleOpenRecent = (path: string) => {
-    promptSaveChanges(async () => {
-      await runFileOp(bridge, { kind: "file/open", params: { path } });
-    });
+    replaceDocument(bridge, { kind: "file/open", params: { path } });
   };
 
   const handleExit = () => {

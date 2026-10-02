@@ -10,6 +10,7 @@
 #include "../ModManager.h"     // initial-dir resolution (file/open, file/save-as)
 #include "../ParticleSystemIO.h"  // LoadParticleSystem / SaveParticleSystem
 #include "../Autosave.h"       // autosave/check-recovery, autosave/recover
+#include "../CloseDecision.h"  // ShouldRefuseDocumentReplace (file/new, file/open)
 
 #include <commdlg.h>           // GetOpenFileNameW / GetSaveFileNameW
 #include <limits>
@@ -36,6 +37,14 @@ static bool AllowTestHostAutosaveRecovery(bool testHost, const json& params)
     (void)params;
     return false;
 #endif
+}
+
+// file/new and file/open carry `discardUnsaved: true` only after the user chose
+// Don't Save in the web's save prompt.
+static bool DiscardUnsavedConfirmed(const json& params)
+{
+    auto it = params.find("discardUnsaved");
+    return it != params.end() && it->is_boolean() && it->get<bool>();
 }
 
 // Mutation-test seam for the composed recovery oracle. An out-of-range group
@@ -245,6 +254,14 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
     // src/main.cpp:1289). Clear editor path / dirty.
     if (kind == "file/new")
     {
+        // Never drop unsaved work the user has not chosen to discard; the web
+        // answers this by reopening its save prompt.
+        if (ShouldRefuseDocumentReplace(m_dirty, DiscardUnsavedConfirmed(params),
+                                        m_automationMode, m_testHost))
+        {
+            ctx.SendOk(json{{"ok", false}, {"error", "unsaved-changes"}});
+            return true;
+        }
         // shift-click-to-spawn: if the user is mid-Shift-hold when
         // they hit file/new, kill the cursor-bound instance before
         // dropping the ParticleSystem it was spawned from. Mirrors the
@@ -351,6 +368,18 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         if (auto fit = params.find("filter"); fit != params.end() && fit->is_string())
         {
             filterId = fit->get<std::string>();
+        }
+
+        // Opening an .alo replaces the document: refuse over unsaved work the
+        // user has not chosen to discard, BEFORE any picker opens. The
+        // non-mutating pickers (file/pick-open, texture filters) never touch
+        // the document, so they are never refused.
+        if (kind == "file/open" && filterId == "alo"
+            && ShouldRefuseDocumentReplace(m_dirty, DiscardUnsavedConfirmed(params),
+                                           m_automationMode, m_testHost))
+        {
+            ctx.SendOk(json{{"ok", false}, {"error", "unsaved-changes"}});
+            return true;
         }
 
         if (path.empty())
@@ -704,7 +733,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
             AllowTestHostAutosaveRecovery(m_testHost, params);
         const bool suppressForTestHost = m_testHost && !allowTestRecovery;
         if (Autosave::ShouldSuppressRecoveryPrompt(
-                suppressForTestHost, m_driveMode, !m_currentFilePath.empty()))
+                suppressForTestHost, m_automationMode, !m_currentFilePath.empty()))
         {
             ctx.SendOk(json{{"orphan", nullptr}});
             return true;

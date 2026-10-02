@@ -31,8 +31,7 @@ import { ReferenceObjectPopover } from "@/components/ReferenceObjectPopover";
 import { GroundPopover } from "@/components/GroundPopover";
 import { useRightDock, toggleDock } from "@/lib/right-dock";
 import { IconButton } from "@/primitives/IconButton";
-import { promptSaveChanges } from "@/lib/file-state";
-import { runFileOp } from "@/lib/file-op";
+import { replaceDocument, runFileOp } from "@/lib/file-op";
 import { useEngineField } from "@/lib/use-engine-snapshot";
 import { fireAndReport } from "@/lib/status-feedback";
 
@@ -55,17 +54,15 @@ export function Toolbar({ bridge }: Props) {
 
   return (
     <div data-testid="toolbar" className="toolbar">
-      {/* Group 1: file actions. New / Open route through promptSaveChanges
-          so a dirty document gets the Save/Discard/Cancel prompt before
-          being replaced (same gate the MenuBar uses). Save + Save As are
+      {/* Group 1: file actions. New / Open route through replaceDocument
+          (the promptSaveChanges gate) so a dirty document gets the
+          Save/Discard/Cancel prompt before being replaced (same gate the MenuBar uses). Save + Save As are
           themselves the save path so they don't need the gate. */}
       <div className="tb-group">
         <IconButton
           label="New"
           onClick={() => {
-            promptSaveChanges(async () => {
-              await bridge.request({ kind: "file/new", params: {} });
-            });
+            replaceDocument(bridge, { kind: "file/new", params: {} });
           }}
         >
           <FilePlus {...ICON} />
@@ -73,9 +70,7 @@ export function Toolbar({ bridge }: Props) {
         <IconButton
           label="Open"
           onClick={() => {
-            promptSaveChanges(async () => {
-              await runFileOp(bridge, { kind: "file/open", params: {} });
-            });
+            replaceDocument(bridge, { kind: "file/open", params: {} });
           }}
         >
           <FolderOpen {...ICON} />

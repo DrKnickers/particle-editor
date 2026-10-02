@@ -231,6 +231,7 @@ describe("promptSaveChanges", () => {
     promptSaveChanges(action);
 
     expect(action).toHaveBeenCalledTimes(1);
+    expect(action).toHaveBeenCalledWith({ discardUnsaved: false });
     expect(useFileStateStore.getState().pendingAction).toBeNull();
   });
 
@@ -274,6 +275,8 @@ describe("promptSaveChanges", () => {
       expect(bridge.request).toHaveBeenCalledWith({ kind: "file/save", params: {} });
     });
     await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
+    // Saved first, so nothing unsaved is being discarded.
+    expect(action).toHaveBeenCalledWith({ discardUnsaved: false });
     expect(useFileStateStore.getState().pendingAction).toBeNull();
   });
 
@@ -287,6 +290,8 @@ describe("promptSaveChanges", () => {
     fireEvent.click(screen.getByRole("button", { name: "Don't Save" }));
 
     await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
+    // The action learns the user chose to discard, so it may tell the host.
+    expect(action).toHaveBeenCalledWith({ discardUnsaved: true });
     expect(bridge.request).not.toHaveBeenCalledWith(
       expect.objectContaining({ kind: "file/save" }),
     );

@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <exception>
 #include "xml.h"
 #include "exceptions.h"
 #include "utils.h"
@@ -79,9 +80,12 @@ static void checkEmpty(XMLNode* node)
 }
 
 // Audit F-XML (untrusted mod XML): Expat has no nesting or element-count limit
-// of its own, so these caps are ours. Both handlers below stop the
-// parser rather than throw — C++ exceptions must not unwind through Expat's C
-// frames. thread_local: XMLTree::parse runs concurrently on the
+// of its own, so these caps are ours. The handlers below stop the parser rather
+// than throw: C++ exceptions must not unwind through Expat's C frames. A cap
+// trip surfaces as the normal XML_Parse==0 ParseException; any other C++
+// exception raised inside a handler (bad_alloc, ...) is caught there, stashed in
+// g_xmlError, and rethrown by XMLTree::parse once XML_Parse has returned.
+// thread_local: XMLTree::parse runs concurrently on the
 // GameObjectCatalog worker pool, so this MUST be per-thread — a shared static
 // would let one thread's handler stop another thread's parser (DoS bypass) or
 // read a freed parser. Each parse() sets + clears both within one call stack.
@@ -97,9 +101,21 @@ static thread_local unsigned long g_xmlNodes  = 0;
 // are owned by XMLNode, so this is document-wide for the same reason g_xmlNodes
 // is: a per-element cap would still multiply without bound across siblings.
 static thread_local unsigned long g_xmlAttributes = 0;
+// The first C++ exception a handler caught during THIS parse, if any.
+static thread_local std::exception_ptr g_xmlError;
+
+// Called from a handler's catch block: keep the first exception and stop the
+// parser so XMLTree::parse can rethrow it outside Expat.
+static void stashHandlerError()
+{
+	if (!g_xmlError) g_xmlError = std::current_exception();
+	if (g_xmlParser != NULL) XML_StopParser(g_xmlParser, XML_FALSE);
+}
 
 static void onStartElement(void* userData, const XML_Char *name, const XML_Char **atts)
 {
+	if (g_xmlError) return;
+
 	// Depth cap for untrusted mod XML: a crafted file nesting tens of thousands
 	// of elements deep would otherwise build an arbitrarily tall node chain (and
 	// the game's own XML never nests remotely this deep). Stop the parser BEFORE
@@ -144,57 +160,74 @@ static void onStartElement(void* userData, const XML_Char *name, const XML_Char 
 	g_xmlAttributes += attributeCount;
 
 	XMLTree* tree = (XMLTree*)userData;
-	XMLNode* node = new XMLNode(tree->current, name, atts);
-	if (tree->current == NULL)
+	try
 	{
-		if (tree->root == NULL)
+		if (tree->current != NULL) checkEmpty(tree->current);
+		XMLNode* node = new XMLNode(tree->current, name, atts);
+		if (tree->current == NULL)
 		{
+			// A replaced root (never expected: Expat rejects a second
+			// document element) must not leak.
 			delete tree->root;
+			tree->root = node;
 		}
-		tree->root = node;
+		else
+		{
+			// A throwing push_back must not leak the unlinked node.
+			try { tree->current->children.push_back( node ); }
+			catch (...) { delete node; throw; }
+		}
+		tree->current = node;
 	}
-	else
-	{
-		checkEmpty(tree->current);
-		tree->current->children.push_back( node );
-	}
-	tree->current = node;
+	catch (...) { stashHandlerError(); }
 }
 
 static void onEndElement(void* userData, const XML_Char *name)
 {
 	if (g_xmlDepth > 0) --g_xmlDepth;
+	if (g_xmlError) return;
 	XMLTree* tree = (XMLTree*)userData;
 	if (tree->current != NULL)
 	{
-		// Post-process this node; if it contains a single anonymous child, put it into
-		// this node's data field
-		if ((tree->current->children.size() == 1) && (tree->current->children.front()->name.empty()))
+		try
 		{
-			tree->current->data = tree->current->children.front()->data;
-			delete tree->current->children.front();
-			tree->current->children.clear();
-		}
-		tree->current->data = trim(tree->current->data);
+			// Post-process this node; if it contains a single anonymous child, put it into
+			// this node's data field
+			if ((tree->current->children.size() == 1) && (tree->current->children.front()->name.empty()))
+			{
+				tree->current->data = tree->current->children.front()->data;
+				delete tree->current->children.front();
+				tree->current->children.clear();
+			}
+			tree->current->data = trim(tree->current->data);
 
-		checkEmpty(tree->current);
-		tree->current = tree->current->parent;
+			checkEmpty(tree->current);
+			tree->current = tree->current->parent;
+		}
+		catch (...) { stashHandlerError(); }
 	}
 }
 
 static void onCharacterData(void *userData, const XML_Char *s, int len)
 {
+	if (g_xmlError) return;
 	XMLTree* tree = (XMLTree*)userData;
 	if (tree->current != NULL)
 	{
-		if ((tree->current->children.size() > 0) && (tree->current->children.back()->name.empty()))
+		try
 		{
-			tree->current->children.back()->data += wstring(s, len);
+			if ((tree->current->children.size() > 0) && (tree->current->children.back()->name.empty()))
+			{
+				tree->current->children.back()->data += wstring(s, len);
+			}
+			else
+			{
+				XMLNode* node = new XMLNode(tree->current, s, len);
+				try { tree->current->children.push_back( node ); }
+				catch (...) { delete node; throw; }
+			}
 		}
-		else
-		{
-			tree->current->children.push_back( new XMLNode(tree->current, s, len) );
-		}
+		catch (...) { stashHandlerError(); }
 	}
 }
 
@@ -260,6 +293,7 @@ void XMLTree::parse(IFile* file)
 	g_xmlDepth  = 0;        // fresh depth per parse (thread_local survives across calls)
 	g_xmlNodes  = 0;        // ...and a fresh element count
 	g_xmlAttributes = 0;    // ...and fresh document-wide attribute accounting
+	g_xmlError  = nullptr;  // ...and no handler exception carried over
 	XML_SetEntityDeclHandler(parser, onEntityDecl);        // F-XML: reject custom entity declarations
 
 	try
@@ -271,6 +305,12 @@ void XMLTree::parse(IFile* file)
 		{
 			char buffer[ BUFFER_SIZE ];
 			unsigned long n = file->read(buffer, BUFFER_SIZE);
+			// A read that makes no progress short of EOF would otherwise spin
+			// this loop forever.
+			if (n == 0 && !file->eof())
+			{
+				throw ParseException( LoadString(IDS_ERROR_XML, L"read failed before end of file", 0) );
+			}
 			total += n;
 			if (total > kMaxXmlFileBytes)
 			{
@@ -278,6 +318,7 @@ void XMLTree::parse(IFile* file)
 			}
 			if (XML_Parse(parser, buffer, n, file->eof()) == 0)
 			{
+				if (g_xmlError) std::rethrow_exception(g_xmlError);
 				const wstring error = XML_ErrorString(XML_GetErrorCode(parser));
                 throw ParseException( LoadString(IDS_ERROR_XML, error.c_str(), XML_GetCurrentLineNumber(parser)) );
 			}
@@ -286,6 +327,7 @@ void XMLTree::parse(IFile* file)
 	catch (...)
 	{
 		g_xmlParser = NULL;
+		g_xmlError  = nullptr;
 		XML_ParserFree(parser);
 		throw;
 	}

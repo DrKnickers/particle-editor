@@ -10,6 +10,22 @@ namespace host {
 // HKCU key under which ALL editor state persists (recent files, view state,
 // spawner config, lighting). Mirrors legacy main.cpp's registry layout.
 constexpr const wchar_t* kRegistryKeyPath = L"Software\\AloParticleEditor";
+// Per-mod display names, one REG_SZ per mod path, in a child of the key above.
+constexpr const wchar_t* kRegModNicknamesPath = L"Software\\AloParticleEditor\\ModNicknames";
+// REG_SZ: the game folder the user picked when the startup lookup failed.
+constexpr const wchar_t* kRegGameDataPath = L"GameDataPath";
+
+// Test seam (ALO_SETTINGS_LIVE=1): lifts the --test-host settings gate so a CDP
+// test can exercise the real registry round-trip. The a11y harness never sets
+// it, so its plain --test-host launch stays deterministic. Read by both the
+// bridge dispatcher's settings gate and the host's mod-stack persistence gate,
+// so the two can never disagree.
+inline bool ReadSettingsLiveEnv()
+{
+    wchar_t buf[8] = {};
+    DWORD n = GetEnvironmentVariableW(L"ALO_SETTINGS_LIVE", buf, 8);
+    return n > 0 && n < 8 && buf[0] == L'1';
+}
 
 // One-value registry writers for the settings key above. Every Persist* used
 // to hand-open/write/close the key with the identical RegCreateKeyExW
@@ -57,6 +73,20 @@ inline void WriteRegBinary(const wchar_t* name, const void* data, DWORD bytes,
                        static_cast<const BYTE*>(data), bytes);
         RegCloseKey(k);
     }
+}
+// REG_MULTI_SZ from an already-serialized blob (each string NUL-terminated,
+// plus the final extra NUL). Unlike the writers above this reports failure:
+// a caller whose value is authoritative needs to know it was not saved.
+inline bool WriteRegMultiSz(const wchar_t* name, const std::wstring& blob,
+                            const wchar_t* path = kRegistryKeyPath)
+{
+    HKEY k = OpenSettingsKeyForWrite(path);
+    if (!k) return false;
+    const LONG rc = RegSetValueExW(k, name, 0, REG_MULTI_SZ,
+                                   reinterpret_cast<const BYTE*>(blob.data()),
+                                   static_cast<DWORD>(blob.size() * sizeof(wchar_t)));
+    RegCloseKey(k);
+    return rc == ERROR_SUCCESS;
 }
 
 inline HKEY OpenSettingsKeyForRead(const wchar_t* path = kRegistryKeyPath)
@@ -117,6 +147,22 @@ inline std::wstring ReadRegSz(HKEY hKey, const wchar_t* name)
         return std::wstring();
     buf.back() = 0;
     return std::wstring(buf.data());
+}
+
+// REG_MULTI_SZ two-pass sized read. Returns the raw characters (embedded NULs
+// included) for the caller to split, since splitting rules belong to the
+// value's owner. Empty on any failure.
+inline std::vector<wchar_t> ReadRegMultiSz(HKEY hKey, const wchar_t* name)
+{
+    DWORD t = 0, cb = 0;
+    if (RegQueryValueExW(hKey, name, nullptr, &t, nullptr, &cb) != ERROR_SUCCESS
+        || t != REG_MULTI_SZ || cb < sizeof(wchar_t))
+        return std::vector<wchar_t>();
+    std::vector<wchar_t> buf(cb / sizeof(wchar_t));
+    if (RegQueryValueExW(hKey, name, nullptr, &t,
+            reinterpret_cast<LPBYTE>(buf.data()), &cb) != ERROR_SUCCESS)
+        return std::vector<wchar_t>();
+    return buf;
 }
 
 } // namespace host

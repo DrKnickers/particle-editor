@@ -192,11 +192,11 @@ int main()
             "ShouldReadCaptureRegistryOverrides(";
         const std::string block = ControlledBlock(source, call);
         const std::string goldenOnlyBlock =
-            ControlledBlock(source, "if (m_captureGoldenProfile)");
+            ControlledBlock(source, "if (m_params.captureGoldenProfile)");
         const size_t clearAt =
             source.find("engine->SetSkydomeEnvironment(");
         const size_t loadAt =
-            source.find("LoadParticleSystem(m_captureAlo");
+            source.find("LoadParticleSystem(m_params.captureAlo");
         const size_t seedAt = source.find("srand(0x5EEDu)");
 
         CHECK(!source.empty(), "CaptureRunner production source is readable");
@@ -204,7 +204,7 @@ int main()
               "CaptureRunner calls the registry-read predicate exactly once");
         CHECK(compact.find(
                   "if(ShouldReadCaptureRegistryOverrides("
-                  "m_captureGoldenProfile)){") != std::string::npos,
+                  "m_params.captureGoldenProfile)){") != std::string::npos,
               "capture registry reads are directly controlled by the predicate");
         CHECK(block.find("\"ShowGround\"") != std::string::npos,
               "ShowGround registry read is inside the controlled block");
@@ -213,10 +213,10 @@ int main()
               block.find("\"CaptureCamDist\"") != std::string::npos,
               "all CaptureCam registry reads are inside the controlled block");
         CHECK(compact.find(
-                  "m_captureGoldenProfile?"
+                  "m_params.captureGoldenProfile?"
                   "engine->SetEmbeddedSkydomeSlotForCapture("
-                  "m_captureSkydomeSlot):"
-                  "engine->SetSkydomeSlot(m_captureSkydomeSlot)") !=
+                  "m_params.captureSkydomeSlot):"
+                  "engine->SetSkydomeSlot(m_params.captureSkydomeSlot)") !=
                   std::string::npos,
               "golden mode alone selects the embedded skydome source");
         CHECK(goldenOnlyBlock.find("engine->SetSkydomeEnvironment(") !=

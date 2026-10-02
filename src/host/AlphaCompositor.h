@@ -4,7 +4,7 @@
 //   1. As a cross-device SHARED-HANDLE texture (GetSharedHandle) the host's
 //      Compositor opens from D3D11 and composites into its DComp visual —
 //      the live render transport (host::Compositor::CompositeEngineFrame).
-//   2. As an on-demand SNAPSHOT (CaptureSnapshotPng / CaptureSnapshotToFile)
+//   2. As an on-demand SNAPSHOT (CaptureSnapshotJpegBase64 / CaptureSnapshotToFile)
 //      read back via GetRenderTargetData: the modal frosted-glass backdrop
 //      (JPEG, base64) and the `--capture` offline-diff path (PNG to disk).
 //
@@ -61,7 +61,7 @@ public:
 
     // The "scene rect" is the visible viewport
     // sub-region (the centre quadrant), in viewport-client coords.
-    // CaptureSnapshotPng / CaptureSnapshotToFile crop the readback to
+    // CaptureSnapshotJpegBase64 / CaptureSnapshotToFile crop the readback to
     // this rect so the modal backdrop / --capture PNG show only the
     // pixels the user sees, not the offstage engine content that sits
     // under the side panels.
@@ -84,14 +84,14 @@ public:
     // occlusion stamps and BEFORE modal-mask dim/blur — exactly the
     // pixels React's <img src=...> backdrop wants to see, so CSS
     // effects above can dim + blur it uniformly with the panels.
-    bool CaptureSnapshotPng(std::string& outBase64, int& outW, int& outH);
+    bool CaptureSnapshotJpegBase64(std::string& outBase64, int& outW, int& outH);
 
     // Write the most recent pre-stamp engine
-    // frame straight to a PNG file at `path`. Same readback + crop +
-    // GDI+ encode as CaptureSnapshotPng, but saves to disk instead of
-    // returning base64 — used by the `--capture` CLI mode so rendering
+    // frame straight to a PNG file at `path`. Same readback + crop as
+    // CaptureSnapshotJpegBase64, but GDI+-encodes a lossless PNG to disk
+    // instead of returning base64 JPEG — used by the `--capture` CLI mode so rendering
     // fidelity can be inspected/diffed offline without a screen. Returns
-    // false on the same conditions as CaptureSnapshotPng (no frame, no
+    // false on the same conditions as CaptureSnapshotJpegBase64 (no frame, no
     // RT, encoder unavailable, or the file write failing). GDI+ must be
     // initialized by the host (HostWindow::Run). UI-thread only.
     bool CaptureSnapshotToFile(const std::wstring& path);

@@ -510,11 +510,11 @@ bool LayoutBroker::AdvanceSceneAnim(long long qpcNow)
     return true;
 }
 
-bool LayoutBroker::CaptureSnapshotPng(std::string& outBase64, int& outW, int& outH)
+bool LayoutBroker::CaptureSnapshotJpegBase64(std::string& outBase64, int& outW, int& outH)
 {
     if (!m_alphaCompositor || !m_engine || m_engine->DeviceCallsBlocked())
         return false;
-    return m_alphaCompositor->CaptureSnapshotPng(outBase64, outW, outH);
+    return m_alphaCompositor->CaptureSnapshotJpegBase64(outBase64, outW, outH);
 }
 
 bool LayoutBroker::CaptureSnapshotToFile(const std::wstring& path)

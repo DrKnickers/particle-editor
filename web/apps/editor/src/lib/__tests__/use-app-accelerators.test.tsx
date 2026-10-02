@@ -308,9 +308,13 @@ describe("useAppAccelerators — uncovered dispatch + guard paths", () => {
     expect(b.request).not.toHaveBeenCalled();
     const pending = useFileStateStore.getState().pendingAction;
     expect(pending).toBeTypeOf("function");
-    // Running the parked closure (what Save / Don't Save does) issues file/new.
-    void pending!();
+    // Running the parked closure after a Save issues a plain file/new...
+    void pending!({ discardUnsaved: false });
     expect(b.request).toHaveBeenCalledWith({ kind: "file/new", params: {} });
+    // ...and after Don't Save it tells the host the discard is confirmed.
+    b.request.mockClear();
+    void pending!({ discardUnsaved: true });
+    expect(b.request).toHaveBeenCalledWith({ kind: "file/new", params: { discardUnsaved: true } });
   });
 
   it("Ctrl+O routes through the save-changes gate and runFileOp", () => {

@@ -6,7 +6,7 @@
 // WS_EX_LAYERED popup architecture under
 // the default Playwright config, so this spec exercises exactly the
 // path that lost its cache: `Composite()` skips the cache copy, and
-// `CaptureSnapshotPng()` must do its own `GetRenderTargetData` +
+// `CaptureSnapshotJpegBase64()` must do its own `GetRenderTargetData` +
 // `LockRect` + GDI+ PNG encode on demand.
 //
 // What this spec proves:
@@ -152,7 +152,7 @@ test("first viewport/capture-snapshot after boot returns a valid, non-blank JPEG
   expect(colors).toBeGreaterThan(blank);  // ...and the real snapshot clears it
   // The backdrop snapshot is downscaled before encoding (min 2x, capped at a
   // 1024 long edge — it's blurred behind the dialog; see
-  // AlphaCompositor::CaptureSnapshotPng). 1024x768 is under the cap, so it
+  // AlphaCompositor::CaptureSnapshotJpegBase64). 1024x768 is under the cap, so it
   // takes the 2x path: 512x384.
   expect(result.w).toBe(512);
   expect(result.h).toBe(384);
@@ -162,7 +162,7 @@ test("two consecutive snapshots both succeed (readback path is re-entrant)", asy
   // Validates that GetRenderTargetData → LockRect → UnlockRect is
   // properly paired. A bug where UnlockRect was missed would leave
   // the SYSTEMMEM surface locked; the second LockRect would return
-  // D3DERR_INVALIDCALL and CaptureSnapshotPng would return false →
+  // D3DERR_INVALIDCALL and CaptureSnapshotJpegBase64 would return false →
   // imageBase64 would be the empty string per the host fall-through.
   const result = await page.evaluate(async () => {
     const b = window.bridge!;
@@ -225,7 +225,7 @@ test("snapshot dimensions follow viewport resize (readback uses current RT, not 
 
   // The modal backdrop snapshot is downscaled before encoding (min 2x,
   // capped at a 1024 long edge — it's blurred behind the dialog; see
-  // AlphaCompositor::CaptureSnapshotPng). Both these captures are under the
+  // AlphaCompositor::CaptureSnapshotJpegBase64). Both these captures are under the
   // cap, so each takes the 2x path with aspect preserved: 800x600 -> 400x300,
   // 1600x900 -> 800x450. The dims still CHANGE between them, which is what
   // this test actually guards (a fresh readback, not a stale cache).

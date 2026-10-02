@@ -59,7 +59,13 @@ describe("MockBridge contract — file/*, recent/*, mods/*", () => {
     expect((await b.request({ kind: "engine/state/snapshot", params: {} })).dirty)
       .toBe(true);
 
-    const r = await b.request({ kind: "file/new", params: {} });
+    // Like the native host, a dirty document is only replaced once the user
+    // chose Don't Save.
+    const refused = await b.request({ kind: "file/new", params: {} });
+    expect(refused).toEqual({ ok: false, error: "unsaved-changes" });
+    expect((await b.request({ kind: "engine/state/snapshot", params: {} })).dirty).toBe(true);
+
+    const r = await b.request({ kind: "file/new", params: { discardUnsaved: true } });
     expect(r).toEqual({});
     const snap = await b.request({ kind: "engine/state/snapshot", params: {} });
     expect(snap.dirty).toBe(false);
@@ -105,5 +111,30 @@ describe("MockBridge contract — file/*, recent/*, mods/*", () => {
     const b = new MockBridge();
     const r = await b.request({ kind: "file/open", params: {} } as any);
     expect(r).toEqual({ ok: false, error: "browser-mode" });
+  });
+
+  it("file/open of an .alo over unsaved work is refused until the discard is confirmed", async () => {
+    const b = new MockBridge();
+    await b.request({ kind: "engine/set/ground-z", params: { z: 3 } });   // dirty
+    expect(await b.request({ kind: "file/open", params: { path: "C:/a.alo" } }))
+      .toEqual({ ok: false, error: "unsaved-changes" });
+    let snap = await b.request({ kind: "engine/state/snapshot", params: {} });
+    expect(snap.dirty).toBe(true);
+    expect(snap.currentFilePath).toBeNull();
+
+    // Texture pickers never touch the document, so they are never refused.
+    expect(await b.request({ kind: "file/open", params: { filter: "skydome" } }))
+      .toEqual({ ok: false, error: "browser-mode" });
+
+    expect(await b.request({ kind: "file/open", params: { path: "C:/a.alo", discardUnsaved: true } }))
+      .toEqual({ ok: true, path: "C:/a.alo" });
+    snap = await b.request({ kind: "engine/state/snapshot", params: {} });
+    expect(snap.dirty).toBe(false);
+    expect(snap.currentFilePath).toBe("C:/a.alo");
+  });
+
+  it("file/new on a clean document needs no discard flag", async () => {
+    const b = new MockBridge();
+    expect(await b.request({ kind: "file/new", params: {} })).toEqual({});
   });
 });

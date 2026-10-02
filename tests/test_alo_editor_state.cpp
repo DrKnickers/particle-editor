@@ -128,10 +128,10 @@ int main()
         ParticleSystem ps;
         Emitter* src = ps.addRootEmitter();
         src->lifetime  = kLifetime;
-        // setDefaults leaves these two uninitialized; pin them so the image
-        // (and its byte-identity re-save) is deterministic.
-        src->unknown2b = false;
-        src->unknown49 = 0;
+        // setDefaults zeroes these two, which keeps the image (and its
+        // byte-identity re-save) deterministic.
+        CHECK(!src->unknown2b && src->unknown49 == 0,
+              "a default emitter has unknown2b / unknown49 zeroed");
         const Bytes plain = serialize(ps);
 
         Bytes lifetimeMini = { 0x0F, 0x04 };

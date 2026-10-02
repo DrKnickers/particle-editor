@@ -1,4 +1,5 @@
 #include "Autosave.h"
+#include "AtomicSave.h"
 
 #include "ParticleSystem.h"
 #include "files.h"
@@ -314,23 +315,6 @@ void SetProcessNameProbeForTest(ProcessNameProbe probe)
 }
 #endif
 
-static bool VerifyParticleSystemFile(const std::wstring& path)
-{
-    PhysicalFile* f = NULL;
-    try
-    {
-        f = new PhysicalFile(path, PhysicalFile::READ);
-        std::unique_ptr<ParticleSystem> verified(new ParticleSystem(f));
-        f->Release();
-        return true;
-    }
-    catch (...)
-    {
-        if (f) f->Release();
-        return false;
-    }
-}
-
 static bool WriteTier(const ParticleSystem& sys,
                       const std::wstring&   originalFilename,
                       Tier                  tier,
@@ -339,59 +323,29 @@ static bool WriteTier(const ParticleSystem& sys,
     std::wstring dest = (tier == Tier::Recent) ? OurRecentPath() : OurStablePath();
     if (dest.empty()) return false;
     if (!EnsureAutosaveDir()) return false;
-    std::wstring tmp = dest + L".tmp";
 
-    // Write to a temp file then atomically rename into place — a
-    // crash mid-write leaves the .tmp behind but the destination
-    // .alo is either the previous good version or absent (never
-    // partial).
-    PhysicalFile* f = NULL;
-    try
-    {
-        f = new PhysicalFile(tmp, PhysicalFile::WRITE);
-        const_cast<ParticleSystem&>(sys).write(f);
-        f->Release();
-        f = NULL;
-    }
-    catch (...)
-    {
-        // Release BEFORE deleting. PhysicalFile opens without FILE_SHARE_DELETE,
-        // so DeleteFileW fails while the handle is live and the .tmp survives —
-        // and the next autosave targets that same path, cannot reopen it for
-        // writing, and throws again. One failed write would otherwise disable
-        // autosave silently for the rest of the session.
-        if (f) { f->Release(); f = NULL; }
-        DeleteFileW(tmp.c_str());
-        AUTOSAVE_LOG("[Autosave] tier=%s write FAILED %ls (PhysicalFile threw)\n",
-                     tier == Tier::Recent ? "recent" : "stable", tmp.c_str());
-        return false;
-    }
-
+    // Write a flushed temp then rename it into place — a crash mid-write
+    // leaves the .tmp behind but the destination .alo is either the previous
+    // good version or absent (never partial). The temp name stays exactly
+    // dest + ".tmp": ClassifyAutosaveName and DeleteOurSession recognise an
+    // interrupted write by it.
+    //
     // Recovery handoff has a stronger contract than periodic autosave: prove
     // that the still-uncommitted candidate can be loaded by the production
     // ParticleSystem parser before replacing any prior current-session tier.
     // Periodic writes keep their existing single-serialization cost.
-    if (verifyBeforeCommit)
-    {
+    AtomicSaveOptions options;
+    options.verify  = verifyBeforeCommit;
+    options.tmpPath = dest + L".tmp";
 #ifdef AUTOSAVE_TESTING
-        if (g_recoveryCandidateHook) g_recoveryCandidateHook(tmp);
+    options.beforeVerify = g_recoveryCandidateHook;
 #endif
-        if (!VerifyParticleSystemFile(tmp))
-        {
-            DeleteFileW(tmp.c_str());
-            AUTOSAVE_LOG("[Autosave] recovery handoff verify FAILED %ls\n", tmp.c_str());
-            return false;
-        }
-    }
-
-    DWORD moveFlags = MOVEFILE_REPLACE_EXISTING;
-    if (verifyBeforeCommit) moveFlags |= MOVEFILE_WRITE_THROUGH;
-    if (!MoveFileExW(tmp.c_str(), dest.c_str(), moveFlags))
+    std::string err;
+    if (!AtomicWriteParticleSystem(sys, dest, options, &err))
     {
-        DeleteFileW(tmp.c_str());
-        AUTOSAVE_LOG("[Autosave] tier=%s rename FAILED %ls -> %ls err=%lu\n",
+        AUTOSAVE_LOG("[Autosave] tier=%s write FAILED %ls (%s)\n",
                      tier == Tier::Recent ? "recent" : "stable",
-                     tmp.c_str(), dest.c_str(), (unsigned long)GetLastError());
+                     options.tmpPath.c_str(), err.c_str());
         return false;
     }
 

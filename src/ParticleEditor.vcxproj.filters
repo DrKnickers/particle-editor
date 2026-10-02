@@ -81,10 +81,10 @@
     <ClInclude Include="Autosave.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="UndoStack.h">
+    <ClInclude Include="AtomicSave.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="resource.h">
+    <ClInclude Include="UndoStack.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="SphericalHarmonics.h">
@@ -133,6 +133,9 @@
       <Filter>Header Files\host</Filter>
     </ClInclude>
     <ClInclude Include="host\CaptureRunner.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\CaptureTicker.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
     <ClInclude Include="host\HostRunUtil.h">
@@ -208,6 +211,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ManipReadout.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GameRoots.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ModLayers.h">
@@ -392,6 +398,9 @@
     <ClCompile Include="Autosave.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="AtomicSave.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="UndoStack.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -462,6 +471,9 @@
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\CaptureRunner.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\CaptureTicker.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\WicEncode.cpp">

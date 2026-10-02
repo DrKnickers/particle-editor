@@ -9,6 +9,8 @@
 
 #include "ModManager.h"
 #include "ModScan.h"   // ScanModNestedLayers / ModRootHasArt (transitively ModLayers.h)
+#include "GameRoots.h"
+#include "host/SettingsRegistry.h"
 
 #include "engine.h"
 #include "managers.h"
@@ -34,23 +36,11 @@ using std::vector;
 wstring ReadModNickname(const wstring& modPath)
 {
     wstring nickname;
-    HKEY hKey;
-    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor\\ModNicknames", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+    if (HKEY hKey = host::OpenSettingsKeyForRead(host::kRegModNicknamesPath))
     {
-        TCHAR  buf[256] = {0};
-        DWORD  type;
-        // A REG_SZ value is NOT required to be NUL-terminated. One that exactly
-        // filled this buffer left `nickname = buf` scanning past its end
-        // (2026-07 audit). Reserve the last element for a terminator we
-        // write ourselves, and place it at the length the API actually returned.
-        DWORD  size = sizeof(buf) - sizeof(TCHAR);
-        if (RegQueryValueEx(hKey, modPath.c_str(), NULL, &type, (LPBYTE)buf, &size) == ERROR_SUCCESS && type == REG_SZ)
-        {
-            const size_t maxIdx = (sizeof(buf) / sizeof(TCHAR)) - 1;
-            const size_t chars  = size / sizeof(TCHAR);
-            buf[chars < maxIdx ? chars : maxIdx] = 0;
-            nickname = buf;
-        }
+        // ReadRegSz terminates the value itself: a REG_SZ is NOT required to
+        // be NUL-terminated.
+        nickname = host::ReadRegSz(hKey, modPath.c_str());
         RegCloseKey(hKey);
     }
     return nickname;
@@ -58,13 +48,13 @@ wstring ReadModNickname(const wstring& modPath)
 
 static void WriteLastMod(const wstring& modPath)
 {
-    HKEY hKey;
-    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
-                       REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
+    // Unmodded is recorded as an empty string, not a deleted value, so this
+    // writes directly instead of through WriteRegSz (which deletes on empty).
+    if (HKEY hKey = host::OpenSettingsKeyForWrite())
     {
-        RegSetValueEx(hKey, L"LastMod", 0, REG_SZ,
-                      (const BYTE*)modPath.c_str(),
-                      (DWORD)((modPath.size() + 1) * sizeof(TCHAR)));
+        RegSetValueExW(hKey, L"LastMod", 0, REG_SZ,
+                       (const BYTE*)modPath.c_str(),
+                       (DWORD)((modPath.size() + 1) * sizeof(wchar_t)));
         RegCloseKey(hKey);
     }
 }
@@ -76,39 +66,23 @@ static void WriteLastMod(const wstring& modPath)
 static vector<wstring> ReadLastLayers()
 {
     vector<wstring> out;
-    HKEY hKey;
-    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+    if (HKEY hKey = host::OpenSettingsKeyForRead())
     {
-        DWORD type = 0, bytes = 0;
-        if (RegQueryValueEx(hKey, L"LastLayers", NULL, &type, NULL, &bytes) == ERROR_SUCCESS
-            && type == REG_MULTI_SZ && bytes >= sizeof(wchar_t))
-        {
-            std::vector<wchar_t> buf(bytes / sizeof(wchar_t));
-            if (RegQueryValueEx(hKey, L"LastLayers", NULL, &type, (LPBYTE)buf.data(), &bytes) == ERROR_SUCCESS)
-                out = modlayers::ParseMultiSz(buf.data(), buf.size());
-        }
+        const std::vector<wchar_t> buf = host::ReadRegMultiSz(hKey, L"LastLayers");
+        if (!buf.empty())
+            out = modlayers::ParseMultiSz(buf.data(), buf.size());
         RegCloseKey(hKey);
     }
     return out;
 }
 
-// Returns false when the stack could NOT be persisted. Both failure modes used
-// to be discarded — RegCreateKeyEx's result gated the block and RegSetValueEx's
-// was never even read — so a locked or policy-blocked registry looked exactly
-// like a successful save, and the bridge answered {ok:true} (2026-07 audit).
+// Returns false when the stack could NOT be persisted (key open or value write
+// failed), so a locked or policy-blocked registry doesn't look like a
+// successful save and the bridge doesn't answer {ok:true} (2026-07 audit).
 // LastLayers is authoritative, so its failure is the caller's business.
 static bool WriteLastLayers(const vector<wstring>& layers)
 {
-    HKEY hKey;
-    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
-                       REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) != ERROR_SUCCESS)
-        return false;
-
-    const std::wstring blob = modlayers::SerializeMultiSz(layers);
-    const LONG rc = RegSetValueEx(hKey, L"LastLayers", 0, REG_MULTI_SZ,
-                                  (const BYTE*)blob.data(), (DWORD)(blob.size() * sizeof(wchar_t)));
-    RegCloseKey(hKey);
-    return rc == ERROR_SUCCESS;
+    return host::WriteRegMultiSz(L"LastLayers", modlayers::SerializeMultiSz(layers));
 }
 
 // ---------------------------------------------------------------------------
@@ -154,8 +128,8 @@ static void ScanModsDir(const wstring& modsRoot, bool isFoC, vector<ModEntry>& o
 
 ModManager::ModManager(IFileManager* fileManager,
                        const vector<wstring>& gameRoots,
-                       bool ephemeral)
-    : m_ephemeral(ephemeral),
+                       bool suppressPersistence)
+    : m_suppressPersistence(suppressPersistence),
       m_fileManager(fileManager),
       m_gameRoots(gameRoots)
 {}
@@ -172,16 +146,10 @@ void ModManager::DiscoverMods()
     {
         // Strip trailing slashes; the leaf basename is the engine-flavor
         // discriminator (corruption/ → FoC, GameData/ → Base Game).
-        wstring trimmed = root;
-        while (!trimmed.empty() && (trimmed.back() == L'\\' || trimmed.back() == L'/')) trimmed.pop_back();
-
-        size_t sep  = trimmed.find_last_of(L"\\/");
-        wstring leaf = (sep == wstring::npos) ? trimmed : trimmed.substr(sep + 1);
-
-        bool isFoC;
-        if (_wcsicmp(leaf.c_str(), L"corruption") == 0) isFoC = true;
-        else if (_wcsicmp(leaf.c_str(), L"GameData") == 0) isFoC = false;
-        else continue;
+        const wstring trimmed = gameroots::TrimTrailingSlashes(root);
+        const gameroots::RootFlavor flavor = gameroots::ClassifyGameRoot(trimmed);
+        if (flavor == gameroots::RootFlavor::Other) continue;
+        const bool isFoC = (flavor == gameroots::RootFlavor::FoC);
 
         wstring modsDir = trimmed + L"\\Mods";
         if (PathIsDirectory(modsDir.c_str()))
@@ -285,8 +253,9 @@ bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers, bool allow
     //    write-only best-effort record (nothing in the editor reads it anymore).
     //    On a failed reload we leave the registry untouched so the next launch boots
     //    the last-known-good stack, not one whose shaders failed to load.
-    //    (--drive / m_ephemeral never rewrites the daily driver's mod stack.)
-    if (allowPersist && !m_ephemeral && modlayers::ShouldPersistLayers(ok))
+    //    (A headless run — m_suppressPersistence — never rewrites the daily
+    //    driver's mod stack.)
+    if (allowPersist && !m_suppressPersistence && modlayers::ShouldPersistLayers(ok))
     {
         if (!WriteLastLayers(m_layerStack))
         {

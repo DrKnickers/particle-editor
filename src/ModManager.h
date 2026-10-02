@@ -58,14 +58,14 @@ struct ModEntry
 class ModManager
 {
 public:
-    // ephemeral (true in --drive mode): suppress ALL registry writes
-    // (LastLayers/LastMod) so a --drive run never rewrites the
-    // daily driver's persisted mod stack — notably the startup write-back via
-    // RestoreLastLayerStack -> SetLayerStack. HostWindow and BridgeDispatcher
-    // carry related automation/persistence state under their own ownership.
+    // suppressPersistence (true in every headless run: capture, --drive,
+    // --record, and --test-host unless ALO_SETTINGS_LIVE is set): suppress ALL
+    // registry writes (LastLayers/LastMod) so such a run never rewrites the
+    // daily driver's persisted mod stack. HostWindow and BridgeDispatcher carry
+    // related automation/persistence state under their own ownership.
     ModManager(IFileManager* fileManager,
                const std::vector<std::wstring>& gameRoots,
-               bool ephemeral = false);
+               bool suppressPersistence = false);
 
     // Late-bound engine pointer. Required before the first SelectMod
     // that needs to take visible effect (shader + texture reload).
@@ -99,8 +99,9 @@ public:
     // engine assets (if bound).
     // Returns false if the engine shader reload failed OR the stack could not be
     // persisted (state still rolls forward in memory either way).
-    // allowPersist=false suppresses the registry write on top of the ephemeral
-    // gate (the dispatcher passes the test-host settings gate through here so a
+    // allowPersist=false suppresses the registry write on top of the
+    // suppressPersistence gate (the dispatcher passes the test-host settings
+    // gate through here so a
     // --test-host run never rewrites the daily driver's LastLayers/LastMod), and
     // RestoreLastLayerStack passes it because a restore is not a user edit.
     // outError, when supplied, receives a human-readable reason on failure so
@@ -124,7 +125,7 @@ public:
     std::wstring GetPrimaryLayerPath() const { return m_primaryLayerPath; }
 
 private:
-    bool                      m_ephemeral = false;  // --drive: suppress registry writes
+    bool                      m_suppressPersistence = false;  // headless run: no registry writes
     IFileManager*             m_fileManager;
     Engine*                   m_engine = nullptr;
     std::vector<std::wstring> m_gameRoots;

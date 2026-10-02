@@ -48,6 +48,20 @@ static MemoryFile* makeFile(const std::string& text)
     return f;
 }
 
+// An IFile that never reaches EOF and never delivers a byte -- a stalled or
+// failing stream. parse() must reject it rather than loop forever.
+class StalledFile : public IFile
+{
+public:
+    unsigned long reads = 0;
+    bool          eof()                           { return false; }
+    unsigned long size()                          { return 1; }
+    void          seek(unsigned long)             {}
+    unsigned long tell()                          { return 0; }
+    unsigned long read(void*, unsigned long)      { ++reads; return 0; }
+    unsigned long write(const void*, unsigned long) { return 0; }
+};
+
 // Build a shallow document whose attributes are split across two siblings.
 // This is deliberately NOT one giant element: a mistaken per-element cap would
 // accept the over-budget document, while the required document-wide counter
@@ -284,6 +298,35 @@ int main()
               "131073 document-wide attributes raise ParseException (over contract)");
         CHECK(!otherFailure,
               "131073-attribute rejection is the parser-abort path, not another exception");
+        f->Release();
+    }
+
+    // --- I: a read that returns 0 bytes before EOF is a ParseException, not an
+    // endless loop. The stub would spin forever under the old loop.
+    {
+        StalledFile* f = new StalledFile();
+        XMLTree tree;
+        bool parseFailure = false;
+        bool otherFailure = false;
+        try { tree.parse(f); }
+        catch (ParseException&) { parseFailure = true; }
+        catch (...) { otherFailure = true; }
+        CHECK(parseFailure && !otherFailure,
+              "0-byte read before EOF raises ParseException");
+        CHECK(f->reads == 1, "the stalled read is attempted exactly once");
+        f->Release();
+    }
+
+    // --- J: per-parse state is reset, so a normal document still parses on
+    // this thread after the rejected one above.
+    {
+        MemoryFile* f = makeFile("<a/>");
+        XMLTree tree;
+        bool threw = false;
+        try { tree.parse(f); }
+        catch (...) { threw = true; }
+        CHECK(!threw && tree.getRoot() != NULL,
+              "a normal parse after a rejected one still succeeds");
         f->Release();
     }
 

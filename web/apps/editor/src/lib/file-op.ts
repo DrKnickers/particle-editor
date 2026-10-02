@@ -1,10 +1,12 @@
 // file-op.ts — wraps file/save|open|save-as so non-cancel failures surface
 // in a single App-level error modal instead of being silently discarded.
 // `bridge` is passed in (App.tsx:35 owns the only instance; it is a prop,
-// not a module singleton). Touches only the error store, so it is callable
-// from non-component code (use-app-accelerators.ts).
+// not a module singleton). Touches only the error store and the file-state
+// prompt slot, so it is callable from non-component code
+// (use-app-accelerators.ts). replaceDocument is the New / Open entry point.
 import { create } from "zustand";
 import type { Bridge, Request, ResponseFor } from "@particle-editor/bridge-schema";
+import { promptSaveChanges, reopenSaveChangesDialog, type PendingActionFn } from "@/lib/file-state";
 
 type FileOpErrorStore = {
   message: string | null;
@@ -38,6 +40,11 @@ const PREFIX: Record<FileOpReq["kind"], string> = {
   "file/save-as": "Couldn't save the file.",
 };
 
+// The host's answer when file/new or file/open would replace a document with
+// unsaved work the user has not chosen to discard. Not an error to show: the
+// caller reopens the save prompt instead (see replaceDocument).
+export const UNSAVED_CHANGES = "unsaved-changes";
+
 // Generic host errors ("save failed" / "load failed") add no information
 // beyond the prefix; anything else (a real path/permission message) is shown.
 export function messageFor(kind: FileOpReq["kind"], error: string): string {
@@ -61,7 +68,8 @@ export async function runFileOp(
     throw err;
   }
   if (!r.ok && r.error !== "user-cancelled") {
-    useFileOpErrorStore.getState().show(messageFor(req.kind, r.error));
+    if (r.error !== UNSAVED_CHANGES)
+      useFileOpErrorStore.getState().show(messageFor(req.kind, r.error));
     return r;
   }
   // After a successful Open, surface a notice if the .alo holds no particle
@@ -81,4 +89,33 @@ export async function runFileOp(
     }
   }
   return r;
+}
+
+// New / Open / Open Recent: replace the open document, gated on the
+// Save-changes prompt. The request carries `discardUnsaved: true` only when the
+// user chose Don't Save, so the clean path's request is unchanged. If the host
+// still refuses with "unsaved-changes" (an edit landed after the prompt's clean
+// check), the prompt reopens for the same action instead of an error modal.
+export type DocumentReplaceReq =
+  | { kind: "file/new"; params: Record<string, never> }
+  | { kind: "file/open"; params: { path?: string } };
+
+export function replaceDocument(bridge: Bridge, req: DocumentReplaceReq): void {
+  const action: PendingActionFn = async ({ discardUnsaved }) => {
+    let refused: boolean;
+    if (req.kind === "file/new") {
+      const r = await bridge.request(
+        discardUnsaved ? { kind: "file/new", params: { discardUnsaved: true } } : req,
+      );
+      refused = "ok" in r && !r.ok && r.error === UNSAVED_CHANGES;
+    } else {
+      const r = await runFileOp(
+        bridge,
+        discardUnsaved ? { kind: "file/open", params: { ...req.params, discardUnsaved: true } } : req,
+      );
+      refused = !r.ok && r.error === UNSAVED_CHANGES;
+    }
+    if (refused) reopenSaveChangesDialog(action);
+  };
+  promptSaveChanges(action);
 }

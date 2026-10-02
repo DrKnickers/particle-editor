@@ -28,6 +28,7 @@
 #include <windows.h>
 
 #include "ParticleSystemIO.h"   // compile contract: the header must stand alone
+#include "AtomicSave.h"         // section I: the shared save path, linked for real
 #include "ParticleSystem.h"
 #include "ParticleSystemInstance.h"
 #include "ResourceLimits.h"     // kMaxEmitterTreeDepth (section G)
@@ -445,6 +446,69 @@ int main()
         CHECK(rp != nullptr && !other &&
                   rp->getName() == "derived_name_check",
               "derive: reloaded file carries the filename-derived name");
+    }
+
+    // ---- I: AtomicWriteParticleSystem — the crash-durable save behind both
+    // File > Save (SaveParticleSystem) and the autosave tiers. Temp in the
+    // destination's directory, flushed, optionally verified, then renamed
+    // over the destination; any failure leaves the destination untouched and
+    // removes the temp.
+    {
+        auto exists = [](const std::wstring& p) {
+            return GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES;
+        };
+        auto reloadedName = [](const std::wstring& p) {
+            bool other = false;
+            std::unique_ptr<ParticleSystem> rp = loadFrom(p, other);
+            return rp && !other ? rp->getName() : std::string("<load failed>");
+        };
+
+        ParticleSystem ps;
+        ps.addRootEmitter();
+        ps.setName("atomic_first");
+        const std::wstring dest = tempPath(L"Atomic.alo");
+        const std::wstring tmp  = tempPath(L"Atomic.alo.4242.tmp");
+        AtomicSaveOptions options;
+        options.tmpPath = tmp;
+
+        std::string err = "stale";
+        CHECK(AtomicWriteParticleSystem(ps, dest, options, &err) && err.empty(),
+              "atomic: a fresh save succeeds and clears the error");
+        CHECK(!exists(tmp), "atomic: the temp was renamed away");
+        CHECK(reloadedName(dest) == "atomic_first", "atomic: the destination holds the save");
+
+        // Replace an existing file, with the verify pass on.
+        ps.setName("atomic_second");
+        options.verify = true;
+        CHECK(AtomicWriteParticleSystem(ps, dest, options, &err),
+              "atomic: a verified save replaces the existing destination");
+        CHECK(reloadedName(dest) == "atomic_second", "atomic: the replacement landed");
+
+        // A candidate that fails verification never replaces the destination.
+        ps.setName("atomic_third");
+        options.beforeVerify = [](const std::wstring& candidate) {
+            writeRawBytes(candidate, "junk", 4);
+        };
+        CHECK(!AtomicWriteParticleSystem(ps, dest, options, &err) && !err.empty(),
+              "atomic: a candidate that does not load back is refused with a reason");
+        CHECK(!exists(tmp), "atomic: the refused temp is removed");
+        CHECK(reloadedName(dest) == "atomic_second",
+              "atomic: the destination is untouched by the refused save");
+
+        // An unopenable temp fails before anything is written.
+        AtomicSaveOptions bad;
+        bad.tmpPath = g_tempDir + L"\\no-such-dir\\Atomic.alo.tmp";
+        CHECK(!AtomicWriteParticleSystem(ps, dest, bad, &err) && !err.empty(),
+              "atomic: an unopenable temp is reported");
+        CHECK(reloadedName(dest) == "atomic_second",
+              "atomic: ...and the destination is untouched");
+
+        // No tmpPath: the temp defaults to dest + ".tmp" (the autosave name).
+        const std::wstring defaultTmp = tempPath(L"Atomic.alo.tmp");
+        CHECK(AtomicWriteParticleSystem(ps, dest, AtomicSaveOptions(), nullptr),
+              "atomic: the default temp name works without an error sink");
+        CHECK(!exists(defaultTmp), "atomic: the default temp was renamed away");
+        CHECK(reloadedName(dest) == "atomic_third", "atomic: default-temp save landed");
     }
 
     cleanupTempDir();

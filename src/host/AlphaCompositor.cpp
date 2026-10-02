@@ -55,7 +55,7 @@ struct AlphaCompositor::Impl
     int      height     = 0;
 
     // The scene rect — the visible viewport sub-region
-    // (viewport-client coords) that CaptureSnapshotPng / CaptureSnapshot
+    // (viewport-client coords) that CaptureSnapshotJpegBase64 / CaptureSnapshot
     // ToFile crop the readback to. Default (0/0/0/0) disables the crop
     // (full RT) — the host-boot default before React dispatches the
     // first layout/scene-rect.
@@ -178,7 +178,7 @@ void AlphaCompositor::SetSceneRect(int x, int y, int w, int h)
 // + host::Base64Encode(…). Was four copy-pasted CLSID lookups + two identical
 // Base64 copies across AlphaCompositor / WindowCapture / PaletteThumbs.
 
-bool AlphaCompositor::CaptureSnapshotPng(std::string& outBase64, int& outW, int& outH)
+bool AlphaCompositor::CaptureSnapshotJpegBase64(std::string& outBase64, int& outW, int& outH)
 {
     // On-demand readback: a one-shot GetRenderTargetData at snapshot time
     // (~12-15 ms, imperceptible vs. the ~50-100 ms dialog mount + React
@@ -228,7 +228,7 @@ bool AlphaCompositor::CaptureSnapshotPng(std::string& outBase64, int& outW, int&
     // Crop region = the current scene rect (the only sub-region
     // that holds pixels the user sees; encoding the full RT would stretch
     // outside-scene engine content into the modal's backdrop). When no
-    // scene rect is set (boot, or harnesses that drive CaptureSnapshotPng
+    // scene rect is set (boot, or harnesses that drive CaptureSnapshotJpegBase64
     // without a layout/scene-rect dispatch), fall back to the full RT. This
     // needs only width/height, so it runs BEFORE any readback and is shared
     // by both the fast (StretchRect) and slow (full-readback) paths.
@@ -517,7 +517,7 @@ bool AlphaCompositor::CaptureSnapshotPng(std::string& outBase64, int& outW, int&
 
 bool AlphaCompositor::CaptureSnapshotToFile(const std::wstring& path)
 {
-    // Same one-shot readback + scene-rect crop as CaptureSnapshotPng,
+    // Same one-shot readback + scene-rect crop as CaptureSnapshotJpegBase64,
     // but GDI+ saves straight to `path` instead of encoding to base64.
     // Kept as a separate method (rather than refactoring the shared
     // readback) so the proven modal-snapshot path stays untouched.

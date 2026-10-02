@@ -938,6 +938,11 @@ export class MockBridge implements Bridge {
       //     "this is a fake/cancelled pick" is the lack of `path`.
 
       case "file/new":
+        // Mirror the native host's data-loss guard: a dirty document is only
+        // replaced once the user chose Don't Save (discardUnsaved).
+        if (snapshotEngineState().dirty && !req.params?.discardUnsaved) {
+          return { ok: false, error: "unsaved-changes" };
+        }
         // Reset engine state to defaults, clear currentFilePath, clear
         // dirty. Emit dirty/changed (always — markClean dedupes on
         // already-clean, but file/new from a clean state may still
@@ -969,6 +974,13 @@ export class MockBridge implements Bridge {
         // for type-compat but ignored here: there's no native dialog to
         // re-filter, and the browser-mode return value is the same
         // regardless of which surface invoked the picker.
+        //
+        // Opening an .alo replaces the document, so the native host's
+        // data-loss guard applies first (texture filters never touch it).
+        if ((req.params?.filter ?? "alo") === "alo" &&
+            snapshotEngineState().dirty && !req.params?.discardUnsaved) {
+          return { ok: false, error: "unsaved-changes" };
+        }
         const explicit = req.params?.path;
         if (!explicit) {
           return { ok: false, error: "browser-mode" };

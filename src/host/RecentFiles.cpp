@@ -41,9 +41,8 @@ std::vector<std::wstring> ReadRecentFilesUncapped()
 {
     std::vector<std::pair<ULONGLONG, std::wstring>> entries;
 
-    HKEY hKey;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0,
-                      KEY_READ, &hKey) != ERROR_SUCCESS)
+    HKEY hKey = OpenSettingsKeyForRead();
+    if (!hKey)
     {
         return {};
     }
@@ -122,9 +121,7 @@ std::vector<std::wstring> WriteRecentFile(const std::wstring& path)
 
     if (list.size() > kMaxRecentFiles)
     {
-        HKEY hTrim;
-        if (RegOpenKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0,
-                          KEY_READ | KEY_WRITE, &hTrim) == ERROR_SUCCESS)
+        if (HKEY hTrim = OpenSettingsKeyForWrite())
         {
             for (size_t i = kMaxRecentFiles; i < list.size(); ++i)
             {

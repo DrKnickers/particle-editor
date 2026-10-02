@@ -32,6 +32,9 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 - A failed `--record` run no longer replaces the previous good clip, and recording never deletes unrelated files left in the clip's staging folder
 - The curve editor's right-click key menu now works from the keyboard (arrow keys, Enter, Escape) and returns focus where it came from. Each curve channel row has its own visibility checkbox and a separate "Edit curve" button, so screen readers no longer announce a button wrapped around a checkbox
 - Buttons, checkboxes, dropdowns and menus look and behave the same everywhere in the editor, and the remaining browser-native tooltips use the editor's own tooltip
+- Saving a particle file, and every autosave, now flushes it to disk before it replaces the old copy, so a crash or power cut right after saving can't leave a damaged file
+- New and Open can no longer throw away unsaved changes made just before you clicked them; the editor asks to save first
+- A game XML file whose read stops before its end now fails with an error instead of hanging the editor, and a mod nickname or saved game folder longer than 255 characters is no longer cut short
 
 ### Security
 

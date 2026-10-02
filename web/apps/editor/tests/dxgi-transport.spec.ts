@@ -26,7 +26,7 @@
 // transparent `<canvas>`) — not the DXGI pixels. So this spec
 // CANNOT visually assert "engine pixels are correct"; that's
 // irreducible to manual smoke or
-// host-side AlphaCompositor::CaptureSnapshotPng bridge inspection.
+// host-side AlphaCompositor::CaptureSnapshotJpegBase64 bridge inspection.
 //
 // What this spec DOES catch:
 //   - Regression in AttachEngineVisual wiring (no [COMP-engine-attach]

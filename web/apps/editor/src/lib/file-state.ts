@@ -17,7 +17,10 @@
 // open, clicking Save / Don't Save runs the closure; Cancel discards it
 // and closes the modal. This keeps the prompt decoupled from any
 // specific destructive op: the caller passes "run this once the user
-// has decided what to do about unsaved changes" as a function.
+// has decided what to do about unsaved changes" as a function. The
+// closure learns which way the user decided (`discardUnsaved`), because
+// the host refuses to replace a dirty document unless told the user
+// chose Don't Save.
 
 import { useEffect } from "react";
 import { create } from "zustand";
@@ -26,7 +29,12 @@ import { runWhenIdle } from "@/lib/run-after-paint";
 
 // ─── Atom shape ─────────────────────────────────────────────────────
 
-type PendingAction = (() => void | Promise<void>) | null;
+/** How the user resolved the unsaved-changes question before the pending
+ *  action runs. `discardUnsaved` is true only for Don't Save; the clean path
+ *  and Save-then-continue pass false (nothing unsaved is being dropped). */
+export type PendingActionOptions = { discardUnsaved: boolean };
+export type PendingActionFn = (opts: PendingActionOptions) => void | Promise<void>;
+type PendingAction = PendingActionFn | null;
 
 type FileStateStore = {
   currentFilePath: string | null;
@@ -153,7 +161,8 @@ export function useSeedFileState(bridge: Bridge): void {
 
 /** Returns a function `promptSaveChanges(action)` that:
  *
- *    - If `dirty` is false: runs `action()` immediately.
+ *    - If `dirty` is false: runs `action({ discardUnsaved: false })`
+ *      immediately.
  *    - If `dirty` is true: opens the SaveChangesDialog with `action`
  *      stored as the pending closure. The prompt's buttons run the
  *      closure (Save / Don't Save) or discard it (Cancel).
@@ -173,7 +182,7 @@ export function useSeedFileState(bridge: Bridge): void {
  *  edit unprompted. Requests are handled in order, so the snapshot sees
  *  every edit sent before it. The mirror is the fallback when no bridge
  *  is seeded or the snapshot fails / lacks the field. */
-export function promptSaveChanges(action: () => void | Promise<void>): void {
+export function promptSaveChanges(action: PendingActionFn): void {
   const bridge = seededBridge;
   if (bridge === null) {
     decideSaveChanges(useFileStateStore.getState().dirty, action);
@@ -189,16 +198,25 @@ export function promptSaveChanges(action: () => void | Promise<void>): void {
     .catch((err) => console.warn("[file-state] pending action failed:", err));
 }
 
-function decideSaveChanges(dirty: boolean, action: () => void | Promise<void>): void {
+function decideSaveChanges(dirty: boolean, action: PendingActionFn): void {
   if (!dirty) {
     // Fire-and-forget: the action may be a file op that rejects (runFileOp
     // re-throws after surfacing the error). Swallow so it never escapes as an
     // unhandled promise rejection (#489).
-    Promise.resolve(action()).catch((err) =>
+    Promise.resolve(action({ discardUnsaved: false })).catch((err) =>
       console.warn("[file-state] pending action failed:", err),
     );
     return;
   }
   useFileStateStore.getState().setPendingAction(action);
+}
+
+/** Reopen the SaveChangesDialog for `action` after the host refused it with
+ *  "unsaved-changes": the document turned out to be dirty after all (an edit
+ *  landed after the clean check), so the user must decide again. */
+export function reopenSaveChangesDialog(action: PendingActionFn): void {
+  const store = useFileStateStore.getState();
+  store.setDirty(true);
+  store.setPendingAction(action);
 }
 

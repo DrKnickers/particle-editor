@@ -25,6 +25,7 @@
 #include "UndoStack.h"
 #include "LinkGroup.h"
 #include "Autosave.h"
+#include "AtomicSave.h"
 #include "utils.h"
 #include "AssetPathSafety.h"
 #include "engine.h"
@@ -33,7 +34,7 @@
 #include "Rescale.h"
 #include "ParticleSystemIO.h"
 #include "ModManager.h"
-#include "resource.h"
+#include "Resources/resource.h"
 
 // the WebView2 + D3D9 host declared here is the ONLY UI — WinMain runs
 // it unconditionally (the `--legacy` / `--legacy-ui` / `--new-ui` flags are
@@ -45,6 +46,8 @@
 #include "host/WindowCapture.h"
 #include "host/WebViewModalPolicy.h"  // IsFullyInteractiveSession — gate the pre-host data-path picker
 #include "host/StringConv.h"          // host::WideToUtf8 — ParticleSystemIO errorOut is UTF-8
+#include "host/SettingsRegistry.h"    // GameDataPath read/write
+#include "GameRoots.h"                // GameData / corruption sibling root
 
 #include <shlobj.h>
 #include <shlwapi.h>
@@ -577,55 +580,17 @@ bool SaveParticleSystem(ParticleSystem* system, const std::wstring& path,
         if (errorOut) *errorOut = "null particle system";
         return false;
     }
-    // Data-loss guard: write to a sibling temp then atomically
-    // rename into place, mirroring Autosave::Write (Autosave.cpp:197-221). The
-    // old code opened the destination CREATE_ALWAYS (truncate-to-0) and streamed
-    // chunks in place, so any mid-write failure (disk full, removable drive,
-    // denied, throw) corrupted the user's original .alo. Now a failure leaves
-    // the original untouched; only a fully-written temp replaces it.
-    const std::wstring tmp = path + L".tmp";
-    PhysicalFile* file = NULL;
-    try
-    {
-        file = new PhysicalFile(tmp, PhysicalFile::WRITE);
-    }
-    catch (wexception& e)
-    {
-        if (errorOut) *errorOut = host::WideToUtf8(e.wwhat());
-        return false;
-    }
-    catch (...)
-    {
-        if (errorOut) *errorOut = "could not open file for writing";
-        return false;
-    }
-
-    bool ok = true;
-    try
-    {
-        system->write(file);
-    }
-    catch (wexception& e)
-    {
-        if (errorOut) *errorOut = host::WideToUtf8(e.wwhat());
-        ok = false;
-    }
-    catch (...)
-    {
-        if (errorOut) *errorOut = "write failed";
-        ok = false;
-    }
-    file->Release();   // close the temp handle before the rename
-
-    if (ok && !MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING))
-    {
-        if (errorOut) *errorOut = "could not replace destination file";
-        ok = false;
-    }
-    if (!ok)
-        DeleteFileW(tmp.c_str());   // failure: original .alo preserved, no orphan temp
-
-    return ok;
+    // Data-loss guard: write a flushed sibling temp, then rename it into place
+    // (AtomicWriteParticleSystem, shared with the autosave tiers). Opening the
+    // destination CREATE_ALWAYS and streaming chunks in place would let any
+    // mid-write failure (disk full, removable drive, denied, throw) corrupt the
+    // user's original .alo. A failure leaves the original untouched; only a
+    // fully-written temp replaces it. The temp name carries the process id so
+    // it can never collide with another editor instance's save of this file,
+    // nor with an autosave tier's fixed `.tmp`.
+    AtomicSaveOptions options;
+    options.tmpPath = path + L"." + std::to_wstring(GetCurrentProcessId()) + L".tmp";
+    return AtomicWriteParticleSystem(*system, path, options, errorOut);
 }
 
 
@@ -634,20 +599,8 @@ bool SaveParticleSystem(ParticleSystem* system, const std::wstring& path,
 // the other. If we detect either, also include the sibling.
 static void AddSiblingGamePath(vector<wstring>& paths, const wstring& picked)
 {
-	wstring trimmed = picked;
-	while (!trimmed.empty() && (trimmed.back() == L'\\' || trimmed.back() == L'/')) trimmed.pop_back();
-
-	size_t sep = trimmed.find_last_of(L"\\/");
-	if (sep == wstring::npos) return;
-
-	wstring parent = trimmed.substr(0, sep);
-	wstring leaf   = trimmed.substr(sep + 1);
-	wstring sibling;
-	if (_wcsicmp(leaf.c_str(), L"corruption") == 0) sibling = parent + L"\\GameData";
-	else if (_wcsicmp(leaf.c_str(), L"GameData") == 0) sibling = parent + L"\\corruption";
-	else return;
-
-	if (PathIsDirectory(sibling.c_str()))
+	const wstring sibling = gameroots::SiblingGameRoot(picked);
+	if (!sibling.empty() && PathIsDirectory(sibling.c_str()))
 	{
 		paths.push_back(sibling);
 	}
@@ -722,12 +675,12 @@ static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv, v
 	if (EmpireAtWarPaths.empty())
 	{
 		// Try the previously-saved game path
-		HKEY hKey;
-		if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+		if (HKEY hKey = host::OpenSettingsKeyForRead())
 		{
-			TCHAR savedPath[MAX_PATH] = {0};
-			DWORD type, size = sizeof(savedPath);
-			if (RegQueryValueEx(hKey, L"GameDataPath", NULL, &type, (LPBYTE)savedPath, &size) == ERROR_SUCCESS && type == REG_SZ && savedPath[0] != L'\0')
+			// ReadRegSz terminates the value itself: a stored REG_SZ need not
+			// carry its own NUL.
+			const wstring savedPath = host::ReadRegSz(hKey, host::kRegGameDataPath);
+			if (!savedPath.empty())
 			{
 				EmpireAtWarPaths.push_back(savedPath);
 				AddSiblingGamePath(EmpireAtWarPaths, savedPath);
@@ -802,12 +755,7 @@ static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv, v
 	const bool automationMode = driveMode || recordMode;  // --drive AND --record suppress persistence
 	if (fileManager != NULL && !pickedPath.empty() && !automationMode)
 	{
-		HKEY hKey;
-		if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
-		{
-			RegSetValueEx(hKey, L"GameDataPath", 0, REG_SZ, (const BYTE*)pickedPath.c_str(), (DWORD)((pickedPath.size() + 1) * sizeof(TCHAR)));
-			RegCloseKey(hKey);
-		}
+		host::WriteRegSz(host::kRegGameDataPath, pickedPath);   // non-empty here
 	}
 	if (outGameRoots != NULL && fileManager != NULL)
 	{

@@ -154,43 +154,82 @@ RestoredSettings ReadRestoredSettings(HKEY hKey, bool inCaptureMode)
     // defaults under --test-host). Intensity is folded into the
     // diffuse/specular channels exactly as the legacy `MakeLight`
     // (native Win32 UI, since removed) did; fills pass specular=black.
-    s.sunIntensity = kSunIntensityDefault;
-    s.sunZ = kSunZAngleDefault;
-    s.sunTilt = kSunTiltDefault;
-    s.sunAmbient = SunAmbientColorDefault();
-    s.sunSpecular = SunSpecularColorDefault();
-    s.sunDiffuse = SunDiffuseColorDefault();
-    s.sunShadow = SunShadowColorDefault();
-    s.forceAlign = kForceAlignDefault;
-    s.fill1Intensity = kFill1IntensityDefault;
-    s.fill1Zp = kFill1ZAngleDefault;
-    s.fill1Tiltp = kFill1TiltDefault;
-    s.fill1Diffuse = Fill1DiffuseColorDefault();
-    s.fill2Intensity = kFill2IntensityDefault;
-    s.fill2Zp = kFill2ZAngleDefault;
-    s.fill2Tiltp = kFill2TiltDefault;
-    s.fill2Diffuse = Fill2DiffuseColorDefault();
-
-    ReadRegFloat(hKey, kLightSunIntensity, s.sunIntensity);
-    ReadRegFloat(hKey, kLightSunZAngle, s.sunZ);
-    ReadRegFloat(hKey, kLightSunTilt, s.sunTilt);
-    ReadRegDword(hKey, kLightSunAmbientColor, s.sunAmbient);
-    ReadRegDword(hKey, kLightSunSpecularColor, s.sunSpecular);
-    ReadRegDword(hKey, kLightSunDiffuseColor, s.sunDiffuse);
-    ReadRegDword(hKey, kLightSunShadowColor, s.sunShadow);
-    DWORD forceAlign = s.forceAlign ? 1u : 0u;
-    if (ReadRegDword(hKey, kLightForceFillAlignment, forceAlign))
-        s.forceAlign = (forceAlign != 0);
-    ReadRegFloat(hKey, kLightFill1Intensity, s.fill1Intensity);
-    ReadRegFloat(hKey, kLightFill1ZAngle, s.fill1Zp);
-    ReadRegFloat(hKey, kLightFill1Tilt, s.fill1Tiltp);
-    ReadRegDword(hKey, kLightFill1DiffuseColor, s.fill1Diffuse);
-    ReadRegFloat(hKey, kLightFill2Intensity, s.fill2Intensity);
-    ReadRegFloat(hKey, kLightFill2ZAngle, s.fill2Zp);
-    ReadRegFloat(hKey, kLightFill2Tilt, s.fill2Tiltp);
-    ReadRegDword(hKey, kLightFill2DiffuseColor, s.fill2Diffuse);
+    const LightingValues light = ReadLightingSettings(hKey);
+    s.sunIntensity = light.sunIntensity;
+    s.sunZ = light.sunZ;
+    s.sunTilt = light.sunTilt;
+    s.sunAmbient = light.sunAmbient;
+    s.sunSpecular = light.sunSpecular;
+    s.sunDiffuse = light.sunDiffuse;
+    s.sunShadow = light.sunShadow;
+    s.forceAlign = light.forceAlign;
+    s.fill1Intensity = light.fill1Intensity;
+    s.fill1Zp = light.fill1Z;
+    s.fill1Tiltp = light.fill1Tilt;
+    s.fill1Diffuse = light.fill1Diffuse;
+    s.fill2Intensity = light.fill2Intensity;
+    s.fill2Zp = light.fill2Z;
+    s.fill2Tiltp = light.fill2Tilt;
+    s.fill2Diffuse = light.fill2Diffuse;
 
     return s;
+}
+
+LightingValues ReadLightingSettings(HKEY hKey)
+{
+    LightingValues v;
+    ReadRegFloat(hKey, kLightSunIntensity, v.sunIntensity);
+    ReadRegFloat(hKey, kLightSunZAngle, v.sunZ);
+    ReadRegFloat(hKey, kLightSunTilt, v.sunTilt);
+    ReadRegDword(hKey, kLightSunAmbientColor, v.sunAmbient);
+    ReadRegDword(hKey, kLightSunSpecularColor, v.sunSpecular);
+    ReadRegDword(hKey, kLightSunDiffuseColor, v.sunDiffuse);
+    ReadRegDword(hKey, kLightSunShadowColor, v.sunShadow);
+    DWORD forceAlign = v.forceAlign ? 1u : 0u;
+    if (ReadRegDword(hKey, kLightForceFillAlignment, forceAlign))
+        v.forceAlign = (forceAlign != 0);
+    ReadRegFloat(hKey, kLightFill1Intensity, v.fill1Intensity);
+    ReadRegFloat(hKey, kLightFill1ZAngle, v.fill1Z);
+    ReadRegFloat(hKey, kLightFill1Tilt, v.fill1Tilt);
+    ReadRegDword(hKey, kLightFill1DiffuseColor, v.fill1Diffuse);
+    ReadRegFloat(hKey, kLightFill2Intensity, v.fill2Intensity);
+    ReadRegFloat(hKey, kLightFill2ZAngle, v.fill2Z);
+    ReadRegFloat(hKey, kLightFill2Tilt, v.fill2Tilt);
+    ReadRegDword(hKey, kLightFill2DiffuseColor, v.fill2Diffuse);
+    return v;
+}
+
+void WriteLightingSettings(HKEY hKey, const LightingValues& v)
+{
+    // Floats persist as REG_BINARY, colours + the flag as REG_DWORD, matching
+    // the reads above.
+    auto writeF = [&](const wchar_t* name, float f) {
+        RegSetValueExW(hKey, name, 0, REG_BINARY,
+                       reinterpret_cast<const BYTE*>(&f), sizeof(f));
+    };
+    auto writeDw = [&](const wchar_t* name, DWORD dw) {
+        RegSetValueExW(hKey, name, 0, REG_DWORD,
+                       reinterpret_cast<const BYTE*>(&dw), sizeof(dw));
+    };
+    writeF(kLightSunIntensity,      v.sunIntensity);
+    writeF(kLightSunZAngle,         v.sunZ);
+    writeF(kLightSunTilt,           v.sunTilt);
+    writeDw(kLightSunDiffuseColor,  v.sunDiffuse);
+    writeDw(kLightSunSpecularColor, v.sunSpecular);
+    writeDw(kLightSunAmbientColor,  v.sunAmbient);
+    writeDw(kLightSunShadowColor,   v.sunShadow);
+
+    writeF(kLightFill1Intensity,     v.fill1Intensity);
+    writeF(kLightFill1ZAngle,        v.fill1Z);
+    writeF(kLightFill1Tilt,          v.fill1Tilt);
+    writeDw(kLightFill1DiffuseColor, v.fill1Diffuse);
+
+    writeF(kLightFill2Intensity,     v.fill2Intensity);
+    writeF(kLightFill2ZAngle,        v.fill2Z);
+    writeF(kLightFill2Tilt,          v.fill2Tilt);
+    writeDw(kLightFill2DiffuseColor, v.fill2Diffuse);
+
+    writeDw(kLightForceFillAlignment, v.forceAlign ? 1u : 0u);
 }
 
 } // namespace host

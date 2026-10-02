@@ -220,8 +220,8 @@ inline bool IsAllowedRecordKind(const std::string& kind) {
     if (kind == "spawner/stop")    return true;
     // mods/set-layers lets a timeline clear the mod stack (paths:[]) so a
     // reference-object resolves the BASE-GAME asset, not a mod override. Safe in
-    // record: ModManager is constructed ephemeral (automationMode) so SetLayerStack
-    // does NOT persist — the daily-driver's mod stack is untouched.
+    // record: ModManager is constructed with persistence suppressed (automation
+    // mode) so SetLayerStack does NOT persist — the daily-driver's mod stack is untouched.
     if (kind == "mods/set-layers") return true;
     // emitters/delete drops an emitter subtree from the in-memory effect (no
     // native dialog). The handler markDirty()s, but --record NEVER writes the
@@ -267,7 +267,7 @@ inline bool IsAllowedRecordKind(const std::string& kind) {
     if (kind == "emitters/add-track-key") return true;
     // engine/set/skydome-environment {context, primaryName, secondaryName} is the
     // name-based game-dome selector the Background picker actually uses (NOT the
-    // legacy slot-index API). Persist is gated by !m_ephemeral, so record-safe.
+    // legacy slot-index API). Persist is gated by PersistsUserState(), so record-safe.
     if (kind == "engine/set/skydome-environment") return true;
     // ui/* events are view-only host->webview pushes (panel/picker open state);
     // the ClipRunner routes any ui/-prefixed kind to PostWebMessageAsJson rather

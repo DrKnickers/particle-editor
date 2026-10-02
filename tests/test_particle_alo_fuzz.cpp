@@ -137,14 +137,10 @@ static Outcome load(const Bytes& image, ParticleSystem** out = NULL)
 }
 
 // ---- the synthesized corpus ---------------------------------------------------
-// Emitter::setDefaults() leaves unknown2b / unknown49 uninitialized, so an
-// emitter built through the API serializes indeterminate bytes there. Pin them
-// (and un-share the colour tracks setDefaults aliases) so the corpus is
+// Un-share the colour tracks setDefaults aliases so the corpus is
 // deterministic.
 static void pinFields(Emitter* e)
 {
-    e->unknown2b = false;
-    e->unknown49 = 0;
     for (int t = 0; t < ParticleSystem::NUM_TRACKS; ++t)
         e->tracks[t] = &e->trackContents[t];
 }

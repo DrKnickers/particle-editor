@@ -64,10 +64,10 @@ public:
     // the new one.
     void              SetActiveMod(const std::wstring& modPath);
     void              ClearActiveMod();   // wipes the current mod's INI section (Reset View Settings)
-    // Automation isolation: in --record / --drive the dispatcher is ephemeral
-    // (HostWindow m_automationMode), so persistent user state must not be read or
-    // mutated. Switching modes clears the in-memory cache. An ephemeral run can
-    // then seed capture-local recents/pins without inheriting or overwriting the
+    // Automation isolation: in --record / --drive (HostWindow m_automationMode)
+    // the dispatcher suppresses persistence, so persistent user state must not be
+    // read or mutated. Switching modes clears the in-memory cache. An ephemeral
+    // run can then seed capture-local recents/pins without inheriting or overwriting the
     // user's real per-mod palette. Mirrors the skydome/registry gate.
     void              SetEphemeral(bool ephemeral);
     const std::wstring& ActiveMod() const { return m_activeMod; }

@@ -166,7 +166,7 @@ bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
         std::string imageBase64;
         int w = 0;
         int h = 0;
-        if (m_layout.CaptureSnapshotPng(imageBase64, w, h))
+        if (m_layout.CaptureSnapshotJpegBase64(imageBase64, w, h))
         {
             ctx.SendOk(json{{"imageBase64", std::move(imageBase64)}, {"w", w}, {"h", h}});
         }

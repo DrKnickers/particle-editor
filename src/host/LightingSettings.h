@@ -56,4 +56,35 @@ inline FillAngles ForceAlignFillAngles(bool forceAlign, float sunZ,
     return { fill1Zp, fill1Tiltp, fill2Zp, fill2Tiltp };
 }
 
+// The raw persisted lighting split: intensity and colour kept separate, fill
+// angles as stored (force-align is resolved by whoever applies them). A
+// default-constructed value holds the defaults above.
+struct LightingValues
+{
+    float    sunIntensity   = kSunIntensityDefault;
+    float    sunZ           = kSunZAngleDefault;
+    float    sunTilt        = kSunTiltDefault;
+    COLORREF sunAmbient     = SunAmbientColorDefault();
+    COLORREF sunSpecular    = SunSpecularColorDefault();
+    COLORREF sunDiffuse     = SunDiffuseColorDefault();
+    COLORREF sunShadow      = SunShadowColorDefault();
+    bool     forceAlign     = kForceAlignDefault;
+    float    fill1Intensity = kFill1IntensityDefault;
+    float    fill1Z         = kFill1ZAngleDefault;
+    float    fill1Tilt      = kFill1TiltDefault;
+    COLORREF fill1Diffuse   = Fill1DiffuseColorDefault();
+    float    fill2Intensity = kFill2IntensityDefault;
+    float    fill2Z         = kFill2ZAngleDefault;
+    float    fill2Tilt      = kFill2TiltDefault;
+    COLORREF fill2Diffuse   = Fill2DiffuseColorDefault();
+};
+
+// The one reader and writer for the 16 lighting values above (defined in
+// RestoredSettings.cpp). Read starts from the defaults and takes each stored
+// value that is present, well-typed and (for floats) finite; hKey may be
+// nullptr (first run), which yields the defaults. Write stores all 16 into an
+// already-open key opened for writing.
+LightingValues ReadLightingSettings(HKEY hKey);
+void WriteLightingSettings(HKEY hKey, const LightingValues& v);
+
 } // namespace host

@@ -687,19 +687,14 @@ json BuildEngineStateSnapshot(Engine* engine,
 
 BridgeDispatcher::BridgeDispatcher(Engine* engine, LayoutBroker& layout,
                                     AcceleratorBridge& accel, EmitFn emit,
-                                    bool useTestHost, bool driveMode)
+                                    bool useTestHost, bool automationMode)
     : m_engine(engine), m_layout(layout), m_accel(accel), m_emit(std::move(emit))
     , m_testHost(useTestHost)
-    , m_driveMode(driveMode)
+    , m_automationMode(automationMode)
 {
     // Test seam (ALO_SETTINGS_LIVE=1): lift the --test-host settings gate so
-    // a CDP test can exercise the real registry round-trip. The a11y harness
-    // never sets this, so its plain --test-host launch stays deterministic.
-    {
-        wchar_t buf[8] = {};
-        DWORD n = GetEnvironmentVariableW(L"ALO_SETTINGS_LIVE", buf, 8);
-        m_settingsLive = (n > 0 && n < 8 && buf[0] == L'1');
-    }
+    // a CDP test can exercise the real registry round-trip.
+    m_settingsLive = ReadSettingsLiveEnv();
 
     // Seed the recent-files list from the registry at construction so
     // the first React-side `file/recent/list` request already has data
@@ -1067,9 +1062,9 @@ void BridgeDispatcher::EmitEmittersTreeChanged()
     if (m_recordEmitThrottle) {
         if (now - m_lastTreeEmitTick < kRecordEmitThrottleMs) return;
     }
-    // [B1] Live trailing coalesce (see the header field block). Drive
-    // (m_driveMode) is exempt: asserts must see every change.
-    else if (!m_driveMode && now - m_lastTreeEmitTick < kEmitCoalesceMs) {
+    // [B1] Live trailing coalesce (see the header field block). Automation
+    // (m_automationMode: drive asserts must see every change) is exempt.
+    else if (!m_automationMode && now - m_lastTreeEmitTick < kEmitCoalesceMs) {
         m_treeEmitPending = true;
         return;
     }
@@ -1207,9 +1202,9 @@ void BridgeDispatcher::EmitEngineStateChanged()
     if (m_recordEmitThrottle) {
         if (now - m_lastStateEmitTick < kRecordEmitThrottleMs) return;
     }
-    // [B1] Live trailing coalesce (see the header field block). Drive
-    // (m_driveMode) is exempt: asserts must see every change.
-    else if (!m_driveMode && now - m_lastStateEmitTick < kEmitCoalesceMs) {
+    // [B1] Live trailing coalesce (see the header field block). Automation
+    // (m_automationMode: drive asserts must see every change) is exempt.
+    else if (!m_automationMode && now - m_lastStateEmitTick < kEmitCoalesceMs) {
         m_stateEmitPending = true;
         return;
     }

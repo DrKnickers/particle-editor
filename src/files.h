@@ -55,6 +55,9 @@ public:
 	void          seek(unsigned long offset) { m_position = min(offset, m_size); }
 	unsigned long read(void* buffer, unsigned long size);
 	unsigned long write(const void* buffer, unsigned long size);
+	// Flush written data to the device (FlushFileBuffers). Throws
+	// WriteException on failure. Needs a handle opened in WRITE mode.
+	void          Flush();
 
 	PhysicalFile(const std::wstring& name, Mode mode = READ);
 };
