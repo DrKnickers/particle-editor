@@ -8,6 +8,13 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const auditRoot = path.join(repoRoot, "tasks", "perf-audit-2026-06-28");
 const manifestPath = path.join(auditRoot, "fixtures", "manifest.json");
 
+// Maintainer-only: the perf-audit drive fixtures live under tasks/, which the
+// public mirror does not publish.
+if (!fs.existsSync(auditRoot)) {
+  console.error("write-perf-fixture-manifest: maintainer-only — the perf-audit fixtures (tasks/perf-audit-2026-06-28/) are not in this checkout.");
+  process.exit(2);
+}
+
 const fixturePaths = [
   "tasks/perf-audit-2026-06-28/fixtures/drive/00-baseline.json",
   "tasks/perf-audit-2026-06-28/fixtures/drive/10-texture-preview.json",

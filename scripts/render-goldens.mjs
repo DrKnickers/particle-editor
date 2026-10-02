@@ -26,7 +26,9 @@
 // "re-bless with --update and diff-review the images", not "rendering broke".
 //
 // Exit nonzero on: missing ffmpeg/exe/fixture, capture failure, dimension
-// mismatch, SSIM below threshold, or missing golden (hint: --update).
+// mismatch, SSIM below threshold, or missing golden (hint: --update). A scene
+// whose declared `inputs` are absent from the checkout is SKIPPED and counted in
+// the final "N skipped" line, which the gate holds to its SKIP_BUDGET.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, copyFileSync, rmSync, readFileSync, writeFileSync } from "node:fs";
@@ -77,9 +79,16 @@ export const SCENES = [
   // CWD-relative from the repo root) so this scene needs no game install;
   // requireTexGate fails the scene loudly if resolution ever regresses to the
   // checkerboard placeholder, which could otherwise get silently blessed.
+  // `inputs`: tests/fixtures/bumptest/ is NOT published on the public mirror
+  // (its textures are not redistributable, and the .alo references them), so
+  // there the scene SKIPs visibly instead of failing
+  // on textures the checkout can never have. The gate budgets that skip only
+  // when the folder is absent.
   {
     name: "bump-cutout",
     fixture: join(fixturesDir, "bump-asteroids.alo"),
+    inputs: [join(repoRoot, "tests", "fixtures", "bumptest", "zz_bumpgold_rock.tga"),
+             join(repoRoot, "tests", "fixtures", "bumptest", "zz_bumptest_nm.tga")],
     args: ["--frames", "45", "--ambient", "0.6,0.6,0.6", "--sun", "1,1,1"],
     requireTexGate: ["TESTS\\FIXTURES\\BUMPTEST\\ZZ_BUMPGOLD_ROCK.TGA",
                      "TESTS\\FIXTURES\\BUMPTEST\\ZZ_BUMPTEST_NM.TGA"],
@@ -98,6 +107,13 @@ function texGateResolved(stdout, name) {
     }
   }
   return false;
+}
+
+// The scene's declared non-fixture inputs that are absent from this checkout.
+// A non-empty result means SKIP the scene (reported and counted), not FAIL:
+// these are files a published checkout cannot have, unlike the fixture itself.
+export function missingSceneInputs(scene, exists = existsSync) {
+  return (scene.inputs ?? []).filter((p) => !exists(p));
 }
 
 export function buildGoldenCaptureArgs(fixture, out, sceneArgs = []) {
@@ -158,12 +174,19 @@ function main() {
   mkdirSync(goldenDir, { recursive: true });
 
   let failed = 0;
+  let skipped = 0;
   for (const scene of SCENES) {
     const golden = join(goldenDir, `${scene.name}.png`);
     const out = join(tmpdir(), `render-golden-${scene.name}-${process.pid}.png`);
     if (!existsSync(scene.fixture)) {
       log(`${scene.name}: FAIL — fixture missing (${scene.fixture})`);
       failed++;
+      continue;
+    }
+    const absent = missingSceneInputs(scene);
+    if (absent.length > 0) {
+      log(`${scene.name}: SKIP — input(s) not in this checkout: ${absent.map((p) => relative(repoRoot, p)).join(", ")}`);
+      skipped++;
       continue;
     }
     // Two attempts per scene, but ONLY for ssim-exec failures (dimension
@@ -269,7 +292,9 @@ function main() {
     break;
     }  // retry loop
   }
-  log(`render-goldens: ${SCENES.length - failed}/${SCENES.length} scenes ok`);
+  // "N skipped" is the phrase the gate's parseSkippedCount reads; the gate holds
+  // it to SKIP_BUDGET["render-goldens"], so an unexpected skip still fails there.
+  log(`render-goldens: ${SCENES.length - failed - skipped}/${SCENES.length} scenes ok, ${skipped} skipped`);
   return failed > 0 ? 1 : 0;
 }
 

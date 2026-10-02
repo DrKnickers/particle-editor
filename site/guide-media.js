@@ -2,7 +2,7 @@
 // minus the motion toggle (guide pages have no Pause control). Tutorial pages embed
 //   <video class="clip-video" data-clip="<id>.mp4" data-poster="<id>-poster.jpg">
 //   <img   class="clip-img"   data-poster="<id>.png">
-// placeholders (emitted by scripts/build-guide.mjs from tasks/wiki-media/manifest.json).
+// placeholders (emitted by scripts/build-guide.mjs from the guide-src/media.json index).
 // This joins them to the Pages-served media mirror and plays clips as they scroll into view
 // (muted loop), honoring prefers-reduced-motion. The MEDIA_BASE precedence matches main.js:
 // window.__MEDIA_BASE__ (tests) → ?media= query param (local preview) → the site's media/

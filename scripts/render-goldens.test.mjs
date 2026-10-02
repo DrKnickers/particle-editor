@@ -12,6 +12,7 @@ import {
   missingGoldenProfileAttestations,
   parseGoldenProvenance,
   provenanceDrift,
+  missingSceneInputs,
 } from "./render-goldens.mjs";
 
 test("golden capture env removes every inherited ALO hook", () => {
@@ -63,6 +64,32 @@ test("every golden scene refuses to bless missing particle textures", () => {
       "TESTS\\FIXTURES\\BUMPTEST\\ZZ_BUMPTEST_NM.TGA",
     ],
   );
+});
+
+test("bump-cutout declares its unpublished textures as skippable inputs; others declare none", () => {
+  const bump = SCENES.find((scene) => scene.name === "bump-cutout");
+  // Each requireTexGate texture is also a declared input, so a checkout without
+  // tests/fixtures/bumptest/ skips the scene instead of failing its tex gate.
+  const inputNames = (bump?.inputs ?? []).map((p) => p.split(/[\\/]/).slice(-4).join("\\").toUpperCase());
+  assert.deepEqual(inputNames, bump?.requireTexGate);
+  for (const scene of SCENES.filter((s) => s.name !== "bump-cutout")) {
+    assert.equal(scene.inputs, undefined, `${scene.name} must not gain a skip path`);
+  }
+});
+
+test("missingSceneInputs lists only the absent inputs", () => {
+  const scene = { inputs: ["a.tga", "b.tga"] };
+  assert.deepEqual(missingSceneInputs(scene, () => true), []);
+  assert.deepEqual(missingSceneInputs(scene, (p) => p === "a.tga"), ["b.tga"]);
+  assert.deepEqual(missingSceneInputs({}, () => false), []);
+});
+
+test("production runner skips a scene with absent inputs and reports the count the gate parses", () => {
+  const source = readFileSync(fileURLToPath(new URL("./render-goldens.mjs", import.meta.url)), "utf8");
+  const loop = source.slice(source.indexOf("for (const scene of SCENES)"));
+  // The skip happens before any capture is spawned.
+  assert.ok(loop.indexOf("missingSceneInputs(scene)") < loop.indexOf("spawnSync(exe"));
+  assert.match(source, /scenes ok, \$\{skipped\} skipped`/);
 });
 
 test("golden capture argv always selects the isolated profile and skydome one", () => {

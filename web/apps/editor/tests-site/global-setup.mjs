@@ -1,8 +1,9 @@
 // Generates gitignored placeholder media for the landing smoke ONCE, before workers.
 // Fails loud in CI if ffmpeg is missing (so a missing dep can't green the suite by skip).
 //
-// NON-DESTRUCTIVE by design: media-local/ doubles as the user's REAL clip staging dir
-// (the VPS demo deploys from it), so this never overwrites an existing file — the
+// NON-DESTRUCTIVE by design: media-local/ doubles as the REAL clip staging dir (real
+// renders are previewed from it via ?media=/media-local/ — see site/README.md), so
+// this never overwrites an existing file — the
 // placeholder is rendered to a temp name and only copied into missing slots. (The old
 // version re-rendered hero.mp4 in place whenever ANY placeholder was missing, which
 // would have clobbered the real hero clip.)

@@ -11,7 +11,7 @@ import { spawnSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { parseArgs, usage } from "./run-all-tests.mjs";
+import { parseArgs, usage, shellSpawnSpec, spawnExitCode, parseSkippedCount } from "./run-all-tests.mjs";
 
 const scriptPath = join(dirname(fileURLToPath(import.meta.url)), "run-all-tests.mjs");
 
@@ -92,4 +92,44 @@ test("--list exits 0 and prints lane names", () => {
   const r = runScript("--list");
   assert.equal(r.status, 0);
   assert.match(r.stdout, /^lint$/m);
+});
+
+// ---- spawn portability: cmd.exe only where it exists ----
+
+test("shellSpawnSpec: win32 goes through cmd.exe with verbatim args", () => {
+  const s = shellSpawnSpec("pnpm run lint", "win32");
+  assert.equal(s.cmd, "cmd.exe");
+  assert.deepEqual(s.args, ["/d", "/s", "/c", '"pnpm run lint"']);
+  assert.equal(s.opts.windowsVerbatimArguments, true);
+  assert.equal(s.opts.shell, false);
+});
+
+test("shellSpawnSpec: linux/darwin use the POSIX shell, never cmd.exe", () => {
+  for (const platform of ["linux", "darwin"]) {
+    const s = shellSpawnSpec("pnpm run lint", platform);
+    assert.equal(s.cmd, "pnpm run lint");
+    assert.deepEqual(s.args, []);
+    assert.equal(s.opts.shell, true);
+  }
+});
+
+test("spawnExitCode: a child that never started reports why, then fails", () => {
+  const said = [];
+  const code = spawnExitCode({ error: new Error("spawn cmd.exe ENOENT"), status: null }, "pnpm run lint", (m) => said.push(m));
+  assert.equal(code, 1);
+  assert.equal(said.length, 1);
+  assert.match(said[0], /could not start pnpm run lint: spawn cmd\.exe ENOENT/);
+});
+
+test("spawnExitCode: a normal exit passes its status through silently", () => {
+  const said = [];
+  assert.equal(spawnExitCode({ status: 0 }, "x", (m) => said.push(m)), 0);
+  assert.equal(spawnExitCode({ status: 3 }, "x", (m) => said.push(m)), 3);
+  assert.equal(spawnExitCode({ status: null }, "x", (m) => said.push(m)), 1);
+  assert.deepEqual(said, []);
+});
+
+test("parseSkippedCount reads the render-goldens summary line", () => {
+  assert.equal(parseSkippedCount("[gate] render-goldens: 2/3 scenes ok, 1 skipped"), 1);
+  assert.equal(parseSkippedCount("[gate] render-goldens: 3/3 scenes ok, 0 skipped"), 0);
 });

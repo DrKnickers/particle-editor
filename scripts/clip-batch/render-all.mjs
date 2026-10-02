@@ -443,6 +443,13 @@ function cleanup(clips) {
 // ---------------------------------------------------------------------------
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  // Maintainer-only: every clip timeline and recipe lives under tasks/clips/,
+  // which the public mirror does not publish. Say so instead of failing on the
+  // first missing timeline.
+  if (!existsSync(join(repoRoot, "tasks", "clips"))) {
+    console.error("[clip-batch] maintainer-only: the landing-clip timelines (tasks/clips/) are not in this checkout, so there is nothing to render.");
+    process.exit(2);
+  }
   let clips = CLIPS;
   if (args.only) {
     const unknown = args.only.filter((n) => !CLIPS.some((c) => c.name === n));

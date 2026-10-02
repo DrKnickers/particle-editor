@@ -350,7 +350,9 @@ if ($DriveScript.Count -eq 0) {
     }
 }
 if ($DriveScript.Count -eq 0) {
-    Write-Error "no drive scripts supplied; pass -DriveScript or add tasks\perf-audit-2026-06-28\fixtures\drive\*.json"
+    # The default fixtures are maintainer-only (tasks\ is not published on the
+    # public mirror), so name that instead of implying they were deleted.
+    Write-Error "no drive scripts supplied; pass -DriveScript <drive.json>. The default set (tasks\perf-audit-2026-06-28\fixtures\drive\*.json) is maintainer-only and absent from public checkouts."
     exit 2
 }
 

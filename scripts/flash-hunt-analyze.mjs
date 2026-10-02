@@ -1,5 +1,7 @@
 // Analyze a screen recording for white-flash frames (the intermittent cross-page
-// view-transition flash on the landing/guide site). Companion to flash-hunt.ps1.
+// view-transition flash on the landing/guide site). Companion to flash-hunt.ps1, the
+// maintainer-only capture rig (not published on the public mirror); any screen recording of
+// the site works as input.
 //
 //   node scripts/flash-hunt-analyze.mjs <capture.mkv> [--delta 40] [--out <dir>] [--crop W:H:X:Y]
 //

@@ -4,7 +4,7 @@
 //   node scripts/run-all-tests.mjs [flags]
 //
 // Lanes, cheap/fast first (later lanes depend on earlier build lanes):
-//   lint              tsc --noEmit                        (web/apps/editor)
+//   lint              tsc -b — app + e2e/site specs       (web/apps/editor)
 //   vitest            vitest run — the web unit/component suite
 //   web-build         tsc -b && vite build -> dist/ (proof: dist/index.html mtime
 //                     must ADVANCE — vite exit 0 alone doesn't prove output)
@@ -24,7 +24,9 @@
 //   record-smoke      headless --record timeline produces renderable frames
 //   drive-smoke       tasks/drive-smoke.ps1 — real-pixel non-black --drive smoke
 //                     + the oracle-step scenarios (assert-state / nonblack /
-//                     production-wire bridge-selftest)
+//                     production-wire bridge-selftest). The script is
+//                     maintainer-only (not on the public mirror), where the lane
+//                     is a missing prereq: pass --allow-missing drive-smoke
 //
 // Missing prereqs are FAILURES with actionable messages by default; silent skips
 // are the enemy of a gate. `--allow-missing <lane>` downgrades that lane's missing
@@ -63,6 +65,7 @@ const debugExe = join(repoRoot, "x64", "Debug", "ParticleEditor.exe");
 const releaseExe = join(repoRoot, "x64", "Release", "ParticleEditor.exe");
 const distIndex = join(editorDir, "dist", "index.html");
 const smokeFixture = join(editorDir, "tests", "fixtures", "a11y-base-state.alo");
+const driveSmokeScript = join(repoRoot, "tasks", "drive-smoke.ps1");
 const lockPath = join(repoRoot, ".gate.lock");
 
 // ---------------------------------------------------------------------------
@@ -135,21 +138,46 @@ function log(msg) {
 }
 
 // ---------------------------------------------------------------------------
-// Spawn helpers. .bat/.CMD shims (pnpm) can't be launched with shell:false, so
-// they go through cmd.exe /d /s /c with verbatim args — the only reliable form
-// for a repo path containing spaces ("Particle Editor").
+// Spawn helpers. On Windows, .bat/.CMD shims (pnpm) can't be launched with
+// shell:false, so they go through cmd.exe /d /s /c with verbatim args — the only
+// reliable form for a repo path containing spaces ("Particle Editor"). Anywhere
+// else pnpm is a plain executable and the line goes to /bin/sh: there is no
+// cmd.exe there, and routing every lane through it made each pnpm lane FAIL in
+// 0.0 s with no reason for a contributor on Linux or macOS.
+//
+// Every command line is a fixed string written in this file (never user
+// input), so the shell form is safe on both sides.
+export function shellSpawnSpec(commandLine, platform = process.platform) {
+  if (platform === "win32") {
+    return {
+      cmd: "cmd.exe",
+      args: ["/d", "/s", "/c", `"${commandLine}"`],
+      opts: { shell: false, windowsVerbatimArguments: true },
+    };
+  }
+  return { cmd: commandLine, args: [], opts: { shell: true } };
+}
+
+// Exit code for a finished spawnSync. A child that never started (ENOENT on the
+// program, a bad cwd, an oversized environment) carries `error` and no status;
+// that used to collapse into a bare 1, so the lane FAILed with no hint why.
+// Say what failed to start, and why.
+export function spawnExitCode(r, what, report = log) {
+  if (r.error) {
+    report(`could not start ${what}: ${r.error.message}`);
+    return 1;
+  }
+  return r.status ?? 1;
+}
+
 function runCmdLine(commandLine, cwd) {
-  const r = spawnSync("cmd.exe", ["/d", "/s", "/c", `"${commandLine}"`], {
-    cwd,
-    stdio: "inherit",
-    shell: false,
-    windowsVerbatimArguments: true,
-  });
-  return r.error ? 1 : (r.status ?? 1);
+  const { cmd, args, opts } = shellSpawnSpec(commandLine);
+  const r = spawnSync(cmd, args, { cwd, stdio: "inherit", ...opts });
+  return spawnExitCode(r, commandLine);
 }
 function runExe(cmd, args, cwd = repoRoot) {
   const r = spawnSync(cmd, args, { cwd, stdio: "inherit", shell: false });
-  return r.error ? 1 : (r.status ?? 1);
+  return spawnExitCode(r, cmd);
 }
 
 // Like runCmdLine, but TEES: the child's output still reaches the console while
@@ -158,15 +186,21 @@ function runExe(cmd, args, cwd = repoRoot) {
 // lane could pass while silently executing nothing), which the 2026-07 audit
 // demonstrated with a stub reporting "0 passed, 1 skipped".
 function runCmdLineTee(commandLine, cwd) {
-  const r = spawnSync("cmd.exe", ["/d", "/s", "/c", `"${commandLine}"`], {
-    cwd,
-    encoding: "utf8",
-    shell: false,
-    windowsVerbatimArguments: true,
-  });
+  const { cmd, args, opts } = shellSpawnSpec(commandLine);
+  const r = spawnSync(cmd, args, { cwd, encoding: "utf8", ...opts });
   const out = `${r.stdout || ""}${r.stderr || ""}`;
   if (out) process.stdout.write(out);
-  return { code: r.error ? 1 : (r.status ?? 1), out };
+  return { code: spawnExitCode(r, commandLine), out };
+}
+// runExe's teeing twin, for an exe lane whose runner reports skipped items.
+// Output arrives when the child exits (not live). The raised maxBuffer covers a
+// failing render-goldens run, which dumps the engine's diagnostic stdout — the
+// 1 MiB default would kill the child mid-report (ENOBUFS).
+function runExeTee(cmd, args, cwd = repoRoot) {
+  const r = spawnSync(cmd, args, { cwd, encoding: "utf8", shell: false, maxBuffer: 64 * 1024 * 1024 });
+  const out = `${r.stdout || ""}${r.stderr || ""}`;
+  if (out) process.stdout.write(out);
+  return { code: spawnExitCode(r, cmd), out };
 }
 
 // The 8-byte PNG signature every real frame starts with.
@@ -243,15 +277,25 @@ export function parseSkippedCount(out) {
 // impossible on some machine, and write the reason: the reason is the part that
 // gets checked.
 export const SKIP_BUDGET = {
-  // Eight scripts-lane tests self-skip on the public mirror: five inspect the
+  // Seven scripts-lane tests self-skip on the public mirror: four inspect the
   // PRIVATE clip-source data (tasks/wiki-media manifest + timelines) and three
-  // pre-existing ones lint unpublished timeline fixtures. The entry exists ONLY
-  // when that data is absent — never on the private repo — so the private gate
-  // keeps a zero budget (no permanent "tighten" nag) and the public tree passes
-  // at exactly its budgeted skips; a ninth quiet skip still fails both sides.
+  // pre-existing ones lint unpublished timeline fixtures. (The guide build used
+  // to be an eighth; it now reads the published site/guide-src/media.json stub.)
+  // The entry exists ONLY when that data is absent — never on the private repo —
+  // so the private gate keeps a zero budget (no permanent "tighten" nag) and the
+  // public tree passes at exactly its budgeted skips; an eighth quiet skip still
+  // fails both sides.
   ...(existsSync(join(repoRoot, "tasks", "wiki-media", "manifest.json"))
     ? {}
-    : { scripts: { max: 8, why: "maintainer-only clip-source data and timeline fixtures (tasks/wiki-media, .claude/skills) are absent on the public mirror" } }),
+    : { scripts: { max: 7, why: "maintainer-only clip-source data and timeline fixtures (tasks/wiki-media, .claude/skills) are absent on the public mirror" } }),
+  // The bump-cutout render-golden scene needs tests/fixtures/bumptest/*.tga, and
+  // that folder is not published (its textures are not redistributable, so the
+  // whole folder stays private). render-goldens.mjs SKIPs the scene
+  // visibly when its inputs are absent; this budgets exactly that one skip, and
+  // only when the folder is missing, so the private gate still runs all scenes.
+  ...(existsSync(join(repoRoot, "tests", "fixtures", "bumptest"))
+    ? {}
+    : { "render-goldens": { max: 1, why: "the bump-cutout scene's textures (tests/fixtures/bumptest/) are not published on the public mirror" } }),
 };
 
 // Verdict for a lane that exited 0 while reporting `innerSkipped` skipped tests.
@@ -434,8 +478,8 @@ const fail = (note) => ({ status: "FAIL", note });
 const skip = (note) => ({ status: "SKIP", note });
 
 // Render-capability preflight for the D3D9 desktop lanes. When the workstation
-// is locked or on the secure/logon desktop — e.g. the nightly gate firing at
-// 04:37 on a locked box — DWM stops compositing and a D3D9 present yields a
+// is locked or on the secure/logon desktop — e.g. an unattended scheduled gate
+// run firing on a locked box — DWM stops compositing and a D3D9 present yields a
 // BLACK frame, so render-goldens / drive-smoke / playwright-native fail as a
 // FALSE rendering regression (#745). Detect the clear locked case and SKIP those
 // lanes VISIBLY instead of running them into a black-frame failure. Deliberately
@@ -475,7 +519,7 @@ function prereq(lane, ok, what, hint) {
 const LANES = [
   {
     name: "lint",
-    run: () => (runCmdLine("pnpm run lint", editorDir) === 0 ? pass : fail("tsc --noEmit")),
+    run: () => (runCmdLine("pnpm run lint", editorDir) === 0 ? pass : fail("tsc -b")),
   },
   {
     name: "vitest",
@@ -564,8 +608,8 @@ const LANES = [
       if (!SKIP_BUILD) {
         // test_startup_callback_guard compiles StartupCallbackAdapter.cpp, which
         // includes WebView2.h from the Microsoft.Web.WebView2 NuGet package. That
-        // package is restored by the LATER msbuild lanes, so on a fresh worktree
-        // (e.g. the nightly gate) the header is absent and the test build fails
+        // package is restored by the LATER msbuild lanes, so on a fresh checkout
+        // (e.g. a scheduled gate run or CI) the header is absent and the test build fails
         // with C1083 — a false cpp-unit failure. Restore here as a prereq, the
         // same shape as the expat static-lib prereq below. (#745)
         if (ensureRestored() !== 0) {
@@ -673,9 +717,12 @@ const LANES = [
       if (!rd.ok) return skip(`no interactive render desktop — ${rd.reason}`);
       const p = prereq("render-goldens", existsSync(releaseExe), "x64/Release/ParticleEditor.exe missing", "run the msbuild-release lane first");
       if (p) return p;
-      return runExe(process.execPath, [join(repoRoot, "scripts", "render-goldens.mjs")]) === 0
-        ? pass
-        : fail("render goldens (bless intentional changes with scripts/render-goldens.mjs --update)");
+      // Tee + budget: a scene whose committed inputs are absent is SKIPPED by
+      // render-goldens.mjs (and counted in its "N skipped" summary), never
+      // silently dropped — SKIP_BUDGET decides whether that skip is expected.
+      const r = runExeTee(process.execPath, [join(repoRoot, "scripts", "render-goldens.mjs")]);
+      if (r.code !== 0) return fail("render goldens (bless intentional changes with scripts/render-goldens.mjs --update)");
+      return withSkipBudget("render-goldens", parseSkippedCount(r.out));
     },
   },
   {
@@ -739,11 +786,15 @@ const LANES = [
       const rd = renderDesktopUsable();
       if (!rd.ok) return skip(`no interactive render desktop — ${rd.reason}`);
       // drive-smoke.ps1 only self-checks the exe; the gate owns the full prereq
-      // trio + the fixture its A3 scenario silently skips without.
+      // trio + the fixture its A3 scenario silently skips without. The script
+      // itself comes first: it lives under tasks/, which the public mirror does
+      // not publish, and without this check that checkout FAILed with a bare
+      // powershell "file not found" instead of an actionable prereq.
       const reg = spawnSync("reg.exe", ["query", "HKCU\\Software\\AloParticleEditor", "/v", "GameDataPath"], {
         encoding: "utf8", shell: false,
       });
       const checks = [
+        [existsSync(driveSmokeScript), "tasks/drive-smoke.ps1 missing (maintainer-only; not published on the public mirror)", "the lane cannot run in this checkout"],
         [existsSync(releaseExe), "x64/Release/ParticleEditor.exe missing", "run the msbuild-release lane first"],
         [existsSync(distIndex), "web dist/ missing", "run the web-build lane first"],
         [reg.status === 0, "HKCU GameDataPath not set", "launch the editor once and pick the game data folder"],
@@ -755,7 +806,7 @@ const LANES = [
       }
       const code = runExe("powershell.exe", [
         "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-        "-File", join(repoRoot, "tasks", "drive-smoke.ps1"),
+        "-File", driveSmokeScript,
       ]);
       return code === 0 ? pass : fail(`drive smoke exit ${code}`);
     },

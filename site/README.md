@@ -2,8 +2,8 @@
 
 A static site for the public mirror (`DrKnickers/particle-editor`): the landing page at the
 root plus a user guide under `guide/`. Plain HTML/CSS/JS — no framework, no CI build step
-(the guide's HTML is prerendered locally and committed). Decoupled from the source-sync
-pipeline (it is **not** in `tasks/public-manifest.txt`). Fonts are self-hosted in `fonts/`
+(the guide's HTML is prerendered locally and committed), and deployed separately from the
+source by the Pages workflow. Fonts are self-hosted in `fonts/`
 (latin woff2 subsets of Schibsted Grotesk + IBM Plex Mono, preloaded from each page head —
 no third-party requests from the shipped pages).
 
@@ -41,7 +41,11 @@ pipe tables, raw HTML blocks). Internal page links are written as bare lowercase
 **fails on an unknown or unpublished target, or a leftover wiki-style page ref** (external
 `http(s)`/`mailto`, `#anchors`, and explicit `./`/`../` paths pass through unchanged), so
 broken cross-references can't ship. Hidden `<!-- Media: … -->` comments in tutorial pages
-are anchors for the clip workstream — preserve them while editing prose. `GUIDE_MEDIA` in
+are anchors for the clip workstream — preserve them while editing prose. Each anchor resolves
+against `guide-src/media.json`, the published media index (id → kind, manual, purpose, output, poster).
+It is generated from the maintainer's media manifest by a build in a checkout that has it, and
+`--check` fails if it drifts; without that manifest the build reads the committed index, so
+prose edits build anywhere — a NEW media id needs the maintainer side. `GUIDE_MEDIA` in
 `tests-site/guide.spec.ts` pins the exact ordered filenames each public page renders. Leaving
 manifest items in place for an unpublished draft is intentional: the media pipeline can keep
 rendering work-in-progress material without exposing the tutorial on the site.

@@ -1,5 +1,7 @@
 # verify-compositor-retry.ps1 -- fault-injection regression check for the
-# Compositor::Init DirectComposition retry (tasks/2026-07-07-compositor-init-retry-plan.md).
+# Compositor::Init DirectComposition retry (a short, capped retry of the device
+# create while DWM settles on a freshly attached virtual display, e.g. a Chrome
+# Remote Desktop session).
 # ASCII only (PS 5.1 mojibakes non-ASCII).
 #
 # Proves the retry LOOP MECHANICS on any box: with ALO_COMP_INIT_FAIL_FIRST=2 the
