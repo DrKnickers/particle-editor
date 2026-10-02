@@ -16,6 +16,9 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 ### Fixed
 
 - Edit → Paste and the emitter tree's Paste / Paste As items stay enabled after the editor reloads its interface (crash recovery or the error screen's Reload) while emitters are still on the clipboard
+- The property panel shows an error with a Retry button when an emitter's properties fail to load, instead of "Loading…" forever, and no longer leaves the previous emitter's values editable while the next one loads
+- The Load Order dialog reports a failed mod list with Retry and keeps Apply disabled until the list loads, so a failed load can no longer overwrite your configured mod stack
+- The atlas picker names the texture it could not find or read and says where to change it
 
 ## [0.4.2] - 2026-10-02
 

@@ -4,12 +4,13 @@
 // (the shared useStackReorder glide engine — same one the Mods dropdown uses); remove
 // via ×; base game is implicit (a pinned, non-removable footer row). Apply dispatches
 // mods/set-layers once and calls onApplied so the menu summary refreshes.
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Search, Package, Check, Plus, GripVertical, ChevronUp, ChevronDown, X, Lock, Triangle, Layers } from "lucide-react";
 import type { Bridge, LayerRef } from "@particle-editor/bridge-schema";
 import { Modal } from "@/components/Modal";
 import { cn } from "@/lib/utils";
 import { IconButton } from "@/primitives/IconButton";
+import { Button } from "@/primitives/Button";
 import { useStackReorder } from "@/lib/use-stack-reorder";
 import { moveItemToGap, refreshModStack } from "@/lib/mod-stack";
 import { basename, eqPath } from "@/lib/paths";
@@ -24,34 +25,37 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
   const [query, setQuery] = useState("");
   const [applyPending, setApplyPending] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const [loadState, setLoadState] = useState<{ bridge: Bridge; status: "loading" | "ready" | "error"; error?: string }>({ bridge, status: "loading" });
+  const loadGeneration = useRef(0);
+  const ready = open && loadState.bridge === bridge && loadState.status === "ready";
 
   // An unresolved in-stack path (absent from the catalog) falls back to its
   // normalized basename rather than the full path, so trailing separators do not blank the fallback label.
   const labelFor = (p: string) => catalog.find((l) => eqPath(l.path, p))?.label ?? basename(p, { normalizeSeparators: true });
   const inStack = (p: string) => order.some((o) => eqPath(o, p));
-  const add = (p: string) => setOrder((o) => (inStack(p) ? o : [...o, p]));
-  const remove = (i: number) => setOrder((o) => o.filter((_, j) => j !== i));
+  const add = (p: string) => { if (ready) setOrder((o) => (inStack(p) ? o : [...o, p])); };
+  const remove = (i: number) => { if (ready) setOrder((o) => o.filter((_, j) => j !== i)); };
   const move = (i: number, dir: -1 | 1) => setOrder((o) => {
+    if (!ready) return o;
     const j = i + dir; if (j < 0 || j >= o.length) return o;
     const n = o.slice(); [n[i], n[j]] = [n[j], n[i]]; return n;
   });
   // Move `from` to insertion gap `target` (target === order.length → append).
   const reorder = (from: number, target: number) => setOrder((o) => {
+    if (!ready) return o;
     return moveItemToGap(o, from, target);
   });
 
   // Shared drag/glide engine (also powers the Mods dropdown's in-place reorder).
   const drag = useStackReorder({ order, labelFor, onReorder: reorder });
 
-  useEffect(() => {
-    // Abort any interrupted drag on open/close (a row can unmount mid-drag if the
-    // modal is dismissed before pointerup), then load the catalog + current stack.
-    drag.cancel();
-    if (!open) return;
-    let cancelled = false;
-    setQuery("");
+  const load = useCallback(() => {
+    const generation = ++loadGeneration.current;
+    setLoadState({ bridge, status: "loading" });
+    setCatalog([]);
+    setOrder([]);
     bridge.request({ kind: "mods/list", params: {} }).then((r) => {
-      if (cancelled) return;
+      if (generation !== loadGeneration.current) return;
       setCatalog(Array.isArray(r?.layers) ? r.layers : []);
       // Initialise the working order to the FULL incoming configured stack as-is.
       // Do NOT filter to only the catalog: it excludes temporarily unavailable
@@ -59,12 +63,27 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
       // MEG-packed mod), so dropping either kind here would silently erase those
       // layers on Apply.
       setOrder(Array.isArray(r?.stack) ? r.stack : []);
-    }).catch((err) => console.warn("[LoadOrderDialog] mods/list failed:", err));
-    return () => { cancelled = true; };
+      setLoadState({ bridge, status: "ready" });
+    }).catch((err: unknown) => {
+      if (generation !== loadGeneration.current) return;
+      setLoadState({ bridge, status: "error", error: `Couldn't load mods: ${err instanceof Error ? err.message : String(err)}` });
+    });
+  }, [bridge]);
+
+  useEffect(() => {
+    // Abort any interrupted drag on open/close (a row can unmount mid-drag if the
+    // modal is dismissed before pointerup), then load the catalog + current stack.
+    drag.cancel();
+    setLoadState({ bridge, status: "loading" });
+    setApplyError(null);
+    setQuery("");
+    if (open) load();
+    return () => { loadGeneration.current += 1; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, bridge]);
 
   const apply = () => {
+    if (!ready || applyPending) return;
     setApplyError(null);
     setApplyPending(true);
     // Await the host result: notify + close ONLY if the apply (incl. the shader
@@ -103,7 +122,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
   // separate groups instead of merging their nested layers. The header text still
   // uses the human label (parentLabel for nested, the mod's label otherwise).
   const groups: { key: string; label: string; items: LayerRef[] }[] = [];
-  for (const l of catalog) {
+  for (const l of ready ? catalog : []) {
     const key = l.kind === "nested" ? (l.parentPath ?? l.path) : l.path;
     const headerLabel = l.kind === "nested" ? (l.parentLabel ?? l.label) : l.label;
     let grp = groups.find((x) => eqPath(x.key, key));
@@ -147,6 +166,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
               <Search className="size-3 shrink-0 text-text-3" strokeWidth={1.5} />
               <input
                 value={query}
+                disabled={!ready}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search mods…"
                 aria-label="Search mods"
@@ -197,8 +217,17 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
                   </div>
                 </div>
               ))}
-              {visibleGroups.length === 0 && (
-                <div className="px-1.5 py-2 text-2xs text-text-3">No mods match “{query}”.</div>
+              {!ready && (loadState.bridge !== bridge || loadState.status === "loading") && (
+                <div role="status" className="px-1.5 py-2 text-2xs text-text-3">Loading mods…</div>
+              )}
+              {loadState.bridge === bridge && loadState.status === "error" && (
+                <div className="flex flex-col items-start gap-2 px-1.5 py-2 text-2xs">
+                  <div role="alert" className="text-danger-fg">{loadState.error}</div>
+                  <Button variant="secondary" onClick={load}>Retry</Button>
+                </div>
+              )}
+              {ready && visibleGroups.length === 0 && (
+                <div className="px-1.5 py-2 text-2xs text-text-3">{catalog.length === 0 ? "No mods found." : `No mods match “${query}”.`}</div>
               )}
             </div>
           </div>
@@ -221,7 +250,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
               <div className="my-0.5 w-[3px] shrink-0 rounded-[var(--radius-2xs)] bg-gradient-to-b from-accent via-accent-2 to-border-2" />
 
               <div className="flex min-w-0 flex-1 flex-col">
-                {order.length === 0 ? (
+                {!ready ? null : order.length === 0 ? (
                   <div className="mb-1.5 flex flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-border-2 px-3 py-[22px] text-center">
                     <Layers className="size-[22px] text-text-3" strokeWidth={1.3} />
                     <div className="text-xs text-text-2">No mods added</div>
@@ -287,7 +316,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
           </span>
         )}
         <Modal.CancelButton onClick={() => onOpenChange(false)}>Cancel</Modal.CancelButton>
-        <Modal.OkButton onClick={apply} disabled={applyPending}>{applyPending ? "Applying…" : "Apply"}</Modal.OkButton>
+        <Modal.OkButton onClick={apply} disabled={!ready || applyPending}>{applyPending ? "Applying…" : "Apply"}</Modal.OkButton>
       </Modal.Footer>
 
       {drag.chipNode}

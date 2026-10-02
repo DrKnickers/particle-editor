@@ -89,7 +89,8 @@ reach the preview or saved file.
    current selection. [tree-refetch.ts](src/lib/tree-refetch.ts),
    `requestTreeRefetch`, shares matching reads made in the same turn.
    `emitters/get-properties` returns the native `initialDelay`, and the form
-   replaces its local copy. A rejected edit also calls `fetchProps`.
+   replaces its local copy. A rejected edit is announced in the status bar
+   and also calls `fetchProps`.
 9. The edit itself does not save a file. On Save,
    [BridgeDispatch_File.cpp](../../../src/host/BridgeDispatch_File.cpp),
    `file/save`, calls [ParticleSystemIO.cpp](../../../src/ParticleSystemIO.cpp),
@@ -107,8 +108,9 @@ The spinner's zero minimum is an interface rule. Native `getFloat` checks
 that `initialDelay` is a JSON number; it does **not** enforce that minimum.
 A wrong type keeps the old value and lists the field in `skipped`. Unknown
 field names are also skipped. Even a skipped patch reaches the handler's
-dirty, refresh and event code. The current web commit ignores the returned
-`applied`/`skipped` lists; its tree-event read supplies the host's value.
+dirty, refresh and event code. The web `commit` reads the answer: when
+`skipped` is not empty it announces the skipped field names in the status
+bar and reads the properties again, so the form shows the host's value.
 
 [mock.ts](src/bridge/mock.ts), `emitters/set-properties`, is more lenient.
 It accepts known fields without native type checks, including the derived

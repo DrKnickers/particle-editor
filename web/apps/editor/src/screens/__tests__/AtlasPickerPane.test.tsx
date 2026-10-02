@@ -104,7 +104,18 @@ describe("AtlasPickerPane", () => {
 
   it("missing placeholder", async () => {
     setup({ textureSize: 16, colorTexture: "__missing__.dds" });
-    await waitFor(() => expect(screen.getByText(/not found/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/not found/i).textContent).toContain("__missing__.dds"));
+    expect(screen.getByText(/not found/i).textContent).toContain("Appearance → Textures");
+  });
+
+  it("names the unreadable texture and points to its setting on preview rejection", async () => {
+    const bridge = new MockBridge();
+    rejectMatching(bridge, (r) => r.kind === "textures/get-preview");
+    useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "broken.dds" });
+    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [0.3] } });
+    render(<AtlasPickerPane bridge={bridge} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getByText(/could not be read/i).textContent).toContain("broken.dds"));
+    expect(screen.getByText(/could not be read/i).textContent).toContain("Appearance → Textures");
   });
 
   it("too-large placeholder", async () => {

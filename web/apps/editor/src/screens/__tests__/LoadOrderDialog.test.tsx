@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render as rtlRender, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { act, render as rtlRender, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import type { ReactElement, ReactNode } from "react";
 import { LoadOrderDialog } from "../LoadOrderDialog";
@@ -27,6 +27,125 @@ function makeBridge(stack: string[]) {
 }
 
 describe("LoadOrderDialog", () => {
+  it("blocks Apply after a rejected load and retries the full configured stack", async () => {
+    const bridge = makeBridge(["C:/m/Offline", "C:/m/Alpha/Bravo"]);
+    bridge.request.mockRejectedValueOnce(new Error("catalog unavailable"));
+    render(<LoadOrderDialog bridge={bridge} open onOpenChange={() => {}} />);
+    expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled();
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("catalog unavailable"));
+    expect(screen.queryByText(/No mods match/)).toBeNull();
+    expect(screen.queryByText("No mods added")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(bridge.request.mock.calls.some(([r]) => r.kind === "mods/set-layers")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => screen.getByRole("button", { name: "Remove Offline" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    await waitFor(() => expect(bridge.request).toHaveBeenCalledWith({
+      kind: "mods/set-layers", params: { paths: ["C:/m/Offline", "C:/m/Alpha/Bravo"] },
+    }));
+  });
+
+  it("distinguishes loading from a successfully empty catalog", async () => {
+    const bridge = makeBridge([]);
+    bridge.request.mockRejectedValueOnce(new Error("initial failure"));
+    render(<LoadOrderDialog bridge={bridge} open onOpenChange={() => {}} />);
+    expect(screen.getByText("Loading mods…")).toBeTruthy();
+    await waitFor(() => screen.getByRole("button", { name: "Retry" }));
+    bridge.request.mockResolvedValueOnce({ mods: [], layers: [], stack: [], activePath: null });
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => screen.getByText("No mods found."));
+    expect(screen.queryByText(/No mods match/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Apply" })).toBeEnabled();
+  });
+
+  it.each(["resolve", "reject"] as const)("ignores a catalog request that %ss after close/reopen", async (settle) => {
+    let resolve!: (value: unknown) => void;
+    let reject!: (error: Error) => void;
+    const old = new Promise((yes, no) => { resolve = yes; reject = no; });
+    const bridge = makeBridge(["C:/m/Alpha/Bravo"]);
+    bridge.request.mockReturnValueOnce(old);
+    const view = render(<LoadOrderDialog bridge={bridge} open onOpenChange={() => {}} />);
+    view.rerender(<LoadOrderDialog bridge={bridge} open={false} onOpenChange={() => {}} />);
+    view.rerender(<LoadOrderDialog bridge={bridge} open onOpenChange={() => {}} />);
+    await waitFor(() => screen.getByRole("button", { name: "Remove Bravo" }));
+    await act(async () => {
+      if (settle === "resolve") resolve({ layers: [], stack: ["C:/m/Obsolete"] });
+      else reject(new Error("obsolete catalog"));
+    });
+    expect(screen.getByRole("button", { name: "Remove Bravo" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Remove Obsolete" })).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("clears old stack editing on bridge replacement and retries only the new bridge", async () => {
+    const first = makeBridge(["C:/m/Alpha/Bravo"]);
+    const second = makeBridge(["C:/m/Offline"]);
+    second.request.mockRejectedValueOnce(new Error("new catalog failed"));
+    const view = render(<LoadOrderDialog bridge={first} open onOpenChange={() => {}} />);
+    await waitFor(() => screen.getByRole("button", { name: "Remove Bravo" }));
+    view.rerender(<LoadOrderDialog bridge={second} open onOpenChange={() => {}} />);
+    expect(screen.queryByRole("button", { name: "Remove Bravo" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Add / })).toBeNull();
+    await waitFor(() => screen.getByRole("alert"));
+    expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => screen.getByRole("button", { name: "Remove Offline" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    await waitFor(() => expect(second.request).toHaveBeenCalledWith({
+      kind: "mods/set-layers", params: { paths: ["C:/m/Offline"] },
+    }));
+  });
+
+  it("does not expose the previous stack when reopening fails to load", async () => {
+    const bridge = makeBridge(["C:/m/Alpha/Bravo"]);
+    const view = render(<LoadOrderDialog bridge={bridge} open onOpenChange={() => {}} />);
+    await waitFor(() => screen.getByRole("button", { name: "Remove Bravo" }));
+    view.rerender(<LoadOrderDialog bridge={bridge} open={false} onOpenChange={() => {}} />);
+    bridge.request.mockRejectedValueOnce(new Error("reopen failed"));
+    view.rerender(<LoadOrderDialog bridge={bridge} open onOpenChange={() => {}} />);
+    expect(screen.queryByRole("button", { name: "Remove Bravo" })).toBeNull();
+    await waitFor(() => screen.getByRole("alert"));
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(bridge.request.mock.calls.some(([r]) => r.kind === "mods/set-layers")).toBe(false);
+  });
+
+  it("keeps the working stack and supports retry after Apply rejects", async () => {
+    const bridge = makeBridge(["C:/m/Alpha/Bravo", "C:/m/Offline"]);
+    const close = vi.fn();
+    render(<LoadOrderDialog bridge={bridge} open onOpenChange={close} />);
+    await waitFor(() => screen.getByRole("button", { name: "Move Offline up" }));
+    fireEvent.click(screen.getByRole("button", { name: "Move Offline up" }));
+    bridge.request.mockRejectedValueOnce(new Error("apply unavailable"));
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    await waitFor(() => expect(screen.getByTestId("load-order-error").textContent).toContain("apply unavailable"));
+    expect(close).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Move Offline up" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    await waitFor(() => expect(close).toHaveBeenCalledWith(false));
+    expect(bridge.request).toHaveBeenLastCalledWith({ kind: "mods/set-layers", params: { paths: ["C:/m/Offline", "C:/m/Alpha/Bravo"] } });
+  });
+
+  it.each(["resolve", "reject"] as const)("ignores a catalog request that %ss after unmount", async (settle) => {
+    let resolve!: (value: unknown) => void;
+    let reject!: (error: Error) => void;
+    const pending = new Promise((yes, no) => { resolve = yes; reject = no; });
+    const bridge = makeBridge([]);
+    bridge.request.mockReturnValueOnce(pending);
+    const view = render(<LoadOrderDialog bridge={bridge} open onOpenChange={() => {}} />);
+    view.unmount();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await act(async () => {
+        if (settle === "resolve") resolve({ layers: [], stack: [] });
+        else reject(new Error("late catalog"));
+      });
+      expect(warn).not.toHaveBeenCalled();
+      expect(bridge.request.mock.calls.some(([r]) => r.kind === "mods/set-layers")).toBe(false);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("initialises the load order from the current stack, numbered", async () => {
     render(<LoadOrderDialog bridge={makeBridge(["C:/m/Alpha/Bravo", "C:/m/Alpha/Core"])} open onOpenChange={() => {}} onApplied={() => {}} />);
     await waitFor(() => expect(screen.getByRole("list", { name: "Load order" })).toBeTruthy());

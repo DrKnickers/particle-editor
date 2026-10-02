@@ -747,9 +747,9 @@ export function AtlasPickerPane({
   } else if (!eligible) {
     body = <Placeholder>Single frame — no atlas to pick from.</Placeholder>;
   } else if (preview.kind === "missing") {
-    body = <Placeholder>Texture not found.</Placeholder>;
+    body = <Placeholder>Texture “{colorTexture}” not found. Choose another under Appearance → Textures.</Placeholder>;
   } else if (preview.kind === "broken") {
-    body = <Placeholder>Texture could not be read.</Placeholder>;
+    body = <Placeholder>Texture “{colorTexture}” could not be read. Choose another under Appearance → Textures.</Placeholder>;
   } else if (offIndex) {
     body = (
       <Placeholder>Select keys on the index channel to assign frames.</Placeholder>
@@ -1003,4 +1003,3 @@ function PreviewBox({
     </div>
   );
 }
-
