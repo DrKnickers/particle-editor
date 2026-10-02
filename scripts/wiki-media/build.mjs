@@ -7,7 +7,7 @@ import { inflateSync } from "node:zlib";
 
 const DEFAULT_FPS = 60;
 const DEFAULT_CRF = 16;
-// Stage 3 (headless composite record): the capture is now the client area 1:1 —
+// Headless composite record: the capture is now the client area 1:1 —
 // 1264x951, no native border (X=0) and the branded frameless title bar at the top
 // (part of the app). Legacy foreground PrintWindow was 1264x952 with an 8px left
 // border (X=8). Height rounded DOWN to an even 950 so the crop is a clean pixel
@@ -479,7 +479,7 @@ function checkLullLuma(frameDir, item) {
   return { ok: leadLuma <= threshold && tailLuma <= threshold, message: "lead=" + leadLuma.toFixed(2) + " tail=" + tailLuma.toFixed(2) + " threshold=" + threshold };
 }
 
-// Stage 3: clips render through the headless composite path (engine RT +
+// Headless composite record: clips render through the headless composite path (engine RT +
 // CapturePreview UI, composited on the CPU) — occlusion-immune with the editor
 // minimized, so a batch can run while the machine is in use. The crop
 // (DEFAULT_CROP) is tuned to the headless capture dims, so this is the ONLY

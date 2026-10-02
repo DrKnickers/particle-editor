@@ -701,9 +701,9 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
     }
     case WM_KILLFOCUS:
     {
-        // End an in-flight gizmo drag on focus loss (archC routes Alt-Tab here as window.blur;
+        // End an in-flight gizmo drag on focus loss (the composition host routes Alt-Tab here as window.blur;
         // WM_CAPTURECHANGED may not fire for the hidden popup). Commit the moved transform so it isn't
-        // lost, then clear drag + active-guide state. A spurious archC focus-churn mid-drag would also end
+        // lost, then clear drag + active-guide state. A spurious composition host focus-churn mid-drag would also end
         // the drag, but commit preserves the position (accepted tradeoff -- a captured drag rarely churns).
         if (m_viewport.dragMode == DragMode::MANIPULATE) {
             if (dispatcher) dispatcher->CommitReferenceObjectTransform();

@@ -37,7 +37,7 @@ export function BasicTab({
       case "continuous": onCommit({ useBursts: false, isWeatherParticle: false }); break;
       // Weather only sets isWeatherParticle — useBursts is preserved so
       // toggling weather off returns the user to whichever non-weather
-      // mode they came from. Matches legacy IDC_RADIO_WEATHER behaviour.
+      // mode they came from, as the original editor's Weather radio button did.
       case "weather":    onCommit({ isWeatherParticle: true }); break;
     }
   };
@@ -206,9 +206,9 @@ export function BasicTab({
         </div>
 
         {/* Lifetime fields moved here from Emitter Timing to match
-            legacy IDD_EMITTER_PROPS1. Minimum lifetime
+            the original editor's Basic panel. Minimum lifetime
             uses displayInvertedPercent: the stored ratio (0..1) displays
-            as `100 - val*100` rounded — matches legacy IDC_SPINNER14. */}
+            as `100 - val*100` rounded — matches the original editor's inversion. */}
         <FieldSpinner
           label="Maximum lifetime:"
           value={properties.lifetime}

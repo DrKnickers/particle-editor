@@ -46,7 +46,7 @@ describe("computeSceneRect", () => {
 
 describe("dockSlideTarget", () => {
   // The measured test window: viewport 658 (dock open) ↔ 918 (dock closed),
-  // Δ = 260 = the dock's min width (Phase-0).
+  // Δ = 260 = the dock's min width.
   const from: SceneRect = { x: 100, y: 20, w: 658, h: 500 };
 
   it("OPEN shrinks width by the dock width; x/y/h fixed", () => {

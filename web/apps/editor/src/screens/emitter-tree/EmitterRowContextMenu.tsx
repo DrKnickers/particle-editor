@@ -162,7 +162,7 @@ export function EmitterRowContextMenu({
     announceWhenOk(bridge.request({ kind: "emitters/paste", params: {} }), "Pasted — Ctrl+Z to undo");
   };
   // Paste As ▸ Lifetime/Death Child — paste the clipboard into this
-  // emitter's child slot (legacy ID_PASTEAS_LIFETIME / ID_PASTEAS_DEATH).
+  // emitter's child slot, as the original editor's paste-as-child commands did.
   const handlePasteAsLifetime = () => {
     resolveTargetIds();
     void bridge.request({

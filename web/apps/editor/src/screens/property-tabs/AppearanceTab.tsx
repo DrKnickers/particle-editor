@@ -14,8 +14,8 @@ import {
 // switch via fireEvent (the known pointer-event flake noted in the
 // tests), so vitest mounts AppearanceTab directly.
 //
-// Restructure — five sections matching legacy
-// IDD_EMITTER_PROPS2 (legacy Win32 editor):
+// Restructure — five sections matching the original editor's
+// Appearance panel:
 //   Textures / Random color addition / Tail / Rotation / Rendering.
 //
 // Field moves vs the prior layout:
@@ -25,7 +25,8 @@ import {
 //   - `nTriangles` dropped from the inspector entirely;
 //     the schema field is retained on the wire.
 //
-// Semantic flip on "Always face camera" (legacy IDC_CHECK16):
+// "Always face camera" shows the inverse of isWorldOriented,
+// as the original editor's checkbox did:
 // the checkbox label and meaning are inverted from
 // `isWorldOriented`. Checkbox checked = "always face camera = yes" =
 // `isWorldOriented = false`. When `blendMode === BLEND_BUMP` the
@@ -55,7 +56,7 @@ export function AppearanceTab({
   const rotationEnabled = properties.randomRotation;
 
   // Display 0..1 random-colour values as 0..100% in the spinners
-  // (matches the legacy IDC_SPINNER19-26 percentage spinners).
+  // (matches the original editor's random-colour percentage spinners).
   const updateRandomColors = (idx: 0 | 1 | 2 | 3, displayed: number) => {
     const next: [number, number, number, number] = [
       properties.randomColors[0],
@@ -99,7 +100,7 @@ export function AppearanceTab({
           onCommit={(v) => onCommit({ textureSize: Math.max(1, Math.round(v)) })}
         />
         {/* Minimum scale: adopts displayInvertedPercent —
-            matches the legacy IDC_SPINNER13 inversion.
+            matches the original editor's inverted-percent scale convention.
             The stored ratio (0..1) displays
             as `100 - val*100` and commits `(100 - displayed)/100`. */}
         <FieldSpinner

@@ -40,7 +40,7 @@ export function computeSceneRect(el: HTMLElement): SceneRect {
  * window was resized while the dock was closed (the library restores a
  * remembered PERCENTAGE, not the pixels we shadow). In the common path — no
  * resize between close and open, not at a constraint boundary — the prediction
- * is exact (the whole dock delta moves to/from the centre; Phase-0 confirmed
+ * is exact (the whole dock delta moves to/from the centre; measurements confirmed
  * 658↔918). At a constraint boundary or after a resize-while-closed the real
  * settled width diverges by a small amount; rather than re-implement the
  * library's solver on the web side (no clean handle on the group pixel width),

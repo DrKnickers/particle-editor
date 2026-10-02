@@ -107,8 +107,8 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
         // ModManager keeps selectedModPath as-is on refresh; if the
         // path no longer exists on disk the React UI will see a
         // "ghost" selection until the user picks something else. This
-        // matches the legacy WM_COMMAND ID_MOD_REFRESH branch in
-        // main.cpp which has the same behaviour for symmetry.
+        // matches the original editor's "refresh mods" menu command,
+        // which has the same behaviour for symmetry.
         ctx.SendOk(buildModsListPayload());
         return true;
     }

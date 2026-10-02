@@ -12,7 +12,7 @@
 // (filtered engine-side), and is built off the UI thread; while it builds the
 // query returns `building:true` and the picker shows "Loading objects…". A
 // search box narrows the list. The objects are presented as a COLLAPSIBLE TREE
-// (Stage 2): top-level **Heroes / Ground / Space** sections, each Ground/Space
+// with top-level **Heroes / Ground / Space** sections, each Ground/Space
 // section sub-grouped into bucket disclosures (Infantry, Vehicles, …, Fighters,
 // Capitals, …). Searching force-expands so matches are always visible.
 //

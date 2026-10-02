@@ -300,7 +300,7 @@ describe("EmitterPropertyTabs", () => {
     expect(speed).toBeInTheDocument();
     expect(accel).toBeInTheDocument();
     expect(ground).toBeInTheDocument();
-    // DOM order matches legacy IDD_EMITTER_PROPS3.
+    // DOM order matches the original editor's Physics panel.
     expect(pos.compareDocumentPosition(speed)   & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(speed.compareDocumentPosition(accel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(accel.compareDocumentPosition(ground) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

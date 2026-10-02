@@ -125,7 +125,7 @@ describe("ImportEmittersDialog", () => {
     expect(screen.getByRole("button", { name: /^Import$/ })).toBeDisabled();
   });
 
-  it("Clear button deselects every emitter (legacy IDC_IMPORT_CLEAR)", async () => {
+  it("Clear button deselects every emitter (original editor behaviour)", async () => {
     const bridge = makeTreeBridge();
     render(<ImportEmittersDialog bridge={bridge} open onOpenChange={() => {}} />);
 

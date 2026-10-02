@@ -13,7 +13,7 @@ const TipProvider = ({ children }: { children: ReactNode }) => (
 );
 const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
-// PRM-4 / PRM-5: the legacy panel displays rotation average as
+// The original editor's panel displays rotation average as
 // `stored * 360` (integer degrees, -180..180) and commits `typed / 360`,
 // and rotation variance as `stored * 100` (integer 0..100) committing
 // `typed / 100`. The host serialises the

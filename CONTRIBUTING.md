@@ -99,7 +99,7 @@ the interface, host, engine and file paths.
 | Golden | A saved picture or description of the interface. Tests compare new output with it to catch changes. |
 | Lane | One group of checks in the test runner, such as `vitest` or `cpp-unit`. |
 | Policy header | A small C++ header that holds a rule without needing a window or graphics device. It has its own test. |
-| Legacy | Mike.NL's original Win32 editor. This editor preserves its behaviour. Names starting with `IDC_` or `IDD_` in comments are its old control IDs; you can ignore them. |
+| Legacy | Mike.NL's original Win32 editor. This editor preserves its behaviour. |
 
 | User term | Name in code | Meaning and source |
 |---|---|---|

@@ -34,8 +34,8 @@ export const BLEND_BUMP = 11;
 
 // Ground-interaction dropdown options — mirrors the legacy
 // `GroundBehaviors[]` table. Values are
-// the engine enum index (0..3); the `IDS_GROUND_BEHAVIOR_BOUNCE`
-// string-id is the 3rd entry (value 2), and legacy cascades enable
+// the engine enum index (0..3); "Bounce" is the 3rd entry
+// (value 2), and the original editor's cascades enable
 // `bounciness` only when this value is picked.
 export const GROUND_BEHAVIOR_OPTIONS: { value: number; label: string }[] = [
   { value: 0, label: "None" },
@@ -390,15 +390,15 @@ export function FieldSpinner({
   disabled?: boolean;
   /** When true, displays `100 - value*100` (rounded to integer) and
    *  commits `(100 - displayed) / 100`. Forces min=0, max=100. Used for
-   *  `randomLifetimePerc` and `randomScalePerc` per legacy IDC_SPINNER13/14
-   *  inverted convention. */
+   *  `randomLifetimePerc` and `randomScalePerc`, following the original
+   *  editor's inverted-percent convention. */
   displayInvertedPercent?: boolean;
   /** When set, displays `value * displayScale` and commits `typed /
    *  displayScale`. The engine stores these as a normalised ratio; the
    *  legacy panel applied this scale purely as a display transform. Pass
    *  `min`/`max`/`step`/`decimals` in DISPLAY space. Used for
    *  `randomRotationAverage` (×360, -180..180°) and `randomRotationVariance`
-   *  (×100, 0..100) per legacy IDC_SPINNER16/17.
+   *  (×100, 0..100), as in the original editor's rotation spinners.
    *  Mutually exclusive with `displayInvertedPercent`. */
   displayScale?: number;
   /** Optional input-column boost for spinners whose values exceed the

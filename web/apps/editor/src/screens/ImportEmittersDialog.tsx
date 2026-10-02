@@ -202,7 +202,7 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
     });
 
   const handleSelectAll = () => setPicks(new Set(allIds));
-  // Legacy IDC_IMPORT_CLEAR: deselect every node.
+  // Clear deselects every node, as in the original editor.
   const handleClear = () => setPicks(new Set());
 
   const handleOk = async () => {

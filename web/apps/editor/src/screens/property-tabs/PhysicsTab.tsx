@@ -28,8 +28,8 @@ import {
 // Radix Tabs in jsdom doesn't reliably switch via fireEvent (known
 // pointer-event flake), so vitest mounts PhysicsTab directly.
 //
-// Restructure — four sections matching legacy
-// IDD_EMITTER_PROPS3 (legacy Win32 editor):
+// Restructure — four sections matching the original editor's
+// Physics panel:
 //   Initial position / Initial speed / Acceleration / Ground
 //   interaction.
 //
@@ -38,7 +38,7 @@ import {
 //     Basic, now under Initial speed. Inline `* 100` / `/ 100` math
 //     since this is the only non-inverted display-percent consumer.
 //   - `affectedByWind` moved IN from Appearance, now under Initial
-//     speed (matches legacy IDD_EMITTER_PROPS3).
+//     speed (matches the original editor's Physics panel).
 //   - `emitFromMesh` + `emitFromMeshOffset` moved OUT to Basic >
 //     Connection.
 //   - `isWeatherParticle` + `weatherCubeSize` + `weatherCubeDistance`
@@ -141,7 +141,7 @@ export function PhysicsTab({
       <Section title="Acceleration" unit="units/s²">
         {/* Acceleration X/Y/Z — 3-spinner cluster. Spans the .form-row
             input + unit columns since 3 spinners don't fit in 92px.
-            Combined "X / Y / Z:" label per legacy IDD_EMITTER_PROPS3. */}
+            Combined "X / Y / Z:" label as in the original editor's Physics panel. */}
         <div className="form-row form-row-cluster items-start">
           {/* No unit here — the "Acceleration" section header carries
               "units/s²" for every field in the section (keeping this label short

@@ -5,9 +5,9 @@
 // Bridge call: engine/action/rescale-system { durationScalePercent,
 // sizeScalePercent }. Returns Record<string, never>.
 //
-// Ported from the legacy Win32 editor's IDD_RESCALE_SYSTEM dialog.
-// The native Win32 dialog and the `--legacy-ui` opt-out were
-// removed; this React modal is now the sole Rescale surface.
+// Ported from the original editor's Rescale dialog.
+// The native Win32 dialog was removed; this React modal is now
+// the sole Rescale surface.
 
 import { useEffect, useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
