@@ -37,6 +37,14 @@ test.afterAll(async () => {
   await page.evaluate(() => {
     window.location.href = window.location.href.split("?")[0];
   }).catch(() => {});
+  // That navigation is asynchronous. Wait for the normal app to be back
+  // (the gallery route never renders app-shell) and for its bridge, or the
+  // next spec file's first page.evaluate lands mid-navigation and fails with
+  // "Execution context was destroyed".
+  await page.waitForSelector('[data-testid="app-shell"]');
+  await page.waitForFunction(() => typeof window.bridge !== "undefined", null, {
+    timeout: 15_000,
+  });
 });
 
 // ── 1. Gallery page loads ────────────────────────────────────────────────────
