@@ -1,8 +1,7 @@
 # GitHub Pages deploy for the landing site. Publishes the repo's site/ dir (Pages
 # can't serve a /site subfolder, so we stage + upload it as the Pages artifact).
-# README.md and dev-only files are excluded from the published artifact. Actions are
-# disabled on the private repo, so this runs only on the public fork, where Pages is
-# enabled with build_type=workflow.
+# README.md and dev-only files are excluded from the published artifact. Requires Pages
+# to be enabled on the repository with build_type=workflow.
 name: Deploy landing page
 on:
   push:

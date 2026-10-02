@@ -3,20 +3,26 @@
 # Scope: changes land on `master` via PR. This workflow gates the web stack
 # (pnpm/Vitest) and the x64 C++ build before changes reach master.
 #
-# What this workflow DOES run for the web stack: tsc, vite build, Vitest
-# (jsdom unit), node --test scripts, and the `test:web` Playwright layout lane
-# (headless Chromium against the MOCK app via the Vite dev server — real-browser
-# DOM-layout checks jsdom can't do; no native host, runs on Linux).
+# What this workflow DOES run for the web stack: the `lint` type-check
+# (tsc -b — app plus the e2e/site specs), vite build, Vitest (jsdom unit),
+# node --test scripts, and the `test:web` Playwright layout lane (headless
+# Chromium against the MOCK app via the Vite dev server — real-browser
+# DOM-layout checks jsdom can't do; no native host, runs on Linux). On Windows
+# it builds both x64 configurations and runs the standalone C++ unit tests (the
+# gate's `cpp-unit` lane).
+#
+# Node comes from web/.nvmrc and pnpm from web/package.json's `packageManager`,
+# so CI and a contributor's machine resolve the same toolchain.
 #
 # What this workflow does NOT do:
-#   * native Playwright (test:native). That harness launches
-#     ParticleEditor.exe + WebView2 CDP and takes ~minutes; it also
-#     needs the DirectX SDK install for the underlying x64 build, and CDP
-#     blackens the D3D9 viewport. Run it manually via workflow_dispatch when
-#     a viewport/host-bridge change warrants it. (The `test:web` lane above is
-#     a different, CI-friendly thing: mock app, no host, DOM-only.)
-#   * x86 builds. The editor is x64-only (new-UI host bridge + WebView2);
-#     the x86 build leg was removed.
+#   * native Playwright (test:native). No job here runs it, on any trigger:
+#     it launches ParticleEditor.exe + WebView2 over CDP, needs an interactive
+#     desktop (CDP blackens the D3D9 viewport on a headless runner), and takes
+#     minutes. Run it locally through the gate's `playwright-native` lane.
+#     (The `test:web` lane above is a different, CI-friendly thing: mock app,
+#     no host, DOM-only.) `workflow_dispatch` only re-runs the jobs below.
+#   * x86 builds. The editor is x64-only (WebView2 host bridge); the x86 build
+#     leg was removed.
 
 name: CI
 
@@ -43,20 +49,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No `version:` — the action reads `packageManager` from web/package.json,
+      # the single pin.
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          package_json_file: web/package.json
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: web/.nvmrc
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
 
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Lint (tsc --noEmit)
+      - name: Lint (tsc -b — app + e2e/site specs)
         run: pnpm --filter @particle-editor/editor lint
 
       - name: Build
@@ -72,6 +80,11 @@ jobs:
       - name: Vitest
         run: pnpm --filter @particle-editor/editor test
 
+      # Before the script tests: the ssim / clip-encode / clip-verify tests
+      # skip without ffmpeg, and the landing smoke needs it for placeholder media.
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Script tests (node --test)
         run: pnpm --filter @particle-editor/editor test:scripts
 
@@ -81,25 +94,20 @@ jobs:
       - name: Web layout lane (Playwright, headless Chromium, mock app)
         run: pnpm --filter @particle-editor/editor test:web
 
-      - name: Install ffmpeg (landing-smoke placeholder media)
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
-
       - name: Landing page smoke (Playwright, static site/)
         run: pnpm --filter @particle-editor/editor test:site
 
   cpp:
     name: C++ (x64)
     needs: web
-    # Run the heavy 2x-billed Windows C++ legs ONLY on the public mirror, where
-    # Actions are free and the curated tree is the real gate. The private repo
-    # builds C++ locally instead (free-tier quota).
+    # Run the heavy 2x-billed Windows C++ legs ONLY on this repository, not on
+    # forks of it (a fork's Actions minutes are its owner's, and a fork PR is
+    # gated here anyway).
     #
-    # Stated POSITIVELY, naming the public slug, and that is load-bearing: the
-    # sync script rewrites every occurrence of the private slug in each published
-    # file. Phrased as `!= '<private-slug>'` this line became `!= '<public-slug>'`
-    # on the mirror — false there — silently skipping both build configurations,
-    # the exact opposite of the gate. Naming the public slug leaves nothing for
-    # the rewrite to touch. Do not reintroduce the private slug here.
+    # Stated POSITIVELY, naming this repository's slug, and that is
+    # load-bearing: an exclusion (`!=`) guard has to name the right OTHER
+    # repository, and getting that wrong silently skips both build
+    # configurations here — the exact opposite of a gate.
     if: github.repository == 'DrKnickers/particle-editor'
     runs-on: windows-latest
     strategy:
@@ -121,7 +129,7 @@ jobs:
           path: web/apps/editor/dist
 
       - name: Add MSBuild to PATH
-        uses: microsoft/setup-msbuild@v1.0.2
+        uses: microsoft/setup-msbuild@v2
 
       - name: Install DirectX SDK (June 2010)
         shell: pwsh
@@ -153,6 +161,21 @@ jobs:
 
       - name: Build ${{ matrix.build_config }}|x64
         run: msbuild /m /p:Configuration=${{ matrix.build_config }} /p:Platform=x64 .
+
+      # The standalone C++ unit tests (tests/test_*.cpp) through the gate's own
+      # `cpp-unit` lane, so CI and a local run share one recipe: it restores
+      # NuGet, builds the expat static lib in BOTH configs, then builds and runs
+      # every test that doesn't need the app exe. Config-independent, so once
+      # per matrix run (on the Debug leg). Toolchain comes from tests/_env.bat
+      # (vswhere + vcvars64) and the DXSDK_DIR exported above.
+      - uses: actions/setup-node@v4
+        if: matrix.build_config == 'Debug'
+        with:
+          node-version-file: web/.nvmrc
+
+      - name: C++ unit tests (gate lane cpp-unit)
+        if: matrix.build_config == 'Debug'
+        run: node scripts/run-all-tests.mjs --lane cpp-unit
 
       - name: Package Release artifact smoke
         if: matrix.build_config == 'Release'
