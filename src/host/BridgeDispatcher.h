@@ -422,11 +422,15 @@ private:
     // Each lives in its own TU (BridgeDispatch_<Domain>.cpp), holds that
     // domain's `kind ==` handlers, and returns true when it handled `kind`
     // (response written via ctx).
-    // DispatchInternal calls all six in sequence; kinds are exact-match and
+    // DispatchInternal calls all ten in sequence; kinds are exact-match and
     // mutually exclusive, so call order carries no semantics.
     friend struct BridgeRequestContext;   // RequireEngine/MarkDirty need privates
     bool TryDispatchEngine  (BridgeRequestContext& ctx);
-    bool TryDispatchEmitters(BridgeRequestContext& ctx);  // + linkGroups/*
+    bool TryDispatchEmitters(BridgeRequestContext& ctx);
+    bool TryDispatchEmitterProperties(BridgeRequestContext& ctx);
+    bool TryDispatchEmitterTracks(BridgeRequestContext& ctx);
+    bool TryDispatchLinkGroups(BridgeRequestContext& ctx);
+    bool TryDispatchEmitterClipboard(BridgeRequestContext& ctx);
     bool TryDispatchFile    (BridgeRequestContext& ctx);  // + autosave/undo
     bool TryDispatchAssets  (BridgeRequestContext& ctx);  // textures/mods
     bool TryDispatchShell   (BridgeRequestContext& ctx);  // window/layout/viewport/host/app/debug/stats/…

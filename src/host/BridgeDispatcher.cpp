@@ -1023,6 +1023,8 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     // family). Kinds are exact-match and mutually exclusive, so the call
     // order carries no semantics.
     if (TryDispatchEngine(ctx) || TryDispatchEmitters(ctx) ||
+        TryDispatchEmitterProperties(ctx) || TryDispatchEmitterTracks(ctx) ||
+        TryDispatchLinkGroups(ctx) || TryDispatchEmitterClipboard(ctx) ||
         TryDispatchFile(ctx)   || TryDispatchAssets(ctx)   ||
         TryDispatchShell(ctx)  || TryDispatchSpawner(ctx))
     {

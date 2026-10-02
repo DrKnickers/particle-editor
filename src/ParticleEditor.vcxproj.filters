@@ -452,6 +452,15 @@
     <ClCompile Include="host\BridgeDispatch_Assets.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
+    <ClCompile Include="host\BridgeDispatch_EmitterClipboard.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\BridgeDispatch_EmitterProperties.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\BridgeDispatch_EmitterTracks.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
     <ClCompile Include="host\BridgeDispatch_Emitters.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
@@ -459,6 +468,9 @@
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\BridgeDispatch_File.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\BridgeDispatch_LinkGroups.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\BridgeDispatch_Shell.cpp">
