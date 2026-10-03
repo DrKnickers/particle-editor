@@ -1,7 +1,7 @@
 // curve-morph — pure sampling/diffing core for the curve morph
 // animation.
 //
-// The legacy smooth curve (buildSmoothPath, CurveEditor.tsx: control
+// The legacy smooth curve (buildSmoothPath, screens/curve-editor/curve-paths.ts: control
 // points at 1/4 and 3/4 horizontal, cp1y=p1.y, cp2y=p2.y) reduces to
 //   x(t) = x1 + dx * (0.75t + 0.75t^2 - 0.5t^3)   (monotonic: x' >= 0.75)
 //   y(t) = y1 + (y2 - y1) * (3t^2 - 2t^3)          (exactly smoothstep)

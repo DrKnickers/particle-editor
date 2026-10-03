@@ -185,7 +185,7 @@ function buildPointsString(xs: Float64Array, ys: Float64Array): string {
 
 /** Build the fill-path `d` string: traces from left to right along the
  *  lerped polyline, then drops to `height` and returns left. Matches
- *  the `buildFillPath` shape logic in CurveEditor.tsx. */
+ *  the `buildFillPath` shape logic in screens/curve-editor/curve-paths.ts. */
 function buildFillD(xs: Float64Array, ys: Float64Array, height: number): string {
   if (xs.length < 2) return "";
   const parts: string[] = [`M ${xs[0]!.toFixed(2)} ${ys[0]!.toFixed(2)}`];
