@@ -19,7 +19,7 @@ type SpawnerLightingKind =
 
 type SpawnerLightingRequest = Extract<Request, { kind: SpawnerLightingKind }>;
 
-// Mirrors native ClampSpawnerConfig (src/SpawnerDriver.cpp): burstSize
+// Mirrors native ClampSpawnerConfig (src/simulation/SpawnerDriver.cpp): burstSize
 // 1..MAX_BURST_SIZE (10), spacingSec 0..MAX_SPACING_SEC (10), intervalSec
 // 0..MAX_INTERVAL_SEC (60), maxLifetimeSec 0..MAX_LIFETIME_SEC (600), every
 // position / velocity / jitterPosition / acceleration / squiggleAmplitude axis

@@ -11,7 +11,7 @@
 // empty, or purely-record-output directory. Re-shooting a clip into the same
 // place (the pipeline's normal workflow) must keep working.
 
-#include "RecordOutputSafety.h"
+#include "host/RecordOutputSafety.h"
 
 #include <cstdio>
 #include <string>

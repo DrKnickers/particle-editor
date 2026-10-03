@@ -42,7 +42,7 @@
 #include <vector>
 
 #include "GdiplusEncode.h"
-#include "../UI/TexturePalette.h"
+#include "palette/TexturePalette.h"
 
 namespace host {
 

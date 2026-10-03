@@ -6,7 +6,7 @@
 #include "BridgeDispatchShared.h"
 #include "BridgeRequestContext.h"
 #include "LightingSettings.h"
-#include "../MouseCursor.h"
+#include "simulation/MouseCursor.h"
 
 using nlohmann::json;
 

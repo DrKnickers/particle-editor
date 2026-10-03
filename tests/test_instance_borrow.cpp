@@ -5,7 +5,7 @@
 // pins the production binding so a pointer-only bypass in Engine itself cannot
 // leave this device-free test falsely green.
 
-#include "InstanceBorrow.h"
+#include "rendering/InstanceBorrow.h"
 
 #include <cstdio>
 #include <filesystem>
@@ -130,15 +130,15 @@ int main()
     std::printf("production binding\n");
     const std::filesystem::path root = std::filesystem::current_path();
     const std::string engineHeader =
-        ReadSource(root / "src" / "engine.h");
+        ReadSource(root / "src" / "rendering" / "engine.h");
     const std::string engineSource =
-        ReadSource(root / "src" / "engine.cpp");
+        ReadSource(root / "src" / "rendering" / "engine.cpp");
     const std::string renderSource =
-        ReadSource(root / "src" / "engine_render.cpp");
+        ReadSource(root / "src" / "rendering" / "engine_render.cpp");
     const std::string instanceHeader =
-        ReadSource(root / "src" / "ParticleSystemInstance.h");
+        ReadSource(root / "src" / "simulation" / "ParticleSystemInstance.h");
     const std::string instanceSource =
-        ReadSource(root / "src" / "ParticleSystemInstance.cpp");
+        ReadSource(root / "src" / "simulation" / "ParticleSystemInstance.cpp");
     const std::string hostHeader =
         ReadSource(root / "src" / "host" / "BridgeDispatcher.h");
     const std::string hostSource = ReadHostWindowSources(root);

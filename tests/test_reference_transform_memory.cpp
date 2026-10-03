@@ -1,9 +1,9 @@
 // test_reference_transform_memory.cpp -- headless unit test for the per-object
-// reference-transform memory (src/ReferenceTransformMemory.h), the fix for a land
+// reference-transform memory (src/rendering/ReferenceTransformMemory.h), the fix for a land
 // unit floating after a prior object left a non-zero transform. Pure (no engine /
 // D3D), so it builds + runs in CI. Mirrors tests/test_ref_lock.cpp's ok() style.
 
-#include "../src/ReferenceTransformMemory.h"
+#include "rendering/ReferenceTransformMemory.h"
 #include <cstdio>
 
 using reftransform::Xform;

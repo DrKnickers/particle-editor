@@ -21,9 +21,9 @@
 //     disagrees across the triangles sharing them -> distinguishes a clean
 //     sphere + one seam from genuinely incoherent UVs.
 
-#include "AloModel.h"
-#include "files.h"
-#include "exceptions.h"
+#include "gamedata/AloModel.h"
+#include "common/files.h"
+#include "common/exceptions.h"
 
 #include <cstdio>
 #include <cstring>

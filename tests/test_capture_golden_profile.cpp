@@ -262,11 +262,11 @@ int main()
     // ordinary selection must explicitly leave embedded mode.
     {
         const std::filesystem::path root = std::filesystem::current_path();
-        const std::string header = ReadSource(root / "src" / "engine.h");
-        const std::string core = ReadSource(root / "src" / "engine.cpp");
-        const std::string device = ReadSource(root / "src" / "engine_device.cpp");
+        const std::string header = ReadSource(root / "src" / "rendering" / "engine.h");
+        const std::string core = ReadSource(root / "src" / "rendering" / "engine.cpp");
+        const std::string device = ReadSource(root / "src" / "rendering" / "engine_device.cpp");
         const std::string environment =
-            ReadSource(root / "src" / "engine_environment.cpp");
+            ReadSource(root / "src" / "rendering" / "engine_environment.cpp");
         const std::string compactHeader = WithoutWhitespace(header);
         const std::string compactCore = WithoutWhitespace(core);
         const std::string compactEnvironment = WithoutWhitespace(environment);
@@ -356,8 +356,8 @@ int main()
     // never gated — see the runner test for the never-fails-the-lane binding.
     {
         const std::filesystem::path root = std::filesystem::current_path();
-        const std::string header = ReadSource(root / "src" / "engine.h");
-        const std::string core = ReadSource(root / "src" / "engine.cpp");
+        const std::string header = ReadSource(root / "src" / "rendering" / "engine.h");
+        const std::string core = ReadSource(root / "src" / "rendering" / "engine.cpp");
         const std::string runner = ReadSource(
             root / "src" / "host" / "CaptureRunner.cpp");
         const std::string compactHeader = WithoutWhitespace(header);

@@ -3,10 +3,10 @@
 // to pin the EXACT build target for the §4 build clip. Read-only, dev-box only.
 //   usage: dump_fire_emitter.exe <path-to-flipbook.alo>
 #include <windows.h>
-#include "ParticleSystem.h"
-#include "ParticleSystemInstance.h"
-#include "files.h"
-#include "exceptions.h"
+#include "effect/ParticleSystem.h"
+#include "simulation/ParticleSystemInstance.h"
+#include "common/files.h"
+#include "common/exceptions.h"
 #include <cstdio>
 #include <cstring>
 #include <memory>

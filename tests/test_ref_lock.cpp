@@ -1,4 +1,4 @@
-#include "../src/RefLock.h"
+#include "rendering/RefLock.h"
 #include <cstdio>
 static int g_fail = 0;
 static void ok(bool c, const char* m){ printf(c?"  ok: %s\n":"  FAIL: %s\n", m); if(!c) ++g_fail; }

@@ -3,7 +3,7 @@
 // every exposed blend-mode enum value maps to the expected alpha-gated class.
 // Standalone x64 console exe (no engine runtime); same build shape as
 // test_emitter_reorder in tests/native-tests.json but header-only (single TU).
-#include "ParticleSystem.h"
+#include "effect/ParticleSystem.h"
 #include <cstdio>
 
 static int g_fail = 0;

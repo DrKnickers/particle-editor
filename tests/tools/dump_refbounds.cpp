@@ -12,9 +12,9 @@
 //
 // Pure CPU: ReferenceObjectMesh::Load needs no D3D device (Resolve/CreateBuffers do).
 
-#include "ReferenceObjectMesh.h"
-#include "managers.h"   // IFileManager
-#include "files.h"
+#include "rendering/ReferenceObjectMesh.h"
+#include "gamedata/managers.h"   // IFileManager
+#include "common/files.h"
 
 #include <cstdio>
 #include <string>

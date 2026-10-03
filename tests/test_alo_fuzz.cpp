@@ -1,5 +1,5 @@
 // Malformed/truncated-input fuzz for the static-mesh .alo decoder
-// (src/AloModel.cpp), mirroring tests/test_meg_fuzz.cpp in shape.
+// (src/gamedata/AloModel.cpp), mirroring tests/test_meg_fuzz.cpp in shape.
 //
 // Builds a small VALID .alo byte image in memory (same chunk builders as
 // tests/test_alo_model.cpp: skeleton + two-submesh mesh + connections), then
@@ -34,9 +34,9 @@
 //
 // Standalone console exe; see the test_alo_fuzz entry in tests/native-tests.json.
 
-#include "AloModel.h"
-#include "files.h"
-#include "exceptions.h"
+#include "gamedata/AloModel.h"
+#include "common/files.h"
+#include "common/exceptions.h"
 
 #include <cstdint>
 #include <cstdio>

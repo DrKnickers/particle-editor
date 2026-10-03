@@ -2,7 +2,7 @@
 #include <cstdio>
 #include <cmath>
 #include <string>
-#include "DriveScript.h"
+#include "host/DriveScript.h"
 
 static int g_fail = 0;
 static int g_check = 0;

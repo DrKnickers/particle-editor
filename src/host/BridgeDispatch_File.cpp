@@ -6,10 +6,10 @@
 #include "BridgeRequestContext.h"
 
 #include "StringConv.h"        // host::Utf8ToWide / WideToUtf8
-#include "../ModManager.h"     // initial-dir resolution (file/open, file/save-as)
-#include "../ParticleSystemIO.h"  // LoadParticleSystem / SaveParticleSystem
-#include "../Autosave.h"       // autosave/check-recovery, autosave/recover
-#include "../CloseDecision.h"  // ShouldRefuseDocumentReplace (file/new, file/open)
+#include "gamedata/ModManager.h"     // initial-dir resolution (file/open, file/save-as)
+#include "effect/ParticleSystemIO.h"  // LoadParticleSystem / SaveParticleSystem
+#include "effect/Autosave.h"       // autosave/check-recovery, autosave/recover
+#include "effect/CloseDecision.h"  // ShouldRefuseDocumentReplace (file/new, file/open)
 
 #include <commdlg.h>           // GetOpenFileNameW / GetSaveFileNameW
 #include <limits>

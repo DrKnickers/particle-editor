@@ -21,9 +21,9 @@
 // uses. Usage:
 //   make_chain_test_alo.exe <vanilla.alo> <out.alo>
 
-#include "ParticleSystem.h"
-#include "ParticleSystemInstance.h"
-#include "files.h"
+#include "effect/ParticleSystem.h"
+#include "simulation/ParticleSystemInstance.h"
+#include "common/files.h"
 #include <cstdio>
 #include <string>
 

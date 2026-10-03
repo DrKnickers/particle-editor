@@ -1,0 +1,347 @@
+#include <iostream>
+#include <fstream>
+#include <exception>
+#include "xml.h"
+#include "common/exceptions.h"
+#include "common/utils.h"
+#include "common/ResourceLimits.h"
+using namespace std;
+
+static const int BUFFER_SIZE = 32*1024;	// Read 32k at once
+
+XMLNode::XMLNode(XMLNode* parent, const XML_Char* name, const XML_Char **atts)
+{
+	this->parent   = parent;
+	this->name     = name;
+
+	// Expat passes attributes as a NULL-terminated [name0, val0, name1,
+	// val1, ...] array. Advance by pairs — without the `atts += 2` this
+	// loop spun forever (100% CPU) on any element carrying >=1 attribute.
+	// The `atts[1]` guard also tolerates a malformed
+	// odd-length array rather than reading past the terminator.
+	while (atts && atts[0] && atts[1])
+	{
+		attributes.insert(make_pair(atts[0], atts[1]));
+		atts += 2;
+	}
+}
+
+XMLNode::XMLNode(XMLNode* parent, const XML_Char* s, int len) : data(s, len)
+{
+	this->parent = parent;
+}
+
+// Iterative teardown: a recursive delete (each child's destructor deleting its
+// own children) consumes one stack frame per nesting level, so a deeply nested
+// tree — even one under kMaxXmlDepth on a small worker-pool stack — risks
+// overflow. Flatten the subtree into an explicit worklist instead; each child's
+// own destructor then runs with an empty children vector and never recurses.
+XMLNode::~XMLNode()
+{
+	vector<XMLNode*> stack(children.begin(), children.end());
+	children.clear();
+	while (!stack.empty())
+	{
+		XMLNode* n = stack.back();
+		stack.pop_back();
+		stack.insert(stack.end(), n->children.begin(), n->children.end());
+		n->children.clear();
+		delete n;
+	}
+}
+
+static wstring trim(const wstring& source, const wchar_t* delims = L" \t\r\n")
+{
+	wstring result(source);
+	wstring::size_type index = result.find_last_not_of(delims);
+	if (index != wstring::npos)
+		result.erase(index + 1);
+
+	index = result.find_first_not_of(delims);
+	if(index != wstring::npos) 
+		result.erase(0, index);
+	else
+		result.erase();
+	return result;
+}
+
+static void checkEmpty(XMLNode* node)
+{
+	if (node->children.size() > 0)
+	{
+		XMLNode* child = node->children.back();
+		child->data = trim(child->data);
+		if (child->data.empty() && child->name.empty())
+		{
+			delete child;
+			node->children.erase( node->children.end() - 1 );
+		}
+	}
+}
+
+// Untrusted mod XML: Expat has no nesting or element-count limit
+// of its own, so these caps are ours. The handlers below stop the parser rather
+// than throw: C++ exceptions must not unwind through Expat's C frames. A cap
+// trip surfaces as the normal XML_Parse==0 ParseException; any other C++
+// exception raised inside a handler (bad_alloc, ...) is caught there, stashed in
+// g_xmlError, and rethrown by XMLTree::parse once XML_Parse has returned.
+// thread_local: XMLTree::parse runs concurrently on the
+// GameObjectCatalog worker pool, so this MUST be per-thread — a shared static
+// would let one thread's handler stop another thread's parser (DoS bypass) or
+// read a freed parser. Each parse() sets + clears both within one call stack.
+static thread_local XML_Parser    g_xmlParser = NULL;
+static thread_local unsigned long g_xmlDepth  = 0;
+// Total elements seen in THIS parse — the breadth companion to g_xmlDepth.
+// Depth alone left a shallow-but-enormous document unbounded, and the 64 MiB
+// input cap is not a substitute: each element becomes an XMLNode with a child
+// vector and an attribute map, so the heap cost is a large multiple of the
+// bytes on disk.
+static thread_local unsigned long g_xmlNodes  = 0;
+// Total Expat [name,value] attribute pairs seen in THIS parse. Attribute maps
+// are owned by XMLNode, so this is document-wide for the same reason g_xmlNodes
+// is: a per-element cap would still multiply without bound across siblings.
+static thread_local unsigned long g_xmlAttributes = 0;
+// The first C++ exception a handler caught during THIS parse, if any.
+static thread_local std::exception_ptr g_xmlError;
+
+// Called from a handler's catch block: keep the first exception and stop the
+// parser so XMLTree::parse can rethrow it outside Expat.
+static void stashHandlerError()
+{
+	if (!g_xmlError) g_xmlError = std::current_exception();
+	if (g_xmlParser != NULL) XML_StopParser(g_xmlParser, XML_FALSE);
+}
+
+static void onStartElement(void* userData, const XML_Char *name, const XML_Char **atts)
+{
+	if (g_xmlError) return;
+
+	// Depth cap for untrusted mod XML: a crafted file nesting tens of thousands
+	// of elements deep would otherwise build an arbitrarily tall node chain (and
+	// the game's own XML never nests remotely this deep). Stop the parser BEFORE
+	// allocating the node; the aborted parse surfaces as the normal
+	// XML_Parse==0 ParseException in XMLTree::parse.
+	if (++g_xmlDepth > kMaxXmlDepth)
+	{
+		if (g_xmlParser != NULL) XML_StopParser(g_xmlParser, XML_FALSE);
+		return;
+	}
+	// Same stop-before-allocating discipline as the depth cap above.
+	if (++g_xmlNodes > kMaxXmlNodes)
+	{
+		if (g_xmlParser != NULL) XML_StopParser(g_xmlParser, XML_FALSE);
+		return;
+	}
+
+	// Count Expat's NULL-terminated [name,value,...] pairs BEFORE constructing
+	// XMLNode (which copies every pair into its std::map). Use a subtraction-
+	// derived remaining budget instead of `total + incoming`: both the local
+	// count and final accumulation are then unable to overflow. The exact
+	// kMaxXmlAttributes boundary is accepted; the next pair stops the whole
+	// document through the same ParseException path as the depth/node guards.
+	if (g_xmlAttributes > kMaxXmlAttributes)
+	{
+		if (g_xmlParser != NULL) XML_StopParser(g_xmlParser, XML_FALSE);
+		return;
+	}
+	const unsigned long remaining = kMaxXmlAttributes - g_xmlAttributes;
+	unsigned long attributeCount = 0;
+	const XML_Char **attr = atts;
+	while (attr && attr[0] && attr[1])
+	{
+		if (attributeCount >= remaining)
+		{
+			if (g_xmlParser != NULL) XML_StopParser(g_xmlParser, XML_FALSE);
+			return;
+		}
+		++attributeCount;
+		attr += 2;
+	}
+	g_xmlAttributes += attributeCount;
+
+	XMLTree* tree = (XMLTree*)userData;
+	try
+	{
+		if (tree->current != NULL) checkEmpty(tree->current);
+		XMLNode* node = new XMLNode(tree->current, name, atts);
+		if (tree->current == NULL)
+		{
+			// A replaced root (never expected: Expat rejects a second
+			// document element) must not leak.
+			delete tree->root;
+			tree->root = node;
+		}
+		else
+		{
+			// A throwing push_back must not leak the unlinked node.
+			try { tree->current->children.push_back( node ); }
+			catch (...) { delete node; throw; }
+		}
+		tree->current = node;
+	}
+	catch (...) { stashHandlerError(); }
+}
+
+static void onEndElement(void* userData, const XML_Char *name)
+{
+	if (g_xmlDepth > 0) --g_xmlDepth;
+	if (g_xmlError) return;
+	XMLTree* tree = (XMLTree*)userData;
+	if (tree->current != NULL)
+	{
+		try
+		{
+			// Post-process this node; if it contains a single anonymous child, put it into
+			// this node's data field
+			if ((tree->current->children.size() == 1) && (tree->current->children.front()->name.empty()))
+			{
+				tree->current->data = tree->current->children.front()->data;
+				delete tree->current->children.front();
+				tree->current->children.clear();
+			}
+			tree->current->data = trim(tree->current->data);
+
+			checkEmpty(tree->current);
+			tree->current = tree->current->parent;
+		}
+		catch (...) { stashHandlerError(); }
+	}
+}
+
+static void onCharacterData(void *userData, const XML_Char *s, int len)
+{
+	if (g_xmlError) return;
+	XMLTree* tree = (XMLTree*)userData;
+	if (tree->current != NULL)
+	{
+		try
+		{
+			if ((tree->current->children.size() > 0) && (tree->current->children.back()->name.empty()))
+			{
+				tree->current->children.back()->data += wstring(s, len);
+			}
+			else
+			{
+				XMLNode* node = new XMLNode(tree->current, s, len);
+				try { tree->current->children.push_back( node ); }
+				catch (...) { delete node; throw; }
+			}
+		}
+		catch (...) { stashHandlerError(); }
+	}
+}
+
+// Expat recognizes "US-ASCII" but NOT the bare "ASCII" that many mod XML files
+// declare (one mod's core folder ships 11 of 33 files as <?xml ... encoding='ASCII'?>). Left
+// unhandled, XML_Parse aborts with "unknown encoding" and XMLTree::parse throws --
+// and the catalog's parseObjectFile / parseHardpointFile swallow that throw, silently
+// dropping EVERY game object in the file (and any Variant_Of parent defined there).
+// The game tolerates "ASCII"; mirror it. Map the name (case-insensitive ASCII /
+// US-ASCII) to an identity byte->codepoint table -- ASCII is a strict subset, and a
+// stray high byte degrades to Latin-1 rather than aborting the whole file. Decline
+// other unknown names so genuine UTF-16 / Latin-1 declarations keep expat's handling.
+static int onUnknownEncoding(void* /*data*/, const XML_Char* name, XML_Encoding* info)
+{
+	auto ieq = [](const XML_Char* a, const wchar_t* b) -> bool {
+		for (; *a && *b; ++a, ++b)
+		{
+			const wchar_t ca = (*a >= L'A' && *a <= L'Z') ? (wchar_t)(*a + 32) : (wchar_t)*a;
+			const wchar_t cb = (*b >= L'A' && *b <= L'Z') ? (wchar_t)(*b + 32) : *b;
+			if (ca != cb) return false;
+		}
+		return *a == 0 && *b == 0;
+	};
+	if (!ieq(name, L"ascii") && !ieq(name, L"us-ascii"))
+		return XML_STATUS_ERROR;   // not ours -> let expat reject genuinely unknown encodings
+	for (int i = 0; i < 256; ++i) info->map[i] = i;   // identity byte->codepoint (ASCII subset; Latin-1 fallback)
+	info->data    = NULL;
+	info->convert = NULL;
+	info->release = NULL;
+	return XML_STATUS_OK;
+}
+
+// Legit game/mod XML declares NO custom entities, so abort parsing on the first
+// <!ENTITY> declaration — closing the entity-expansion DoS outright rather than
+// relying only on Expat's (>= 2.4.0) billion-laughs amplification cap. The
+// aborted parse surfaces as the normal XML_Parse==0 ParseException below.
+static void onEntityDecl(void* /*userData*/, const XML_Char* /*entityName*/,
+    int /*isParameterEntity*/, const XML_Char* /*value*/, int /*valueLength*/,
+    const XML_Char* /*base*/, const XML_Char* /*systemId*/,
+    const XML_Char* /*publicId*/, const XML_Char* /*notationName*/)
+{
+    if (g_xmlParser != NULL) XML_StopParser(g_xmlParser, XML_FALSE);
+}
+
+void XMLTree::parse(IFile* file)
+{
+	// Reset tree
+	delete root;
+	root    = NULL;
+	current = NULL;
+
+	XML_Parser parser = XML_ParserCreate(NULL);
+	if (parser == NULL)
+	{
+		throw wruntime_error(LoadString(IDS_ERROR_XML_PARSER_CREATE));
+	}
+
+	XML_SetUserData(parser, this);
+	XML_SetElementHandler(parser, onStartElement, onEndElement);
+	XML_SetCharacterDataHandler(parser, onCharacterData);
+	XML_SetUnknownEncodingHandler(parser, onUnknownEncoding, NULL);   // tolerate encoding='ASCII'
+	g_xmlParser = parser;   // for onEntityDecl's / onStartElement's XML_StopParser
+	g_xmlDepth  = 0;        // fresh depth per parse (thread_local survives across calls)
+	g_xmlNodes  = 0;        // ...and a fresh element count
+	g_xmlAttributes = 0;    // ...and fresh document-wide attribute accounting
+	g_xmlError  = nullptr;  // ...and no handler exception carried over
+	XML_SetEntityDeclHandler(parser, onEntityDecl);        // reject custom entity declarations
+
+	try
+	{
+		// Cap total input so a crafted untrusted mod XML can't drive an
+		// unbounded read/parse. Real game XML is well under this.
+		unsigned long total = 0;
+		while (!file->eof())
+		{
+			char buffer[ BUFFER_SIZE ];
+			unsigned long n = file->read(buffer, BUFFER_SIZE);
+			// A read that makes no progress short of EOF would otherwise spin
+			// this loop forever.
+			if (n == 0 && !file->eof())
+			{
+				throw ParseException( LoadString(IDS_ERROR_XML, L"read failed before end of file", 0) );
+			}
+			total += n;
+			if (total > kMaxXmlFileBytes)
+			{
+				throw ParseException( LoadString(IDS_ERROR_XML, L"input too large", 0) );
+			}
+			if (XML_Parse(parser, buffer, n, file->eof()) == 0)
+			{
+				if (g_xmlError) std::rethrow_exception(g_xmlError);
+				const wstring error = XML_ErrorString(XML_GetErrorCode(parser));
+                throw ParseException( LoadString(IDS_ERROR_XML, error.c_str(), XML_GetCurrentLineNumber(parser)) );
+			}
+		}
+	}
+	catch (...)
+	{
+		g_xmlParser = NULL;
+		g_xmlError  = nullptr;
+		XML_ParserFree(parser);
+		throw;
+	}
+	g_xmlParser = NULL;
+	XML_ParserFree(parser);
+}
+
+XMLTree::XMLTree()
+{
+	root    = NULL;
+	current = NULL;
+}
+
+XMLTree::~XMLTree()
+{
+	delete root;
+}

@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 #include <map>
-#include "third_party/nlohmann/json.hpp"
+#include "host/third_party/nlohmann/json.hpp"
 #include "DriveScript.h"   // drive::ComputeOrbitCamera, IsAllowedBridgeKind, Build/Classify
 #include "ClipPathTokens.h" // ${GAME}-style path-token expansion (pure)
 

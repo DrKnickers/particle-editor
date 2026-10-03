@@ -15,7 +15,7 @@ import {
 
 // Random-param group ordering — `EmitterPropertiesDto.groups` is the
 // on-wire projection of `ParticleSystem::Emitter::groups[NUM_GROUPS]`.
-// Engine constants in src/ParticleSystem.h:
+// Engine constants in src/effect/ParticleSystem.h:
 //   GROUP_SPEED    = 0  → "Initial speed"   (rendered in PhysicsTab)
 //   GROUP_LIFETIME = 1  → "Lifetime"        (NOT rendered; schema
 //                                            retained for round-trip

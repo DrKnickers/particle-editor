@@ -1,4 +1,4 @@
-#include "../src/GizmoRibbon.h"
+#include "rendering/GizmoRibbon.h"
 #include <cstdio>
 #include <cmath>
 using namespace gizmoribbon;

@@ -21,22 +21,22 @@
 #include "HostMessages.h"   // WM_APP_QUIT_CONFIRMED
 #include "StringConv.h"   // host::Utf8ToWide / WideToUtf8 (consolidated)
 #include "PerfTrace.h"
-#include "third_party/nlohmann/json.hpp"
+#include "host/third_party/nlohmann/json.hpp"
 
-#include "../engine.h"
-#include "../files.h"
-#include "../ChunkFile.h"
-#include "../LinkGroup.h"
-#include "../ModManager.h"
-#include "../ParticleSystem.h"
-#include "../EmitterNaming.h"
-#include "../UI/TexturePalette.h"
-#include "../ParticleSystemIO.h"
-#include "../Rescale.h"
-#include "../RefTransformUndoKey.h"
-#include "../ResourceLimits.h"   // kMaxEmitterTreeDepth (BuildEmitterTreeNode backstop)
-#include "../SpawnerDriver.h"
-#include "../UndoStack.h"
+#include "rendering/engine.h"
+#include "common/files.h"
+#include "effect/ChunkFile.h"
+#include "effect/LinkGroup.h"
+#include "gamedata/ModManager.h"
+#include "effect/ParticleSystem.h"
+#include "effect/EmitterNaming.h"
+#include "palette/TexturePalette.h"
+#include "effect/ParticleSystemIO.h"
+#include "effect/Rescale.h"
+#include "effect/RefTransformUndoKey.h"
+#include "common/ResourceLimits.h"   // kMaxEmitterTreeDepth (BuildEmitterTreeNode backstop)
+#include "simulation/SpawnerDriver.h"
+#include "effect/UndoStack.h"
 
 #include <algorithm>
 #include <cmath>

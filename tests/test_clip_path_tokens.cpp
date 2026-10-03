@@ -6,7 +6,7 @@
 //   - unknown NAME  -> err set (FAIL LOUD), input returned unchanged
 //   - unterminated / empty ${} -> err set
 //   - bare '$' or '${' -less text is literal
-#include "ClipPathTokens.h"
+#include "host/ClipPathTokens.h"
 #include <cstdio>
 #include <map>
 #include <string>

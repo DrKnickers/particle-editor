@@ -7,7 +7,7 @@
 //   - GdiplusEncoderClsid: png/jpeg resolve to distinct CLSIDs, the per-MIME
 //     cache returns the same CLSID on a repeat call, and a bogus MIME fails soft
 //     (false, out untouched) rather than throwing.
-#include "../src/host/GdiplusEncode.h"
+#include "host/GdiplusEncode.h"
 #include <gdiplus.h>
 #include <cstdio>
 #include <cstring>

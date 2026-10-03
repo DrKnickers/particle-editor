@@ -1,4 +1,4 @@
-#include "../src/SelectionBoxStyle.h"
+#include "rendering/SelectionBoxStyle.h"
 #include <cstdio>
 #include <cmath>
 using namespace selboxstyle;

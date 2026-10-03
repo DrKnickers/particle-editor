@@ -32,9 +32,9 @@
 #include <objidl.h>    // IStream -- gdiplus.h needs it, and LEAN_AND_MEAN drops it
 #include <gdiplus.h>
 
-#include "../src/host/AcceleratorBridge.h"
-#include "../src/host/BridgeDispatcher.h"
-#include "../src/host/LayoutBroker.h"
+#include "host/AcceleratorBridge.h"
+#include "host/BridgeDispatcher.h"
+#include "host/LayoutBroker.h"
 
 #include <cstdio>
 #include <string>

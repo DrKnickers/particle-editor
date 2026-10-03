@@ -1,5 +1,5 @@
 // Regression test for PhysicalFile's write contract and its handle lifetime
-// (src/files.cpp).
+// (src/common/files.cpp).
 //
 // Two properties are pinned here, both load-bearing for save correctness.
 //
@@ -25,8 +25,8 @@
 //
 // Header + files.cpp only; see the test_physicalfile_write entry in tests/native-tests.json.
 
-#include "files.h"
-#include "exceptions.h"
+#include "common/files.h"
+#include "common/exceptions.h"
 
 #include <windows.h>
 #include <cstdio>

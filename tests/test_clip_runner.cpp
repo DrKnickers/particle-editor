@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 #include <crtdbg.h>
-#include "ClipRunner.h"
+#include "host/ClipRunner.h"
 
 static int g_fail = 0;
 #define CHECK(cond) do { if (!(cond)) { \

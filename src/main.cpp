@@ -12,19 +12,19 @@
 #include <exception>   // std::set_terminate (log unhandled exceptions headlessly)
 #include <cstdio>      // fwprintf / fprintf CLI diagnostics
 
-#include "exceptions.h"
-#include "UI/TexturePalette.h"
-#include "SpawnerDriver.h"
-#include "UndoStack.h"
-#include "LinkGroup.h"
-#include "Autosave.h"
-#include "utils.h"
-#include "engine.h"
-#include "ParticleSystem.h"
-#include "ParticleSystemInstance.h"
-#include "Rescale.h"
-#include "ParticleSystemIO.h"
-#include "ModManager.h"
+#include "common/exceptions.h"
+#include "palette/TexturePalette.h"
+#include "simulation/SpawnerDriver.h"
+#include "effect/UndoStack.h"
+#include "effect/LinkGroup.h"
+#include "effect/Autosave.h"
+#include "common/utils.h"
+#include "rendering/engine.h"
+#include "effect/ParticleSystem.h"
+#include "simulation/ParticleSystemInstance.h"
+#include "effect/Rescale.h"
+#include "effect/ParticleSystemIO.h"
+#include "gamedata/ModManager.h"
 #include "Resources/resource.h"
 
 // the WebView2 + D3D9 host declared here is the ONLY UI — WinMain runs
@@ -37,7 +37,7 @@
 #include "host/WindowCapture.h"
 #include "host/WebViewModalPolicy.h"  // IsFullyInteractiveSession — gate the pre-host data-path picker
 #include "host/SettingsRegistry.h"    // GameDataPath read/write
-#include "GameRoots.h"                // GameData / corruption sibling root
+#include "gamedata/GameRoots.h"                // GameData / corruption sibling root
 
 #include <shlobj.h>
 #include <shlwapi.h>
@@ -49,11 +49,11 @@ using namespace std;
 // VS_VERSION_INFO in ParticleEditor.rc and the React About via vite.config.ts).
 #include "version.h"
 
-// MouseCursor + GetCursorPos3D live in src/MouseCursor.h for the host's
+// MouseCursor + GetCursorPos3D live in src/simulation/MouseCursor.h for the host's
 // cursor-bound preview path. The header is included alongside
 // ParticleSystemInstance.h above; MouseCursor.h re-includes engine.h with its
 // own guard.
-#include "MouseCursor.h"
+#include "simulation/MouseCursor.h"
 
 
 // EaW Gold Pack on Steam splits assets across "GameData" (base EaW) and

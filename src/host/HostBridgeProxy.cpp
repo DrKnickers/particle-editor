@@ -19,7 +19,7 @@
 #include <stdexcept>
 #include "StringConv.h"   // host::Utf8ToWide / WideToUtf8 (shared host copy)
 #include "BridgeWire.h"   // SerializeBridgeEnvelope (non-throwing on invalid UTF-8)
-#include "third_party/nlohmann/json.hpp"
+#include "host/third_party/nlohmann/json.hpp"
 
 #pragma comment(lib, "OleAut32.lib")
 

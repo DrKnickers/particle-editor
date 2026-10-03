@@ -1,8 +1,8 @@
-// Unit tests for src/GameRoots.h: the GameData / corruption leaf classification
+// Unit tests for src/gamedata/GameRoots.h: the GameData / corruption leaf classification
 // shared by the startup sibling-root lookup (main.cpp AddSiblingGamePath) and
 // mod discovery (ModManager::DiscoverMods).
 
-#include "GameRoots.h"
+#include "gamedata/GameRoots.h"
 
 #include <cstdio>
 #include <string>

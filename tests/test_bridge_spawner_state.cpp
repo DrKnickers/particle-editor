@@ -3,9 +3,9 @@
 // state resolver used by both bridge snapshot/event call sites; this harness
 // deliberately avoids the D3D/WebView dispatcher translation unit.
 
-#include "../src/host/AcceleratorBridge.h"
-#include "../src/host/BridgeDispatcher.h"
-#include "../src/host/LayoutBroker.h"
+#include "host/AcceleratorBridge.h"
+#include "host/BridgeDispatcher.h"
+#include "host/LayoutBroker.h"
 
 #include <cstdio>
 #include <memory>

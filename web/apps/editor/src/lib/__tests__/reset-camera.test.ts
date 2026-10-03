@@ -3,7 +3,7 @@
 // Ctrl+Home accelerator from the original editor's Reset Camera behaviour.
 //
 // Legacy reference: the original editor's Reset Camera command and the
-// Engine constructor default in src/engine.cpp — eye (0,-250,125), target
+// Engine constructor default in src/rendering/engine.cpp — eye (0,-250,125), target
 // origin, up +Z. These vectors are identical at both legacy sites.
 
 import { describe, it, expect } from "vitest";

@@ -30,12 +30,12 @@
 // entry in tests/native-tests.json -- so the shipped no-assert parser is the one
 // being fuzzed.
 
-#include "ParticleSystem.h"
-#include "ParticleSystemInstance.h"
-#include "ChunkFile.h"
-#include "files.h"
-#include "exceptions.h"
-#include "LinkGroup.h"
+#include "effect/ParticleSystem.h"
+#include "simulation/ParticleSystemInstance.h"
+#include "effect/ChunkFile.h"
+#include "common/files.h"
+#include "common/exceptions.h"
+#include "effect/LinkGroup.h"
 
 #include <cstdint>
 #include <cstdio>

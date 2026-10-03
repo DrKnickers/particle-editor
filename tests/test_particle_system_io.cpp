@@ -1,10 +1,10 @@
 // Disk-level regression test for the ParticleSystemIO contract
-// (src/ParticleSystemIO.h): load/save of .alo files through real files on
+// (src/effect/ParticleSystemIO.h): load/save of .alo files through real files on
 // disk, plus the error taxonomy the wrappers translate into
 // `false + errorOut`.
 //
 // SCOPE NOTE: the wrapper BODIES -- LoadParticleSystem / SaveParticleSystem --
-// live in their own TU, src/ParticleSystemIO.cpp, and section J links and
+// live in their own TU, src/effect/ParticleSystemIO.cpp, and section J links and
 // exercises them for real. Sections A-H pin the machinery those wrappers are a
 // thin try/catch veneer over:
 //   - load  = PhysicalFile(path, READ) + ParticleSystem(IFile*)
@@ -23,13 +23,13 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-#include "ParticleSystemIO.h"   // compile contract: the header must stand alone
-#include "AtomicSave.h"         // section I: the shared save path, linked for real
-#include "ParticleSystem.h"
-#include "ParticleSystemInstance.h"
-#include "ResourceLimits.h"     // kMaxEmitterTreeDepth (section G)
-#include "files.h"
-#include "exceptions.h"
+#include "effect/ParticleSystemIO.h"   // compile contract: the header must stand alone
+#include "effect/AtomicSave.h"         // section I: the shared save path, linked for real
+#include "effect/ParticleSystem.h"
+#include "simulation/ParticleSystemInstance.h"
+#include "common/ResourceLimits.h"     // kMaxEmitterTreeDepth (section G)
+#include "common/files.h"
+#include "common/exceptions.h"
 
 #include <cstdio>
 #include <memory>
@@ -508,7 +508,7 @@ int main()
     }
 
     // ---- J: the real LoadParticleSystem / SaveParticleSystem wrappers ------
-    // Linked from src/ParticleSystemIO.cpp. Every failure must come back as
+    // Linked from src/effect/ParticleSystemIO.cpp. Every failure must come back as
     // false / nullptr with errorOut written, a success must clear errorOut,
     // and a save goes through a per-process temp that never outlives the call.
     // The file-exception messages are loaded from the exe's string table,

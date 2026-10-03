@@ -7,9 +7,9 @@
 #include "CameraParams.h"         // ReadCameraParams (engine/set/camera validation)
 
 #include "StringConv.h"           // host::Utf8ToWide / WideToUtf8
-#include "../ModManager.h"      // activeModPath in the state snapshot
-#include "../Rescale.h"              // DoRescaleEmitter (engine/action/rescale-*)
-#include "../RefTransformUndoKey.h"  // RefTransformCoalesceKey (set/reference-object-transform)
+#include "gamedata/ModManager.h"      // activeModPath in the state snapshot
+#include "effect/Rescale.h"              // DoRescaleEmitter (engine/action/rescale-*)
+#include "effect/RefTransformUndoKey.h"  // RefTransformCoalesceKey (set/reference-object-transform)
 
 using nlohmann::json;
 
@@ -708,7 +708,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
     }
     // Rescale the active particle system by a duration / size percentage.
     // Iterates over every emitter in the live ParticleSystem and applies the
-    // helper from src/Rescale.cpp.
+    // helper from src/effect/Rescale.cpp.
     //
     // This handler used to carry a comment excusing the missing captureUndo()
     // as "a no-op until the broader capture wiring lands". That wiring HAS
@@ -859,7 +859,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
     //
     // Per-emitter rescale (vs `engine/action/rescale-system` which
     // walks every emitter). Mirrors the inner loop body of legacy
-    // `RescaleEmitter` at src/Rescale.cpp; here we just call
+    // `RescaleEmitter` at src/effect/Rescale.cpp; here we just call
     // DoRescaleEmitter once on the chosen emitter.
     if (kind == "engine/action/rescale-emitter")
     {

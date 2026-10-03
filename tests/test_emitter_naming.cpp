@@ -1,6 +1,6 @@
-// Tests for the duplicate-name rule (src/EmitterNaming.h).
+// Tests for the duplicate-name rule (src/effect/EmitterNaming.h).
 
-#include "EmitterNaming.h"
+#include "effect/EmitterNaming.h"
 
 #include <cstdio>
 

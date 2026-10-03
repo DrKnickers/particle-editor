@@ -1,4 +1,4 @@
-// Unit tests for the skydome environment reader (src/SkydomeEnvironment.cpp).
+// Unit tests for the skydome environment reader (src/rendering/SkydomeEnvironment.cpp).
 //
 // Drives the reader with a mock IFileManager backed by in-memory XML that
 // mirrors the vanilla FoC layout -- no game assets required. Covers
@@ -7,10 +7,10 @@
 // pair resolution (incl. the asymmetric-miss case). Standalone console exe;
 // see the test_skydome_environment entry in tests/native-tests.json.
 
-#include "SkydomeEnvironment.h"
-#include "managers.h"
-#include "files.h"
-#include "ResourceLimits.h"   // kMaxCatalogXmlFileCount (manifest cap case)
+#include "rendering/SkydomeEnvironment.h"
+#include "gamedata/managers.h"
+#include "common/files.h"
+#include "common/ResourceLimits.h"   // kMaxCatalogXmlFileCount (manifest cap case)
 
 #include <array>
 #include <cstdio>

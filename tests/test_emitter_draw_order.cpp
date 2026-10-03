@@ -9,7 +9,7 @@
 //     their draw key.
 // No engine/D3D dependency: the decision is pure data.
 
-#include "EmitterDrawOrder.h"
+#include "simulation/EmitterDrawOrder.h"
 #include <cstdio>
 #include <vector>
 #include <utility>

@@ -12,12 +12,12 @@
 #include "SettingsRegistry.h"
 #include "WindowCapture.h"     // host::CaptureWindowToPng (the ticker's composite hook)
 
-#include "../ModManager.h"
-#include "../ParticleSystem.h"
-#include "../ParticleSystemIO.h"   // LoadParticleSystem
-#include "../SpawnerDriver.h"
-#include "../engine.h"             // Engine, FreezePreviewClockAt, StepPreviewFrames
-#include "../utils.h"              // WideToAnsi
+#include "gamedata/ModManager.h"
+#include "effect/ParticleSystem.h"
+#include "effect/ParticleSystemIO.h"   // LoadParticleSystem
+#include "simulation/SpawnerDriver.h"
+#include "rendering/engine.h"             // Engine, FreezePreviewClockAt, StepPreviewFrames
+#include "common/utils.h"              // WideToAnsi
 
 #include <cmath>
 #include <cstdarg>

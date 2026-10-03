@@ -13,10 +13,10 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="Source Files\UI">
+    <Filter Include="Source Files\palette">
       <UniqueIdentifier>{6fa9bc6f-acc2-4d2b-9e14-1bfe6b77134a}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\UI">
+    <Filter Include="Header Files\palette">
       <UniqueIdentifier>{36a77cfe-1f80-40a0-9268-011f4c421c80}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files\host">
@@ -25,82 +25,112 @@
     <Filter Include="Header Files\host">
       <UniqueIdentifier>{8e3d6c4b-e9f2-5a6d-0b4f-2b7090aece25}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\common">
+      <UniqueIdentifier>{3f4bb2e7-2fe2-596a-7cec-de375e62ad68}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\common">
+      <UniqueIdentifier>{07ba7dc6-786d-04e7-223c-03ec827e5ecc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\effect">
+      <UniqueIdentifier>{978b7be3-06ef-3380-5b3e-739881d03f45}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\effect">
+      <UniqueIdentifier>{571d019c-4c7e-a787-d813-2a5a58ff8054}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\gamedata">
+      <UniqueIdentifier>{591e054b-69cd-70c0-2263-3e9b4ecaa415}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\gamedata">
+      <UniqueIdentifier>{7be018ff-652a-27ac-a9d5-b7d4833face8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\simulation">
+      <UniqueIdentifier>{d1fc8c28-1675-8864-cf3e-6f9a0e4854d3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\simulation">
+      <UniqueIdentifier>{89e09601-b76d-b16d-b188-d69e411f3db8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\rendering">
+      <UniqueIdentifier>{249f5749-6cb4-7dd3-dab4-1cf99aa89f05}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\rendering">
+      <UniqueIdentifier>{79d313f2-d31f-be2f-6e0a-faf2969d186f}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ChunkFile.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="effect\ChunkFile.h">
+      <Filter>Header Files\effect</Filter>
     </ClInclude>
-    <ClInclude Include="crc32.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="common\crc32.h">
+      <Filter>Header Files\common</Filter>
     </ClInclude>
-    <ClInclude Include="Effect.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="gamedata\Effect.h">
+      <Filter>Header Files\gamedata</Filter>
     </ClInclude>
-    <ClInclude Include="EmitterInstance.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="simulation\EmitterInstance.h">
+      <Filter>Header Files\simulation</Filter>
     </ClInclude>
-    <ClInclude Include="engine.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="rendering\engine.h">
+      <Filter>Header Files\rendering</Filter>
     </ClInclude>
-    <ClInclude Include="engine_internal.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="rendering\engine_internal.h">
+      <Filter>Header Files\rendering</Filter>
     </ClInclude>
-    <ClInclude Include="exceptions.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="common\exceptions.h">
+      <Filter>Header Files\common</Filter>
     </ClInclude>
-    <ClInclude Include="files.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="common\files.h">
+      <Filter>Header Files\common</Filter>
     </ClInclude>
-    <ClInclude Include="LinkGroup.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="effect\LinkGroup.h">
+      <Filter>Header Files\effect</Filter>
     </ClInclude>
-    <ClInclude Include="managers.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="gamedata\managers.h">
+      <Filter>Header Files\gamedata</Filter>
     </ClInclude>
-    <ClInclude Include="MegaFiles.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="gamedata\MegaFiles.h">
+      <Filter>Header Files\gamedata</Filter>
     </ClInclude>
-    <ClInclude Include="MouseCursor.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="simulation\MouseCursor.h">
+      <Filter>Header Files\simulation</Filter>
     </ClInclude>
-    <ClInclude Include="ParticleSystem.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="effect\ParticleSystem.h">
+      <Filter>Header Files\effect</Filter>
     </ClInclude>
-    <ClInclude Include="ParticleSystemInstance.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="simulation\ParticleSystemInstance.h">
+      <Filter>Header Files\simulation</Filter>
     </ClInclude>
-    <ClInclude Include="Rescale.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="effect\Rescale.h">
+      <Filter>Header Files\effect</Filter>
     </ClInclude>
-    <ClInclude Include="SpawnerDriver.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="simulation\SpawnerDriver.h">
+      <Filter>Header Files\simulation</Filter>
     </ClInclude>
-    <ClInclude Include="SpawnerPath.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="simulation\SpawnerPath.h">
+      <Filter>Header Files\simulation</Filter>
     </ClInclude>
-    <ClInclude Include="Autosave.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="effect\Autosave.h">
+      <Filter>Header Files\effect</Filter>
     </ClInclude>
-    <ClInclude Include="AtomicSave.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="effect\AtomicSave.h">
+      <Filter>Header Files\effect</Filter>
     </ClInclude>
-    <ClInclude Include="UndoStack.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="effect\UndoStack.h">
+      <Filter>Header Files\effect</Filter>
     </ClInclude>
-    <ClInclude Include="SphericalHarmonics.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="rendering\SphericalHarmonics.h">
+      <Filter>Header Files\rendering</Filter>
     </ClInclude>
-    <ClInclude Include="types.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="common\types.h">
+      <Filter>Header Files\common</Filter>
     </ClInclude>
-    <ClInclude Include="utils.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="common\utils.h">
+      <Filter>Header Files\common</Filter>
     </ClInclude>
-    <ClInclude Include="InstanceBorrow.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="rendering\InstanceBorrow.h">
+      <Filter>Header Files\rendering</Filter>
     </ClInclude>
-    <ClInclude Include="xml.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="gamedata\xml.h">
+      <Filter>Header Files\gamedata</Filter>
     </ClInclude>
     <ClInclude Include="host\AcceleratorBridge.h">
       <Filter>Header Files\host</Filter>
@@ -171,113 +201,113 @@
     <ClInclude Include="Resources\resource.h">
       <Filter>Resource Files</Filter>
     </ClInclude>
-    <ClInclude Include="UI\TexturePalette.h">
-      <Filter>Header Files\UI</Filter>
+    <ClInclude Include="palette\TexturePalette.h">
+      <Filter>Header Files\palette</Filter>
     </ClInclude>
-    <ClInclude Include="AloModel.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="gamedata\AloModel.h">
+      <Filter>Header Files\gamedata</Filter>
     </ClInclude>
-    <ClInclude Include="GameObjectCatalog.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="gamedata\GameObjectCatalog.h">
+      <Filter>Header Files\gamedata</Filter>
     </ClInclude>
-    <ClInclude Include="ReferenceObjectMesh.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="rendering\ReferenceObjectMesh.h">
+      <Filter>Header Files\rendering</Filter>
     </ClInclude>
-    <ClInclude Include="SkydomeEnvironment.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="rendering\SkydomeEnvironment.h">
+      <Filter>Header Files\rendering</Filter>
     </ClInclude>
-    <ClInclude Include="SkydomeMesh.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="rendering\SkydomeMesh.h">
+      <Filter>Header Files\rendering</Filter>
     </ClInclude>
-    <ClInclude Include="AssetPathSafety.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="gamedata\AssetPathSafety.h">
+      <Filter>Header Files\gamedata</Filter>
     </ClInclude>
-    <ClInclude Include="BounceCatchUp.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="simulation\BounceCatchUp.h">
+      <Filter>Header Files\simulation</Filter>
     </ClInclude>
-    <ClInclude Include="CloseDecision.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="effect\CloseDecision.h">
+      <Filter>Header Files\effect</Filter>
     </ClInclude>
-    <ClInclude Include="DeferredParticleSystemChange.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="rendering\DeferredParticleSystemChange.h">
+      <Filter>Header Files\rendering</Filter>
     </ClInclude>
-    <ClInclude Include="DeviceRecovery.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="rendering\DeviceRecovery.h">
+      <Filter>Header Files\rendering</Filter>
     </ClInclude>
-    <ClInclude Include="DeviceState.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="rendering\DeviceState.h">
+      <Filter>Header Files\rendering</Filter>
     </ClInclude>
-    <ClInclude Include="EmitterDrawOrder.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="simulation\EmitterDrawOrder.h">
+      <Filter>Header Files\simulation</Filter>
     </ClInclude>
-    <ClInclude Include="EmitterNaming.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="effect\EmitterNaming.h">
+      <Filter>Header Files\effect</Filter>
     </ClInclude>
-    <ClInclude Include="GizmoRibbon.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="rendering\GizmoRibbon.h">
+      <Filter>Header Files\rendering</Filter>
     </ClInclude>
-    <ClInclude Include="GizmoSizing.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="rendering\GizmoSizing.h">
+      <Filter>Header Files\rendering</Filter>
     </ClInclude>
-    <ClInclude Include="ManipReadout.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="rendering\ManipReadout.h">
+      <Filter>Header Files\rendering</Filter>
     </ClInclude>
-    <ClInclude Include="GameRoots.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="gamedata\GameRoots.h">
+      <Filter>Header Files\gamedata</Filter>
     </ClInclude>
-    <ClInclude Include="ModLayers.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="gamedata\ModLayers.h">
+      <Filter>Header Files\gamedata</Filter>
     </ClInclude>
-    <ClInclude Include="ModManager.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="gamedata\ModManager.h">
+      <Filter>Header Files\gamedata</Filter>
     </ClInclude>
-    <ClInclude Include="ModScan.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="gamedata\ModScan.h">
+      <Filter>Header Files\gamedata</Filter>
     </ClInclude>
-    <ClInclude Include="MuzzleFlashFilter.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="rendering\MuzzleFlashFilter.h">
+      <Filter>Header Files\rendering</Filter>
     </ClInclude>
-    <ClInclude Include="ParticleCompaction.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="simulation\ParticleCompaction.h">
+      <Filter>Header Files\simulation</Filter>
     </ClInclude>
-    <ClInclude Include="ParticleMipFilter.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="rendering\ParticleMipFilter.h">
+      <Filter>Header Files\rendering</Filter>
     </ClInclude>
-    <ClInclude Include="ParticleSystemIO.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="effect\ParticleSystemIO.h">
+      <Filter>Header Files\effect</Filter>
     </ClInclude>
-    <ClInclude Include="PlaneHandle.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="rendering\PlaneHandle.h">
+      <Filter>Header Files\rendering</Filter>
     </ClInclude>
-    <ClInclude Include="RefLock.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="rendering\RefLock.h">
+      <Filter>Header Files\rendering</Filter>
     </ClInclude>
-    <ClInclude Include="RefTransformUndoKey.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="effect\RefTransformUndoKey.h">
+      <Filter>Header Files\effect</Filter>
     </ClInclude>
-    <ClInclude Include="ReferenceObjectWorld.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="rendering\ReferenceObjectWorld.h">
+      <Filter>Header Files\rendering</Filter>
     </ClInclude>
-    <ClInclude Include="ReferenceTransformMemory.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="rendering\ReferenceTransformMemory.h">
+      <Filter>Header Files\rendering</Filter>
     </ClInclude>
-    <ClInclude Include="ResourceLimits.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="common\ResourceLimits.h">
+      <Filter>Header Files\common</Filter>
     </ClInclude>
-    <ClInclude Include="RingFade.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="rendering\RingFade.h">
+      <Filter>Header Files\rendering</Filter>
     </ClInclude>
-    <ClInclude Include="SceneOverscan.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="rendering\SceneOverscan.h">
+      <Filter>Header Files\rendering</Filter>
     </ClInclude>
-    <ClInclude Include="SelectionBoxStyle.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="rendering\SelectionBoxStyle.h">
+      <Filter>Header Files\rendering</Filter>
     </ClInclude>
-    <ClInclude Include="SpawnSchedule.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="simulation\SpawnSchedule.h">
+      <Filter>Header Files\simulation</Filter>
     </ClInclude>
-    <ClInclude Include="UnitConstants.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="rendering\UnitConstants.h">
+      <Filter>Header Files\rendering</Filter>
     </ClInclude>
     <ClInclude Include="version.h">
       <Filter>Header Files</Filter>
@@ -365,92 +395,92 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="ChunkReader.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="effect\ChunkReader.cpp">
+      <Filter>Source Files\effect</Filter>
     </ClCompile>
-    <ClCompile Include="ChunkWriter.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="effect\ChunkWriter.cpp">
+      <Filter>Source Files\effect</Filter>
     </ClCompile>
-    <ClCompile Include="crc32.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="common\crc32.cpp">
+      <Filter>Source Files\common</Filter>
     </ClCompile>
-    <ClCompile Include="Effect.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="gamedata\Effect.cpp">
+      <Filter>Source Files\gamedata</Filter>
     </ClCompile>
-    <ClCompile Include="EmitterInstance.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="simulation\EmitterInstance.cpp">
+      <Filter>Source Files\simulation</Filter>
     </ClCompile>
-    <ClCompile Include="engine.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="rendering\engine.cpp">
+      <Filter>Source Files\rendering</Filter>
     </ClCompile>
-    <ClCompile Include="engine_device.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="rendering\engine_device.cpp">
+      <Filter>Source Files\rendering</Filter>
     </ClCompile>
-    <ClCompile Include="engine_environment.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="rendering\engine_environment.cpp">
+      <Filter>Source Files\rendering</Filter>
     </ClCompile>
-    <ClCompile Include="engine_reference.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="rendering\engine_reference.cpp">
+      <Filter>Source Files\rendering</Filter>
     </ClCompile>
-    <ClCompile Include="engine_shadows.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="rendering\engine_shadows.cpp">
+      <Filter>Source Files\rendering</Filter>
     </ClCompile>
-    <ClCompile Include="engine_gizmo.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="rendering\engine_gizmo.cpp">
+      <Filter>Source Files\rendering</Filter>
     </ClCompile>
-    <ClCompile Include="engine_render.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="rendering\engine_render.cpp">
+      <Filter>Source Files\rendering</Filter>
     </ClCompile>
-    <ClCompile Include="files.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="common\files.cpp">
+      <Filter>Source Files\common</Filter>
     </ClCompile>
-    <ClCompile Include="LinkGroup.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="effect\LinkGroup.cpp">
+      <Filter>Source Files\effect</Filter>
     </ClCompile>
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="managers.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="gamedata\managers.cpp">
+      <Filter>Source Files\gamedata</Filter>
     </ClCompile>
-    <ClCompile Include="MegaFiles.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="gamedata\MegaFiles.cpp">
+      <Filter>Source Files\gamedata</Filter>
     </ClCompile>
-    <ClCompile Include="SpawnerDriver.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="simulation\SpawnerDriver.cpp">
+      <Filter>Source Files\simulation</Filter>
     </ClCompile>
-    <ClCompile Include="Autosave.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="effect\Autosave.cpp">
+      <Filter>Source Files\effect</Filter>
     </ClCompile>
-    <ClCompile Include="AtomicSave.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="effect\AtomicSave.cpp">
+      <Filter>Source Files\effect</Filter>
     </ClCompile>
-    <ClCompile Include="UndoStack.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="effect\UndoStack.cpp">
+      <Filter>Source Files\effect</Filter>
     </ClCompile>
-    <ClCompile Include="ParticleSystem.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="effect\ParticleSystem.cpp">
+      <Filter>Source Files\effect</Filter>
     </ClCompile>
-    <ClCompile Include="ParticleSystemSerialization.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="effect\ParticleSystemSerialization.cpp">
+      <Filter>Source Files\effect</Filter>
     </ClCompile>
-    <ClCompile Include="ParticleSystemIO.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="effect\ParticleSystemIO.cpp">
+      <Filter>Source Files\effect</Filter>
     </ClCompile>
-    <ClCompile Include="ParticleSystemInstance.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="simulation\ParticleSystemInstance.cpp">
+      <Filter>Source Files\simulation</Filter>
     </ClCompile>
-    <ClCompile Include="Rescale.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="effect\Rescale.cpp">
+      <Filter>Source Files\effect</Filter>
     </ClCompile>
-    <ClCompile Include="SphericalHarmonics.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="rendering\SphericalHarmonics.cpp">
+      <Filter>Source Files\rendering</Filter>
     </ClCompile>
-    <ClCompile Include="utils.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="common\utils.cpp">
+      <Filter>Source Files\common</Filter>
     </ClCompile>
-    <ClCompile Include="xml.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="gamedata\xml.cpp">
+      <Filter>Source Files\gamedata</Filter>
     </ClCompile>
     <ClCompile Include="host\AcceleratorBridge.cpp">
       <Filter>Source Files\host</Filter>
@@ -530,29 +560,29 @@
     <ClCompile Include="host\PerfTrace.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
-    <ClCompile Include="UI\PaletteStore.cpp">
-      <Filter>Source Files\UI</Filter>
+    <ClCompile Include="palette\PaletteStore.cpp">
+      <Filter>Source Files\palette</Filter>
     </ClCompile>
-    <ClCompile Include="UI\PaletteThumbs.cpp">
-      <Filter>Source Files\UI</Filter>
+    <ClCompile Include="palette\PaletteThumbs.cpp">
+      <Filter>Source Files\palette</Filter>
     </ClCompile>
-    <ClCompile Include="AloModel.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="gamedata\AloModel.cpp">
+      <Filter>Source Files\gamedata</Filter>
     </ClCompile>
-    <ClCompile Include="ModManager.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="gamedata\ModManager.cpp">
+      <Filter>Source Files\gamedata</Filter>
     </ClCompile>
-    <ClCompile Include="GameObjectCatalog.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="gamedata\GameObjectCatalog.cpp">
+      <Filter>Source Files\gamedata</Filter>
     </ClCompile>
-    <ClCompile Include="ReferenceObjectMesh.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="rendering\ReferenceObjectMesh.cpp">
+      <Filter>Source Files\rendering</Filter>
     </ClCompile>
-    <ClCompile Include="SkydomeEnvironment.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="rendering\SkydomeEnvironment.cpp">
+      <Filter>Source Files\rendering</Filter>
     </ClCompile>
-    <ClCompile Include="SkydomeMesh.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="rendering\SkydomeMesh.cpp">
+      <Filter>Source Files\rendering</Filter>
     </ClCompile>
     <ClCompile Include="host\AlphaCompositor.cpp">
       <Filter>Source Files\host</Filter>

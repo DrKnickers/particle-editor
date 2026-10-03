@@ -17,25 +17,25 @@
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
     "test_alo_editor_state": {
-      "sources": ["src/ParticleSystem.cpp", "src/ParticleSystemSerialization.cpp", "src/ChunkReader.cpp", "src/ChunkWriter.cpp", "src/crc32.cpp", "src/files.cpp", "src/utils.cpp", "src/LinkGroup.cpp"],
+      "sources": ["src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp"],
       "uses": ["expat", "dxsdk", "webview2"],
       "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"],
       "release": true
     },
     "test_alo_fuzz": {
-      "sources": ["src/AloModel.cpp", "src/ChunkReader.cpp", "src/files.cpp", "src/utils.cpp"],
+      "sources": ["src/gamedata/AloModel.cpp", "src/effect/ChunkReader.cpp", "src/common/files.cpp", "src/common/utils.cpp"],
       "uses": ["dxsdk"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"],
       "release": true
     },
     "test_alo_model": {
-      "sources": ["src/AloModel.cpp", "src/ReferenceObjectMesh.cpp", "src/ChunkReader.cpp", "src/files.cpp", "src/utils.cpp"],
+      "sources": ["src/gamedata/AloModel.cpp", "src/rendering/ReferenceObjectMesh.cpp", "src/effect/ChunkReader.cpp", "src/common/files.cpp", "src/common/utils.cpp"],
       "defines": ["ALO_MODEL_TEST_PROBES"],
       "uses": ["dxsdk"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
     "test_alo_roundtrip": {
-      "sources": ["src/ParticleSystem.cpp", "src/ParticleSystemSerialization.cpp", "src/ChunkReader.cpp", "src/ChunkWriter.cpp", "src/crc32.cpp", "src/files.cpp", "src/utils.cpp", "src/LinkGroup.cpp"],
+      "sources": ["src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp"],
       "uses": ["expat", "dxsdk", "webview2"],
       "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"],
       "release": true
@@ -45,12 +45,12 @@
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
     "test_asset_safety_integration": {
-      "sources": ["src/GameObjectCatalog.cpp", "src/SkydomeEnvironment.cpp", "src/AloModel.cpp", "src/ChunkReader.cpp", "src/xml.cpp", "src/files.cpp", "src/utils.cpp"],
+      "sources": ["src/gamedata/GameObjectCatalog.cpp", "src/rendering/SkydomeEnvironment.cpp", "src/gamedata/AloModel.cpp", "src/effect/ChunkReader.cpp", "src/gamedata/xml.cpp", "src/common/files.cpp", "src/common/utils.cpp"],
       "uses": ["expat-lib", "dxsdk", "webview2"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
     "test_autosave_recover": {
-      "sources": ["src/Autosave.cpp", "src/AtomicSave.cpp", "src/ParticleSystem.cpp", "src/ParticleSystemSerialization.cpp", "src/ChunkReader.cpp", "src/ChunkWriter.cpp", "src/crc32.cpp", "src/files.cpp", "src/utils.cpp", "src/LinkGroup.cpp"],
+      "sources": ["src/effect/Autosave.cpp", "src/effect/AtomicSave.cpp", "src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp"],
       "defines": ["AUTOSAVE_TESTING"],
       "uses": ["expat", "dxsdk", "webview2"],
       "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "shell32.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
@@ -62,7 +62,7 @@
       "release": true
     },
     "test_bridge_spawner_state": {
-      "sources": ["src/SpawnerDriver.cpp"],
+      "sources": ["src/simulation/SpawnerDriver.cpp"],
       "includes": ["src/host"],
       "uses": ["dxsdk"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
@@ -104,13 +104,13 @@
     "test_emitter_draw_order": {},
     "test_emitter_naming": {},
     "test_emitter_reorder": {
-      "sources": ["src/ParticleSystem.cpp", "src/ParticleSystemSerialization.cpp", "src/ChunkReader.cpp", "src/ChunkWriter.cpp", "src/crc32.cpp", "src/files.cpp", "src/utils.cpp", "src/LinkGroup.cpp"],
+      "sources": ["src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp"],
       "uses": ["expat", "dxsdk", "webview2"],
       "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
     "test_external_links": {},
     "test_game_object_catalog": {
-      "sources": ["src/GameObjectCatalog.cpp", "src/AloModel.cpp", "src/ChunkReader.cpp", "src/xml.cpp", "src/files.cpp", "src/utils.cpp"],
+      "sources": ["src/gamedata/GameObjectCatalog.cpp", "src/gamedata/AloModel.cpp", "src/effect/ChunkReader.cpp", "src/gamedata/xml.cpp", "src/common/files.cpp", "src/common/utils.cpp"],
       "uses": ["expat-lib", "dxsdk", "webview2"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
@@ -124,7 +124,7 @@
       "libs": ["d3dx9.lib"]
     },
     "test_meg_fuzz": {
-      "sources": ["src/MegaFiles.cpp", "src/files.cpp", "src/utils.cpp", "src/crc32.cpp"],
+      "sources": ["src/gamedata/MegaFiles.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/common/crc32.cpp"],
       "uses": ["expat", "dxsdk", "webview2"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"],
       "release": true
@@ -138,11 +138,11 @@
     },
     "test_muzzle_flash": {},
     "test_palette_store": {
-      "sources": ["src/UI/PaletteStore.cpp", "src/crc32.cpp", "src/utils.cpp"],
+      "sources": ["src/palette/PaletteStore.cpp", "src/common/crc32.cpp", "src/common/utils.cpp"],
       "libs": ["shell32.lib", "user32.lib", "advapi32.lib"]
     },
     "test_particle_alo_fuzz": {
-      "sources": ["src/ParticleSystem.cpp", "src/ParticleSystemSerialization.cpp", "src/ChunkReader.cpp", "src/ChunkWriter.cpp", "src/crc32.cpp", "src/files.cpp", "src/utils.cpp", "src/LinkGroup.cpp"],
+      "sources": ["src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp"],
       "uses": ["expat", "dxsdk", "webview2"],
       "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"],
       "release": true
@@ -150,7 +150,7 @@
     "test_particle_compaction": {},
     "test_particle_mipfilter": {},
     "test_particle_system_io": {
-      "sources": ["src/ParticleSystemIO.cpp", "src/AtomicSave.cpp", "src/ParticleSystem.cpp", "src/ParticleSystemSerialization.cpp", "src/ChunkReader.cpp", "src/ChunkWriter.cpp", "src/crc32.cpp", "src/files.cpp", "src/utils.cpp", "src/LinkGroup.cpp"],
+      "sources": ["src/effect/ParticleSystemIO.cpp", "src/effect/AtomicSave.cpp", "src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp"],
       "uses": ["expat", "dxsdk", "webview2"],
       "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
@@ -159,13 +159,13 @@
       "includes": ["src/host"]
     },
     "test_physicalfile_write": {
-      "sources": ["src/files.cpp", "src/utils.cpp"],
+      "sources": ["src/common/files.cpp", "src/common/utils.cpp"],
       "uses": ["dxsdk"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
     "test_plane_handle": {},
     "test_preview_encode_worker": {
-      "sources": ["src/UI/PaletteThumbs.cpp", "src/utils.cpp", "src/files.cpp", "src/host/PerfTrace.cpp"],
+      "sources": ["src/palette/PaletteThumbs.cpp", "src/common/utils.cpp", "src/common/files.cpp", "src/host/PerfTrace.cpp"],
       "includes": ["src/host"],
       "uses": ["dxsdk"],
       "libs": ["d3d9.lib", "d3dx9.lib", "gdiplus.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
@@ -188,7 +188,7 @@
       "libs": ["d3dx9.lib"]
     },
     "test_rescale": {
-      "sources": ["src/Rescale.cpp", "src/ParticleSystem.cpp", "src/ParticleSystemSerialization.cpp", "src/ChunkReader.cpp", "src/ChunkWriter.cpp", "src/crc32.cpp", "src/files.cpp", "src/utils.cpp", "src/LinkGroup.cpp"],
+      "sources": ["src/effect/Rescale.cpp", "src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp"],
       "uses": ["expat", "dxsdk", "webview2"],
       "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
@@ -205,7 +205,7 @@
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
     "test_skydome_environment": {
-      "sources": ["src/SkydomeEnvironment.cpp", "src/xml.cpp", "src/files.cpp", "src/utils.cpp"],
+      "sources": ["src/rendering/SkydomeEnvironment.cpp", "src/gamedata/xml.cpp", "src/common/files.cpp", "src/common/utils.cpp"],
       "uses": ["expat-lib", "dxsdk", "webview2"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
@@ -213,7 +213,7 @@
       "libs": ["kernel32.lib"]
     },
     "test_spawner_driver": {
-      "sources": ["src/SpawnerDriver.cpp"],
+      "sources": ["src/simulation/SpawnerDriver.cpp"],
       "uses": ["dxsdk"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
@@ -222,7 +222,7 @@
       "libs": ["d3dx9.lib"]
     },
     "test_spherical_harmonics": {
-      "sources": ["src/SphericalHarmonics.cpp"],
+      "sources": ["src/rendering/SphericalHarmonics.cpp"],
       "uses": ["dxsdk"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
@@ -233,12 +233,12 @@
     },
     "test_stringconv": {},
     "test_subfile_read": {
-      "sources": ["src/files.cpp", "src/utils.cpp"],
+      "sources": ["src/common/files.cpp", "src/common/utils.cpp"],
       "uses": ["dxsdk"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
     "test_undo_aux": {
-      "sources": ["src/UndoStack.cpp", "src/ParticleSystem.cpp", "src/ParticleSystemSerialization.cpp", "src/ChunkReader.cpp", "src/ChunkWriter.cpp", "src/crc32.cpp", "src/files.cpp", "src/utils.cpp", "src/LinkGroup.cpp"],
+      "sources": ["src/effect/UndoStack.cpp", "src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp"],
       "uses": ["expat", "dxsdk", "webview2"],
       "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
@@ -259,7 +259,7 @@
       "libs": ["gdiplus.lib", "ole32.lib", "oleaut32.lib", "user32.lib", "gdi32.lib", "shlwapi.lib"]
     },
     "test_xml_billion_laughs": {
-      "sources": ["src/xml.cpp", "src/files.cpp", "src/utils.cpp"],
+      "sources": ["src/gamedata/xml.cpp", "src/common/files.cpp", "src/common/utils.cpp"],
       "uses": ["expat-lib", "dxsdk", "webview2"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"],
       "release": true
@@ -267,37 +267,37 @@
   },
   "tools": {
     "dump_bones": {
-      "sources": ["src/AloModel.cpp", "src/ReferenceObjectMesh.cpp", "src/ChunkReader.cpp", "src/files.cpp", "src/utils.cpp"],
+      "sources": ["src/gamedata/AloModel.cpp", "src/rendering/ReferenceObjectMesh.cpp", "src/effect/ChunkReader.cpp", "src/common/files.cpp", "src/common/utils.cpp"],
       "uses": ["dxsdk"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
     "dump_bounds": {
-      "sources": ["src/AloModel.cpp", "src/ChunkReader.cpp", "src/files.cpp", "src/utils.cpp"],
+      "sources": ["src/gamedata/AloModel.cpp", "src/effect/ChunkReader.cpp", "src/common/files.cpp", "src/common/utils.cpp"],
       "uses": ["dxsdk"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
     "dump_fire_emitter": {
-      "sources": ["src/ParticleSystem.cpp", "src/ParticleSystemSerialization.cpp", "src/ChunkReader.cpp", "src/ChunkWriter.cpp", "src/crc32.cpp", "src/files.cpp", "src/utils.cpp", "src/LinkGroup.cpp"],
+      "sources": ["src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp"],
       "uses": ["expat", "dxsdk"],
       "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
     "dump_refbounds": {
-      "sources": ["src/AloModel.cpp", "src/ReferenceObjectMesh.cpp", "src/ChunkReader.cpp", "src/files.cpp", "src/utils.cpp"],
+      "sources": ["src/gamedata/AloModel.cpp", "src/rendering/ReferenceObjectMesh.cpp", "src/effect/ChunkReader.cpp", "src/common/files.cpp", "src/common/utils.cpp"],
       "uses": ["dxsdk"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
     "dump_skydome_uv": {
-      "sources": ["src/AloModel.cpp", "src/ReferenceObjectMesh.cpp", "src/ChunkReader.cpp", "src/files.cpp", "src/utils.cpp"],
+      "sources": ["src/gamedata/AloModel.cpp", "src/rendering/ReferenceObjectMesh.cpp", "src/effect/ChunkReader.cpp", "src/common/files.cpp", "src/common/utils.cpp"],
       "uses": ["dxsdk"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
     "make_chain_test_alo": {
-      "sources": ["src/ParticleSystem.cpp", "src/ParticleSystemSerialization.cpp", "src/ChunkReader.cpp", "src/ChunkWriter.cpp", "src/crc32.cpp", "src/files.cpp", "src/utils.cpp", "src/LinkGroup.cpp"],
+      "sources": ["src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp"],
       "uses": ["expat", "dxsdk", "webview2"],
       "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
     "measure_alo_bbox": {
-      "sources": ["src/AloModel.cpp", "src/ChunkReader.cpp", "src/files.cpp", "src/utils.cpp"],
+      "sources": ["src/gamedata/AloModel.cpp", "src/effect/ChunkReader.cpp", "src/common/files.cpp", "src/common/utils.cpp"],
       "uses": ["dxsdk"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },

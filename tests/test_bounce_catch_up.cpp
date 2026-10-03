@@ -1,4 +1,4 @@
-// Regression test for the GROUND_BOUNCE catch-up loop (src/BounceCatchUp.h).
+// Regression test for the GROUND_BOUNCE catch-up loop (src/simulation/BounceCatchUp.h).
 //
 // The loop in EmitterInstance::UpdateParticle advanced bounceTime by one arc per
 // bounce and only stopped when a bounce left v_z exactly 0. bounciness = -1 sent
@@ -25,7 +25,7 @@
 //
 // See the test_bounce_catch_up entry in tests/native-tests.json.
 
-#include "BounceCatchUp.h"
+#include "simulation/BounceCatchUp.h"
 
 #include <atomic>
 #include <chrono>
@@ -386,7 +386,7 @@ int main()
     {
         const std::filesystem::path repoRoot =
             std::filesystem::path(__FILE__).parent_path().parent_path();
-        const std::string source = ReadSource(repoRoot / "src" / "EmitterInstance.cpp");
+        const std::string source = ReadSource(repoRoot / "src" / "simulation" / "EmitterInstance.cpp");
         CHECK(!source.empty(), "EmitterInstance.cpp is readable");
         CHECK(std::regex_search(source, std::regex(R"(#include\s+"BounceCatchUp\.h")")),
               "EmitterInstance.cpp includes BounceCatchUp.h");

@@ -1,6 +1,6 @@
 // Regression test for the spawner shaped-path kinematics.
 //
-// Exercises EvalSpawnerPath (src/SpawnerPath.h), the closed form that
+// Exercises EvalSpawnerPath (src/simulation/SpawnerPath.h), the closed form that
 // drives spawner-owned instance motion: a deterministic arc
 // (acceleration) plus a smooth per-axis sinusoidal squiggle with a
 // per-instance phase. Header-only + pure, so this links nothing from the
@@ -9,7 +9,7 @@
 // Build:  node tests/build-native.mjs test_spawner_path
 // Run:    expects "Results: N passed, 0 failed".
 
-#include "SpawnerPath.h"
+#include "simulation/SpawnerPath.h"
 #include <cstdio>
 #include <cmath>
 #include <initializer_list>

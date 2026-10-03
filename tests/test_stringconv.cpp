@@ -4,7 +4,7 @@
 // empty-string path (the HostBridgeProxy concern), and embedded-NUL handling
 // (the helpers convert by .size(), NOT a NUL-terminated -1 length — so a string
 // with an interior NUL survives, which a naive -1 conversion would truncate).
-#include "../src/host/StringConv.h"
+#include "host/StringConv.h"
 #include <cstdio>
 #include <string>
 

@@ -1,4 +1,4 @@
-// Regression test for the WM_CLOSE veto decision (src/CloseDecision.h).
+// Regression test for the WM_CLOSE veto decision (src/effect/CloseDecision.h).
 //
 // A native frame-X / Alt-F4 must prompt-to-save only for a REAL interactive
 // session with unsaved work. Ephemeral runs (--drive / --capture) and
@@ -12,7 +12,7 @@
 // the same way. Header-only; see the test_close_guard entry in
 // tests/native-tests.json.
 
-#include "CloseDecision.h"
+#include "effect/CloseDecision.h"
 
 #include <cstdio>
 

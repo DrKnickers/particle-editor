@@ -1,12 +1,12 @@
 // Unit test for the reference-object world matrix builder
-// (src/ReferenceObjectWorld.h). Pure-header test, links only d3dx9.lib (the
+// (src/rendering/ReferenceObjectWorld.h). Pure-header test, links only d3dx9.lib (the
 // GizmoSizing.h / ManipReadout.h precedent) -- no engine TU.
 //
 // Proves the per-object <Scale_Factor> render multiplier is applied as a uniform
 // scale ABOUT THE ORIGIN (leftmost, before rotation/translation): a basis vector
 // maps to length sf, rotation stays length-preserving, the origin is fixed (so an
 // off-origin mesh translates as it grows -- Risk-2), and translation is NOT scaled.
-#include "../src/ReferenceObjectWorld.h"
+#include "rendering/ReferenceObjectWorld.h"
 #include <cstdio>
 #include <cmath>
 

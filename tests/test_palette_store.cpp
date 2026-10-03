@@ -16,7 +16,7 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#include "UI/TexturePalette.h"
+#include "palette/TexturePalette.h"
 #include <cstdio>
 #include <cstdlib>
 #include <string>

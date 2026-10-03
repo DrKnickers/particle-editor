@@ -33,7 +33,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-#include "third_party/nlohmann/json.hpp"
+#include "host/third_party/nlohmann/json.hpp"
 
 namespace host {
 

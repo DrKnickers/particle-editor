@@ -1,4 +1,4 @@
-// Unit test for the device-free parts of SpawnerDriver (src/SpawnerDriver.cpp):
+// Unit test for the device-free parts of SpawnerDriver (src/simulation/SpawnerDriver.cpp):
 // config clamping, burst-rate math, and the burst/interval state machine.
 //
 // Coverage, per the source:
@@ -36,7 +36,7 @@
 //
 // Standalone console exe; see the test_spawner_driver entry in tests/native-tests.json.
 
-#include "SpawnerDriver.h"
+#include "simulation/SpawnerDriver.h"
 
 #include <cmath>
 #include <cstdio>

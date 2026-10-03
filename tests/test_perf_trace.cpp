@@ -3,8 +3,8 @@
 #include <vector>
 #include <windows.h>
 
-#include "PerfTrace.h"
-#include "third_party/nlohmann/json.hpp"
+#include "host/PerfTrace.h"
+#include "host/third_party/nlohmann/json.hpp"
 
 static int g_fail = 0;
 #define CHECK(cond) do { if (!(cond)) { \

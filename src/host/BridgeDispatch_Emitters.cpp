@@ -6,7 +6,7 @@
 #include "BridgeRequestContext.h"
 
 #include "StringConv.h"           // host::Utf8ToWide / WideToUtf8
-#include "../ParticleSystemIO.h"  // LoadParticleSystem (preview/import-from-file)
+#include "effect/ParticleSystemIO.h"  // LoadParticleSystem (preview/import-from-file)
 
 using nlohmann::json;
 

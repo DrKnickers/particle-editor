@@ -40,14 +40,14 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-#include "third_party/nlohmann/json.hpp"
+#include "host/third_party/nlohmann/json.hpp"
 
 // Autosave::OrphanSession is held by value in the recovery stash.
-#include "../Autosave.h"
-#include "../UndoStack.h"   // full def needed for UndoStack::EditorAux in ApplyUndoSnapshot
-#include "../ParticleSystem.h"   // full def needed for ParticleSystem::Emitter* in getEmitterById
-#include "../MouseCursor.h"       // by-value record-preview anchor (preview/* record kinds)
-#include "../SpawnerDriver.h"     // dispatcher-owned clamped SpawnerConfig
+#include "effect/Autosave.h"
+#include "effect/UndoStack.h"   // full def needed for UndoStack::EditorAux in ApplyUndoSnapshot
+#include "effect/ParticleSystem.h"   // full def needed for ParticleSystem::Emitter* in getEmitterById
+#include "simulation/MouseCursor.h"       // by-value record-preview anchor (preview/* record kinds)
+#include "simulation/SpawnerDriver.h"     // dispatcher-owned clamped SpawnerConfig
 #include "PreviewEncodeWorker.h"   // async texture-preview encode
 
 class Engine;

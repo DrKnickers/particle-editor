@@ -1,6 +1,6 @@
 import type { SpawnerParamsDto } from "@particle-editor/bridge-schema";
 
-/** Defaults mirror `SpawnerConfig()` in src/SpawnerDriver.h:
+/** Defaults mirror `SpawnerConfig()` in src/simulation/SpawnerDriver.h:
  *  Auto mode + disabled + burst 1 + 0 s spacing + 10 s interval + origin
  *  + 5 s lifetime + zero jitter. */
 export function makeDefaultSpawnerParams(): SpawnerParamsDto {

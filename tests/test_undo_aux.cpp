@@ -18,10 +18,10 @@
 // Build/run: node tests/build-native.mjs test_undo_aux ; tests\test_undo_aux.exe
 // Expects the final line "=== undo aux: ALL PASS ===" and exit code 0.
 
-#include "UndoStack.h"
-#include "RefTransformUndoKey.h"
-#include "ParticleSystem.h"
-#include "ParticleSystemInstance.h"
+#include "effect/UndoStack.h"
+#include "effect/RefTransformUndoKey.h"
+#include "effect/ParticleSystem.h"
+#include "simulation/ParticleSystemInstance.h"
 #include <cstdio>
 #include <cmath>
 

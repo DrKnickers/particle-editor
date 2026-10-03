@@ -3,7 +3,7 @@
 // The primitive vector's order is draw order, so every kill pattern must compact
 // survivors stably while keeping the parallel particle-index vector aligned.
 
-#include "ParticleCompaction.h"
+#include "simulation/ParticleCompaction.h"
 #include <cstdio>
 #include <set>
 #include <vector>

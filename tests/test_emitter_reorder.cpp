@@ -19,8 +19,8 @@
 // bottom of this file's companion command; links only the data-model TUs.
 // Run: expects "Results: N passed, 0 failed".
 
-#include "ParticleSystem.h"
-#include "ParticleSystemInstance.h"
+#include "effect/ParticleSystem.h"
+#include "simulation/ParticleSystemInstance.h"
 #include <cstdio>
 #include <vector>
 

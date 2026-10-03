@@ -1,11 +1,11 @@
-// Unit test for ParseParticleMipFilter (src/ParticleMipFilter.h) — the
+// Unit test for ParseParticleMipFilter (src/rendering/ParticleMipFilter.h) — the
 // ALO_PARTICLE_MIPFILTER override parser behind the particle mip-sampling
 // bracket. Pure header, no D3D. Contract under test:
 //   unset/empty        -> MODE_NONE, recognized
 //   "linear" (any case)-> MODE_LINEAR, recognized
 //   "bias:<finite f>"  -> MODE_BIAS + value, recognized
 //   anything else      -> MODE_NONE, NOT recognized (caller logs the typo)
-#include "ParticleMipFilter.h"
+#include "rendering/ParticleMipFilter.h"
 #include <cstdio>
 #include <cmath>
 

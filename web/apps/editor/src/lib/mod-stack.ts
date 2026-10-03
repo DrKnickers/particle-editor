@@ -55,7 +55,7 @@ export function moveItemToGap<T>(items: T[], from: number, target: number): T[] 
 /**
  * Force a mods/list refresh through the live initModStack subscription.
  * The engine/state/changed gate below keys on activeModPath (the FRONT
- * layer only — src/ModManager.h GetPrimaryLayerPath), so a stack edit
+ * layer only — src/gamedata/ModManager.h GetPrimaryLayerPath), so a stack edit
  * that keeps the front unchanged (reorder / remove / append of a
  * secondary layer) would otherwise leave this store stale. The two
  * mods/set-layers call sites (MenuBar, LoadOrderDialog) call this after

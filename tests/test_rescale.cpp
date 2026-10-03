@@ -1,4 +1,4 @@
-// Unit test for DoRescaleEmitter (src/Rescale.cpp) -- the pure-IO emitter
+// Unit test for DoRescaleEmitter (src/effect/Rescale.cpp) -- the pure-IO emitter
 // rescale used by `engine/action/rescale-system`.
 //
 // Table-driven over both emitter rate modes and both scale axes, with every
@@ -19,9 +19,9 @@
 // float comparisons below are exact unless noted. Standalone console exe; see
 // the test_rescale entry in tests/native-tests.json.
 
-#include "Rescale.h"
-#include "ParticleSystem.h"
-#include "ParticleSystemInstance.h"
+#include "effect/Rescale.h"
+#include "effect/ParticleSystem.h"
+#include "simulation/ParticleSystemInstance.h"
 
 #include <cstdio>
 

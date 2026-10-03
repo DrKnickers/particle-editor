@@ -47,7 +47,7 @@ type Props = {
 };
 
 /** Hard caps from `SpawnerDriver` — mirror the C++ constants in
- *  src/SpawnerDriver.h so the panel clamps where the host would
+ *  src/simulation/SpawnerDriver.h so the panel clamps where the host would
  *  clamp anyway. */
 const MAX_BURST_SIZE = 10;
 const MAX_SPACING_SEC = 10;

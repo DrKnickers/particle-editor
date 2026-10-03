@@ -13,7 +13,7 @@
 // spawn-depth cap proved was worth asserting from both sides.
 
 #include "host/WebMessageIngressPolicy.h"
-#include "ResourceLimits.h"
+#include "common/ResourceLimits.h"
 
 #include <cstdio>
 

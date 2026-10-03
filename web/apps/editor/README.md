@@ -36,7 +36,7 @@ A **snapshot** is a copy of the current values.
 
 | State | Owner | How it changes | Persistence | Undo | Readers | Source to open |
 |---|---|---|---|---|---|---|
-| Document: emitter definitions and curves | Host's `ParticleSystem` | Property, track and tree requests change native fields; events tell the web to read again. | Written to `.alo` on Save. | Native snapshots restore document content. | Property tabs, tree, curve panel and particle engine. | [ParticleSystem.h](../../../src/ParticleSystem.h), [UndoStack.cpp](../../../src/UndoStack.cpp), [dispatch map](../../../src/README.md#find-a-request-handler). |
+| Document: emitter definitions and curves | Host's `ParticleSystem` | Property, track and tree requests change native fields; events tell the web to read again. | Written to `.alo` on Save. | Native snapshots restore document content. | Property tabs, tree, curve panel and particle engine. | [ParticleSystem.h](../../../src/effect/ParticleSystem.h), [UndoStack.cpp](../../../src/effect/UndoStack.cpp), [dispatch map](../../../src/README.md#find-a-request-handler). |
 | File path, dirty flag and recent files | Host; web keeps a copy. Dirty means there are unsaved changes. | File requests update path and recents; edits set dirty. `useSeedFileState` reads snapshots and follows events. | Content goes in `.alo`; recent paths go in Windows settings. Current path and dirty flag are session state. | Restoring content recalculates dirty against the last saved snapshot. It does not restore the file path or recent list. | App title, File menu and save prompt. | [file-state.ts](src/lib/file-state.ts), [BridgeDispatch_File.cpp](../../../src/host/BridgeDispatch_File.cpp), [BridgeDispatcher.cpp](../../../src/host/BridgeDispatcher.cpp), `ApplyUndoSnapshot`. |
 | Primary emitter selection: one row | Host's `m_selectedEmitterId` | `emitters/select` sets it; `emitters/selected` and engine events report it. | Session only; absent from `.alo`. | Selection alone creates no undo step. Document snapshots capture and restore the selected position. | Inspector, curve panel and tree. | [BridgeDispatch_Emitters.cpp](../../../src/host/BridgeDispatch_Emitters.cpp), [BridgeDispatcher.cpp](../../../src/host/BridgeDispatcher.cpp), `CaptureUndoPoint`. |
 | Multiple emitter selection | Web's `useEmitterSelectionStore` | Tree gestures call `setSingle`, `toggle`, `range` or `setIds`. The tree sends only the primary row to the host; batch actions send their own list of IDs. | Memory only. | No history for the set. Host selection events can adjust it after document undo. | Tree, keyboard navigation and batch menu actions. | [emitter-selection.ts](src/lib/tree/emitter-selection.ts), [EmitterTree.tsx](src/screens/EmitterTree.tsx), [MenuBar.tsx](src/components/MenuBar.tsx). |
@@ -79,7 +79,7 @@ reach the preview or saved file.
 6. The handler calls `propagateLinkGroup`. A link group shares settings
    between emitters. [BridgeDispatcher.cpp](../../../src/host/BridgeDispatcher.cpp)
    copies shared fields to other members;
-   [ParticleSystem.cpp](../../../src/ParticleSystem.cpp), `copySharedParamsFrom`,
+   [ParticleSystem.cpp](../../../src/effect/ParticleSystem.cpp), `copySharedParamsFrom`,
    preserves `initialDelay` on a member when that field is exempt. The undo
    snapshot covers the whole group.
 7. [BridgeDispatch_EmitterProperties.cpp](../../../src/host/BridgeDispatch_EmitterProperties.cpp)
@@ -90,8 +90,8 @@ reach the preview or saved file.
    `dirty/changed` if the dirty flag changed; see
    [BridgeDispatcher.cpp](../../../src/host/BridgeDispatcher.cpp). Refreshing does not promise to
    restart an existing instance's initial wait; see
-   [EmitterInstance.cpp](../../../src/EmitterInstance.cpp), `onParticleSystemChanged`,
-   and [SpawnSchedule.h](../../../src/SpawnSchedule.h), `ReconcileNextSpawnTime`.
+   [EmitterInstance.cpp](../../../src/simulation/EmitterInstance.cpp), `onParticleSystemChanged`,
+   and [SpawnSchedule.h](../../../src/simulation/SpawnSchedule.h), `ReconcileNextSpawnTime`.
 8. The tree event makes
    [EmitterPropertyTabs.tsx](src/screens/EmitterPropertyTabs.tsx) call `fetchProps` for the
    current selection. [tree-refetch.ts](src/lib/tree-refetch.ts),
@@ -102,11 +102,11 @@ reach the preview or saved file.
    and also calls `fetchProps`.
 9. The edit itself does not save a file. On Save,
    [BridgeDispatch_File.cpp](../../../src/host/BridgeDispatch_File.cpp),
-   `file/save`, calls [ParticleSystemIO.cpp](../../../src/ParticleSystemIO.cpp),
-   `SaveParticleSystem`. [AtomicSave.cpp](../../../src/AtomicSave.cpp),
+   `file/save`, calls [ParticleSystemIO.cpp](../../../src/effect/ParticleSystemIO.cpp),
+   `SaveParticleSystem`. [AtomicSave.cpp](../../../src/effect/AtomicSave.cpp),
    `AtomicWriteParticleSystem`, writes a temporary file through
    `ParticleSystem::write` and replaces the destination after a successful
-   write. [ParticleSystemSerialization.cpp](../../../src/ParticleSystemSerialization.cpp),
+   write. [ParticleSystemSerialization.cpp](../../../src/effect/ParticleSystemSerialization.cpp),
    `Emitter::writeProperties`, writes `initialDelay` as a float, a number that
    can have a fractional part. It goes in mini-chunk `0x24`, a numbered field
    in the file. `readProperties` reads it back.
@@ -146,11 +146,11 @@ file agree.
    [mock.ts](src/bridge/mock.ts), `emitters/set-properties`, needs no new
    field-specific code: it derives `applied` and `skipped` from the fixture's
    keys. The mock does not check types; the host does.
-3. In [ParticleSystem.h](../../../src/ParticleSystem.h), search for
+3. In [ParticleSystem.h](../../../src/effect/ParticleSystem.h), search for
    `float gravity` and add the stored member. In
-   [ParticleSystem.cpp](../../../src/ParticleSystem.cpp), search for
+   [ParticleSystem.cpp](../../../src/effect/ParticleSystem.cpp), search for
    `setDefaults` and give it a default. In
-   [ParticleSystemSerialization.cpp](../../../src/ParticleSystemSerialization.cpp),
+   [ParticleSystemSerialization.cpp](../../../src/effect/ParticleSystemSerialization.cpp),
    search for `writeMiniFloat  (writer, 0x0C, gravity)` for the write line,
    then `case 0x0C:` and `readFloat(reader)` for the matching read line.
    Add both sides for the new field. Mini-chunk IDs must be unique within
@@ -171,10 +171,10 @@ file agree.
    remain visible. Follow the existing field's bounds and units only when
    they also apply to the new setting.
 6. If the field should be shared in a link group, add its exemption flag in
-   [LinkGroup.h](../../../src/LinkGroup.h), `bool gravity`, and its default
-   and difference check in [LinkGroup.cpp](../../../src/LinkGroup.cpp),
+   [LinkGroup.h](../../../src/effect/LinkGroup.h), `bool gravity`, and its default
+   and difference check in [LinkGroup.cpp](../../../src/effect/LinkGroup.cpp),
    `gravity(false)` and `CHECK_FIELD(gravity,`. In
-   [ParticleSystem.cpp](../../../src/ParticleSystem.cpp),
+   [ParticleSystem.cpp](../../../src/effect/ParticleSystem.cpp),
    `copySharedParamsFrom`, preserve and restore the field when exempt;
    search for `sav_gravity` for the example. Add the bridge flag mapping to
    [BridgeDispatcher.cpp](../../../src/host/BridgeDispatcher.cpp),
@@ -182,7 +182,7 @@ file agree.
    [LinkGroupSettingsDialog.tsx](src/screens/LinkGroupSettingsDialog.tsx),
    `"Gravity"` and `"gravity"`. If the field should change when the user
    rescales an effect, add the appropriate time or size rule to
-   [Rescale.cpp](../../../src/Rescale.cpp), `emitter->gravity`.
+   [Rescale.cpp](../../../src/effect/Rescale.cpp), `emitter->gravity`.
 7. Extend the get/set round trip in
    [bridge-contract.emitters.test.ts](src/bridge/__tests__/bridge-contract.emitters.test.ts),
    `emitters/set-properties applies a partial patch`, and the label check

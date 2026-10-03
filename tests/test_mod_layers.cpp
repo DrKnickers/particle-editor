@@ -1,8 +1,8 @@
-// Unit test for src/ModLayers.h pure helpers.
+// Unit test for src/gamedata/ModLayers.h pure helpers.
 #include <cstdio>
 #include <string>
 #include <vector>
-#include "ModLayers.h"
+#include "gamedata/ModLayers.h"
 
 static int g_fail = 0;
 #define CHECK(cond) do { if (!(cond)) { \

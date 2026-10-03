@@ -2,7 +2,7 @@
 #define HOST_PERF_TRACE_H
 
 #include <string>
-#include "third_party/nlohmann/json.hpp"
+#include "host/third_party/nlohmann/json.hpp"
 
 namespace host::perf {
 

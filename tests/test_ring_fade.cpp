@@ -1,4 +1,4 @@
-#include "../src/RingFade.h"
+#include "rendering/RingFade.h"
 #include <cstdio>
 #include <cmath>
 using namespace ringfade;

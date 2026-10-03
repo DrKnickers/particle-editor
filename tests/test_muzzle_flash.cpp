@@ -1,7 +1,7 @@
-// Unit test for src/MuzzleFlashFilter.h -- IsMuzzleFlashMesh (hide fire-only
+// Unit test for src/rendering/MuzzleFlashFilter.h -- IsMuzzleFlashMesh (hide fire-only
 // muzzle quads on a reference object). Pure-header test (string only); links
 // nothing -- the test_reference_world / test_gizmo_sizing precedent.
-#include "../src/MuzzleFlashFilter.h"
+#include "rendering/MuzzleFlashFilter.h"
 #include <cstdio>
 
 static int g_fail = 0;

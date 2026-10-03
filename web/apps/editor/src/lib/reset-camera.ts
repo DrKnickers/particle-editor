@@ -6,7 +6,7 @@
 //
 // The values mirror the legacy editor exactly:
 //   - Reset Camera command                    — the original Win32 editor
-//   - Engine constructor default (m_eye)     — Engine::Engine in src/engine.cpp
+//   - Engine constructor default (m_eye)     — Engine::Engine in src/rendering/engine.cpp
 //   eye (0,-250,125), target origin, up +Z.
 // The host's `engine/set/camera` handler (src/host/BridgeDispatch_Engine.cpp)
 // maps this DTO 1:1 into Engine::Camera and calls the SAME Engine::SetCamera()

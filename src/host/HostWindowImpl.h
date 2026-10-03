@@ -92,23 +92,23 @@
 #include "BridgeDispatcher.h"
 #include "HostBridgeProxy.h"
 #include "HostMessages.h"        // WM_APP_QUIT_CONFIRMED
-#include "../CloseDecision.h"    // ShouldVetoClose
+#include "effect/CloseDecision.h"    // ShouldVetoClose
 #include "LayoutBroker.h"
 
-#include "../engine.h"
-#include "../ManipReadout.h"   // pure projection/label helpers for the readout pill
-#include "../PlaneHandle.h"
-#include "../managers.h"
-#include "../ModManager.h"
-#include "../MouseCursor.h"
-#include "../ResourceLimits.h"   // kMaxWebMessageChars (bridge ingress cap)
-#include "../UI/TexturePalette.h"   // Store::SetEphemeral (automation palette isolation)
-#include "../ParticleSystem.h"
-#include "../ParticleSystemIO.h"
-#include "../ParticleSystemInstance.h"
-#include "../SpawnerDriver.h"
-#include "../UndoStack.h"
-#include "../Autosave.h"  // two-tier autosave timers + clean-exit cleanup
+#include "rendering/engine.h"
+#include "rendering/ManipReadout.h"   // pure projection/label helpers for the readout pill
+#include "rendering/PlaneHandle.h"
+#include "gamedata/managers.h"
+#include "gamedata/ModManager.h"
+#include "simulation/MouseCursor.h"
+#include "common/ResourceLimits.h"   // kMaxWebMessageChars (bridge ingress cap)
+#include "palette/TexturePalette.h"   // Store::SetEphemeral (automation palette isolation)
+#include "effect/ParticleSystem.h"
+#include "effect/ParticleSystemIO.h"
+#include "simulation/ParticleSystemInstance.h"
+#include "simulation/SpawnerDriver.h"
+#include "effect/UndoStack.h"
+#include "effect/Autosave.h"  // two-tier autosave timers + clean-exit cleanup
 #include "DriveRunner.h"   // --drive: scripted non-CDP composite capture
 #include "ClipRunner.h"    // --record: deterministic clip recording (PNG sequence)
 #include "RecordTrace.h"   // --record: flag-gated pump-schedule trace

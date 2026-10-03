@@ -6,7 +6,7 @@
 #include <cstdio>
 #include <string>
 #include <vector>
-#include "CaptureTicker.h"
+#include "host/CaptureTicker.h"
 
 static int g_fail = 0;
 static int g_check = 0;

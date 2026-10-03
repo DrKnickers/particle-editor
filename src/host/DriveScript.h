@@ -11,7 +11,7 @@
 #include <optional>
 #include <string>
 #include <vector>
-#include "third_party/nlohmann/json.hpp"
+#include "host/third_party/nlohmann/json.hpp"
 
 namespace drive {
 

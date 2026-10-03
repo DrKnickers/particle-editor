@@ -19,16 +19,16 @@
 #include <windows.h>          // COLORREF (self-contained; don't rely on include order)
 
 #include "SettingsRegistry.h"
-#include "third_party/nlohmann/json.hpp"
+#include "host/third_party/nlohmann/json.hpp"
 
-#include "../engine.h"        // Engine::Camera/Light/LightType, ReferenceObjectStatus, SkydomeSlotStatus, D3DX types
-#include "../LinkGroup.h"     // LinkExemptFlags
-#include "../SpawnerDriver.h" // SpawnerConfig (returned by value)
+#include "rendering/engine.h"        // Engine::Camera/Light/LightType, ReferenceObjectStatus, SkydomeSlotStatus, D3DX types
+#include "effect/LinkGroup.h"     // LinkExemptFlags
+#include "simulation/SpawnerDriver.h" // SpawnerConfig (returned by value)
 
 class ParticleSystem;
 
 // Emitter duplicate-name adapter, implemented in BridgeDispatcher.cpp using
-// the window-free rule in src/EmitterNaming.h.
+// the window-free rule in src/effect/EmitterNaming.h.
 extern std::string GenerateDuplicateName(const ParticleSystem* system,
                                          const std::string& sourceName);
 

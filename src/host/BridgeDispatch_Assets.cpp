@@ -7,8 +7,8 @@
 
 #include "PerfTrace.h"            // host::perf spans (palette/thumbnail, get-preview)
 #include "StringConv.h"           // host::Utf8ToWide / WideToUtf8
-#include "../ModManager.h"        // mods/list, mods/refresh, mods/set-layers
-#include "../UI/TexturePalette.h" // textures/palette/*
+#include "gamedata/ModManager.h"        // mods/list, mods/refresh, mods/set-layers
+#include "palette/TexturePalette.h" // textures/palette/*
 
 #include "HostMessages.h"         // WM_APP_PREVIEW_READY (textures/get-preview)
 

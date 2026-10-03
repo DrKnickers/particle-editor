@@ -11,7 +11,7 @@ function parseSeparatedInteger(source, pattern, description) {
 }
 
 test("the web overload-cap default matches Engine's preview-particle cap", () => {
-  const engineHeader = readFileSync(new URL("../../../../../src/engine.h", import.meta.url), "utf8");
+  const engineHeader = readFileSync(new URL("../../../../../src/rendering/engine.h", import.meta.url), "utf8");
   const overloadGuard = readFileSync(new URL("../../src/lib/overload-guard.ts", import.meta.url), "utf8");
   const engineDefault = parseSeparatedInteger(
     engineHeader,

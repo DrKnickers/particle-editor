@@ -47,7 +47,7 @@ export const GROUND_BEHAVIOR_BOUNCE = 2;
 
 // Emit-from-mesh dropdown options — mirrors the legacy
 // `EmitModes[]` table. Values match
-// `ParticleSystem::EMIT_*` constants in src/ParticleSystem.h:
+// `ParticleSystem::EMIT_*` constants in src/effect/ParticleSystem.h:
 // EMIT_DISABLE=0, EMIT_RANDOM_VERTEX=1, EMIT_RANDOM_MESH=2,
 // EMIT_EVERY_VERTEX=3.
 export const EMIT_FROM_MESH_OPTIONS: { value: number; label: string }[] = [
@@ -59,7 +59,7 @@ export const EMIT_FROM_MESH_OPTIONS: { value: number; label: string }[] = [
 export const EMIT_FROM_MESH_DISABLE = 0;
 
 // Random-Param group type dropdown options — mirrors the engine
-// `GT_*` constants in src/ParticleSystem.h: GT_EXACT=0,
+// `GT_*` constants in src/effect/ParticleSystem.h: GT_EXACT=0,
 // GT_BOX=1, GT_CUBE=2, GT_SPHERE=3, GT_CYLINDER=4.
 export const GROUP_TYPE_OPTIONS: { value: number; label: string }[] = [
   { value: 0, label: "Exact" },

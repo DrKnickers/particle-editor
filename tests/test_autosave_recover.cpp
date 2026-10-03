@@ -1,6 +1,6 @@
 // Production-linked autosave recovery contract test.
 //
-// This executable links src/Autosave.cpp and the real ParticleSystem
+// This executable links src/effect/Autosave.cpp and the real ParticleSystem
 // serializer/parser. It runs against a unique TEMP root so it can prove the
 // filesystem behavior that the former header-only test could not:
 //   - PID + creation-FILETIME identity and PID-reuse liveness;
@@ -21,10 +21,10 @@
 #include <string>
 #include <vector>
 
-#include "Autosave.h"
-#include "ParticleSystem.h"
-#include "ParticleSystemInstance.h"
-#include "files.h"
+#include "effect/Autosave.h"
+#include "effect/ParticleSystem.h"
+#include "simulation/ParticleSystemInstance.h"
+#include "common/files.h"
 
 // ParticleSystem::Emitter::~Emitter routes live instances through this D3D-
 // coupled owner method. This data-only test never registers an EmitterInstance,

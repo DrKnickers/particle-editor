@@ -17,11 +17,11 @@
 //
 // See the test_alo_editor_state entry in tests/native-tests.json.
 
-#include "ParticleSystem.h"
-#include "ParticleSystemInstance.h"
-#include "ChunkFile.h"
-#include "files.h"
-#include "exceptions.h"
+#include "effect/ParticleSystem.h"
+#include "simulation/ParticleSystemInstance.h"
+#include "effect/ChunkFile.h"
+#include "common/files.h"
+#include "common/exceptions.h"
 
 #include <cstdint>
 #include <cstdio>

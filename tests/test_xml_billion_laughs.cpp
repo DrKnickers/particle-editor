@@ -1,4 +1,4 @@
-// Regression test for the XML DoS guards (src/xml.cpp).
+// Regression test for the XML DoS guards (src/gamedata/xml.cpp).
 //
 // Guard 1 (entity expansion): added when the bundled Expat (2.1.0) predated
 // the 2.4.0 billion-laughs amplification cap; kept as defence in depth. Legit
@@ -23,10 +23,10 @@
 // deeper than any real game file but under the cap) parse WITHOUT throwing.
 // See the test_xml_billion_laughs entry in tests/native-tests.json.
 
-#include "xml.h"
-#include "files.h"
-#include "exceptions.h"
-#include "ResourceLimits.h"   // existing depth/breadth production constants
+#include "gamedata/xml.h"
+#include "common/files.h"
+#include "common/exceptions.h"
+#include "common/ResourceLimits.h"   // existing depth/breadth production constants
 
 #include <cstdio>
 #include <cstring>

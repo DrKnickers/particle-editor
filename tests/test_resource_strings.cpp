@@ -23,7 +23,7 @@
 #include <cstdio>
 #include <cwchar>
 
-#include "Resources\resource.h"   // pure #defines — IDS_* / IDR_* / IDB_* / IDI_*
+#include "Resources/resource.h"   // pure #defines — IDS_* / IDR_* / IDB_* / IDI_*
 
 static int g_pass = 0;
 static int g_fail = 0;

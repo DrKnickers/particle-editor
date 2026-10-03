@@ -6,9 +6,9 @@
 //   build: node tests/build-native.mjs measure_alo_bbox; see the inline note below.
 //   usage: measure_alo_bbox.exe <path-to.alo>
 
-#include "AloModel.h"
-#include "files.h"
-#include "exceptions.h"
+#include "gamedata/AloModel.h"
+#include "common/files.h"
+#include "common/exceptions.h"
 
 #include <cstdio>
 #include <cstring>

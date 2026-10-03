@@ -12,9 +12,9 @@
 // the exact CheckDeviceState / ResetEx door, while source bindings below prove
 // both Engine callers and the host frame gate remain wired to it.
 
-#include "DeviceState.h"
-#include "DeviceRecovery.h"
-#include "DeferredParticleSystemChange.h"
+#include "rendering/DeviceState.h"
+#include "rendering/DeviceRecovery.h"
+#include "rendering/DeferredParticleSystemChange.h"
 #include "host/Compositor.h"
 
 #include <algorithm>
@@ -798,13 +798,13 @@ int main()
     {
         const std::filesystem::path repoRoot = std::filesystem::current_path();
         const std::string engineHeader =
-            ReadSource(repoRoot / "src" / "engine.h");
+            ReadSource(repoRoot / "src" / "rendering" / "engine.h");
         const std::string engineSource =
-            ReadSource(repoRoot / "src" / "engine.cpp");
+            ReadSource(repoRoot / "src" / "rendering" / "engine.cpp");
         const std::string deviceSource =
-            ReadSource(repoRoot / "src" / "engine_device.cpp");
+            ReadSource(repoRoot / "src" / "rendering" / "engine_device.cpp");
         const std::string renderSource =
-            ReadSource(repoRoot / "src" / "engine_render.cpp");
+            ReadSource(repoRoot / "src" / "rendering" / "engine_render.cpp");
         const std::string bridgeEngineSource =
             ReadSource(repoRoot / "src" / "host" /
                        "BridgeDispatch_Engine.cpp");
@@ -812,12 +812,12 @@ int main()
             ReadSource(repoRoot / "src" / "host" /
                        "BridgeDispatch_Assets.cpp");
         const std::string modManagerSource =
-            ReadSource(repoRoot / "src" / "ModManager.cpp");
+            ReadSource(repoRoot / "src" / "gamedata" / "ModManager.cpp");
         const std::string recoveryHeader =
-            ReadSource(repoRoot / "src" / "DeviceRecovery.h");
+            ReadSource(repoRoot / "src" / "rendering" / "DeviceRecovery.h");
         const std::string deferredChangeHeader =
             ReadSource(repoRoot / "src" /
-                       "DeferredParticleSystemChange.h");
+                       "rendering" / "DeferredParticleSystemChange.h");
         const std::string hostSource = ReadHostWindowSources(repoRoot);
         const std::string layoutSource =
             ReadSource(repoRoot / "src" / "host" / "LayoutBroker.cpp");
@@ -826,21 +826,21 @@ int main()
         const std::string compositorSource =
             ReadSource(repoRoot / "src" / "host" / "Compositor.cpp");
         const std::string managerHeader =
-            ReadSource(repoRoot / "src" / "managers.h");
+            ReadSource(repoRoot / "src" / "gamedata" / "managers.h");
         const std::string managerSource =
-            ReadSource(repoRoot / "src" / "managers.cpp");
+            ReadSource(repoRoot / "src" / "gamedata" / "managers.cpp");
         const std::string emitterHeader =
-            ReadSource(repoRoot / "src" / "EmitterInstance.h");
+            ReadSource(repoRoot / "src" / "simulation" / "EmitterInstance.h");
         const std::string emitterSource =
-            ReadSource(repoRoot / "src" / "EmitterInstance.cpp");
+            ReadSource(repoRoot / "src" / "simulation" / "EmitterInstance.cpp");
         const std::string instanceHeader =
-            ReadSource(repoRoot / "src" / "ParticleSystemInstance.h");
+            ReadSource(repoRoot / "src" / "simulation" / "ParticleSystemInstance.h");
         const std::string instanceSource =
-            ReadSource(repoRoot / "src" / "ParticleSystemInstance.cpp");
+            ReadSource(repoRoot / "src" / "simulation" / "ParticleSystemInstance.cpp");
         const std::string environmentSource =
-            ReadSource(repoRoot / "src" / "engine_environment.cpp");
+            ReadSource(repoRoot / "src" / "rendering" / "engine_environment.cpp");
         const std::string referenceSource =
-            ReadSource(repoRoot / "src" / "engine_reference.cpp");
+            ReadSource(repoRoot / "src" / "rendering" / "engine_reference.cpp");
 
         ExpectBool("production device-reset sources are readable",
                    !engineHeader.empty() && !engineSource.empty() &&

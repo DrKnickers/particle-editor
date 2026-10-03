@@ -41,7 +41,7 @@ The [bridge dispatcher](host/BridgeDispatcher.h) exchanges JSON requests
 (`req`), responses (`res`) and events (`evt`) with the interface and routes
 requests to the ten [handler files](#find-a-request-handler), which read or
 change the effect document and engine.
-[File helpers](ParticleSystemIO.h) open and save the effect document as
+[File helpers](effect/ParticleSystemIO.h) open and save the effect document as
 `.alo` files, while the [compositor](host/Compositor.h) places the engine's
 rendered frame behind the web interface.
 In a browser, the [mock bridge](../web/apps/editor/src/bridge/mock.ts)
@@ -55,9 +55,9 @@ supplies sample state and answers in place of the Windows host.
 | Colours or spacing | [tokens.css](../web/apps/editor/src/styles/tokens.css) for shared colours; [components.css](../web/apps/editor/src/styles/components.css) for rules such as `.form-row`. |
 | An emitter setting | [EmitterPropertyTabs.tsx](../web/apps/editor/src/screens/EmitterPropertyTabs.tsx), `commit`, then [BridgeDispatch_EmitterProperties.cpp](host/BridgeDispatch_EmitterProperties.cpp), `emitters/set-properties`. An emitter is one source of particles in an effect. For a new setting, follow [Adding a property field](../web/apps/editor/README.md#adding-a-property-field). |
 | A curve value | [CurveEditorPanel.tsx](../web/apps/editor/src/screens/curve-editor/CurveEditorPanel.tsx), `emitters/set-track-key`, then [BridgeDispatch_EmitterTracks.cpp](host/BridgeDispatch_EmitterTracks.cpp) with the same search text. A curve changes a value over a particle's life. |
-| Preview timing or motion | [EmitterInstance.cpp](EmitterInstance.cpp), `Update` and `onParticleSystemChanged`; [SpawnerDriver.cpp](SpawnerDriver.cpp), `Tick`, for the pane that places effect instances. An instance is one running copy of the effect. |
-| Preview drawing | [engine_render.cpp](engine_render.cpp), `Render`, and [EmitterInstance.cpp](EmitterInstance.cpp), `UpdateParticle`. |
-| Open or Save | [BridgeDispatch_File.cpp](host/BridgeDispatch_File.cpp), `file/open` or `file/save`. Follow `SaveParticleSystem` into [ParticleSystemIO.cpp](ParticleSystemIO.cpp). |
+| Preview timing or motion | [EmitterInstance.cpp](simulation/EmitterInstance.cpp), `Update` and `onParticleSystemChanged`; [SpawnerDriver.cpp](simulation/SpawnerDriver.cpp), `Tick`, for the pane that places effect instances. An instance is one running copy of the effect. |
+| Preview drawing | [engine_render.cpp](rendering/engine_render.cpp), `Render`, and [EmitterInstance.cpp](simulation/EmitterInstance.cpp), `UpdateParticle`. |
+| Open or Save | [BridgeDispatch_File.cpp](host/BridgeDispatch_File.cpp), `file/open` or `file/save`. Follow `SaveParticleSystem` into [ParticleSystemIO.cpp](effect/ParticleSystemIO.cpp). |
 | A guide page | Follow [site/README.md](../site/README.md#guide-markdown--committed-html). Edit the Markdown source, then run `node scripts/build-guide.mjs` and `node scripts/build-guide.mjs --check` from the repository root. |
 
 For a first browser edit and the checks for each change, use
@@ -69,16 +69,16 @@ the way to the saved file.
 
 Open a group when the change crosses from the interface into native behaviour.
 
-| Job | Files to open | When to open them |
-|---|---|---|
-| Effect definition | [ParticleSystem.h](ParticleSystem.h), [ParticleSystem.cpp](ParticleSystem.cpp), [LinkGroup.cpp](LinkGroup.cpp) | Find stored emitter fields, tree changes, or the rules for sharing settings between emitters. Search for `Emitter` or `copySharedParamsFrom`. |
-| File formats and saving | [ParticleSystemSerialization.cpp](ParticleSystemSerialization.cpp), [ChunkFile.h](ChunkFile.h), [ChunkReader.cpp](ChunkReader.cpp), [ChunkWriter.cpp](ChunkWriter.cpp), [ParticleSystemIO.cpp](ParticleSystemIO.cpp), [AtomicSave.cpp](AtomicSave.cpp) | Change how a particle file is read or written. A chunk is a numbered block of values in the file. Search for `writeProperties`, `readProperties` or `AtomicWriteParticleSystem`. |
-| Game assets | [AloModel.cpp](AloModel.cpp), [files.cpp](files.cpp), [MegaFiles.cpp](MegaFiles.cpp), [managers.cpp](managers.cpp), [ModManager.cpp](ModManager.cpp) | Find model decoding or texture, shader and mod file lookup. These are separate from the user's chosen Open and Save paths. |
-| Simulation | [ParticleSystemInstance.cpp](ParticleSystemInstance.cpp), [EmitterInstance.cpp](EmitterInstance.cpp), [SpawnerDriver.cpp](SpawnerDriver.cpp) | Change when instances or particles spawn, move or stop. Search for `Update`. |
-| Rendering | [engine.cpp](engine.cpp), [engine_device.cpp](engine_device.cpp), [engine_render.cpp](engine_render.cpp), [engine_environment.cpp](engine_environment.cpp), [engine_reference.cpp](engine_reference.cpp), [engine_shadows.cpp](engine_shadows.cpp), [engine_gizmo.cpp](engine_gizmo.cpp), [Effect.cpp](Effect.cpp) | Change the graphics device, drawing, ground and sky, reference models, or shader loading. A shader is a program used by the graphics device to draw a surface. Preserve the game's real shaders. |
-| Small rules | [SpawnSchedule.h](SpawnSchedule.h), [EmitterNaming.h](EmitterNaming.h), [CloseDecision.h](CloseDecision.h) | Change a decision that needs no window or graphics device. These are policy headers. Each has a small test, such as [test_emitter_naming.cpp](../tests/test_emitter_naming.cpp), listed in [native-tests.json](../tests/native-tests.json). |
-| Host and bridge | [main.cpp](main.cpp), [Run.h](host/Run.h), [HostWindowImpl.h](host/HostWindowImpl.h), [BridgeDispatcher.cpp](host/BridgeDispatcher.cpp) | Follow startup, window events, or a request from the interface. `HostWindowImpl.h` explains the host window's file family. `DispatchInternal` routes requests to the table below. |
-| Texture palette data | [TexturePalette.h](UI/TexturePalette.h), [PaletteStore.cpp](UI/PaletteStore.cpp), [PaletteThumbs.cpp](UI/PaletteThumbs.cpp) | Change saved texture pins, recent textures or thumbnails. Despite the folder name, `UI/` holds native data and image code. The visible palette is in the web interface. |
+| Job | Folder | Files to open | When to open them |
+|---|---|---|---|
+| Effect definition | `effect/` | [ParticleSystem.h](effect/ParticleSystem.h), [ParticleSystem.cpp](effect/ParticleSystem.cpp), [LinkGroup.cpp](effect/LinkGroup.cpp) | Find stored emitter fields, tree changes, or the rules for sharing settings between emitters. Search for `Emitter` or `copySharedParamsFrom`. |
+| File formats and saving | `effect/` | [ParticleSystemSerialization.cpp](effect/ParticleSystemSerialization.cpp), [ChunkFile.h](effect/ChunkFile.h), [ChunkReader.cpp](effect/ChunkReader.cpp), [ChunkWriter.cpp](effect/ChunkWriter.cpp), [ParticleSystemIO.cpp](effect/ParticleSystemIO.cpp), [AtomicSave.cpp](effect/AtomicSave.cpp) | Change how a particle file is read or written. A chunk is a numbered block of values in the file. Search for `writeProperties`, `readProperties` or `AtomicWriteParticleSystem`. |
+| Game assets | `gamedata/`, `common/` | [AloModel.cpp](gamedata/AloModel.cpp), [files.cpp](common/files.cpp), [MegaFiles.cpp](gamedata/MegaFiles.cpp), [managers.cpp](gamedata/managers.cpp), [ModManager.cpp](gamedata/ModManager.cpp) | Find model decoding or texture, shader and mod file lookup. These are separate from the user's chosen Open and Save paths. |
+| Simulation | `simulation/` | [ParticleSystemInstance.cpp](simulation/ParticleSystemInstance.cpp), [EmitterInstance.cpp](simulation/EmitterInstance.cpp), [SpawnerDriver.cpp](simulation/SpawnerDriver.cpp) | Change when instances or particles spawn, move or stop. Search for `Update`. |
+| Rendering | `rendering/`, `gamedata/` | [engine.cpp](rendering/engine.cpp), [engine_device.cpp](rendering/engine_device.cpp), [engine_render.cpp](rendering/engine_render.cpp), [engine_environment.cpp](rendering/engine_environment.cpp), [engine_reference.cpp](rendering/engine_reference.cpp), [engine_shadows.cpp](rendering/engine_shadows.cpp), [engine_gizmo.cpp](rendering/engine_gizmo.cpp), [Effect.cpp](gamedata/Effect.cpp) | Change the graphics device, drawing, ground and sky, reference models, or shader loading. A shader is a program used by the graphics device to draw a surface. Preserve the game's real shaders. |
+| Small rules | `simulation/`, `effect/` | [SpawnSchedule.h](simulation/SpawnSchedule.h), [EmitterNaming.h](effect/EmitterNaming.h), [CloseDecision.h](effect/CloseDecision.h) | Change a decision that needs no window or graphics device. These are policy headers. Each has a small test, such as [test_emitter_naming.cpp](../tests/test_emitter_naming.cpp), listed in [native-tests.json](../tests/native-tests.json). |
+| Host and bridge | `host/`, `main.cpp` | [main.cpp](main.cpp), [Run.h](host/Run.h), [HostWindowImpl.h](host/HostWindowImpl.h), [BridgeDispatcher.cpp](host/BridgeDispatcher.cpp) | Follow startup, window events, or a request from the interface. `HostWindowImpl.h` explains the host window's file family. `DispatchInternal` routes requests to the table below. |
+| Texture palette data | `palette/` | [TexturePalette.h](palette/TexturePalette.h), [PaletteStore.cpp](palette/PaletteStore.cpp), [PaletteThumbs.cpp](palette/PaletteThumbs.cpp) | Change saved texture pins, recent textures or thumbnails. `palette/` holds native data and image code. The visible palette is in the web interface. |
 
 ## Find a request handler
 
@@ -108,19 +108,27 @@ Keep one definition of each shared helper.
 
 ## Keep the boundaries
 
-`host/` holds the window and bridge. The rest of `src/` holds the engine,
-file formats and small rules. New core code should not include host headers.
+`host/` holds the window and bridge. `common/`, `effect/`, `gamedata/`,
+`simulation/`, `rendering/` and `palette/` hold shared helpers, the effect document,
+game assets, simulation, rendering and texture palette data. New core code
+should not include host headers.
+
+Include rule: a header in the same folder is included by bare name
+(`#include "engine_internal.h"`); a header in another folder by its path from
+`src/` (`#include "rendering/engine.h"`), never with `../`. Tests use the same
+`src/`-relative form. `scripts/src-include-paths.test.mjs` checks this, with
+exact letter case, in the `scripts` lane.
 There are existing exceptions:
 
 - [main.cpp](main.cpp) starts the host and its capture modes.
-- [engine.cpp](engine.cpp), [engine_device.cpp](engine_device.cpp) and [engine_render.cpp](engine_render.cpp) use
+- [engine.cpp](rendering/engine.cpp), [engine_device.cpp](rendering/engine_device.cpp) and [engine_render.cpp](rendering/engine_render.cpp) use
   host helpers for combining the rendered image with the web interface and
   finding the program's folder.
-- [AtomicSave.cpp](AtomicSave.cpp) and [ParticleSystemIO.cpp](ParticleSystemIO.cpp)
-  use string conversion. [ModManager.cpp](ModManager.cpp) and
+- [AtomicSave.cpp](effect/AtomicSave.cpp) and [ParticleSystemIO.cpp](effect/ParticleSystemIO.cpp)
+  use string conversion. [ModManager.cpp](gamedata/ModManager.cpp) and
   [main.cpp](main.cpp) use Windows settings helpers.
-- [Autosave.h](Autosave.h) uses the program-folder helper.
-  [PaletteThumbs.cpp](UI/PaletteThumbs.cpp) uses image encoding and timing helpers.
+- [Autosave.h](effect/Autosave.h) uses the program-folder helper.
+  [PaletteThumbs.cpp](palette/PaletteThumbs.cpp) uses image encoding and timing helpers.
 
 ## Sources and generated files
 

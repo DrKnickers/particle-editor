@@ -1,0 +1,32 @@
+#ifndef MEGAFILES_H
+#define MEGAFILES_H
+
+#include <vector>
+#include "common/types.h"
+#include "common/files.h"
+
+class MegaFile
+{
+	struct FileInfo
+	{
+		uint32_t crc;
+		uint32_t index;
+		uint32_t size;
+		uint32_t start;
+		uint32_t nameIndex;
+	};
+
+	IFile* file;
+	std::vector<FileInfo>      files;
+	std::vector<std::string>   filenames;
+
+public:
+	IFile*             getFile(std::string path) const;
+
+	MegaFile(IFile* file);
+	~MegaFile();
+	MegaFile(const MegaFile&) = delete;
+	MegaFile& operator=(const MegaFile&) = delete;
+};
+
+#endif

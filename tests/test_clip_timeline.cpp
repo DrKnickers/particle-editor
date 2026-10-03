@@ -5,7 +5,7 @@
 #include <limits>
 #include <string>
 #include <vector>
-#include "ClipTimeline.h"
+#include "host/ClipTimeline.h"
 
 static int g_fail = 0;
 #define CHECK(cond) do { if (!(cond)) { \

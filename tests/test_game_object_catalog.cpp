@@ -1,4 +1,4 @@
-// Unit tests for the game-object catalog (src/GameObjectCatalog.cpp).
+// Unit tests for the game-object catalog (src/gamedata/GameObjectCatalog.cpp).
 //
 // Drives the catalog with a mock IFileManager backed by in-memory XML that
 // mirrors the GameObjectFiles.xml -> per-file object layout -- no game assets
@@ -12,12 +12,12 @@
 // `.alo` via the --probe dump mode. Standalone console exe; see
 // the test_game_object_catalog entry in tests/native-tests.json.
 
-#include "GameObjectCatalog.h"
-#include "managers.h"
-#include "files.h"
-#include "ResourceLimits.h"   // kMaxRosterEntries / kMaxXmlFileBytes (roster cap)
-#include "AloModel.h"   // --dumpalo: decode bones/connections/meshes
-#include "xml.h"        // --xmltest: does a raw XML file parse?
+#include "gamedata/GameObjectCatalog.h"
+#include "gamedata/managers.h"
+#include "common/files.h"
+#include "common/ResourceLimits.h"   // kMaxRosterEntries / kMaxXmlFileBytes (roster cap)
+#include "gamedata/AloModel.h"   // --dumpalo: decode bones/connections/meshes
+#include "gamedata/xml.h"        // --xmltest: does a raw XML file parse?
 
 #include <chrono>
 #include <cstdio>

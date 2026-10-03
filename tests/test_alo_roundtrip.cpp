@@ -21,13 +21,13 @@
 //
 // See the test_alo_roundtrip entry in tests/native-tests.json.
 
-#include "ParticleSystem.h"
-#include "ParticleSystemInstance.h"
-#include "ChunkFile.h"
-#include "files.h"
-#include "exceptions.h"
-#include "LinkGroup.h"
-#include "ResourceLimits.h"
+#include "effect/ParticleSystem.h"
+#include "simulation/ParticleSystemInstance.h"
+#include "effect/ChunkFile.h"
+#include "common/files.h"
+#include "common/exceptions.h"
+#include "effect/LinkGroup.h"
+#include "common/ResourceLimits.h"
 
 #include <cstdint>
 #include <cstdio>

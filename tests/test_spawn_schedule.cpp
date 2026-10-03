@@ -1,4 +1,4 @@
-// Regression test for the spawn-rate reconcile clamp (src/SpawnSchedule.h).
+// Regression test for the spawn-rate reconcile clamp (src/simulation/SpawnSchedule.h).
 //
 // onParticleSystemChanged recomputes m_spawnDelay on a rate edit but the next
 // spawn was scheduled against the OLD delay. Raise the rate on a slow emitter
@@ -15,7 +15,7 @@
 // The builder links no production TU, so the final block also pins the actual
 // EmitterInstance call site and provenance transitions. See the build script.
 
-#include "SpawnSchedule.h"
+#include "simulation/SpawnSchedule.h"
 
 #include <cstdio>
 #include <filesystem>
@@ -123,8 +123,8 @@ int main()
     {
         const std::filesystem::path repoRoot =
             std::filesystem::path(__FILE__).parent_path().parent_path();
-        const std::string header = ReadSource(repoRoot / "src" / "EmitterInstance.h");
-        const std::string source = ReadSource(repoRoot / "src" / "EmitterInstance.cpp");
+        const std::string header = ReadSource(repoRoot / "src" / "simulation" / "EmitterInstance.h");
+        const std::string source = ReadSource(repoRoot / "src" / "simulation" / "EmitterInstance.cpp");
 
         CHECK(!header.empty() && !source.empty(), "production schedule sources are readable");
         CHECK(std::regex_search(header, std::regex(

@@ -2,7 +2,7 @@
 // half of the --drive assert-viewport-nonblack probe (ProbeWindowMaxLuma =
 // GrabWindowPixels + MaxLumaInRect). No window or GDI+ is involved.
 
-#include "../src/host/WindowCapture.h"
+#include "host/WindowCapture.h"
 
 #include <cstdio>
 #include <vector>

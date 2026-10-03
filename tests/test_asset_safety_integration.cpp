@@ -4,11 +4,11 @@
 // Unsafe mod-authored <File> / model values must be treated as missing and must
 // never reach getFile after being concatenated under Data\XML or Data\Art\Models.
 
-#include "GameObjectCatalog.h"
-#include "SkydomeEnvironment.h"
-#include "files.h"
-#include "managers.h"
-#include "ResourceLimits.h"
+#include "gamedata/GameObjectCatalog.h"
+#include "rendering/SkydomeEnvironment.h"
+#include "common/files.h"
+#include "gamedata/managers.h"
+#include "common/ResourceLimits.h"
 
 #include <array>
 #include <cstdio>

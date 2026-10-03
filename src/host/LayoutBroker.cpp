@@ -1,7 +1,7 @@
 #include "LayoutBroker.h"
 
-#include "../SceneOverscan.h"
-#include "../engine.h"
+#include "rendering/SceneOverscan.h"
+#include "rendering/engine.h"
 #include "AlphaCompositor.h"
 #include "Compositor.h"
 

@@ -1,4 +1,4 @@
-// Unit test for SPH_Calculate_Matrices (src/SphericalHarmonics.cpp) -- the
+// Unit test for SPH_Calculate_Matrices (src/rendering/SphericalHarmonics.cpp) -- the
 // directional-light -> per-channel lighting-matrix encoder. Pure D3DX math,
 // no device.
 //
@@ -6,7 +6,7 @@
 // (a commented-out #define at the top of SphericalHarmonics.cpp): the shipped
 // build leaves it UNDEFINED, so the classical fallback (#ifndef branch) runs.
 // To execute BOTH branches without touching src, this test:
-//   - links src\SphericalHarmonics.cpp as-is  -> global  SPH_Calculate_Matrices
+//   - links src/rendering/SphericalHarmonics.cpp as-is  -> global  SPH_Calculate_Matrices
 //     (classical fallback), and
 //   - re-includes SphericalHarmonics.cpp inside a namespace with
 //     USE_PROPER_SPH defined -> propersph::SPH_Calculate_Matrices (the
@@ -26,7 +26,7 @@
 //
 // Standalone console exe; see the test_spherical_harmonics entry in tests/native-tests.json.
 
-#include "SphericalHarmonics.h"
+#include "rendering/SphericalHarmonics.h"
 
 #include <cmath>
 #include <cstdio>
@@ -37,7 +37,7 @@
 // only the function body is compiled here, against the global D3DX/Engine types.
 #define USE_PROPER_SPH
 namespace propersph {
-#include "SphericalHarmonics.cpp"
+#include "rendering/SphericalHarmonics.cpp"
 }
 #undef USE_PROPER_SPH
 

@@ -11,8 +11,8 @@
 //     non-interlaced.
 //  3. Alpha is dropped identically (X8 in -> opaque out) on both paths.
 
-#include "../src/host/WicEncode.h"
-#include "../src/host/WindowCapture.h"
+#include "host/WicEncode.h"
+#include "host/WindowCapture.h"
 
 #include <windows.h>
 #include <gdiplus.h>

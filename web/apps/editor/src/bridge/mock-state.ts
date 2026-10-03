@@ -16,7 +16,7 @@
 // MockBridge when the React app runs outside a WebView2 host (browser-
 // mode design iteration). Defaults intentionally mirror
 // `Engine::ResetParameters` / the engine constructor in
-// `src/engine.cpp` so the mock state is indistinguishable from a
+// `src/rendering/engine.cpp` so the mock state is indistinguishable from a
 // freshly-launched native session.
 //
 // Colour encoding note: `groundSolidColor` and `background` are Win32
@@ -276,7 +276,7 @@ export const useMockEmitterTree = create<EmitterTreeStore>((set) => ({
 // (per-emitter). MockBridge owns an in-memory map so the React modal
 // can round-trip a fixture without the C++ host. Defaults to "name +
 // colorTexture + normalTexture + trackIndex" — matches
-// GetDefaultLinkExemptFlags() at [src/LinkGroup.cpp].
+// GetDefaultLinkExemptFlags() at [src/effect/LinkGroup.cpp].
 
 type LinkGroupExemptStore = {
   exempts: Map<number, string[]>;

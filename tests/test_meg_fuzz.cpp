@@ -1,4 +1,4 @@
-// Regression test for MegaFile header validation (src/MegaFiles.cpp).
+// Regression test for MegaFile header validation (src/gamedata/MegaFiles.cpp).
 //
 // A .meg is: [uint32 numStrings][uint32 numFiles]
 //            numStrings x [uint16 len][len bytes]
@@ -12,9 +12,9 @@
 // and asserts BadFileException is thrown -- never a crash -- and that a
 // well-formed tiny .meg constructs cleanly. See the test_meg_fuzz entry in tests/native-tests.json.
 
-#include "MegaFiles.h"
-#include "files.h"
-#include "exceptions.h"
+#include "gamedata/MegaFiles.h"
+#include "common/files.h"
+#include "common/exceptions.h"
 
 #include <cstdint>
 #include <cstdio>

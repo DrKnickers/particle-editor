@@ -17,7 +17,7 @@ export type OverloadGuardConfig = { enabled: boolean; maxParticles: number };
 // corrupt / wrong-type paths) can't be mutated into a corrupted singleton.
 // 10k default: user feel-tested down from 15k, which still made the
 // editor struggle on a large simultaneous burst. Mirrors
-// kDefaultMaxPreviewParticles in src/engine.h — keep in sync.
+// kDefaultMaxPreviewParticles in src/rendering/engine.h — keep in sync.
 export const OVERLOAD_GUARD_DEFAULT: OverloadGuardConfig = Object.freeze({
   enabled: true,
   maxParticles: 10_000,

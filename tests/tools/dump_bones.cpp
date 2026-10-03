@@ -11,9 +11,9 @@
 //
 //   usage: dump_bones.exe <path.alo>
 
-#include "AloModel.h"
-#include "files.h"
-#include "exceptions.h"
+#include "gamedata/AloModel.h"
+#include "common/files.h"
+#include "common/exceptions.h"
 
 #include <cstdio>
 #include <string>

@@ -1,4 +1,4 @@
-// Regression test for asset-name path-safety (src/AssetPathSafety.h, audit F-PATH).
+// Regression test for asset-name path-safety (src/gamedata/AssetPathSafety.h, audit F-PATH).
 //
 // Untrusted .alo texture/shader names used to flow VERBATIM into
 // new PhysicalFile(...) -> CreateFile. A crafted "\\attacker\share\x" leaks the
@@ -10,7 +10,7 @@
 // return no candidates for unsafe names. Header-only; see
 // the test_asset_path_safety entry in tests/native-tests.json.
 
-#include "AssetPathSafety.h"
+#include "gamedata/AssetPathSafety.h"
 
 #include <cstdio>
 #include <string>

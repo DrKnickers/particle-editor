@@ -11,10 +11,10 @@
 //
 //   usage: dump_bounds.exe <path.alo> [scaleFactor]
 
-#include "AloModel.h"
-#include "files.h"
-#include "exceptions.h"
-#include "MuzzleFlashFilter.h"   // same muzzle-flash hide rule the engine's Load uses
+#include "gamedata/AloModel.h"
+#include "common/files.h"
+#include "common/exceptions.h"
+#include "rendering/MuzzleFlashFilter.h"   // same muzzle-flash hide rule the engine's Load uses
 
 #include <d3dx9.h>
 

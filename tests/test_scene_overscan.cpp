@@ -1,7 +1,7 @@
-// Unit test for src/SceneOverscan.h pure helper.
+// Unit test for src/rendering/SceneOverscan.h pure helper.
 // Header-only, no engine/Win32 deps — links only this TU.
 #include <cstdio>
-#include "SceneOverscan.h"
+#include "rendering/SceneOverscan.h"
 
 static int g_fail = 0;
 #define CHECK(cond) do { if (!(cond)) { \

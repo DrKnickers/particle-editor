@@ -1,4 +1,4 @@
-// Unit tests for the static-mesh .alo decoder (src/AloModel.cpp).
+// Unit tests for the static-mesh .alo decoder (src/gamedata/AloModel.cpp).
 //
 // Builds synthetic .alo byte streams in memory (via the documented chunk wire
 // format) and feeds them through LoadAloModel -- no game assets are committed
@@ -7,12 +7,12 @@
 // cases the parser must reject. Standalone console exe; see
 // the test_alo_model entry in tests/native-tests.json.
 
-#include "AloModel.h"
-#include "ReferenceObjectMesh.h"   // [refmesh] shadow-bucket routing test
-#include "managers.h"              // IFileManager (StubFileManager below)
-#include "files.h"
-#include "exceptions.h"
-#include "ResourceLimits.h"
+#include "gamedata/AloModel.h"
+#include "rendering/ReferenceObjectMesh.h"   // [refmesh] shadow-bucket routing test
+#include "gamedata/managers.h"              // IFileManager (StubFileManager below)
+#include "common/files.h"
+#include "common/exceptions.h"
+#include "common/ResourceLimits.h"
 
 #include <algorithm>
 #include <array>

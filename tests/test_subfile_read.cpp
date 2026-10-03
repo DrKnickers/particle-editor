@@ -1,4 +1,4 @@
-// Regression test for SubFile::read clamping (src/files.cpp).
+// Regression test for SubFile::read clamping (src/common/files.cpp).
 //
 // SubFile is a bounded view into a parent file (used for MEG-packed entries:
 // MegaFile::getFile returns `new SubFile(parent, start, size)`). A read request
@@ -10,8 +10,8 @@
 // boundary behaviour against that regression. Standalone console exe; see
 // the test_subfile_read entry in tests/native-tests.json.
 
-#include "files.h"
-#include "exceptions.h"
+#include "common/files.h"
+#include "common/exceptions.h"
 
 #include <windows.h>
 #include <cstdio>
