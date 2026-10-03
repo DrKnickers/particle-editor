@@ -3,7 +3,7 @@
 //
 // Private helpers shared between the Engine translation units
 // (engine.cpp + engine_render.cpp / engine_reference.cpp /
-// engine_environment.cpp). Rule: a helper used by more
+// engine_environment.cpp / engine_shadows.cpp / engine_gizmo.cpp). Rule: a helper used by more
 // than one engine TU gets its declaration HERE and exactly ONE non-static
 // definition in its primary-consumer TU — never a per-TU static copy (two
 // same-name TU-local statics would compile and silently diverge).

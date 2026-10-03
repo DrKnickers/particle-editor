@@ -389,6 +389,12 @@
     <ClCompile Include="engine_reference.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="engine_shadows.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="engine_gizmo.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="engine_render.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
