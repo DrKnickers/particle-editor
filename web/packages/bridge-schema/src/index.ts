@@ -24,8 +24,9 @@
 //   1. Add its arm to the `Request` union below (params shape + a comment).
 //   2. Add its response shape to `ResponseMap` (a missing entry fails to
 //      compile at `ResponseFor`).
-//   3. Handle it in MockBridge's switch (`apps/editor/src/bridge/mock.ts`), or
-//      add it to the commented DEFERRED allowlist in
+//   3. Add its label to the router in `apps/editor/src/bridge/mock.ts` and
+//      its case to the matching `apps/editor/src/bridge/mock-dispatch/` file,
+//      or add it to the commented DEFERRED allowlist in
 //      `apps/editor/src/bridge/__tests__/contract-drift.test.ts`.
 //   4. If it changes the document, make MockBridge's `isMutating` return true
 //      (every `engine/set/*` already does by prefix) and, if it can be

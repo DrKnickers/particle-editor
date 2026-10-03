@@ -1052,7 +1052,7 @@ describe("EmitterTree delete gating (helper-level)", () => {
 //
 // These render against the REAL MockBridge (not the stub) because the
 // mock decorates tree payloads with live spawn values from the
-// properties overlay (`decorateSpawn` in bridge/mock.ts) — patching the
+// properties overlay (`decorateSpawn` in bridge/mock-dispatch/dispatch-emitters.ts) — patching the
 // overlay then rendering exercises the same data path the browser-mode
 // editor uses. Every render goes through renderWithTooltips
 // (defined near the imports) because EmitterTree now mounts Tips

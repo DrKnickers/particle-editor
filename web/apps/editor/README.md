@@ -17,7 +17,7 @@ picture of the interface, host, engine and file paths.
 | `src/components` | Pieces shared around the main screen. Open [PanelLayout.tsx](src/components/PanelLayout.tsx) for panel placement, [MenuBar.tsx](src/components/MenuBar.tsx) for menus, or [Toolbar.tsx](src/components/Toolbar.tsx) for toolbar buttons. |
 | `src/primitives` | Basic controls. Open [Spinner.tsx](src/primitives/Spinner.tsx) for number entry, [Select.tsx](src/primitives/Select.tsx) for a list of choices, or [Tip.tsx](src/primitives/Tip.tsx) for hover help. A spinner is a number box with step buttons. |
 | `src/lib` | Shared rules and state. Open [file-state.ts](src/lib/file-state.ts) for file status and save prompts, [emitter-selection.ts](src/lib/tree/emitter-selection.ts) for multiple selection, or [curve-model.ts](src/lib/curve/curve-model.ts) for curve calculations. |
-| `src/bridge` | Host communication and the browser stand-in. [index.ts](src/bridge/index.ts), `makeBridge`, chooses [native.ts](src/bridge/native.ts) inside WebView2, the embedded browser, and [mock.ts](src/bridge/mock.ts) outside it. Open these when a request or event behaves differently in the two modes. |
+| `src/bridge` | Host communication and the browser stand-in. [index.ts](src/bridge/index.ts), `makeBridge`, chooses [native.ts](src/bridge/native.ts) inside WebView2, the embedded browser, and [mock.ts](src/bridge/mock.ts) outside it. The mock routes requests to `src/bridge/mock-dispatch/` files matching the ten native handler groups. Open these when a request or event behaves differently in the two modes. |
 | `src/styles` | [tokens.css](src/styles/tokens.css) holds shared colours and sizes. [components.css](src/styles/components.css) holds rules for controls and panels. [globals.css](src/styles/globals.css) sets page-wide rules. Open these for appearance changes. |
 
 [App.tsx](src/App.tsx) connects the main pieces. The
@@ -121,7 +121,7 @@ dirty, refresh and event code. The web `commit` reads the answer: when
 `skipped` is not empty it announces the skipped field names in the status
 bar and reads the properties again, so the form shows the host's value.
 
-[mock.ts](src/bridge/mock.ts), `emitters/set-properties`, is more lenient.
+[dispatch-emitter-properties.ts](src/bridge/mock-dispatch/dispatch-emitter-properties.ts), `emitters/set-properties`, is more lenient.
 It accepts known fields without native type checks, including the derived
 `blendAlphaGated` field, which native skips. An unknown emitter returns two
 empty lists instead of rejecting. Browser checks therefore cannot prove
