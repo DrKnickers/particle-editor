@@ -1,3 +1,11 @@
+// Contents (search for the quoted text):
+//   "Composition state and transforms" - Shared visual state and transform application.
+//   "theme-coloured backing helpers" - Backing device, visual and paint.
+//   "Visual tree lifecycle" - Creation, browser attachment and sizing.
+//   "Engine frame visual" - Shared texture attachment and frame composition.
+//   "scene-rect transform" - Particle scene placement.
+//   "Readiness queries" - Readiness and host-window queries.
+//
 // Compositor — see Compositor.h for the design overview.
 //
 // Most of this file is a port of src/host/spike/dxgi_spike.cpp's
@@ -68,6 +76,7 @@
 
 #include <cstdio>
 
+// ---------- Composition state and transforms ----------
 namespace host {
 
 namespace {
@@ -464,6 +473,7 @@ HRESULT Compositor::Impl::PaintBacking(COLORREF color)
     return S_OK;
 }
 
+// ---------- Visual tree lifecycle ----------
 Compositor::Compositor(HWND hostHwnd, LogFn log) noexcept
     : m_impl(std::make_unique<Impl>())
 {
@@ -780,7 +790,7 @@ HRESULT Compositor::SetBackingColor(COLORREF color) noexcept
     return S_OK;
 }
 
-// ---------- engine visual ----------
+// ---------- Engine frame visual ----------
 // AttachEngineVisual does the real D3D11 + DXGI + DComp wiring;
 // CompositeEngineFrame and RefreshEngineSharedHandle implement the
 // per-frame composite and the resize-handle re-open respectively.
@@ -1447,6 +1457,7 @@ HRESULT Compositor::SetEngineVisualTransform(int x, int y, int w, int h, bool im
 
 // ---------------------------------------------------------------
 
+// ---------- Readiness queries ----------
 bool Compositor::IsReady() const noexcept
 {
     return m_impl && m_impl->treeBuilt;

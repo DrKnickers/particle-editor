@@ -1,3 +1,17 @@
+// Contents (search for the quoted text):
+//   "Engine state defaults and store" - Initial preview state and snapshots.
+//   "Recent files registry" - Recent-file state.
+//   "Emitter-tree fixture" - Default tree and row identities.
+//   "Link-group exempt-field fixture" - Fields excluded from linked edits.
+//   "Join-conflict seam (mock only)" - Configurable link conflicts.
+//   "Tree-mutation helpers" - Duplicate, delete and rename.
+//   "Add child / Move / Link-group membership helpers" - Child creation and membership edits.
+//   "drag/drop reorder + reparent helpers" - Root ordering and parent changes.
+//   "clipboard helpers (copy / cut / paste)" - Emitter clipboard state and operations.
+//   "Track fixtures" - Default curve keys.
+//   "Mutable per-emitter track overrides" - Curve edits and lock views.
+//   "Emitter properties fixture + overlay" - Property defaults and overrides.
+//
 // Zustand-backed in-memory mirror of `EngineStateDto` used by the
 // MockBridge when the React app runs outside a WebView2 host (browser-
 // mode design iteration). Defaults intentionally mirror
@@ -27,6 +41,7 @@ import { TRACK_NAMES, ZERO_SPAWN } from "@particle-editor/bridge-schema";
 import { isOwnFootprint } from "@/lib/multi-drag";
 import { makeDefaultSpawnerParams } from "@/lib/spawner-defaults";
 
+// ─── Engine state defaults and store ─────────────────────────────
 export const GROUND_SLOT_COUNT = 8;       // matches Engine::kGroundTextureCount
 export const SKYDOME_SLOT_COUNT = 12;     // matches Engine::kSkydomeSlotCount
 export const SKYDOME_FIRST_CUSTOM = 9;    // matches Engine::kSkydomeFirstCustomSlot

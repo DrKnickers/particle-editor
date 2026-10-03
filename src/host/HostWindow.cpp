@@ -1,3 +1,22 @@
+// Contents (search for the quoted text):
+//   "Startup helpers" - Runtime checks and process diagnostics.
+//   "logging" - Log files and drive self-checks.
+//   "WebView2 process failure" - Browser failure handling and COM teardown.
+//   "Particle frame rendering" - One engine frame per timer tick.
+//   "WndProc dispatch" - Window messages and frame behaviour.
+//   "Run: startup, pump and shutdown" - The whole program lifetime, in the phases below.
+//   "Run: preflight" - Process and runtime preparation.
+//   "Run: windows" - Window creation.
+//   "Run: bridge and document" - Bridge and document setup.
+//   "Run: WebView2 and show" - Browser setup and window display.
+//   "Run: capture runner" - Capture setup.
+//   "Run: pump" - Message-loop entry.
+//   "Run: drive" - Scripted input.
+//   "Run: record" - Clip recording.
+//   "Run: interactive" - Interactive frame scheduling.
+//   "Run: teardown and exit code" - Shutdown and final result.
+//   "Public window wrapper" - Window ownership and run forwarding.
+//
 // HostWindow — see HostWindow.h for the design overview.
 //
 // This file grew out of an early composition proof of concept, split into
@@ -21,6 +40,7 @@
 
 namespace host {
 
+// ---------- Startup helpers ----------
 namespace {
 
 struct ProcessMemorySnapshot
@@ -763,7 +783,7 @@ void HostWindowImpl::ReleaseHostComObjects()
     engine.reset();
 }
 
-// ---------- D3D9 ----------
+// ---------- Particle frame rendering ----------
 
 // render loop + per-frame spawner tick. Replaces the prior
 // placeholder clear-to-background path. The per-frame sequence here
@@ -1985,7 +2005,7 @@ LRESULT CALLBACK HostViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
 } // namespace
 
-// ---------- Run ----------
+// ---------- Run: startup, pump and shutdown ----------
 
 int HostWindowImpl::Run(int nCmdShow)
 {
@@ -2789,6 +2809,7 @@ int HostWindowImpl::Run(int nCmdShow)
 // HostWindow public surface
 // -----------------------------------------------------------------------------
 
+// ---------- Public window wrapper ----------
 HostWindow::HostWindow(HINSTANCE hInstance,
                        ITextureManager& textureManager,
                        IShaderManager&  shaderManager,

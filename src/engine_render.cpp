@@ -1,3 +1,10 @@
+// Contents (search for the quoted text):
+//   "Shader setup and post-processing resources" - Shader textures, bloom and shadow blur.
+//   "Asset reload" - Shader and texture replacement.
+//   "Simulation update" - Instance updates and overload evaluation.
+//   "Frame rendering" - Scene, bloom, distortion and presentation.
+//   "Draw-state diagnostics" - Optional render-state snapshots.
+//
 // engine_render.cpp — the render/update/post-processing/shader-reload cluster of the Engine class,
 // moved verbatim out of engine.cpp (a translation-unit split). SAME class, same header
 // (engine.h); this is a file split, not a class split. Cluster-local
@@ -23,6 +30,7 @@
 
 using namespace std;
 
+// ---------- Shader setup and post-processing resources ----------
 static const char* ShaderNames[Engine::NUM_SHADERS] = {
     "Engine\\PrimOpaque.fx",
     "Engine\\PrimAdditive.fx",
@@ -367,6 +375,7 @@ void Engine::InitShadowBlurEffect()
 	fflush(stdout);
 }
 
+// ---------- Asset reload ----------
 // Hot-reload all 14 entries from ShaderNames[]. All-or-nothing: load every
 // new shader into a temporary array first, only swap into m_pShaders[] once
 // every one succeeds. On failure the previous set stays alive untouched, so
@@ -500,6 +509,7 @@ bool Engine::PerformTextureReload()
 	return true;
 }
 
+// ---------- Simulation update ----------
 void Engine::Update()
 {
 	if (!PrepareDeviceForFrame()) return;
@@ -625,6 +635,7 @@ void Engine::Update()
 	m_overloadThisFrame = false;
 }
 
+// ---------- Frame rendering ----------
 bool Engine::Render()
 {
 	static const D3DXMATRIX Identity(1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1);
@@ -1181,6 +1192,7 @@ bool Engine::Render()
 	return true;
 }
 
+// ---------- Draw-state diagnostics ----------
 // [shadow-leak hunt] Env-gated full device-state snapshot at the particle draw.
 // Writes to the file named by ALO_DUMP_RSTATE (append), throttled to ~every 30th
 // frame. No-op when the env var is unset, so it costs nothing in normal use and is

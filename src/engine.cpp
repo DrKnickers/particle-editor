@@ -1,3 +1,15 @@
+// Contents (search for the quoted text):
+//   "Particle vertex layout" - Particle vertex declaration.
+//   "Preview clock" - Pause and frame stepping.
+//   "Instance lifecycle and load guard" - Spawn, detach, clear and overload limits.
+//   "Timing and texture replay" - Pass timing, texture access and deferred edits.
+//   "Camera and scene settings" - Camera, lighting and multisampling controls.
+//   "Shared frame synchronization" - Shared texture and end-of-frame queries.
+//   "Scene viewport" - Scene rectangle and projection.
+//   "Environment list cache" - Cached sky lists for the active content stack.
+//   "Construction" - Device and scene resource setup.
+//   "Destruction" - Catalog worker join and resource release.
+//
 #include <algorithm>
 #include <assert.h>
 #include <vector>
@@ -21,6 +33,7 @@
 using namespace std;
 
 
+// ---------- Particle vertex layout ----------
 D3DVERTEXELEMENT9 Engine::ParticleElements[] = {
 	{0, offsetof(EmitterInstance::Vertex, Position),  D3DDECLTYPE_FLOAT3,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0}, 
 	{0, offsetof(EmitterInstance::Vertex, Normal),    D3DDECLTYPE_FLOAT3,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL,   0}, 
@@ -30,6 +43,7 @@ D3DVERTEXELEMENT9 Engine::ParticleElements[] = {
 	D3DDECL_END()
 };
 
+// ---------- Preview clock ----------
 // Preview clock with pause / frame-step support.
 //
 // Every consumer of "simulation now" — emitter spawn time, particle
@@ -120,6 +134,7 @@ void StepPreviewFrames(int frames)
     g_previewPauseAnchor += frames / 60.0f;
 }
 
+// ---------- Instance lifecycle and load guard ----------
 ParticleSystemInstance* Engine::SpawnParticleSystem(const ParticleSystem& system, Object3D* parent)
 {
     if (DeviceCallsBlocked()) return nullptr;
@@ -283,6 +298,7 @@ int Engine::ActiveSpawnerInstanceCount() const
     return n;
 }
 
+// ---------- Timing and texture replay ----------
 // [PERF] round-2 sub-profiling helpers — QPC microsecond deltas for the
 // per-pass timing in Render(). Frequency is fixed for the process; cache it.
 // Non-static: declared in engine_internal.h (render + reference TUs use it too).
@@ -425,6 +441,7 @@ bool Engine::ReplayPendingParticleSystemChange()
 	    [this]() { return DeviceCallsBlocked() || m_presentSuspect; });
 }
 
+// ---------- Camera and scene settings ----------
 void Engine::GetViewPort(D3DVIEWPORT9* viewport) const
 {
 	if (viewport == NULL) return;
@@ -626,6 +643,7 @@ const Engine::Light& Engine::GetLight(LightType which) const
 	return m_lights[index];
 }
 
+// ---------- Shared frame synchronization ----------
 // forwarder to the AlphaCompositor's shared
 // HANDLE. Returns nullptr when the compositor isn't installed (canvas-
 // jpeg mode skips the layered-window path) or before Resize has run.
@@ -755,6 +773,7 @@ LUID Engine::GetAdapterLuid() const
 	return luid;
 }
 
+// ---------- Scene viewport ----------
 // scene-rect viewport.
 //
 // Stash the rect, mark active, and recompute m_projection at the
@@ -938,6 +957,7 @@ bool Engine::GetSceneViewport(int& x, int& y, int& w, int& h) const
 	return true;
 }
 
+// ---------- Environment list cache ----------
 // Build (one LoadAllSkydomeLists pass) and cache the four axis skydome lists,
 // rebuilding only when the FileManager's mod/submod context has changed since the
 // cache was last built. This collapses the ~4 GameObjectFiles scans per mod switch
@@ -958,6 +978,7 @@ const std::array<std::vector<SkydomeRef>, kNumSkydomeAxes>& Engine::EnsureSkydom
     return m_skydomeLists;
 }
 
+// ---------- Construction ----------
 Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShaderManager& shaderManager, IFileManager& fileManager)
     : m_textureManager(textureManager), m_shaderManager(shaderManager), m_fileManager(fileManager)
 {
@@ -1233,6 +1254,7 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 #endif
 }
 
+// ---------- Destruction ----------
 Engine::~Engine()
 {
 	// Join the catalog worker BEFORE any member is torn down -- the worker

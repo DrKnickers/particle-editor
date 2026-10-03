@@ -1,3 +1,10 @@
+// Contents (search for the quoted text):
+//   "Types" - Channel, interaction and marquee contracts.
+//   "Constants" - Plot dimensions, time bounds and drag slop.
+//   "Wrapper" - Plot defaults and overlay wiring.
+//   "Multi-channel overlay (with hybrid focus-channel restore)" - Overlay props and rendering modes.
+//   "Interactive overlay" - Focus, cached layers, pointer and keyboard input.
+//
 // CurveEditor — multi-channel SVG curve renderer.
 //
 // Read-only foundation.
@@ -64,6 +71,7 @@ import { project, unproject, eventToViewBox } from "./curve-paths";
 import { StaticChannelLayer, FocusChannelLayer } from "./CurveChannelLayers";
 import type { CurveLayerModel, CurveLayerCacheEntry, CurveDragState } from "./CurveChannelLayers";
 
+// ─── Types ─────────────────────────────
 /** Channel definition for the multi-channel overlay branch.
  *  `id` is the UI-facing identifier (e.g. "rotation"); `trackName` is
  *  the wire-level TrackName (e.g. "rotationSpeed") used to look up the
@@ -233,6 +241,7 @@ export type CurveMarqueeHandle = {
   startMarquee: (clientX: number, clientY: number, shiftKey: boolean, pointerId: number) => void;
 };
 
+// ─── Constants ─────────────────────────────
 const DEFAULT_WIDTH = 600;
 const DEFAULT_HEIGHT = 300;
 const DEFAULT_TIME_MIN = 0;
@@ -243,6 +252,7 @@ const DEFAULT_TIME_MAX = 100;
  *  legacy CurveEditor's hit-test slop. */
 const DRAG_SLOP = 1.5;
 
+// ─── Wrapper ─────────────────────────────
 export function CurveEditor({
   valueRange,
   tracks,
@@ -378,6 +388,7 @@ type MultiProps = {
 };
 
 
+// ─── Interactive overlay ─────────────────────────────
 function MultiChannelCurves({
   tracks,
   channels,

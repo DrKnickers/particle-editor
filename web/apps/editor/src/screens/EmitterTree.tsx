@@ -1,3 +1,8 @@
+// Contents (search for the quoted text):
+//   "Tree rows" - Flattened rows in display order.
+//   "Tree controller" - Selection, rename, drag and clipboard actions.
+//   "keyboard handler" - Tree navigation and shortcuts.
+//
 // EmitterTree — sidebar tree of the live ParticleSystem's emitters.
 //
 // Capabilities:
@@ -118,6 +123,7 @@ type Props = {
   bridge: Bridge;
 };
 
+// ─── Tree rows ─────────────────────────────
 function flattenTree(tree: EmitterTreeDto | null): FlatRow[] {
   if (tree === null) return [];
   const rows: FlatRow[] = [];
@@ -134,6 +140,7 @@ function flattenTree(tree: EmitterTreeDto | null): FlatRow[] {
   return rows;
 }
 
+// ─── Tree controller ─────────────────────────────
 export function EmitterTree({ bridge }: Props) {
   const tree = useEmitterTree(bridge);
   const setTree = useEmitterTreeStore((s) => s.setTree);

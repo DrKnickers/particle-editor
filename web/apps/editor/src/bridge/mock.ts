@@ -1,3 +1,9 @@
+// Contents (search for the quoted text):
+//   "Mutation rules" - Persisted edits and refusal checks.
+//   "Bridge state and requests" - Instance state and mutation wrapper.
+//   "Event helpers" - Event decoration and state notifications.
+//   "Request routing" - Handler groups and deferred requests.
+//
 // MockBridge — a fully-in-process Bridge implementation backed by a
 // Zustand store (`mock-state.ts`). Used when the React app runs outside
 // the WebView2 host (browser-mode design iteration, Vitest contract
@@ -62,6 +68,7 @@ import { EventHub } from "./event-hub";
  *  user-visible parameters. file/*, query/*, undo/perform, spawner/*,
  *  layout, accelerators are not. The native host applies the same rule
  *  via per-handler `SetDirty(true)` calls. */
+// ─── Mutation rules ─────────────────────────────
 function isMutating(kind: Request["kind"]): boolean {
   // engine/set/paused (view-only preview clock toggle) and
   // engine/set/heat-debug (view-only debug overlay) are excluded —
@@ -202,6 +209,7 @@ function didMutate(
   }
 }
 
+// ─── Bridge state and requests ─────────────────────────────
 export class MockBridge implements Bridge, MockDispatchHost {
   private events = new EventHub<{ [K in EventKind]: EventOf<K> }>("MockBridge");
   private viewportUnavailable: EventOf<"viewport/unavailable"> | null = null;
@@ -278,6 +286,7 @@ export class MockBridge implements Bridge, MockDispatchHost {
     return unsubscribe;
   }
 
+  // ─── Event helpers ─────────────────────────────
   // ---------------------------------------------------------------- internals
 
   emit(e: Event): void {
@@ -328,6 +337,7 @@ export class MockBridge implements Bridge, MockDispatchHost {
     this.emit({ kind: "engine/state/changed", payload: snapshotEngineState() });
   }
 
+  // ─── Request routing ─────────────────────────────
   private handle(req: Request): unknown {
     switch (req.kind) {
       case "engine/state/snapshot":

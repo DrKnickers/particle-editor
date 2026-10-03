@@ -1,3 +1,11 @@
+// Contents (search for the quoted text):
+//   "Environment assets and texture helpers" - Bundled sky slots and texture loading.
+//   "Ground texture selection" - Ground slots, custom paths and solid colour.
+//   "Sky geometry and rendering" - Sky mesh resources, textures and draw passes.
+//   "Game sky composition" - Primary and secondary skies and content lists.
+//   "Ground lighting" - Ground shader, normal textures and lit draw.
+//   "Sky slot selection" - Bundled and custom sky controls.
+//
 // engine_environment.cpp — the ground + skydome environment cluster of the Engine class,
 // moved verbatim out of engine.cpp (a translation-unit split). SAME class, same header
 // (engine.h); this is a file split, not a class split. Cluster-local
@@ -15,6 +23,7 @@
 
 using namespace std;
 
+// ---------- Environment assets and texture helpers ----------
 // slot 0 is Off (no resource); slots 1-8 map to bundled skydome textures.
 // The IDR_SKYDOME_* RCDATA entries live in ParticleEditor.rc; if one is missing,
 // FindResource returns NULL and ReloadSkydomeTexture returns false.
@@ -305,6 +314,7 @@ static bool CreateSolidColorTexture(IDirect3DDevice9*    pDevice,
     return true;
 }
 
+// ---------- Ground texture selection ----------
 bool Engine::ReloadGroundTexture()
 {
     if (m_pDevice == NULL) return false;   // pre-init guard
@@ -541,6 +551,7 @@ bool Engine::SetGroundSolidColor(COLORREF color)
     return true;
 }
 
+// ---------- Sky geometry and rendering ----------
 // Build the UV sphere vertex declaration + mesh used by the skydome
 // render pass. Called once from the Engine constructor after m_pDevice is
 // created. The VB/IB allocation moved into
@@ -1046,6 +1057,7 @@ void Engine::RenderSkydomeMesh(SkydomeMesh& mesh, const D3DXMATRIX& world)
     m_pDevice->SetRenderState(D3DRS_CULLMODE,         oldCull);
 }
 
+// ---------- Game sky composition ----------
 // Compose entry, replacing the single RenderSkydome() call site. Draws
 // the game domes (secondary behind, then primary) when a real dome is selected;
 // otherwise falls back to the simple-background sphere (bundled / custom / solid).
@@ -1186,6 +1198,7 @@ void Engine::EnumerateSkydomeNames(SkydomeContext context,
     for (const SkydomeRef& r : lists[secAxis])  outSecondary.push_back(r.name);
 }
 
+// ---------- Ground lighting ----------
 // compile IDR_SHADER_GROUND_LIT, cache parameter handles, select the
 // best-validating technique (bump → gloss), and build the tangent-space ground
 // vertex declaration. Graceful-degrade: on any failure m_pGroundEffect stays
@@ -1385,6 +1398,7 @@ void Engine::RenderGroundLit()
     if (oldDecl) oldDecl->Release();
 }
 
+// ---------- Sky slot selection ----------
 bool Engine::SetSkydomeSlot(int newIndex)
 {
     if (DeviceCallsBlocked()) return false;

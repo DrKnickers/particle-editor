@@ -1,3 +1,11 @@
+// Contents (search for the quoted text):
+//   "World drawing helpers" - Lines, triangles and ribbons.
+//   "Unit grid" - Ground-plane grid drawing.
+//   "Cursor and handle picking" - Cursor rays and manipulation geometry.
+//   "Manipulator drawing" - Translation arrows and rotation rings.
+//   "Selection outline" - Dashed bounds and corner brackets.
+//   "Object picking and grid spacing" - Body selection and grid controls.
+//
 // engine_gizmo.cpp — the grid/manipulator/picking cluster of the Engine class,
 // moved verbatim out of engine_reference.cpp (a translation-unit split). SAME class, same header
 // (engine.h); cluster-local statics moved with their consumers.
@@ -22,6 +30,7 @@
 
 using namespace std;
 
+// ---------- World drawing helpers ----------
 // Reusable fixed-function world-space line-list draw. Uses the passed
 // EmitterInstance::Vertex decl (Position + diffuse Color; the FF view/proj are
 // already set this frame). Depth test ON (so a placed object occludes lines
@@ -235,6 +244,7 @@ static void DrawWorldRibbons(IDirect3DDevice9* dev, IDirect3DVertexDeclaration9*
     dev->SetRenderState(D3DRS_CULLMODE,         oCull);
 }
 
+// ---------- Unit grid ----------
 // Unit grid: axis-aligned world lines on the ground plane (the engine's
 // first D3DPT_LINELIST primitive). Spacing = m_gridSpacing over a fixed extent,
 // with a brighter major line every 5 cells from centre. Co-planar with the
@@ -289,6 +299,7 @@ void Engine::RenderUnitGrid()
     DrawWorldLines(m_pDevice, m_pDeclaration, s_gridVerts.data(), (int)(s_gridVerts.size() / 2));
 }
 
+// ---------- Cursor and handle picking ----------
 // Screen->world ray for the cursor. Shared with GetCursorPos3D
 // (MouseCursor.h) so the manipulator pick uses the IDENTICAL unproject incl. the
 // scene-viewport aspect fix. Origin = near-plane point; dir = unit toward far.
@@ -537,6 +548,7 @@ bool Engine::ManipulatorPlaneOffset(short screenX, short screenY, int normalAxis
                                        normalAxis, outU, outV);
 }
 
+// ---------- Manipulator drawing ----------
 // Draw the combined manipulator (X=red/Y=green/Z=blue), ALWAYS-ON-TOP
 // (depth-test off) so it is never hidden inside the object. Per axis: a translate
 // arrow (shaft + 4-sided head) from the object origin, plus a rotate ring (a
@@ -732,6 +744,7 @@ void Engine::RenderReferenceManipulator()
     DrawWorldLines(m_pDevice, m_pDeclaration, v.data(), (int)(v.size() / 2), /*depthTest=*/false);
 }
 
+// ---------- Selection outline ----------
 // Selection box: the object's object-space AABB (over the kept/drawn
 // geometry) transformed by the live world, drawn as dashed edges plus bright corner
 // brackets via the camera-facing ribbon renderer (DrawWorldRibbons), depth-tested.
@@ -789,6 +802,7 @@ void Engine::RenderReferenceSelectionBox()
                          camPos, ribHalf, ribOut, kOutlineRGB, /*depthTest=*/true, kGizmoAlpha);
 }
 
+// ---------- Object picking and grid spacing ----------
 // Body pick for click-to-select: ray vs the object's object-space AABB (the
 // same box RenderReferenceSelectionBox draws), so the visual box == the clickable
 // region. Ray is transformed into object space (inverse world) then slab-tested.

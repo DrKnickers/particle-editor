@@ -1,3 +1,17 @@
+// Contents (search for the quoted text):
+//   "Panel state" - Focus, visibility and key selection.
+//   "Live-drag write coalescing" - Frame-coalesced curve writes.
+//   "Selection and track loading" - Selection subscriptions and guarded fetches.
+//   "Mutation-completion scope guard" - Late edit completion checks.
+//   "Texture size and atlas context" - Atlas eligibility and selected frames.
+//   "Display ranges and channel visibility" - Shared ranges, solo channels and focus.
+//   "Curve interactions" - Key selection, insertion and drag commits.
+//   "Spinner sync" - Time and value edits.
+//   "Delete keyboard handler (window-scoped typing-target guard)" - Scoped key deletion.
+//   "Lock-to curve aliases" - Curve aliases and lock changes.
+//   "Key clipboard" - Key copy, cut and paste.
+//   "Render" - Toolbar, channel list and plot.
+//
 // CurveEditorPanel — hybrid focus-channel curve editor.
 //
 // The always-on bottom panel has a multi-channel
@@ -75,6 +89,7 @@ export { CanvasWithAxisLabels } from "./CanvasWithAxisLabels";
 type EditMode = CurveEditMode;
 type Props = { bridge: Bridge };
 
+// ── Panel state ─────────────────────────────
 export function CurveEditorPanel({ bridge }: Props) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [tracks, setTracks] = useState<TrackDto[] | null>(null);
@@ -187,6 +202,7 @@ export function CurveEditorPanel({ bridge }: Props) {
   }, []);
   const keyMenuRef = useRef<CurveKeyContextMenuHandle>(null);
 
+  // ── Selection and track loading ─────────────────────────────
   // Track which id we last fetched for, so a late-arriving response
   // for a stale selection doesn't clobber current data.
   const inFlightFor = useRef<number | null>(null);
@@ -332,6 +348,7 @@ export function CurveEditorPanel({ bridge }: Props) {
     liveScopeRef.current.id === id && liveScopeRef.current.track === track
   ), []);
 
+  // ── Texture size and atlas context ─────────────────────────────
   // Atlas eligibility: the picker only auto-opens when the emitter's
   // texture is an atlas (gridSide ≥ 2). CurveEditorPanel doesn't otherwise
   // read emitter properties, so fetch just `textureSize` keyed on the
@@ -442,6 +459,7 @@ export function CurveEditorPanel({ bridge }: Props) {
     });
   }, [focusedTrack]);
 
+  // ── Display ranges and channel visibility ─────────────────────────────
   // Unified Y-axis range across all VISIBLE channels' tracks. When
   // multiple channels are visible the canvas extends to encompass
   // the most extreme keys on any of them — so turning on Scale-at-20
@@ -1243,6 +1261,7 @@ export function CurveEditorPanel({ bridge }: Props) {
   const lockToOptions = LOCK_TO_OPTIONS[focusedChannel.trackName];
   const lockToDisabled = lockToOptions.length <= 1;
 
+  // ── Lock-to curve aliases ─────────────────────────────
   // Lock-to dropdown value: derived from the host's TrackDto.lockedTo
   // (NOT from local state — pointer-equality on the engine side is
   // the source of truth, and a successful set-track-lock dispatches
@@ -1408,6 +1427,7 @@ export function CurveEditorPanel({ bridge }: Props) {
     }).catch(() => { /* silent */ });
   };
 
+  // ── Render ─────────────────────────────
   // Read-only mirror: a locked focus channel gets NO
   // interactive handlers — drag, insert, key-click, marquee, and the
   // key context menu are all selection/mutation gateways. onCanvasClick

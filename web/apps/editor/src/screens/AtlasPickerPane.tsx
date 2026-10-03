@@ -1,3 +1,17 @@
+// Contents (search for the quoted text):
+//   "types" - Panel props.
+//   "picker pane component" - Panel state and layout measurements.
+//   "fetch emitter properties" - Texture and atlas eligibility.
+//   "fetch texture preview" - Cached preview requests and image readiness.
+//   "stale-index reset" - Selection reset when atlas context changes.
+//   "derived display values" - Atlas eligibility and dimensions.
+//   "cold-start slide readiness" - Initial layout and preview settling.
+//   "click-to-assign" - Frame assignment and confirmation.
+//   "keyboard navigation" - Frame movement and assignment shortcuts.
+//   "body content" - Grid, preview and placeholders.
+//   "header meta visibility" - Header badges and display rules.
+//   "sub-components" - Placeholder and preview display.
+//
 // AtlasPickerPane — atlas frame grid + click-to-assign.
 //
 // Displays the texture atlas for the selected emitter's colorTexture as a
@@ -81,7 +95,7 @@ type PreviewState =
   | { kind: "missing" }
   | { kind: "broken" };
 
-// ─── component ───────────────────────────────────────────────────────────────
+// ─── picker pane component ───────────────────────────────────────────────────
 
 export function AtlasPickerPane({
   bridge,

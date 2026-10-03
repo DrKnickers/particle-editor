@@ -1,3 +1,11 @@
+// Contents (search for the quoted text):
+//   "Browser profile helpers" - Profile isolation and URL preparation.
+//   "Resize settling and browser messages" - Fitting the browser to the window; messages it sends.
+//   "Browser environment creation" - Options and asynchronous creation.
+//   "Controller setup" - Navigation, permissions and embedded assets.
+//   "Composition controller readiness" - Visual attachment and startup completion.
+//   "Mouse forwarding" - Pointer input into the browser surface.
+//
 // HostWindow_WebView2.cpp — HostWindowImpl's WebView2 side: environment and
 // composition-controller creation, the shared per-controller setup
 // (navigation and permission policy, the embedded app.local bundle),
@@ -11,6 +19,7 @@
 
 namespace host {
 
+// ---------- Browser profile helpers ----------
 namespace {
 
 // The WebView2 origin allow-list (IsApprovedWebViewOrigin) lives in
@@ -69,7 +78,7 @@ std::wstring AppendQueryParam(const std::wstring& url, const wchar_t* param)
 
 } // namespace
 
-// ---------- WebView2 ----------
+// ---------- Resize settling and browser messages ----------
 
 void HostWindowImpl::ResizeWebViewToClient()
 {
@@ -352,6 +361,7 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
         dispatcher->Dispatch(WideToUtf8(json));
 }
 
+// ---------- Browser environment creation ----------
 HRESULT HostWindowImpl::InitWebView2()
 {
     // Any session with no human at the keyboard gets a throwaway per-PID
@@ -513,6 +523,7 @@ HRESULT HostWindowImpl::InitWebView2()
 // put_Bounds, app.local mapping, add_WebMessageReceived, Navigate) is on
 // the base ICoreWebView2Controller or ICoreWebView2 interfaces.
 // ---------------------------------------------------------------------
+// ---------- Controller setup ----------
 HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* controller)
 {
     if (!controller) return E_POINTER;
@@ -1112,6 +1123,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
 // required and there is no HWND fallback. Only the engine-visual attach
 // after step 3 keeps interactive chrome usable, but is fatal for automation.
 // ---------------------------------------------------------------------
+// ---------- Composition controller readiness ----------
 HRESULT HostWindowImpl::OnCompositionControllerReady(
     HRESULT chr, ICoreWebView2CompositionController* ctl)
 {
@@ -1393,6 +1405,7 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
 // alternate "track which button captured" book-keeping and
 // matches the simple model React's pointer-id state expects.
 // ---------------------------------------------------------------------
+// ---------- Mouse forwarding ----------
 void HostWindowImpl::ForwardMouseToCompositionWebView2(UINT msg, WPARAM wp, LPARAM lp)
 {
     if (!m_compositionController) return;

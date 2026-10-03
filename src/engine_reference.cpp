@@ -1,3 +1,10 @@
+// Contents (search for the quoted text):
+//   "Object placement" - World transforms and display easing.
+//   "Object rendering" - Opaque and transparent imported geometry.
+//   "Object catalog" - Prefetch, background build and picker listing.
+//   "Object selection and bounds" - Selection and geometry bounds.
+//   "Object loading" - Render-state teardown and mesh rebuilding.
+//
 // engine_reference.cpp — the reference-object render/shadow/manipulator/picking/catalog cluster of the Engine class,
 // moved verbatim out of engine.cpp (a translation-unit split). SAME class, same header
 // (engine.h); this is a file split, not a class split. Cluster-local
@@ -24,6 +31,7 @@
 
 using namespace std;
 
+// ---------- Object placement ----------
 // Live reference-object world = rotation then translation. The engine is
 // Z-UP (m_eye.Up = (0,0,1), set in the Engine constructor), so "yaw"
 // (heading -- turning while staying upright) is rotation about world Z, NOT the
@@ -102,6 +110,7 @@ void Engine::EaseReferenceDisplay()
     m_displayRotation.z = easeAngle(m_displayRotation.z, m_referenceRotation.z);
 }
 
+// ---------- Object rendering ----------
 // Draw the imported reference object in two phases (opaque then
 // transparent). Each rigid sub-mesh is placed by its bone's object-space matrix
 // (sub.placement) times the live object world, and runs its OWN game shader 1:1
@@ -314,6 +323,7 @@ void Engine::RenderReferenceObject()
     m_pDevice->SetRenderState(D3DRS_CULLMODE,         oldCull);
 }
 
+// ---------- Object catalog ----------
 // The host calls this once at startup to ARM the eager reference-object
 // catalog prefetch: set the persistent m_catalogWanted latch and the next
 // Update()->StartCatalogBuildIfNeeded() kicks a background build immediately --
@@ -428,6 +438,7 @@ void Engine::EnumerateReferenceObjects(std::vector<GameObjectRef>& out)
             out.push_back(r);
 }
 
+// ---------- Object selection and bounds ----------
 // Select a reference object by its in-game Name; clears it when empty.
 // A fresh selection is shown by default (reset visibility) so a previously-hidden
 // object doesn't make a newly-picked one silently invisible.
@@ -535,6 +546,7 @@ bool Engine::GetReferenceObjectBounds(D3DXVECTOR3& outMin, D3DXVECTOR3& outMax) 
     return true;
 }
 
+// ---------- Object loading ----------
 // Full teardown of the render-state fields RebuildReferenceObjectMesh clears on its
 // empty-name / deferred exits: mesh, hardpoint attachments, render scale, status. Does
 // NOT touch m_referenceMeshDeferred -- that flag stays owned by the caller

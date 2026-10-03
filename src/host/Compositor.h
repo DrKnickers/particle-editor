@@ -174,7 +174,7 @@ public:
     // commit themselves.
     HRESULT Commit();
 
-    // ---------- engine visual ----------
+    // ---------- Engine frame visual ----------
 
     // Stand up the D3D11 device + DXGI factory, open the
     // engine's shared texture as a D3D11 alias, create a composition

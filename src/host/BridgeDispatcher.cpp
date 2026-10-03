@@ -1,3 +1,14 @@
+// Contents (search for the quoted text):
+//   "Colour parsing" - Browser colour conversion.
+//   "Shared bridge helpers" - DTO assembly and field rules.
+//   "Dispatcher lifecycle" - Construction and engine attachment.
+//   "Request ingress" - Parsing and guarded dispatch.
+//   "Mutation and selection helpers" - Dirty state, selection and linked edits.
+//   "Request routing" - Handler groups and deferred requests.
+//   "Event and undo helpers" - Notifications, undo capture and preview results.
+//   "Saved state and undo restoration" - Dirty baseline and snapshot application.
+//   "Runtime notifications" - Statistics and host status.
+//
 #include "BridgeDispatcher.h"
 
 #include "AcceleratorBridge.h"
@@ -52,6 +63,7 @@
 
 using nlohmann::json;
 
+// ---------- Colour parsing ----------
 // parse a CSS colour string from getComputedStyle
 // ("#rrggbb", "#rgb", or "rgb(r, g, b)" / "rgba(r, g, b, a)") into a
 // COLORREF for the host/backing-color handler. Returns true on success.
@@ -111,6 +123,7 @@ std::string GenerateDuplicateName(const ParticleSystem* system, const std::strin
     return NextDuplicateName(existingNames, sourceName);
 }
 
+// ---------- Shared bridge helpers ----------
 namespace host {
 
 // The helpers below (through BuildEngineStateSnapshot) were an anonymous
@@ -697,6 +710,7 @@ json BuildEngineStateSnapshot(Engine* engine,
     };
 }
 
+// ---------- Dispatcher lifecycle ----------
 BridgeDispatcher::BridgeDispatcher(Engine* engine, LayoutBroker& layout,
                                     AcceleratorBridge& accel, EmitFn emit,
                                     bool useTestHost, bool automationMode)
@@ -748,6 +762,7 @@ void BridgeDispatcher::SetEngine(Engine* engine)
         m_engine->SetEstimatedLoad(m_estimatedLoadPerInstance);
 }
 
+// ---------- Request ingress ----------
 void BridgeDispatcher::Dispatch(const std::string& jsonRequest)
 {
     // Any coalesced trailing broadcast lands BEFORE this request's
@@ -874,6 +889,7 @@ json BridgeDispatcher::DispatchParsed(const json& parsed, const char* mode)
         });
 }
 
+// ---------- Mutation and selection helpers ----------
 // ---- BridgeRequestContext members needing BridgeDispatcher privates ----
 // == the requireEngine lambda (verbatim).
 bool BridgeRequestContext::RequireEngine(const char* what)
@@ -994,6 +1010,7 @@ void BridgeDispatcher::propagateLinkGroup(ParticleSystem::Emitter* edited)
         m_engine->OnParticleSystemChanged(-1);
 }
 
+// ---------- Request routing ----------
 json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
 {
     std::string id;
@@ -1035,6 +1052,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     return ctx.res;
 }
 
+// ---------- Event and undo helpers ----------
 void BridgeDispatcher::EmitAcceleratorPressed(const std::string& combo)
 {
     if (!m_emit) return;
@@ -1307,6 +1325,7 @@ void BridgeDispatcher::FlushPendingEmits()
     }
 }
 
+// ---------- Saved state and undo restoration ----------
 bool BridgeDispatcher::ComputeCanUndo() const
 {
     // Auto-cap-aware: undo/perform inserts a snapshot of the current
@@ -1557,6 +1576,7 @@ void BridgeDispatcher::EnforceSingleMemberLinkGroups()
     }
 }
 
+// ---------- Runtime notifications ----------
 void BridgeDispatcher::EmitStatsTick(float fps, int emitters,
                                      int particles, int instances,
                                      bool overload)
