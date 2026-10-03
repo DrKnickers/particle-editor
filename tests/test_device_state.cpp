@@ -801,6 +801,8 @@ int main()
             ReadSource(repoRoot / "src" / "engine.h");
         const std::string engineSource =
             ReadSource(repoRoot / "src" / "engine.cpp");
+        const std::string deviceSource =
+            ReadSource(repoRoot / "src" / "engine_device.cpp");
         const std::string renderSource =
             ReadSource(repoRoot / "src" / "engine_render.cpp");
         const std::string bridgeEngineSource =
@@ -842,7 +844,7 @@ int main()
 
         ExpectBool("production device-reset sources are readable",
                    !engineHeader.empty() && !engineSource.empty() &&
-                    !renderSource.empty() && !bridgeEngineSource.empty() &&
+                    !deviceSource.empty() && !renderSource.empty() && !bridgeEngineSource.empty() &&
                     !bridgeAssetsSource.empty() && !modManagerSource.empty() &&
                     !recoveryHeader.empty() &&
                     !deferredChangeHeader.empty() &&
@@ -856,9 +858,9 @@ int main()
                     true);
 
         ExpectBool("production adapter instantiates the executable recovery port",
-                   Contains(engineSource,
+                   Contains(deviceSource,
                             "D3D9ExRecoveryPort<IDirect3DDevice9Ex, Engine>") &&
-                   Contains(engineSource,
+                   Contains(deviceSource,
                             "m_pAlphaCompositor != nullptr") &&
                    Contains(recoveryHeader,
                             "bool renderWhenOccluded = false") &&
@@ -877,12 +879,12 @@ int main()
                              "if (!PrepareDeviceForFrame()) return false;"),
                     true);
         const size_t prepareBegin =
-            engineSource.find("bool Engine::PrepareDeviceForFrame()");
+            deviceSource.find("bool Engine::PrepareDeviceForFrame()");
         const size_t recoverBegin =
-            engineSource.find("bool Engine::RecoverDeviceIfNeeded()");
+            deviceSource.find("bool Engine::RecoverDeviceIfNeeded()");
         const std::string prepareBody =
             prepareBegin != std::string::npos && recoverBegin > prepareBegin
-                ? engineSource.substr(prepareBegin, recoverBegin - prepareBegin)
+                ? deviceSource.substr(prepareBegin, recoverBegin - prepareBegin)
                 : std::string();
         const size_t prepareFatalReturn =
             prepareBody.find("return false;");
@@ -924,10 +926,10 @@ int main()
                             "if (!PrepareDeviceForFrame()) return;"),
                    true);
         const size_t recoverEnd =
-            engineSource.find("void Engine::ReportFatalDeviceState", recoverBegin);
+            deviceSource.find("void Engine::ReportFatalDeviceState", recoverBegin);
         const std::string recoverBody =
             recoverBegin != std::string::npos && recoverEnd > recoverBegin
-                ? engineSource.substr(recoverBegin, recoverEnd - recoverBegin)
+                ? deviceSource.substr(recoverBegin, recoverEnd - recoverBegin)
                 : std::string();
         ExpectBool("non-render recovery call site executes the same coordinator",
                    Contains(recoverBody, "result = ProbeDeviceRecovery();"),
@@ -1025,7 +1027,7 @@ int main()
                    true);
         ExpectBool("composed coordinator uses conditional frame admission",
                    Contains(engineHeader, "bool PrepareComposedFrame();") &&
-                   Contains(engineSource,
+                   Contains(deviceSource,
                             "bool Engine::PrepareComposedFrame()\n"
                             "{\n"
                             "\t++m_composedFramePrepareCount;\n"
@@ -1033,7 +1035,9 @@ int main()
                             "}") &&
                    !Contains(engineSource,
                              "PrepareDeviceForFrame(bool probeHealthyDevice)") &&
-                   Contains(engineSource,
+                   !Contains(deviceSource,
+                             "PrepareDeviceForFrame(bool probeHealthyDevice)") &&
+                   Contains(deviceSource,
                             "++m_deviceStateProbeCount;") &&
                    CountOccurrences(hostSource,
                                     "engine->PrepareComposedFrame()") == 1,
@@ -1123,9 +1127,9 @@ int main()
         ExpectBool("Engine exposes the direct D3D9 present observer",
                    Contains(engineHeader, "void NotifyPresentResult(HRESULT hr);"), true);
         ExpectBool("Engine observer uses the tested suspect predicate",
-                   Contains(engineSource,
+                   Contains(deviceSource,
                             "if (devicestate::ShouldCheckDeviceAfterPresent(hr))") &&
-                   Contains(engineSource, "m_presentSuspect = true;"), true);
+                   Contains(deviceSource, "m_presentSuspect = true;"), true);
         ExpectBool("direct D3D9 Present forwards its actual HRESULT",
                    Contains(renderSource, "NotifyPresentResult(presentHr);"), true);
         const size_t compositeResult =
@@ -1256,43 +1260,43 @@ int main()
                    true);
 
         const size_t releaseBegin =
-            engineSource.find("void Engine::ReleaseDeviceResourcesForReset()");
+            deviceSource.find("void Engine::ReleaseDeviceResourcesForReset()");
         const size_t effectResetBegin =
-            engineSource.find("void Engine::ResetDeviceEffectsAfterReset()",
+            deviceSource.find("void Engine::ResetDeviceEffectsAfterReset()",
                               releaseBegin);
         const size_t refreshBegin =
-            engineSource.find("HRESULT Engine::RefreshPresentationParametersAfterReset()",
+            deviceSource.find("HRESULT Engine::RefreshPresentationParametersAfterReset()",
                               effectResetBegin);
         const size_t reacquireBegin =
-            engineSource.find("void Engine::ReacquireDeviceResourcesAfterReset()",
+            deviceSource.find("void Engine::ReacquireDeviceResourcesAfterReset()",
                               refreshBegin);
         const size_t resetBegin =
-            engineSource.find("void Engine::Reset()", reacquireBegin);
+            deviceSource.find("void Engine::Reset()", reacquireBegin);
         const size_t resetEnd =
-            engineSource.find("bool Engine::ResetForResize()", resetBegin);
+            deviceSource.find("bool Engine::ResetForResize()", resetBegin);
         const std::string releaseBody =
             releaseBegin != std::string::npos && effectResetBegin > releaseBegin
-                ? engineSource.substr(releaseBegin,
+                ? deviceSource.substr(releaseBegin,
                                       effectResetBegin - releaseBegin)
                 : std::string();
         const std::string effectResetBody =
             effectResetBegin != std::string::npos && refreshBegin > effectResetBegin
-                ? engineSource.substr(effectResetBegin,
+                ? deviceSource.substr(effectResetBegin,
                                       refreshBegin - effectResetBegin)
                 : std::string();
         const std::string refreshBody =
             refreshBegin != std::string::npos && reacquireBegin > refreshBegin
-                ? engineSource.substr(refreshBegin,
+                ? deviceSource.substr(refreshBegin,
                                       reacquireBegin - refreshBegin)
                 : std::string();
         const std::string reacquireBody =
             reacquireBegin != std::string::npos && resetBegin > reacquireBegin
-                ? engineSource.substr(reacquireBegin,
+                ? deviceSource.substr(reacquireBegin,
                                       resetBegin - reacquireBegin)
                 : std::string();
         const std::string resetBody =
             resetBegin != std::string::npos && resetEnd > resetBegin
-                ? engineSource.substr(resetBegin, resetEnd - resetBegin)
+                ? deviceSource.substr(resetBegin, resetEnd - resetBegin)
                 : std::string();
         const size_t compositorReleaseBegin =
             compositorSource.find(
@@ -1486,10 +1490,10 @@ int main()
         }
 
         const size_t resizeEnd =
-            engineSource.find("HANDLE Engine::GetSharedTextureHandle()", resetEnd);
+            deviceSource.find("void Engine::ResetParameters()", resetEnd);
         const std::string resizeResetBody =
             resetEnd != std::string::npos && resizeEnd > resetEnd
-                ? engineSource.substr(resetEnd, resizeEnd - resetEnd)
+                ? deviceSource.substr(resetEnd, resizeEnd - resetEnd)
                 : std::string();
         const size_t cheapResetExPos =
             resizeResetBody.find("m_pDevice->ResetEx(&parameters, NULL)");
@@ -1562,15 +1566,15 @@ int main()
                             "if (DeviceCallsBlocked()) return NULL;"),
                    true);
         const size_t testHoldBegin =
-            engineSource.find(
+            deviceSource.find(
                 "bool Engine::SetDeviceRecoveryWorkHoldForTesting(bool hold)");
         const size_t prepareAfterTestHold =
-            engineSource.find("bool Engine::PrepareDeviceForFrame()",
+            deviceSource.find("bool Engine::PrepareDeviceForFrame()",
                               testHoldBegin);
         const std::string testHoldBody =
             testHoldBegin != std::string::npos &&
             prepareAfterTestHold > testHoldBegin
-                ? engineSource.substr(testHoldBegin,
+                ? deviceSource.substr(testHoldBegin,
                                       prepareAfterTestHold - testHoldBegin)
                 : std::string();
         ExpectBool("synthetic hold arms only from healthy state and releases idempotently",
@@ -2001,12 +2005,12 @@ int main()
                    true);
 
         const size_t fatalBegin =
-            engineSource.find("void Engine::ReportFatalDeviceState(");
+            deviceSource.find("void Engine::ReportFatalDeviceState(");
         const size_t fatalEnd =
-            engineSource.find("void Engine::NotifyPresentResult(", fatalBegin);
+            deviceSource.find("void Engine::NotifyPresentResult(", fatalBegin);
         const std::string fatalBody =
             fatalBegin != std::string::npos && fatalEnd > fatalBegin
-                ? engineSource.substr(fatalBegin, fatalEnd - fatalBegin)
+                ? deviceSource.substr(fatalBegin, fatalEnd - fatalBegin)
                 : std::string();
         ExpectBool("terminal recovery discards deferred preview work",
                    Contains(fatalBody,

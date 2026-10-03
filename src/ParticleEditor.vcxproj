@@ -223,6 +223,7 @@
     <ClCompile Include="Effect.cpp" />
     <ClCompile Include="EmitterInstance.cpp" />
     <ClCompile Include="engine.cpp" />
+    <ClCompile Include="engine_device.cpp" />
     <ClCompile Include="engine_environment.cpp" />
     <ClCompile Include="engine_reference.cpp" />
     <ClCompile Include="engine_shadows.cpp" />

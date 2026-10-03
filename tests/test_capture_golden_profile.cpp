@@ -264,6 +264,7 @@ int main()
         const std::filesystem::path root = std::filesystem::current_path();
         const std::string header = ReadSource(root / "src" / "engine.h");
         const std::string core = ReadSource(root / "src" / "engine.cpp");
+        const std::string device = ReadSource(root / "src" / "engine_device.cpp");
         const std::string environment =
             ReadSource(root / "src" / "engine_environment.cpp");
         const std::string compactHeader = WithoutWhitespace(header);
@@ -272,7 +273,7 @@ int main()
         const std::string embeddedLoadBlock = ControlledBlock(
             environment, "static bool LoadEmbeddedSkydomeSlotOne(");
         const std::string resetReacquireBlock = ControlledBlock(
-            core, "void Engine::ReacquireDeviceResourcesAfterReset()");
+            device, "void Engine::ReacquireDeviceResourcesAfterReset()");
 
         CHECK(compactHeader.find(
                   "boolSetEmbeddedSkydomeSlotForCapture(intindex);") !=
