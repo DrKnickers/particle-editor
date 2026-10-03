@@ -1083,6 +1083,14 @@ struct HostWindowImpl
     // also release everything before CoUninitialize.
     void ReleaseHostComObjects();
 
+private:
+    LRESULT OnMainCreate(HWND hwnd);
+    LRESULT OnMainTimer(HWND hwnd, WPARAM wp);
+    LRESULT OnMainNcCalcSize(HWND hwnd, WPARAM wp, LPARAM lp);
+    LRESULT OnMainNcHitTest(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
+    void OnMainWindowPosChanged(HWND hwnd, LPARAM lp);
+
+public:
     LRESULT MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
     LRESULT ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 

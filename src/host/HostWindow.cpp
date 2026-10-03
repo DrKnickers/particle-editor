@@ -1210,265 +1210,10 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     switch (msg)
     {
     case WM_CREATE:
-    {
-        // Viewport is a top-level WS_POPUP window OWNED by main
-        // (not a WS_CHILD). It carries the Engine's D3D9 device and is
-        // hidden once the window is up (see Run): the engine frame
-        // reaches the screen through the DComp engine visual, and input
-        // arrives via InputDispatcher. WS_EX_NOACTIVATE prevents
-        // the popup from stealing focus; WS_EX_TOOLWINDOW keeps it out
-        // of the taskbar.
-        //
-        // Ownership semantics: an owned popup follows the owner's
-        // minimize/restore state, gets destroyed when the owner is
-        // destroyed, and stays z-ordered above the owner. Position
-        // is in SCREEN coords; LayoutBroker translates from main-
-        // client coords via ClientToScreen.
-        hViewport = CreateWindowExW(
-            WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
-            kHostViewportClassName, L"",
-            WS_POPUP | WS_VISIBLE,
-            16, 16, 320, 240, hwnd /* owner */, nullptr,
-            hInstance, nullptr);
-        if (!hViewport)
-        {
-            Log("[host] CreateWindowExW viewport failed (gle=%lu)\n", GetLastError());
-            return -1;
-        }
-        layout.SetViewport(hViewport);
-
-        // no host-owned D3D9 device. The Engine constructs the
-        // live device internally below, targeting this viewport HWND.
-
-        // Construct the Engine now that both HWNDs exist. hFocus = parent,
-        // hDevice = viewport popup — same wiring as the legacy editor.
-        try
-        {
-            engine = std::make_unique<Engine>(
-                hwnd, hViewport, textureManager, shaderManager, fileManager);
-            if (dispatcher) dispatcher->SetEngine(engine.get());
-            layout.SetEngine(engine.get());
-            // bind engine to ModManager so subsequent
-            // SelectMod() calls can hot-swap shaders + textures.
-            if (modManager) modManager->SetEngine(engine.get());
-
-            // [bloom-restore] Restore bloom config from the
-            // registry (HKCU\Software\AloParticleEditor), mirroring the legacy
-            // editor's startup restore (SetBloom* from ReadBloom*). The
-            // host previously skipped this, so the engine kept its
-            // strength=0 constructor default and toggling "Enable bloom"
-            // produced NO visible glow even when the user has saved bloom
-            // settings from the legacy editor. Same value names/types legacy
-            // reads/writes, so settings round-trip between the two UIs.
-            //
-            // Skipped under --test-host: the a11y goldens capture the bloom
-            // dialog's strength value, so the harness must see the
-            // constructor defaults (0.00) deterministically, not whatever the
-            // dev machine has saved in the registry.
-            if (ShouldRestorePersistedViewSettings(useTestHost, m_captureGoldenProfile))
-            {
-                // Open MAY fail on the very first launch (key absent). That must NOT skip
-                // the restore: ReadRestoredSettings fail-softs every read to its default on
-                // a null key, and the apply phase's UNCONDITIONAL lighting pushes
-                // (SetLight/SetAmbient(w=1)/SetShadow) are load-bearing — gating on a
-                // successful open once left a true first run unlit (ambient w=0 → black
-                // viewport). Caught by scripts/cold-launch-check.ps1 on a clean profile.
-                const bool inCaptureMode = m_runMode == RunMode::Capture;
-                HKEY hKey = host::OpenSettingsKeyForRead();
-                const host::RestoredSettings restored =
-                    host::ReadRestoredSettings(hKey, inCaptureMode);
-                if (hKey) RegCloseKey(hKey);
-                ApplyRestoredSettings(engine.get(), restored);
-            }
-            else if (m_captureGoldenProfile)
-            {
-                // Report the LIVE stack size rather than a constant: if the
-                // restore gate above ever regresses, the count moves off zero,
-                // the golden runner's exact-line match misses, and the capture
-                // fails loudly instead of quietly comparing modded pixels.
-                const size_t layers = modManager ? modManager->GetLayerStack().size() : 0;
-                fputs("[capture-profile] golden persisted-view-restore=skipped\n", stdout);
-                printf("[capture-profile] golden persisted-mod-layer-restore=skipped layers=%zu\n",
-                       layers);
-                fflush(stdout);
-                Log("[capture-profile] golden persisted-view-restore=skipped\n");
-                Log("[capture-profile] golden persisted-mod-layer-restore=skipped layers=%zu\n",
-                    layers);
-            }
-            Log("[host] Engine constructed OK\n");
-        }
-        catch (const std::exception& e)
-        {
-            Log("[host] Engine construction threw: %s\n", e.what());
-            // Any headless mode is unattended: a modal would hang the run with
-            // nothing to dismiss it (the pump's engine-null arm exits non-zero
-            // instead). Covers --capture/--capture-ref/--test-host, not just
-            // --drive/--record — IsFullyInteractive() is the complete predicate.
-            if (IsFullyInteractive())
-                MessageBoxA(hwnd, e.what(), "Engine init failed", MB_ICONERROR);
-            // Continue — viewport will still clear, just without engine state.
-        }
-        catch (...)
-        {
-            Log("[host] Engine construction threw unknown exception\n");
-            // Continue without engine; snapshot will return ok:false.
-        }
-
-        // Stand up the alpha compositor against the Engine's D3D9
-        // device. The Engine's Reset() resizes the off-screen RT on
-        // layout changes; we still bootstrap a non-degenerate size now
-        // so the very first Render finds a valid RT to target.
-        if (engine && engine->GetDevice())
-        {
-            try
-            {
-                alphaCompositor = std::make_unique<host::AlphaCompositor>(engine->GetDevice());
-                RECT vrc{};
-                GetClientRect(hViewport, &vrc);
-                alphaCompositor->Resize(vrc.right - vrc.left, vrc.bottom - vrc.top);
-                engine->SetAlphaCompositor(alphaCompositor.get());
-                engine->SetCompositionCompositor(m_compositor.get());
-                // Arm the eager reference-object catalog prefetch now
-                // that the render path is up.
-                engine->ArmCatalogPrefetch();
-                layout.SetAlphaCompositor(alphaCompositor.get());
-                Log("[host] AlphaCompositor up (%ldx%ld)\n",
-                    vrc.right - vrc.left, vrc.bottom - vrc.top);
-
-                // Stand up the InputDispatcher on the
-                // viewport popup so DOM-routed camera/keyboard input reaches
-                // the engine. Bound to BridgeDispatcher below in Run() once
-                // `dispatcher` exists.
-                if (alphaCompositor)
-                {
-                    m_inputDispatcher = std::make_unique<host::InputDispatcher>(hViewport);
-                    m_inputDispatcher->SetLogger([this](const std::string& line) {
-                        Log("%s\n", line.c_str());
-                    });
-                    Log("[ArchC] InputDispatcher up (popup=%p)\n",
-                        static_cast<void*>(hViewport));
-                }
-            }
-            catch (const std::exception& e)
-            {
-                Log("[host] AlphaCompositor init failed: %s — 3D preview unavailable\n", e.what());
-                engine->SetAlphaCompositor(nullptr);
-                layout.SetAlphaCompositor(nullptr);
-                alphaCompositor.reset();
-                m_inputDispatcher.reset();
-                MarkViewportUnavailable("The graphics preview surface could not be initialized.", E_FAIL);
-            }
-        }
-
-        // Seed the first paint (suppresses white-flash on startup).
-        InvalidateRect(hViewport, nullptr, FALSE);
-
-        // Start the 4 Hz stats timer. Fires every 250 ms and emits a
-        // stats/tick event to React so the status bar stays live.
-        SetTimer(hwnd, kStatsTimerId, 250, nullptr);
-
-        // Two-tier autosave timers (30 s recent / 5 min stable),
-        // mirroring the legacy editor. Gated on !useTestHost so harness
-        // runs never write autosave files — those would orphan into a
-        // recovery prompt for the user's real editor. WM_TIMER latches the
-        // dirty-gated write (see the DEFERRED autosave note below). Also gated
-        // on !captureMode: a --capture run skips the paced idle
-        // branch that services the latch, so its pending write could only
-        // land via the busy-override — and an ephemeral capture has no
-        // business writing recovery files anyway (same orphan-prompt
-        // rationale as --drive).
-        // Reference-only captures historically service these timers too.
-        if (!useTestHost && (m_runMode == RunMode::Interactive ||
-            (m_runMode == RunMode::Capture && m_captureAlo.empty())))
-        {
-            SetTimer(hwnd, Autosave::RECENT_TIMER_ID, Autosave::RECENT_INTERVAL_MS, nullptr);
-            SetTimer(hwnd, Autosave::STABLE_TIMER_ID, Autosave::STABLE_INTERVAL_MS, nullptr);
-        }
-        return 0;
-    }
+        return OnMainCreate(hwnd);
 
     case WM_TIMER:
-        if (wp == kStatsTimerId && dispatcher)
-        {
-            // Heartbeat flush: modal dialogs (file pickers etc.) run
-            // their own message pump, which starves the paced idle branch —
-            // but still dispatches WM_TIMER, so a coalesced trailing
-            // broadcast is at worst one stats tick (250 ms) stale there.
-            dispatcher->FlushPendingEmits();
-            // Record mode: the sim advances exactly tl.fps virtual frames/sec
-            // (StepPreviewFrames), so the wall-clock render rate is the wrong
-            // number to show — and it swings with the capture barriers, which
-            // made the FPS chip a run-variant in recorded clips. Locked from
-            // the moment the timeline parses (before frame 0's settle) so no
-            // captured frame ever carries a wall-clock value.
-            float fps      = (m_runMode == RunMode::Record && m_recordTimelineFps > 0)
-                               ? static_cast<float>(m_recordTimelineFps)
-                               : fpsMeasurer.getFPS();
-            int emitters   = engine ? engine->GetNumEmitters()  : 0;
-            int particles  = engine ? engine->GetNumParticles() : 0;
-            int instances  = engine ? engine->GetNumInstances() : 0;
-            bool overload  = engine ? engine->IsSpawnOverloadActive() : false;
-            dispatcher->EmitStatsTick(fps, emitters, particles, instances, overload);
-        }
-        // Autosave tick. Best-effort + dirty-gated — skip the write
-        // when nothing changed since the last save (no point autosaving an
-        // unmodified saved file).
-        //
-        // DEFERRED: the timer no longer writes inline — a WM_TIMER can
-        // fire mid-gesture (gizmo drag, splitter, modal resize pump) and the
-        // serialize+temp-write+rename then stalls the UI thread at the worst
-        // moment. The tick just latches m_autosavePending; the paced idle
-        // branch services it right after a presented frame when no capture /
-        // size-move is active (ServicePendingAutosave). Busy-override: if the
-        // pending write can't land within one RECENT interval (continuous
-        // gesture), the NEXT timer tick forces it inline — the crash-safety
-        // window is bounded at ~2x the tier cadence, never unbounded.
-        else if ((wp == Autosave::RECENT_TIMER_ID || wp == Autosave::STABLE_TIMER_ID)
-                 && dispatcher && particleSystem && dispatcher->GetDirty())
-        {
-            Autosave::Tier tier = (wp == Autosave::RECENT_TIMER_ID)
-                                ? Autosave::Tier::Recent
-                                : Autosave::Tier::Stable;
-            // Stable outranks Recent if both end up pending (rarer cadence,
-            // and the stable slot is the one recovery prefers).
-            if (m_autosavePendingTier != Autosave::Tier::Stable)
-                m_autosavePendingTier = tier;
-            if (!m_autosavePending)
-            {
-                m_autosavePending = true;
-                m_autosavePendingSince = GetTickCount64();
-            }
-            else if (GetTickCount64() - m_autosavePendingSince
-                     >= Autosave::RECENT_INTERVAL_MS)
-            {
-                // Busy-override: still pending a full interval later —
-                // write now regardless of gesture state.
-                ServicePendingAutosave(true);
-            }
-        }
-        // [resize-perf] quiescence safety net — fires
-        // 150 ms after size ticks stop; normally a no-op (per-tick
-        // cheap resets keep sizes in sync), it only re-resets if a
-        // mid-gesture reset failed. Covers a lost WM_EXITSIZEMOVE.
-        else if (wp == kResizeSettleTimerId)
-        {
-            KillTimer(hwnd, kResizeSettleTimerId);
-            SettleResize(m_inSizeMove ? "quiescence-pause" : "quiescence");
-        }
-        // Crash recovery: a Reload() the page never answered (WebViewCrashPolicy.h).
-        else if (wp == kWebReloadDeadlineTimerId)
-        {
-            KillTimer(hwnd, kWebReloadDeadlineTimerId);
-            if (webviewcrash::DecideReloadDeadline(m_webReloadPending)
-                    == webviewcrash::WebFailureAction::MarkDead)
-                MarkWebDead("reload deadline passed");
-        }
-        // A dead-web close deferred out of a bridge handler's modal pump.
-        else if (wp == kWebDeadCloseRetryTimerId)
-        {
-            CloseAfterWebDeath(hwnd);
-        }
-        return 0;
+        return OnMainTimer(hwnd, wp);
 
     // ---- Frameless custom title bar (pre-PR Win32 review recipe) ----
     // The WebView is a COMPOSITION controller (no child HWND), so the host owns
@@ -1479,95 +1224,10 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     // Alt+Space / right-click system menu — for free. WM_NC* aren't intercepted by
     // the client-area mouse forwarding, so those reach DefWindowProc unimpeded.
     case WM_NCCALCSIZE:
-        if (wp == TRUE)
-        {
-            auto* params = reinterpret_cast<NCCALCSIZE_PARAMS*>(lp);
-            const LONG originalTop = params->rgrc[0].top;
-            const LRESULT dwp = DefWindowProcW(hwnd, WM_NCCALCSIZE, wp, lp);
-            if (dwp != 0) return dwp;
-            // A minimized window's proposed client rect is degenerate
-            // (bottom - top == 0). The caption reclaim below (top += 1 / top +=
-            // frameY) would invert it to a NEGATIVE-height client rect —
-            // GetClientRect then reports win=0x-1, which zeroes the D3D9
-            // backbuffer and drives the React viewport layout degenerate,
-            // stalling the headless --record-minimized capture. Leave
-            // DefWindowProc's (0-height, non-inverted) rect
-            // as-is while iconic; a later positive-size WM_SIZE re-seeds the
-            // client size on restore. (The compositor/WebView sinks apply the
-            // same non-positive-size policy at their own sites — the WebView2
-            // setup seeds and the WM_SIZE / ResizeWebViewToClient sinks.)
-            if (IsIconic(hwnd)) return 0;
-            // Reclaim ONLY the caption/top into the client (removes the native
-            // title bar); keep the L/R/bottom frame DefWindowProc computed.
-            params->rgrc[0].top = originalTop;
-            const UINT dpi = GetDpiForWindow(hwnd);
-            const int frameY = GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi)
-                             + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
-            if (IsZoomed(hwnd))
-            {
-                // Maximized: add the frame inset so the client doesn't spill into
-                // the invisible overhang; keep a sliver on an auto-hide taskbar.
-                params->rgrc[0].top += frameY;
-                InsetForAutoHideTaskbar(params->rgrc[0]);
-            }
-            else
-            {
-                params->rgrc[0].top += 1;   // 1px top keeps the resize/shadow line
-            }
-            return 0;
-        }
-        break;
+        if (wp == TRUE) return OnMainNcCalcSize(hwnd, wp, lp); break;
 
     case WM_NCHITTEST:
-    {
-        LRESULT dwmHit = 0;
-        if (DwmDefWindowProc(hwnd, msg, wp, lp, &dwmHit)) return dwmHit;
-
-        const POINT screenPt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
-        RECT wr; GetWindowRect(hwnd, &wr);
-        const UINT dpi = GetDpiForWindow(hwnd);
-        const int frameX = GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
-        const int frameY = GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
-
-        // Resize edges/corners take priority over the drag band — the top ~frameY
-        // is a resize grip even though it overlaps the title bar. Not when maximized.
-        if (!IsZoomed(hwnd))
-        {
-            if (screenPt.y < wr.top + frameY)
-            {
-                if (screenPt.x < wr.left + frameX)   return HTTOPLEFT;
-                if (screenPt.x >= wr.right - frameX)  return HTTOPRIGHT;
-                return HTTOP;
-            }
-            if (screenPt.y >= wr.bottom - frameY)
-            {
-                if (screenPt.x < wr.left + frameX)   return HTBOTTOMLEFT;
-                if (screenPt.x >= wr.right - frameX)  return HTBOTTOMRIGHT;
-                return HTBOTTOM;
-            }
-            if (screenPt.x < wr.left + frameX)   return HTLEFT;
-            if (screenPt.x >= wr.right - frameX)  return HTRIGHT;
-        }
-
-        // Ask WebView2 whether this pixel is the web title bar's caption region.
-        POINT clientPt = screenPt; ScreenToClient(hwnd, &clientPt);
-        if (m_ncRegionEnabled && m_compositionController4)
-        {
-            COREWEBVIEW2_NON_CLIENT_REGION_KIND kind = COREWEBVIEW2_NON_CLIENT_REGION_KIND_CLIENT;
-            if (SUCCEEDED(m_compositionController4->GetNonClientRegionAtPoint(clientPt, &kind)))
-                return kind == COREWEBVIEW2_NON_CLIENT_REGION_KIND_CAPTION ? HTCAPTION : HTCLIENT;
-        }
-        // Fallback (WebView2 Runtime lacks non-client support): the fixed 34px
-        // TitleBar strip minus the 3×46px controls on the right is the caption.
-        {
-            const int stripH = MulDiv(34, dpi, 96);
-            const int controlsW = MulDiv(46 * 3, dpi, 96);
-            RECT cr; GetClientRect(hwnd, &cr);
-            if (clientPt.y >= 0 && clientPt.y < stripH && clientPt.x < cr.right - controlsW)
-                return HTCAPTION;
-        }
-        return HTCLIENT;
-    }
+        return OnMainNcHitTest(hwnd, msg, wp, lp);
 
     // Frameless title bar: right-click the caption → the window system menu.
     // Alt+Space works via DefWindowProc, but a custom frame doesn't get the
@@ -1757,79 +1417,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
 
     case WM_WINDOWPOSCHANGED:
-        // WM_WINDOWPOSCHANGED fires for every position/
-        // size change BEFORE WM_SIZE / WM_MOVE / WM_PAINT.
-        //
-        // (1) PredictAndApply resizes the popup synchronously to
-        //     match main's new client extent, using cached layout
-        //     offsets.
-        // (2) RenderD3D9 forces a Present after the swap chain is
-        //     Reset. Without this, Windows' modal resize loop holds
-        //     my PeekMessage idle pump and D3D9 never gets to render
-        //     fresh — the popup just stretches the LAST presented
-        //     frame, so a wider/taller resize reveals dark purple
-        //     where the ground plane should be.
-        //
-        // [resize-perf] PredictAndApply's per-tick reset
-        // runs on the cheap ResetEx path (~3-5 ms — textures/shaders
-        // persist per D3D9Ex semantics; only size-keyed RTs rebuild),
-        // so the scene renders at the CORRECT size every tick — no
-        // deferred-settle snap. RenderD3D9 stays the modal-loop frame
-        // driver (the idle pump is starved in here). The
-        // kResizeSettleTimerId one-shot is a safety net that re-resets
-        // only if a mid-gesture reset failed.
-        // A move can land the window on a different monitor —
-        // re-derive the pacing budget from that monitor's refresh rate.
-        if (MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY) != m_pacingMonitor)
-            UpdatePacingBudget(hwnd);
-        // Position-only ticks (window drags: SWP_NOSIZE set) skip the
-        // predict/render chain — the client extent is unchanged, so
-        // PredictAndApply would early-out into RefreshScreenPosition anyway,
-        // and the unconditional RenderD3D9 was pure extra work on top of the
-        // paced idle loop (one wasted render per drag tick). The popup still
-        // tracks the move. SWP_FRAMECHANGED is excluded: a non-client recalc
-        // can change the CLIENT extent even under SWP_NOSIZE (window rect
-        // unchanged), so those ticks keep the full predict/render path.
-        if (hViewport && lp != 0
-            && (reinterpret_cast<const WINDOWPOS*>(lp)->flags & SWP_NOSIZE)
-            && !(reinterpret_cast<const WINDOWPOS*>(lp)->flags & SWP_FRAMECHANGED))
-        {
-            layout.RefreshScreenPosition();
-            break;  // DefWindowProc still generates WM_MOVE etc.
-        }
-        if (hViewport)
-        {
-            // [resize-perf] time the per-tick chain and
-            // emit a 1 Hz aggregate with the engine's reset sub-stage
-            // breakdown (cheap = ResetForResize successes).
-            const LONGLONG rpT0 = PerfQpcNow();
-            layout.PredictAndApply();
-            RenderD3D9();
-            perfWmpos.add(PerfUsSince(rpT0));
-
-            if (m_inSizeMove)
-                SetTimer(hwnd, kResizeSettleTimerId, kResizeSettleDelayMs, nullptr);
-
-            const DWORD rpNow = GetTickCount();
-            if (perfWmposLastEmit == 0 || (rpNow - perfWmposLastEmit) >= 1000)
-            {
-                if (engine)
-                {
-                    const Engine::ResetPerf& rp = engine->GetResetPerf();
-                    Log("[resize-perf] wmpos: ticks=%u apply+render(ms av/mx)=%.1f/%.1f "
-                        "resets=%u (cheap-total=%u) last(ms tot=%.1f lost=%.1f dev=%.1f reload=%.1f alpha=%.1f)\n",
-                        perfWmpos.n,
-                        perfWmpos.avg() / 1000.0, perfWmpos.maxUs / 1000.0,
-                        rp.count - perfWmposResetBase, rp.cheapCount,
-                        rp.lastTotalMs, rp.lastLostMs, rp.lastDeviceResetMs,
-                        rp.lastReloadMs, rp.lastAlphaResizeMs);
-                    perfWmposResetBase = rp.count;
-                }
-                perfWmpos.reset();
-                perfWmposLastEmit = rpNow;
-            }
-        }
-        break;  // fall through so DefWindowProc continues processing
+        OnMainWindowPosChanged(hwnd, lp); break;
 
     // During the modal sizemove loop, WM_SIZE/WM_MOVE
     // fire continuously. Each one calls RefreshScreenPosition so
@@ -1943,6 +1531,435 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     return DefWindowProc(hwnd, msg, wp, lp);
 }
 
+LRESULT HostWindowImpl::OnMainCreate(HWND hwnd)
+{
+        // Viewport is a top-level WS_POPUP window OWNED by main
+        // (not a WS_CHILD). It carries the Engine's D3D9 device and is
+        // hidden once the window is up (see Run): the engine frame
+        // reaches the screen through the DComp engine visual, and input
+        // arrives via InputDispatcher. WS_EX_NOACTIVATE prevents
+        // the popup from stealing focus; WS_EX_TOOLWINDOW keeps it out
+        // of the taskbar.
+        //
+        // Ownership semantics: an owned popup follows the owner's
+        // minimize/restore state, gets destroyed when the owner is
+        // destroyed, and stays z-ordered above the owner. Position
+        // is in SCREEN coords; LayoutBroker translates from main-
+        // client coords via ClientToScreen.
+        hViewport = CreateWindowExW(
+            WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
+            kHostViewportClassName, L"",
+            WS_POPUP | WS_VISIBLE,
+            16, 16, 320, 240, hwnd /* owner */, nullptr,
+            hInstance, nullptr);
+        if (!hViewport)
+        {
+            Log("[host] CreateWindowExW viewport failed (gle=%lu)\n", GetLastError());
+            return -1;
+        }
+        layout.SetViewport(hViewport);
+
+        // no host-owned D3D9 device. The Engine constructs the
+        // live device internally below, targeting this viewport HWND.
+
+        // Construct the Engine now that both HWNDs exist. hFocus = parent,
+        // hDevice = viewport popup — same wiring as the legacy editor.
+        try
+        {
+            engine = std::make_unique<Engine>(
+                hwnd, hViewport, textureManager, shaderManager, fileManager);
+            if (dispatcher) dispatcher->SetEngine(engine.get());
+            layout.SetEngine(engine.get());
+            // bind engine to ModManager so subsequent
+            // SelectMod() calls can hot-swap shaders + textures.
+            if (modManager) modManager->SetEngine(engine.get());
+
+            // [bloom-restore] Restore bloom config from the
+            // registry (HKCU\Software\AloParticleEditor), mirroring the legacy
+            // editor's startup restore (SetBloom* from ReadBloom*). The
+            // host previously skipped this, so the engine kept its
+            // strength=0 constructor default and toggling "Enable bloom"
+            // produced NO visible glow even when the user has saved bloom
+            // settings from the legacy editor. Same value names/types legacy
+            // reads/writes, so settings round-trip between the two UIs.
+            //
+            // Skipped under --test-host: the a11y goldens capture the bloom
+            // dialog's strength value, so the harness must see the
+            // constructor defaults (0.00) deterministically, not whatever the
+            // dev machine has saved in the registry.
+            if (ShouldRestorePersistedViewSettings(useTestHost, m_captureGoldenProfile))
+            {
+                // Open MAY fail on the very first launch (key absent). That must NOT skip
+                // the restore: ReadRestoredSettings fail-softs every read to its default on
+                // a null key, and the apply phase's UNCONDITIONAL lighting pushes
+                // (SetLight/SetAmbient(w=1)/SetShadow) are load-bearing — gating on a
+                // successful open once left a true first run unlit (ambient w=0 → black
+                // viewport). Caught by scripts/cold-launch-check.ps1 on a clean profile.
+                const bool inCaptureMode = m_runMode == RunMode::Capture;
+                HKEY hKey = host::OpenSettingsKeyForRead();
+                const host::RestoredSettings restored =
+                    host::ReadRestoredSettings(hKey, inCaptureMode);
+                if (hKey) RegCloseKey(hKey);
+                ApplyRestoredSettings(engine.get(), restored);
+            }
+            else if (m_captureGoldenProfile)
+            {
+                // Report the LIVE stack size rather than a constant: if the
+                // restore gate above ever regresses, the count moves off zero,
+                // the golden runner's exact-line match misses, and the capture
+                // fails loudly instead of quietly comparing modded pixels.
+                const size_t layers = modManager ? modManager->GetLayerStack().size() : 0;
+                fputs("[capture-profile] golden persisted-view-restore=skipped\n", stdout);
+                printf("[capture-profile] golden persisted-mod-layer-restore=skipped layers=%zu\n",
+                       layers);
+                fflush(stdout);
+                Log("[capture-profile] golden persisted-view-restore=skipped\n");
+                Log("[capture-profile] golden persisted-mod-layer-restore=skipped layers=%zu\n",
+                    layers);
+            }
+            Log("[host] Engine constructed OK\n");
+        }
+        catch (const std::exception& e)
+        {
+            Log("[host] Engine construction threw: %s\n", e.what());
+            // Any headless mode is unattended: a modal would hang the run with
+            // nothing to dismiss it (the pump's engine-null arm exits non-zero
+            // instead). Covers --capture/--capture-ref/--test-host, not just
+            // --drive/--record — IsFullyInteractive() is the complete predicate.
+            if (IsFullyInteractive())
+                MessageBoxA(hwnd, e.what(), "Engine init failed", MB_ICONERROR);
+            // Continue — viewport will still clear, just without engine state.
+        }
+        catch (...)
+        {
+            Log("[host] Engine construction threw unknown exception\n");
+            // Continue without engine; snapshot will return ok:false.
+        }
+
+        // Stand up the alpha compositor against the Engine's D3D9
+        // device. The Engine's Reset() resizes the off-screen RT on
+        // layout changes; we still bootstrap a non-degenerate size now
+        // so the very first Render finds a valid RT to target.
+        if (engine && engine->GetDevice())
+        {
+            try
+            {
+                alphaCompositor = std::make_unique<host::AlphaCompositor>(engine->GetDevice());
+                RECT vrc{};
+                GetClientRect(hViewport, &vrc);
+                alphaCompositor->Resize(vrc.right - vrc.left, vrc.bottom - vrc.top);
+                engine->SetAlphaCompositor(alphaCompositor.get());
+                engine->SetCompositionCompositor(m_compositor.get());
+                // Arm the eager reference-object catalog prefetch now
+                // that the render path is up.
+                engine->ArmCatalogPrefetch();
+                layout.SetAlphaCompositor(alphaCompositor.get());
+                Log("[host] AlphaCompositor up (%ldx%ld)\n",
+                    vrc.right - vrc.left, vrc.bottom - vrc.top);
+
+                // Stand up the InputDispatcher on the
+                // viewport popup so DOM-routed camera/keyboard input reaches
+                // the engine. Bound to BridgeDispatcher below in Run() once
+                // `dispatcher` exists.
+                if (alphaCompositor)
+                {
+                    m_inputDispatcher = std::make_unique<host::InputDispatcher>(hViewport);
+                    m_inputDispatcher->SetLogger([this](const std::string& line) {
+                        Log("%s\n", line.c_str());
+                    });
+                    Log("[ArchC] InputDispatcher up (popup=%p)\n",
+                        static_cast<void*>(hViewport));
+                }
+            }
+            catch (const std::exception& e)
+            {
+                Log("[host] AlphaCompositor init failed: %s — 3D preview unavailable\n", e.what());
+                engine->SetAlphaCompositor(nullptr);
+                layout.SetAlphaCompositor(nullptr);
+                alphaCompositor.reset();
+                m_inputDispatcher.reset();
+                MarkViewportUnavailable("The graphics preview surface could not be initialized.", E_FAIL);
+            }
+        }
+
+        // Seed the first paint (suppresses white-flash on startup).
+        InvalidateRect(hViewport, nullptr, FALSE);
+
+        // Start the 4 Hz stats timer. Fires every 250 ms and emits a
+        // stats/tick event to React so the status bar stays live.
+        SetTimer(hwnd, kStatsTimerId, 250, nullptr);
+
+        // Two-tier autosave timers (30 s recent / 5 min stable),
+        // mirroring the legacy editor. Gated on !useTestHost so harness
+        // runs never write autosave files — those would orphan into a
+        // recovery prompt for the user's real editor. WM_TIMER latches the
+        // dirty-gated write (see the DEFERRED autosave note below). Also gated
+        // on !captureMode: a --capture run skips the paced idle
+        // branch that services the latch, so its pending write could only
+        // land via the busy-override — and an ephemeral capture has no
+        // business writing recovery files anyway (same orphan-prompt
+        // rationale as --drive).
+        // Reference-only captures historically service these timers too.
+        if (!useTestHost && (m_runMode == RunMode::Interactive ||
+            (m_runMode == RunMode::Capture && m_captureAlo.empty())))
+        {
+            SetTimer(hwnd, Autosave::RECENT_TIMER_ID, Autosave::RECENT_INTERVAL_MS, nullptr);
+            SetTimer(hwnd, Autosave::STABLE_TIMER_ID, Autosave::STABLE_INTERVAL_MS, nullptr);
+        }
+        return 0;
+}
+
+LRESULT HostWindowImpl::OnMainTimer(HWND hwnd, WPARAM wp)
+{
+        if (wp == kStatsTimerId && dispatcher)
+        {
+            // Heartbeat flush: modal dialogs (file pickers etc.) run
+            // their own message pump, which starves the paced idle branch —
+            // but still dispatches WM_TIMER, so a coalesced trailing
+            // broadcast is at worst one stats tick (250 ms) stale there.
+            dispatcher->FlushPendingEmits();
+            // Record mode: the sim advances exactly tl.fps virtual frames/sec
+            // (StepPreviewFrames), so the wall-clock render rate is the wrong
+            // number to show — and it swings with the capture barriers, which
+            // made the FPS chip a run-variant in recorded clips. Locked from
+            // the moment the timeline parses (before frame 0's settle) so no
+            // captured frame ever carries a wall-clock value.
+            float fps      = (m_runMode == RunMode::Record && m_recordTimelineFps > 0)
+                               ? static_cast<float>(m_recordTimelineFps)
+                               : fpsMeasurer.getFPS();
+            int emitters   = engine ? engine->GetNumEmitters()  : 0;
+            int particles  = engine ? engine->GetNumParticles() : 0;
+            int instances  = engine ? engine->GetNumInstances() : 0;
+            bool overload  = engine ? engine->IsSpawnOverloadActive() : false;
+            dispatcher->EmitStatsTick(fps, emitters, particles, instances, overload);
+        }
+        // Autosave tick. Best-effort + dirty-gated — skip the write
+        // when nothing changed since the last save (no point autosaving an
+        // unmodified saved file).
+        //
+        // DEFERRED: the timer no longer writes inline — a WM_TIMER can
+        // fire mid-gesture (gizmo drag, splitter, modal resize pump) and the
+        // serialize+temp-write+rename then stalls the UI thread at the worst
+        // moment. The tick just latches m_autosavePending; the paced idle
+        // branch services it right after a presented frame when no capture /
+        // size-move is active (ServicePendingAutosave). Busy-override: if the
+        // pending write can't land within one RECENT interval (continuous
+        // gesture), the NEXT timer tick forces it inline — the crash-safety
+        // window is bounded at ~2x the tier cadence, never unbounded.
+        else if ((wp == Autosave::RECENT_TIMER_ID || wp == Autosave::STABLE_TIMER_ID)
+                 && dispatcher && particleSystem && dispatcher->GetDirty())
+        {
+            Autosave::Tier tier = (wp == Autosave::RECENT_TIMER_ID)
+                                ? Autosave::Tier::Recent
+                                : Autosave::Tier::Stable;
+            // Stable outranks Recent if both end up pending (rarer cadence,
+            // and the stable slot is the one recovery prefers).
+            if (m_autosavePendingTier != Autosave::Tier::Stable)
+                m_autosavePendingTier = tier;
+            if (!m_autosavePending)
+            {
+                m_autosavePending = true;
+                m_autosavePendingSince = GetTickCount64();
+            }
+            else if (GetTickCount64() - m_autosavePendingSince
+                     >= Autosave::RECENT_INTERVAL_MS)
+            {
+                // Busy-override: still pending a full interval later —
+                // write now regardless of gesture state.
+                ServicePendingAutosave(true);
+            }
+        }
+        // [resize-perf] quiescence safety net — fires
+        // 150 ms after size ticks stop; normally a no-op (per-tick
+        // cheap resets keep sizes in sync), it only re-resets if a
+        // mid-gesture reset failed. Covers a lost WM_EXITSIZEMOVE.
+        else if (wp == kResizeSettleTimerId)
+        {
+            KillTimer(hwnd, kResizeSettleTimerId);
+            SettleResize(m_inSizeMove ? "quiescence-pause" : "quiescence");
+        }
+        // Crash recovery: a Reload() the page never answered (WebViewCrashPolicy.h).
+        else if (wp == kWebReloadDeadlineTimerId)
+        {
+            KillTimer(hwnd, kWebReloadDeadlineTimerId);
+            if (webviewcrash::DecideReloadDeadline(m_webReloadPending)
+                    == webviewcrash::WebFailureAction::MarkDead)
+                MarkWebDead("reload deadline passed");
+        }
+        // A dead-web close deferred out of a bridge handler's modal pump.
+        else if (wp == kWebDeadCloseRetryTimerId)
+        {
+            CloseAfterWebDeath(hwnd);
+        }
+        return 0;
+}
+
+LRESULT HostWindowImpl::OnMainNcCalcSize(HWND hwnd, WPARAM wp, LPARAM lp)
+{
+            auto* params = reinterpret_cast<NCCALCSIZE_PARAMS*>(lp);
+            const LONG originalTop = params->rgrc[0].top;
+            const LRESULT dwp = DefWindowProcW(hwnd, WM_NCCALCSIZE, wp, lp);
+            if (dwp != 0) return dwp;
+            // A minimized window's proposed client rect is degenerate
+            // (bottom - top == 0). The caption reclaim below (top += 1 / top +=
+            // frameY) would invert it to a NEGATIVE-height client rect —
+            // GetClientRect then reports win=0x-1, which zeroes the D3D9
+            // backbuffer and drives the React viewport layout degenerate,
+            // stalling the headless --record-minimized capture. Leave
+            // DefWindowProc's (0-height, non-inverted) rect
+            // as-is while iconic; a later positive-size WM_SIZE re-seeds the
+            // client size on restore. (The compositor/WebView sinks apply the
+            // same non-positive-size policy at their own sites — the WebView2
+            // setup seeds and the WM_SIZE / ResizeWebViewToClient sinks.)
+            if (IsIconic(hwnd)) return 0;
+            // Reclaim ONLY the caption/top into the client (removes the native
+            // title bar); keep the L/R/bottom frame DefWindowProc computed.
+            params->rgrc[0].top = originalTop;
+            const UINT dpi = GetDpiForWindow(hwnd);
+            const int frameY = GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi)
+                             + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+            if (IsZoomed(hwnd))
+            {
+                // Maximized: add the frame inset so the client doesn't spill into
+                // the invisible overhang; keep a sliver on an auto-hide taskbar.
+                params->rgrc[0].top += frameY;
+                InsetForAutoHideTaskbar(params->rgrc[0]);
+            }
+            else
+            {
+                params->rgrc[0].top += 1;   // 1px top keeps the resize/shadow line
+            }
+            return 0;
+}
+
+LRESULT HostWindowImpl::OnMainNcHitTest(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+{
+        LRESULT dwmHit = 0;
+        if (DwmDefWindowProc(hwnd, msg, wp, lp, &dwmHit)) return dwmHit;
+
+        const POINT screenPt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
+        RECT wr; GetWindowRect(hwnd, &wr);
+        const UINT dpi = GetDpiForWindow(hwnd);
+        const int frameX = GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+        const int frameY = GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+
+        // Resize edges/corners take priority over the drag band — the top ~frameY
+        // is a resize grip even though it overlaps the title bar. Not when maximized.
+        if (!IsZoomed(hwnd))
+        {
+            if (screenPt.y < wr.top + frameY)
+            {
+                if (screenPt.x < wr.left + frameX)   return HTTOPLEFT;
+                if (screenPt.x >= wr.right - frameX)  return HTTOPRIGHT;
+                return HTTOP;
+            }
+            if (screenPt.y >= wr.bottom - frameY)
+            {
+                if (screenPt.x < wr.left + frameX)   return HTBOTTOMLEFT;
+                if (screenPt.x >= wr.right - frameX)  return HTBOTTOMRIGHT;
+                return HTBOTTOM;
+            }
+            if (screenPt.x < wr.left + frameX)   return HTLEFT;
+            if (screenPt.x >= wr.right - frameX)  return HTRIGHT;
+        }
+
+        // Ask WebView2 whether this pixel is the web title bar's caption region.
+        POINT clientPt = screenPt; ScreenToClient(hwnd, &clientPt);
+        if (m_ncRegionEnabled && m_compositionController4)
+        {
+            COREWEBVIEW2_NON_CLIENT_REGION_KIND kind = COREWEBVIEW2_NON_CLIENT_REGION_KIND_CLIENT;
+            if (SUCCEEDED(m_compositionController4->GetNonClientRegionAtPoint(clientPt, &kind)))
+                return kind == COREWEBVIEW2_NON_CLIENT_REGION_KIND_CAPTION ? HTCAPTION : HTCLIENT;
+        }
+        // Fallback (WebView2 Runtime lacks non-client support): the fixed 34px
+        // TitleBar strip minus the 3×46px controls on the right is the caption.
+        {
+            const int stripH = MulDiv(34, dpi, 96);
+            const int controlsW = MulDiv(46 * 3, dpi, 96);
+            RECT cr; GetClientRect(hwnd, &cr);
+            if (clientPt.y >= 0 && clientPt.y < stripH && clientPt.x < cr.right - controlsW)
+                return HTCAPTION;
+        }
+        return HTCLIENT;
+}
+
+void HostWindowImpl::OnMainWindowPosChanged(HWND hwnd, LPARAM lp)
+{
+        // WM_WINDOWPOSCHANGED fires for every position/
+        // size change BEFORE WM_SIZE / WM_MOVE / WM_PAINT.
+        //
+        // (1) PredictAndApply resizes the popup synchronously to
+        //     match main's new client extent, using cached layout
+        //     offsets.
+        // (2) RenderD3D9 forces a Present after the swap chain is
+        //     Reset. Without this, Windows' modal resize loop holds
+        //     my PeekMessage idle pump and D3D9 never gets to render
+        //     fresh — the popup just stretches the LAST presented
+        //     frame, so a wider/taller resize reveals dark purple
+        //     where the ground plane should be.
+        //
+        // [resize-perf] PredictAndApply's per-tick reset
+        // runs on the cheap ResetEx path (~3-5 ms — textures/shaders
+        // persist per D3D9Ex semantics; only size-keyed RTs rebuild),
+        // so the scene renders at the CORRECT size every tick — no
+        // deferred-settle snap. RenderD3D9 stays the modal-loop frame
+        // driver (the idle pump is starved in here). The
+        // kResizeSettleTimerId one-shot is a safety net that re-resets
+        // only if a mid-gesture reset failed.
+        // A move can land the window on a different monitor —
+        // re-derive the pacing budget from that monitor's refresh rate.
+        if (MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY) != m_pacingMonitor)
+            UpdatePacingBudget(hwnd);
+        // Position-only ticks (window drags: SWP_NOSIZE set) skip the
+        // predict/render chain — the client extent is unchanged, so
+        // PredictAndApply would early-out into RefreshScreenPosition anyway,
+        // and the unconditional RenderD3D9 was pure extra work on top of the
+        // paced idle loop (one wasted render per drag tick). The popup still
+        // tracks the move. SWP_FRAMECHANGED is excluded: a non-client recalc
+        // can change the CLIENT extent even under SWP_NOSIZE (window rect
+        // unchanged), so those ticks keep the full predict/render path.
+        if (hViewport && lp != 0
+            && (reinterpret_cast<const WINDOWPOS*>(lp)->flags & SWP_NOSIZE)
+            && !(reinterpret_cast<const WINDOWPOS*>(lp)->flags & SWP_FRAMECHANGED))
+        {
+            layout.RefreshScreenPosition();
+            return;  // DefWindowProc still generates WM_MOVE etc.
+        }
+        if (hViewport)
+        {
+            // [resize-perf] time the per-tick chain and
+            // emit a 1 Hz aggregate with the engine's reset sub-stage
+            // breakdown (cheap = ResetForResize successes).
+            const LONGLONG rpT0 = PerfQpcNow();
+            layout.PredictAndApply();
+            RenderD3D9();
+            perfWmpos.add(PerfUsSince(rpT0));
+
+            if (m_inSizeMove)
+                SetTimer(hwnd, kResizeSettleTimerId, kResizeSettleDelayMs, nullptr);
+
+            const DWORD rpNow = GetTickCount();
+            if (perfWmposLastEmit == 0 || (rpNow - perfWmposLastEmit) >= 1000)
+            {
+                if (engine)
+                {
+                    const Engine::ResetPerf& rp = engine->GetResetPerf();
+                    Log("[resize-perf] wmpos: ticks=%u apply+render(ms av/mx)=%.1f/%.1f "
+                        "resets=%u (cheap-total=%u) last(ms tot=%.1f lost=%.1f dev=%.1f reload=%.1f alpha=%.1f)\n",
+                        perfWmpos.n,
+                        perfWmpos.avg() / 1000.0, perfWmpos.maxUs / 1000.0,
+                        rp.count - perfWmposResetBase, rp.cheapCount,
+                        rp.lastTotalMs, rp.lastLostMs, rp.lastDeviceResetMs,
+                        rp.lastReloadMs, rp.lastAlphaResizeMs);
+                    perfWmposResetBase = rp.count;
+                }
+                perfWmpos.reset();
+                perfWmposLastEmit = rpNow;
+            }
+        }
+        return;  // fall through so DefWindowProc continues processing
+}
+
 namespace {
 
 LRESULT CALLBACK HostMainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
@@ -1972,6 +1989,7 @@ LRESULT CALLBACK HostViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
 int HostWindowImpl::Run(int nCmdShow)
 {
+    // ---------- Run: preflight ----------
     OpenLog();
 
     if (useTestHost)
@@ -2048,6 +2066,7 @@ int HostWindowImpl::Run(int nCmdShow)
     ULONG_PTR gdiplusToken = 0;
     Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, nullptr);
 
+    // ---------- Run: windows ----------
     g_self = this;
 
     WNDCLASSEXW wc{};
@@ -2143,6 +2162,7 @@ int HostWindowImpl::Run(int nCmdShow)
                               &dark, sizeof(dark));
     }
 
+    // ---------- Run: bridge and document ----------
     // Construct dispatcher AFTER hMain exists (it captures the WebView2
     // pointer-to-PostWebMessageAsString via its EmitFn). engine ptr is
     // wired in WM_CREATE when the Engine is built.
@@ -2214,6 +2234,7 @@ int HostWindowImpl::Run(int nCmdShow)
     dispatcher->SetInputDispatcher(m_inputDispatcher.get());
     Log("[host] host state bound (particleSystem + spawnerDriver)\n");
 
+    // ---------- Run: WebView2 and show ----------
     HRESULT hr = InitWebView2();
     if (FAILED(hr))
     {
@@ -2272,6 +2293,7 @@ int HostWindowImpl::Run(int nCmdShow)
     ShowWindow(hMain, (captureMode || IsAutomationMode()) ? SW_SHOWNOACTIVATE : nCmdShow);
     UpdateWindow(hMain);
 
+    // ---------- Run: capture runner ----------
     // --capture: construct the one-shot runner (setup + per-frame tick +
     // exit mapping live in CaptureRunner.cpp). Init
     // performs the exact swap+notify load sequence file/open uses (or the
@@ -2294,6 +2316,7 @@ int HostWindowImpl::Run(int nCmdShow)
     if (captureMode)
         captureRunner.Init();
 
+    // ---------- Run: pump ----------
     // main loop: switched from blocking GetMessage to PeekMessage
     // idle-render. The blocking variant produces no continuous WM_PAINT
     // events, so the per-frame spawner tick + engine render had no driver.
@@ -2376,6 +2399,7 @@ int HostWindowImpl::Run(int nCmdShow)
         // without rendering (exit code set below).
         if (captureRunner.Failed()) break;
 
+        // ---------- Run: drive ----------
         // --drive: own top-level branch, FIRST (captureMode is false in drive
         // mode, so this must precede the !captureMode idle branch). Renders
         // every iteration; never blocks. States: wait app/ready -> build runner
@@ -2471,6 +2495,7 @@ int HostWindowImpl::Run(int nCmdShow)
             driveExitCode = 5;
             quit = true;
         }
+        // ---------- Run: record ----------
         // --record: own top-level branch, before the paced idle branch. States:
         // wait app/ready -> parse timeline + one-time startup gate (seed/resize/
         // pause/open/catalog) + build runner -> Tick per emitted frame.
@@ -2654,6 +2679,7 @@ int HostWindowImpl::Run(int nCmdShow)
             rec.exitCode = 5;
             quit = true;
         }
+        // ---------- Run: interactive ----------
         // Idle: render one frame per budget slot. Cheap enough to always
         // run (Engine has its own paused / IsPreviewPaused gates that skip
         // the simulation step when set; render still presents to keep the
@@ -2713,6 +2739,7 @@ int HostWindowImpl::Run(int nCmdShow)
         }
     }
 
+    // ---------- Run: teardown and exit code ----------
     // [resize-perf] matching release for the timeBeginPeriod above.
     timeEndPeriod(1);
 
