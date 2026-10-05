@@ -37,6 +37,7 @@
 #define WINVER 0x0A00
 
 #include "HostWindowImpl.h"
+#include "simulation/ParticleRandom.h"
 
 namespace host {
 
@@ -278,7 +279,41 @@ void HostWindowImpl::OpenLog()
     // Get-Content -Wait, etc.) can open the file while the host is
     // writing to it. The host is the only writer so deny-no is safe.
     logFile = _wfsopen(path.c_str(), L"w", _SH_DENYNO);
-    if (logFile) Log("[host] === host session started ===\n");
+    if (logFile)
+    {
+        Log("[host] === host session started ===\n");
+        const char* mode = m_runMode == RunMode::Drive ? "drive"
+                         : m_runMode == RunMode::Record ? "record"
+                         : m_runMode == RunMode::Capture
+                             ? (m_captureRef.empty() ? "capture" : "capture-ref")
+                         : useTestHost ? "test-host" : "interactive";
+        Log("[particle-rng] mode=%s algorithm=legacy-msvc-v%u seed=0x%08X\n",
+            mode, static_cast<unsigned>(ParticleRandom::kAlgorithmVersion),
+            static_cast<unsigned>(ParticleRandom::SeedValue()));
+    }
+}
+
+// CloseLog holds logMutex: write directly rather than locking again through Log.
+void HostWindowImpl::LogParticleRngResult()
+{
+    if (m_runMode == RunMode::Record)
+    {
+        fprintf(logFile, "[particle-rng] mode=record algorithm=legacy-msvc-v%u seed=0x%08X draws=%llu drawsBeforeFirstFrame=",
+            static_cast<unsigned>(ParticleRandom::kAlgorithmVersion),
+            static_cast<unsigned>(ParticleRandom::SeedValue()),
+            static_cast<unsigned long long>(ParticleRandom::DrawCount()));
+        if (m_recordSession.sampledBeforeFirstFrame)
+            fprintf(logFile, "%llu\n", static_cast<unsigned long long>(m_recordSession.drawsBeforeFirstFrame));
+        else
+            fputs("n/a\n", logFile);
+    }
+    else if (m_runMode == RunMode::Capture && !m_capturePng.empty())
+    {
+        fprintf(logFile, "[particle-rng] mode=capture algorithm=legacy-msvc-v%u seed=0x%08X draws=%llu\n",
+            static_cast<unsigned>(ParticleRandom::kAlgorithmVersion),
+            static_cast<unsigned>(ParticleRandom::SeedValue()),
+            static_cast<unsigned long long>(ParticleRandom::DrawCount()));
+    }
 }
 
 void HostWindowImpl::CloseLog()
@@ -286,6 +321,7 @@ void HostWindowImpl::CloseLog()
     std::lock_guard<std::mutex> lock(logMutex);
     if (logFile)
     {
+        LogParticleRngResult();
         fputs("[host] === host session ending ===\n", logFile);
         fclose(logFile);
         logFile = nullptr;
@@ -2389,7 +2425,7 @@ int HostWindowImpl::Run(int nCmdShow)
     // --record: deterministic clip recording. Its own pump branch (below), a
     // sibling of --drive. The runner is built once (after app/ready + the
     // one-time startup gate) then Ticked per emitted frame.
-    RecordSession rec;
+    RecordSession& rec = m_recordSession;
     rec.startQpc = PerfQpcNow();
     rec.freqQpc  = PerfQpcFreq();
 

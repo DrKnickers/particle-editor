@@ -48,6 +48,7 @@
 #include <array>
 #include <atomic>
 #include <cstdarg>
+#include <cstdint>
 #include <cmath>       // roundf for drag-time grid/angle snap
 #include <cstdio>
 #include <cstdlib>     // C runtime helpers
@@ -286,6 +287,8 @@ struct RecordSession
     double       budgetMs = 0.0;
     LONGLONG     startQpc = 0;
     LONGLONG     freqQpc  = 0;
+    std::uint64_t drawsBeforeFirstFrame = 0;
+    bool         sampledBeforeFirstFrame = false;
 };
 
 // DComp-present barrier policy (was Run()-scope; hoisted to file scope so the
@@ -923,6 +926,7 @@ struct HostWindowImpl
     // CaptureRunner (which owns the gate timer/warn state) reads it via Deps.
     bool         m_sceneRectSeen = false;
     std::unique_ptr<host::ClipRunner> m_clipRunner;
+    RecordSession m_recordSession;
     std::wstring m_perfWebViewProfile;
     FILE*       logFile = nullptr;
     std::mutex  logMutex;
@@ -1010,6 +1014,7 @@ struct HostWindowImpl
     // travels in `rec`.
     bool SetupRecordArm(RecordSession& rec);
     void CloseLog();
+    void LogParticleRngResult();
 
     // InitD3D9 dropped; the Engine owns the live D3D9 device. The
     // viewport HWND is handed to Engine's ctor in WM_CREATE.

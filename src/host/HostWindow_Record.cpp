@@ -492,6 +492,8 @@ bool HostWindowImpl::SetupRecordArm(RecordSession& rec)
                     rec.budgetMs = r->FrameCount() *
                                      (host::ClipRunner::kAckDeadlineMs + 1000.0) + 30000.0;
                     m_clipRunner = std::move(r);
+                    rec.drawsBeforeFirstFrame = ParticleRandom::DrawCount();
+                    rec.sampledBeforeFirstFrame = true;
                     }  // end if (gateOk)
                 }
     return quit;
