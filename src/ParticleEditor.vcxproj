@@ -122,6 +122,7 @@
     <ClInclude Include="effect\Autosave.h" />
     <ClInclude Include="effect\AtomicSave.h" />
     <ClInclude Include="simulation\ParticleRandom.h" />
+    <ClInclude Include="simulation\PreviewScenario.h" />
     <ClInclude Include="simulation\SpawnerDriver.h" />
     <ClInclude Include="simulation\SpawnerRandom.h" />
     <ClInclude Include="simulation\SpawnerPath.h" />
@@ -181,6 +182,7 @@
     <ClInclude Include="host\CaptureGoldenProfile.h" />
     <ClInclude Include="host\CaptureRunner.h" />
     <ClInclude Include="host\CaptureTicker.h" />
+    <ClInclude Include="host\PreviewScenarioJson.h" />
     <ClInclude Include="host\DriveRunner.h" />
     <ClInclude Include="host\HostRunUtil.h" />
     <ClInclude Include="host\ClipTimeline.h" />
@@ -275,6 +277,7 @@
     <ClCompile Include="host\BridgeDispatch_SpawnerLighting.cpp" />
     <ClCompile Include="host\CaptureRunner.cpp" />
     <ClCompile Include="host\CaptureTicker.cpp" />
+    <ClCompile Include="host\PreviewScenarioJson.cpp" />
     <ClCompile Include="host\RestoredSettings.cpp" />
     <ClCompile Include="host\WicEncode.cpp">
       <!-- Same include-order override as Compositor.cpp: wincodec.h is a

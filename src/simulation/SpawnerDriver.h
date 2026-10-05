@@ -81,6 +81,9 @@ public:
 
     SpawnerDriver();
 
+    // Start a new run without changing the caller's configuration.
+    void Reset();
+
     // Replace the active config. Resets the burst-state machine so a
     // freshly-applied config doesn't strand half-finished bursts with
     // stale parameters.

@@ -105,6 +105,9 @@
     <ClInclude Include="simulation\ParticleRandom.h">
       <Filter>Header Files\simulation</Filter>
     </ClInclude>
+    <ClInclude Include="simulation\PreviewScenario.h">
+      <Filter>Header Files\simulation</Filter>
+    </ClInclude>
     <ClInclude Include="simulation\SpawnerDriver.h">
       <Filter>Header Files\simulation</Filter>
     </ClInclude>
@@ -172,6 +175,9 @@
       <Filter>Header Files\host</Filter>
     </ClInclude>
     <ClInclude Include="host\CaptureTicker.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\PreviewScenarioJson.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
     <ClInclude Include="host\HostRunUtil.h">
@@ -561,6 +567,9 @@
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\CaptureTicker.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\PreviewScenarioJson.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\WicEncode.cpp">

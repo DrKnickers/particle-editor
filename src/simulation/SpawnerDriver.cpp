@@ -71,6 +71,16 @@ SpawnerDriver::SpawnerDriver()
 {
 }
 
+void SpawnerDriver::Reset()
+{
+    m_phase                 = Phase::Waiting;
+    m_burstRemaining        = 0;
+    m_timeUntilNextInstance = 0.0f;
+    m_timeUntilNextBurst    = 0.0f;
+    m_pendingBursts         = 0;
+    m_burstBegun            = false;
+}
+
 void SpawnerDriver::SetConfig(const SpawnerConfig& cfg)
 {
     SpawnerConfig oldCfg = m_cfg;

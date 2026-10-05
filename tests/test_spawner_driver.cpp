@@ -462,6 +462,68 @@ int main()
         CHECK(g_spawnCalls == before + 1, "a fresh Trigger after CancelPending spawns again");
     }
 
+    // ---- Reset: discard armed and queued work, retain configuration --------
+    // The stub records attempts only: every attempt is refused, so this does
+    // not exercise a successfully spawned, begun-and-still-firing burst.
+    {
+        SpawnerConfig c;
+        c.mode = SpawnerConfig::Mode::Manual; c.enabled = true;
+        c.burstSize = 3; c.spacingSec = 0.25f; c.intervalSec = 2.0f;
+        c.position = D3DXVECTOR3(4, 8, -16);
+        c.velocity = D3DXVECTOR3(1, 2, 3);
+        c.maxLifetimeSec = 42.0f;
+        c.jitterPosition = D3DXVECTOR3(8, 0, 8);
+        c.acceleration = D3DXVECTOR3(0, 0, -3);
+        c.squiggleAmplitude = D3DXVECTOR3(1, 2, 3);
+        c.squiggleFrequency = 4.0f;
+        SpawnerDriver reset, fresh;
+        reset.SetConfig(c); fresh.SetConfig(c);
+        reset.Trigger(FakeSystem(), FakeEngine());
+        reset.Trigger(FakeSystem(), FakeEngine());
+        const int beforeReset = g_spawnCalls;
+        ParticleRandom::Seed(ParticleRandom::kAutomationSeed);
+        reset.Reset();
+        CHECK(g_spawnCalls == beforeReset && ParticleRandom::DrawCount() == 0,
+              "Reset calls no engine spawn and draws no randomness");
+        const SpawnerConfig& kept = reset.GetConfig();
+        CHECK(kept.mode == c.mode && kept.enabled == c.enabled &&
+              kept.burstSize == c.burstSize && kept.spacingSec == c.spacingSec &&
+              kept.intervalSec == c.intervalSec && kept.position == c.position &&
+              kept.velocity == c.velocity && kept.maxLifetimeSec == c.maxLifetimeSec &&
+              kept.jitterPosition == c.jitterPosition && kept.acceleration == c.acceleration &&
+              kept.squiggleAmplitude == c.squiggleAmplitude &&
+              kept.squiggleFrequency == c.squiggleFrequency,
+              "Reset preserves every config field");
+        std::uint64_t drawCounts[2] = {};
+        std::uint32_t positions[2][3] = {};
+        SpawnerDriver* drivers[] = { &reset, &fresh };
+        for (int i = 0; i < 2; ++i)
+        {
+            ParticleRandom::Seed(ParticleRandom::kAutomationSeed);
+            const int before = g_spawnCalls;
+            g_activeCount = SpawnerDriver::MAX_ACTIVE_INSTANCES;
+            drivers[i]->Trigger(FakeSystem(), FakeEngine());
+            drivers[i]->Tick(1.0f / 60.0f, FakeSystem(), FakeEngine());
+            CHECK(g_spawnCalls == before && ParticleRandom::DrawCount() == 0,
+                  "post-reset or fresh cap-dropped trigger attempts no spawn or draws");
+            g_activeCount = 0;
+            drivers[i]->Tick(1.0f / 60.0f, FakeSystem(), FakeEngine());
+            CHECK(g_spawnCalls == before && ParticleRandom::DrawCount() == 0,
+                  "clearing the cap leaves no queued pre-reset work");
+            drivers[i]->Trigger(FakeSystem(), FakeEngine());
+            drivers[i]->Tick(1.0f / 60.0f, FakeSystem(), FakeEngine());
+            CHECK(g_spawnCalls == before + 1, "new trigger makes exactly one refused spawn attempt");
+            drawCounts[i] = ParticleRandom::DrawCount();
+            positions[i][0] = FloatBits(g_lastSpawnPos.x);
+            positions[i][1] = FloatBits(g_lastSpawnPos.y);
+            positions[i][2] = FloatBits(g_lastSpawnPos.z);
+        }
+        CHECK(drawCounts[0] == 2 && drawCounts[0] == drawCounts[1],
+              "reset and fresh attempts consume the same jitter draws, no successful-spawn phase draws");
+        CHECK(std::memcmp(positions[0], positions[1], sizeof(positions[0])) == 0,
+              "reset and fresh attempts stamp identical jittered positions");
+    }
+
     // ---- Particle stream: pinned helper vectors and reachable NULL spawns ---
     {
         ParticleRandom::Seed(ParticleRandom::kAutomationSeed);
