@@ -215,7 +215,7 @@ int main()
             source.find("engine->SetSkydomeEnvironment(");
         const size_t loadAt =
             source.find("LoadParticleSystem(m_params.captureAlo");
-        const size_t seedAt = source.find("srand(0x5EEDu)");
+        const size_t seedAt = source.find("ParticleRandom::Seed(");
 
         CHECK(!source.empty(), "CaptureRunner production source is readable");
         CHECK(CountOccurrences(source, call) == 1,

@@ -121,7 +121,9 @@
     <ClInclude Include="effect\Rescale.h" />
     <ClInclude Include="effect\Autosave.h" />
     <ClInclude Include="effect\AtomicSave.h" />
+    <ClInclude Include="simulation\ParticleRandom.h" />
     <ClInclude Include="simulation\SpawnerDriver.h" />
+    <ClInclude Include="simulation\SpawnerRandom.h" />
     <ClInclude Include="simulation\SpawnerPath.h" />
     <ClInclude Include="effect\UndoStack.h" />
     <ClInclude Include="gamedata\GameObjectCatalog.h" />
@@ -242,6 +244,7 @@
     <ClCompile Include="effect\Rescale.cpp" />
     <ClCompile Include="effect\Autosave.cpp" />
     <ClCompile Include="effect\AtomicSave.cpp" />
+    <ClCompile Include="simulation\ParticleRandom.cpp" />
     <ClCompile Include="simulation\SpawnerDriver.cpp" />
     <ClCompile Include="effect\UndoStack.cpp" />
     <ClCompile Include="gamedata\GameObjectCatalog.cpp" />

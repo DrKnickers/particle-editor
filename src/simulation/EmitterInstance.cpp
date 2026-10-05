@@ -3,6 +3,7 @@
 #include <cstdarg>
 #include <windows.h>
 #include "EmitterInstance.h"
+#include "ParticleRandom.h"
 #include "ParticleCompaction.h"
 #include "SpawnSchedule.h"   // ReconcileNextSpawnTime (rate-edit clamp)
 #include "BounceCatchUp.h"   // GROUND_BOUNCE catch-up loop

@@ -16,6 +16,7 @@
 #include "effect/ParticleSystem.h"
 #include "effect/ParticleSystemIO.h"   // LoadParticleSystem
 #include "simulation/SpawnerDriver.h"
+#include "simulation/ParticleRandom.h"
 #include "rendering/engine.h"             // Engine, FreezePreviewClockAt, StepPreviewFrames
 #include "common/utils.h"              // WideToAnsi
 
@@ -180,9 +181,8 @@ void CaptureRunner::Init()
     }
     else
     {
-        // Clear persisted game-dome selections before any mod/catalog/fixture
-        // load. Those paths may parse XML and perturb the CRT PRNG; the fixed
-        // seed below must remain the final seed before spawning.
+        // Clear persisted game-dome selections before loading so captures
+        // use the requested environment.
         if (m_params.captureGoldenProfile)
         {
             engine->SetSkydomeEnvironment(
@@ -245,10 +245,8 @@ void CaptureRunner::Init()
                 spawnerDriver->SetConfig(cfg);
                 // Deterministic sim for the render-golden lane, same recipe as
                 // the --record path (ClipRunner):
-                //  (a) fixed PRNG seed — seeded HERE (after load/mod-scan)
-                //      because expat re-seeds the CRT PRNG with entropy on the
-                //      first XML_Parse per thread (GameObjectCatalog.cpp
-                //      footgun), so an earlier seed doesn't survive;
+                //  (a) seed after load, immediately before spawning, so each
+                //      particle capture starts from a known stream;
                 //  (b) frozen preview clock, stepped exactly 1/60 s per COUNTED
                 //      frame in the capture loop below. Without the freeze the
                 //      sim runs on wall time, and the layout gate holds the
@@ -258,7 +256,7 @@ void CaptureRunner::Init()
                 //      ever true for time-stable scenes). Begin the spawner
                 //      explicitly at the frozen anchor; zero-delta render ticks
                 //      are true no-ops so paused interactive scenes stay paused.
-                srand(0x5EEDu);
+                ParticleRandom::Seed(ParticleRandom::kAutomationSeed);
                 FreezePreviewClockAt(0.0f);   // fixed anchor: m_time-consuming shaders render identical every run
                 spawnerDriver->Trigger(particleSystem.get(), engine.get());
                 spawnerDriver->Tick(1.0f / 60.0f, particleSystem.get(), engine.get());

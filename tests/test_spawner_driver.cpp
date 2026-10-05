@@ -32,20 +32,30 @@
 //   - velocity/path-shape stamping on the instance (needs a live
 //     ParticleSystemInstance; MarkSpawnerOwned/SetPathShape are inline and
 //     virtual-dispatch on a fake instance would be UB)
-//   - the file-static RandPhase helper.
+//   - real-spawn jitter/emitter/phase interleaving (NULL spawn skips phase).
 //
 // Standalone console exe; see the test_spawner_driver entry in tests/native-tests.json.
 
 #include "simulation/SpawnerDriver.h"
+#include "simulation/SpawnerRandom.h"
 
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 
 static int g_failed = 0;
 #define CHECK(cond, msg) do {                              \
     if (cond) { std::printf("  ok: %s\n", msg); }          \
     else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
 } while (0)
+
+static std::uint32_t FloatBits(float value)
+{
+    std::uint32_t bits;
+    static_assert(sizeof(bits) == sizeof(value), "fixtures require 32-bit floats");
+    std::memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
 
 // ---- Engine link stubs (see header comment) --------------------------------
 static int         g_spawnCalls  = 0;
@@ -273,11 +283,14 @@ int main()
         SpawnerDriver d;
         SpawnerConfig c;
         c.mode = SpawnerConfig::Mode::Manual;
+        c.jitterPosition = D3DXVECTOR3(8.0f, 8.0f, 8.0f);
         d.SetConfig(c);
         int before = g_spawnCalls;
+        ParticleRandom::Seed(ParticleRandom::kAutomationSeed);
         d.Trigger(FakeSystem(), FakeEngine());
         d.Tick(0.016f, FakeSystem(), FakeEngine());
         CHECK(g_spawnCalls == before, "at the instance cap: burst dropped before any spawn call");
+        CHECK(ParticleRandom::DrawCount() == 0, "cap-dropped burst draws nothing");
         g_activeCount = 0;
         d.Tick(0.016f, FakeSystem(), FakeEngine());
         CHECK(g_spawnCalls == before, "dropped burst is not queued (nothing fires after cap clears)");
@@ -333,8 +346,7 @@ int main()
     }
 
     // ---- L: jitter keeps spawns inside cfg.position +/- jitter --------------
-    // JitterAxis/Jitter (SpawnerDriver.cpp) are file-static; their
-    // contract is observable through the stamped anchor position.
+    // The NULL-spawn stub exposes the jittered anchor but skips phase draws.
     {
         g_activeCount = 0;
         SpawnerDriver d;
@@ -448,6 +460,77 @@ int main()
         d.Trigger(FakeSystem(), FakeEngine());
         d.Tick(0.016f, FakeSystem(), FakeEngine());
         CHECK(g_spawnCalls == before + 1, "a fresh Trigger after CancelPending spawns again");
+    }
+
+    // ---- Particle stream: pinned helper vectors and reachable NULL spawns ---
+    {
+        ParticleRandom::Seed(ParticleRandom::kAutomationSeed);
+        const D3DXVECTOR3 jitter = SpawnerRandom::Jitter(D3DXVECTOR3(8.0f, 8.0f, 8.0f));
+        CHECK(FloatBits(jitter.x) == 0x40B5976Cu && FloatBits(jitter.y) == 0xC027C550u &&
+              FloatBits(jitter.z) == 0xBF9DC93Cu, "direct jitter pins z, y, x draw order");
+        CHECK(ParticleRandom::DrawCount() == 3, "three positive jitter axes draw three times");
+    }
+    {
+        ParticleRandom::Seed(ParticleRandom::kAutomationSeed);
+        const D3DXVECTOR3 jitter = SpawnerRandom::Jitter(D3DXVECTOR3(8.0f, 0.0f, 0.0f));
+        CHECK(FloatBits(jitter.x) == 0xBF9DC93Cu && FloatBits(jitter.y) == 0 &&
+              FloatBits(jitter.z) == 0, "direct x-only jitter uses the first draw");
+        CHECK(ParticleRandom::DrawCount() == 1, "zero jitter axes draw nothing");
+    }
+    {
+        ParticleRandom::Seed(ParticleRandom::kAutomationSeed);
+        const D3DXVECTOR3 jitter = SpawnerRandom::Jitter(D3DXVECTOR3(0.0f, 0.0f, 0.0f));
+        CHECK(FloatBits(jitter.x) == 0 && FloatBits(jitter.y) == 0 && FloatBits(jitter.z) == 0,
+              "direct zero jitter returns exact zero");
+        CHECK(ParticleRandom::DrawCount() == 0, "direct zero jitter draws nothing");
+    }
+    {
+        ParticleRandom::Seed(ParticleRandom::kAutomationSeed);
+        const D3DXVECTOR3 jitter = SpawnerRandom::Jitter(D3DXVECTOR3(-8.0f, -1.0f, -2.0f));
+        CHECK(FloatBits(jitter.x) == 0 && FloatBits(jitter.y) == 0 && FloatBits(jitter.z) == 0,
+              "non-positive jitter radii return exact zero");
+        CHECK(ParticleRandom::DrawCount() == 0, "negative jitter axes draw nothing");
+    }
+    {
+        ParticleRandom::Seed(ParticleRandom::kAutomationSeed);
+        const D3DXVECTOR3 phase = SpawnerRandom::SquigglePhase();
+        CHECK(FloatBits(phase.x) == 0x40ABD77Fu && FloatBits(phase.y) == 0x40072DB3u &&
+              FloatBits(phase.z) == 0x402A14AAu, "direct phase pins z, y, x draw order");
+        CHECK(ParticleRandom::DrawCount() == 3, "phase draws exactly three times");
+    }
+    {
+        const D3DXVECTOR3 radii[] = {
+            D3DXVECTOR3(8.0f, 0.0f, 0.0f),
+            D3DXVECTOR3(8.0f, 8.0f, 8.0f),
+            D3DXVECTOR3(0.0f, 0.0f, 0.0f)
+        };
+        const std::uint32_t expected[][3] = {
+            { 0xBF9DC93Cu, 0, 0 },
+            { 0x40B5976Cu, 0xC027C550u, 0xBF9DC93Cu },
+            { 0, 0, 0 }
+        };
+        const std::uint64_t counts[] = { 1, 3, 0 };
+        for (int i = 0; i < 3; ++i)
+        {
+            g_activeCount = 0;
+            SpawnerDriver d;
+            SpawnerConfig c;
+            c.mode = SpawnerConfig::Mode::Manual;
+            c.jitterPosition = radii[i];
+            c.squiggleAmplitude = D3DXVECTOR3(1.0f, 1.0f, 1.0f);
+            d.SetConfig(c);
+            ParticleRandom::Seed(ParticleRandom::kAutomationSeed);
+            const int before = g_spawnCalls;
+            d.Trigger(FakeSystem(), FakeEngine());
+            d.Tick(0.016f, FakeSystem(), FakeEngine());
+            CHECK(g_spawnCalls == before + 1, "pinned NULL-spawn case attempts one spawn");
+            CHECK(FloatBits(g_lastSpawnPos.x) == expected[i][0] &&
+                  FloatBits(g_lastSpawnPos.y) == expected[i][1] &&
+                  FloatBits(g_lastSpawnPos.z) == expected[i][2],
+                  "NULL spawn stamps the pinned jitter vector");
+            CHECK(ParticleRandom::DrawCount() == counts[i],
+                  "NULL spawn draws only jitter, never phase");
+        }
     }
 
     std::printf("%s\n", g_failed ? "=== FAILED ===" : "=== ALL PASS ===");

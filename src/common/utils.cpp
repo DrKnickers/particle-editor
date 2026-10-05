@@ -41,11 +41,6 @@ string WideToAnsi(const wchar_t* cstr, const char* defChar)
 	}
 }
 
-float GetRandom(float min, float max)
-{
-	return (max - min) / RAND_MAX * rand() + min;
-}
-
 static wstring FormatString(const wchar_t* format, va_list args)
 {
     // Measuring consumes a va_list, so measure a copy and format with the original

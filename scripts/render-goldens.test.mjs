@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -13,7 +15,43 @@ import {
   parseGoldenProvenance,
   provenanceDrift,
   missingSceneInputs,
+  retainGoldenCapture,
 } from "./render-goldens.mjs";
+
+test("retained PNG survives temp cleanup and the final attempt replaces it", () => {
+  const scratch = mkdtempSync(join(tmpdir(), "render-golden-retention-"));
+  try {
+    const out = join(scratch, "capture.png");
+    const keepDir = join(scratch, "kept", "nested");
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ1kAAAAASUVORK5CYII=", "base64");
+    writeFileSync(out, png);
+    retainGoldenCapture(out, keepDir, "scene");
+    rmSync(out);
+    assert.deepEqual(readFileSync(join(keepDir, "scene.png")), png);
+
+    const finalPng = Buffer.concat([png, Buffer.from("final attempt")]);
+    writeFileSync(out, finalPng);
+    retainGoldenCapture(out, keepDir, "scene");
+    rmSync(out);
+    assert.deepEqual(readFileSync(join(keepDir, "scene.png")), finalPng);
+    retainGoldenCapture(out, null, "scene");
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+test("production retains PNGs before retry and final cleanup", () => {
+  const source = readFileSync(fileURLToPath(new URL("./render-goldens.mjs", import.meta.url)), "utf8");
+  const spawnAt = source.indexOf("spawnSync(exe");
+  const retainAt = source.indexOf("retainGoldenCapture(out, keepDir, scene.name)", spawnAt);
+  const retryAt = source.indexOf("continue retry", spawnAt);
+  const retryCleanupAt = source.indexOf("rmSync(out, { force: true })", spawnAt);
+  const finalCleanupAt = source.indexOf("rmSync(out, { force: true })", retryCleanupAt + 1);
+
+  assert.ok(retainAt > spawnAt, "production must retain the rendered PNG");
+  assert.ok(retryCleanupAt > retainAt && retryAt > retryCleanupAt, "retention must precede retry cleanup");
+  assert.ok(finalCleanupAt > retainAt, "retention must precede final cleanup");
+});
 
 test("golden capture env removes every inherited ALO hook", () => {
   const inherited = {

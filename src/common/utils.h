@@ -17,8 +17,6 @@ static std::string WideToAnsi(const std::wstring& str, const char* defChar = " "
 	return WideToAnsi(str.c_str(), defChar);
 }
 
-float GetRandom(float min, float max);
-
 std::wstring LoadString(UINT id, ...);
 
 #endif

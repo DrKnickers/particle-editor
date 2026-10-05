@@ -1,7 +1,8 @@
 #include "SpawnerDriver.h"
 #include "ParticleSystemInstance.h"
+#include "ParticleRandom.h"
+#include "SpawnerRandom.h"
 #include <algorithm>
-#include <cstdlib>
 
 namespace {
 
@@ -17,26 +18,6 @@ public:
     void SetPosition(const D3DXVECTOR3& p) { m_position = p; }
     void SetVelocity(const D3DXVECTOR3& v) { m_velocity = v; }
 };
-
-inline float JitterAxis(float r)
-{
-    if (r <= 0.0f) return 0.0f;
-    float u = (float)std::rand() / (float)RAND_MAX;
-    return (u * 2.0f - 1.0f) * r;
-}
-
-inline D3DXVECTOR3 Jitter(const D3DXVECTOR3& r)
-{
-    return D3DXVECTOR3(JitterAxis(r.x), JitterAxis(r.y), JitterAxis(r.z));
-}
-
-// Random squiggle phase in [0, 2π) per axis, seeded once at spawn so
-// each instance wanders on its own offset.
-inline float RandPhase()
-{
-    float u = (float)std::rand() / (float)RAND_MAX;
-    return u * (2.0f * 3.14159265358979323846f);
-}
 
 inline float Clamp(float v, float lo, float hi)
 {
@@ -225,7 +206,7 @@ void SpawnerDriver::Tick(float dtSeconds, const ParticleSystem* sys, Engine* eng
                 break;
             }
 
-            D3DXVECTOR3 pos = m_cfg.position + Jitter(m_cfg.jitterPosition);
+            D3DXVECTOR3 pos = m_cfg.position + SpawnerRandom::Jitter(m_cfg.jitterPosition);
             anchor.SetPosition(pos);
             anchor.SetVelocity(m_cfg.velocity);   // no velocity jitter; path is shaped over lifetime instead
 
@@ -237,7 +218,7 @@ void SpawnerDriver::Tick(float dtSeconds, const ParticleSystem* sys, Engine* eng
                 inst->SetPathShape(m_cfg.acceleration,
                                    m_cfg.squiggleAmplitude,
                                    m_cfg.squiggleFrequency,
-                                   D3DXVECTOR3(RandPhase(), RandPhase(), RandPhase()));
+                                   SpawnerRandom::SquigglePhase());
                 inst->Detach();   // freeze the stamped values; per-frame motion takes over from Update
             }
             else

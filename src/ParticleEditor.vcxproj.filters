@@ -102,7 +102,13 @@
     <ClInclude Include="effect\Rescale.h">
       <Filter>Header Files\effect</Filter>
     </ClInclude>
+    <ClInclude Include="simulation\ParticleRandom.h">
+      <Filter>Header Files\simulation</Filter>
+    </ClInclude>
     <ClInclude Include="simulation\SpawnerDriver.h">
+      <Filter>Header Files\simulation</Filter>
+    </ClInclude>
+    <ClInclude Include="simulation\SpawnerRandom.h">
       <Filter>Header Files\simulation</Filter>
     </ClInclude>
     <ClInclude Include="simulation\SpawnerPath.h">
@@ -445,6 +451,9 @@
     </ClCompile>
     <ClCompile Include="gamedata\MegaFiles.cpp">
       <Filter>Source Files\gamedata</Filter>
+    </ClCompile>
+    <ClCompile Include="simulation\ParticleRandom.cpp">
+      <Filter>Source Files\simulation</Filter>
     </ClCompile>
     <ClCompile Include="simulation\SpawnerDriver.cpp">
       <Filter>Source Files\simulation</Filter>

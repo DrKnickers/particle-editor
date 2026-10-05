@@ -1,7 +1,7 @@
 // [gate] Render-golden lane — deterministic `--capture` scenes vs checked-in
 // golden PNGs, compared with ffmpeg SSIM.
 //
-//   node scripts/render-goldens.mjs [--update] [--exe <path>]
+//   node scripts/render-goldens.mjs [--update] [--exe <path>] [--keep-dir <path>]
 //
 // Each scene renders a fixture .alo through the REAL engine (x64 Release,
 // no CDP) and must match tests/goldens/render/<name>.png with SSIM >= 0.9995.
@@ -59,6 +59,11 @@ const exe = resolve(
   repoRoot,
   exeArg >= 0 && argv[exeArg + 1] ? argv[exeArg + 1] : join("x64", "Release", "ParticleEditor.exe"),
 );
+const keepDirArg = argv.indexOf("--keep-dir");
+if (keepDirArg >= 0 && (!argv[keepDirArg + 1] || argv[keepDirArg + 1].startsWith("--"))) {
+  throw new Error("--keep-dir requires a directory argument");
+}
+const keepDir = keepDirArg >= 0 ? resolve(repoRoot, argv[keepDirArg + 1]) : null;
 
 export const SCENES = [
   {
@@ -118,6 +123,12 @@ export function missingSceneInputs(scene, exists = existsSync) {
 
 export function buildGoldenCaptureArgs(fixture, out, sceneArgs = []) {
   return ["--capture", fixture, out, ...GOLDEN_PROFILE_ARGS, ...sceneArgs];
+}
+
+export function retainGoldenCapture(out, keepDir, sceneName) {
+  if (!keepDir) return;
+  mkdirSync(keepDir, { recursive: true });
+  copyFileSync(out, join(keepDir, `${sceneName}.png`));
 }
 
 export function buildGoldenCaptureEnv(inheritedEnv, requireTexGate) {
@@ -214,6 +225,8 @@ function main() {
       failed++;
       break retry;
     }
+    // Keep every rendered attempt; a retry replaces the scene's retained PNG.
+    retainGoldenCapture(out, keepDir, scene.name);
     const missingAttestations = missingGoldenProfileAttestations(cap.stdout);
     if (missingAttestations.length > 0) {
       // Never compare or bless a capture unless both production call sites

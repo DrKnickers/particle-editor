@@ -7,6 +7,7 @@
 #define WINVER 0x0A00
 
 #include "HostWindowImpl.h"
+#include "simulation/ParticleRandom.h"
 
 namespace host {
 
@@ -85,7 +86,7 @@ bool HostWindowImpl::SetupRecordArm(RecordSession& rec)
                     m_recordTimelineFps = tl.fps;
 
                     // (a) deterministic particle RNG (Goal-A motion correctness).
-                    srand(0x5EEDu);
+                    ParticleRandom::Seed(ParticleRandom::kAutomationSeed);
 
                     // (b) resize the WINDOW to tl.width x tl.height via SetWindowPos
                     //     -> WM_WINDOWPOSCHANGED -> LayoutBroker -> Engine::ResetForResize.

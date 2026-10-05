@@ -62,7 +62,7 @@
       "release": true
     },
     "test_bridge_spawner_state": {
-      "sources": ["src/simulation/SpawnerDriver.cpp"],
+      "sources": ["src/simulation/SpawnerDriver.cpp", "src/simulation/ParticleRandom.cpp"],
       "includes": ["src/host"],
       "uses": ["dxsdk"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
@@ -149,6 +149,10 @@
     },
     "test_particle_compaction": {},
     "test_particle_mipfilter": {},
+    "test_particle_random": {
+      "sources": ["src/simulation/ParticleRandom.cpp"],
+      "release": true
+    },
     "test_particle_system_io": {
       "sources": ["src/effect/ParticleSystemIO.cpp", "src/effect/AtomicSave.cpp", "src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp"],
       "uses": ["expat", "dxsdk", "webview2"],
@@ -213,7 +217,7 @@
       "libs": ["kernel32.lib"]
     },
     "test_spawner_driver": {
-      "sources": ["src/simulation/SpawnerDriver.cpp"],
+      "sources": ["src/simulation/SpawnerDriver.cpp", "src/simulation/ParticleRandom.cpp"],
       "uses": ["dxsdk"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },

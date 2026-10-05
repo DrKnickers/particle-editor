@@ -16,6 +16,7 @@
 #include "common/exceptions.h"
 #include "palette/TexturePalette.h"
 #include "simulation/SpawnerDriver.h"
+#include "simulation/ParticleRandom.h"
 #include "effect/UndoStack.h"
 #include "effect/LinkGroup.h"
 #include "effect/Autosave.h"
@@ -899,16 +900,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			!captureAlo.empty() || !captureRef.empty(),
 			!driveScriptPath.empty() || !recordScriptPath.empty(),
 			testHost);
-		// Fresh particle variation per launch. The bundled Expat used to reseed the
-		// CRT stream as a side effect of parsing MegaFiles.xml; since 2.8.5 it does
-		// not, so the editor has to do it. Automation modes keep their own seeds.
-		if (interactiveSession)
-		{
-			srand(static_cast<unsigned>(time(nullptr)));
-			// Discard the first value, as the old parser did: it moves by only
-			// about 3 in 32767 per second of clock time. Later values do not.
-			(void)rand();
-		}
+		// Fresh variation per interactive launch; the stepped state preserves srand plus
+		// one discarded draw. Automation keeps the default seed.
+		ParticleRandom::Seed(ParticleRandom::LaunchSeed(interactiveSession, static_cast<std::uint32_t>(time(nullptr))));
 		FileManager* fileManager = createFileManager(NULL, argv, &gameRoots, interactiveSession);
 		if (fileManager == NULL)
 		{
