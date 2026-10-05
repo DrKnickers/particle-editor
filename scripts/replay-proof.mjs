@@ -245,9 +245,11 @@ export function checkReport(report, definition, scenario) {
       // a deterministic lane failure. An incorrectly claimed acceptance is.
       if (found.length !== 1) acceptanceBlockers.push(`E10 missing measurement frame ${f}, render=${intermediate}`);
     }
-    const latency = timings.find((t) => t.frame === 300 && t.renderIntermediate === true);
+    // Acceptance uses the destination-only seek (plan amendment, 2026-10-05);
+    // rendered-intermediate seeks pace to the display refresh and are informational.
+    const latency = timings.find((t) => t.frame === 300 && t.renderIntermediate === false);
     if (definition.latencyRequired && (!latency || latency.medianMs > 250))
-      acceptanceBlockers.push("frame-300 seek requires median <= 250 ms");
+      acceptanceBlockers.push("frame-300 destination-only seek requires median <= 250 ms");
     const accepted = !definition.latencyRequired || (!!latency && latency.medianMs <= 250);
     require(report.acceptance?.latencyRequired === !!definition.latencyRequired && report.acceptance.thresholdMs === 250 &&
       report.acceptance.accepted === accepted, "incorrect phase acceptance status");
@@ -387,7 +389,7 @@ export function main(argv = process.argv.slice(2)) {
       prove({ name: `stock-${basename(file, ".alo")}`, file: path }, true);
     } catch (error) { console.error(`[replay-proof] optional ${file}: unavailable: ${error.message}`); }
   }
-  console.log("E10 seek latency (destination render included; required frame-300 median <= 250 ms):");
+  console.log("E10 seek latency (destination render included; acceptance: destination-only frame-300 median <= 250 ms):");
   console.table(latency);
   return failures ? 1 : 0;
 }

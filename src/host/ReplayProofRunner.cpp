@@ -637,8 +637,13 @@ struct ReplayProofRunner::Impl
         if (timedRequired)
         {
             accepted = false;
+            // Owner decision 2026-10-05: a seek simulates intermediate frames and
+            // presents only the destination. Presenting each intermediate frame
+            // waits one display refresh while the display is live (E8 shows the
+            // results are identical), so the rendered-intermediate timings are
+            // recorded but do not decide acceptance.
             for (const auto& timing : experiments["E10"]["timings"])
-                if (timing["frame"] == 300 && timing["renderIntermediate"] == true)
+                if (timing["frame"] == 300 && timing["renderIntermediate"] == false)
                     accepted = timing["medianMs"].get<double>() <= 250.0;
         }
         report["acceptance"] = {{"latencyRequired", timedRequired}, {"thresholdMs", 250}, {"accepted", accepted}};
@@ -671,6 +676,8 @@ struct ReplayProofRunner::Impl
         const std::string error = input.bad() || !input.is_open()
             ? "scenario file could not be read" : ParsePreviewScenario(text, scenario);
         if (!error.empty()) return Fail(2, "scenario", error);
+        // Name the effect: per-process logs are otherwise indistinguishable.
+        Log("[replay-proof] scenario %s\n", WideToUtf8(scenario.aloPath).c_str());
         report["scenario"] = json::parse(SerializePreviewScenario(scenario));
         for (int f : {0, 1, 2, 15, 60, 300, scenario.maxFrames}) if (f <= scenario.maxFrames) checked.insert(f);
         report["checkedFrames"] = checked;

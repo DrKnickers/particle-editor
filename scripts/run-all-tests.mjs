@@ -251,7 +251,9 @@ export function recordSmokeVerdict({ error, signal, status, stderr, frames, maxB
 // reads as "skipped 196". The gate caught exactly that.
 export function parseSkippedCount(out) {
   let n = 0;
-  for (const m of out.matchAll(/(\d+)[ \t]+(?:skipped|did not run)\b/gi)) {
+  // \b before the count: a test title like "checker rejects E11 skipped" must
+  // not read as 11 skipped tests.
+  for (const m of out.matchAll(/\b(\d+)[ \t]+(?:skipped|did not run)\b/gi)) {
     n = Math.max(n, Number(m[1]));
   }
   for (const m of out.matchAll(/\bskipped[ \t]+(\d+)\b/gi)) {

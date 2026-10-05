@@ -134,6 +134,11 @@ test("parseSkippedCount reads the render-goldens summary line", () => {
   assert.equal(parseSkippedCount("[gate] render-goldens: 3/3 scenes ok, 0 skipped"), 0);
 });
 
+test("parseSkippedCount ignores a number glued to a word, such as a test title", () => {
+  assert.equal(parseSkippedCount("✔ checker rejects E11 skipped (10.5ms)\nℹ skipped 0"), 0);
+  assert.equal(parseSkippedCount("✔ checker rejects E9 skipped\n  11 skipped"), 11);
+});
+
 test("replay-proof follows drive-smoke in the registered gate", () => {
   const r = runScript("--list");
   assert.equal(r.status, 0);

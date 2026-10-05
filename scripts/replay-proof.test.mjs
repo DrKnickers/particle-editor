@@ -192,7 +192,7 @@ test("missing frame-300 timing blocks acceptance but does not fail the determini
 test("250 ms threshold is inclusive; a miss blocks phase acceptance only", () => {
   for (const ms of [250, 251]) {
     const f = fixture();
-    const t = f.report.experiments.E10.timings.find((v) => v.frame === 300 && v.renderIntermediate);
+    const t = f.report.experiments.E10.timings.find((v) => v.frame === 300 && !v.renderIntermediate);
     t.samplesMs = Array(5).fill(ms); t.medianMs = ms; t.maximumMs = ms;
     f.report.acceptance.accepted = ms <= 250;
     const result = checkReport(f.report, f.definition, f.scenario);
