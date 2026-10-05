@@ -114,6 +114,7 @@
 #include "ClipRunner.h"    // --record: deterministic clip recording (PNG sequence)
 #include "RecordTrace.h"   // --record: flag-gated pump-schedule trace
 #include "RecordOutputSafety.h"  // --record: refuse to remove_all a non-output dir
+#include "ParticleReplayController.h"
 #include "CaptureRunner.h" // --capture/--capture-ref: one-shot render + PNG
 #include "HostRunUtil.h"   // PerfQpcNow/PerfQpcFreq/QpcMs/DeriveSibling (shared with the runners)
 #include "AsyncFrameEncoder.h"   // --record: background PNG encode
@@ -367,6 +368,8 @@ struct HostWindowImpl
     IShaderManager&  shaderManager;
     IFileManager&    fileManager;
     std::unique_ptr<Engine> engine;
+    // Snapshot of CaptureRunner's constructor view, before registry restoration.
+    std::function<bool()> m_fixedCaptureView;
 
     // layered-window alpha compositor. Constructed after the
     // Engine (needs its D3D9 device), torn down before the Engine in
@@ -652,7 +655,7 @@ struct HostWindowImpl
 
     bool        useDevUi   = false;  // --dev-ui: navigate to Vite HMR server
     bool        useTestHost = false; // --test-host: CDP :9222 + DevTools
-    enum class RunMode { Interactive, Capture, Drive, Record };
+    enum class RunMode { Interactive, Capture, Drive, Record, ReplayProof };
     const RunMode m_runMode;
     // --capture mode: load m_captureAlo,
     // render m_captureFrames frames, write engine RT to m_capturePng,
@@ -1019,6 +1022,8 @@ struct HostWindowImpl
     // InitD3D9 dropped; the Engine owns the live D3D9 device. The
     // viewport HWND is handed to Engine's ctor in WM_CREATE.
     void RenderD3D9();
+    bool RenderComposedFrame(bool simulate);
+    ParticleReplayController::Hooks BuildReplayHooks(const std::wstring& readbackPath);
 
     HRESULT InitWebView2();
     // Wires every per-controller setup step that's common to both HWND

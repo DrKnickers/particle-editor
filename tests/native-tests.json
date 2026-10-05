@@ -153,6 +153,10 @@
       "sources": ["src/simulation/ParticleRandom.cpp"],
       "release": true
     },
+    "test_particle_replay_controller": {
+      "sources": ["src/host/ParticleReplayController.cpp"],
+      "uses": ["dxsdk"]
+    },
     "test_particle_system_io": {
       "sources": ["src/effect/ParticleSystemIO.cpp", "src/effect/AtomicSave.cpp", "src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp"],
       "uses": ["expat", "dxsdk", "webview2"],

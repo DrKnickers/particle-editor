@@ -80,6 +80,7 @@ public:
         m_velocity     = GetVelocity();
     }
     bool IsSpawnerOwned() const     { return m_spawnerOwned; }
+    TimeF SpawnTimeForObservation() const { return m_spawnTime; }
 
     // Set by the SpawnerDriver after spawn. 0 means "no cap"; > 0 means
     // call StopSpawning when (currentTime - spawnTime) reaches it.

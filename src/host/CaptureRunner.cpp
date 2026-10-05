@@ -27,6 +27,34 @@
 
 namespace host {
 
+std::function<bool()> CaptureRunner::MakeFixedCaptureView(Engine& engine)
+{
+    const Engine::Camera camera = engine.GetCamera();
+    const COLORREF background = engine.GetBackground();
+    const D3DXVECTOR4 ambient = engine.GetAmbient();
+    const Engine::Light sun = engine.GetLight(Engine::LT_SUN);
+    const Engine::Light fill1 = engine.GetLight(Engine::LT_FILL1);
+    const Engine::Light fill2 = engine.GetLight(Engine::LT_FILL2);
+    return [&engine, camera, background, ambient, sun, fill1, fill2]()
+    {
+        if (engine.DeviceCallsBlocked()) return false;
+        engine.SetCamera(camera);
+        engine.SetBackground(background);
+        engine.SetAmbient(ambient);
+        engine.SetLight(Engine::LT_SUN, sun);
+        engine.SetLight(Engine::LT_FILL1, fill1);
+        engine.SetLight(Engine::LT_FILL2, fill2);
+        engine.SetBloom(false);
+        engine.SetBloomStrength(0.00f);
+        engine.SetBloomCutoff(0.90f);
+        engine.SetBloomSize(0.10f);
+        engine.SetHeatDebug(false);
+        engine.SetWind(D3DXVECTOR3(0, 0, 0));
+        engine.SetGravity(D3DXVECTOR3(0, 0, -1));
+        return !engine.DeviceCallsBlocked();
+    };
+}
+
 // printf-style forwarder to the Impl's Log sink (same _vsnprintf_s
 // discipline as HostWindowImpl::Log) so moved Log(...) sites are verbatim.
 void CaptureRunner::Log(const char* fmt, ...)
@@ -187,6 +215,8 @@ void CaptureRunner::Init()
         {
             engine->SetSkydomeEnvironment(
                 engine->GetSkydomeContext(), std::string(), std::string());
+            if (!m_deps.fixedCaptureView || !m_deps.fixedCaptureView())
+                m_ticker.MarkFailed();
         }
 
         // Select the mod that owns this .alo BEFORE loading, so the mod's

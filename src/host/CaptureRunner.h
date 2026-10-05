@@ -68,6 +68,7 @@ public:
         const bool&                             sceneRectSeen;  // Impl m_sceneRectSeen
         std::function<void()>                   renderD3D9;     // Impl RenderD3D9()
         std::function<void(const std::string&)> log;            // Impl Log sink
+        std::function<bool()>                   fixedCaptureView; // constructor profile, before restore
     };
 
     enum class TickResult { Running, Done };
@@ -87,6 +88,9 @@ public:
     // Failures set the failed flag (the run still pumps and exits 2, matching
     // the old inline behavior).
     void Init();
+
+    // Capture and replay share the constructor-default view, never registry values.
+    static std::function<bool()> MakeFixedCaptureView(Engine& engine);
 
     // The pump's capture step, called once per iteration right after
     // RenderD3D9() — paces the sim, holds the layout-determinism gate, steps

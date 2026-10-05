@@ -177,6 +177,9 @@
     <ClInclude Include="host\CaptureTicker.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="host\ParticleReplayController.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
     <ClInclude Include="host\PreviewScenarioJson.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
@@ -557,6 +560,9 @@
     <ClCompile Include="host\HostWindow_Record.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
+    <ClCompile Include="host\HostWindow_Replay.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
     <ClCompile Include="host\WindowCapture.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
@@ -567,6 +573,9 @@
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\CaptureTicker.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\ParticleReplayController.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\PreviewScenarioJson.cpp">

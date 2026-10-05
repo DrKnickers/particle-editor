@@ -288,6 +288,21 @@ bool Engine::TakeSpawnRefusal(SpawnRefusal* out)
     return true;
 }
 
+bool Engine::GetReplayInstanceObservation(ReplayInstanceObservation& out) const
+{
+    const ParticleSystemInstance* owned = nullptr;
+    for (const auto& instance : m_instances)
+    {
+        if (!instance || !instance->IsSpawnerOwned()) continue;
+        if (owned) return false;
+        owned = instance.get();
+    }
+    if (!owned || owned->SpawnTimeForObservation() < 0.0f) return false;
+    out.position = owned->GetPosition();
+    out.age = GetTimeF() - owned->SpawnTimeForObservation();
+    return true;
+}
+
 int Engine::ActiveSpawnerInstanceCount() const
 {
     int n = 0;
@@ -671,11 +686,14 @@ HANDLE Engine::GetSharedTextureHandle() const
 // commands have completed.
 void Engine::IssueEndFrameQuery()
 {
+	m_endFrameQueryReady = false;
+	m_endFrameQueryLastIssueResult = S_FALSE;
 	if (DeviceCallsBlocked()) return;
 	if (m_pDevice == NULL) return;
 	if (m_pEndFrameQuery == NULL)
 	{
 		HRESULT hr = m_pDevice->CreateQuery(D3DQUERYTYPE_EVENT, &m_pEndFrameQuery);
+		m_endFrameQueryLastIssueResult = hr;
 		if (FAILED(hr) || m_pEndFrameQuery == NULL)
 		{
 			OutputDebugStringA("[Engine] CreateQuery(EVENT) failed; cross-device sync disabled this run\n");
@@ -684,7 +702,7 @@ void Engine::IssueEndFrameQuery()
 		}
 		++m_endFrameQueryCreateCount;
 	}
-	m_pEndFrameQuery->Issue(D3DISSUE_END);
+	m_endFrameQueryLastIssueResult = m_pEndFrameQuery->Issue(D3DISSUE_END);
 }
 
 // WaitEndFrameQuery spins on GetData with the spike's 100k cap (see
@@ -707,6 +725,7 @@ void Engine::IssueEndFrameQuery()
 // now that late polls yield — irrelevant next to a hung GPU).
 int Engine::WaitEndFrameQuery()
 {
+	m_endFrameQueryReady = false;
 	if (DeviceCallsBlocked()) return 0;
 	if (m_pEndFrameQuery == NULL) return 0;
 	BOOL done = FALSE;
@@ -731,6 +750,7 @@ int Engine::WaitEndFrameQuery()
 		}
 		if (spins > 64) SwitchToThread();
 	}
+	m_endFrameQueryReady = queryResult == S_OK;
 	if (FAILED(queryResult))
 	{
 		char message[160] = {};

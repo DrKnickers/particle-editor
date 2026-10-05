@@ -601,6 +601,7 @@ void Engine::Update()
         }
         m_lastUpdatedSimTime        = currentTime;
         m_lastUpdatedInstanceCount  = m_instances.size();
+        ++m_completedFullUpdateCount;
     }
 
 	// Latch with a clear-delay debounce: refusals only occur on frames

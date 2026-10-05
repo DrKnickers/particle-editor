@@ -200,7 +200,7 @@ test("HostWindow's emit lambda is the serializer, and its other .dump() calls ar
     /m_clipRunner->Sidecar\(\)\.dump\(\s*2\s*\)/,
   ];
   const family = sources.filter((s) => /^HostWindow(_\w+)?\.cpp$|^HostWindowImpl\.h$/.test(basename(s.file)));
-  assert.equal(family.length, 5, "expected HostWindowImpl.h, HostWindow.cpp and the three HostWindow_*.cpp files");
+  assert.equal(family.length, 6, "expected HostWindowImpl.h, HostWindow.cpp and the four HostWindow_*.cpp files");
   const unknown = [];
   for (const { file, code } of family) {
     code.split("\n").forEach((text, idx) => {

@@ -182,6 +182,7 @@
     <ClInclude Include="host\CaptureGoldenProfile.h" />
     <ClInclude Include="host\CaptureRunner.h" />
     <ClInclude Include="host\CaptureTicker.h" />
+    <ClInclude Include="host\ParticleReplayController.h" />
     <ClInclude Include="host\PreviewScenarioJson.h" />
     <ClInclude Include="host\DriveRunner.h" />
     <ClInclude Include="host\HostRunUtil.h" />
@@ -277,6 +278,7 @@
     <ClCompile Include="host\BridgeDispatch_SpawnerLighting.cpp" />
     <ClCompile Include="host\CaptureRunner.cpp" />
     <ClCompile Include="host\CaptureTicker.cpp" />
+    <ClCompile Include="host\ParticleReplayController.cpp" />
     <ClCompile Include="host\PreviewScenarioJson.cpp" />
     <ClCompile Include="host\RestoredSettings.cpp" />
     <ClCompile Include="host\WicEncode.cpp">
@@ -320,6 +322,7 @@
     <ClCompile Include="host\HostWindow_WebView2.cpp" />
     <ClCompile Include="host\HostWindow_Viewport.cpp" />
     <ClCompile Include="host\HostWindow_Record.cpp" />
+    <ClCompile Include="host\HostWindow_Replay.cpp" />
     <ClCompile Include="host\WindowCapture.cpp">
     </ClCompile>
     <ClCompile Include="host\LayoutBroker.cpp">

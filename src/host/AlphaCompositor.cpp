@@ -74,6 +74,26 @@ AlphaCompositor::AlphaCompositor(IDirect3DDevice9* device)
 
 AlphaCompositor::~AlphaCompositor() = default;
 
+AlphaCompositor::Size AlphaCompositor::RenderTargetSizeForObservation() const
+{
+    return { m_impl->width, m_impl->height };
+}
+
+AlphaCompositor::CropRect AlphaCompositor::ReadbackCropForObservation() const
+{
+    CropRect crop = { 0, 0, m_impl->width, m_impl->height };
+    if (m_impl->sceneW > 0 && m_impl->sceneH > 0)
+    {
+        crop.x = (m_impl->sceneX < 0) ? 0 : m_impl->sceneX;
+        crop.y = (m_impl->sceneY < 0) ? 0 : m_impl->sceneY;
+        const int maxW = m_impl->width - crop.x;
+        const int maxH = m_impl->height - crop.y;
+        crop.width = (m_impl->sceneW < maxW) ? m_impl->sceneW : maxW;
+        crop.height = (m_impl->sceneH < maxH) ? m_impl->sceneH : maxH;
+    }
+    return crop;
+}
+
 void AlphaCompositor::Resize(int w, int h)
 {
     if (w == m_impl->width && h == m_impl->height) return;

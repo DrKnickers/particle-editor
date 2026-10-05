@@ -967,7 +967,7 @@ int main()
                             "if (rendered && m_compositor && m_compositor->IsReady())"),
                    true);
         const size_t prepareFramePos =
-            hostSource.find("if (!engine->PrepareComposedFrame()) return;");
+            hostSource.find("if (!engine->PrepareComposedFrame()) return false;");
         const size_t spawnerTickPos =
             hostSource.find("spawnerDriver->Tick(", prepareFramePos);
         const size_t engineRenderPos =
@@ -981,7 +981,7 @@ int main()
                    spawnerTickPos < engineRenderPos,
                    true);
         const size_t renderD3D9Begin =
-            hostSource.find("void HostWindowImpl::RenderD3D9()");
+            hostSource.find("bool HostWindowImpl::RenderComposedFrame(bool simulate)");
         const size_t renderD3D9End =
             hostSource.find(
                 "\n}",

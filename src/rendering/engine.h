@@ -178,6 +178,17 @@ public:
 		D3DXVECTOR3 Up;
 	};
 
+	uint64_t CompletedFullUpdateCountForObservation() const
+	{
+		return m_completedFullUpdateCount;
+	}
+	struct ReplayInstanceObservation
+	{
+		D3DXVECTOR3 position;
+		TimeF age;
+	};
+	bool GetReplayInstanceObservation(ReplayInstanceObservation& out) const;
+
 	void Update();
 	bool Render();
 
@@ -299,6 +310,10 @@ public:
 	{
 		return m_textureReloadApplyCount;
 	}
+	bool ParticleSystemChangePendingForObservation() const
+	{
+		return m_deferredParticleSystemChange.Pending();
+	}
 	uint64_t ParticleSystemChangeApplyCountForTesting() const
 	{
 		return m_particleSystemChangeApplyCount;
@@ -322,6 +337,9 @@ public:
 	{
 		return m_endFrameQueryCreateCount;
 	}
+	bool EndFrameQueryPresentForObservation() const { return m_pEndFrameQuery != NULL; }
+	bool EndFrameQueryReadyForObservation() const { return m_pEndFrameQuery != NULL && m_endFrameQueryReady; }
+	HRESULT EndFrameQueryLastIssueResultForObservation() const { return m_endFrameQueryLastIssueResult; }
 	uint64_t EndFrameQueryFailureCountForTesting() const
 	{
 		return m_endFrameQueryFailureCount;
@@ -1108,6 +1126,9 @@ private:
     uint64_t m_particleSystemChangeApplyCount = 0;
     uint64_t m_deviceStateProbeCount = 0;
     uint64_t m_composedFramePrepareCount = 0;
+    uint64_t m_completedFullUpdateCount = 0;
+    bool m_endFrameQueryReady = false;
+    HRESULT m_endFrameQueryLastIssueResult = S_FALSE;
     uint64_t m_endFrameQueryCreateCount = 0;
     uint64_t m_endFrameQueryFailureCount = 0;
     uint64_t m_endFrameQueryTimeoutCount = 0;

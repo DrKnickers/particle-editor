@@ -837,12 +837,17 @@ void HostWindowImpl::ReleaseHostComObjects()
 // changes. The SpawnerPanel badge subscribes to that event unchanged.
 void HostWindowImpl::RenderD3D9()
 {
-    if (!engine || m_compositionFatalPending) return;
+    RenderComposedFrame(m_runMode != RunMode::ReplayProof);
+}
+
+bool HostWindowImpl::RenderComposedFrame(bool simulate)
+{
+    if (!engine || m_compositionFatalPending) return false;
     // The composed editor has no D3D9 Present result. This admission door
     // consumes any suspect state raised by the previous frame's event-query
     // failure before SpawnerDriver, Update, or Render can touch D3D resources.
     // A healthy frame performs no CheckDeviceState probe.
-    if (!engine->PrepareComposedFrame()) return;
+    if (!engine->PrepareComposedFrame()) return false;
 
     float now = GetTimeF();
     float dt  = (m_lastRenderTime > 0.0f) ? (now - m_lastRenderTime) : 0.0f;
@@ -855,7 +860,7 @@ void HostWindowImpl::RenderD3D9()
     // In --record mode the spawner is driven EXACTLY ONCE per emitted frame by
     // the ClipRunner step hook (at the fixed virtual dt), so keep incidental
     // renders out of that deterministic schedule.
-    if (spawnerDriver && particleSystem && m_runMode != RunMode::Record)
+    if (simulate && spawnerDriver && particleSystem && m_runMode != RunMode::Record)
         spawnerDriver->Tick(dt, particleSystem.get(), engine.get());
 
     // shift-click-to-spawn: refresh cursor velocity from
@@ -864,10 +869,10 @@ void HostWindowImpl::RenderD3D9()
     // through its Object3D parent chain during Update. Mirrors the
     // legacy editor, whose render loop called UpdateVelocity
     // unconditionally each frame whether or not a system was attached.
-    m_mouseCursor.UpdateVelocity();
+    if (simulate) m_mouseCursor.UpdateVelocity();
 
     const LONGLONG perfT0 = PerfQpcNow();
-    engine->Update();
+    if (simulate) engine->Update();
     const double perfUpdateUs = PerfUsSince(perfT0);
 
     // The game-object catalog builds off the UI thread; when Update() just
@@ -910,14 +915,29 @@ void HostWindowImpl::RenderD3D9()
     // AttachEngineVisual failed (LUID mismatch, D3D11 device, etc.),
     // CompositeEngineFrame returns S_FALSE and this block is a per-frame
     // no-op with the viewport area empty.
+    bool composed = false;
+    bool queryOk = false;
     if (rendered && m_compositor && m_compositor->IsReady())
     {
+        const uint64_t queryFailures = engine->EndFrameQueryFailureCountForTesting();
+        const uint64_t queryTimeouts = engine->EndFrameQueryTimeoutCountForTesting();
         engine->IssueEndFrameQuery();
+        if (!simulate && (!engine->EndFrameQueryPresentForObservation() ||
+            engine->EndFrameQueryLastIssueResultForObservation() != S_OK ||
+            engine->DeviceCallsBlocked())) return false;
         // [PERF] WaitEndFrameQuery is the suspected hot stage — time the
         // busy-spin and capture the spin count it now returns.
         const LONGLONG perfT2     = PerfQpcNow();
         const int      perfSpins  = engine->WaitEndFrameQuery();
         const double   perfWaitUs = PerfUsSince(perfT2);
+        queryOk = engine->EndFrameQueryPresentForObservation() &&
+            engine->EndFrameQueryReadyForObservation() &&
+            engine->EndFrameQueryLastIssueResultForObservation() == S_OK &&
+            engine->EndFrameQueryFailureCountForTesting() == queryFailures &&
+            engine->EndFrameQueryTimeoutCountForTesting() == queryTimeouts &&
+            !engine->DeviceCallsBlocked();
+        // Normal modes retain degraded composition; proof rejects stale pixels.
+        if (!simulate && !queryOk) return false;
         // Pass the engine's current shared
         // handle so Compositor can lazy-detect AlphaCompositor::Resize
         // invalidation and re-open the D3D11 alias. Without this, a
@@ -929,6 +949,8 @@ void HostWindowImpl::RenderD3D9()
         const LONGLONG perfT3 = PerfQpcNow();
         const ComposedFrameResult compositeResult =
             m_compositor->CompositeEngineFrame(engine->GetSharedTextureHandle());
+        composed = compositeResult.stage == ComposedFrameStage::Present1 &&
+            compositeResult.hr == S_OK;
         // Present1 belongs to the D3D11 composition device, not the engine's
         // D3D9Ex device. Exact DXGI device-removal states therefore enter the
         // composition fatal/restart path with zero D3D9 recovery attempts.
@@ -1056,6 +1078,7 @@ void HostWindowImpl::RenderD3D9()
             dispatcher->EmitSpawnerActiveCount(instances);
         }
     }
+    return rendered && queryOk && composed && !m_compositionFatalPending;
 }
 
 // ---------- WndProc dispatch ----------
@@ -1624,6 +1647,8 @@ LRESULT HostWindowImpl::OnMainCreate(HWND hwnd)
         {
             engine = std::make_unique<Engine>(
                 hwnd, hViewport, textureManager, shaderManager, fileManager);
+            // Snapshot the constructor profile before any persisted view overrides.
+            m_fixedCaptureView = CaptureRunner::MakeFixedCaptureView(*engine);
             if (dispatcher) dispatcher->SetEngine(engine.get());
             layout.SetEngine(engine.get());
             // bind engine to ModManager so subsequent
@@ -2368,7 +2393,8 @@ int HostWindowImpl::Run(int nCmdShow)
             engine, modManager, particleSystem, spawnerDriver,
             alphaCompositor, hMain, m_uiReady, m_sceneRectSeen,
             [this] { RenderD3D9(); },
-            [this](const std::string& s) { Log("%s", s.c_str()); }});
+            [this](const std::string& s) { Log("%s", s.c_str()); },
+            m_fixedCaptureView});
     if (captureMode)
         captureRunner.Init();
 

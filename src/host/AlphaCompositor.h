@@ -71,6 +71,11 @@ public:
     // first layout/scene-rect.
     void SetSceneRect(int x, int y, int w, int h);
 
+    struct Size { int width; int height; };
+    struct CropRect { int x; int y; int width; int height; };
+    Size RenderTargetSizeForObservation() const;
+    CropRect ReadbackCropForObservation() const;
+
     // Capture the most recent pre-stamp engine frame as a
     // base64-encoded PNG. `outBase64` is filled with the PNG payload
     // (no "data:image/png;base64," prefix — the caller adds that).
