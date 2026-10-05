@@ -541,6 +541,11 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
     }
     if (kind == "engine/set/overload-guard")
     {
+        if (IgnoreReplayProofSettingsPush(m_replayProofIgnoredPushes.overloadGuard))
+        {
+            ctx.SendOk(json::object());
+            return true;
+        }
         // [guard-config] View-only preview setting (like engine/set/paused):
         // never marks the document dirty. The engine clamps maxParticles
         // defensively; we cache pre-clamp intent for SetEngine reapply
@@ -563,6 +568,11 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
     // re-applied each time the engine rebuilds its swap chain.
     if (kind == "engine/set/msaa-level")
     {
+        if (IgnoreReplayProofSettingsPush(m_replayProofIgnoredPushes.msaaLevel))
+        {
+            ctx.SendOk(json::object());
+            return true;
+        }
         if (!ctx.RequireEngine(kind.c_str())) return true;
         const int level = params.value("level", 0);
         m_engine->SetMsaaLevel(level);
@@ -601,6 +611,11 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
     // and reapplied on SetEngine like the guard config.
     if (kind == "engine/set/estimated-load")
     {
+        if (IgnoreReplayProofSettingsPush(m_replayProofIgnoredPushes.estimatedLoad))
+        {
+            ctx.SendOk(json::object());
+            return true;
+        }
         double perInstance = params.value("perInstance", 0.0);
         if (perInstance < 0.0) perInstance = 0.0;
         m_estimatedLoadCached       = true;

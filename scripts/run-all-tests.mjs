@@ -22,6 +22,7 @@
 //   render-goldens    deterministic --capture scenes vs checked-in goldens
 //                     (ffmpeg SSIM ≥ 0.9995 — see scripts/render-goldens.mjs)
 //   record-smoke      headless --record timeline produces renderable frames
+//   replay-proof      headless replay experiments, retained PNGs and checked report.json
 //   drive-smoke       tasks/drive-smoke.ps1 — real-pixel non-black --drive smoke
 //                     + the oracle-step scenarios (assert-state / nonblack /
 //                     production-wire bridge-selftest). The script is
@@ -54,6 +55,7 @@
 // MSBuild/game-install lanes.
 
 import { spawnSync } from "node:child_process";
+import { resolveReplayGameRoots } from "./replay-proof.mjs";
 import { existsSync, statSync, writeFileSync, readFileSync, unlinkSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -507,12 +509,38 @@ function renderDesktopUsable() {
 }
 
 // Missing prereq -> FAIL unless the user explicitly allowed it for this lane.
-function prereq(lane, ok, what, hint) {
+export function prereq(lane, ok, what, hint, allowMissing = ALLOW_MISSING) {
   if (ok) return null;
   const msg = `${what} — ${hint}`;
-  if (ALLOW_MISSING.has(lane)) return skip(msg);
+  if (allowMissing.has(lane)) return skip(msg);
   log(`${lane}: missing prereq: ${msg} (or pass --allow-missing ${lane})`);
   return fail(`missing prereq: ${what}`);
+}
+
+export function runReplayProofLane({
+  desktop = renderDesktopUsable, exists = existsSync, gameRoots = resolveReplayGameRoots,
+  checkPrereq = prereq,
+  runProof = (roots) => runExeTee(process.execPath, [join(repoRoot, "scripts", "replay-proof.mjs"),
+    ...roots.flatMap((root) => ["--game-root", root])]),
+} = {}) {
+  const rd = desktop();
+  if (!rd.ok) return skip(`no interactive render desktop ? ${rd.reason}`);
+  for (const [ok, what, hint] of [
+    [exists(releaseExe), "x64/Release/ParticleEditor.exe missing", "run the msbuild-release lane first"],
+    [exists(debugExe), "x64/Debug/ParticleEditor.exe missing", "run the msbuild-debug lane first"],
+    [exists(distIndex), "web dist/ missing", "run the web-build lane first"],
+    [exists(join(repoRoot, "scripts", "replay-proof.mjs")), "scripts/replay-proof.mjs missing", "restore the proof script"],
+  ]) {
+    const p = checkPrereq("replay-proof", ok, what, hint);
+    if (p) return p;
+  }
+  const roots = gameRoots();
+  const p = checkPrereq("replay-proof", roots.length > 0,
+    "missing game data (host GameDataPath / sibling / cwd lookup)",
+    "launch the editor once and choose an installed game data folder with a usable MEG archive");
+  if (p) return p;
+  const r = runProof(roots);
+  return r.code === 0 ? pass : fail(`replay proof exit ${r.code}`);
 }
 
 const LANES = [
@@ -809,6 +837,11 @@ const LANES = [
       ]);
       return code === 0 ? pass : fail(`drive smoke exit ${code}`);
     },
+  },
+  {
+    name: "replay-proof",
+    deps: ["msbuild-release", "web-build"],
+    run: () => runReplayProofLane(),
   },
 ];
 

@@ -36,6 +36,12 @@ struct SpawnerConfigWiringTestAccess
     {
         dispatcher.ApplySpawnerStop();
     }
+
+    static bool IgnoreSettingsPush(BridgeDispatcher& dispatcher,
+        std::uint64_t BridgeDispatcher::ReplayProofIgnoredPushCounts::* counter)
+    {
+        return dispatcher.IgnoreReplayProofSettingsPush(dispatcher.m_replayProofIgnoredPushes.*counter);
+    }
 };
 
 } // namespace host
@@ -128,6 +134,29 @@ int main()
     std::printf("test_bridge_spawner_state\n");
     host::LayoutBroker layout;
     host::AcceleratorBridge accel;
+
+    // Exercise the production switch without requiring an Engine or WebView.
+    {
+        auto dispatcher = host::SpawnerConfigWiringTestAccess::MakeDispatcher(layout, accel);
+        using Counts = host::BridgeDispatcher::ReplayProofIgnoredPushCounts;
+        const auto ignore = [&](std::uint64_t Counts::* counter)
+        {
+            return host::SpawnerConfigWiringTestAccess::IgnoreSettingsPush(*dispatcher, counter);
+        };
+        const auto& counts = dispatcher->IgnoredReplayProofSettingsPushes();
+        for (auto counter : { &Counts::overloadGuard, &Counts::msaaLevel, &Counts::estimatedLoad })
+            CHECK(!ignore(counter) && counts.*counter == 0, "normal mode accepts settings pushes without counting");
+        dispatcher->SetReplayProofOwnsSettings(true);
+        for (auto counter : { &Counts::overloadGuard, &Counts::msaaLevel, &Counts::estimatedLoad })
+            CHECK(ignore(counter) && counts.*counter == 1, "proof mode ignores and counts each settings kind");
+        CHECK(ignore(&Counts::estimatedLoad) && counts.estimatedLoad == 2 &&
+              counts.overloadGuard == 1 && counts.msaaLevel == 1, "ignored push counters are independent");
+        dispatcher->SetReplayProofOwnsSettings(false);
+        for (auto counter : { &Counts::overloadGuard, &Counts::msaaLevel, &Counts::estimatedLoad })
+            CHECK(!ignore(counter), "disabling proof ownership restores normal settings handling");
+        CHECK(counts.overloadGuard == 1 && counts.msaaLevel == 1 && counts.estimatedLoad == 2,
+              "normal handling does not alter ignored push counts");
+    }
 
     // Driverless start must echo the parsed, clamped structure rather than the
     // raw params. This is the partial-wiring / Vitest contract.

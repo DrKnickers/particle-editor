@@ -26,8 +26,8 @@ test("automation isolates the texture palette before restoring the saved mod sta
   );
   assert.match(
     hostSource,
-    /bool IsAutomationMode\(\) const\s*\{\s*return m_runMode == RunMode::Drive \|\| m_runMode == RunMode::Record;\s*\}/,
-    "both drive and record must isolate the palette",
+    /bool IsAutomationMode\(\) const\s*\{\s*return m_runMode == RunMode::Drive \|\| m_runMode == RunMode::Record \|\|\s*m_runMode == RunMode::ReplayProof;\s*\}/,
+    "drive, record and replay proof must isolate the palette",
   );
   assert.ok(
     isolate < restore,

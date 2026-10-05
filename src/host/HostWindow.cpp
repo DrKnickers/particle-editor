@@ -257,7 +257,8 @@ void HostWindowImpl::OpenLog()
     // (truncate) never wipes a concurrently-running daily driver's host.log.
     if (IsAutomationMode())
     {
-        const std::wstring suffix = (m_runMode == RunMode::Record ? L"-record-" : L"-drive-") + std::to_wstring(GetCurrentProcessId());
+        const std::wstring suffix = (m_runMode == RunMode::ReplayProof ? L"-replay-proof-" :
+                                     m_runMode == RunMode::Record ? L"-record-" : L"-drive-") + std::to_wstring(GetCurrentProcessId());
         if (!perfArtifactDir.empty())
         {
             std::error_code ec;
@@ -283,6 +284,7 @@ void HostWindowImpl::OpenLog()
     {
         Log("[host] === host session started ===\n");
         const char* mode = m_runMode == RunMode::Drive ? "drive"
+                         : m_runMode == RunMode::ReplayProof ? "replay-proof"
                          : m_runMode == RunMode::Record ? "record"
                          : m_runMode == RunMode::Capture
                              ? (m_captureRef.empty() ? "capture" : "capture-ref")
@@ -296,7 +298,14 @@ void HostWindowImpl::OpenLog()
 // CloseLog holds logMutex: write directly rather than locking again through Log.
 void HostWindowImpl::LogParticleRngResult()
 {
-    if (m_runMode == RunMode::Record)
+    if (m_runMode == RunMode::ReplayProof)
+    {
+        fprintf(logFile, "[particle-rng] mode=replay-proof algorithm=legacy-msvc-v%u seed=0x%08X draws=%llu\n",
+            static_cast<unsigned>(ParticleRandom::kAlgorithmVersion),
+            static_cast<unsigned>(ParticleRandom::SeedValue()),
+            static_cast<unsigned long long>(ParticleRandom::DrawCount()));
+    }
+    else if (m_runMode == RunMode::Record)
     {
         fprintf(logFile, "[particle-rng] mode=record algorithm=legacy-msvc-v%u seed=0x%08X draws=%llu drawsBeforeFirstFrame=",
             static_cast<unsigned>(ParticleRandom::kAlgorithmVersion),
@@ -842,12 +851,18 @@ void HostWindowImpl::RenderD3D9()
 
 bool HostWindowImpl::RenderComposedFrame(bool simulate)
 {
-    if (!engine || m_compositionFatalPending) return false;
+    ReplayProofRunner* proof = m_runMode == RunMode::ReplayProof ? m_replayProofRunner.get() : nullptr;
+    if (proof && !proof->BeforeRender()) return false;
+    const auto finish = [proof](bool succeeded)
+    {
+        return proof ? proof->AfterRender(succeeded) : succeeded;
+    };
+    if (!engine || m_compositionFatalPending) return finish(false);
     // The composed editor has no D3D9 Present result. This admission door
     // consumes any suspect state raised by the previous frame's event-query
     // failure before SpawnerDriver, Update, or Render can touch D3D resources.
     // A healthy frame performs no CheckDeviceState probe.
-    if (!engine->PrepareComposedFrame()) return false;
+    if (!engine->PrepareComposedFrame()) return finish(false);
 
     float now = GetTimeF();
     float dt  = (m_lastRenderTime > 0.0f) ? (now - m_lastRenderTime) : 0.0f;
@@ -924,7 +939,7 @@ bool HostWindowImpl::RenderComposedFrame(bool simulate)
         engine->IssueEndFrameQuery();
         if (!simulate && (!engine->EndFrameQueryPresentForObservation() ||
             engine->EndFrameQueryLastIssueResultForObservation() != S_OK ||
-            engine->DeviceCallsBlocked())) return false;
+            engine->DeviceCallsBlocked())) return finish(false);
         // [PERF] WaitEndFrameQuery is the suspected hot stage — time the
         // busy-spin and capture the spin count it now returns.
         const LONGLONG perfT2     = PerfQpcNow();
@@ -937,7 +952,7 @@ bool HostWindowImpl::RenderComposedFrame(bool simulate)
             engine->EndFrameQueryTimeoutCountForTesting() == queryTimeouts &&
             !engine->DeviceCallsBlocked();
         // Normal modes retain degraded composition; proof rejects stale pixels.
-        if (!simulate && !queryOk) return false;
+        if (!simulate && !queryOk) return finish(false);
         // Pass the engine's current shared
         // handle so Compositor can lazy-detect AlphaCompositor::Resize
         // invalidation and re-open the D3D11 alias. Without this, a
@@ -1078,7 +1093,7 @@ bool HostWindowImpl::RenderComposedFrame(bool simulate)
             dispatcher->EmitSpawnerActiveCount(instances);
         }
     }
-    return rendered && queryOk && composed && !m_compositionFatalPending;
+    return finish(rendered && queryOk && composed && !m_compositionFatalPending);
 }
 
 // ---------- WndProc dispatch ----------
@@ -2259,6 +2274,7 @@ int HostWindowImpl::Run(int nCmdShow)
     dispatcher = std::make_unique<BridgeDispatcher>(/*engine*/nullptr, layout, accelerator, emitFn,
                                                     /*useTestHost*/useTestHost,
                                                     /*automationMode*/IsAutomationMode());
+    dispatcher->SetReplayProofOwnsSettings(m_runMode == RunMode::ReplayProof);
     dispatcher->SetUndoStack(&undoStack);
     dispatcher->SetHostHwnd(hMain);
     dispatcher->SetExternalLaunchAllowed(IsFullyInteractive());
@@ -2440,6 +2456,7 @@ int HostWindowImpl::Run(int nCmdShow)
     // branch (below) — built+ticked here, NOT under captureMode (which is false
     // in drive mode). Watchdogs: a startup deadline until app/ready, and a
     // render-budget cap of sum(settle)+60s once running.
+    int       replayExitCode   = 5;
     int       driveExitCode    = 0;
     bool      driveDcompSettled = false;
     LONGLONG  driveDcompStart  = 0;
@@ -2471,7 +2488,7 @@ int HostWindowImpl::Run(int nCmdShow)
         // app/ready, no frame acks, no composite — so end it now with
         // kWebProcessFailedExitCode instead of waiting out a watchdog. An
         // interactive session closes through WM_APP_WEB_DEAD instead.
-        if (m_webDead && !IsFullyInteractive())
+        if (m_webDead && !IsFullyInteractive() && m_runMode != RunMode::ReplayProof)
         {
             Log("[webview] headless run aborted: web process failed (exit %d)\n",
                 webviewcrash::kWebProcessFailedExitCode);
@@ -2486,7 +2503,20 @@ int HostWindowImpl::Run(int nCmdShow)
         // mode, so this must precede the !captureMode idle branch). Renders
         // every iteration; never blocks. States: wait app/ready -> build runner
         // -> one-shot DComp settle -> Tick per frame.
-        if (engine && m_runMode == RunMode::Drive)
+        if (m_runMode == RunMode::ReplayProof)
+        {
+            m_replayProofRunner = std::make_unique<ReplayProofRunner>(
+                ReplayProofRunner::Deps{engine, particleSystem, undoStack, layout, alphaCompositor,
+                    m_uiReady, m_sceneRectSeen, m_webDead,
+                    [this](const std::wstring& path) { return BuildReplayHooks(path); },
+                    [this](const std::string& request) { return dispatcher->DispatchSync(request); },
+                    [this]() { SettleResize("replay-proof"); },
+                    [this](const std::string& text) { Log("%s", text.c_str()); }, *dispatcher},
+                m_replayScenarioPath, m_replayOutputDirectory);
+            replayExitCode = m_replayProofRunner->Run();
+            quit = true;
+        }
+        else if (engine && m_runMode == RunMode::Drive)
         {
             RenderD3D9();
             const double elapsedMs = driveFreq > 0
@@ -2856,6 +2886,7 @@ int HostWindowImpl::Run(int nCmdShow)
     CloseLog();
     // A headless run whose web process died — whatever stage it reached,
     // its output can't be trusted, and a --record run never published.
+    if (m_runMode == RunMode::ReplayProof) return replayExitCode;
     if (webDeadAbort) return webviewcrash::kWebProcessFailedExitCode;
     // In --capture mode we break the loop via
     // the `quit` flag (not PostQuitMessage), so m.wParam is stale; return

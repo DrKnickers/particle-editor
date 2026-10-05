@@ -617,6 +617,9 @@ public:
     // the latch immediately so the overload banner doesn't linger after
     // the user opts out.
     void SetOverloadGuard(bool enabled, int maxParticles);
+    bool OverloadGuardEnabledForObservation() const { return m_overloadGuardEnabled; }
+    int OverloadGuardLimitForObservation() const { return m_maxPreviewParticles; }
+    double EstimatedLoadForObservation() const { return m_estimatedPerInstance; }
 
     // [hard-guard] One-shot spawn-refusal record polled by the host's
     // 4 Hz stats path and emitted as engine/overload/refused. Declared

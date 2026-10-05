@@ -11,6 +11,10 @@
 #include <ctime>       // time() for launch seed
 #include <crtdbg.h>    // _CrtSetReportMode/File (route Debug asserts to stderr)
 #include <exception>   // std::set_terminate (log unhandled exceptions headlessly)
+#include <fstream>
+#include <filesystem>
+#include "host/PreviewScenarioJson.h"
+#include "host/third_party/nlohmann/json.hpp"
 #include <cstdio>      // fwprintf / fprintf CLI diagnostics
 
 #include "common/exceptions.h"
@@ -108,7 +112,8 @@ static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv, v
 		    arg == L"--smoke-color" ||
 		    arg == L"--smoke-spin")
 			return 1;
-		if (arg == L"--capture" || arg == L"--capture-ref")
+		if (arg == L"--capture" || arg == L"--capture-ref" ||
+            arg == L"--replay-proof" || arg == L"--gen-replay-proof-fixture")
 			return 2;
 		if (arg == L"--snap-window")
 			return 1;
@@ -216,7 +221,8 @@ static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv, v
 	// driveScriptPath local is out of scope inside createFileManager.
 	bool driveMode = false, recordMode = false;
 	for (const std::wstring& a : argv) { if (a == L"--drive") driveMode = true; if (a == L"--record") recordMode = true; }
-	const bool automationMode = driveMode || recordMode;  // --drive AND --record suppress persistence
+	const bool replayMode = std::find(argv.begin(), argv.end(), L"--replay-proof") != argv.end();
+	const bool automationMode = driveMode || recordMode || replayMode;
 	if (fileManager != NULL && !pickedPath.empty() && !automationMode)
 	{
 		host::WriteRegSz(host::kRegGameDataPath, pickedPath);   // non-empty here
@@ -294,6 +300,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		// ParticleSystem API + SaveParticleSystem.
 		std::wstring genSingletonLinkFixturePath;
 		std::wstring genA11yFixturePath;
+		std::wstring genReplayFixtureKind, genReplayFixturePath;
+		std::wstring replayScenarioPath, replayOutputDirectory;
+		bool replayConflict = false;
 		std::wstring genSmokeTestPath;   // [shaded-smoke] all-three test particle
 		// [shaded-smoke] --smoke-color <warm|grey>: color ramp for the gen-smoke-test
 		// plume. warm (default) = white->orange->red (proves vivid tint); grey =
@@ -342,6 +351,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		std::wstring perfWebViewProfile;
 		for (size_t i = 1; i < argv.size(); ++i)
 		{
+			for (const wchar_t* mode : {L"--capture", L"--capture-ref", L"--drive", L"--record",
+									   L"--snap-window", L"--test-host", L"--dev-ui",
+									   L"--gen-a11y-fixture", L"--gen-singleton-link-fixture", L"--gen-smoke-test"})
+				if (argv[i] == mode) replayConflict = true;
 			if (argv[i] == L"--dev-ui")    devUi    = true;
 			if (argv[i] == L"--test-host") testHost = true;
 			if (argv[i] == L"--perf-trace")
@@ -429,6 +442,32 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			{
 				genSmokeTestPath = argv[i + 1];
 			}
+			if (argv[i] == L"--replay-proof" || argv[i] == L"--gen-replay-proof-fixture")
+			{
+				if (i + 2 >= argv.size() || argv[i + 1].empty() || argv[i + 2].empty() ||
+					argv[i + 1][0] == L'-' || argv[i + 2][0] == L'-')
+				{
+					fwprintf(stderr, L"%s requires two values\n", argv[i].c_str());
+					return 2;
+				}
+				if (argv[i] == L"--replay-proof")
+				{
+					replayScenarioPath = argv[i + 1];
+					replayOutputDirectory = argv[i + 2];
+				}
+				else
+				{
+					genReplayFixtureKind = argv[i + 1];
+					genReplayFixturePath = argv[i + 2];
+					if (genReplayFixtureKind != L"weather" && genReplayFixtureKind != L"guard")
+					{
+						fwprintf(stderr, L"--gen-replay-proof-fixture requires weather or guard\n");
+						return 2;
+					}
+				}
+				i += 2;
+				continue;
+			}
 			if (argv[i] == L"--capture" && i + 2 < argv.size())
 			{
 				captureAlo = argv[i + 1];
@@ -502,6 +541,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		if (perfTraceMode.empty())      perfTraceMode = readEnvW(L"ALO_PERF_TRACE_MODE");
 		if (perfArtifactDir.empty())    perfArtifactDir = readEnvW(L"ALO_PERF_ARTIFACT_DIR");
 		if (perfWebViewProfile.empty()) perfWebViewProfile = readEnvW(L"ALO_PERF_WEBVIEW_PROFILE");
+		if ((!replayScenarioPath.empty() || !genReplayFixturePath.empty()) &&
+			(replayConflict || !captureAlo.empty() || !capturePng.empty() || !captureRef.empty() ||
+			 !driveScriptPath.empty() || !recordScriptPath.empty() || snapWindowFlagSeen ||
+			 testHost || devUi || !genSingletonLinkFixturePath.empty() ||
+			 !genA11yFixturePath.empty() || !genSmokeTestPath.empty() ||
+			 (!replayScenarioPath.empty() && !genReplayFixturePath.empty())))
+		{
+			fwprintf(stderr, L"replay proof flags cannot be combined with other run modes\n");
+			return 2;
+		}
 		// --drive and --capture/--capture-ref are mutually-exclusive one-shots
 		// (both arm a captureMode-style branch). Reject the combination loudly
 		// rather than run an ambiguous mix. Checked BEFORE the capture/capture-ref
@@ -544,7 +593,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		// the redirect file) so a crash is diagnosable headlessly. Interactive Debug
 		// launches keep their dialogs.
 #ifndef NDEBUG
-		if ((!captureAlo.empty() || !captureRef.empty()) && !capturePng.empty())
+		if (((!captureAlo.empty() || !captureRef.empty()) && !capturePng.empty()) ||
+			!replayScenarioPath.empty() || !genReplayFixturePath.empty())
 		{
 			setvbuf(stderr, nullptr, _IONBF, 0);   // unbuffered: pre-crash traces survive a terminate
 			_set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
@@ -827,6 +877,79 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			         genSmokeTestPath.c_str(), (int)e->blendMode, sys->getEmitters().size());
 			return 0;
 		}
+		if (!genReplayFixturePath.empty())
+		{
+			using PS = ParticleSystem;
+			using Track = PS::Emitter::Track;
+			auto system = std::make_unique<PS>();
+			system->setName(DeriveParticleSystemName(genReplayFixturePath));
+			auto* e = system->addRootEmitter();
+			if (!e) return 3;
+			const bool weather = genReplayFixtureKind == L"weather";
+			e->colorTexture = "tests\\fixtures\\bumptest\\zz_bumpgold_rock.tga";
+			e->normalTexture = "tests\\fixtures\\bumptest\\zz_bumptest_nm.tga";
+			e->blendMode = PS::BLEND_BUMP;
+			e->textureSize = 1;
+			e->useBursts = true;
+			e->nBursts = 1;
+			e->nParticlesPerBurst = weather ? 64 : 2048;
+			e->nParticlesPerSecond = weather ? 64 : 0;
+			e->initialDelay = 0;
+			e->skipTime = 0;
+			e->burstDelay = 10000;
+			e->lifetime = 600;
+			e->gravity = 0;
+			e->isWeatherParticle = weather;
+			e->weatherCubeSize = weather ? 128.0f : 0.0f;
+			e->weatherCubeDistance = weather ? 200.0f : 0.0f;
+			e->groups[PS::GROUP_POSITION].type = PS::GT_BOX;
+			auto& g = e->groups[PS::GROUP_POSITION];
+			g.minX = -80; g.maxX = 80;
+			g.minY = -20; g.maxY = 20;
+			g.minZ = -40; g.maxZ = 40;
+			e->groups[PS::GROUP_SPEED].type = PS::GT_EXACT;
+			e->groups[PS::GROUP_SPEED].valX = 0;
+			e->groups[PS::GROUP_SPEED].valY = 0;
+			e->groups[PS::GROUP_SPEED].valZ = 0;
+			for (int track : {PS::TRACK_SCALE, PS::TRACK_RED_CHANNEL, PS::TRACK_GREEN_CHANNEL,
+							  PS::TRACK_BLUE_CHANNEL, PS::TRACK_ALPHA_CHANNEL})
+			{
+				e->tracks[track]->interpolation = Track::IT_LINEAR;
+				e->tracks[track]->keys.clear();
+				const float value = track == PS::TRACK_SCALE ? 8.0f : 1.0f;
+				e->tracks[track]->keys.insert(Track::Key(0, value));
+				e->tracks[track]->keys.insert(Track::Key(1, value));
+			}
+			std::string error;
+			if (!SaveParticleSystem(system.get(), genReplayFixturePath, &error))
+			{
+				fprintf(stderr, "replay fixture save: %s\n", error.c_str());
+				return 3;
+			}
+			// Attest the persisted definition, not the object supplied to the writer.
+			auto loaded = LoadParticleSystem(genReplayFixturePath, &error);
+			if (!loaded || loaded->getEmitters().size() != 1)
+			{
+				fprintf(stderr, "replay fixture reload: %s\n", error.c_str());
+				return 3;
+			}
+			e = loaded->getEmitters()[0];
+			nlohmann::json fields = {
+				{"kind", weather ? "weather" : "guard"}, {"reloaded", true},
+				{"colorTexture", e->colorTexture}, {"normalTexture", e->normalTexture},
+				{"useBursts", e->useBursts}, {"nBursts", e->nBursts},
+				{"nParticlesPerBurst", e->nParticlesPerBurst}, {"nParticlesPerSecond", e->nParticlesPerSecond},
+				{"initialDelay", e->initialDelay}, {"skipTime", e->skipTime},
+				{"burstDelay", e->burstDelay}, {"lifetime", e->lifetime}, {"gravity", e->gravity},
+				{"isWeatherParticle", e->isWeatherParticle}, {"weatherCubeSize", e->weatherCubeSize},
+				{"weatherCubeDistance", e->weatherCubeDistance},
+				{"positionGroup", e->groups[PS::GROUP_POSITION].type},
+				{"scale", e->tracks[PS::TRACK_SCALE]->keys.begin()->value},
+				{"alpha", e->tracks[PS::TRACK_ALPHA_CHANNEL]->keys.begin()->value}
+			};
+			printf("[replay-fixture] %s\n", fields.dump().c_str());
+			return 0;
+		}
 		// --gen-a11y-fixture <path>: one-shot CLI to produce a
 		// .alo file with a 3-emitter tree (1 root + 1 lifetime child + 1
 		// death child). Used by the a11y specs so every surface driver's
@@ -898,11 +1021,36 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		std::vector<std::wstring> gameRoots;
 		const bool interactiveSession = IsFullyInteractiveSession(
 			!captureAlo.empty() || !captureRef.empty(),
-			!driveScriptPath.empty() || !recordScriptPath.empty(),
+			!driveScriptPath.empty() || !recordScriptPath.empty() || !replayScenarioPath.empty(),
 			testHost);
 		// Fresh variation per interactive launch; the stepped state preserves srand plus
 		// one discarded draw. Automation keeps the default seed.
 		ParticleRandom::Seed(ParticleRandom::LaunchSeed(interactiveSession, static_cast<std::uint32_t>(time(nullptr))));
+		if (!replayScenarioPath.empty())
+		{
+			std::ifstream input(std::filesystem::path(replayScenarioPath), std::ios::binary);
+			const std::string text((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+			PreviewScenario scenario;
+			const std::string error = input.bad() || !input.is_open()
+				? "scenario file could not be read" : host::ParsePreviewScenario(text, scenario);
+			if (!error.empty())
+			{
+				fprintf(stderr, "[replay-proof] scenario: %s\n", error.c_str());
+				std::error_code ec;
+				std::filesystem::create_directories(replayOutputDirectory, ec);
+				const auto out = std::filesystem::path(replayOutputDirectory);
+				std::ofstream log(out / (L"host-replay-proof-" + std::to_wstring(GetCurrentProcessId()) + L".log"));
+				log << "[replay-proof] hook=scenario frame=-1 exit=2 " << error << "\n";
+				const auto temp = out / L"report.json.tmp";
+				std::ofstream report(temp, std::ios::binary);
+				report << nlohmann::json{{"schemaVersion", 1}, {"exitCode", 2},
+					{"failure", {{"hook", "scenario"}, {"frame", -1}, {"message", error}}}}.dump(2);
+				report.close();
+				MoveFileExW(temp.c_str(), (out / L"report.json").c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+				return 2;
+			}
+			ParticleRandom::Seed(scenario.seed);
+		}
 		FileManager* fileManager = createFileManager(NULL, argv, &gameRoots, interactiveSession);
 		if (fileManager == NULL)
 		{
@@ -929,6 +1077,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		launch.sunIntensity         = captureSunIntensity;
 		launch.driveScriptPath      = driveScriptPath;
 		launch.recordScriptPath     = recordScriptPath;
+		launch.replayScenarioPath   = replayScenarioPath;
+		launch.replayOutputDirectory = replayOutputDirectory;
 		launch.perfTracePath        = perfTracePath;
 		launch.perfTraceMode        = perfTraceMode;
 		launch.perfArtifactDir      = perfArtifactDir;

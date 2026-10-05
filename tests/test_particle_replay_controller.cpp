@@ -368,6 +368,53 @@ static void SourcePins()
           !resize.empty() && Count(resize, "RenderD3D9();") == 1 && Count(resize, "RenderComposedFrame(") == 0 &&
           !settle.empty() && Count(settle, "RenderD3D9();") == 1 && Count(settle, "RenderComposedFrame(") == 0,
           "WM_WINDOWPOSCHANGED and SettleResize reach frames exclusively through wrapper");
+    const std::string proof = ReadSource("src/host/ReplayProofRunner.cpp");
+    const size_t resizeBefore = proof.find("const uint64_t before = deps.engine->CompletedFullUpdateCountForObservation();");
+    const size_t resizeCall = proof.find("deps.settleResize();", resizeBefore);
+    const size_t resizeAfter = proof.find("const uint64_t after = deps.engine->CompletedFullUpdateCountForObservation();", resizeCall);
+    CHECK(resizeBefore < resizeCall && resizeCall < resizeAfter && resizeAfter != std::string::npos &&
+          proof.find("if (before != after) return Fail(4, \"resize-update-count\"", resizeAfter) != std::string::npos &&
+          host.find("SettleResize(\"replay-proof\");") != std::string::npos,
+          "proof invokes real SettleResize and fails on an incidental completed Update");
+    CHECK(proof.find("deps.buildHooks(capturePath).readback") != std::string::npos &&
+          proof.find("std::to_string(frame) + \".png\"") != std::string::npos &&
+          frame.find("proof->BeforeRender()") != std::string::npos &&
+          frame.find("proof->AfterRender(succeeded)") != std::string::npos,
+          "proof keeps authoritative readback with per-frame paths and brackets incidental renders");
+
+    const std::string dispatch = ReadSource("src/host/BridgeDispatch_Engine.cpp");
+    for (const auto& setting : std::vector<std::vector<const char*>>{
+        { "engine/set/overload-guard", "overloadGuard", "SetOverloadGuard(", "m_overloadGuardCached       = true;" },
+        { "engine/set/msaa-level", "msaaLevel", "SetMsaaLevel(", "ctx.RequireEngine(" },
+        { "engine/set/estimated-load", "estimatedLoad", "SetEstimatedLoad(", "m_estimatedLoadCached       = true;" } })
+    {
+        const size_t begin = dispatch.find(std::string("if (kind == \"") + setting[0] + "\")");
+        const size_t end = dispatch.find("\n    if (kind ==", begin + 1);
+        const std::string handler = begin == std::string::npos ? std::string() : dispatch.substr(begin, end - begin);
+        const std::string ignore = std::string("if (IgnoreReplayProofSettingsPush(m_replayProofIgnoredPushes.") + setting[1] + "))";
+        const size_t gate = handler.find(ignore);
+        const size_t reply = handler.find("ctx.SendOk(json::object());", gate);
+        const size_t stop = handler.find("return true;", reply);
+        CHECK(gate < reply && reply < stop && stop < handler.find(setting[2]) && stop < handler.find(setting[3]) &&
+              stop < handler.find("params.value("),
+              "proof settings handler counts and acknowledges before reading values, changing caches or calling engine");
+    }
+    const std::string setEngine = Body(ReadSource("src/host/BridgeDispatcher.cpp"), "void BridgeDispatcher::SetEngine(");
+    CHECK(setEngine.find("if (m_engine && !m_replayProofOwnsSettings && m_overloadGuardCached)") <
+              setEngine.find("m_engine->SetOverloadGuard(") &&
+          setEngine.find("if (m_engine && !m_replayProofOwnsSettings && m_estimatedLoadCached)") <
+              setEngine.find("m_engine->SetEstimatedLoad("),
+          "SetEngine skips both cached settings reapplies during proof ownership");
+    const size_t isolation = host.find("dispatcher->SetReplayProofOwnsSettings(m_runMode == RunMode::ReplayProof);");
+    CHECK(isolation < host.find("dispatcher->SetEngine(engine.get());", isolation) &&
+          isolation < host.find("HRESULT hr = InitWebView2();"),
+          "host enables proof settings ownership before engine binding and WebView mount pushes");
+    CHECK(proof.find("if (!CheckSettings()) return false;") != std::string::npos &&
+          proof.find("deps.dispatcher.IgnoredReplayProofSettingsPushes()") != std::string::npos,
+          "proof retains per-update settings checks and records ignored pushes");
+    CHECK(proof.find("emitter->colorTexture =") == std::string::npos &&
+          proof.find("emitter->normalTexture =") == std::string::npos,
+          "proof uses loaded fixtures without replacing their textures");
 }
 
 int main()

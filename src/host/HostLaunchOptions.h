@@ -73,6 +73,9 @@ struct HostLaunchOptions
     // Non-empty = ephemeral record mode (same persistence isolation as drive).
     // See ClipRunner / ClipTimeline.h.
     std::wstring recordScriptPath;
+    // --replay-proof <scenario.json> <out-dir>: isolated one-shot engine proof.
+    std::wstring replayScenarioPath;
+    std::wstring replayOutputDirectory;
 
     // Performance-audit-only knobs (--perf-trace, --perf-trace-mode,
     // --perf-artifact-dir, --perf-webview-profile, or their ALO_PERF_*

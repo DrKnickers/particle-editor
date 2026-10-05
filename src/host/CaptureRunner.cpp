@@ -35,7 +35,8 @@ std::function<bool()> CaptureRunner::MakeFixedCaptureView(Engine& engine)
     const Engine::Light sun = engine.GetLight(Engine::LT_SUN);
     const Engine::Light fill1 = engine.GetLight(Engine::LT_FILL1);
     const Engine::Light fill2 = engine.GetLight(Engine::LT_FILL2);
-    return [&engine, camera, background, ambient, sun, fill1, fill2]()
+    const D3DXVECTOR3 gravity = engine.GetGravity();
+    return [&engine, camera, background, ambient, sun, fill1, fill2, gravity]()
     {
         if (engine.DeviceCallsBlocked()) return false;
         engine.SetCamera(camera);
@@ -50,7 +51,9 @@ std::function<bool()> CaptureRunner::MakeFixedCaptureView(Engine& engine)
         engine.SetBloomSize(0.10f);
         engine.SetHeatDebug(false);
         engine.SetWind(D3DXVECTOR3(0, 0, 0));
-        engine.SetGravity(D3DXVECTOR3(0, 0, -1));
+        // SetGravity normalizes, which turns the constructor's exact -1 into
+        // -0.99999994; call it only to undo a real change.
+        if (engine.GetGravity() != gravity) engine.SetGravity(gravity);
         return !engine.DeviceCallsBlocked();
     };
 }

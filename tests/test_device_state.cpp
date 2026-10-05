@@ -967,7 +967,7 @@ int main()
                             "if (rendered && m_compositor && m_compositor->IsReady())"),
                    true);
         const size_t prepareFramePos =
-            hostSource.find("if (!engine->PrepareComposedFrame()) return false;");
+            hostSource.find("if (!engine->PrepareComposedFrame()) return finish(false);");
         const size_t spawnerTickPos =
             hostSource.find("spawnerDriver->Tick(", prepareFramePos);
         const size_t engineRenderPos =

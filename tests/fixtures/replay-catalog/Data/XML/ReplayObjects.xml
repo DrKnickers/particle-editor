@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<Objects>
+  <GroundVehicle Name="ReplayObject">
+    <Land_Model_Name>ReplayObject.ALO</Land_Model_Name>
+  </GroundVehicle>
+</Objects>

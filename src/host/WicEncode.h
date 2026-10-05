@@ -16,13 +16,22 @@
 // Thread contract: call from a thread with COM initialized (AsyncFrameEncoder's
 // worker loop initializes MTA COM); the WIC factory is created per call —
 // microseconds against a multi-ms encode.
+//
+// The --replay-proof runner also decodes its PNGs here to count differing
+// pixels: wincodec.h must stay in this one translation unit, whose include
+// order puts the Windows SDK ahead of the June 2010 DXSDK.
 
 #include <string>
+#include <vector>
 
 namespace host {
 
 bool EncodeBgraToPngWic(const unsigned char* bgra, int w, int h,
                         const std::wstring& path);
+
+// Decodes the first frame of a PNG to top-down 32bppBGRA.
+bool DecodePngToBgraWic(const std::wstring& path, unsigned& w, unsigned& h,
+                        std::vector<unsigned char>& bgra);
 
 }  // namespace host
 

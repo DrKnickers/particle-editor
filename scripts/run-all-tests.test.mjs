@@ -11,7 +11,7 @@ import { spawnSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { parseArgs, usage, shellSpawnSpec, spawnExitCode, parseSkippedCount } from "./run-all-tests.mjs";
+import { parseArgs, usage, shellSpawnSpec, spawnExitCode, parseSkippedCount, prereq, runReplayProofLane } from "./run-all-tests.mjs";
 
 const scriptPath = join(dirname(fileURLToPath(import.meta.url)), "run-all-tests.mjs");
 
@@ -132,4 +132,50 @@ test("spawnExitCode: a normal exit passes its status through silently", () => {
 test("parseSkippedCount reads the render-goldens summary line", () => {
   assert.equal(parseSkippedCount("[gate] render-goldens: 2/3 scenes ok, 1 skipped"), 1);
   assert.equal(parseSkippedCount("[gate] render-goldens: 3/3 scenes ok, 0 skipped"), 0);
+});
+
+test("replay-proof follows drive-smoke in the registered gate", () => {
+  const r = runScript("--list");
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /drive-smoke\r?\nreplay-proof\r?\n/);
+});
+
+function replayLane(overrides = {}, allowMissing = false) {
+  return runReplayProofLane({
+    desktop: () => ({ ok: true }), exists: () => true, gameRoots: () => ["installed-game"],
+    checkPrereq: (lane, ok, what, hint) => prereq(lane, ok, what, hint, new Set(allowMissing ? ["replay-proof"] : [])),
+    runProof: () => ({ code: 0 }), ...overrides,
+  });
+}
+
+test("replay-proof has visible render-desktop SKIP and never runs without it", () => {
+  const r = replayLane({ desktop: () => ({ ok: false, reason: "locked" }), runProof: () => assert.fail("must not run") });
+  assert.equal(r.status, "SKIP");
+  assert.match(r.note, /render desktop.*locked/);
+});
+
+for (const missing of ["Release", "Debug", "dist", "replay-proof.mjs"]) {
+  test(`replay-proof missing ${missing} fails by default and --allow-missing visibly skips`, () => {
+    const overrides = { exists: (path) => !path.includes(missing), runProof: () => assert.fail("must not run") };
+    assert.equal(replayLane(overrides).status, "FAIL");
+    const allowed = replayLane(overrides, true);
+    assert.equal(allowed.status, "SKIP");
+    assert.match(allowed.note, /missing/);
+  });
+}
+
+test("replay-proof reports missing host game data via prereq, never PASS", () => {
+  const overrides = { gameRoots: () => [], runProof: () => assert.fail("must not run") };
+  assert.match(replayLane(overrides).note, /missing game data/);
+  assert.equal(replayLane(overrides).status, "FAIL");
+  const allowed = replayLane(overrides, true);
+  assert.equal(allowed.status, "SKIP");
+  assert.match(allowed.note, /GameDataPath.*sibling.*cwd/);
+});
+
+test("replay-proof only passes after actually running the proof; failures cannot skip", () => {
+  let runs = 0;
+  assert.equal(replayLane({ runProof: (roots) => { ++runs; assert.deepEqual(roots, ["installed-game"]); return { code: 0 }; } }).status, "PASS");
+  assert.equal(runs, 1);
+  assert.equal(replayLane({ runProof: () => ({ code: 4 }) }, true).status, "FAIL");
 });

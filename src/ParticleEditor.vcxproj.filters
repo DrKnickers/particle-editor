@@ -177,6 +177,12 @@
     <ClInclude Include="host\CaptureTicker.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="host\ReplayProofRunner.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\ReplayHostileCrt.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
     <ClInclude Include="host\ParticleReplayController.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
@@ -574,6 +580,12 @@
     </ClCompile>
     <ClCompile Include="host\CaptureTicker.cpp">
       <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\ReplayProofRunner.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="..\tests\support\replay_hostile_crt.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="host\ParticleReplayController.cpp">
       <Filter>Source Files\host</Filter>

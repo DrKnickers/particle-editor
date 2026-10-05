@@ -90,4 +90,34 @@ bool EncodeBgraToPngWic(const unsigned char* bgra, int w, int h,
     return true;
 }
 
+bool DecodePngToBgraWic(const std::wstring& path, unsigned& w, unsigned& h,
+                        std::vector<unsigned char>& bgra)
+{
+    ComPtr<IWICImagingFactory> fac;
+    ComPtr<IWICBitmapDecoder> decoder;
+    ComPtr<IWICBitmapFrameDecode> frame;
+    ComPtr<IWICFormatConverter> converter;
+    UINT width = 0, height = 0;
+    if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
+                                IID_PPV_ARGS(&fac))) ||
+        FAILED(fac->CreateDecoderFromFilename(path.c_str(), nullptr, GENERIC_READ,
+                                              WICDecodeMetadataCacheOnDemand, &decoder)) ||
+        FAILED(decoder->GetFrame(0, &frame)) ||
+        FAILED(fac->CreateFormatConverter(&converter)) ||
+        FAILED(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppBGRA,
+                                     WICBitmapDitherTypeNone, nullptr, 0.0,
+                                     WICBitmapPaletteTypeCustom)) ||
+        FAILED(converter->GetSize(&width, &height)))
+        return false;
+    // Same narrowing guard as the encoder: CopyPixels takes a UINT size.
+    const unsigned long long bytesLL = static_cast<unsigned long long>(width) * height * 4ull;
+    if (bytesLL == 0 || bytesLL > 0xFFFFFFFFull) return false;
+    bgra.resize(static_cast<size_t>(bytesLL));
+    if (FAILED(converter->CopyPixels(nullptr, width * 4, static_cast<UINT>(bytesLL), bgra.data())))
+        return false;
+    w = width;
+    h = height;
+    return true;
+}
+
 }  // namespace host

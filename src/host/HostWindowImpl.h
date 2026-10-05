@@ -115,6 +115,7 @@
 #include "RecordTrace.h"   // --record: flag-gated pump-schedule trace
 #include "RecordOutputSafety.h"  // --record: refuse to remove_all a non-output dir
 #include "ParticleReplayController.h"
+#include "ReplayProofRunner.h"
 #include "CaptureRunner.h" // --capture/--capture-ref: one-shot render + PNG
 #include "HostRunUtil.h"   // PerfQpcNow/PerfQpcFreq/QpcMs/DeriveSibling (shared with the runners)
 #include "AsyncFrameEncoder.h"   // --record: background PNG encode
@@ -657,6 +658,9 @@ struct HostWindowImpl
     bool        useTestHost = false; // --test-host: CDP :9222 + DevTools
     enum class RunMode { Interactive, Capture, Drive, Record, ReplayProof };
     const RunMode m_runMode;
+    const std::wstring m_replayScenarioPath;
+    const std::wstring m_replayOutputDirectory;
+    std::unique_ptr<ReplayProofRunner> m_replayProofRunner;
     // --capture mode: load m_captureAlo,
     // render m_captureFrames frames, write engine RT to m_capturePng,
     // then quit. These are capture inputs; m_runMode selects the pump branch.
@@ -684,13 +688,14 @@ struct HostWindowImpl
     // WebMessageReceived to this thread's message pump), so a plain non-atomic
     // bool is correct: no atomic/volatile needed.
     bool         m_uiReady = false;
-    // --drive and --record share persistence/profile/log isolation, but have
+    // --drive, --record and --replay-proof share persistence/profile/log isolation, but have
     // separate run-loop branches. --test-host remains an orthogonal flag.
     std::wstring m_driveScriptPath;
     std::wstring m_recordScriptPath;
     bool IsAutomationMode() const
     {
-        return m_runMode == RunMode::Drive || m_runMode == RunMode::Record;
+        return m_runMode == RunMode::Drive || m_runMode == RunMode::Record ||
+            m_runMode == RunMode::ReplayProof;
     }
     // True only when a human is present to dismiss a blocking modal — i.e. NOT in
     // any headless mode (capture / drive-or-record / test-host). Every fatal or
@@ -946,19 +951,22 @@ struct HostWindowImpl
         , fileManager(fil)
         , useDevUi(options.useDevUi)
         , useTestHost(options.useTestHost)
-        // main.cpp rejects capture/drive/record combinations. For direct callers,
-        // preserve the old pump precedence: Drive, then Record, then Capture.
+        // main.cpp rejects run-mode combinations. Direct callers prioritize proof,
+        // then preserve the old pump precedence: Drive, Record, Capture.
         // Both capture inputs are allowed; CaptureRunner still prefers captureRef.
-        , m_runMode(!options.driveScriptPath.empty() ? RunMode::Drive
+        , m_runMode(!options.replayScenarioPath.empty() ? RunMode::ReplayProof
+                    : !options.driveScriptPath.empty() ? RunMode::Drive
                     : !options.recordScriptPath.empty() ? RunMode::Record
                     : (!options.captureAlo.empty() || !options.captureRef.empty())
                         ? RunMode::Capture : RunMode::Interactive)
+        , m_replayScenarioPath(options.replayScenarioPath)
+        , m_replayOutputDirectory(options.replayOutputDirectory)
         , m_captureAlo(options.captureAlo)
         , m_captureRef(options.captureRef)
         , m_capturePng(options.capturePng)
         , m_captureFrames(options.captureFrames)
         , m_captureSkydomeSlot(options.captureSkydome)
-        , m_captureGoldenProfile(options.captureGoldenProfile)
+        , m_captureGoldenProfile(options.captureGoldenProfile || !options.replayScenarioPath.empty())
         , m_captureHasAmbient(options.hasAmbient)
         , m_captureHasSun(options.hasSun)
         , m_captureHasSunI(options.hasSunIntensity)
@@ -981,7 +989,8 @@ struct HostWindowImpl
         , modManager(std::make_unique<ModManager>(&fil, gameRoots_,
               /*suppressPersistence=*/!IsFullyInteractiveSession(
                   !options.captureAlo.empty() || !options.captureRef.empty(),
-                  !options.driveScriptPath.empty() || !options.recordScriptPath.empty(),
+                  !options.driveScriptPath.empty() || !options.recordScriptPath.empty() ||
+                  !options.replayScenarioPath.empty(),
                   options.useTestHost && !ReadSettingsLiveEnv())))
     {
         // [world-lit] capture lighting colours (arrays can't init in list).

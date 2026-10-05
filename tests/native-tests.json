@@ -153,6 +153,9 @@
       "sources": ["src/simulation/ParticleRandom.cpp"],
       "release": true
     },
+    "test_replay_hostile_crt": {
+      "sources": ["tests/support/replay_hostile_crt.cpp", "src/simulation/ParticleRandom.cpp"]
+    },
     "test_particle_replay_controller": {
       "sources": ["src/host/ParticleReplayController.cpp"],
       "uses": ["dxsdk"]

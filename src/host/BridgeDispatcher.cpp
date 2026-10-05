@@ -753,12 +753,13 @@ void BridgeDispatcher::SetEngine(Engine* engine)
     // recreated engine never silently reverts to defaults. Today the
     // engine is constructed once per process (HostWindow startup) and
     // this is a no-op safety net; if a future change recreates the
-    // engine, the user's setting follows automatically.
-    if (m_engine && m_overloadGuardCached)
+    // engine, the user's setting follows automatically. Proof settings belong
+    // to pinSettings even if this cache was populated before ownership began.
+    if (m_engine && !m_replayProofOwnsSettings && m_overloadGuardCached)
         m_engine->SetOverloadGuard(m_overloadGuardEnabled, m_overloadGuardMaxParticles);
     // [hard-guard] Reapply the cached estimate the same way, for the same
     // engine-recreation safety net.
-    if (m_engine && m_estimatedLoadCached)
+    if (m_engine && !m_replayProofOwnsSettings && m_estimatedLoadCached)
         m_engine->SetEstimatedLoad(m_estimatedLoadPerInstance);
 }
 

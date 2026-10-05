@@ -183,6 +183,8 @@
     <ClInclude Include="host\CaptureRunner.h" />
     <ClInclude Include="host\CaptureTicker.h" />
     <ClInclude Include="host\ParticleReplayController.h" />
+    <ClInclude Include="host\ReplayHostileCrt.h" />
+    <ClInclude Include="host\ReplayProofRunner.h" />
     <ClInclude Include="host\PreviewScenarioJson.h" />
     <ClInclude Include="host\DriveRunner.h" />
     <ClInclude Include="host\HostRunUtil.h" />
@@ -279,6 +281,11 @@
     <ClCompile Include="host\CaptureRunner.cpp" />
     <ClCompile Include="host\CaptureTicker.cpp" />
     <ClCompile Include="host\ParticleReplayController.cpp" />
+    <ClCompile Include="..\tests\support\replay_hostile_crt.cpp" />
+    <ClCompile Include="host\ReplayProofRunner.cpp">
+      <!-- WIC needs modern DXGI definitions before the legacy d3dx9 SDK. -->
+      <AdditionalIncludeDirectories>$(WindowsSdkDir)Include\$(WindowsSDKVersion)shared;$(WindowsSdkDir)Include\$(WindowsSDKVersion)um;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
     <ClCompile Include="host\PreviewScenarioJson.cpp" />
     <ClCompile Include="host\RestoredSettings.cpp" />
     <ClCompile Include="host\WicEncode.cpp">

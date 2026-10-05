@@ -92,6 +92,19 @@ public:
     // cannot be inlined in this header.
     void SetEngine(Engine* engine);
 
+    // Mount and tree-change pushes must not overwrite the proof's pinned settings.
+    void SetReplayProofOwnsSettings(bool enabled) { m_replayProofOwnsSettings = enabled; }
+    struct ReplayProofIgnoredPushCounts
+    {
+        std::uint64_t overloadGuard = 0;
+        std::uint64_t msaaLevel = 0;
+        std::uint64_t estimatedLoad = 0;
+    };
+    const ReplayProofIgnoredPushCounts& IgnoredReplayProofSettingsPushes() const
+    {
+        return m_replayProofIgnoredPushes;
+    }
+
     // Inject the UndoStack used to service `undo/perform` requests.
     // Stack is constructed by HostWindow alongside the Engine. Null is
     // treated as "no undo available, applied:false". Emitter
@@ -318,6 +331,13 @@ public:
     void EmitCloseRequested();
 
 private:
+    bool IgnoreReplayProofSettingsPush(std::uint64_t& count)
+    {
+        if (!m_replayProofOwnsSettings) return false;
+        ++count;
+        return true;
+    }
+
     // Deterministic construction seam for the preview-queue production-call
     // oracle. Always declared (never macro-selected), so production and test
     // compile the same class layout. Unlike the normal constructor, this skips
@@ -518,6 +538,8 @@ private:
     void EnforceSingleMemberLinkGroups();
 
     Engine*            m_engine;
+    bool m_replayProofOwnsSettings = false;
+    ReplayProofIgnoredPushCounts m_replayProofIgnoredPushes;
     // [guard-config] Last config applied via engine/set/overload-guard —
     // reapplied by SetEngine (see above).
     bool m_overloadGuardCached       = false;
