@@ -49,14 +49,14 @@ int main()
     using Status = ObservationStatus;
     using Type = ObservationSpec::Lifecycle::Type;
     const ObservationSpec defaults = ValidSpec();
-    CHECK(ObservationPreflightBytes(100, 100, 2, 11) == 1269490,
-          "preflight includes padded scanlines, five percent, per-PNG allowance, telemetry and reserve");
-    CHECK(ObservationPreflightBytes(1, 1, 1, 1) == 1114630,
-          "fractional preflight bytes round upward");
-    CHECK(ObservationPreflightBytes(1920, 1080, 0, 1) == 1049088,
+    CHECK(ObservationPreflightBytes(10000, 2, 11) == 1084208,
+          "preflight includes one and a half measured PNG bytes, telemetry and reserve");
+    CHECK(ObservationPreflightBytes(3, 2, 1) == 1049098,
+          "fractional per-PNG bytes round upward before multiplying the count");
+    CHECK(ObservationPreflightBytes(10000000, 0, 1) == 1049088,
           "no PNGs still reserve telemetry and metadata bytes");
-    CHECK(ObservationPreflightBytes(1920, 1080, 3665, 3601) > 2ull * 1024 * 1024 * 1024,
-          "large playback preflight uses 64-bit bytes beyond the maximum quota");
+    CHECK(ObservationPreflightBytes(64ull * 1024 * 1024, 3665, 3601) == 368933872128ull,
+          "3600-frame large-PNG playback preflight keeps exact 64-bit arithmetic");
     CHECK(ValidateObservationSpec(defaults).empty(), "synthetic spec is valid");
     const Status statuses[] = { Status::Running, Status::NaturalEnd, Status::Capped, Status::SpawnLimited, Status::Failed };
     const char* names[] = { "running", "natural-end", "capped", "spawn-limited", "failed" };

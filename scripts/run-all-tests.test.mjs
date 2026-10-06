@@ -10,8 +10,9 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { mkdirSync, mkdtempSync, openSync, closeSync, readFileSync, rmSync } from "node:fs";
 
-import { parseArgs, usage, shellSpawnSpec, spawnExitCode, parseSkippedCount, prereq, runReplayProofLane } from "./run-all-tests.mjs";
+import { parseArgs, usage, shellSpawnSpec, spawnExitCode, parseSkippedCount, prereq, runReplayProofLane, runObserveLane } from "./run-all-tests.mjs";
 
 const scriptPath = join(dirname(fileURLToPath(import.meta.url)), "run-all-tests.mjs");
 
@@ -70,7 +71,17 @@ test("usage: names every flag and the invocation", () => {
 // lane (help/unknown short-circuit; --list just prints names) — so they prove the
 // main() wiring + CLI guard, not just the pure parser.
 function runScript(...args) {
-  return spawnSync(process.execPath, [scriptPath, ...args], { encoding: "utf8" });
+  // File-backed output also works in Windows sandboxes that deny pipe handles.
+  const scratch = join(dirname(scriptPath), "..", "tests", ".tmp");
+  mkdirSync(scratch, { recursive: true });
+  const directory = mkdtempSync(join(scratch, "gate-cli-"));
+  const out = join(directory, "stdout"), err = join(directory, "stderr");
+  const stdout = openSync(out, "w"), stderr = openSync(err, "w");
+  let result;
+  try { result = spawnSync(process.execPath, [scriptPath, ...args], { stdio: ["ignore", stdout, stderr], timeout: 10000, windowsHide: true }); }
+  finally { closeSync(stdout); closeSync(stderr); }
+  try { return { ...result, stdout: readFileSync(out, "utf8"), stderr: readFileSync(err, "utf8") }; }
+  finally { rmSync(directory, { recursive: true, force: true }); }
 }
 
 test("--help exits 0 and prints usage without running a lane", () => {
@@ -183,4 +194,65 @@ test("replay-proof only passes after actually running the proof; failures cannot
   assert.equal(replayLane({ runProof: (roots) => { ++runs; assert.deepEqual(roots, ["installed-game"]); return { code: 0 }; } }).status, "PASS");
   assert.equal(runs, 1);
   assert.equal(replayLane({ runProof: () => ({ code: 4 }) }, true).status, "FAIL");
+});
+
+test("observe immediately follows replay-proof in the registered gate", () => {
+  const r = runScript("--list");
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /replay-proof\r?\nobserve\r?\n/);
+});
+
+function observeLane(overrides = {}, allowMissing = false) {
+  return runObserveLane({
+    desktop: () => ({ ok: true }), exists: () => true, gameRoots: () => ["installed-game"],
+    probe: () => ({ status: 0 }),
+    checkPrereq: (lane, ok, what, hint) => prereq(lane, ok, what, hint, new Set(allowMissing ? ["observe"] : [])),
+    runObserve: () => ({ code: 0 }), ...overrides,
+  });
+}
+
+test("observe visibly skips without a render desktop and never runs", () => {
+  const r = observeLane({ desktop: () => ({ ok: false, reason: "locked" }),
+    probe: () => assert.fail("must not probe"), runObserve: () => assert.fail("must not run") });
+  assert.equal(r.status, "SKIP");
+  assert.match(r.note, /render desktop.*locked/);
+});
+
+for (const missing of ["Release", "Debug", "dist", "observe.mjs", "observe-lane.mjs"]) {
+  test(`observe missing ${missing} fails by default and --allow-missing visibly skips`, () => {
+    const overrides = { exists: (path) => !path.includes(missing), runObserve: () => assert.fail("must not run") };
+    assert.equal(observeLane(overrides).status, "FAIL");
+    const allowed = observeLane(overrides, true);
+    assert.equal(allowed.status, "SKIP");
+    assert.match(allowed.note, /missing/);
+  });
+}
+
+for (const missing of ["ffmpeg", "ffprobe"]) {
+  test(`observe missing ${missing} cannot pass: visible SKIP or FAIL`, () => {
+    const calls = [];
+    const overrides = { probe: (bin) => { calls.push(bin); return { status: bin === missing ? null : 0, error: bin === missing ? new Error("ENOENT") : null }; },
+      runObserve: () => assert.fail("must not run") };
+    assert.equal(observeLane(overrides).status, "FAIL");
+    const allowed = observeLane(overrides, true);
+    assert.equal(allowed.status, "SKIP");
+    assert.match(allowed.note, new RegExp(missing));
+    assert.ok(calls.includes(missing));
+  });
+}
+
+test("observe missing host game data gives FAIL or visible allowed SKIP", () => {
+  const overrides = { gameRoots: () => [], runObserve: () => assert.fail("must not run") };
+  assert.equal(observeLane(overrides).status, "FAIL");
+  const allowed = observeLane(overrides, true);
+  assert.equal(allowed.status, "SKIP");
+  assert.match(allowed.note, /GameDataPath.*sibling.*cwd/);
+});
+
+test("observe cannot pass without actually running, and a failed lane cannot skip", () => {
+  let runs = 0;
+  assert.equal(observeLane({ runObserve: (roots) => { ++runs; assert.deepEqual(roots, ["installed-game"]); return { code: 0 }; } }).status, "PASS");
+  assert.equal(runs, 1);
+  assert.equal(observeLane({ runObserve: () => ({ code: 1 }) }, true).status, "FAIL");
+  assert.equal(observeLane({ runObserve: () => ({}) }).status, "FAIL");
 });

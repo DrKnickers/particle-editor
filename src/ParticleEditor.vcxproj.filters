@@ -402,6 +402,9 @@
     <ClInclude Include="host\PreviewEncodeWorker.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="host\IsolatedWebViewProfile.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
     <ClInclude Include="host\RecordOutputSafety.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>

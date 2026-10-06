@@ -21,11 +21,10 @@ struct ObservationSample
 enum class ObservationStatus { Running, NaturalEnd, Capped, SpawnLimited, Failed };
 
 // Early refusal only: GDI+ can exceed this estimate; actual writes enforce the quota.
-inline std::uint64_t ObservationPreflightBytes(std::uint64_t width, std::uint64_t height,
+inline std::uint64_t ObservationPreflightBytes(std::uint64_t measuredPngBytes,
                                               std::uint64_t pngs, std::uint64_t samples)
 {
-    const std::uint64_t scanlines = height * (4 * width + 1);
-    const std::uint64_t perPng = (scanlines * 105 + 99) / 100 + 64 * 1024;
+    const std::uint64_t perPng = measuredPngBytes + measuredPngBytes / 2 + measuredPngBytes % 2;
     return perPng * pngs + 512 * samples + 1024 * 1024;
 }
 

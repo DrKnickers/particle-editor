@@ -401,12 +401,37 @@ struct ObservationRunner::Impl
         capture["lifecycle"] = Summary(lifecycle);
         Log("[observe] lifecycle=%s finalFrame=%d\n", ObservationStatusString(lifecycle.Status()), lifecycle.FinalFrame());
 
-        // Estimate exactly the files pass 2 will write; nothing is created until it passes.
+        // Measure one destination-only render; Reset in pass 2 restores the sample stream.
         const auto choices = SelectFrames(samples, spec);
+        pass = 0;
+        const int measuredFrame = lifecycle.PeakFrame().value_or(0);
+        const auto scratchPath = out / L"preflight.png";
+        struct ScratchFile
+        {
+            std::filesystem::path path;
+            ~ScratchFile() { std::error_code error; std::filesystem::remove(path, error); }
+        } scratch{scratchPath};
+        auto measuredHooks = Hooks();
+        const auto readback = deps.buildHooks(scratchPath.wstring()).readback;
+        measuredHooks.readback = [this, readback]()
+        {
+            if (context.failed() || !CheckGeometry(context, "preflight-readback-before")) return false;
+            if (!readback || !readback()) return Fail(13, "preflight-readback", "PNG capture failed");
+            return CheckGeometry(context, "preflight-readback-after");
+        };
+        ParticleReplayController measured(spec.scenario, measuredHooks);
+        if (!measured.SeekTo(measuredFrame, false))
+            return context.failed() ? false : Fail(9, "quota-preflight", "controller seek failed");
+        std::error_code sizeError, removeError;
+        const auto measuredBytes = std::filesystem::file_size(scratchPath, sizeError);
+        const bool removed = std::filesystem::remove(scratchPath, removeError);
+        if (removeError || !removed) return Fail(13, "preflight-cleanup", removeError ? removeError.message() : "scratch PNG missing");
+        if (sizeError) return Fail(13, "preflight-size", sizeError.message());
+        // The scratch PNG is never a bundle file or part of the running byte total.
+        Log("[observe] preflight frame=%d pngBytes=%llu\n", measuredFrame, static_cast<unsigned long long>(measuredBytes));
         std::uint64_t playbackCount = spec.output.playbackStride == 0 ? 0 :
             (lifecycle.ReviewEndFrame() - lifecycle.ReviewStartFrame()) / spec.output.playbackStride + 1;
-        const auto estimate = ObservationPreflightBytes(context.geometry["crop"][2].get<unsigned>(),
-            context.geometry["crop"][3].get<unsigned>(), choices.size() + playbackCount, samples.size());
+        const auto estimate = ObservationPreflightBytes(measuredBytes, choices.size() + playbackCount, samples.size());
         Log("[observe] preflightBytes=%llu maxBytes=%llu\n", static_cast<unsigned long long>(estimate),
             static_cast<unsigned long long>(spec.output.maxBytes));
         if (estimate > spec.output.maxBytes) return Fail(16, "quota-preflight", "estimated native output bytes exceeded maxBytes");

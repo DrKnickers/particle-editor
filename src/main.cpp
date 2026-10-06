@@ -468,9 +468,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 				{
 					genReplayFixtureKind = argv[i + 1];
 					genReplayFixturePath = argv[i + 2];
-					if (genReplayFixtureKind != L"weather" && genReplayFixtureKind != L"guard")
+					if (genReplayFixtureKind != L"weather" && genReplayFixtureKind != L"guard" &&
+						genReplayFixtureKind != L"late-flash" && genReplayFixtureKind != L"guard-short" &&
+						genReplayFixtureKind != L"death-child" && genReplayFixtureKind != L"child-starve" &&
+						genReplayFixtureKind != L"budget-bailout" && genReplayFixtureKind != L"budget-bailout-skip" &&
+						genReplayFixtureKind != L"index-cap")
 					{
-						fwprintf(stderr, L"--gen-replay-proof-fixture requires weather or guard\n");
+						fwprintf(stderr, L"--gen-replay-proof-fixture requires weather, guard, late-flash, guard-short, death-child, child-starve, budget-bailout, budget-bailout-skip or index-cap\n");
 						return 2;
 					}
 				}
@@ -885,6 +889,174 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			// (the grid produces 12).
 			fwprintf(stderr, L"gen-smoke-test: wrote %s (root blendMode %d, %zu emitter(s))\n",
 			         genSmokeTestPath.c_str(), (int)e->blendMode, sys->getEmitters().size());
+			return 0;
+		}
+		if (!genReplayFixturePath.empty() && genReplayFixtureKind != L"weather" && genReplayFixtureKind != L"guard")
+		{
+			using PS = ParticleSystem;
+			using Track = PS::Emitter::Track;
+			auto system = std::make_unique<PS>();
+			system->setName(DeriveParticleSystemName(genReplayFixturePath));
+			const auto configure = [](PS::Emitter* e, const char* name, unsigned long count, float lifetime)
+			{
+				e->name = name;
+				e->colorTexture = "tests\\fixtures\\bumptest\\zz_bumpgold_rock.tga";
+				e->normalTexture = "tests\\fixtures\\bumptest\\zz_bumptest_nm.tga";
+				e->blendMode = PS::BLEND_BUMP;
+				e->textureSize = 1;
+				e->useBursts = true;
+				e->nBursts = 1;
+				e->nParticlesPerBurst = count;
+				e->nParticlesPerSecond = 0;
+				e->initialDelay = 0;
+				e->skipTime = 0;
+				e->burstDelay = 10000;
+				e->lifetime = lifetime;
+				e->gravity = 0;
+				e->freezeTime = 0;
+				e->randomLifetimePerc = 0;
+				e->randomScalePerc = 0;
+				e->isWeatherParticle = false;
+				e->groups[PS::GROUP_POSITION].type = PS::GT_BOX;
+				auto& g = e->groups[PS::GROUP_POSITION];
+				g.minX = -8; g.maxX = 8;
+				g.minY = -8; g.maxY = 8;
+				g.minZ = -8; g.maxZ = 8;
+				e->groups[PS::GROUP_SPEED].type = PS::GT_EXACT;
+				e->groups[PS::GROUP_SPEED].valX = 0;
+				e->groups[PS::GROUP_SPEED].valY = 0;
+				e->groups[PS::GROUP_SPEED].valZ = 0;
+				// Defaults alias RGBA to red; separate the tracks before authoring a tint.
+				for (int track : {PS::TRACK_SCALE, PS::TRACK_RED_CHANNEL, PS::TRACK_GREEN_CHANNEL,
+								  PS::TRACK_BLUE_CHANNEL, PS::TRACK_ALPHA_CHANNEL})
+				{
+					e->tracks[track] = &e->trackContents[track];
+					e->tracks[track]->interpolation = Track::IT_LINEAR;
+					e->tracks[track]->keys.clear();
+					const float value = track == PS::TRACK_SCALE ? 8.0f : 1.0f;
+					e->tracks[track]->keys.insert(Track::Key(0, value));
+					e->tracks[track]->keys.insert(Track::Key(100, value));
+				}
+			};
+			const auto setTrack = [](PS::Emitter* e, int track, float value)
+			{
+				e->tracks[track]->keys.clear();
+				e->tracks[track]->keys.insert(Track::Key(0, value));
+				e->tracks[track]->keys.insert(Track::Key(100, value));
+			};
+			auto* root = system->addRootEmitter();
+			if (!root) return 3;
+			if (genReplayFixtureKind == L"late-flash")
+			{
+				// The look must read without telemetry: a grey alpha-blended smoke cloud and a
+				// bright additive orange flash, both on the soft procedural disc. The rock atlas
+				// (red <= 127) made both read as asteroids and hid the flash inside the cloud.
+				const char* softTexture = "tests\\fixtures\\observe\\zz_observe_soft.tga";
+				configure(root, "core", 64, 1.0f);
+				root->colorTexture = softTexture;
+				root->blendMode = PS::BLEND_TRANSPARENT;
+				auto& g = root->groups[PS::GROUP_POSITION];
+				g.minX = -40; g.maxX = 40;
+				g.minY = -20; g.maxY = 20;
+				g.minZ = -40; g.maxZ = 40;
+				root->groups[PS::GROUP_SPEED].valZ = 1;
+				setTrack(root, PS::TRACK_SCALE, 24);
+				for (int track : {PS::TRACK_RED_CHANNEL, PS::TRACK_GREEN_CHANNEL, PS::TRACK_BLUE_CHANNEL})
+					setTrack(root, track, 0.5f);
+				setTrack(root, PS::TRACK_ALPHA_CHANNEL, 0.25f);
+				auto* flash = system->addRootEmitter();
+				if (!flash) return 3;
+				configure(flash, "flash", 8, 0.5f);
+				flash->colorTexture = softTexture;
+				flash->blendMode = PS::BLEND_ADDITIVE;
+				flash->initialDelay = 0.75f;
+				setTrack(flash, PS::TRACK_SCALE, 40);
+				setTrack(flash, PS::TRACK_GREEN_CHANNEL, 0.5f);
+				setTrack(flash, PS::TRACK_BLUE_CHANNEL, 0.125f);
+			}
+			else if (genReplayFixtureKind == L"guard-short" || genReplayFixtureKind == L"index-cap")
+				configure(root, "burst", genReplayFixtureKind == L"guard-short" ? 2048 : 20000, 0.5f);
+			else if (genReplayFixtureKind == L"death-child" || genReplayFixtureKind == L"child-starve")
+			{
+				const bool starve = genReplayFixtureKind == L"child-starve";
+				configure(root, "parent", starve ? 200 : 8, starve ? 0.5f : 0.25f);
+				if (starve)
+				{
+					auto* life = system->addLifetimeEmitter(root);
+					if (!life) return 3;
+					configure(life, "lifetime-child", 1, 0.25f);
+					life->useBursts = false;
+					life->nParticlesPerSecond = 60;
+					root->spawnDuringLife = life->index;
+				}
+				auto* death = system->addDeathEmitter(root);
+				if (!death) return 3;
+				// addDeathEmitter defaults to infinite bursts; the constructor must emit once
+				// before KillParticle immediately detaches and stops the death emitter.
+				configure(death, "death-child", 1, 0.75f);
+				root->spawnOnDeath = death->index;
+			}
+			else
+			{
+				configure(root, "budget-burst", 1000, 0.5f);
+				// Positive delay avoids spending the budget in the frame-0 constructor.
+				root->initialDelay = 0.0078125f;
+				auto* catchup = system->addRootEmitter();
+				if (!catchup) return 3;
+				configure(catchup, "catch-up", 1, 0.5f);
+				// Finite bursts at the engine's 0.01 s floor share the spawn-round loop with
+				// continuous emitters, so a round due after the burst above spends the budget
+				// takes the SpawnBudgetExhausted bailout, yet the emitter still finishes and
+				// the run can end on its quiet tail (a continuous root never would).
+				catchup->nBursts = 30;
+				catchup->burstDelay = 0.01f;
+				catchup->initialDelay = root->initialDelay;
+				catchup->skipTime = genReplayFixtureKind == L"budget-bailout-skip" ? 0.25f : 0.0f;
+			}
+			std::string error;
+			if (!SaveParticleSystem(system.get(), genReplayFixturePath, &error))
+			{
+				fprintf(stderr, "replay fixture save: %s\n", error.c_str());
+				return 3;
+			}
+			auto loaded = LoadParticleSystem(genReplayFixturePath, &error);
+			if (!loaded)
+			{
+				fprintf(stderr, "replay fixture reload: %s\n", error.c_str());
+				return 3;
+			}
+			nlohmann::json emitters = nlohmann::json::array();
+			size_t roots = 0;
+			for (const auto* e : loaded->getEmitters())
+			{
+				if (!e->parent) ++roots;
+				const auto& position = e->groups[PS::GROUP_POSITION];
+				const auto& speed = e->groups[PS::GROUP_SPEED];
+				const auto link = [](size_t index) -> long long { return index == (size_t)-1 ? -1 : static_cast<long long>(index); };
+				emitters.push_back({
+					{"name", e->name}, {"parent", e->parent ? link(e->parent->index) : -1},
+					{"spawnDuringLife", link(e->spawnDuringLife)}, {"spawnOnDeath", link(e->spawnOnDeath)},
+					{"colorTexture", e->colorTexture}, {"normalTexture", e->normalTexture},
+					{"blendMode", e->blendMode}, {"textureSize", e->textureSize},
+					{"useBursts", e->useBursts}, {"nBursts", e->nBursts},
+					{"nParticlesPerBurst", e->nParticlesPerBurst}, {"nParticlesPerSecond", e->nParticlesPerSecond},
+					{"initialDelay", e->initialDelay}, {"skipTime", e->skipTime}, {"burstDelay", e->burstDelay},
+					{"lifetime", e->lifetime}, {"gravity", e->gravity}, {"freezeTime", e->freezeTime},
+					{"randomLifetimePerc", e->randomLifetimePerc}, {"randomScalePerc", e->randomScalePerc},
+					{"isWeatherParticle", e->isWeatherParticle}, {"positionGroup", position.type},
+					{"positionMin", {position.minX, position.minY, position.minZ}},
+					{"positionMax", {position.maxX, position.maxY, position.maxZ}},
+					{"speedGroup", speed.type}, {"speed", {speed.valX, speed.valY, speed.valZ}},
+					{"scale", e->tracks[PS::TRACK_SCALE]->keys.begin()->value},
+					{"red", e->tracks[PS::TRACK_RED_CHANNEL]->keys.begin()->value},
+					{"green", e->tracks[PS::TRACK_GREEN_CHANNEL]->keys.begin()->value},
+					{"blue", e->tracks[PS::TRACK_BLUE_CHANNEL]->keys.begin()->value},
+					{"alpha", e->tracks[PS::TRACK_ALPHA_CHANNEL]->keys.begin()->value}
+				});
+			}
+			nlohmann::json fields = {{"kind", WideToAnsi(genReplayFixtureKind)}, {"reloaded", true},
+				{"emitterCount", loaded->getEmitters().size()}, {"rootCount", roots}, {"emitters", emitters}};
+			printf("[replay-fixture] %s\n", fields.dump().c_str());
 			return 0;
 		}
 		if (!genReplayFixturePath.empty())

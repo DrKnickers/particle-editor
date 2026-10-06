@@ -216,6 +216,7 @@
     <ClInclude Include="host\ModulePath.h" />
     <ClInclude Include="host\PerfTrace.h" />
     <ClInclude Include="host\PreviewEncodeWorker.h" />
+    <ClInclude Include="host\IsolatedWebViewProfile.h" />
     <ClInclude Include="host\RecordOutputSafety.h" />
     <ClInclude Include="host\RecordTrace.h" />
     <ClInclude Include="host\SavePathConfine.h" />

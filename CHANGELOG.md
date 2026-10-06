@@ -10,6 +10,7 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ### Added
 
+- `node scripts/observe.mjs` (on top of `ParticleEditor.exe --observe`) replays an effect without the UI and writes a reproducible bundle: whether it ended naturally, ran to the frame cap or was cut by a spawn limit, how often each limit fired, a set of objectively chosen frames, a filmstrip and optional playback, so timing problems can be checked from evidence
 - Help → User Guide opens the online guide in your browser, and the About dialog's project link now works: a button opens the project page and the address stays on screen to copy
 - Emitter property fields explain themselves: Skip time, Freeze time, Minimum lifetime and Link particles to instance show a short description, and a greyed-out field says why when you hover or focus its label
 - Emit mode and Emit offset now explain that they are saved in the file and not used by the preview; the offset names the reason while it is disabled

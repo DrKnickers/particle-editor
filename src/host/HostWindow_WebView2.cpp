@@ -16,6 +16,7 @@
 #define WINVER 0x0A00
 
 #include "HostWindowImpl.h"
+#include "IsolatedWebViewProfile.h"
 
 namespace host {
 
@@ -61,13 +62,16 @@ std::wstring ComputeUserDataFolder(bool isolated = false)
         CoTaskMemFree(localAppData);
         folder += L"\\AloParticleEditor\\WebView2";
         folder += pidSuffix;
+        // A reused PID would otherwise inherit an earlier run's localStorage.
+        if (isolated) return host::FreshIsolatedProfileFolder(folder, GetTickCount64()).wstring();
         SHCreateDirectoryExW(nullptr, folder.c_str(), nullptr); // best-effort
         return folder;
     }
     // Fallback to temp.
     wchar_t tempDir[MAX_PATH] = {};
     GetTempPathW(MAX_PATH, tempDir);
-    return std::wstring(tempDir) + L"AloParticleEditor_WebView2" + pidSuffix;
+    const std::wstring folder = std::wstring(tempDir) + L"AloParticleEditor_WebView2" + pidSuffix;
+    return isolated ? host::FreshIsolatedProfileFolder(folder, GetTickCount64()).wstring() : folder;
 }
 
 std::wstring AppendQueryParam(const std::wstring& url, const wchar_t* param)

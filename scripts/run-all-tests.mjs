@@ -22,12 +22,13 @@
 //   render-goldens    deterministic --capture scenes vs checked-in goldens
 //                     (ffmpeg SSIM ≥ 0.9995 — see scripts/render-goldens.mjs)
 //   record-smoke      headless --record timeline produces renderable frames
-//   replay-proof      headless replay experiments, retained PNGs and checked report.json
 //   drive-smoke       tasks/drive-smoke.ps1 — real-pixel non-black --drive smoke
 //                     + the oracle-step scenarios (assert-state / nonblack /
 //                     production-wire bridge-selftest). The script is
 //                     maintainer-only (not on the public mirror), where the lane
 //                     is a missing prereq: pass --allow-missing drive-smoke
+//   replay-proof      headless replay experiments, retained PNGs and checked report.json
+//   observe           repeated observation bundles, filmstrip, playback and pinned telemetry
 //
 // Missing prereqs are FAILURES with actionable messages by default; silent skips
 // are the enemy of a gate. `--allow-missing <lane>` downgrades that lane's missing
@@ -545,6 +546,40 @@ export function runReplayProofLane({
   return r.code === 0 ? pass : fail(`replay proof exit ${r.code}`);
 }
 
+export function runObserveLane({
+  desktop = renderDesktopUsable, exists = existsSync, gameRoots = resolveReplayGameRoots,
+  checkPrereq = prereq,
+  probe = (bin) => spawnSync(bin, ["-version"], { encoding: "utf8", windowsHide: true, timeout: 10000 }),
+  runObserve = (roots) => runExeTee(process.execPath, [join(repoRoot, "scripts", "observe-lane.mjs"),
+    ...roots.flatMap((root) => ["--game-root", root])]),
+} = {}) {
+  const rd = desktop();
+  if (!rd.ok) return skip(`no interactive render desktop — ${rd.reason}`);
+  for (const [ok, what, hint] of [
+    [exists(releaseExe), "x64/Release/ParticleEditor.exe missing", "run the msbuild-release lane first"],
+    [exists(debugExe), "x64/Debug/ParticleEditor.exe missing", "run the msbuild-debug lane first"],
+    [exists(distIndex), "web dist/ missing", "run the web-build lane first"],
+    [exists(join(repoRoot, "scripts", "observe.mjs")), "scripts/observe.mjs missing", "restore the observation script"],
+    [exists(join(repoRoot, "scripts", "observe-lane.mjs")), "scripts/observe-lane.mjs missing", "restore the observation lane script"],
+  ]) {
+    const p = checkPrereq("observe", ok, what, hint);
+    if (p) return p;
+  }
+  const roots = gameRoots();
+  const p = checkPrereq("observe", roots.length > 0,
+    "missing game data (host GameDataPath / sibling / cwd lookup)",
+    "launch the editor once and choose an installed game data folder with a usable MEG archive");
+  if (p) return p;
+  for (const bin of ["ffmpeg", "ffprobe"]) {
+    const r = probe(bin);
+    const missing = checkPrereq("observe", r.status === 0 && !r.error && !r.signal,
+      `${bin} missing or -version failed`, `install ${bin} on PATH`);
+    if (missing) return missing;
+  }
+  const r = runObserve(roots);
+  return r.code === 0 ? pass : fail(`observe exit ${r.code}`);
+}
+
 const LANES = [
   {
     name: "lint",
@@ -844,6 +879,11 @@ const LANES = [
     name: "replay-proof",
     deps: ["msbuild-release", "web-build"],
     run: () => runReplayProofLane(),
+  },
+  {
+    name: "observe",
+    deps: ["msbuild-release", "web-build"],
+    run: () => runObserveLane(),
   },
 ];
 

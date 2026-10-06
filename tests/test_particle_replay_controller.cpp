@@ -453,6 +453,13 @@ static void SourcePins()
           observe.find("deps.buildHooks(path.wstring()).readback") != std::string::npos &&
           observe.find("second.Reset() && captureHooks.render() && captureHooks.readback()") != std::string::npos,
           "observe compares every update including RNG and renders frame zero without another update");
+    CHECK(observe.find("pass = 0;") != std::string::npos &&
+          observe.find("lifecycle.PeakFrame().value_or(0)") != std::string::npos &&
+          observe.find("measured.SeekTo(measuredFrame, false)") != std::string::npos &&
+          observe.find("std::filesystem::file_size(scratchPath, sizeError)") != std::string::npos &&
+          observe.find("std::filesystem::remove(scratchPath, removeError)") != std::string::npos &&
+          observe.find("ObservationPreflightBytes(measuredBytes, choices.size() + playbackCount, samples.size())") != std::string::npos,
+          "observe preflight measures a destination-only peak render without sampling and removes its scratch PNG");
     CHECK(proof.find("emitter->colorTexture =") == std::string::npos &&
           proof.find("emitter->normalTexture =") == std::string::npos &&
           support.find("emitter->colorTexture =") == std::string::npos &&

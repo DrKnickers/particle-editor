@@ -200,6 +200,9 @@
       "uses": ["dxsdk"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
+    "test_isolated_webview_profile": {
+      "includes": ["src/host"]
+    },
     "test_record_output_safety": {
       "includes": ["src/host"]
     },
