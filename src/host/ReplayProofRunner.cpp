@@ -6,7 +6,6 @@
 #include "StringConv.h"
 #include "rendering/engine.h"
 #include "effect/ParticleSystem.h"
-#include "effect/ParticleSystemIO.h"
 #include "effect/UndoStack.h"
 #include <wrl/client.h>
 #include <filesystem>
@@ -19,13 +18,10 @@
 #include "simulation/ParticleRandom.h"
 #include "gamedata/GameObjectCatalog.h"
 #include "gamedata/xml.h"
-#include <wincrypt.h>
 #include "WicEncode.h"
 #include <chrono>
 #include <set>
 #include <stdexcept>
-
-#pragma comment(lib, "advapi32.lib")
 
 namespace host {
 namespace {
@@ -35,30 +31,6 @@ using Microsoft::WRL::ComPtr;
 using Clock = std::chrono::steady_clock;
 
 json Vector(const D3DXVECTOR3& v) { return {v.x, v.y, v.z}; }
-json Vector(const D3DXVECTOR4& v) { return {v.x, v.y, v.z, v.w}; }
-
-// Hash the PNG bytes; the visibility oracle below independently decodes pixels.
-std::string Hash(const std::wstring& path)
-{
-    std::ifstream input(std::filesystem::path(path), std::ios::binary);
-    const std::string bytes((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
-    if (bytes.empty()) return "";
-    HCRYPTPROV provider = 0;
-    HCRYPTHASH hash = 0;
-    if (!CryptAcquireContextW(&provider, nullptr, nullptr, PROV_RSA_AES, CRYPT_VERIFYCONTEXT)) return "";
-    BYTE digest[32] = {};
-    DWORD size = sizeof(digest);
-    const bool ok = CryptCreateHash(provider, CALG_SHA_256, 0, 0, &hash) &&
-        CryptHashData(hash, reinterpret_cast<const BYTE*>(bytes.data()), static_cast<DWORD>(bytes.size()), 0) &&
-        CryptGetHashParam(hash, HP_HASHVAL, digest, &size, 0) && size == sizeof(digest);
-    if (hash) CryptDestroyHash(hash);
-    CryptReleaseContext(provider, 0);
-    if (!ok) return "";
-    const char* hex = "0123456789abcdef";
-    std::string result;
-    for (BYTE byte : digest) { result += hex[byte >> 4]; result += hex[byte & 15]; }
-    return result;
-}
 
 struct Pixels
 {
@@ -100,21 +72,24 @@ struct ReplayProofRunner::Impl
     Deps deps;
     std::wstring scenarioPath;
     std::filesystem::path out;
-    PreviewScenario scenario, inForce;
+    PreviewScenario scenario;
     json report = {{"schemaVersion", 1}, {"exitCode", 0}, {"failure", nullptr},
                    {"experiments", json::object()}, {"preparation", json::array()}};
-    json geometry, profile, run, baseline;
+    json run, baseline;
     std::set<int> checked;
     std::function<bool(int)> selectCapture;
     std::string prefix;
     std::wstring capturePath;
     int frame = -1, exitCode = 0;
     uint64_t resetUpdateCount = 0;
-    Clock::time_point start = Clock::now();
-    bool geometryLocked = false;
+    ReplayRunContext context;
 
     Impl(Deps dependencies, const std::wstring& path, const std::wstring& directory)
-        : deps(std::move(dependencies)), scenarioPath(path), out(directory) {}
+        : deps(std::move(dependencies)), scenarioPath(path), out(directory),
+          context{deps,
+              [this](int code, const char* hook, const std::string& message) { return Fail(code, hook, message); },
+              [this]() { return exitCode != 0; }, report["preparation"], {}, {}, {}, false, Clock::now(),
+              [this](const json& locked) { report["geometry"] = locked; }} {}
 
     void Log(const char* format, ...)
     {
@@ -138,80 +113,13 @@ struct ReplayProofRunner::Impl
         return false;
     }
 
-    bool Pump()
-    {
-        if (exitCode) return false;
-        if (Clock::now() - start > std::chrono::minutes(10)) return Fail(5, "watchdog", "proof exceeded 10 minutes");
-        MSG message = {};
-        // Bound each drain too: a busy sender cannot defeat the wall-clock bound.
-        for (int i = 0; i < 256 && PeekMessage(&message, nullptr, 0, 0, PM_REMOVE); ++i)
-        {
-            if (message.message == WM_QUIT) return Fail(5, "message-pump", "WM_QUIT during proof");
-            TranslateMessage(&message);
-            DispatchMessage(&message);
-        }
-        return !deps.webDead || Fail(5, "webview", "web process failed during proof");
-    }
-
-    json Geometry()
-    {
-        int x = 0, y = 0, w = 0, h = 0;
-        if (!deps.alphaCompositor || !deps.layout.GetSceneRect(x, y, w, h)) return nullptr;
-        const auto rt = deps.alphaCompositor->RenderTargetSizeForObservation();
-        const auto crop = deps.alphaCompositor->ReadbackCropForObservation();
-        return {{"rt", {rt.width, rt.height}}, {"viewport", {x, y, w, h}},
-                {"crop", {crop.x, crop.y, crop.width, crop.height}}};
-    }
-
-    bool CheckGeometry(const char* hook)
-    {
-        if (exitCode) return false;
-        if (!geometryLocked) return true;
-        return (Geometry() == geometry && !deps.layout.IsSceneAnimActive()) ||
-            Fail(7, hook, "render-target, viewport or readback crop changed");
-    }
-
-    json Profile()
-    {
-        auto& e = *deps.engine;
-        const auto camera = e.GetCamera();
-        json lights = json::array();
-        for (auto type : {Engine::LT_SUN, Engine::LT_FILL1, Engine::LT_FILL2})
-        {
-            const auto& light = e.GetLight(type);
-            lights.push_back({{"diffuse", Vector(light.Diffuse)}, {"specular", Vector(light.Specular)},
-                {"position", Vector(light.Position)}, {"direction", Vector(light.Direction)}});
-        }
-        return {{"camera", {{"position", Vector(camera.Position)}, {"target", Vector(camera.Target)},
-                              {"up", Vector(camera.Up)}}},
-            {"background", e.GetBackground()}, {"ambient", Vector(e.GetAmbient())}, {"lights", lights},
-            {"wind", Vector(e.GetWind())}, {"gravity", Vector(e.GetGravity())},
-            {"ground", e.GetGround()}, {"bloom", e.GetBloom()}, {"bloomStrength", e.GetBloomStrength()},
-            {"bloomCutoff", e.GetBloomCutoff()}, {"bloomSize", e.GetBloomSize()},
-            {"heatDebug", e.GetHeatDebug()}, {"msaa", e.GetCurrentMsaaLevel()},
-            {"skydomeSlot", e.GetSkydomeSlot()}, {"embeddedSkydome", e.IsSkydomeUsingEmbeddedResource()},
-            {"primaryDome", e.GetSkydomePrimaryName()}, {"secondaryDome", e.GetSkydomeSecondaryName()},
-            {"primaryDomeGpu", e.SkydomePrimaryHasGpuBuffers()},
-            {"secondaryDomeGpu", e.SkydomeSecondaryHasGpuBuffers()},
-            {"skydomeMeshGpu", e.SkydomeMeshHasGpuBuffers()}};
-    }
-
-    bool CheckSettings()
-    {
-        auto& e = *deps.engine;
-        return (e.OverloadGuardEnabledForObservation() == inForce.overloadGuardEnabled &&
-                e.OverloadGuardLimitForObservation() == inForce.overloadGuardLimit &&
-                e.EstimatedLoadForObservation() == inForce.estimatedParticlesPerInstance && Profile() == profile) ||
-            Fail(4, "settings-observation", "scenario settings or fixed profile changed");
-    }
-
     ParticleReplayController::Hooks Hooks()
     {
         auto hooks = deps.buildHooks(L"");
         const auto admit = hooks.admitDevice;
         hooks.admitDevice = [this, admit]()
         {
-            if (!Pump()) return false;
+            if (!PumpMessages(context)) return false;
             if (admit()) return true;
             frame = frame < 0 ? 0 : frame + 1;
             return Fail(8, "admitDevice", "device admission failed");
@@ -220,7 +128,7 @@ struct ReplayProofRunner::Impl
         hooks.pinSettings = [this, pin](const PreviewScenario& value)
         {
             frame = 0;
-            inForce = value;
+            context.inForce = value;
             return pin(value) || Fail(9, "pinSettings", "fixed profile or scenario settings failed");
         };
         const auto clear = hooks.clearInstances;
@@ -250,7 +158,7 @@ struct ReplayProofRunner::Impl
         hooks.update = [this, update]()
         {
             if (!update()) return Fail(10, "update", "one completed full Update required");
-            if (!CheckSettings()) return false;
+            if (!CheckSettings(context)) return false;
             const int particles = deps.engine->GetNumParticles();
             run["particles"].push_back(particles);
             if (particles > run["peak"].get<int>()) { run["peak"] = particles; run["peakFrame"] = frame; }
@@ -263,20 +171,20 @@ struct ReplayProofRunner::Impl
         const auto render = hooks.render;
         hooks.render = [this, render]()
         {
-            if (!CheckGeometry("render-before")) return false;
+            if (!CheckGeometry(context, "render-before")) return false;
             if (!render()) return Fail(11, "render", "render, query or composition failed");
-            return CheckGeometry("render-after");
+            return CheckGeometry(context, "render-after");
         };
         hooks.readback = [this]()
         {
             if (!selectCapture || !selectCapture(frame)) return true;
-            if (!CheckGeometry("readback-before")) return false;
+            if (!CheckGeometry(context, "readback-before")) return false;
             capturePath = (out / (prefix + "-" + std::to_string(frame) + ".png")).wstring();
             // BuildReplayHooks remains the authoritative readback wiring. Each selected
             // frame gets a new closure, so no experiment overwrites another's evidence.
             auto readback = deps.buildHooks(capturePath).readback;
             if (!readback || !readback()) return Fail(13, "readback", "PNG capture failed");
-            return CheckGeometry("readback-after");
+            return CheckGeometry(context, "readback-after");
         };
         return hooks;
     }
@@ -301,57 +209,12 @@ struct ReplayProofRunner::Impl
         json value = {{"frame", frame}, {"draws", ParticleRandom::DrawCount()}, {"state", ParticleRandom::StateValue()},
             {"instances", e.GetNumInstances()}, {"particles", e.GetNumParticles()}, {"emitters", e.GetNumEmitters()},
             {"guard", {{"enabled", e.OverloadGuardEnabledForObservation()}, {"limit", e.OverloadGuardLimitForObservation()},
-                       {"estimate", e.EstimatedLoadForObservation()}}}, {"profile", Profile()}, {"geometry", Geometry()},
+                       {"estimate", e.EstimatedLoadForObservation()}}}, {"profile", FixedProfile(*deps.engine)}, {"geometry", CaptureGeometry(context)},
             {"instance", hasInstance ? json{{"position", Vector(instance.position)}, {"age", instance.age}} : json(nullptr)},
             {"completedUpdates", e.CompletedFullUpdateCountForObservation() - resetUpdateCount},
-            {"png", captured ? WideToUtf8(capturePath) : ""}, {"sha256", captured ? Hash(capturePath) : ""}};
+            {"png", captured ? WideToUtf8(capturePath) : ""}, {"sha256", captured ? Sha256(capturePath) : ""}};
         if (captured && value["sha256"] == "") Fail(13, "hash", "captured PNG could not be hashed");
         return value;
-    }
-
-    bool Prepare(const ParticleReplayController::Hooks& hooks)
-    {
-        const auto deadline = Clock::now() + std::chrono::seconds(10);
-        int stable = 0, passes = 0;
-        uint64_t previous = deps.engine->ParticleSystemChangeApplyCountForTesting();
-        json observations = json::array();
-        while (passes < 8 && Clock::now() < deadline)
-        {
-            if (!Pump()) return false;
-            if (deps.layout.IsSceneAnimActive())
-            {
-                if (!hooks.render()) return false;
-                Sleep(1);
-                continue;
-            }
-            if (!geometryLocked)
-            {
-                geometry = Geometry();
-                if (geometry.is_null() || geometry["rt"][0].get<int>() <= 0 ||
-                    geometry["rt"][1].get<int>() <= 0 || geometry["viewport"][2].get<int>() <= 0 ||
-                    geometry["viewport"][3].get<int>() <= 0 || geometry["crop"][2].get<int>() <= 0 ||
-                    geometry["crop"][3].get<int>() <= 0)
-                    return Fail(12, "preparation", "capture geometry unavailable");
-                geometryLocked = true;
-                report["geometry"] = geometry;
-            }
-            if (!hooks.admitDevice() || !hooks.render()) return false;
-            ++passes;
-            const auto applied = deps.engine->ParticleSystemChangeApplyCountForTesting();
-            const bool pending = deps.engine->TextureReloadPendingForTesting() ||
-                deps.engine->ParticleSystemChangePendingForObservation();
-            observations.push_back({{"applyCount", applied}, {"pending", pending}});
-            stable = !pending && applied == previous ? stable + 1 : 0;
-            previous = applied;
-            if (stable == 2)
-            {
-                if (Clock::now() >= deadline) break;
-                report["preparation"].push_back({{"passes", observations}, {"settled", true}});
-                return true;
-            }
-        }
-        report["preparation"].push_back({{"passes", observations}, {"settled", false}});
-        return Fail(12, "preparation", "two consecutive settled passes not reached within 8 passes / 10 seconds");
     }
 
     bool Sequential(const PreviewScenario& value, const std::string& name, int stride, json& result)
@@ -440,7 +303,7 @@ struct ReplayProofRunner::Impl
 
     bool Difference(const json& a, const json& b, uint64_t& count)
     {
-        if (!CheckGeometry("decode-before")) return false;
+        if (!CheckGeometry(context, "decode-before")) return false;
         Pixels first, second;
         if (!Decode(Utf8ToWide(a.at("png").get<std::string>()), first) ||
             !Decode(Utf8ToWide(b.at("png").get<std::string>()), second))
@@ -450,7 +313,7 @@ struct ReplayProofRunner::Impl
         count = 0;
         for (size_t i = 0; i < first.bytes.size(); i += 4)
             if (memcmp(first.bytes.data() + i, second.bytes.data() + i, 4) != 0) ++count;
-        return CheckGeometry("decode-after");
+        return CheckGeometry(context, "decode-after");
     }
 
     bool Experiments()
@@ -544,7 +407,7 @@ struct ReplayProofRunner::Impl
             return Fail(4, "E5-undo", "undo must apply and restore serialized document");
         experiments["E5"]["documentRestored"] = true;
         auto hooks = Hooks();
-        if (!Prepare(hooks) || !Seeks(scenario, "E5", true, result)) return false;
+        if (!PrepareScene(context, hooks) || !Seeks(scenario, "E5", true, result)) return false;
         experiments["E5"]["frames"] = result["frames"];
         if (!Compare(result, "E5")) return false;
 
@@ -685,38 +548,24 @@ struct ReplayProofRunner::Impl
         if (!deps.engine) return Fail(8, "admitDevice", "engine unavailable");
         Log("[particle-rng] mode=replay-proof algorithm=legacy-msvc-v%u seed=0x%08X\n",
             scenario.algorithmVersion, scenario.seed);
-        const auto deadline = Clock::now() + std::chrono::seconds(10);
-        while (!deps.uiReady || !deps.sceneRectSeen)
-        {
-            if (!Pump()) return false;
-            if (Clock::now() >= deadline) return Fail(6, "readiness", "app/ready and layout/scene-rect not received in 10 seconds");
-            Sleep(1);
-        }
-        std::string loadError;
-        auto document = LoadParticleSystem(scenario.aloPath, &loadError);
-        if (!document) return Fail(3, "load", loadError);
-        deps.engine->Clear();
-        deps.particleSystem = std::move(document);
-        deps.undoStack.Clear();
-        deps.engine->OnParticleSystemChanged(-1);
-        deps.engine->ReloadTextures();
+        if (!WaitReady(context) || !LoadDocument(context, scenario.aloPath)) return false;
         BeginRun("empty", [](int) { return true; });
         auto hooks = Hooks();
         if (!hooks.admitDevice() || !hooks.pinSettings(scenario)) return false;
         hooks.clearInstances();
         hooks.seed(scenario.seed);
         hooks.freezeClock(0);
-        profile = Profile();
-        report["profile"] = profile;
-        if (!Prepare(hooks)) return false;
+        context.profile = FixedProfile(*deps.engine);
+        report["profile"] = context.profile;
+        if (!PrepareScene(context, hooks)) return false;
         const uint64_t before = deps.engine->CompletedFullUpdateCountForObservation();
-        if (!CheckGeometry("resize-before")) return false;
+        if (!CheckGeometry(context, "resize-before")) return false;
         deps.settleResize();
         const uint64_t after = deps.engine->CompletedFullUpdateCountForObservation();
         report["resize"] = {{"before", before}, {"after", after}, {"unchanged", before == after}};
         if (before != after) return Fail(4, "resize-update-count", "SettleResize caused an incidental Update");
-        if (!CheckGeometry("resize-after") || !hooks.render() || !hooks.readback()) return false;
-        report["positive"] = {{"empty", {{"png", WideToUtf8(capturePath)}, {"sha256", Hash(capturePath)}}}};
+        if (!CheckGeometry(context, "resize-after") || !hooks.render() || !hooks.readback()) return false;
+        report["positive"] = {{"empty", {{"png", WideToUtf8(capturePath)}, {"sha256", Sha256(capturePath)}}}};
         if (report["positive"]["empty"]["sha256"] == "") return Fail(13, "hash-empty", "empty-scene PNG unavailable");
         return Experiments();
     }
@@ -735,15 +584,8 @@ struct ReplayProofRunner::Impl
         const auto& ignored = deps.dispatcher.IgnoredReplayProofSettingsPushes();
         report["ignoredSettingsPushes"] = {{"overloadGuard", ignored.overloadGuard},
             {"msaaLevel", ignored.msaaLevel}, {"estimatedLoad", ignored.estimatedLoad}};
-        report["wallMs"] = std::chrono::duration<double, std::milli>(Clock::now() - start).count();
-        const auto temporary = out / L"report.json.tmp";
-        const auto destination = out / L"report.json";
-        std::ofstream file(temporary, std::ios::binary | std::ios::trunc);
-        file << report.dump(2);
-        file.flush();
-        const bool written = file.good();
-        file.close();
-        if (!written || !MoveFileExW(temporary.c_str(), destination.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+        report["wallMs"] = std::chrono::duration<double, std::milli>(Clock::now() - context.start).count();
+        if (!AtomicWrite(out / L"report.json", report.dump(2)))
         {
             Fail(13, "report-write", "atomic report write failed");
             return exitCode;
@@ -759,13 +601,13 @@ ReplayProofRunner::ReplayProofRunner(Deps deps, const std::wstring& scenarioPath
 
 ReplayProofRunner::~ReplayProofRunner() = default;
 int ReplayProofRunner::Run() { return m_impl->Run(); }
-bool ReplayProofRunner::BeforeRender() { return m_impl->CheckGeometry("composed-render-before"); }
+bool ReplayProofRunner::BeforeRender() { return CheckGeometry(m_impl->context, "composed-render-before"); }
 bool ReplayProofRunner::AfterRender(bool succeeded)
 {
-    if (!m_impl->CheckGeometry("composed-render-after")) return false;
+    if (!CheckGeometry(m_impl->context, "composed-render-after")) return false;
     // Startup callbacks can render before geometry is established. Once locked,
     // incidental resize/message renders have the same success bar as hook renders.
-    if (!succeeded && m_impl->geometryLocked)
+    if (!succeeded && m_impl->context.geometryLocked)
         return m_impl->Fail(11, "composed-render", "incidental render/query/composition failed");
     return succeeded;
 }

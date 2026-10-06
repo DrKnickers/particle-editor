@@ -8,7 +8,7 @@
 
 namespace host {
 
-ParticleReplayController::Hooks HostWindowImpl::BuildReplayHooks(const std::wstring& readbackPath)
+ParticleReplayController::Hooks HostWindowImpl::BuildReplayHooks(const std::wstring& readbackPath, SpawnPolicy policy)
 {
     ParticleReplayController::Hooks hooks;
     auto spawnPending = std::make_shared<bool>(false);
@@ -61,16 +61,20 @@ ParticleReplayController::Hooks HostWindowImpl::BuildReplayHooks(const std::wstr
         return !engine->DeviceCallsBlocked();
     };
     hooks.stepClock = []() { StepPreviewFrames(1); };
-    hooks.tickSpawner = [this, spawnPending]()
+    hooks.tickSpawner = [this, spawnPending, policy]()
     {
         if (!engine || !spawnerDriver || !particleSystem || engine->DeviceCallsBlocked()) return false;
         spawnerDriver->Tick(1.0f / 60.0f, particleSystem.get(), engine.get());
         if (*spawnPending)
         {
             *spawnPending = false;
-            const bool refused = engine->TakeSpawnRefusal(nullptr);
-            if (refused || engine->ActiveSpawnerInstanceCount() != 1 || engine->GetNumInstances() != 1)
-                return false;
+            if (policy == SpawnPolicy::Strict)
+            {
+                const bool refused = engine->TakeSpawnRefusal(nullptr);
+                if (refused || engine->ActiveSpawnerInstanceCount() != 1 || engine->GetNumInstances() != 1)
+                    return false;
+            }
+            // Observe leaves an empty/refused spawn to the counters and quiet tail.
         }
         return !engine->DeviceCallsBlocked();
     };

@@ -34,7 +34,7 @@ static std::string ReadHostWindowSources(const std::filesystem::path& root)
 {
     const char* const files[] = {
         "HostWindowImpl.h", "HostWindow.cpp", "HostWindow_WebView2.cpp",
-        "HostWindow_Viewport.cpp", "HostWindow_Record.cpp" };
+        "HostWindow_Viewport.cpp", "HostWindow_Record.cpp", "HostWindow_Replay.cpp" };
     std::string all;
     for (const char* file : files)
     {
@@ -178,6 +178,9 @@ int main()
         const std::string block = ControlledBlock(source, call);
 
         CHECK(!source.empty(), "HostWindow production source is readable");
+        CHECK(compact.find("m_captureGoldenProfile(options.captureGoldenProfile||"
+                  "!options.replayScenarioPath.empty()||!options.observeSpecPath.empty())") != std::string::npos,
+              "proof and observe force the golden profile before view and mod restoration");
         CHECK(CountOccurrences(source, call) == 1,
               "HostWindow calls the persisted-view predicate exactly once");
         CHECK(compact.find(

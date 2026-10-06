@@ -187,6 +187,8 @@
     <ClInclude Include="host\ParticleReplayController.h" />
     <ClInclude Include="host\ReplayHostileCrt.h" />
     <ClInclude Include="host\ReplayProofRunner.h" />
+    <ClInclude Include="host\ReplayRunSupport.h" />
+    <ClInclude Include="host\ObservationRunner.h" />
     <ClInclude Include="host\PreviewScenarioJson.h" />
     <ClInclude Include="host\ObservationSpecJson.h" />
     <ClInclude Include="host\DriveRunner.h" />
@@ -289,6 +291,8 @@
       <!-- WIC needs modern DXGI definitions before the legacy d3dx9 SDK. -->
       <AdditionalIncludeDirectories>$(WindowsSdkDir)Include\$(WindowsSDKVersion)shared;$(WindowsSdkDir)Include\$(WindowsSDKVersion)um;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
+    <ClCompile Include="host\ReplayRunSupport.cpp" />
+    <ClCompile Include="host\ObservationRunner.cpp" />
     <ClCompile Include="host\PreviewScenarioJson.cpp" />
     <ClCompile Include="host\ObservationSpecJson.cpp" />
     <ClCompile Include="host\RestoredSettings.cpp" />

@@ -325,6 +325,20 @@ static int Count(const std::string& source, const char* needle)
     return count;
 }
 
+static std::string StrictBlock(const std::string& source)
+{
+    const size_t policy = source.find("if (policy == SpawnPolicy::Strict)");
+    if (policy == std::string::npos) return {};
+    const size_t begin = source.find('{', policy);
+    int depth = 0;
+    for (size_t end = begin; end < source.size(); ++end)
+    {
+        if (source[end] == '{') ++depth;
+        if (source[end] == '}' && --depth == 0) return source.substr(begin, end - begin + 1);
+    }
+    return {};
+}
+
 static void SourcePins()
 {
     const std::string wiring = ReadSource("src/host/HostWindow_Replay.cpp");
@@ -345,12 +359,24 @@ static void SourcePins()
           clear.find("engine->InvalidatePausedIdleSkip();") < clear.find("engine->TakeSpawnRefusal(nullptr);") &&
           clear.find("engine->TakeSpawnRefusal(nullptr);") != std::string::npos,
           "host reset pins guard, estimate, shared profile then clear, idle invalidation and refusal drain");
+    const std::string strict = StrictBlock(wiring);
+    const std::string tick = Body(wiring, "hooks.tickSpawner =");
+    CHECK(strict.find("const bool refused = engine->TakeSpawnRefusal(nullptr);") != std::string::npos &&
+          strict.find("if (refused || engine->ActiveSpawnerInstanceCount() != 1 || engine->GetNumInstances() != 1)\n") != std::string::npos &&
+          strict.find("return false;") != std::string::npos,
+          "Strict retains the original pending-tick refusal and instance-count failure condition");
+    CHECK(Count(tick, "TakeSpawnRefusal(") == Count(strict, "TakeSpawnRefusal(") &&
+          Count(tick, "GetNumInstances()") == Count(strict, "GetNumInstances()") &&
+          tick.find("if (policy == SpawnPolicy::Strict)") != std::string::npos &&
+          tick.find("return !engine->DeviceCallsBlocked();") != std::string::npos &&
+          wiring.find("[this, spawnPending, policy]") != std::string::npos,
+          "Observe skips only Strict refusal/count rejection while retaining device failure");
     const std::string host = ReadSource("src/host/HostWindow.cpp");
     const std::string wrapper = Body(host, "void HostWindowImpl::RenderD3D9()");
     const std::string frame = Body(host, "bool HostWindowImpl::RenderComposedFrame(bool simulate)");
-    CHECK(wrapper.find("RenderComposedFrame(m_runMode != RunMode::ReplayProof);") != std::string::npos &&
+    CHECK(wrapper.find("RenderComposedFrame(m_runMode != RunMode::ReplayProof && m_runMode != RunMode::Observe);") != std::string::npos &&
           Count(wrapper, "RenderComposedFrame(") == 1 && Count(wrapper, "Update") == 0,
-          "RenderD3D9 wrapper passes simulate false in ReplayProof");
+          "RenderD3D9 wrapper passes simulate false in ReplayProof and Observe");
     CHECK(frame.find("if (simulate && spawnerDriver && particleSystem && m_runMode != RunMode::Record)") != std::string::npos &&
           frame.find("if (simulate) m_mouseCursor.UpdateVelocity();") != std::string::npos &&
           frame.find("if (simulate) engine->Update();") != std::string::npos &&
@@ -369,6 +395,7 @@ static void SourcePins()
           !settle.empty() && Count(settle, "RenderD3D9();") == 1 && Count(settle, "RenderComposedFrame(") == 0,
           "WM_WINDOWPOSCHANGED and SettleResize reach frames exclusively through wrapper");
     const std::string proof = ReadSource("src/host/ReplayProofRunner.cpp");
+    const std::string support = ReadSource("src/host/ReplayRunSupport.cpp");
     const size_t resizeBefore = proof.find("const uint64_t before = deps.engine->CompletedFullUpdateCountForObservation();");
     const size_t resizeCall = proof.find("deps.settleResize();", resizeBefore);
     const size_t resizeAfter = proof.find("const uint64_t after = deps.engine->CompletedFullUpdateCountForObservation();", resizeCall);
@@ -405,15 +432,31 @@ static void SourcePins()
           setEngine.find("if (m_engine && !m_replayProofOwnsSettings && m_estimatedLoadCached)") <
               setEngine.find("m_engine->SetEstimatedLoad("),
           "SetEngine skips both cached settings reapplies during proof ownership");
-    const size_t isolation = host.find("dispatcher->SetReplayProofOwnsSettings(m_runMode == RunMode::ReplayProof);");
+    const size_t isolation = host.find("dispatcher->SetReplayProofOwnsSettings(m_runMode == RunMode::ReplayProof || m_runMode == RunMode::Observe);");
     CHECK(isolation < host.find("dispatcher->SetEngine(engine.get());", isolation) &&
           isolation < host.find("HRESULT hr = InitWebView2();"),
           "host enables proof settings ownership before engine binding and WebView mount pushes");
-    CHECK(proof.find("if (!CheckSettings()) return false;") != std::string::npos &&
-          proof.find("deps.dispatcher.IgnoredReplayProofSettingsPushes()") != std::string::npos,
+    CHECK(proof.find("if (!CheckSettings(context)) return false;") != std::string::npos &&
+          proof.find("deps.dispatcher.IgnoredReplayProofSettingsPushes()") != std::string::npos &&
+          support.find("e.OverloadGuardEnabledForObservation() == context.inForce.overloadGuardEnabled") != std::string::npos &&
+          support.find("e.OverloadGuardLimitForObservation() == context.inForce.overloadGuardLimit") != std::string::npos &&
+          support.find("e.EstimatedLoadForObservation() == context.inForce.estimatedParticlesPerInstance && FixedProfile(e) == context.profile") != std::string::npos,
           "proof retains per-update settings checks and records ignored pushes");
+    const std::string observe = ReadSource("src/host/ObservationRunner.cpp");
+    CHECK(host.find("BuildReplayHooks(path, SpawnPolicy::Strict)") != std::string::npos &&
+          host.find("BuildReplayHooks(path, SpawnPolicy::Observe)") != std::string::npos &&
+          frame.find("observe->BeforeRender()") != std::string::npos &&
+          frame.find("observe->AfterRender(succeeded)") != std::string::npos,
+          "proof selects Strict, observe selects Observe, and both bracket incidental renders");
+    CHECK(observe.find("CheckSettings(context)") != std::string::npos &&
+          observe.find("SampleJson(sample) != SampleJson(samples[frame])") != std::string::npos &&
+          observe.find("deps.buildHooks(path.wstring()).readback") != std::string::npos &&
+          observe.find("second.Reset() && captureHooks.render() && captureHooks.readback()") != std::string::npos,
+          "observe compares every update including RNG and renders frame zero without another update");
     CHECK(proof.find("emitter->colorTexture =") == std::string::npos &&
-          proof.find("emitter->normalTexture =") == std::string::npos,
+          proof.find("emitter->normalTexture =") == std::string::npos &&
+          support.find("emitter->colorTexture =") == std::string::npos &&
+          support.find("emitter->normalTexture =") == std::string::npos,
           "proof uses loaded fixtures without replacing their textures");
 }
 

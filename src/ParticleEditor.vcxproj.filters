@@ -186,6 +186,12 @@
     <ClInclude Include="host\ReplayProofRunner.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="host\ReplayRunSupport.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\ObservationRunner.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
     <ClInclude Include="host\ReplayHostileCrt.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
@@ -591,6 +597,12 @@
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\ReplayProofRunner.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\ReplayRunSupport.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\ObservationRunner.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="..\tests\support\replay_hostile_crt.cpp">

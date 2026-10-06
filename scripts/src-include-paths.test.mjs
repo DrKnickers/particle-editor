@@ -11,6 +11,10 @@ const sourceRoot = process.env.SRC_INCLUDE_ROOT ? resolve(process.env.SRC_INCLUD
 
 // Each exception names the SDK/generated owner and its actual callers.
 const exemptions = new Map([
+  ["version.h", {
+    reason: "Canonical application version at the src root (the compiler's root include path)",
+    callers: ["main.cpp", "host/ObservationRunner.cpp"],
+  }],
   ["WebView2.h", {
     reason: "WebView2 SDK header supplied by NuGet",
     callers: ["host/Compositor.cpp", "host/HostWindowImpl.h", "host/StartupCallbackAdapter.h"],

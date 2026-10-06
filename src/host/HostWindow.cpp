@@ -258,6 +258,7 @@ void HostWindowImpl::OpenLog()
     if (IsAutomationMode())
     {
         const std::wstring suffix = (m_runMode == RunMode::ReplayProof ? L"-replay-proof-" :
+                                     m_runMode == RunMode::Observe ? L"-observe-" :
                                      m_runMode == RunMode::Record ? L"-record-" : L"-drive-") + std::to_wstring(GetCurrentProcessId());
         if (!perfArtifactDir.empty())
         {
@@ -279,12 +280,14 @@ void HostWindowImpl::OpenLog()
     // log lines. Switch to _wfsopen with _SH_DENYNO so readers (tests,
     // Get-Content -Wait, etc.) can open the file while the host is
     // writing to it. The host is the only writer so deny-no is safe.
+    m_hostLogPath = path;
     logFile = _wfsopen(path.c_str(), L"w", _SH_DENYNO);
     if (logFile)
     {
         Log("[host] === host session started ===\n");
         const char* mode = m_runMode == RunMode::Drive ? "drive"
                          : m_runMode == RunMode::ReplayProof ? "replay-proof"
+                         : m_runMode == RunMode::Observe ? "observe"
                          : m_runMode == RunMode::Record ? "record"
                          : m_runMode == RunMode::Capture
                              ? (m_captureRef.empty() ? "capture" : "capture-ref")
@@ -301,6 +304,13 @@ void HostWindowImpl::LogParticleRngResult()
     if (m_runMode == RunMode::ReplayProof)
     {
         fprintf(logFile, "[particle-rng] mode=replay-proof algorithm=legacy-msvc-v%u seed=0x%08X draws=%llu\n",
+            static_cast<unsigned>(ParticleRandom::kAlgorithmVersion),
+            static_cast<unsigned>(ParticleRandom::SeedValue()),
+            static_cast<unsigned long long>(ParticleRandom::DrawCount()));
+    }
+    else if (m_runMode == RunMode::Observe)
+    {
+        fprintf(logFile, "[particle-rng] mode=observe algorithm=legacy-msvc-v%u seed=0x%08X draws=%llu\n",
             static_cast<unsigned>(ParticleRandom::kAlgorithmVersion),
             static_cast<unsigned>(ParticleRandom::SeedValue()),
             static_cast<unsigned long long>(ParticleRandom::DrawCount()));
@@ -846,16 +856,19 @@ void HostWindowImpl::ReleaseHostComObjects()
 // changes. The SpawnerPanel badge subscribes to that event unchanged.
 void HostWindowImpl::RenderD3D9()
 {
-    RenderComposedFrame(m_runMode != RunMode::ReplayProof);
+    RenderComposedFrame(m_runMode != RunMode::ReplayProof && m_runMode != RunMode::Observe);
 }
 
 bool HostWindowImpl::RenderComposedFrame(bool simulate)
 {
     ReplayProofRunner* proof = m_runMode == RunMode::ReplayProof ? m_replayProofRunner.get() : nullptr;
+    ObservationRunner* observe = m_runMode == RunMode::Observe ? m_observationRunner.get() : nullptr;
     if (proof && !proof->BeforeRender()) return false;
-    const auto finish = [proof](bool succeeded)
+    if (observe && !observe->BeforeRender()) return false;
+    const auto finish = [proof, observe](bool succeeded)
     {
-        return proof ? proof->AfterRender(succeeded) : succeeded;
+        if (proof) return proof->AfterRender(succeeded);
+        return observe ? observe->AfterRender(succeeded) : succeeded;
     };
     if (!engine || m_compositionFatalPending) return finish(false);
     // The composed editor has no D3D9 Present result. This admission door
@@ -2274,7 +2287,7 @@ int HostWindowImpl::Run(int nCmdShow)
     dispatcher = std::make_unique<BridgeDispatcher>(/*engine*/nullptr, layout, accelerator, emitFn,
                                                     /*useTestHost*/useTestHost,
                                                     /*automationMode*/IsAutomationMode());
-    dispatcher->SetReplayProofOwnsSettings(m_runMode == RunMode::ReplayProof);
+    dispatcher->SetReplayProofOwnsSettings(m_runMode == RunMode::ReplayProof || m_runMode == RunMode::Observe);
     dispatcher->SetUndoStack(&undoStack);
     dispatcher->SetHostHwnd(hMain);
     dispatcher->SetExternalLaunchAllowed(IsFullyInteractive());
@@ -2457,6 +2470,7 @@ int HostWindowImpl::Run(int nCmdShow)
     // in drive mode). Watchdogs: a startup deadline until app/ready, and a
     // render-budget cap of sum(settle)+60s once running.
     int       replayExitCode   = 5;
+    int       observeExitCode  = 5;
     int       driveExitCode    = 0;
     bool      driveDcompSettled = false;
     LONGLONG  driveDcompStart  = 0;
@@ -2488,7 +2502,7 @@ int HostWindowImpl::Run(int nCmdShow)
         // app/ready, no frame acks, no composite — so end it now with
         // kWebProcessFailedExitCode instead of waiting out a watchdog. An
         // interactive session closes through WM_APP_WEB_DEAD instead.
-        if (m_webDead && !IsFullyInteractive() && m_runMode != RunMode::ReplayProof)
+        if (m_webDead && !IsFullyInteractive() && m_runMode != RunMode::ReplayProof && m_runMode != RunMode::Observe)
         {
             Log("[webview] headless run aborted: web process failed (exit %d)\n",
                 webviewcrash::kWebProcessFailedExitCode);
@@ -2508,12 +2522,30 @@ int HostWindowImpl::Run(int nCmdShow)
             m_replayProofRunner = std::make_unique<ReplayProofRunner>(
                 ReplayProofRunner::Deps{engine, particleSystem, undoStack, layout, alphaCompositor,
                     m_uiReady, m_sceneRectSeen, m_webDead,
-                    [this](const std::wstring& path) { return BuildReplayHooks(path); },
+                    [this](const std::wstring& path) { return BuildReplayHooks(path, SpawnPolicy::Strict); },
                     [this](const std::string& request) { return dispatcher->DispatchSync(request); },
                     [this]() { SettleResize("replay-proof"); },
                     [this](const std::string& text) { Log("%s", text.c_str()); }, *dispatcher},
                 m_replayScenarioPath, m_replayOutputDirectory);
             replayExitCode = m_replayProofRunner->Run();
+            quit = true;
+        }
+        else if (m_runMode == RunMode::Observe)
+        {
+            m_observationRunner = std::make_unique<ObservationRunner>(
+                ReplayRunDeps{engine, particleSystem, undoStack, layout, alphaCompositor,
+                    m_uiReady, m_sceneRectSeen, m_webDead,
+                    [this](const std::wstring& path) { return BuildReplayHooks(path, SpawnPolicy::Observe); },
+                    [this](const std::string& request) { return dispatcher->DispatchSync(request); },
+                    [this]() { SettleResize("observe"); },
+                    [this](const std::string& text) { Log("%s", text.c_str()); }, *dispatcher},
+                ObservationRunner::Deps{
+                    [this]() { return spawnerDriver && spawnerDriver->IsIdle(); },
+                    [this]() { std::lock_guard<std::mutex> lock(logMutex); if (logFile) fflush(logFile); return m_hostLogPath; },
+                    [this]() { return modManager->GameRoots(); },
+                    [this]() { return modManager->GetLayerStack(); }},
+                m_observeSpecPath, m_observeOutputDirectory);
+            observeExitCode = m_observationRunner->Run();
             quit = true;
         }
         else if (engine && m_runMode == RunMode::Drive)
@@ -2887,6 +2919,7 @@ int HostWindowImpl::Run(int nCmdShow)
     // A headless run whose web process died — whatever stage it reached,
     // its output can't be trusted, and a --record run never published.
     if (m_runMode == RunMode::ReplayProof) return replayExitCode;
+    if (m_runMode == RunMode::Observe) return observeExitCode;
     if (webDeadAbort) return webviewcrash::kWebProcessFailedExitCode;
     // In --capture mode we break the loop via
     // the `quit` flag (not PostQuitMessage), so m.wParam is stale; return

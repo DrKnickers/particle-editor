@@ -201,6 +201,12 @@ test("HostWindow's emit lambda is the serializer, and its other .dump() calls ar
   ];
   const family = sources.filter((s) => /^HostWindow(_\w+)?\.cpp$|^HostWindowImpl\.h$/.test(basename(s.file)));
   assert.equal(family.length, 6, "expected HostWindowImpl.h, HostWindow.cpp and the four HostWindow_*.cpp files");
+  // ObservationRunner writes local capture/telemetry JSON, not bridge envelopes.
+  const observation = sources.find((s) => basename(s.file) === "ObservationRunner.cpp");
+  assert.ok(observation, "ObservationRunner.cpp must be scanned by the global bridge guards");
+  assert.ok(!family.includes(observation), "the runner is separate from HostWindow's serialization allowlist");
+  assert.equal(callArguments(observation.code, "PostWebMessageAsJson").length, 0);
+  assert.equal(callArguments(observation.code, "PostWebMessageAsString").length, 0);
   const unknown = [];
   for (const { file, code } of family) {
     code.split("\n").forEach((text, idx) => {

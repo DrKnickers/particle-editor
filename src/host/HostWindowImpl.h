@@ -116,6 +116,7 @@
 #include "RecordOutputSafety.h"  // --record: refuse to remove_all a non-output dir
 #include "ParticleReplayController.h"
 #include "ReplayProofRunner.h"
+#include "ObservationRunner.h"
 #include "CaptureRunner.h" // --capture/--capture-ref: one-shot render + PNG
 #include "HostRunUtil.h"   // PerfQpcNow/PerfQpcFreq/QpcMs/DeriveSibling (shared with the runners)
 #include "AsyncFrameEncoder.h"   // --record: background PNG encode
@@ -656,11 +657,15 @@ struct HostWindowImpl
 
     bool        useDevUi   = false;  // --dev-ui: navigate to Vite HMR server
     bool        useTestHost = false; // --test-host: CDP :9222 + DevTools
-    enum class RunMode { Interactive, Capture, Drive, Record, ReplayProof };
+    enum class RunMode { Interactive, Capture, Drive, Record, ReplayProof, Observe };
+    enum class SpawnPolicy { Strict, Observe };
     const RunMode m_runMode;
     const std::wstring m_replayScenarioPath;
     const std::wstring m_replayOutputDirectory;
     std::unique_ptr<ReplayProofRunner> m_replayProofRunner;
+    const std::wstring m_observeSpecPath;
+    const std::wstring m_observeOutputDirectory;
+    std::unique_ptr<ObservationRunner> m_observationRunner;
     // --capture mode: load m_captureAlo,
     // render m_captureFrames frames, write engine RT to m_capturePng,
     // then quit. These are capture inputs; m_runMode selects the pump branch.
@@ -688,14 +693,14 @@ struct HostWindowImpl
     // WebMessageReceived to this thread's message pump), so a plain non-atomic
     // bool is correct: no atomic/volatile needed.
     bool         m_uiReady = false;
-    // --drive, --record and --replay-proof share persistence/profile/log isolation, but have
+    // --drive, --record, --replay-proof and --observe share persistence/profile/log isolation, but have
     // separate run-loop branches. --test-host remains an orthogonal flag.
     std::wstring m_driveScriptPath;
     std::wstring m_recordScriptPath;
     bool IsAutomationMode() const
     {
         return m_runMode == RunMode::Drive || m_runMode == RunMode::Record ||
-            m_runMode == RunMode::ReplayProof;
+            m_runMode == RunMode::ReplayProof || m_runMode == RunMode::Observe;
     }
     // True only when a human is present to dismiss a blocking modal — i.e. NOT in
     // any headless mode (capture / drive-or-record / test-host). Every fatal or
@@ -937,6 +942,7 @@ struct HostWindowImpl
     RecordSession m_recordSession;
     std::wstring m_perfWebViewProfile;
     FILE*       logFile = nullptr;
+    std::wstring m_hostLogPath;
     std::mutex  logMutex;
 
     HostWindowImpl(HINSTANCE inst,
@@ -951,22 +957,25 @@ struct HostWindowImpl
         , fileManager(fil)
         , useDevUi(options.useDevUi)
         , useTestHost(options.useTestHost)
-        // main.cpp rejects run-mode combinations. Direct callers prioritize proof,
+        // main.cpp rejects run-mode combinations. Direct callers prioritize observe/proof,
         // then preserve the old pump precedence: Drive, Record, Capture.
         // Both capture inputs are allowed; CaptureRunner still prefers captureRef.
-        , m_runMode(!options.replayScenarioPath.empty() ? RunMode::ReplayProof
+        , m_runMode(!options.observeSpecPath.empty() ? RunMode::Observe
+                    : !options.replayScenarioPath.empty() ? RunMode::ReplayProof
                     : !options.driveScriptPath.empty() ? RunMode::Drive
                     : !options.recordScriptPath.empty() ? RunMode::Record
                     : (!options.captureAlo.empty() || !options.captureRef.empty())
                         ? RunMode::Capture : RunMode::Interactive)
         , m_replayScenarioPath(options.replayScenarioPath)
         , m_replayOutputDirectory(options.replayOutputDirectory)
+        , m_observeSpecPath(options.observeSpecPath)
+        , m_observeOutputDirectory(options.observeOutputDirectory)
         , m_captureAlo(options.captureAlo)
         , m_captureRef(options.captureRef)
         , m_capturePng(options.capturePng)
         , m_captureFrames(options.captureFrames)
         , m_captureSkydomeSlot(options.captureSkydome)
-        , m_captureGoldenProfile(options.captureGoldenProfile || !options.replayScenarioPath.empty())
+        , m_captureGoldenProfile(options.captureGoldenProfile || !options.replayScenarioPath.empty() || !options.observeSpecPath.empty())
         , m_captureHasAmbient(options.hasAmbient)
         , m_captureHasSun(options.hasSun)
         , m_captureHasSunI(options.hasSunIntensity)
@@ -990,7 +999,7 @@ struct HostWindowImpl
               /*suppressPersistence=*/!IsFullyInteractiveSession(
                   !options.captureAlo.empty() || !options.captureRef.empty(),
                   !options.driveScriptPath.empty() || !options.recordScriptPath.empty() ||
-                  !options.replayScenarioPath.empty(),
+                  !options.replayScenarioPath.empty() || !options.observeSpecPath.empty(),
                   options.useTestHost && !ReadSettingsLiveEnv())))
     {
         // [world-lit] capture lighting colours (arrays can't init in list).
@@ -1032,7 +1041,7 @@ struct HostWindowImpl
     // viewport HWND is handed to Engine's ctor in WM_CREATE.
     void RenderD3D9();
     bool RenderComposedFrame(bool simulate);
-    ParticleReplayController::Hooks BuildReplayHooks(const std::wstring& readbackPath);
+    ParticleReplayController::Hooks BuildReplayHooks(const std::wstring& readbackPath, SpawnPolicy policy);
 
     HRESULT InitWebView2();
     // Wires every per-controller setup step that's common to both HWND

@@ -14,6 +14,7 @@
 #include <fstream>
 #include <filesystem>
 #include "host/PreviewScenarioJson.h"
+#include "host/ObservationSpecJson.h"
 #include "host/third_party/nlohmann/json.hpp"
 #include <cstdio>      // fwprintf / fprintf CLI diagnostics
 
@@ -113,7 +114,7 @@ static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv, v
 		    arg == L"--smoke-spin")
 			return 1;
 		if (arg == L"--capture" || arg == L"--capture-ref" ||
-            arg == L"--replay-proof" || arg == L"--gen-replay-proof-fixture")
+            arg == L"--replay-proof" || arg == L"--observe" || arg == L"--gen-replay-proof-fixture")
 			return 2;
 		if (arg == L"--snap-window")
 			return 1;
@@ -222,7 +223,8 @@ static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv, v
 	bool driveMode = false, recordMode = false;
 	for (const std::wstring& a : argv) { if (a == L"--drive") driveMode = true; if (a == L"--record") recordMode = true; }
 	const bool replayMode = std::find(argv.begin(), argv.end(), L"--replay-proof") != argv.end();
-	const bool automationMode = driveMode || recordMode || replayMode;
+	const bool observeMode = std::find(argv.begin(), argv.end(), L"--observe") != argv.end();
+	const bool automationMode = driveMode || recordMode || replayMode || observeMode;
 	if (fileManager != NULL && !pickedPath.empty() && !automationMode)
 	{
 		host::WriteRegSz(host::kRegGameDataPath, pickedPath);   // non-empty here
@@ -302,6 +304,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		std::wstring genA11yFixturePath;
 		std::wstring genReplayFixtureKind, genReplayFixturePath;
 		std::wstring replayScenarioPath, replayOutputDirectory;
+		// --observe <observation.json> <out-dir>: fixed-profile lifecycle capture.
+		std::wstring observeSpecPath, observeOutputDirectory;
 		bool replayConflict = false;
 		std::wstring genSmokeTestPath;   // [shaded-smoke] all-three test particle
 		// [shaded-smoke] --smoke-color <warm|grey>: color ramp for the gen-smoke-test
@@ -442,7 +446,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			{
 				genSmokeTestPath = argv[i + 1];
 			}
-			if (argv[i] == L"--replay-proof" || argv[i] == L"--gen-replay-proof-fixture")
+			if (argv[i] == L"--replay-proof" || argv[i] == L"--observe" || argv[i] == L"--gen-replay-proof-fixture")
 			{
 				if (i + 2 >= argv.size() || argv[i + 1].empty() || argv[i + 2].empty() ||
 					argv[i + 1][0] == L'-' || argv[i + 2][0] == L'-')
@@ -454,6 +458,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 				{
 					replayScenarioPath = argv[i + 1];
 					replayOutputDirectory = argv[i + 2];
+				}
+				else if (argv[i] == L"--observe")
+				{
+					observeSpecPath = argv[i + 1];
+					observeOutputDirectory = argv[i + 2];
 				}
 				else
 				{
@@ -541,14 +550,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		if (perfTraceMode.empty())      perfTraceMode = readEnvW(L"ALO_PERF_TRACE_MODE");
 		if (perfArtifactDir.empty())    perfArtifactDir = readEnvW(L"ALO_PERF_ARTIFACT_DIR");
 		if (perfWebViewProfile.empty()) perfWebViewProfile = readEnvW(L"ALO_PERF_WEBVIEW_PROFILE");
-		if ((!replayScenarioPath.empty() || !genReplayFixturePath.empty()) &&
+		if ((!replayScenarioPath.empty() || !observeSpecPath.empty() || !genReplayFixturePath.empty()) &&
 			(replayConflict || !captureAlo.empty() || !capturePng.empty() || !captureRef.empty() ||
 			 !driveScriptPath.empty() || !recordScriptPath.empty() || snapWindowFlagSeen ||
 			 testHost || devUi || !genSingletonLinkFixturePath.empty() ||
 			 !genA11yFixturePath.empty() || !genSmokeTestPath.empty() ||
-			 (!replayScenarioPath.empty() && !genReplayFixturePath.empty())))
+			 (!replayScenarioPath.empty() && !genReplayFixturePath.empty()) ||
+			 (!observeSpecPath.empty() && (!replayScenarioPath.empty() || !genReplayFixturePath.empty()))))
 		{
-			fwprintf(stderr, L"replay proof flags cannot be combined with other run modes\n");
+			fwprintf(stderr, L"replay proof and observe flags cannot be combined with other run modes\n");
 			return 2;
 		}
 		// --drive and --capture/--capture-ref are mutually-exclusive one-shots
@@ -594,7 +604,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		// launches keep their dialogs.
 #ifndef NDEBUG
 		if (((!captureAlo.empty() || !captureRef.empty()) && !capturePng.empty()) ||
-			!replayScenarioPath.empty() || !genReplayFixturePath.empty())
+			!replayScenarioPath.empty() || !observeSpecPath.empty() || !genReplayFixturePath.empty())
 		{
 			setvbuf(stderr, nullptr, _IONBF, 0);   // unbuffered: pre-crash traces survive a terminate
 			_set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
@@ -1021,7 +1031,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		std::vector<std::wstring> gameRoots;
 		const bool interactiveSession = IsFullyInteractiveSession(
 			!captureAlo.empty() || !captureRef.empty(),
-			!driveScriptPath.empty() || !recordScriptPath.empty() || !replayScenarioPath.empty(),
+			!driveScriptPath.empty() || !recordScriptPath.empty() || !replayScenarioPath.empty() || !observeSpecPath.empty(),
 			testHost);
 		// Fresh variation per interactive launch; the stepped state preserves srand plus
 		// one discarded draw. Automation keeps the default seed.
@@ -1051,6 +1061,21 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			}
 			ParticleRandom::Seed(scenario.seed);
 		}
+		if (!observeSpecPath.empty())
+		{
+			std::ifstream input(std::filesystem::path(observeSpecPath), std::ios::binary);
+			const std::string text((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+			ObservationSpec spec;
+			std::string error = input.bad() || !input.is_open()
+				? "spec file could not be read" : host::ParseObservationSpec(text, spec);
+			if (error.empty()) error = ValidateObservationSpec(spec);
+			if (!error.empty())
+			{
+				fprintf(stderr, "[observe] spec: %s\n", error.c_str());
+				return 2;
+			}
+			ParticleRandom::Seed(spec.scenario.seed);
+		}
 		FileManager* fileManager = createFileManager(NULL, argv, &gameRoots, interactiveSession);
 		if (fileManager == NULL)
 		{
@@ -1079,6 +1104,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		launch.recordScriptPath     = recordScriptPath;
 		launch.replayScenarioPath   = replayScenarioPath;
 		launch.replayOutputDirectory = replayOutputDirectory;
+		launch.observeSpecPath       = observeSpecPath;
+		launch.observeOutputDirectory = observeOutputDirectory;
 		launch.perfTracePath        = perfTracePath;
 		launch.perfTraceMode        = perfTraceMode;
 		launch.perfArtifactDir      = perfArtifactDir;
