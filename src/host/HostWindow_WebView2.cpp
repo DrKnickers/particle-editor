@@ -74,6 +74,32 @@ std::wstring ComputeUserDataFolder(bool isolated = false)
     return isolated ? host::FreshIsolatedProfileFolder(folder, GetTickCount64()).wstring() : folder;
 }
 
+// True while `pid` is a running editor (an exe with our basename). Any ambiguous answer
+// counts as live, the rule Autosave's IsLiveLegacyEditorPid uses: the profile sweep may
+// leave a dead run's folder for one more run, never delete a live sibling's. An exited
+// process whose handle a parent still holds is dead, not live.
+bool IsLiveEditorPid(unsigned long pid)
+{
+    if (pid == GetCurrentProcessId()) return true;
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) return GetLastError() != ERROR_INVALID_PARAMETER;
+    DWORD exitCode = 0;
+    const bool exited = GetExitCodeProcess(process, &exitCode) && exitCode != STILL_ACTIVE;
+    const std::wstring image = host::ModuleFilePathWith([process](wchar_t* buffer, DWORD capacity)
+    {
+        DWORD size = capacity;
+        if (QueryFullProcessImageNameW(process, 0, buffer, &size))
+            return host::ModuleNameProbeResult{ size, ERROR_SUCCESS };
+        const DWORD error = GetLastError();
+        return host::ModuleNameProbeResult{ error == ERROR_INSUFFICIENT_BUFFER ? capacity : 0, error };
+    });
+    CloseHandle(process);
+    if (exited) return false;
+    const std::wstring ours = std::filesystem::path(host::ModuleFilePath()).filename().wstring();
+    if (image.empty() || ours.empty()) return true;
+    return _wcsicmp(std::filesystem::path(image).filename().c_str(), ours.c_str()) == 0;
+}
+
 std::wstring AppendQueryParam(const std::wstring& url, const wchar_t* param)
 {
     if (!param || !param[0]) return url;
@@ -391,6 +417,13 @@ HRESULT HostWindowImpl::InitWebView2()
     Log("[host] WebView2 user-data folder: %ls%s\n", userDataFolder.c_str(),
         !m_perfWebViewProfile.empty() ? " (perf profile)" :
         captureIsolation ? " (isolated capture profile)" : "");
+    if (captureIsolation && m_perfWebViewProfile.empty())
+    {
+        const ULONGLONG sweepStart = GetTickCount64();
+        const int swept = host::SweepStaleIsolatedProfiles(userDataFolder, IsLiveEditorPid);
+        Log("[host] iso-sweep: removed %d stale profile(s) in %llu ms\n",
+            swept, GetTickCount64() - sweepStart);
+    }
 
     // When --test-host is set, pass --remote-debugging-port=9222
     // to the underlying Chromium runtime so Playwright (and any CDP client)

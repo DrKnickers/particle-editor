@@ -66,6 +66,63 @@ int main()
     CHECK(host::FreshIsolatedProfileFolder(daily, 7) == daily && fs::exists(daily / L"keep.txt"),
           "the daily-driver profile is left untouched");
 
+    // The owner PID is read only from the exact shape ComputeUserDataFolder names.
+    const std::wstring stem = L"WebView2-iso-";
+    CHECK(host::IsolatedProfileOwnerPid(L"WebView2-iso-4242", stem) == 4242, "owner of a per-PID profile");
+    CHECK(host::IsolatedProfileOwnerPid(L"WebView2-iso-4242-99", stem) == 4242, "owner of a salted profile");
+    CHECK(host::IsolatedProfileOwnerPid(L"AloParticleEditor_WebView2-iso-12",
+                                        L"AloParticleEditor_WebView2-iso-") == 12,
+          "owner of a TEMP-fallback profile");
+    bool rejected = true;
+    for (const wchar_t* leaf : { L"WebView2", L"WebView2-iso-", L"WebView2-iso-abc", L"WebView2-iso-12x",
+                                 L"WebView2-iso-12-", L"WebView2-iso-12-x", L"WebView2-iso-12-3-4",
+                                 L"WebView2-iso-99999999999", L"WebView2-iso-4294967296",
+                                 L"AloParticleEditor_WebView2-iso-12", L"xWebView2-iso-12" })
+        rejected = rejected && host::IsolatedProfileOwnerPid(leaf, stem) == 0;
+    CHECK(rejected, "every other shape, an overflowing PID and a different stem have no owner");
+
+    // The sweep removes dead owners' profiles and leaves everything else.
+    const fs::path sweep = root / L"sweep";
+    const fs::path own = sweep / L"WebView2-iso-1";
+    for (const wchar_t* leaf : { L"WebView2-iso-1", L"WebView2-iso-2", L"WebView2-iso-3", L"WebView2-iso-3-77",
+                                 L"WebView2", L"foo-iso-3", L"WebView2-iso-3x" })
+        Touch(sweep / leaf / L"EBWebView" / L"data");
+    Touch(sweep / L"WebView2-iso-30");                         // a FILE named like a profile
+    const fs::path outside = root / L"outside";
+    Touch(outside / L"precious.txt");
+    const std::wstring junctionCommand = L"cmd /c mklink /J \"" + (sweep / L"WebView2-iso-31").wstring() +
+                                         L"\" \"" + outside.wstring() + L"\" >nul";
+    const bool junction = _wsystem(junctionCommand.c_str()) == 0;
+    CHECK(junction, "test made a junction named like a dead profile");
+    auto live = [](unsigned long pid) { return pid == 1 || pid == 2; };
+    const int removed = host::SweepStaleIsolatedProfiles(own, live);
+    CHECK(removed == 2, "the sweep reports the two dead profiles it removed");
+    CHECK(!fs::exists(sweep / L"WebView2-iso-3") && !fs::exists(sweep / L"WebView2-iso-3-77"),
+          "a dead owner's profile and its salted sibling are removed");
+    CHECK(fs::exists(own / L"EBWebView" / L"data") && fs::exists(sweep / L"WebView2-iso-2" / L"EBWebView" / L"data"),
+          "our own and a live sibling's profiles are kept");
+    CHECK(fs::exists(sweep / L"WebView2" / L"EBWebView" / L"data"), "the daily-driver profile is kept");
+    CHECK(fs::exists(sweep / L"foo-iso-3") && fs::exists(sweep / L"WebView2-iso-3x") &&
+          fs::is_regular_file(sweep / L"WebView2-iso-30"),
+          "unrelated folders and a file named like a profile are kept");
+    CHECK(fs::exists(outside / L"precious.txt"), "a junction is never followed");
+    if (junction) RemoveDirectoryW((sweep / L"WebView2-iso-31").c_str());
+
+    // A dead profile still held open is left for a later sweep, and the rest still go.
+    const fs::path heldDead = sweep / L"WebView2-iso-40";
+    Touch(heldDead / L"lock");
+    Touch(sweep / L"WebView2-iso-41" / L"data");
+    HANDLE deadLock = CreateFileW((heldDead / L"lock").c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING,
+                                  FILE_ATTRIBUTE_NORMAL, nullptr);
+    host::SweepStaleIsolatedProfiles(own, live);
+    CHECK(fs::exists(heldDead / L"lock") && !fs::exists(sweep / L"WebView2-iso-41"),
+          "a held profile survives without stopping the sweep");
+    CloseHandle(deadLock);
+
+    // A folder that is not an isolated profile never sweeps its siblings.
+    CHECK(host::SweepStaleIsolatedProfiles(sweep / L"WebView2", [](unsigned long) { return false; }) == 0 &&
+          fs::exists(own), "a non-isolated folder sweeps nothing");
+
     fs::remove_all(root, error);
     std::printf("%s (%d failures)\n", g_failed ? "=== FAILED ===" : "=== ALL PASS ===", g_failed);
     return g_failed ? 1 : 0;

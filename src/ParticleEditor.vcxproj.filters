@@ -405,6 +405,9 @@
     <ClInclude Include="host\IsolatedWebViewProfile.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="host\HostLogRetention.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
     <ClInclude Include="host\RecordOutputSafety.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>

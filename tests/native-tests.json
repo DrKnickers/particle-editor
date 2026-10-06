@@ -203,6 +203,9 @@
     "test_isolated_webview_profile": {
       "includes": ["src/host"]
     },
+    "test_host_log_retention": {
+      "includes": ["src/host"]
+    },
     "test_record_output_safety": {
       "includes": ["src/host"]
     },

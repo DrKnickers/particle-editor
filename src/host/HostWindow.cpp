@@ -37,7 +37,10 @@
 #define WINVER 0x0A00
 
 #include "HostWindowImpl.h"
+#include "HostLogRetention.h"
 #include "simulation/ParticleRandom.h"
+
+#include <chrono>
 
 namespace host {
 
@@ -253,6 +256,7 @@ void HostWindowImpl::OpenLog()
 {
     std::wstring path = ComputeHostLogPath();
     const std::wstring perfArtifactDir = host::perf::CurrentConfig().artifactDir;
+    int sweptLogs = -1;
     // --drive (ephemeral): per-PID log filename so a --drive run's _wfsopen("w")
     // (truncate) never wipes a concurrently-running daily driver's host.log.
     if (IsAutomationMode())
@@ -268,6 +272,10 @@ void HostWindowImpl::OpenLog()
         }
         else
         {
+            // Keep the newest 100 per-run logs and anything under an hour old: callers read
+            // a run's log after it exits (HostLogRetention.h).
+            sweptLogs = host::SweepPerRunHostLogs(path, std::filesystem::file_time_type::clock::now(),
+                                                  100, std::chrono::hours(1));
             const size_t dot = path.find_last_of(L'.');
             path = (dot == std::wstring::npos) ? path + suffix
                                                : path.substr(0, dot) + suffix + path.substr(dot);
@@ -285,6 +293,8 @@ void HostWindowImpl::OpenLog()
     if (logFile)
     {
         Log("[host] === host session started ===\n");
+        if (sweptLogs >= 0)
+            Log("[host] log-sweep: deleted %d old per-run log(s)\n", sweptLogs);
         const char* mode = m_runMode == RunMode::Drive ? "drive"
                          : m_runMode == RunMode::ReplayProof ? "replay-proof"
                          : m_runMode == RunMode::Observe ? "observe"
