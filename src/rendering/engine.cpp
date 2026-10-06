@@ -151,6 +151,7 @@ ParticleSystemInstance* Engine::SpawnParticleSystem(const ParticleSystem& system
         const double projected = (GetNumInstances() + 1) * m_estimatedPerInstance;
         if (projected > (double)m_maxPreviewParticles)
         {
+            ++m_hardGuardRefusals;
             m_spawnRefusal = { projected, m_maxPreviewParticles, GetNumInstances() + 1 };
             m_spawnRefusalPending = true;
             Clear();
@@ -274,6 +275,7 @@ void Engine::SetEstimatedLoad(double perInstance)
     if (m_overloadGuardEnabled && perInstance > 0.0 && n > 0 &&
         n * perInstance > (double)m_maxPreviewParticles)
     {
+        ++m_hardGuardRefusals;
         m_spawnRefusal = { n * perInstance, m_maxPreviewParticles, n };
         m_spawnRefusalPending = true;
         Clear();

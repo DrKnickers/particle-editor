@@ -81,6 +81,12 @@ void SpawnerDriver::Reset()
     m_burstBegun            = false;
 }
 
+bool SpawnerDriver::IsIdle() const
+{
+    return m_phase == Phase::Waiting && m_burstRemaining == 0 && m_pendingBursts == 0 &&
+        (m_cfg.mode == SpawnerConfig::Mode::Manual || !m_cfg.enabled);
+}
+
 void SpawnerDriver::SetConfig(const SpawnerConfig& cfg)
 {
     SpawnerConfig oldCfg = m_cfg;

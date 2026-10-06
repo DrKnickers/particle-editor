@@ -306,6 +306,7 @@ bool EmitterInstance::SpawnParticle(TimeF currentTime)
 	const size_t kMaxParticleIndex = 0xFFFF / NUM_VERTICES_PER_PARTICLE;
 	if (particle.m_index > kMaxParticleIndex)
 	{
+		m_engine.NoteIndexCapRefusalForObservation();
 #ifndef NDEBUG
 		printf("[Particle] uint16 index cap reached at %zu live particles; refusing spawn\n",
 		       particle.m_index); fflush(stdout);
@@ -869,6 +870,7 @@ int EmitterInstance::Update(TimeF currentTime)
             // here skips the TryConsume refusal that normally flags it.
             if (m_engine.SpawnBudgetExhausted())
             {
+                m_engine.NoteRuntimeGuardRefusalForObservation();
                 m_engine.NoteSpawnSuppressed();
                 m_nextSpawnUsesInitialDelay = false;
                 m_nextSpawnTime = currentTime + GetSpawnDelay();
@@ -1206,6 +1208,7 @@ EmitterInstance::EmitterInstance(TimeF currentTime, ParticleSystemInstance& syst
             // skipTime/delay iterations doing zero-work spawn rounds.
             if (m_engine.SpawnBudgetExhausted())
             {
+                m_engine.NoteRuntimeGuardRefusalForObservation();
                 m_engine.NoteSpawnSuppressed();
                 break;
             }

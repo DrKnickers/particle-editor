@@ -584,6 +584,7 @@ public:
     {
         if (!m_overloadGuardEnabled) return true;
         if (m_spawnBudget > 0) { m_spawnBudget--; return true; }
+        ++m_runtimeGuardRefusals;
         m_overloadThisFrame = true;
         return false;
     }
@@ -594,6 +595,7 @@ public:
     {
         if (!m_overloadGuardEnabled) return true;
         if (m_numEmitters < m_maxPreviewInstances) return true;
+        ++m_runtimeGuardRefusals;
         m_overloadThisFrame = true;
         return false;
     }
@@ -607,6 +609,11 @@ public:
     // TryConsume* refusal, so they must register the suppression here or
     // the latch would clear while spawning is still being suppressed.
     void NoteSpawnSuppressed() { m_overloadThisFrame = true; }
+    void NoteRuntimeGuardRefusalForObservation() { ++m_runtimeGuardRefusals; }
+    void NoteIndexCapRefusalForObservation() { ++m_indexCapRefusals; }
+    std::uint64_t RuntimeGuardRefusalCountForObservation() const { return m_runtimeGuardRefusals; }
+    std::uint64_t HardGuardRefusalCountForObservation() const { return m_hardGuardRefusals; }
+    std::uint64_t IndexCapRefusalCountForObservation() const { return m_indexCapRefusals; }
     // Latched flag the UI reads (stats/tick). True while any spawn was
     // suppressed during the last completed Update.
     bool IsSpawnOverloadActive() const { return m_overloadActive; }
@@ -1111,6 +1118,10 @@ private:
     int  m_maxPreviewParticles  = kDefaultMaxPreviewParticles;
     int  m_maxPreviewInstances  = kDefaultMaxPreviewParticles / kInstancesDivisor;
     int  m_spawnBudget       = kDefaultMaxPreviewParticles;
+    // Lifetime totals survive Clear(); observers subtract a reset baseline.
+    std::uint64_t m_runtimeGuardRefusals = 0;
+    std::uint64_t m_hardGuardRefusals = 0;
+    std::uint64_t m_indexCapRefusals = 0;
     // D3D9Ex device-state tracking.
     // m_presentSuspect: raised when a Present reports anything but D3D_OK, and
     // read at the top of Render(). Microsoft recommends querying

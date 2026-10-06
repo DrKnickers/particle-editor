@@ -181,6 +181,15 @@
       "uses": ["dxsdk"],
       "libs": ["d3d9.lib", "d3dx9.lib", "gdiplus.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
+    "test_observation_spec": {
+      "sources": ["src/host/ObservationSpecJson.cpp", "src/host/PreviewScenarioJson.cpp", "src/simulation/ParticleRandom.cpp"],
+      "uses": ["dxsdk"],
+      "libs": ["d3dx9.lib"]
+    },
+    "test_observation_lifecycle": {
+      "uses": ["dxsdk"],
+      "libs": ["d3dx9.lib"]
+    },
     "test_preview_scenario": {
       "sources": ["src/host/PreviewScenarioJson.cpp", "src/simulation/ParticleRandom.cpp"],
       "uses": ["dxsdk"],

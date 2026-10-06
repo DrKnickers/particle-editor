@@ -123,6 +123,8 @@
     <ClInclude Include="effect\AtomicSave.h" />
     <ClInclude Include="simulation\ParticleRandom.h" />
     <ClInclude Include="simulation\PreviewScenario.h" />
+    <ClInclude Include="simulation\ObservationSpec.h" />
+    <ClInclude Include="simulation\ObservationLifecycle.h" />
     <ClInclude Include="simulation\SpawnerDriver.h" />
     <ClInclude Include="simulation\SpawnerRandom.h" />
     <ClInclude Include="simulation\SpawnerPath.h" />
@@ -186,6 +188,7 @@
     <ClInclude Include="host\ReplayHostileCrt.h" />
     <ClInclude Include="host\ReplayProofRunner.h" />
     <ClInclude Include="host\PreviewScenarioJson.h" />
+    <ClInclude Include="host\ObservationSpecJson.h" />
     <ClInclude Include="host\DriveRunner.h" />
     <ClInclude Include="host\HostRunUtil.h" />
     <ClInclude Include="host\ClipTimeline.h" />
@@ -287,6 +290,7 @@
       <AdditionalIncludeDirectories>$(WindowsSdkDir)Include\$(WindowsSDKVersion)shared;$(WindowsSdkDir)Include\$(WindowsSDKVersion)um;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Include="host\PreviewScenarioJson.cpp" />
+    <ClCompile Include="host\ObservationSpecJson.cpp" />
     <ClCompile Include="host\RestoredSettings.cpp" />
     <ClCompile Include="host\WicEncode.cpp">
       <!-- Same include-order override as Compositor.cpp: wincodec.h is a

@@ -1,0 +1,237 @@
+#include "simulation/ObservationSpec.h"
+#include "host/ObservationSpecJson.h"
+#include "host/third_party/nlohmann/json.hpp"
+#include <cstdio>
+#include <cstring>
+#include <limits>
+
+static int g_failed = 0;
+#define CHECK(cond, msg) do {                              \
+    if (cond) { std::printf("  ok: %s\n", msg); }          \
+    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
+} while (0)
+
+static ObservationSpec ValidSpec()
+{
+    ObservationSpec spec;
+    spec.scenario.aloPath = L"web/apps/editor/tests/fixtures/singleton-emitter.alo";
+    return spec;
+}
+
+template<class T>
+static bool SameBits(T a, T b)
+{
+    return std::memcmp(&a, &b, sizeof(T)) == 0;
+}
+
+static bool SameSpec(const ObservationSpec& a, const ObservationSpec& b)
+{
+    const PreviewScenario& x = a.scenario;
+    const PreviewScenario& y = b.scenario;
+    return a.schemaVersion == b.schemaVersion && x.schemaVersion == y.schemaVersion &&
+        x.aloPath == y.aloPath && x.seed == y.seed && x.algorithmVersion == y.algorithmVersion &&
+        SameBits(x.clockAnchor, y.clockAnchor) &&
+        SameBits(x.spawnPosition.x, y.spawnPosition.x) &&
+        SameBits(x.spawnPosition.y, y.spawnPosition.y) &&
+        SameBits(x.spawnPosition.z, y.spawnPosition.z) &&
+        SameBits(x.spawnVelocity.x, y.spawnVelocity.x) &&
+        SameBits(x.spawnVelocity.y, y.spawnVelocity.y) &&
+        SameBits(x.spawnVelocity.z, y.spawnVelocity.z) &&
+        x.maxFrames == y.maxFrames && x.overloadGuardEnabled == y.overloadGuardEnabled &&
+        x.overloadGuardLimit == y.overloadGuardLimit &&
+        SameBits(x.estimatedParticlesPerInstance, y.estimatedParticlesPerInstance) &&
+        a.lifecycle.type == b.lifecycle.type && a.lifecycle.quietTailFrames == b.lifecycle.quietTailFrames &&
+        a.lifecycle.warmupFrames == b.lifecycle.warmupFrames && a.lifecycle.reviewFrames == b.lifecycle.reviewFrames &&
+        a.output.strideInterval == b.output.strideInterval && a.output.playbackStride == b.output.playbackStride &&
+        a.output.maxBytes == b.output.maxBytes;
+}
+
+static void Rejects(const ObservationSpec& spec, const char* field)
+{
+    CHECK(ValidateObservationSpec(spec).find(field) != std::string::npos,
+          "validation rejects with the field name");
+}
+
+static void RejectsJson(const std::string& text, ObservationSpec& parsed, const char* field)
+{
+    const ObservationSpec before = parsed;
+    CHECK(host::ParseObservationSpec(text, parsed).find(field) != std::string::npos,
+          "JSON rejects with the field name");
+    CHECK(SameSpec(before, parsed), "JSON failure leaves every output field untouched");
+}
+
+int main()
+{
+    std::printf("test_observation_spec\n");
+    using Type = ObservationSpec::Lifecycle::Type;
+    using nlohmann::json;
+    const ObservationSpec defaults = ValidSpec();
+    CHECK(ValidateObservationSpec(defaults).empty(), "explicit fixture path makes defaults valid");
+    CHECK(defaults.schemaVersion == 1 && defaults.lifecycle.type == Type::Oneshot &&
+          defaults.lifecycle.quietTailFrames == 15 && defaults.lifecycle.warmupFrames == 0 &&
+          defaults.lifecycle.reviewFrames == 1 && defaults.output.strideInterval == 15 &&
+          defaults.output.playbackStride == 0 && defaults.output.maxBytes == 209715200ull,
+          "observation defaults match schema 1");
+    CHECK(ObservationRunCap(defaults) == defaults.scenario.maxFrames, "oneshot cap is the scenario cap");
+    ObservationSpec spec = defaults;
+    spec.schemaVersion = 2; Rejects(spec, "schemaVersion");
+    spec.scenario.aloPath.clear();
+    CHECK(ValidateObservationSpec(spec).find("aloPath") != std::string::npos,
+          "scenario validation precedes observation validation");
+    spec = defaults; spec.lifecycle.type = static_cast<Type>(2); Rejects(spec, "type");
+    for (int value : { 0, 3601, 36001 })
+    {
+        spec = defaults; spec.scenario.maxFrames = value; Rejects(spec, "maxFrames");
+    }
+    for (int value : { 1, 3600 })
+    {
+        spec = defaults; spec.scenario.maxFrames = value; spec.output.strideInterval = 600;
+        CHECK(ValidateObservationSpec(spec).empty(), "observe maxFrames inclusive boundaries");
+    }
+    for (Type type : { Type::Oneshot, Type::Continuous })
+    {
+        for (int value : { 0, 601, 1, 600 })
+        {
+            spec = defaults; spec.lifecycle.type = type; spec.lifecycle.quietTailFrames = value;
+            if (value == 1 || value == 600)
+                CHECK(ValidateObservationSpec(spec).empty(), "quiet tail inclusive bounds apply to both types");
+            else Rejects(spec, "quietTailFrames");
+        }
+    }
+    for (int value : { 0, 601, 1, 600 })
+    {
+        spec = defaults; spec.scenario.maxFrames = 1; spec.output.strideInterval = value;
+        if (value == 1 || value == 600)
+            CHECK(ValidateObservationSpec(spec).empty(), "stride interval inclusive boundaries");
+        else Rejects(spec, "strideInterval");
+    }
+    for (int value : { -1, 5, 0, 1, 2, 3, 4 })
+    {
+        spec = defaults; spec.output.playbackStride = value;
+        if (value < 0 || value > 4) Rejects(spec, "playbackStride");
+        else CHECK(ValidateObservationSpec(spec).empty(), "all playback stride values accepted");
+    }
+    for (std::uint64_t value : { 0ull, 1048575ull, 1048576ull, 2147483648ull,
+                                2147483649ull, (std::numeric_limits<std::uint64_t>::max)() })
+    {
+        spec = defaults; spec.output.maxBytes = value;
+        if (value == 1048576ull || value == 2147483648ull)
+            CHECK(ValidateObservationSpec(spec).empty(), "maxBytes inclusive boundaries");
+        else Rejects(spec, "maxBytes");
+    }
+    spec = defaults; spec.output.strideInterval = 1; spec.scenario.maxFrames = 62;
+    CHECK(ValidateObservationSpec(spec).empty(), "64 stride-frame bound is inclusive");
+    spec.scenario.maxFrames = 63; Rejects(spec, "strideInterval");
+    spec.scenario.maxFrames = 125; spec.output.strideInterval = 2;
+    CHECK(ValidateObservationSpec(spec).empty(), "stride bound uses integer division");
+    spec.scenario.maxFrames = 126; Rejects(spec, "strideInterval");
+    spec = defaults; spec.lifecycle.type = Type::Continuous;
+    CHECK(ValidateObservationSpec(spec).empty() && spec.lifecycle.quietTailFrames == 15,
+          "continuous keeps default quiet tail");
+    spec.lifecycle.warmupFrames = -1; Rejects(spec, "warmupFrames");
+    spec.lifecycle.warmupFrames = 0; spec.lifecycle.reviewFrames = 0; Rejects(spec, "reviewFrames");
+    spec.lifecycle.warmupFrames = 599; spec.lifecycle.reviewFrames = 1;
+    CHECK(ValidateObservationSpec(spec).empty() && ObservationRunCap(spec) == 600,
+          "continuous sum equal to maxFrames is valid and is the cap");
+    spec.lifecycle.reviewFrames = 2; Rejects(spec, "reviewFrames");
+    spec.lifecycle.warmupFrames = (std::numeric_limits<int>::max)();
+    spec.lifecycle.reviewFrames = (std::numeric_limits<int>::max)(); Rejects(spec, "warmupFrames");
+    spec = defaults; spec.lifecycle.type = Type::Continuous;
+    spec.lifecycle.warmupFrames = 100; spec.lifecycle.reviewFrames = 62; spec.output.strideInterval = 1;
+    CHECK(ValidateObservationSpec(spec).empty() && ObservationRunCap(spec) == 162,
+          "continuous stride count uses reviewFrames and cap uses the sum");
+    spec.lifecycle.reviewFrames = 63; Rejects(spec, "strideInterval");
+
+    ObservationSpec parsed;
+    const json defaultJson = json::parse(host::SerializeObservationSpec(defaults));
+    CHECK(host::ParseObservationSpec(defaultJson.dump(), parsed).empty() && SameSpec(defaults, parsed),
+          "every default field round trips");
+    spec = defaults;
+    spec.scenario.aloPath = L"C:\\effects\\\u96ea\U0001F680.alo";
+    spec.scenario.seed = 0xFFFFFFFFu;
+    spec.scenario.clockAnchor = -0.0f;
+    spec.scenario.spawnPosition = D3DXVECTOR3(0.1f, -0.0f, (std::numeric_limits<float>::denorm_min)());
+    spec.scenario.spawnVelocity = D3DXVECTOR3(-123.4567f, 9999.999f, -10000.0f);
+    spec.scenario.maxFrames = 3600;
+    spec.scenario.overloadGuardEnabled = false;
+    spec.scenario.overloadGuardLimit = 1000000;
+    spec.lifecycle.type = Type::Continuous;
+    spec.lifecycle.quietTailFrames = 600;
+    spec.lifecycle.warmupFrames = 200;
+    spec.lifecycle.reviewFrames = 3400;
+    spec.output.strideInterval = 600;
+    spec.output.playbackStride = 4;
+    spec.output.maxBytes = 2147483648ull;
+    for (double value : { 12345.678901234567, -0.0, (std::numeric_limits<double>::denorm_min)(),
+                         (std::numeric_limits<double>::max)() })
+    {
+        spec.scenario.estimatedParticlesPerInstance = value;
+        CHECK(host::ParseObservationSpec(host::SerializeObservationSpec(spec), parsed).empty() && SameSpec(spec, parsed),
+              "non-default fields, Unicode and floating edge bits round trip");
+    }
+    for (const char* level : { "", "scenario", "lifecycle", "output" })
+    {
+        json input = defaultJson;
+        if (*level) input[level]["unknown"] = 0;
+        else input["unknown"] = 0;
+        RejectsJson(input.dump(), parsed, "unknown");
+    }
+    for (const char* level : { "scenario", "lifecycle", "output" })
+    {
+        for (const json& wrong : { json(nullptr), json::array(), json("wrong"), json(true) })
+        {
+            json input = defaultJson; input[level] = wrong;
+            RejectsJson(input.dump(), parsed, level);
+        }
+    }
+    for (const char* level : { "", "lifecycle", "output" })
+    {
+        const json& object = *level ? defaultJson.at(level) : defaultJson;
+        for (auto it = object.begin(); it != object.end(); ++it)
+        {
+            if (it.key() == "scenario" || it.key() == "lifecycle" || it.key() == "output") continue;
+            for (const json& wrong : { json(nullptr), json::object(), json(true), json(1.5), json("wrong") })
+            {
+                json input = defaultJson;
+                if (std::string(level) == "lifecycle") input["lifecycle"]["type"] = "continuous";
+                json& target = *level ? input[level] : input;
+                target[it.key()] = wrong;
+                RejectsJson(input.dump(), parsed, it.key().c_str());
+            }
+            if (it.key() == "type") continue;
+            for (const json& wrong : { json(-1), json(18446744073709551615ull) })
+            {
+                json input = defaultJson;
+                if (std::string(level) == "lifecycle") input["lifecycle"]["type"] = "continuous";
+                json& target = *level ? input[level] : input;
+                target[it.key()] = wrong;
+                RejectsJson(input.dump(), parsed, it.key().c_str());
+            }
+        }
+    }
+    json input = defaultJson; input["scenario"]["maxFrames"] = 3601;
+    RejectsJson(input.dump(), parsed, "maxFrames");
+    input = defaultJson; input["lifecycle"]["type"] = "loop";
+    RejectsJson(input.dump(), parsed, "type");
+    input["lifecycle"]["type"] = "continuous"; input["lifecycle"]["warmupFrames"] = 600;
+    RejectsJson(input.dump(), parsed, "reviewFrames");
+    input = defaultJson; input["output"]["strideInterval"] = 1;
+    RejectsJson(input.dump(), parsed, "strideInterval");
+    CHECK(host::ParseObservationSpec("{\"scenario\":{\"aloPath\":\"fixture.alo\"}}", parsed).empty() &&
+          parsed.lifecycle.type == Type::Oneshot && parsed.output.maxBytes == defaults.output.maxBytes,
+          "omitted observation fields retain defaults");
+    for (const char* text : { "{", "[]", "null", "true", "{}" })
+    {
+        const ObservationSpec before = parsed;
+        CHECK(!host::ParseObservationSpec(text, parsed).empty(), "malformed or missing scenario rejected");
+        CHECK(SameSpec(before, parsed), "malformed input leaves output unchanged");
+    }
+    spec = defaults; spec.output.maxBytes = 0;
+    bool threw = false;
+    try { host::SerializeObservationSpec(spec); }
+    catch (const std::exception&) { threw = true; }
+    CHECK(threw, "serializer rejects invalid specs");
+    std::printf("%s\n", g_failed ? "=== FAILED ===" : "=== ALL PASS ===");
+    std::printf("(%d failure%s)\n", g_failed, g_failed == 1 ? "" : "s");
+    return g_failed ? 1 : 0;
+}

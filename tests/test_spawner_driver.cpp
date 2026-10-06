@@ -595,6 +595,25 @@ int main()
         }
     }
 
+    {
+        SpawnerDriver d;
+        SpawnerConfig c;
+        c.mode = SpawnerConfig::Mode::Manual;
+        c.burstSize = 1;
+        d.SetConfig(c);
+        d.Reset();
+        CHECK(d.IsIdle(), "observation: Reset with no armed work is idle");
+        d.Trigger(FakeSystem(), FakeEngine());
+        CHECK(!d.IsIdle(), "observation: armed Manual burst is not idle");
+        g_activeCount = 0;
+        const int before = g_spawnCalls;
+        d.Tick(1.0f / 60.0f, FakeSystem(), FakeEngine());
+        CHECK(g_spawnCalls == before + 1 && d.IsIdle(),
+              "observation: refused Manual spawn leaves the driver idle");
+        d.Reset();
+        CHECK(d.IsIdle(), "observation: Reset after a refusal remains idle");
+    }
+
     std::printf("%s\n", g_failed ? "=== FAILED ===" : "=== ALL PASS ===");
     std::printf("(%d failure%s)\n", g_failed, g_failed == 1 ? "" : "s");
     return g_failed ? 1 : 0;
