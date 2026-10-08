@@ -439,6 +439,46 @@ static std::vector<Request> Sequence()
     };
 }
 
+// Inputs added after the PR 3 review, each on a fresh load of the synthetic
+// fixture, recorded (like everything above) from the handlers before PR 3:
+// a non-string lockTo, non-finite values, mixed-batch error precedence in
+// both orders, -0.0, and the 1000-collision dedup cap (a 1002-key paste onto
+// one time: the last key lands on an occupied time).
+static std::vector<Request> ExtraBattery()
+{
+    json cap = json::array();
+    for (int i = 0; i < 1002; i++) cap.push_back({{"time", 50}, {"value", 0.5}});
+    return {
+        {"emitters/set-track-lock", {{"id", 1}, {"channel", "green"}, {"lockTo", 5}}},
+        {"emitters/add-track-key", {{"id", 0}, {"track", "scale"}, {"time", 33}, {"value", 1e300}}},
+        {"emitters/add-track-keys", {{"id", 0}, {"track", "scale"}, {"keys", json::array({{{"time", 1e300}, {"value", 1}}, {{"time", "x"}, {"value", 1}}})}}},
+        {"emitters/add-track-keys", {{"id", 0}, {"track", "scale"}, {"keys", json::array({{{"time", "x"}, {"value", 1}}, {{"time", 1e300}, {"value", 1}}})}}},
+        {"emitters/add-track-keys", {{"id", 0}, {"track", "scale"}, {"keys", json::array({{{"time", 10}, {"value", 1}}, {{"time", 20}, {"value", -1e300}}})}}},
+        {"emitters/set-track-key", {{"id", 0}, {"track", "red"}, {"oldTime", 25}, {"newTime", 1e300}, {"newValue", 0.5}}},
+        {"emitters/set-track-key", {{"id", 0}, {"track", "red"}, {"oldTime", 25}, {"newTime", 30}, {"newValue", 1e300}}},
+        {"emitters/set-track-key", {{"id", 0}, {"track", "red"}, {"oldTime", -0.0}, {"newTime", 10}, {"newValue", 0.5}}},
+        {"emitters/set-track-key", {{"id", 0}, {"track", "red"}, {"oldTime", 25}, {"newTime", -0.0}, {"newValue", 0.5}}},
+        {"emitters/delete-track-keys", {{"id", 0}, {"track", "red"}, {"times", Times({-0.0, 25})}}},
+        {"emitters/add-track-key", {{"id", 0}, {"track", "scale"}, {"time", -0.0}, {"value", 1}}},
+        {"emitters/add-track-keys", {{"id", 0}, {"track", "scale"}, {"keys", cap}}},
+    };
+}
+
+// Moves a border, then edits against the new one: keys added below 0 and
+// above 100 become the first and last keys, so 0 and 100 turn interior.
+static std::vector<Request> BorderSequence()
+{
+    return {
+        {"emitters/add-track-key", {{"id", 1}, {"track", "red"}, {"time", -10}, {"value", 0.3}}},
+        {"emitters/add-track-key", {{"id", 1}, {"track", "red"}, {"time", 150}, {"value", 0.6}}},
+        {"emitters/set-track-key", {{"id", 1}, {"track", "red"}, {"oldTime", -10}, {"newTime", 5}, {"newValue", 0.9}}},
+        {"emitters/set-track-key", {{"id", 1}, {"track", "red"}, {"oldTime", 0}, {"newTime", 5}, {"newValue", 0.2}}},
+        {"emitters/delete-track-keys", {{"id", 1}, {"track", "red"}, {"times", Times({100, 150, -10, 25})}}},
+        {"emitters/set-track-key", {{"id", 1}, {"track", "red"}, {"oldTime", 150}, {"newTime", 120}, {"newValue", 0.1}}},
+        {"emitters/get-tracks", {{"id", 1}}},
+    };
+}
+
 // ===========================================================================
 // Runner
 // ===========================================================================
@@ -453,9 +493,12 @@ static std::string Record(host::BridgeDispatcher& d, size_t n, const std::string
     std::string calls;
     for (const std::string& c : g_calls) calls += (calls.empty() ? "" : " ") + c;
 
+    std::string params = r.params.dump();
+    if (params.size() > 400) params = "params#" + Hex64(Fnv1a(params.data(), params.size()));
+
     char num[16];
     std::snprintf(num, sizeof(num), "#%04u", (unsigned)n);
-    return std::string(num) + " " + fixture + " " + r.kind + " " + r.params.dump()
+    return std::string(num) + " " + fixture + " " + r.kind + " " + params
          + " => " + res + " | " + (calls.empty() ? "-" : calls)
          + " | post=" + CurrentStateTag();
 }
@@ -512,6 +555,14 @@ int main(int argc, char** argv)
     g_system = Load(fixtures.front().image);
     for (const Request& r : Sequence())
         lines.push_back(Record(*d, ++n, "synthetic-seq", r));
+    for (const Request& r : ExtraBattery())
+    {
+        g_system = Load(fixtures.front().image);
+        lines.push_back(Record(*d, ++n, "synthetic", r));
+    }
+    g_system = Load(fixtures.front().image);
+    for (const Request& r : BorderSequence())
+        lines.push_back(Record(*d, ++n, "synthetic-border", r));
     g_system.reset();
 
     if (update)

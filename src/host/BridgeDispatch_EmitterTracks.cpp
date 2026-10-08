@@ -5,7 +5,7 @@
 #include "BridgeDispatchShared.h"
 #include "BridgeRequestContext.h"
 
-#include <cmath>                  // std::isfinite (track-key validation)
+#include "effect/ParticleAuthoring.h"   // shared track-edit rules (Plan*/Apply*)
 
 using nlohmann::json;
 
@@ -183,13 +183,6 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
             return true;
         }
 
-        // Border keys = first + last in the multiset (ordered by
-        // Key::operator< on `time`). std::multiset::begin / rbegin
-        // are the cheapest way to grab them; cache the time values
-        // for the skip check below.
-        const float firstTime = track->keys.begin()->time;
-        const float lastTime  = track->keys.rbegin()->time;
-
         // Capture undo BEFORE any erase — if every requested time is
         // a border-key no-op we'll discover that in the loop and
         // the capture is a wasted snapshot, but Undo coalescing
@@ -201,19 +194,11 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
         for (const auto& t : timesJson)
         {
             if (!t.is_number()) continue;
-            float timeVal = t.get<float>();
-            // Silent-skip border keys.
-            if (timeVal == firstTime || timeVal == lastTime) continue;
-            // std::multiset::find takes a `Key` constructed from the
-            // time alone; operator< compares only on time so the
-            // probe value's `value` field is irrelevant.
-            ParticleSystem::Emitter::Track::Key probe(timeVal, 0.0f);
-            auto it = track->keys.find(probe);
-            if (it != track->keys.end())
-            {
-                track->keys.erase(it);
-                removed++;
-            }
+            // Border keys and absent times are silently skipped.
+            const TrackKeyPlan plan = PlanDeleteTrackKey(*track, t.get<float>());
+            if (!plan.willMutate) continue;
+            ApplyDeleteTrackKey(*track, plan);
+            removed++;
         }
 
         ctx.SendOk(json::object());
@@ -260,17 +245,13 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
             return true;
         }
 
-        ParticleSystem::Emitter::Track::InterpolationType next;
-        if      (interpName == "linear") next = ParticleSystem::Emitter::Track::IT_LINEAR;
-        else if (interpName == "smooth") next = ParticleSystem::Emitter::Track::IT_SMOOTH;
-        else if (interpName == "step")   next = ParticleSystem::Emitter::Track::IT_STEP;
-        else
+        const InterpolationPlan plan = PlanSetTrackInterpolation(*track, interpName);
+        if (plan.outcome == EditOutcome::Rejected)
         {
-            ctx.SendErr("unknown interpolation");
+            ctx.SendErr(plan.reason);
             return true;
         }
-
-        if (track->interpolation == next)
+        if (!plan.willMutate)
         {
             // No-op — don't capture undo or fire events.
             ctx.SendOk(json::object());
@@ -278,7 +259,7 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
         }
 
         captureUndo();
-        track->interpolation = next;
+        ApplySetTrackInterpolation(*track, plan);
 
         propagateLinkGroup(target); // sync link-group siblings
         ctx.SendOk(json::object());
@@ -308,9 +289,8 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
     // Locking rules (mirror legacy):
     //   - Only the first four channels (RGBA) participate.
     //   - Channel can only lock to an *earlier* channel (Green→Red,
-    //     Blue→Red/Green, Alpha→Red/Green/Blue). Other combinations
-    //     silently become "unlock" — UI surface already restricts
-    //     options so this is defensive only.
+    //     Blue→Red/Green, Alpha→Red/Green/Blue). Any other non-null
+    //     lockTo is an error (PlanSetTrackLock in ParticleAuthoring).
     //   - `lockTo: null` restores `tracks[i] = &trackContents[i]`
     //     (channel owns its keys again; previous trackContents[i]
     //     is preserved because the lock didn't touch it).
@@ -338,49 +318,29 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
             return true;
         }
 
-        // Only RGBA participate. Silently accept and no-op for the
-        // other three — keeps the React side simple (it can always
-        // dispatch without first checking which channel it's on).
-        if (channelIdx >= 4)
+        // Only RGBA participate: the other three accept and no-op, which
+        // keeps the React side simple (it can always dispatch without first
+        // checking which channel it's on). A non-null lockTo must resolve to
+        // an RGBA channel EARLIER than this one; anything else is an error,
+        // not a silent unlock, so a typo'd --record step aborts (its
+        // ClassifyResponse sees the error) instead of recording as success.
+        const int lockToIdx = lockToIsNull ? -1 : trackNameToIndex(lockToName);
+        const TrackLockPlan plan = PlanSetTrackLock(*target, channelIdx, lockToIdx, lockToIsNull);
+        if (plan.outcome == EditOutcome::Rejected)
         {
-            ctx.SendOk(json::object());
+            ctx.SendErr(plan.reason);
             return true;
         }
-
-        ParticleSystem::Emitter::Track* desired = nullptr;
-        if (lockToIsNull)
+        if (!plan.willMutate)
         {
-            desired = &target->trackContents[channelIdx];
-        }
-        else
-        {
-            int targetIdx = trackNameToIndex(lockToName);
-            // A non-null lockTo must resolve to a valid RGBA channel EARLIER than
-            // us. Previously an invalid name silently fell back to unlock and still
-            // returned OK — harmless for the React UI (its dropdown only offers
-            // valid targets) but a silent-wrong-state trap for --record, where a
-            // typo'd channel would record as success. Reject it so the record
-            // dispatch aborts (ClassifyResponse sees the error).
-            if (targetIdx >= 0 && targetIdx < 4 && targetIdx < channelIdx)
-            {
-                desired = &target->trackContents[targetIdx];
-            }
-            else
-            {
-                ctx.SendErr("invalid lockTo channel (must be an earlier RGBA channel)");
-                return true;
-            }
-        }
-
-        if (target->tracks[channelIdx] == desired)
-        {
-            // No-op — don't capture undo or fire events.
+            // Non-RGBA channel, or already in the requested state — don't
+            // capture undo or fire events.
             ctx.SendOk(json::object());
             return true;
         }
 
         captureUndo();
-        target->tracks[channelIdx] = desired;
+        ApplySetTrackLock(*target, plan);
 
         propagateLinkGroup(target); // sync link-group siblings
         // Re-seat live particle track cursors for this channel. The lock
@@ -404,19 +364,16 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
     // Border keys (first + last in time order on the multiset) have
     // their `newTime` silently overridden to `oldTime` — only the
     // value moves. This mirrors the React-side drag clamping; the
-    // host is the source of truth.
-    //
-    // `std::multiset<Key>::find` accepts a Key constructed from the
-    // time alone — operator< compares only on `time`, so the probe
-    // Key's `value` field is irrelevant. Erase + insert is the
-    // ordered-key idiom (no in-place mutation of the ordering key).
+    // host is the source of truth. The border rule and the erase +
+    // insert live in src/effect/ParticleAuthoring (PlanSetTrackKey /
+    // ApplySetTrackKey), shared with the --tool verbs.
     if (kind == "emitters/set-track-key")
     {
         int id = params.value("id", -1);
         std::string trackName = params.value("track", std::string{});
-        float oldTime  = params.value("oldTime",  0.0f);
-        float newTime  = params.value("newTime",  0.0f);
-        float newValue = params.value("newValue", 0.0f);
+        const float oldTime  = params.value("oldTime",  0.0f);
+        const float newTime  = params.value("newTime",  0.0f);
+        const float newValue = params.value("newValue", 0.0f);
 
         ParticleSystem::Emitter* target = getEmitterById(id);
         if (target == nullptr)
@@ -433,28 +390,23 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
         }
 
         ParticleSystem::Emitter::Track* track = target->tracks[trackIdx];
-        if (track == nullptr || track->keys.empty())
+        if (track == nullptr)
         {
             // Nothing to move — silent ok.
             ctx.SendOk(json::object());
             return true;
         }
 
-        // Identify border keys before any mutation.
-        const float firstTime = track->keys.begin()->time;
-        const float lastTime  = track->keys.rbegin()->time;
-        const bool isBorder = (oldTime == firstTime || oldTime == lastTime);
-        if (isBorder)
+        // A border key keeps its time and still takes the new value.
+        const TrackKeyPlan plan = PlanSetTrackKey(*track, oldTime, newTime, newValue);
+        if (plan.outcome == EditOutcome::Rejected)
         {
-            // Border keys: time fixed.
-            newTime = oldTime;
+            ctx.SendErr(plan.reason);
+            return true;
         }
-
-        ParticleSystem::Emitter::Track::Key probe(oldTime, 0.0f);
-        auto it = track->keys.find(probe);
-        if (it == track->keys.end())
+        if (!plan.willMutate)
         {
-            // Key not found at oldTime — silent ok (matches the
+            // Empty track, or no key at oldTime — silent ok (matches the
             // overlay's read-modify-write semantics).
             ctx.SendOk(json::object());
             return true;
@@ -472,8 +424,7 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
             0x80000000u | ((static_cast<DWORD>(trackIdx) & 0x7FFFu) << 16)
                         | (static_cast<DWORD>(id) & 0xFFFFu);
         captureUndo(coalesceKey);
-        track->keys.erase(it);
-        track->keys.insert(ParticleSystem::Emitter::Track::Key(newTime, newValue));
+        ApplySetTrackKey(*track, plan);
 
         propagateLinkGroup(target); // sync link-group siblings
         // Re-seat the live per-particle track cursors. EmitterInstance
@@ -504,22 +455,25 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
     {
         int id = params.value("id", -1);
         std::string trackName = params.value("track", std::string{});
-        // `time`/`value` must be present + numeric — a missing field defaulting
-        // to 0.0f would silently insert a wrong key (e.g. a typo'd param name
-        // in a --record clip records as success, publishing a bad curve).
-        if (!params.contains("time") || !params["time"].is_number()
-            || !params.contains("value") || !params["value"].is_number())
+        // `time`/`value` must be present, numeric and finite — a missing field
+        // defaulting to 0.0f would silently insert a wrong key (e.g. a typo'd
+        // param name in a --record clip records as success, publishing a bad
+        // curve).
+        ProposedKey key{};
+        key.numeric = params.contains("time")  && params["time"].is_number()
+                   && params.contains("value") && params["value"].is_number();
+        if (key.numeric)
         {
-            ctx.SendErr("add-track-key requires numeric 'time' and 'value'");
+            key.time  = params["time"].get<float>();
+            key.value = params["value"].get<float>();
+        }
+        const EditResult valid = ValidateAddTrackKey(key);
+        if (valid.outcome == EditOutcome::Rejected)
+        {
+            ctx.SendErr(valid.reason);
             return true;
         }
-        float time  = params["time"].get<float>();
-        float value = params["value"].get<float>();
-        if (!std::isfinite(time) || !std::isfinite(value))
-        {
-            ctx.SendErr("add-track-key 'time'/'value' must be finite");
-            return true;
-        }
+        const float value = key.value;
 
         ParticleSystem::Emitter* target = getEmitterById(id);
         if (target == nullptr)
@@ -545,16 +499,8 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
             return true;
         }
 
-        // Dedupe-by-epsilon: bump until the time is unique. Bounded
-        // by 1000 iterations as a defensive safety net so a pathological
-        // dataset can't lock the dispatch thread.
-        ParticleSystem::Emitter::Track::Key probe(time, 0.0f);
-        int safety = 1000;
-        while (track->keys.find(probe) != track->keys.end() && safety-- > 0)
-        {
-            time += 0.001f;
-            probe = ParticleSystem::Emitter::Track::Key(time, 0.0f);
-        }
+        // Dedupe-by-epsilon: bump until the time is unique (bounded).
+        const float time = DedupedInsertTime(*track, key.time);
 
         captureUndo();
         track->keys.insert(ParticleSystem::Emitter::Track::Key(time, value));
@@ -593,29 +539,29 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
             return true;
         }
 
-        // Validate the WHOLE batch before mutating anything. Rejecting
-        // mid-loop would leave half a paste in the document behind an
-        // error envelope — a state the caller never asked for and has no
-        // single Ctrl+Z for.
-        struct PendingKey { float time; float value; };
-        std::vector<PendingKey> pending;
+        // Validate the WHOLE batch before mutating anything (and before the
+        // emitter lookup, so a bad key wins). Rejecting mid-loop would leave
+        // half a paste in the document behind an error envelope — a state
+        // the caller never asked for and has no single Ctrl+Z for.
+        std::vector<ProposedKey> pending;
         for (const auto& k : params["keys"])
         {
-            if (!k.is_object()
-                || !k.contains("time")  || !k["time"].is_number()
-                || !k.contains("value") || !k["value"].is_number())
+            ProposedKey pk{};
+            pk.numeric = k.is_object()
+                      && k.contains("time")  && k["time"].is_number()
+                      && k.contains("value") && k["value"].is_number();
+            if (pk.numeric)
             {
-                ctx.SendErr("add-track-keys requires numeric 'time' and 'value' on every key");
-                return true;
+                pk.time  = k["time"].get<float>();
+                pk.value = k["value"].get<float>();
             }
-            const float t = k["time"].get<float>();
-            const float v = k["value"].get<float>();
-            if (!std::isfinite(t) || !std::isfinite(v))
-            {
-                ctx.SendErr("add-track-keys 'time'/'value' must be finite");
-                return true;
-            }
-            pending.push_back(PendingKey{t, v});
+            pending.push_back(pk);
+        }
+        const EditResult valid = ValidateBatchKeys(pending);
+        if (valid.outcome == EditOutcome::Rejected)
+        {
+            ctx.SendErr(valid.reason);
+            return true;
         }
 
         ParticleSystem::Emitter* target = getEmitterById(id);
@@ -651,20 +597,12 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
         captureUndo();
 
         json inserted = json::array();
-        for (const PendingKey& pk : pending)
+        for (const ProposedKey& pk : pending)
         {
-            float time = pk.time;
-            // Dedupe-by-epsilon per key, bounded by 1000 iterations as the
-            // singular handler is. Earlier keys of this same batch are
-            // already in the multiset, so a paste onto its own source
-            // times bumps rather than aliasing.
-            ParticleSystem::Emitter::Track::Key probe(time, 0.0f);
-            int safety = 1000;
-            while (track->keys.find(probe) != track->keys.end() && safety-- > 0)
-            {
-                time += 0.001f;
-                probe = ParticleSystem::Emitter::Track::Key(time, 0.0f);
-            }
+            // Dedupe-by-epsilon per key, as the singular handler does.
+            // Earlier keys of this same batch are already in the multiset,
+            // so a paste onto its own source times bumps rather than aliasing.
+            const float time = DedupedInsertTime(*track, pk.time);
             track->keys.insert(ParticleSystem::Emitter::Track::Key(time, pk.value));
             inserted.push_back(json{{"time", time}, {"value", pk.value}});
         }
