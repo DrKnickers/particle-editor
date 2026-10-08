@@ -8,6 +8,7 @@
 #include "SpawnSchedule.h"   // ReconcileNextSpawnTime (rate-edit clamp)
 #include "BounceCatchUp.h"   // GROUND_BOUNCE catch-up loop
 #include "ParticleSystemInstance.h"
+#include "effect/ParticleAuthoring.h"   // AtlasGridSide
 using namespace std;
 
 // [norm-dbg] Gated behind the ALO_SHADER_DIAG env var (matches the repo's ALO_*
@@ -714,7 +715,7 @@ void EmitterInstance::onParticleSystemChanged(const Engine& engine, int track)
         m_nParticlesPerBurst = (!m_emitter.useBursts) ? 1 : m_emitter.nParticlesPerBurst;
 		m_spawnDelay         = (!m_emitter.useBursts) ? 1.0f / m_emitter.nParticlesPerSecond : max(0.01f, m_emitter.burstDelay);   // Ensure burst delay isn't 0
 		m_acceleration       = D3DXVECTOR3(m_emitter.acceleration) + m_emitter.gravity * engine.GetGravity();
-		m_textureSizeSqrt    = (int)floor(sqrtf((float)max(1, m_emitter.textureSize)));
+		m_textureSizeSqrt    = AtlasGridSide(m_emitter.textureSize);
 
 		// The next spawn was scheduled against the OLD delay, and recomputing
 		// m_spawnDelay above does not move it — so raising the rate on a slow

@@ -147,6 +147,11 @@
       "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"],
       "release": true
     },
+    "test_particle_authoring": {
+      "sources": ["src/effect/ParticleAuthoring.cpp", "src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp"],
+      "uses": ["expat", "dxsdk", "webview2"],
+      "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
     "test_particle_compaction": {},
     "test_particle_mipfilter": {},
     "test_particle_random": {

@@ -102,6 +102,9 @@
     <ClInclude Include="effect\Rescale.h">
       <Filter>Header Files\effect</Filter>
     </ClInclude>
+    <ClInclude Include="effect\ParticleAuthoring.h">
+      <Filter>Header Files\effect</Filter>
+    </ClInclude>
     <ClInclude Include="simulation\ParticleRandom.h">
       <Filter>Header Files\simulation</Filter>
     </ClInclude>
@@ -516,6 +519,9 @@
       <Filter>Source Files\simulation</Filter>
     </ClCompile>
     <ClCompile Include="effect\Rescale.cpp">
+      <Filter>Source Files\effect</Filter>
+    </ClCompile>
+    <ClCompile Include="effect\ParticleAuthoring.cpp">
       <Filter>Source Files\effect</Filter>
     </ClCompile>
     <ClCompile Include="rendering\SphericalHarmonics.cpp">

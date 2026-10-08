@@ -119,6 +119,7 @@
     <ClInclude Include="effect\ParticleSystem.h" />
     <ClInclude Include="simulation\ParticleSystemInstance.h" />
     <ClInclude Include="effect\Rescale.h" />
+    <ClInclude Include="effect\ParticleAuthoring.h" />
     <ClInclude Include="effect\Autosave.h" />
     <ClInclude Include="effect\AtomicSave.h" />
     <ClInclude Include="simulation\ParticleRandom.h" />
@@ -254,6 +255,7 @@
     <ClCompile Include="effect\ParticleSystemIO.cpp" />
     <ClCompile Include="simulation\ParticleSystemInstance.cpp" />
     <ClCompile Include="effect\Rescale.cpp" />
+    <ClCompile Include="effect\ParticleAuthoring.cpp" />
     <ClCompile Include="effect\Autosave.cpp" />
     <ClCompile Include="effect\AtomicSave.cpp" />
     <ClCompile Include="simulation\ParticleRandom.cpp" />
