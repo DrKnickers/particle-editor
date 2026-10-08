@@ -398,7 +398,8 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
         }
 
         // A border key keeps its time and still takes the new value.
-        const TrackKeyPlan plan = PlanSetTrackKey(*track, oldTime, newTime, newValue);
+        const TrackKeyPlan plan = PlanSetTrackKey(*track, oldTime, newTime, newValue,
+                                                  IsColorTrack(trackIdx));
         if (plan.outcome == EditOutcome::Rejected)
         {
             ctx.SendErr(plan.reason);
@@ -455,10 +456,12 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
     {
         int id = params.value("id", -1);
         std::string trackName = params.value("track", std::string{});
-        // `time`/`value` must be present, numeric and finite — a missing field
-        // defaulting to 0.0f would silently insert a wrong key (e.g. a typo'd
-        // param name in a --record clip records as success, publishing a bad
-        // curve).
+        // `time`/`value` must be present, numeric and finite, the time within
+        // [0, 100] and a color value within [0, 1] — a missing field defaulting
+        // to 0.0f would silently insert a wrong key (e.g. a typo'd param name in
+        // a --record clip records as success, publishing a bad curve), and an
+        // out-of-range key is re-timed or breaks the file on save. The track
+        // name resolves without the emitter, so these checks still come first.
         ProposedKey key{};
         key.numeric = params.contains("time")  && params["time"].is_number()
                    && params.contains("value") && params["value"].is_number();
@@ -467,7 +470,7 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
             key.time  = params["time"].get<float>();
             key.value = params["value"].get<float>();
         }
-        const EditResult valid = ValidateAddTrackKey(key);
+        const EditResult valid = ValidateAddTrackKey(key, IsColorTrack(trackNameToIndex(trackName)));
         if (valid.outcome == EditOutcome::Rejected)
         {
             ctx.SendErr(valid.reason);
@@ -557,7 +560,7 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
             }
             pending.push_back(pk);
         }
-        const EditResult valid = ValidateBatchKeys(pending);
+        const EditResult valid = ValidateBatchKeys(pending, IsColorTrack(trackNameToIndex(trackName)));
         if (valid.outcome == EditOutcome::Rejected)
         {
             ctx.SendErr(valid.reason);

@@ -479,6 +479,20 @@ static std::vector<Request> BorderSequence()
     };
 }
 
+// Track-key bounds (each on a fresh load): an out-of-range color value on
+// add and set, a single add at an occupied 100, and a Scale-range paste onto
+// a color track (which the save cannot reload).
+static std::vector<Request> BoundsBattery()
+{
+    return {
+        {"emitters/add-track-key", {{"id", 0}, {"track", "red"}, {"time", 50}, {"value", 1.5}}},
+        {"emitters/add-track-key", {{"id", 0}, {"track", "scale"}, {"time", 100}, {"value", 3}}},
+        {"emitters/add-track-keys", {{"id", 0}, {"track", "red"}, {"keys", json::array({{{"time", 25}, {"value", 20}}, {{"time", 75}, {"value", 15}}})}}},
+        {"emitters/set-track-key", {{"id", 0}, {"track", "red"}, {"oldTime", 25}, {"newTime", 25}, {"newValue", 2}}},
+        {"emitters/set-track-key", {{"id", 1}, {"track", "alpha"}, {"oldTime", 75}, {"newTime", 75}, {"newValue", -0.5}}},
+    };
+}
+
 // ===========================================================================
 // Runner
 // ===========================================================================
@@ -563,6 +577,11 @@ int main(int argc, char** argv)
     g_system = Load(fixtures.front().image);
     for (const Request& r : BorderSequence())
         lines.push_back(Record(*d, ++n, "synthetic-border", r));
+    for (const Request& r : BoundsBattery())
+    {
+        g_system = Load(fixtures.front().image);
+        lines.push_back(Record(*d, ++n, "synthetic-bounds", r));
+    }
     g_system.reset();
 
     if (update)

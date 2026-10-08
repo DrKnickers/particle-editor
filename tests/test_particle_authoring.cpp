@@ -8,6 +8,9 @@
 //      plan -> (undo iff willMutate) -> apply sequence the handlers will use,
 //      and every edit must leave identical keys (order included) and the same
 //      undo-capture / changed bits. If a handler changes, update its copy here.
+//      The set-track-key and add-track-key copies include the track-key
+//      bounds fix (time within [0, 100], finite values, color values within
+//      [0, 1], dedup searching downward at the 100 edge).
 //  (b) DIRECT SEMANTICS: border keys, not-found, dedup cap, lock matrix,
 //      interpolation, scalar predicates, batch error precedence, link groups.
 //  (c) NEW RULES: full-track replacement (checked against a real save and
@@ -87,7 +90,7 @@ static bool sameEffects(const Effects& a, const Effects& b)
 }
 
 // emitters/set-track-key (BridgeDispatch_EmitterTracks.cpp, from the empty-track check).
-static Effects refSetTrackKey(Track* track, float oldTime, float newTime, float newValue)
+static Effects refSetTrackKey(Track* track, float oldTime, float newTime, float newValue, bool isColor)
 {
     Effects fx;
     if (track == nullptr || track->keys.empty()) return fx;
@@ -95,6 +98,12 @@ static Effects refSetTrackKey(Track* track, float oldTime, float newTime, float 
     const float lastTime  = track->keys.rbegin()->time;
     const bool isBorder = (oldTime == firstTime || oldTime == lastTime);
     if (isBorder) newTime = oldTime;
+    if (!isBorder && !(newTime >= 0.0f && newTime <= 100.0f))
+    { fx.err = "set-track-key 'newTime' must be within [0, 100]"; return fx; }
+    if (!std::isfinite(newValue))
+    { fx.err = "set-track-key 'newValue' must be finite"; return fx; }
+    if (isColor && (newValue < 0.0f || newValue > 1.0f))
+    { fx.err = "set-track-key 'newValue' must be within [0, 1] on a color track"; return fx; }
     Track::Key probe(oldTime, 0.0f);
     auto it = track->keys.find(probe);
     if (it == track->keys.end()) return fx;
@@ -130,17 +139,24 @@ static Effects refDeleteTrackKeys(Track* track, const std::vector<float>& times)
 }
 
 // emitters/add-track-key (from the dedup loop; input already validated).
-static float refAddTrackKey(Track* track, float time, float value)
+static float refBump(const Track* track, float time, float step)
 {
     Track::Key probe(time, 0.0f);
     int safety = 1000;
     while (track->keys.find(probe) != track->keys.end() && safety-- > 0)
     {
-        time += 0.001f;
+        time += step;
         probe = Track::Key(time, 0.0f);
     }
-    track->keys.insert(Track::Key(time, value));
     return time;
+}
+
+static float refAddTrackKey(Track* track, float time, float value)
+{
+    float at = refBump(track, time, 0.001f);
+    if (at > 100.0f && time <= 100.0f) at = refBump(track, time, -0.001f);
+    track->keys.insert(Track::Key(at, value));
+    return at;
 }
 
 // emitters/set-track-lock (from the channel lookup). targetIdx is the
@@ -186,11 +202,12 @@ static Effects refSetTrackInterpolation(Track* track, const std::string& interpN
 
 // ---- The same edits through the unit, as the refactored handlers will call it.
 
-static Effects unitSetTrackKey(Track* track, float oldTime, float newTime, float newValue)
+static Effects unitSetTrackKey(Track* track, float oldTime, float newTime, float newValue, bool isColor)
 {
     Effects fx;
     if (track == nullptr) return fx;
-    TrackKeyPlan plan = PlanSetTrackKey(*track, oldTime, newTime, newValue);
+    TrackKeyPlan plan = PlanSetTrackKey(*track, oldTime, newTime, newValue, isColor);
+    if (plan.outcome == EditOutcome::Rejected) { fx.err = plan.reason; return fx; }
     fx.undo = plan.willMutate;
     ApplySetTrackKey(*track, plan);
     fx.changed = plan.willMutate;
@@ -272,10 +289,11 @@ static void testParity()
         for (float oldTime : kProbeTimes)
         for (float newTime : newTimes)
         for (float newValue : newValues)
+        for (bool isColor : {false, true})
         {
             Track a = base, b = base;
-            Effects fa = refSetTrackKey(&a, oldTime, newTime, newValue);
-            Effects fb = unitSetTrackKey(&b, oldTime, newTime, newValue);
+            Effects fa = refSetTrackKey(&a, oldTime, newTime, newValue, isColor);
+            Effects fb = unitSetTrackKey(&b, oldTime, newTime, newValue, isColor);
             runs++;
             if (!sameKeys(keysOf(a), keysOf(b)) || !sameEffects(fa, fb))
             {
@@ -402,13 +420,13 @@ static void testBorderAndNotFound()
     CHECK(del.outcome == EditOutcome::NoOpBorderSkip && !del.willMutate, "delete on a border key: NoOpBorderSkip, no mutation");
 
     Track t = base;
-    TrackKeyPlan set = PlanSetTrackKey(t, 100, 40, 0.7f);
+    TrackKeyPlan set = PlanSetTrackKey(t, 100, 40, 0.7f, false);
     ApplySetTrackKey(t, set);
     CHECK(set.outcome == EditOutcome::AppliedBorderTime && set.willMutate, "set on a border key: AppliedBorderTime, mutates");
     CHECK(t.keys.rbegin()->time == 100 && t.keys.rbegin()->value == 0.7f, "set on a border key: time pinned, VALUE applied");
 
     t = base;
-    set = PlanSetTrackKey(t, 50, 40, 0.9f);
+    set = PlanSetTrackKey(t, 50, 40, 0.9f, false);
     ApplySetTrackKey(t, set);
     CHECK(set.outcome == EditOutcome::Applied && t.keys.find(Key(40, 0))->value == 0.9f && t.keys.find(Key(50, 0)) == t.keys.end(),
           "set on an interior key moves time and value");
@@ -418,7 +436,7 @@ static void testBorderAndNotFound()
     ApplyDeleteTrackKey(t, del);
     CHECK(del.outcome == EditOutcome::Applied && t.keys.size() == 2, "delete on an interior key removes it");
 
-    TrackKeyPlan missSet = PlanSetTrackKey(base, 33, 40, 1);
+    TrackKeyPlan missSet = PlanSetTrackKey(base, 33, 40, 1, false);
     TrackKeyPlan missDel = PlanDeleteTrackKey(base, 33);
     CHECK(missSet.outcome == EditOutcome::NoOpNotFound && !missSet.willMutate, "set at an absent time: NoOpNotFound, no undo");
     CHECK(missDel.outcome == EditOutcome::NoOpNotFound && !missDel.willMutate, "delete at an absent time: NoOpNotFound, no undo");
@@ -430,9 +448,9 @@ static void testBorderAndNotFound()
 
     // NaN would match the first key in the multiset; refuse it outright.
     CHECK(PlanDeleteTrackKey(base, kNaN).outcome == EditOutcome::Rejected, "delete at NaN: Rejected (would erase a border)");
-    CHECK(PlanSetTrackKey(base, kNaN, 10, 1).outcome == EditOutcome::Rejected
-          && PlanSetTrackKey(base, 50, kNaN, 1).outcome == EditOutcome::Rejected
-          && PlanSetTrackKey(base, 50, 10, kNaN).outcome == EditOutcome::Rejected,
+    CHECK(PlanSetTrackKey(base, kNaN, 10, 1, false).outcome == EditOutcome::Rejected
+          && PlanSetTrackKey(base, 50, kNaN, 1, false).outcome == EditOutcome::Rejected
+          && PlanSetTrackKey(base, 50, 10, kNaN, false).outcome == EditOutcome::Rejected,
           "set with any NaN argument: Rejected");
 }
 
@@ -512,18 +530,18 @@ static void testInterpolationAndScalars()
     CHECK(!InIntFieldRange((double)INT_MAX + 1) && !InIntFieldRange((double)INT_MIN - 1) && !InIntFieldRange(std::nan("")),
           "out-of-range and NaN int rejected");
 
-    CHECK(ValidateAddTrackKey({true, 10, 0.5f}).outcome == EditOutcome::Applied, "add-track-key: finite numeric key accepted");
-    CHECK(ValidateAddTrackKey({false, 0, 0}).reason == "add-track-key requires numeric 'time' and 'value'",
+    CHECK(ValidateAddTrackKey({true, 10, 0.5f}, false).outcome == EditOutcome::Applied, "add-track-key: finite numeric key accepted");
+    CHECK(ValidateAddTrackKey({false, 0, 0}, false).reason == "add-track-key requires numeric 'time' and 'value'",
           "add-track-key: non-numeric -> its wire reason");
-    CHECK(ValidateAddTrackKey({true, kInf, 0}).reason == "add-track-key 'time'/'value' must be finite"
-          && ValidateAddTrackKey({true, 0, -kInf}).outcome == EditOutcome::Rejected,
+    CHECK(ValidateAddTrackKey({true, kInf, 0}, false).reason == "add-track-key 'time'/'value' must be finite"
+          && ValidateAddTrackKey({true, 0, -kInf}, false).outcome == EditOutcome::Rejected,
           "add-track-key: non-finite -> its wire reason");
 
     // Batch: the FIRST bad key decides, whichever kind it is.
-    CHECK(ValidateBatchKeys({}).outcome == EditOutcome::Applied, "add-track-keys: empty batch is legal");
-    CHECK(ValidateBatchKeys({{true, kInf, 0}, {false, 0, 0}}).reason == "add-track-keys 'time'/'value' must be finite",
+    CHECK(ValidateBatchKeys({}, false).outcome == EditOutcome::Applied, "add-track-keys: empty batch is legal");
+    CHECK(ValidateBatchKeys({{true, kInf, 0}, {false, 0, 0}}, false).reason == "add-track-keys 'time'/'value' must be finite",
           "add-track-keys: non-finite before non-numeric -> finite reason");
-    CHECK(ValidateBatchKeys({{true, 1, 0}, {false, 0, 0}, {true, kInf, 0}}).reason
+    CHECK(ValidateBatchKeys({{true, 1, 0}, {false, 0, 0}, {true, kInf, 0}}, false).reason
           == "add-track-keys requires numeric 'time' and 'value' on every key",
           "add-track-keys: non-numeric before non-finite -> numeric reason");
 
@@ -651,6 +669,80 @@ static void testFullTrackReplacement()
     }
 }
 
+static void testKeyBounds()
+{
+    std::printf("(c) track-key bounds\n");
+    const std::string addTime = "add-track-key 'time' must be within [0, 100]";
+    const std::string addColor = "add-track-key 'value' must be within [0, 1] on a color track";
+    CHECK(ValidateAddTrackKey({true, 0, 0.5f}, true).outcome == EditOutcome::Applied
+          && ValidateAddTrackKey({true, 100, 1}, true).outcome == EditOutcome::Applied
+          && ValidateAddTrackKey({true, -0.0f, 0}, true).outcome == EditOutcome::Applied,
+          "add: times 0, 100 and -0.0 accepted; color values 0 and 1 accepted");
+    CHECK(ValidateAddTrackKey({true, -0.1f, 0.5f}, false).reason == addTime
+          && ValidateAddTrackKey({true, 100.001f, 0.5f}, false).reason == addTime
+          && ValidateAddTrackKey({true, 150, 0.5f}, false).reason == addTime,
+          "add: time below 0 or above 100 rejected with its reason");
+    CHECK(ValidateAddTrackKey({true, 50, 1.5f}, true).reason == addColor
+          && ValidateAddTrackKey({true, 50, -0.1f}, true).reason == addColor,
+          "add: color value outside [0, 1] rejected on a color track");
+    CHECK(ValidateAddTrackKey({true, 50, 20}, false).outcome == EditOutcome::Applied
+          && ValidateAddTrackKey({true, 50, -5}, false).outcome == EditOutcome::Applied,
+          "add: non-color tracks take any finite value");
+    CHECK(ValidateBatchKeys({{true, 10, 0.5f}, {true, 150, 0.5f}, {true, 20, 2}}, true).reason
+          == "add-track-keys 'time' must be within [0, 100] on every key",
+          "batch: first bad key decides (time before a later bad color value)");
+    CHECK(ValidateBatchKeys({{true, 10, 0.5f}, {true, 20, 2}, {true, 150, 0.5f}}, true).reason
+          == "add-track-keys 'value' must be within [0, 1] on a color track",
+          "batch: first bad key decides (color value before a later bad time)");
+    CHECK(ValidateBatchKeys({{true, 10, 20}, {true, 90, 15}}, false).outcome == EditOutcome::Applied,
+          "batch: a scale paste is legal on a non-color track");
+
+    const Track base = makeTrack({Key(0, 0.2f), Key(50, 0.5f), Key(100, 1)});
+    CHECK(PlanSetTrackKey(base, 50, 150, 0.5f, false).reason == "set-track-key 'newTime' must be within [0, 100]"
+          && PlanSetTrackKey(base, 50, -1, 0.5f, false).outcome == EditOutcome::Rejected
+          && PlanSetTrackKey(base, 50, kInf, 0.5f, false).outcome == EditOutcome::Rejected,
+          "set: a non-border key's newTime outside [0, 100] (or infinite) rejected");
+    const TrackKeyPlan border = PlanSetTrackKey(base, 100, 150, 0.7f, false);
+    CHECK(border.outcome == EditOutcome::AppliedBorderTime && border.replacement.time == 100,
+          "set: a border key's newTime is ignored, so an out-of-range one is not refused");
+    CHECK(PlanSetTrackKey(base, 50, 40, kInf, false).reason == "set-track-key 'newValue' must be finite",
+          "set: non-finite newValue rejected on any track");
+    CHECK(PlanSetTrackKey(base, 50, 40, 2, true).reason == "set-track-key 'newValue' must be within [0, 1] on a color track"
+          && PlanSetTrackKey(base, 50, 40, 2, false).outcome == EditOutcome::Applied,
+          "set: color value outside [0, 1] rejected on a color track only");
+    CHECK(PlanSetTrackKey(base, 33, 150, 0.5f, false).outcome == EditOutcome::Rejected,
+          "set: a bad request fails loud even when no key sits at oldTime");
+
+    const float below100 = 100 - 0.001f;
+    CHECK(DedupedInsertTime(base, 100) == below100, "dedup: an add at an occupied 100 searches downward");
+    Track crowded = base;
+    crowded.keys.insert(Key(below100, 0));
+    CHECK(DedupedInsertTime(crowded, 100) == below100 - 0.001f, "dedup: downward search skips occupied times too");
+    CHECK(DedupedInsertTime(base, 50) == 50 + 0.001f && DedupedInsertTime(base, 0) == 0 + 0.001f,
+          "dedup: everywhere else it bumps upward exactly as before");
+
+    // Why the rules exist: write the shapes the old rules let through, and reload.
+    const int SCALE = ParticleSystem::TRACK_SCALE;
+    {
+        ParticleSystem bad;
+        newSystem(bad);
+        bad.getEmitter(0).tracks[SCALE]->keys = makeTrack({Key(0, 20), Key(50, 10), Key(100, 5), Key(150, 7), Key(160, 8)}).keys;
+        ParticleSystem* r = reload(serialize(bad));
+        CHECK(r == nullptr, "grounding: two keys past 100 make the saved file unloadable");
+        delete r;
+    }
+    {
+        ParticleSystem bad;
+        newSystem(bad);
+        bad.getEmitter(0).tracks[SCALE]->keys = makeTrack({Key(0, 20), Key(50, 10), Key(100, 5), Key(100 + 0.001f, 7)}).keys;
+        ParticleSystem* r = reload(serialize(bad));
+        const Track* t = r ? r->getEmitter(0).tracks[SCALE] : nullptr;
+        CHECK(t != nullptr && t->keys.count(Key(100, 0)) == 2,
+              "grounding: the old edge bump (100.001) reloads as a second key at 100");
+        delete r;
+    }
+}
+
 static void testAtlas()
 {
     std::printf("(c) atlas grid and index\n");
@@ -687,6 +779,7 @@ int main()
     testLock();
     testInterpolationAndScalars();
     testFullTrackReplacement();
+    testKeyBounds();
     testAtlas();
     if (g_failed) { std::printf("FAILED: %d check(s)\n", g_failed); return 1; }
     std::printf("all checks passed\n");

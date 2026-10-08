@@ -196,6 +196,30 @@ describe("MockBridge contract — emitters track ops", () => {
     const alpha2 = after2.tracks.find((t) => t.name === "alpha");
     expect(alpha2?.keys.length).toBe(6);
   });
+
+  it("emitters/add-track-key at an occupied 100 bumps downward (native parity)", async () => {
+    // A key past 100 does not survive a save, so the host searches downward
+    // at the edge. Alpha has a border key at 100 by default.
+    const b = new MockBridge();
+    const r = await b.request({
+      kind: "emitters/add-track-key",
+      params: { id: 0, track: "alpha", time: 100, value: 0.5 },
+    });
+    expect(r.time).toBeCloseTo(99.999, 4);
+    const r2 = await b.request({
+      kind: "emitters/add-track-key",
+      params: { id: 0, track: "alpha", time: 100, value: 0.4 },
+    });
+    expect(r2.time).toBeCloseTo(99.998, 4);
+    const after = await b.request({
+      kind: "emitters/get-tracks",
+      params: { id: 0 },
+    });
+    const alpha = after.tracks.find((t) => t.name === "alpha");
+    const times = alpha?.keys.map((k) => k.time) ?? [];
+    expect(Math.max(...times)).toBe(100);
+    expect(times[times.length - 1]).toBe(100);
+  });
 });
 
 describe("emitters/set-track-lock — read aliasing (native parity)", () => {

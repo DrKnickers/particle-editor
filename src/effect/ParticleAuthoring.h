@@ -89,8 +89,20 @@ struct ProposedKey
 // pin the [0, 100] range: their time never moves and they are never deleted.
 bool IsBorderKeyTime(const ParticleSystem::Emitter::Track& track, float time);
 
-// Border key: the time stays at oldTime, the value is still applied.
-TrackKeyPlan PlanSetTrackKey(const ParticleSystem::Emitter::Track& track, float oldTime, float newTime, float newValue);
+// Key bounds. The save stores the two endpoint VALUES and each interior key's
+// time / 100; the reload puts the endpoints back at 0 and 100 and refuses an
+// interior time past 100 or a color value outside [0, 1]. So a key time
+// outside [0, 100] is silently re-timed by a save (two of them make the file
+// unloadable), and a color value outside [0, 1] makes it unloadable.
+inline bool IsColorTrack(int trackIdx) { return trackIdx >= 0 && trackIdx < 4; }
+inline bool InTrackTimeRange(float time) { return time >= 0.0f && time <= 100.0f; }   // NaN fails
+
+// Border key: the time stays at oldTime, the value is still applied. Refuses
+// a non-border key's newTime outside [0, 100] (a border key's newTime is
+// ignored, so it is not checked), a non-finite newValue, and on a color
+// track a newValue outside [0, 1].
+TrackKeyPlan PlanSetTrackKey(const ParticleSystem::Emitter::Track& track, float oldTime, float newTime,
+                             float newValue, bool isColor);
 void         ApplySetTrackKey(ParticleSystem::Emitter::Track& track, const TrackKeyPlan& plan);
 
 // One time of a delete-track-keys request. A border key is skipped. Borders
@@ -102,18 +114,21 @@ TrackKeyPlan PlanDeleteTrackKey(const ParticleSystem::Emitter::Track& track, flo
 void         ApplyDeleteTrackKey(ParticleSystem::Emitter::Track& track, const TrackKeyPlan& plan);
 
 // The time an added key is inserted at: bumped by 0.001 until no key
-// occupies it, at most 1000 times. If every bump collides, the last time is
-// returned and the insert makes a true duplicate. Within a batch, insert
-// each key before computing the next one's time.
+// occupies it, at most 1000 times. If the upward bumps would leave [0, 100]
+// (an add at an occupied 100), the search runs downward from the desired
+// time instead, so the key stays inside the track. If every bump collides,
+// the last time is returned and the insert makes a true duplicate. Within a
+// batch, insert each key before computing the next one's time.
 float DedupedInsertTime(const ParticleSystem::Emitter::Track& track, float desiredTime);
 
-// emitters/add-track-key input check.
-EditResult ValidateAddTrackKey(const ProposedKey& key);
+// emitters/add-track-key input check: numeric, finite, time within [0, 100],
+// and on a color track a value within [0, 1].
+EditResult ValidateAddTrackKey(const ProposedKey& key, bool isColor);
 
-// emitters/add-track-keys: checks the WHOLE batch, key by key, and reports
-// the first bad key's reason. The handler runs this before it resolves the
-// emitter, so a bad key wins over an unknown emitter.
-EditResult ValidateBatchKeys(const std::vector<ProposedKey>& keys);
+// emitters/add-track-keys: checks the WHOLE batch, key by key, with the same
+// rules, and reports the first bad key's reason. The handler runs this before
+// it resolves the emitter, so a bad key wins over an unknown emitter.
+EditResult ValidateBatchKeys(const std::vector<ProposedKey>& keys, bool isColor);
 
 // ---- Track lock -------------------------------------------------------------
 

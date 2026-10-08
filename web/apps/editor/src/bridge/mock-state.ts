@@ -1525,7 +1525,9 @@ export const useMockEmitterProperties = create<PropertyOverlayStore>((set, get) 
 
 /** Insert a new key at `(time, value)` on the named track. If a key
  *  already exists at the exact `time`, bumps `time` by 0.001 (matching
- *  the native host's dedupe-by-epsilon rule). Returns the actual
+ *  the native host's dedupe-by-epsilon rule; at the 100 edge the bump
+ *  goes downward, because a key past 100 does not survive a save).
+ *  Returns the actual
  *  inserted (time, value) — the React side auto-selects the new key
  *  using the returned time so a collision doesn't break selection. */
 export function addTrackKeyInOverlay(
@@ -1545,6 +1547,12 @@ export function addTrackKeyInOverlay(
   const times = new Set(target.keys.map((k) => k.time));
   while (times.has(effectiveTime)) {
     effectiveTime += 0.001;
+  }
+  if (effectiveTime > 100 && time <= 100) {
+    effectiveTime = time;
+    while (times.has(effectiveTime)) {
+      effectiveTime -= 0.001;
+    }
   }
   const inserted: TrackKey = { time: effectiveTime, value };
   let ins = target.keys.findIndex((k) => k.time > effectiveTime);

@@ -43,7 +43,7 @@ bool IsBorderKeyTime(const Track& track, float time)
 // has none), so refusing it changes nothing there and protects the tool path.
 static const char* kNaNKeyReason = "track key time/value must not be NaN";
 
-TrackKeyPlan PlanSetTrackKey(const Track& track, float oldTime, float newTime, float newValue)
+TrackKeyPlan PlanSetTrackKey(const Track& track, float oldTime, float newTime, float newValue, bool isColor)
 {
     TrackKeyPlan plan;
     plan.findTime    = oldTime;
@@ -56,6 +56,15 @@ TrackKeyPlan PlanSetTrackKey(const Track& track, float oldTime, float newTime, f
     // Border keys: time fixed, value still moves.
     const bool isBorder = IsBorderKeyTime(track, oldTime);
     if (isBorder) plan.replacement.time = oldTime;
+
+    // Checked before the lookup, so a bad request fails loud even when no
+    // key sits at oldTime.
+    if (!isBorder && !InTrackTimeRange(newTime))
+        return Decide(plan, EditOutcome::Rejected, false, "set-track-key 'newTime' must be within [0, 100]");
+    if (!std::isfinite(newValue))
+        return Decide(plan, EditOutcome::Rejected, false, "set-track-key 'newValue' must be finite");
+    if (isColor && (newValue < 0.0f || newValue > 1.0f))
+        return Decide(plan, EditOutcome::Rejected, false, "set-track-key 'newValue' must be within [0, 1] on a color track");
 
     if (track.keys.find(Track::Key(oldTime, 0.0f)) == track.keys.end())
         return Decide(plan, EditOutcome::NoOpNotFound, false);
@@ -100,24 +109,33 @@ void ApplyDeleteTrackKey(Track& track, const TrackKeyPlan& plan)
     track.keys.erase(it);
 }
 
-float DedupedInsertTime(const Track& track, float desiredTime)
+// Step `time` by `step` while a key occupies it. Bounded by 1000 iterations
+// so a pathological dataset can't lock the dispatch thread. Kept verbatim
+// from the add-track-key handler: the cap, the literal and the post-decrement
+// decide which time a long collision run ends on.
+static float BumpWhileOccupied(const Track& track, float time, float step)
 {
-    // Bounded by 1000 iterations so a pathological dataset can't lock the
-    // dispatch thread. Kept verbatim from the add-track-key handler: the
-    // cap, the literal and the post-decrement decide which time a long
-    // collision run ends on.
-    float time = desiredTime;
     Track::Key probe(time, 0.0f);
     int safety = 1000;
     while (track.keys.find(probe) != track.keys.end() && safety-- > 0)
     {
-        time += 0.001f;
+        time += step;
         probe = Track::Key(time, 0.0f);
     }
     return time;
 }
 
-EditResult ValidateAddTrackKey(const ProposedKey& key)
+float DedupedInsertTime(const Track& track, float desiredTime)
+{
+    const float up = BumpWhileOccupied(track, desiredTime, 0.001f);
+    // An add at an occupied 100 would bump past the track's end and become a
+    // new last key (which the save re-times to 100); search downward instead.
+    if (up > 100.0f && desiredTime <= 100.0f)
+        return BumpWhileOccupied(track, desiredTime, -0.001f);
+    return up;
+}
+
+EditResult ValidateAddTrackKey(const ProposedKey& key, bool isColor)
 {
     // A missing field defaulting to 0 would silently insert a wrong key
     // (a typo'd param name in a --record clip records as success).
@@ -125,10 +143,14 @@ EditResult ValidateAddTrackKey(const ProposedKey& key)
         return Result(EditOutcome::Rejected, "add-track-key requires numeric 'time' and 'value'");
     if (!std::isfinite(key.time) || !std::isfinite(key.value))
         return Result(EditOutcome::Rejected, "add-track-key 'time'/'value' must be finite");
+    if (!InTrackTimeRange(key.time))
+        return Result(EditOutcome::Rejected, "add-track-key 'time' must be within [0, 100]");
+    if (isColor && (key.value < 0.0f || key.value > 1.0f))
+        return Result(EditOutcome::Rejected, "add-track-key 'value' must be within [0, 1] on a color track");
     return Result(EditOutcome::Applied);
 }
 
-EditResult ValidateBatchKeys(const vector<ProposedKey>& keys)
+EditResult ValidateBatchKeys(const vector<ProposedKey>& keys, bool isColor)
 {
     // Rejecting mid-insert would leave half a paste in the document, so the
     // whole batch is checked first, in order: the first bad key decides.
@@ -138,6 +160,10 @@ EditResult ValidateBatchKeys(const vector<ProposedKey>& keys)
             return Result(EditOutcome::Rejected, "add-track-keys requires numeric 'time' and 'value' on every key");
         if (!std::isfinite(keys[i].time) || !std::isfinite(keys[i].value))
             return Result(EditOutcome::Rejected, "add-track-keys 'time'/'value' must be finite");
+        if (!InTrackTimeRange(keys[i].time))
+            return Result(EditOutcome::Rejected, "add-track-keys 'time' must be within [0, 100] on every key");
+        if (isColor && (keys[i].value < 0.0f || keys[i].value > 1.0f))
+            return Result(EditOutcome::Rejected, "add-track-keys 'value' must be within [0, 1] on a color track");
     }
     return Result(EditOutcome::Applied);
 }
