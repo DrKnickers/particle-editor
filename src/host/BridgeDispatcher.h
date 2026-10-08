@@ -361,6 +361,11 @@ private:
     }
     friend struct SpawnerConfigWiringTestAccess;
 
+    // Authoring-parity oracle (tests/test_authoring_parity.cpp): drives the
+    // real emitters/* track handlers through the SpawnerConfigTestTag
+    // constructor and records their undo/event/invalidation calls.
+    friend struct AuthoringParityTestAccess;
+
     static D3DXVECTOR3 SpawnerJsonToVec3(const nlohmann::json& value)
     {
         if (value.is_array() && value.size() >= 3)
