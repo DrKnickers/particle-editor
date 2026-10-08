@@ -40,6 +40,7 @@
 // awareness v2, WebView2) and is x64-only (the only platform the build
 // exposes).
 #include "host/Run.h"
+#include "host/ToolMain.h"
 #include "host/CaptureGoldenProfile.h"
 #include "host/WindowCapture.h"
 #include "host/WebViewModalPolicy.h"  // IsFullyInteractiveSession — gate the pre-host data-path picker
@@ -262,6 +263,11 @@ static vector<wstring> parseCommandLine()
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 {
+	// `--tool`: the window-free authoring tool. Checked before anything else,
+	// the Debug console included, so a tool run never opens a window.
+	if (host::IsToolCommandLine())
+		return host::RunToolMain();
+
 #ifndef NDEBUG
 	AllocConsole();
 	freopen("CONOUT$", "w", stdout);

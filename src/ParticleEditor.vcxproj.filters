@@ -105,6 +105,12 @@
     <ClInclude Include="effect\ParticleAuthoring.h">
       <Filter>Header Files\effect</Filter>
     </ClInclude>
+    <ClInclude Include="effect\ParticleSystemJson.h">
+      <Filter>Header Files\effect</Filter>
+    </ClInclude>
+    <ClInclude Include="effect\PersistedProjection.h">
+      <Filter>Header Files\effect</Filter>
+    </ClInclude>
     <ClInclude Include="simulation\ParticleRandom.h">
       <Filter>Header Files\simulation</Filter>
     </ClInclude>
@@ -193,6 +199,9 @@
       <Filter>Header Files\host</Filter>
     </ClInclude>
     <ClInclude Include="host\ObservationRunner.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\ToolMain.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
     <ClInclude Include="host\ReplayHostileCrt.h">
@@ -615,6 +624,9 @@
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\ObservationRunner.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\ToolMain.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="..\tests\support\replay_hostile_crt.cpp">

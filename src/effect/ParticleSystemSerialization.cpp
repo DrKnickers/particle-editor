@@ -373,6 +373,11 @@ static unsigned long unlockedIdenticalChannels(const ParticleSystem::Emitter& em
 	return mask;
 }
 
+unsigned long ParticleSystem::Emitter::explicitUnlockMask() const
+{
+	return unlockedIdenticalChannels(*this);
+}
+
 void ParticleSystem::Emitter::write(ChunkWriter& writer, bool copy)
 {
 	writeProperties(writer);
@@ -753,6 +758,9 @@ void ParticleSystem::write(IFile* file)
 
 ParticleSystem::ParticleSystem(IFile* file)
 {
+	// Chunk 0x0002 is optional; a file without it must load the same default
+	// the default constructor sets, not an uninitialised bool.
+	m_leaveParticles = true;
     try
     {
 	    ChunkType   type;

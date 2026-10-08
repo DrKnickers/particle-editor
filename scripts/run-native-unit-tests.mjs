@@ -45,7 +45,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const testsDir = join(repoRoot, "tests");
 
 // Tests that validate a built ParticleEditor.exe rather than standalone logic.
-const NEEDS_EXE = new Set(["test_resource_strings"]);
+const NEEDS_EXE = new Set(["test_resource_strings", "test_tool_inspect_cli"]);
 
 // strict:false mirrors the old hand scanner: unknown flags and positionals are
 // ignored, and — load-bearing — gate-integrity.test.mjs IMPORTS this module, so

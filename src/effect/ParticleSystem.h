@@ -254,6 +254,11 @@ public:
         void write(ChunkWriter& writer) { write(writer, false); }
         void copy (ChunkWriter& writer) { write(writer, true); }
 
+        // The colour channels (1..3, as a bitmask) that the writer marks as
+        // explicitly unlocked in chunk 0x0101: unlocked although their saved
+        // keys match an earlier channel's, so the reader would re-lock them.
+        unsigned long explicitUnlockMask() const;
+
         // Detach this emitter from its link group (sets linkGroup = 0).
         // Caller is responsible for any group-bookkeeping side effects
         // (e.g. auto-dissolving a group that would otherwise have one
@@ -434,6 +439,9 @@ public:
     // defaults, so files without per-group customization remain
     // byte-identical to the earlier output.
     const LinkExemptFlags& getLinkExemptFlags(uint32_t groupId) const;
+    // Read-only enumeration of the stored (non-default) exempt sets, in
+    // group-id order -- what chunk 0x0003 persists.
+    void forEachLinkExempt(const std::function<void(uint32_t, const LinkExemptFlags&)>& visit) const;
     void                   setLinkExemptFlags(uint32_t                groupId,
                                               const LinkExemptFlags&  flags);
 

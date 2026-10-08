@@ -424,6 +424,11 @@ ParticleSystem::ParticleSystem()
 	m_leaveParticles = true;
 }
 
+void ParticleSystem::forEachLinkExempt(const std::function<void(uint32_t, const LinkExemptFlags&)>& visit) const
+{
+    for (const auto& entry : m_linkExempts) visit(entry.first, entry.second);
+}
+
 const LinkExemptFlags& ParticleSystem::getLinkExemptFlags(uint32_t groupId) const
 {
     std::map<uint32_t, LinkExemptFlags>::const_iterator it = m_linkExempts.find(groupId);

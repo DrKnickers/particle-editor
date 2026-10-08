@@ -120,6 +120,8 @@
     <ClInclude Include="simulation\ParticleSystemInstance.h" />
     <ClInclude Include="effect\Rescale.h" />
     <ClInclude Include="effect\ParticleAuthoring.h" />
+    <ClInclude Include="effect\ParticleSystemJson.h" />
+    <ClInclude Include="effect\PersistedProjection.h" />
     <ClInclude Include="effect\Autosave.h" />
     <ClInclude Include="effect\AtomicSave.h" />
     <ClInclude Include="simulation\ParticleRandom.h" />
@@ -190,6 +192,7 @@
     <ClInclude Include="host\ReplayProofRunner.h" />
     <ClInclude Include="host\ReplayRunSupport.h" />
     <ClInclude Include="host\ObservationRunner.h" />
+    <ClInclude Include="host\ToolMain.h" />
     <ClInclude Include="host\PreviewScenarioJson.h" />
     <ClInclude Include="host\ObservationSpecJson.h" />
     <ClInclude Include="host\DriveRunner.h" />
@@ -297,6 +300,7 @@
     </ClCompile>
     <ClCompile Include="host\ReplayRunSupport.cpp" />
     <ClCompile Include="host\ObservationRunner.cpp" />
+    <ClCompile Include="host\ToolMain.cpp" />
     <ClCompile Include="host\PreviewScenarioJson.cpp" />
     <ClCompile Include="host\ObservationSpecJson.cpp" />
     <ClCompile Include="host\RestoredSettings.cpp" />
