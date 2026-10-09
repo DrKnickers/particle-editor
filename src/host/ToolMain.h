@@ -5,7 +5,13 @@
 // (tasks/2026-10-07-phase4b-tool-verbs-plan.md). It runs before any window,
 // D3D, WebView2 or game-data work and returns the process exit code.
 //
-//   --tool inspect <in.alo> --out <inspect.json>
+//   --tool inspect  <in.alo> --out <inspect.json>
+//   --tool validate <in.alo> --out <report.json>
+//
+// `validate` always writes its report. It exits 0 when the source loads
+// exactly as written (the report also says whether a save reproduces its
+// bytes, and lists warnings and advisories), and 3 when it does not: a load
+// failure, a spawn link the loader cleared, or a value inspect cannot report.
 //
 // Results go to files, never stdout (the exe is a Windows-subsystem program,
 // and the loader prints diagnostics to stdout); errors go to stderr.

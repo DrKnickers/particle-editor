@@ -23,6 +23,7 @@
 #include <string>
 #include "ParticleSystem.h"
 #include "LinkGroup.h"
+#include "ParticleAuthoring.h"
 #include "host/third_party/nlohmann/json.hpp"
 
 namespace particle_json
@@ -217,36 +218,8 @@ inline json ParticleSystemJson(const ParticleSystem& system)
     };
 }
 
-// Well-formed UTF-8 (RFC 3629): no overlong forms, no surrogates, nothing
-// above U+10FFFF.
-inline bool IsValidUtf8(const std::string& s)
-{
-    const unsigned char* p = reinterpret_cast<const unsigned char*>(s.data());
-    const size_t n = s.size();
-    size_t i = 0;
-    while (i < n)
-    {
-        const unsigned char c = p[i];
-        size_t len;
-        uint32_t cp;
-        if (c < 0x80) { i++; continue; }
-        else if (c >= 0xC2 && c <= 0xDF) { len = 2; cp = c & 0x1F; }
-        else if (c >= 0xE0 && c <= 0xEF) { len = 3; cp = c & 0x0F; }
-        else if (c >= 0xF0 && c <= 0xF4) { len = 4; cp = c & 0x07; }
-        else return false;
-        if (n - i < len) return false;
-        for (size_t k = 1; k < len; k++)
-        {
-            if ((p[i + k] & 0xC0) != 0x80) return false;
-            cp = (cp << 6) | (p[i + k] & 0x3F);
-        }
-        if ((len == 3 && cp < 0x800) || (len == 4 && (cp < 0x10000 || cp > 0x10FFFF)) ||
-            (cp >= 0xD800 && cp <= 0xDFFF))
-            return false;
-        i += len;
-    }
-    return true;
-}
+// IsValidUtf8 lives in ParticleAuthoring.h, shared with the tool rules.
+using ::IsValidUtf8;
 
 // The first string that is not valid UTF-8 or float that is not finite, as a
 // path such as `emitters[2].groups[0].maxY`. Returns false when there is none.

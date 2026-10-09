@@ -628,6 +628,88 @@ static int RunCorpus(const std::wstring& root)
     return projected == files - notParticles ? 0 : 1;
 }
 
+// Scalar leaves of an emitter's dump: "lifetime", "acceleration[1]",
+// "groups[2].valZ". Tracks are left out (they have verbs of their own).
+static void FlattenLeaves(const json& value, const std::string& path, std::map<std::string, json>* out)
+{
+    if (value.is_object())
+    {
+        for (auto it = value.begin(); it != value.end(); ++it)
+        {
+            if (path.empty() && it.key() == "tracks") continue;
+            FlattenLeaves(it.value(), path.empty() ? it.key() : path + "." + it.key(), out);
+        }
+    }
+    else if (value.is_array())
+    {
+        for (size_t i = 0; i < value.size(); i++) FlattenLeaves(value[i], path + "[" + std::to_string(i) + "]", out);
+    }
+    else (*out)[path] = value;
+}
+
+static std::map<std::string, json> EmitterLeaves(const Emitter& e)
+{
+    std::map<std::string, json> leaves;
+    FlattenLeaves(particle_json::EmitterJson(e, nullptr), "", &leaves);
+    return leaves;
+}
+
+// The settable set is the dump's emitter scalars minus the fields the rules
+// table withholds, and setting each one changes exactly its own leaf.
+static void TestSettableProperties()
+{
+    printf("settable properties\n");
+    Emitter probe;
+    std::set<std::string> expected;
+    for (const auto& leaf : EmitterLeaves(probe))
+    {
+        const std::string& p = leaf.first;
+        if (p == "index" || p == "name" || p == "parent" || p == "spawnOnDeath" || p == "spawnDuringLife" ||
+            p == "linkGroup" || p == "colorTexture" || p == "normalTexture" || p == "unknown11" ||
+            p.compare(0, 10, "groups[1].") == 0)
+            continue;
+        expected.insert(p);
+    }
+    const std::vector<std::string> names = SettablePropertyNames();
+    const std::set<std::string> settable(names.begin(), names.end());
+    std::string missing, extra;
+    for (const std::string& p : expected) if (!settable.count(p)) missing += " " + p;
+    for (const std::string& p : settable) if (!expected.count(p)) extra += " " + p;
+    check(missing.empty(), "every withheld-free dump scalar is settable" + (missing.empty() ? std::string() : ": missing" + missing));
+    check(extra.empty(), "every settable name is a dump scalar" + (extra.empty() ? std::string() : ": extra" + extra));
+
+    std::string miswired;
+    for (const std::string& field : names)
+    {
+        Emitter e;
+        const auto before = EmitterLeaves(e);
+        const PropertyValue current = GetProperty(e, field);
+        PropertyValue next = current;
+        if (current.isBool) next.boolValue = !current.boolValue;
+        else
+        {
+            const double probes[] = {3, 2, 1, 0.5, 0};
+            for (double v : probes)
+            {
+                PropertyValue candidate = {false, false, v};
+                if (v != current.number && ValidateSetProperty(field, candidate).outcome == EditOutcome::Applied) { next = candidate; break; }
+            }
+        }
+        ApplySetProperty(e, field, next);
+        const auto after = EmitterLeaves(e);
+        std::vector<std::string> changed;
+        for (const auto& leaf : after)
+            if (before.at(leaf.first) != leaf.second) changed.push_back(leaf.first);
+        if (changed.size() != 1 || changed[0] != field)
+        {
+            miswired += " " + field + "->{";
+            for (const std::string& c : changed) miswired += c + ",";
+            miswired += "}";
+        }
+    }
+    check(miswired.empty(), "setting each property changes exactly its own dump leaf" + miswired);
+}
+
 int main(int argc, char** argv)
 {
     if (argc == 3 && std::string(argv[1]) == "--corpus")
@@ -647,6 +729,7 @@ int main(int argc, char** argv)
     TestProjection();
     TestKeyOrder();
     TestRefusals();
+    TestSettableProperties();
 
     printf("%d checks, %d failed\n", g_checks, g_failed);
     if (g_failed == 0) printf("all checks passed\n");

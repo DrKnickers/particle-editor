@@ -194,4 +194,106 @@ inline bool HasLinkGroupMembership(const ParticleSystem::Emitter& emitter)
     return emitter.linkGroup != 0;
 }
 
+// ---- Tool-only rules (Phase 4B decision 6) ----------------------------------
+//
+// The --tool verbs apply these; the bridge handlers do not (yet), so the
+// editor keeps its current behavior. Field names are `--tool inspect` paths
+// (ParticleSystemJson.h): "lifetime", "acceleration[1]", "groups[0].minX".
+
+// Well-formed UTF-8 (RFC 3629): no overlong forms, no surrogates, nothing
+// above U+10FFFF.
+inline bool IsValidUtf8(const std::string& s)
+{
+    const unsigned char* p = reinterpret_cast<const unsigned char*>(s.data());
+    const size_t n = s.size();
+    size_t i = 0;
+    while (i < n)
+    {
+        const unsigned char c = p[i];
+        size_t len;
+        unsigned long cp;
+        if (c < 0x80) { i++; continue; }
+        else if (c >= 0xC2 && c <= 0xDF) { len = 2; cp = c & 0x1F; }
+        else if (c >= 0xE0 && c <= 0xEF) { len = 3; cp = c & 0x0F; }
+        else if (c >= 0xF0 && c <= 0xF4) { len = 4; cp = c & 0x07; }
+        else return false;
+        if (n - i < len) return false;
+        for (size_t k = 1; k < len; k++)
+        {
+            if ((p[i + k] & 0xC0) != 0x80) return false;
+            cp = (cp << 6) | (p[i + k] & 0x3F);
+        }
+        if ((len == 3 && cp < 0x800) || (len == 4 && (cp < 0x10000 || cp > 0x10FFFF)) ||
+            (cp >= 0xD800 && cp <= 0xDFFF))
+            return false;
+        i += len;
+    }
+    return true;
+}
+
+// A requested property value: a JSON boolean, or a JSON number.
+struct PropertyValue
+{
+    bool   isBool;
+    bool   boolValue;
+    double number;
+};
+
+// The fields `patch` may set: every persisted scalar of an emitter except
+// index, linkGroup, the spawn slots, unknown11 (saved only when the file had
+// it), and the lifetime group (groups[1], derived from lifetime and
+// randomLifetimePerc on save). Names, textures and tracks have verbs of their own.
+std::vector<std::string> SettablePropertyNames();
+
+// Applied when `field` is settable and `value` has its type and range:
+// booleans are JSON booleans; integers are integral numbers in range
+// (blendMode 0..13, nTriangles >= 1, nBursts not 0xFFFFFFFF and group type
+// 0..4, which reload differently or not at all otherwise; groundBehavior and
+// emitFromMesh within their enums, which the reader does not check;
+// otherwise 0..0xFFFFFFFF); floats are finite and fit a float,
+// randomRotationVariance within [0, 1].
+EditResult ValidateSetProperty(const std::string& field, const PropertyValue& value);
+// Call only after ValidateSetProperty returned Applied.
+void       ApplySetProperty(ParticleSystem::Emitter& emitter, const std::string& field, const PropertyValue& value);
+// The current value of a settable `field` (a float widened to double).
+PropertyValue GetProperty(const ParticleSystem::Emitter& emitter, const std::string& field);
+
+// The inspect paths a property set changes on save, `field` included:
+// lifetime and randomLifetimePerc also derive groups[1]; randomRotation
+// decides whether tracks[6] keeps its keys and whether randomRotationAverage
+// is saved; randomRotationAverage is saved as tracks[6]'s first endpoint.
+std::vector<std::string> PropertyFootprint(const std::string& field);
+
+// Rename to exactly `name`: refused when empty, holding a NUL, not UTF-8, or
+// equal to another emitter's name (which would make selectors ambiguous).
+EditResult ValidateRename(const ParticleSystem& system, const ParticleSystem::Emitter& target,
+                          const std::string& name);
+
+// A texture name: not UTF-8, holding a NUL (the writer would save it and the
+// game would cut the name there) or longer than kMaxTextureNameBytes is
+// refused; so is an empty colour texture. An empty normal texture is legal
+// (it reloads as the default name).
+static const size_t kMaxTextureNameBytes = 259;
+EditResult ValidateTextureName(const std::string& name, bool colorTexture);
+
+// DoRescaleEmitter's preconditions: both scales finite and above 0, and, for
+// a time scale on a non-weather emitter, a rescaled burst delay or particle
+// rate that it can convert without overflowing an int (a zero burst delay
+// divides by zero there, and one close to 0 of either sign overflows).
+EditResult ValidateRescale(const ParticleSystem::Emitter& emitter, double timeScale, double sizeScale);
+
+// The load cap: a track keeps fewer than kMaxAloTrackKeys interior keys.
+// Rejected when adding `adding` keys would break it.
+EditResult ValidateKeyCount(const ParticleSystem::Emitter::Track& track, size_t adding);
+
+// The colour channels, other than `source`, whose contents are
+// trackContents[source] (channels locked to it).
+std::vector<int> LockedDependents(const ParticleSystem::Emitter& emitter, int source);
+
+// An edit to tracks[track]'s keys or interpolation: refused on a locked
+// colour channel (the keys belong to its source), and on a channel that
+// other channels are locked to unless `allowDependents` (the edit changes
+// them too; the caller reports them in its footprint).
+EditResult ValidateTrackEditLocks(const ParticleSystem::Emitter& emitter, int track, bool allowDependents);
+
 #endif

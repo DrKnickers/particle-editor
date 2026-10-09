@@ -193,6 +193,7 @@
     <ClInclude Include="host\ReplayRunSupport.h" />
     <ClInclude Include="host\ObservationRunner.h" />
     <ClInclude Include="host\ToolMain.h" />
+    <ClInclude Include="host\ToolSelector.h" />
     <ClInclude Include="host\PreviewScenarioJson.h" />
     <ClInclude Include="host\ObservationSpecJson.h" />
     <ClInclude Include="host\DriveRunner.h" />

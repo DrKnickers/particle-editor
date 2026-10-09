@@ -204,6 +204,9 @@
     <ClInclude Include="host\ToolMain.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="host\ToolSelector.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
     <ClInclude Include="host\ReplayHostileCrt.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>

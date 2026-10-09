@@ -1,11 +1,11 @@
-// `ParticleEditor.exe --tool inspect` end to end (Phase 4B PR 1). Drives the
-// built exe (NEEDS_EXE: run-native-unit-tests passes its path as argv[1]) on
+// `ParticleEditor.exe --tool` end to end: inspect (Phase 4B PR 1) and
+// validate (PR 2). Drives the built exe (NEEDS_EXE: run-native-unit-tests passes its path as argv[1]) on
 // fixtures this test writes, and checks exit codes, the output, the path-alias
 // refusals and that nothing else is left on disk. Every run has a deadline: a
 // tool run that opened a dialog would hang and fail here.
 //
 // Exit codes (src/host/ToolMain.h): 0 ok, 2 usage or alias, 3 invalid source,
-// 13 output not written.
+// 13 output not written. validate writes its report on exit 3 too.
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -136,11 +136,127 @@ static std::set<std::wstring> Listing()
 }
 
 static bool Exists(const std::wstring& path) { return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES; }
+static nlohmann::json ReadJson(const std::wstring& path)
+{
+    try { return nlohmann::json::parse(ReadAll(path)); }
+    catch (...) { return nlohmann::json(); }
+}
+
+// The codes of a validate report's findings with `severity`.
+static std::set<std::string> Codes(const nlohmann::json& report, const char* severity)
+{
+    std::set<std::string> codes;
+    if (report.is_object() && report["findings"].is_array())
+        for (const nlohmann::json& f : report["findings"])
+            if (f["severity"] == severity) codes.insert(f["code"].get<std::string>());
+    return codes;
+}
+
+// check(), printing the report when it fails.
+static void checkReport(bool ok, const char* what, const nlohmann::json& report)
+{
+    check(ok, what);
+    if (!ok) printf("    report: %s\n", report.dump().c_str());
+}
+
+static void TestValidate(const std::string& goodHash)
+{
+    printf("validate\n");
+    {
+        ParticleSystem system;
+        system.setName("canon");
+        system.addRootEmitter()->name = "Root";
+        SaveFixture(system, P(L"canon.alo"));
+    }
+    check(Run({L"--tool", L"validate", P(L"canon.alo"), L"--out", P(L"canon.report.json")}) == 0, "a clean source exits 0");
+    nlohmann::json r = ReadJson(P(L"canon.report.json"));
+    check(r.is_object() && r["schema"] == 1 && r["verb"] == "validate" && r["valid"] == true && r["exitCode"] == 0,
+          "its report says valid, with the exit code");
+    check(r.is_object() && r["canonical"] == true && r["findings"].empty() && r["textureResolution"] == "unverified",
+          "a file this writer saved is canonical, has no findings, and texture resolution is unverified");
+
+    check(Run({L"--tool", L"validate", P(L"good.alo"), L"--out", P(L"good.report.json")}) == 0, "a name warning does not fail validation");
+    r = ReadJson(P(L"good.report.json"));
+    check(r.is_object() && r["sourceDocumentHash"] == goodHash && r["internalName"] == "cli_fixture" && r["derivedName"] == "good",
+          "the report carries the hash, the internal name and the file-derived name");
+    check(Codes(r, "warning") == std::set<std::string>({"internal-name"}) && Codes(r, "error").empty(),
+          "an internal name that differs from the file name is a warning");
+
+    check(Run({L"--tool", L"validate", P(L"selflink.alo"), L"--out", P(L"selflink.report.json")}) == 3, "a repaired graph exits 3");
+    r = ReadJson(P(L"selflink.report.json"));
+    check(r.is_object() && r["valid"] == false && r["exitCode"] == 3 && Codes(r, "error") == std::set<std::string>({"graph-repaired"}),
+          "the report is still written and names the repair");
+    check(r.is_object() && r["findings"].size() == 1 &&
+          r["findings"][0]["message"].get<std::string>().find("spawnOnDeath") != std::string::npos,
+          "the repair message names the cleared slot");
+
+    check(Run({L"--tool", L"validate", P(L"nan.alo"), L"--out", P(L"nan.report.json")}) == 3 &&
+          Codes(ReadJson(P(L"nan.report.json")), "error") == std::set<std::string>({"invalid-value"}),
+          "a non-finite value exits 3");
+    check(Run({L"--tool", L"validate", P(L"inf3f.alo"), L"--out", P(L"inf3f.report.json")}) == 3, "an infinite unknown3f exits 3");
+    r = ReadJson(P(L"inf3f.report.json"));
+    checkReport(Codes(r, "error") == std::set<std::string>({"invalid-value"}) && r["findings"][0]["path"] == "emitters[0].unknown3f",
+                "the finding names the value's inspect path", r);
+    check(Run({L"--tool", L"validate", P(L"badname.alo"), L"--out", P(L"badname.report.json")}) == 3 &&
+          Codes(ReadJson(P(L"badname.report.json")), "error") == std::set<std::string>({"invalid-value"}),
+          "a name that is not UTF-8 exits 3, and the report is still valid JSON");
+    check(Run({L"--tool", L"validate", P(L"garbage.alo"), L"--out", P(L"garbage.report.json")}) == 3, "a file that does not load exits 3");
+    r = ReadJson(P(L"garbage.report.json"));
+    check(Codes(r, "error") == std::set<std::string>({"load-failed"}) && r["canonical"].is_null() && r["sourceDocumentHash"].is_string(),
+          "a load failure is reported with the hash and no canonical verdict");
+    check(Run({L"--tool", L"validate", P(L"missing.alo"), L"--out", P(L"missing.report.json")}) == 3 &&
+          Codes(ReadJson(P(L"missing.report.json")), "error") == std::set<std::string>({"read-failed"}),
+          "a missing input exits 3 with a report");
+
+    check(Run({L"--tool", L"validate", P(L"variance.alo"), L"--out", P(L"variance.report.json")}) == 0, "a value the loader clamps is valid");
+    r = ReadJson(P(L"variance.report.json"));
+    check(r.is_object() && r["canonical"] == false, "but not canonical: a save does not reproduce the bytes");
+
+    check(Run({L"--tool", L"validate", P(L"atlas.alo"), L"--out", P(L"atlas.report.json")}) == 0, "an out-of-grid atlas index is not an error");
+    r = ReadJson(P(L"atlas.report.json"));
+    nlohmann::json advisories = nlohmann::json::array();
+    for (const nlohmann::json& f : r["findings"])
+        if (f["severity"] == "advisory") advisories.push_back(f);
+    checkReport(advisories.size() == 1 && advisories[0]["code"] == "atlas-out-of-grid" &&
+                advisories[0]["path"] == "emitters[0].tracks[5].keys[1]",
+                "it is one advisory, at the key's inspect path (index 3 is inside the 2x2 grid)", r);
+
+    check(Run({L"--tool", L"validate", P(L"good.alo"), L"--out", P(L"good.alo")}) == 2, "validate --out naming the input exits 2");
+    check(Run({L"--tool", L"validate", P(L"good.alo")}) == 2, "validate without --out exits 2");
+    check(Run({L"--tool", L"validate", P(L"good.alo"), L"--out", P(L"no such dir\\z.json")}) == 13, "an unwritable report exits 13");
+
+    // The repository's shipped .alo fixtures: <root>\x64\<Config>\ParticleEditor.exe.
+    std::wstring root = g_exe;
+    for (int i = 0; i < 3; i++) root = root.substr(0, root.find_last_of(L"\\/"));
+    const wchar_t* shipped[] = {
+        L"site\\guide\\downloads\\P_EXPLOSION_EXAMPLE.ALO", L"site\\guide\\downloads\\P_EXPLOSION_EXAMPLE_FLIPBOOK.ALO",
+        L"web\\apps\\editor\\tests\\fixtures\\a11y-base-state.alo", L"web\\apps\\editor\\tests\\fixtures\\bump-asteroids.alo",
+        L"web\\apps\\editor\\tests\\fixtures\\replay-guard.alo", L"web\\apps\\editor\\tests\\fixtures\\replay-weather.alo",
+        L"web\\apps\\editor\\tests\\fixtures\\singleton-emitter.alo"};
+    // Valid is not canonical. Three fixtures re-save to different bytes:
+    // a11y-base-state and singleton-emitter hold the legacy writer's
+    // uninitialised bool byte (0xCC / 0x8D in mini-chunk 0x2B; it loads as
+    // true and saves as 01), and bump-asteroids, built by hand, omits the
+    // optional mini-chunks 0x06, 0x48 and 0x49 that the writer adds.
+    const bool canonicalExpected[] = {true, true, false, false, true, true, false};
+    int matched = 0;
+    for (size_t i = 0; i < sizeof(shipped) / sizeof(shipped[0]); i++)
+    {
+        const int code = Run({L"--tool", L"validate", root + L"\\" + shipped[i], L"--out", P(L"shipped.report.json")});
+        r = ReadJson(P(L"shipped.report.json"));
+        const bool ok = code == 0 && r.is_object() && r["valid"] == true && r["canonical"] == canonicalExpected[i];
+        if (ok) matched++;
+        else wprintf(L"    unexpected verdict: %ls (exit %d)\n", shipped[i], code);
+        DeleteFileW(P(L"shipped.report.json").c_str());
+    }
+    check(matched == 7, "all 7 shipped .alo fixtures are valid, each with its pinned canonical verdict");
+}
+
 
 int main(int argc, char** argv)
 {
-    printf("test_tool_inspect_cli\n");
-    if (argc < 2) { printf("usage: test_tool_inspect_cli <ParticleEditor.exe>\n"); return 2; }
+    printf("test_tool_cli\n");
+    if (argc < 2) { printf("usage: test_tool_cli <ParticleEditor.exe>\n"); return 2; }
     wchar_t exe[MAX_PATH * 4];
     MultiByteToWideChar(CP_ACP, 0, argv[1], -1, exe, MAX_PATH * 4);
     wchar_t full[MAX_PATH * 4];
@@ -157,6 +273,22 @@ int main(int argc, char** argv)
     Fixture(P(L"inf3f.alo"), [](ParticleSystem::Emitter& e) { e.unknown3f = std::numeric_limits<float>::infinity(); });
     Fixture(P(L"badname.alo"), [](ParticleSystem::Emitter& e) { e.name = "bad \xE9"; });
     Fixture(P(L"variance.alo"), [](ParticleSystem::Emitter& e) { e.randomRotationVariance = std::numeric_limits<float>::infinity(); });
+    {
+        ParticleSystem system;
+        system.setName("selflink");
+        ParticleSystem::Emitter* e = system.addRootEmitter();
+        e->name = "Loop";
+        e->spawnOnDeath = 0;   // itself: the loader clears it
+        SaveFixture(system, P(L"selflink.alo"));
+    }
+    Fixture(P(L"atlas.alo"), [](ParticleSystem::Emitter& e) {
+        e.textureSize = 4;   // a 2x2 grid
+        ParticleSystem::Emitter::Track& index = *e.tracks[ParticleSystem::TRACK_INDEX];
+        index.keys.clear();
+        index.keys.insert(ParticleSystem::Emitter::Track::Key(0, 0));
+        index.keys.insert(ParticleSystem::Emitter::Track::Key(50, 7));
+        index.keys.insert(ParticleSystem::Emitter::Track::Key(100, 3));
+    });
     WriteAll(P(L"garbage.alo"), "this is not a particle file");
     CreateDirectoryW(P(L"adir").c_str(), nullptr);
     const std::string goodBytes = ReadAll(P(L"good.alo"));
@@ -210,9 +342,15 @@ int main(int argc, char** argv)
     check(Run({L"--tool", L"inspect", P(L"good.alo"), L"--out", P(L"no such dir\\z.json")}) == 13, "an output in a missing directory exits 13");
     check(Run({L"--tool", L"inspect", P(L"good.alo"), L"--out", P(L"adir")}) == 13, "an output that is a directory exits 13");
 
+    TestValidate(goodHash);
+
     printf("nothing else on disk\n");
     std::set<std::wstring> expected = before;
-    for (const wchar_t* name : {L"good.json", L"relative.json", L"variance.json", L"link.alo"}) expected.insert(name);
+    for (const wchar_t* name : {L"good.json", L"relative.json", L"variance.json", L"link.alo", L"canon.alo",
+                                L"canon.report.json", L"good.report.json", L"selflink.report.json", L"nan.report.json",
+                                L"inf3f.report.json", L"badname.report.json", L"garbage.report.json", L"missing.report.json",
+                                L"variance.report.json", L"atlas.report.json"})
+        expected.insert(name);
     const std::set<std::wstring> after = Listing();
     check(after == expected, "only the expected outputs exist (no temp files)");
     for (const std::wstring& name : after)

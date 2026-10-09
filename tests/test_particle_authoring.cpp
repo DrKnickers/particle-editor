@@ -15,6 +15,9 @@
 //      interpolation, scalar predicates, batch error precedence, link groups.
 //  (c) NEW RULES: full-track replacement (checked against a real save and
 //      reload) and the advisory atlas-index classifier.
+//  (d) TOOL-ONLY RULES (Phase 4B decision 6): set-property (every accepted
+//      edge value checked against a real save and reload), rename, texture
+//      names, rescale preconditions, the key-count cap and the lock matrix.
 //
 // Standalone console exe; see the test_particle_authoring entry in
 // tests/native-tests.json.
@@ -30,6 +33,7 @@
 #include <climits>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <limits>
 #include <string>
 #include <vector>
@@ -770,6 +774,239 @@ static void testAtlas()
     CHECK(neverRejected, "the classifier never rejects (the engine wraps out-of-grid indices)");
 }
 
+static PropertyValue num(double v)  { PropertyValue p = {false, false, v}; return p; }
+static PropertyValue flag(bool b)   { PropertyValue p = {true, b, 0.0}; return p; }
+
+static bool isRejected(const EditResult& r) { return r.outcome == EditOutcome::Rejected; }
+
+static bool samePropertyValue(const PropertyValue& a, const PropertyValue& b)
+{
+    if (a.isBool != b.isBool) return false;
+    if (a.isBool) return a.boolValue == b.boolValue;
+    // Bit-exact, so -0.0 and +0.0 differ.
+    return std::memcmp(&a.number, &b.number, sizeof(double)) == 0;
+}
+
+static bool hasName(const std::vector<std::string>& names, const std::string& name)
+{
+    for (const std::string& n : names) if (n == name) return true;
+    return false;
+}
+
+// Set `field` to `value` on a fresh system, save, reload, and read it back.
+static bool survivesSave(const std::string& field, const PropertyValue& value, std::string* got)
+{
+    ParticleSystem ps;
+    newSystem(ps);
+    Emitter& e = ps.getEmitter(0);
+    // randomRotationAverage is saved only while randomRotation is on.
+    if (field == "randomRotationAverage") e.randomRotation = true;
+    ApplySetProperty(e, field, value);
+    const PropertyValue applied = GetProperty(e, field);   // floats narrowed
+    ParticleSystem* rp = reload(serialize(ps));
+    if (!rp) { *got = "unloadable"; return false; }
+    const PropertyValue back = GetProperty(rp->getEmitter(0), field);
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), back.isBool ? (back.boolValue ? "true" : "false") : "%.9g", back.number);
+    *got = buf;
+    delete rp;
+    return samePropertyValue(back, applied);
+}
+
+static void testSetProperty()
+{
+    std::printf("(d) tool-only: set-property\n");
+    const std::vector<std::string> names = SettablePropertyNames();
+    bool unique = true;
+    for (size_t i = 0; i < names.size(); i++)
+        for (size_t j = i + 1; j < names.size(); j++) unique = unique && names[i] != names[j];
+    CHECK(unique, "settable names are unique");
+    CHECK(hasName(names, "blendMode") && hasName(names, "acceleration[2]") && hasName(names, "randomColors[3]") &&
+          hasName(names, "groups[0].type") && hasName(names, "groups[2].valZ") && hasName(names, "unknown49"),
+          "settable names cover scalars, array elements and the speed/position groups");
+    const char* excluded[] = {"index", "linkGroup", "spawnOnDeath", "spawnDuringLife", "unknown11", "has11",
+                              "groups[1].type", "groups[1].minX", "name", "colorTexture", "normalTexture", "visible",
+                              "stableId", "parent", "acceleration[3]", "groups[3].type"};
+    bool none = true;
+    for (const char* n : excluded) none = none && !hasName(names, n) && isRejected(ValidateSetProperty(n, num(0)));
+    CHECK(none, "identity, link, spawn, derived and verb-owned fields are not settable");
+
+    // Every settable field: legal values at its edges survive a save exactly.
+    int roundTrips = 0;
+    std::string firstMiss;
+    for (const std::string& field : names)
+    {
+        std::vector<PropertyValue> values;
+        const PropertyValue current = GetProperty(Emitter(), field);
+        if (current.isBool) values = {flag(true), flag(false)};
+        else
+        {
+            const double probes[] = {0, 1, 3, 13, 255, 4294967294.0, 4294967295.0, -2.5, 0.125, 1e30, -1e-30, -FLT_MAX};
+            for (double v : probes)
+                if (ValidateSetProperty(field, num(v)).outcome == EditOutcome::Applied) values.push_back(num(v));
+        }
+        for (const PropertyValue& v : values)
+        {
+            std::string got;
+            if (survivesSave(field, v, &got)) { roundTrips++; continue; }
+            if (firstMiss.empty())
+            {
+                char buf[160];
+                std::snprintf(buf, sizeof(buf), "%s = %.9g reloads as %s", field.c_str(), v.isBool ? (double)v.boolValue : v.number, got.c_str());
+                firstMiss = buf;
+            }
+        }
+    }
+    std::printf("  (%d accepted values round-tripped)\n", roundTrips);
+    CHECK(firstMiss.empty(), firstMiss.empty() ? "every accepted value survives save + reload" : firstMiss.c_str());
+    CHECK(roundTrips > 300, "the round-trip battery ran on every field");
+
+    CHECK(isRejected(ValidateSetProperty("noSuchField", num(1))), "unknown field rejected");
+    CHECK(isRejected(ValidateSetProperty("useBursts", num(1))) && isRejected(ValidateSetProperty("lifetime", flag(true))),
+          "a number for a boolean, or a boolean for a number, rejected");
+    CHECK(isRejected(ValidateSetProperty("nParticlesPerSecond", num(1.5))) &&
+          isRejected(ValidateSetProperty("nParticlesPerSecond", num(-1))) &&
+          isRejected(ValidateSetProperty("nParticlesPerSecond", num(4294967296.0))) &&
+          isRejected(ValidateSetProperty("nParticlesPerSecond", num(NAN))),
+          "integers: fractional, negative, above 0xFFFFFFFF and NaN rejected");
+    CHECK(isRejected(ValidateSetProperty("blendMode", num(14))) && isRejected(ValidateSetProperty("nTriangles", num(0))) &&
+          isRejected(ValidateSetProperty("nBursts", num(4294967295.0))) && isRejected(ValidateSetProperty("groundBehavior", num(4))) &&
+          isRejected(ValidateSetProperty("emitFromMesh", num(4))) && isRejected(ValidateSetProperty("emitFromMesh", num(-1))) &&
+          isRejected(ValidateSetProperty("groups[0].type", num(5))) && isRejected(ValidateSetProperty("groups[2].type", num(5))),
+          "integer ranges: blendMode 14, nTriangles 0, nBursts 0xFFFFFFFF, groundBehavior 4, emitFromMesh -1/4, group type 5");
+    CHECK(isRejected(ValidateSetProperty("gravity", num(1e39))) && isRejected(ValidateSetProperty("gravity", num(INFINITY))) &&
+          isRejected(ValidateSetProperty("gravity", num(NAN))),
+          "floats: beyond float range and non-finite rejected");
+    CHECK(isRejected(ValidateSetProperty("randomRotationVariance", num(1.0001))) &&
+          isRejected(ValidateSetProperty("randomRotationVariance", num(-0.1))) &&
+          ValidateSetProperty("randomRotationVariance", num(1)).outcome == EditOutcome::Applied,
+          "randomRotationVariance stays within [0, 1]");
+    CHECK(!ValidateSetProperty("blendMode", num(1.5)).reason.empty(), "a rejection says why");
+
+    // Why the integer ranges exist: write the value directly and reload.
+    {
+        ParticleSystem ps; newSystem(ps);
+        ps.getEmitter(0).blendMode = 14; ps.getEmitter(0).nTriangles = 0; ps.getEmitter(0).nBursts = 0xFFFFFFFFul;
+        ParticleSystem* r = reload(serialize(ps));
+        CHECK(r && r->getEmitter(0).blendMode == 0 && r->getEmitter(0).nTriangles == 1 && r->getEmitter(0).nBursts == 0,
+              "grounding: blendMode 14, nTriangles 0 and nBursts 0xFFFFFFFF reload as 0, 1 and 0");
+        delete r;
+    }
+    {
+        ParticleSystem ps; newSystem(ps);
+        ps.getEmitter(0).groups[ParticleSystem::GROUP_POSITION].type = 5;
+        ParticleSystem* r = reload(serialize(ps));
+        CHECK(r == nullptr, "grounding: a group type of 5 makes the saved file unloadable");
+        delete r;
+    }
+
+    CHECK(PropertyFootprint("acceleration[0]") == std::vector<std::string>({"acceleration[0]"}), "a plain field's footprint is itself");
+    CHECK(PropertyFootprint("lifetime") == std::vector<std::string>({"lifetime", "groups[1]"}) &&
+          PropertyFootprint("randomLifetimePerc") == std::vector<std::string>({"randomLifetimePerc", "groups[1]"}),
+          "lifetime and randomLifetimePerc also derive groups[1]");
+    CHECK(PropertyFootprint("randomRotation") == std::vector<std::string>({"randomRotation", "randomRotationAverage", "tracks[6]"}) &&
+          PropertyFootprint("randomRotationAverage") == std::vector<std::string>({"randomRotationAverage", "tracks[6]"}),
+          "randomRotation and its average reach the rotation track");
+
+    Emitter e;
+    ApplySetProperty(e, "groups[2].sphereEdge", num(7));
+    ApplySetProperty(e, "randomColors[1]", num(0.5));
+    ApplySetProperty(e, "isHeatParticle", flag(true));
+    CHECK(e.groups[ParticleSystem::GROUP_POSITION].sphereEdge == 7 && e.randomColors[1] == 0.5f && e.isHeatParticle,
+          "apply writes the named member");
+}
+
+static void testRenameAndTextures()
+{
+    std::printf("(d) tool-only: rename and texture names\n");
+    ParticleSystem ps;
+    newSystem(ps);
+    Emitter* second = ps.addRootEmitter();
+    second->name = "Em1";
+    const Emitter& first = ps.getEmitter(0);
+    CHECK(ValidateRename(ps, first, "Em0").outcome == EditOutcome::NoOpUnchanged, "renaming to the current name is unchanged");
+    CHECK(ValidateRename(ps, first, "Fresh").outcome == EditOutcome::Applied, "a free name is accepted");
+    const EditResult taken = ValidateRename(ps, first, "Em1");
+    CHECK(isRejected(taken) && taken.reason.find("Em1_1") != std::string::npos, "a taken name is rejected with a free suggestion");
+    CHECK(isRejected(ValidateRename(ps, first, "")) && isRejected(ValidateRename(ps, first, std::string("a\0b", 3))) &&
+          isRejected(ValidateRename(ps, first, "\xC3\x28")),
+          "empty, NUL-holding and non-UTF-8 names rejected");
+    CHECK(ValidateRename(ps, first, "\xC3\xA9tincelle").outcome == EditOutcome::Applied, "a UTF-8 name is accepted");
+
+    CHECK(isRejected(ValidateTextureName("", true)) && ValidateTextureName("", false).outcome == EditOutcome::Applied,
+          "an empty colour texture is rejected, an empty normal texture is legal");
+    CHECK(ValidateTextureName(std::string(kMaxTextureNameBytes, 'a'), true).outcome == EditOutcome::Applied &&
+          isRejected(ValidateTextureName(std::string(kMaxTextureNameBytes + 1, 'a'), true)),
+          "texture names are capped at kMaxTextureNameBytes");
+    CHECK(isRejected(ValidateTextureName(std::string("a\0.tga", 6), true)) && isRejected(ValidateTextureName("\xFF.tga", false)),
+          "NUL-holding and non-UTF-8 texture names rejected");
+}
+
+static void testRescaleRule()
+{
+    std::printf("(d) tool-only: rescale preconditions\n");
+    Emitter e;
+    e.useBursts = false;
+    e.nParticlesPerSecond = 10;
+    CHECK(ValidateRescale(e, 2, 0.5).outcome == EditOutcome::Applied, "ordinary scales accepted");
+    const double bad[] = {0, -1, NAN, INFINITY, 1e-40, 1e39};
+    bool all = true;
+    for (double v : bad) all = all && isRejected(ValidateRescale(e, v, 1)) && isRejected(ValidateRescale(e, 1, v));
+    CHECK(all, "zero, negative, non-finite, subnormal and beyond-float scales rejected");
+
+    CHECK(isRejected(ValidateRescale(e, 1e-9, 1)), "a particle rate pushed past INT_MAX rejected");
+    e.nParticlesPerSecond = 1;
+    CHECK(isRejected(ValidateRescale(e, FLT_MAX, 1)), "a fractional rate whose burst delay overflows rejected");
+    CHECK(ValidateRescale(e, 3, 1).outcome == EditOutcome::Applied, "a fractional rate with a finite burst delay accepted");
+
+    e.useBursts = true;
+    e.burstDelay = 0;
+    CHECK(isRejected(ValidateRescale(e, 2, 1)), "a zero burst delay rejected (the conversion divides by it)");
+    e.burstDelay = 1e-6f;
+    CHECK(isRejected(ValidateRescale(e, 1e-3, 1)), "a burst rate pushed past INT_MAX rejected");
+    CHECK(ValidateRescale(e, 1e-3, 1).reason.find("burst") != std::string::npos, "the reason names the burst delay");
+    e.burstDelay = -1e-6f;
+    CHECK(isRejected(ValidateRescale(e, 1e-3, 1)), "a negative burst rate pushed past INT_MIN rejected");
+    e.burstDelay = -0.5f;
+    CHECK(ValidateRescale(e, 2, 1).outcome == EditOutcome::Applied, "a negative burst delay that converts is accepted (no overflow)");
+    e.burstDelay = 0.25f;
+    CHECK(ValidateRescale(e, 2, 1).outcome == EditOutcome::Applied, "an ordinary burst delay accepted");
+    e.burstDelay = 0;
+    CHECK(ValidateRescale(e, 1, 2).outcome == EditOutcome::Applied, "a time scale of 1 skips the conversion");
+    e.isWeatherParticle = true;
+    CHECK(ValidateRescale(e, 2, 1).outcome == EditOutcome::Applied, "weather emitters skip the conversion");
+}
+
+static void testKeyCountAndLocks()
+{
+    std::printf("(d) tool-only: key count and locks\n");
+    Track t = makeTrack({Key(0, 1), Key(100, 1)});
+    CHECK(ValidateKeyCount(t, kMaxAloTrackKeys - 1).outcome == EditOutcome::Applied, "kMaxAloTrackKeys - 1 interior keys accepted");
+    CHECK(isRejected(ValidateKeyCount(t, kMaxAloTrackKeys)), "kMaxAloTrackKeys interior keys rejected");
+
+    Emitter locked;   // default: G/B/A locked to R
+    CHECK(LockedDependents(locked, ParticleSystem::TRACK_RED_CHANNEL) == std::vector<int>({1, 2, 3}), "red drives green, blue and alpha");
+    CHECK(LockedDependents(locked, ParticleSystem::TRACK_GREEN_CHANNEL).empty() && LockedDependents(locked, 4).empty(),
+          "a locked channel and a non-colour track drive nothing");
+    const EditResult onLocked = ValidateTrackEditLocks(locked, ParticleSystem::TRACK_BLUE_CHANNEL, true);
+    CHECK(isRejected(onLocked) && onLocked.reason.find("tracks[0]") != std::string::npos,
+          "editing a locked channel is rejected and names its source");
+    CHECK(isRejected(ValidateTrackEditLocks(locked, ParticleSystem::TRACK_RED_CHANNEL, false)),
+          "editing a source with dependents is rejected unless they are allowed");
+    CHECK(ValidateTrackEditLocks(locked, ParticleSystem::TRACK_RED_CHANNEL, true).outcome == EditOutcome::Applied,
+          "editing a source is accepted when its dependents are allowed");
+    CHECK(ValidateTrackEditLocks(locked, ParticleSystem::TRACK_SCALE, false).outcome == EditOutcome::Applied,
+          "non-colour tracks are never locked");
+    CHECK(isRejected(ValidateTrackEditLocks(locked, -1, true)) && isRejected(ValidateTrackEditLocks(locked, ParticleSystem::NUM_TRACKS, true)),
+          "unknown track rejected");
+
+    ParticleSystem ps;
+    newSystem(ps);   // every channel unlocked
+    CHECK(ValidateTrackEditLocks(ps.getEmitter(0), ParticleSystem::TRACK_ALPHA_CHANNEL, false).outcome == EditOutcome::Applied &&
+          LockedDependents(ps.getEmitter(0), ParticleSystem::TRACK_RED_CHANNEL).empty(),
+          "unlocked channels edit freely");
+}
+
 int main()
 {
     std::printf("test_particle_authoring\n");
@@ -781,6 +1018,10 @@ int main()
     testFullTrackReplacement();
     testKeyBounds();
     testAtlas();
+    testSetProperty();
+    testRenameAndTextures();
+    testRescaleRule();
+    testKeyCountAndLocks();
     if (g_failed) { std::printf("FAILED: %d check(s)\n", g_failed); return 1; }
     std::printf("all checks passed\n");
     return 0;

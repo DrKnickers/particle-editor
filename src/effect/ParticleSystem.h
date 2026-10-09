@@ -334,6 +334,10 @@ public:
     // recurse or double-free. Called from the ParticleSystem(IFile*) loader
     // (which also backs autosave restore) and the import-emitters helper.
     void ValidateEmitterGraph();
+    // What the last ValidateEmitterGraph cleared, one line per link (empty
+    // when the graph was already well-formed). After a load, a non-empty
+    // list means the document differs from the file's bytes.
+    const std::vector<std::string>& getGraphRepairs() const { return m_graphRepairs; }
 
     // Clone the picked emitters (indices into `source`) into THIS system as
     // new roots: deep-copies each via the chunk serialiser (copy=true), re-maps
@@ -458,5 +462,6 @@ private:
 	std::string                                m_name;
 	std::vector<Emitter*>                      m_emitters;
     std::map<uint32_t, LinkExemptFlags>        m_linkExempts;
+    std::vector<std::string>                   m_graphRepairs;
 };
 #endif

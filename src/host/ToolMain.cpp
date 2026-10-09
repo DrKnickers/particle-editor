@@ -12,6 +12,7 @@
 #include "ToolMain.h"
 #include "effect/ParticleSystem.h"
 #include "effect/ParticleSystemJson.h"
+#include "effect/ParticleSystemIO.h"
 #include "common/exceptions.h"
 #include "common/files.h"
 #include "StringConv.h"
@@ -30,7 +31,8 @@ const int kExitInternal = 14;
 const unsigned long long kMaxSourceBytes = 512ull * 1024 * 1024;
 
 const wchar_t* kUsage =
-    L"usage: ParticleEditor.exe --tool inspect <in.alo> --out <inspect.json>\n";
+    L"usage: ParticleEditor.exe --tool inspect  <in.alo> --out <inspect.json>\n"
+    L"       ParticleEditor.exe --tool validate <in.alo> --out <report.json>\n";
 
 std::vector<std::wstring> CommandLineArgs()
 {
@@ -220,6 +222,97 @@ int Inspect(const std::wstring& input, const std::wstring& output)
     return kExitOk;
 }
 
+std::string SaveToBytes(ParticleSystem& system)
+{
+    MemoryFile file;
+    system.write(&file);
+    file.seek(0);
+    std::string bytes(file.size(), '\0');
+    if (!bytes.empty()) file.read(&bytes[0], static_cast<unsigned long>(bytes.size()));
+    return bytes;
+}
+
+nlohmann::json Finding(const char* severity, const char* code, const std::string& message, const std::string& path = "")
+{
+    nlohmann::json finding = {{"severity", severity}, {"code", code}, {"message", message}};
+    if (!path.empty()) finding["path"] = path;
+    return finding;
+}
+
+// Valid means the source loads exactly as written: no load failure, no spawn
+// link the loader had to clear, and every value reportable by inspect.
+// `canonical` says whether a save of the loaded document reproduces the
+// source bytes. Warnings and advisories never make a source invalid.
+int Validate(const std::wstring& input, const std::wstring& output)
+{
+    if (SameFile(input, output))
+    {
+        fwprintf(stderr, L"[tool] --out names the input file\n");
+        return kExitUsage;
+    }
+    nlohmann::json findings = nlohmann::json::array();
+    nlohmann::json report = {
+        {"schema", 1}, {"verb", "validate"}, {"sourceDocumentHash", nullptr}, {"internalName", nullptr},
+        {"derivedName", DeriveParticleSystemName(input)}, {"canonical", nullptr}, {"textureResolution", "unverified"},
+    };
+    std::string bytes;
+    std::unique_ptr<ParticleSystem> system;
+    if (ReadSource(input, &bytes) != kExitOk)
+        findings.push_back(Finding("error", "read-failed", "the source could not be read"));
+    else
+    {
+        const std::string hash = Sha256Hex(bytes);
+        if (hash.empty()) return kExitInternal;
+        report["sourceDocumentHash"] = hash;
+        std::string error;
+        system = ParseSource(bytes, &error);
+        if (!system) findings.push_back(Finding("error", "load-failed", error));
+    }
+    if (system)
+    {
+        report["internalName"] = system->getName();
+        for (const std::string& repair : system->getGraphRepairs())
+            findings.push_back(Finding("error", "graph-repaired", repair));
+        std::string path, reason;
+        if (particle_json::FindInvalidInspectValue(particle_json::ParticleSystemJson(*system), &path, &reason))
+            findings.push_back(Finding("error", "invalid-value", reason, path));
+        if (system->getName() != report["derivedName"].get<std::string>())
+            findings.push_back(Finding("warning", "internal-name",
+                "the internal name '" + system->getName() + "' differs from '" + report["derivedName"].get<std::string>() +
+                "', the name the file name gives; the game registers the effect under the internal name"));
+        const std::vector<ParticleSystem::Emitter*>& emitters = system->getEmitters();
+        for (size_t i = 0; i < emitters.size(); i++)
+        {
+            size_t k = 0;
+            for (const auto& key : emitters[i]->tracks[ParticleSystem::TRACK_INDEX]->keys)
+            {
+                const EditResult atlas = ClassifyAtlasIndex(*emitters[i], key.value);
+                if (atlas.outcome == EditOutcome::OutOfGrid)
+                    findings.push_back(Finding("advisory", "atlas-out-of-grid", atlas.reason,
+                        "emitters[" + std::to_string(i) + "].tracks[" + std::to_string(ParticleSystem::TRACK_INDEX) +
+                        "].keys[" + std::to_string(k) + "]"));
+                k++;
+            }
+        }
+        report["canonical"] = SaveToBytes(*system) == bytes;
+    }
+    bool valid = true;
+    for (const nlohmann::json& finding : findings) valid = valid && finding["severity"] != "error";
+    const int code = valid ? kExitOk : kExitSource;
+    report["valid"] = valid;
+    report["exitCode"] = code;
+    report["findings"] = findings;
+    // A name that is not UTF-8 is already an error finding; replace its bytes
+    // here so the report itself is always valid JSON.
+    if (!WriteFileAtomically(output, report.dump(2, ' ', false, nlohmann::json::error_handler_t::replace) + "\n"))
+    {
+        fwprintf(stderr, L"[tool] cannot write %ls (error %lu)\n", output.c_str(), GetLastError());
+        return kExitIo;
+    }
+    fprintf(stderr, "[tool] verb=validate exit=%d valid=%s findings=%zu\n", code, valid ? "true" : "false", findings.size());
+    return code;
+}
+
 int Run(const std::vector<std::wstring>& args)
 {
     // args[0] is the exe. The tool takes the whole command line: `--tool`
@@ -232,6 +325,8 @@ int Run(const std::vector<std::wstring>& args)
     }
     if (args[2] == L"inspect" && args.size() == 6 && args[4] == L"--out" && !args[3].empty() && !args[5].empty())
         return Inspect(args[3], args[5]);
+    if (args[2] == L"validate" && args.size() == 6 && args[4] == L"--out" && !args[3].empty() && !args[5].empty())
+        return Validate(args[3], args[5]);
     fwprintf(stderr, L"[tool] unrecognised arguments\n%ls", kUsage);
     return kExitUsage;
 }

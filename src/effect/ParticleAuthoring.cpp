@@ -6,6 +6,9 @@
 #include <cstdio>
 
 #include "common/ResourceLimits.h"
+#include "EmitterNaming.h"
+
+#include <functional>
 
 using namespace std;
 
@@ -339,4 +342,319 @@ EditResult ClassifyAtlasIndex(const Emitter& emitter, float indexValue)
              "atlas index %g is outside the %d x %d grid; the engine wraps it to another frame",
              (double)indexValue, side, side);
     return Result(EditOutcome::OutOfGrid, reason);
+}
+
+// ---- Tool-only rules --------------------------------------------------------
+
+namespace
+{
+enum class PropertyKind { Bool, Float, ULong, UInt, Int };
+
+struct PropertyRule
+{
+    std::string  name;
+    PropertyKind kind;
+    bool         ranged;   // floats: whether [lo, hi] applies; integers always
+    double       lo, hi;
+    std::function<void*(Emitter&)> ref;
+};
+
+const double kU32Max = 4294967295.0;
+
+std::vector<PropertyRule> BuildPropertyRules()
+{
+    std::vector<PropertyRule> rules;
+    auto boolean = [&](const char* name, bool Emitter::* m) {
+        rules.push_back({name, PropertyKind::Bool, false, 0, 0, [m](Emitter& e) -> void* { return &(e.*m); }});
+    };
+    auto real = [&](const std::string& name, std::function<float*(Emitter&)> f, bool ranged = false, double lo = 0, double hi = 0) {
+        rules.push_back({name, PropertyKind::Float, ranged, lo, hi, [f](Emitter& e) -> void* { return f(e); }});
+    };
+    auto ulong = [&](const char* name, unsigned long Emitter::* m, double lo, double hi) {
+        rules.push_back({name, PropertyKind::ULong, true, lo, hi, [m](Emitter& e) -> void* { return &(e.*m); }});
+    };
+    auto member = [](float Emitter::* m) { return [m](Emitter& e) { return &(e.*m); }; };
+
+    boolean("linkToSystem", &Emitter::linkToSystem);
+    boolean("objectSpaceAcceleration", &Emitter::objectSpaceAcceleration);
+    boolean("doColorAddGrayscale", &Emitter::doColorAddGrayscale);
+    boolean("affectedByWind", &Emitter::affectedByWind);
+    boolean("isHeatParticle", &Emitter::isHeatParticle);
+    boolean("isWeatherParticle", &Emitter::isWeatherParticle);
+    boolean("hasTail", &Emitter::hasTail);
+    boolean("noDepthTest", &Emitter::noDepthTest);
+    boolean("randomRotation", &Emitter::randomRotation);
+    boolean("randomRotationDirection", &Emitter::randomRotationDirection);
+    boolean("isWorldOriented", &Emitter::isWorldOriented);
+    boolean("useBursts", &Emitter::useBursts);
+    boolean("unknown15", &Emitter::unknown15);
+    boolean("unknown2b", &Emitter::unknown2b);
+    boolean("unknown44", &Emitter::unknown44);
+
+    real("gravity", member(&Emitter::gravity));
+    real("lifetime", member(&Emitter::lifetime));
+    real("initialDelay", member(&Emitter::initialDelay));
+    real("burstDelay", member(&Emitter::burstDelay));
+    real("inwardSpeed", member(&Emitter::inwardSpeed));
+    real("inwardAcceleration", member(&Emitter::inwardAcceleration));
+    real("randomScalePerc", member(&Emitter::randomScalePerc));
+    real("randomLifetimePerc", member(&Emitter::randomLifetimePerc));
+    real("weatherCubeSize", member(&Emitter::weatherCubeSize));
+    real("tailSize", member(&Emitter::tailSize));
+    real("parentLinkStrength", member(&Emitter::parentLinkStrength));
+    real("weatherCubeDistance", member(&Emitter::weatherCubeDistance));
+    real("randomRotationAverage", member(&Emitter::randomRotationAverage));
+    real("randomRotationVariance", member(&Emitter::randomRotationVariance), true, 0.0, 1.0);
+    real("bounciness", member(&Emitter::bounciness));
+    real("freezeTime", member(&Emitter::freezeTime));
+    real("skipTime", member(&Emitter::skipTime));
+    real("emitFromMeshOffset", member(&Emitter::emitFromMeshOffset));
+    real("weatherFadeoutDistance", member(&Emitter::weatherFadeoutDistance));
+    real("unknown3f", member(&Emitter::unknown3f));
+    for (int i = 0; i < 3; i++)
+        real("acceleration[" + std::to_string(i) + "]", [i](Emitter& e) { return &e.acceleration[i]; });
+    for (int i = 0; i < 4; i++)
+        real("randomColors[" + std::to_string(i) + "]", [i](Emitter& e) { return &e.randomColors[i]; });
+
+    ulong("nBursts", &Emitter::nBursts, 0, kU32Max - 1);   // 0xFFFFFFFF reloads as 0
+    ulong("blendMode", &Emitter::blendMode, 0, 13);
+    ulong("textureSize", &Emitter::textureSize, 0, kU32Max);
+    ulong("nParticlesPerSecond", &Emitter::nParticlesPerSecond, 0, kU32Max);
+    ulong("nTriangles", &Emitter::nTriangles, 1, kU32Max);
+    ulong("nParticlesPerBurst", &Emitter::nParticlesPerBurst, 0, kU32Max);
+    ulong("groundBehavior", &Emitter::groundBehavior, ParticleSystem::GROUND_NONE, ParticleSystem::GROUND_STICK);
+    ulong("unknown06", &Emitter::unknown06, 0, kU32Max);
+    ulong("unknown49", &Emitter::unknown49, 0, kU32Max);
+    rules.push_back({"emitFromMesh", PropertyKind::Int, true, ParticleSystem::EMIT_DISABLE, ParticleSystem::EMIT_EVERY_VERTEX,
+                     [](Emitter& e) -> void* { return &e.emitFromMesh; }});
+
+    // The speed and position groups. The lifetime group is derived on save.
+    for (int g : {ParticleSystem::GROUP_SPEED, ParticleSystem::GROUP_POSITION})
+    {
+        const std::string prefix = "groups[" + std::to_string(g) + "].";
+        auto groupFloat = [&](const char* name, float Emitter::Group::* m) {
+            real(prefix + name, [g, m](Emitter& e) { return &(e.groups[g].*m); });
+        };
+        auto groupUInt = [&](const char* name, unsigned int Emitter::Group::* m, double hi) {
+            rules.push_back({prefix + name, PropertyKind::UInt, true, 0, hi,
+                             [g, m](Emitter& e) -> void* { return &(e.groups[g].*m); }});
+        };
+        groupUInt("type", &Emitter::Group::type, ParticleSystem::NUM_GROUP_TYPES - 1);
+        groupFloat("minX", &Emitter::Group::minX); groupFloat("minY", &Emitter::Group::minY);
+        groupFloat("minZ", &Emitter::Group::minZ); groupFloat("maxX", &Emitter::Group::maxX);
+        groupFloat("maxY", &Emitter::Group::maxY); groupFloat("maxZ", &Emitter::Group::maxZ);
+        groupFloat("sideLength", &Emitter::Group::sideLength);
+        groupFloat("sphereRadius", &Emitter::Group::sphereRadius);
+        groupUInt("sphereEdge", &Emitter::Group::sphereEdge, kU32Max);
+        groupFloat("cylinderRadius", &Emitter::Group::cylinderRadius);
+        groupUInt("cylinderEdge", &Emitter::Group::cylinderEdge, kU32Max);
+        groupFloat("cylinderHeight", &Emitter::Group::cylinderHeight);
+        groupFloat("valX", &Emitter::Group::valX); groupFloat("valY", &Emitter::Group::valY);
+        groupFloat("valZ", &Emitter::Group::valZ);
+    }
+    return rules;
+}
+
+const std::vector<PropertyRule>& PropertyRules()
+{
+    static const std::vector<PropertyRule> rules = BuildPropertyRules();
+    return rules;
+}
+
+const PropertyRule* FindPropertyRule(const std::string& field)
+{
+    for (const PropertyRule& rule : PropertyRules())
+        if (rule.name == field) return &rule;
+    return nullptr;
+}
+
+EditResult Rejected(const std::string& reason)
+{
+    EditResult r;
+    r.outcome = EditOutcome::Rejected;
+    r.reason  = reason;
+    return r;
+}
+} // namespace
+
+std::vector<std::string> SettablePropertyNames()
+{
+    std::vector<std::string> names;
+    for (const PropertyRule& rule : PropertyRules()) names.push_back(rule.name);
+    return names;
+}
+
+EditResult ValidateSetProperty(const std::string& field, const PropertyValue& value)
+{
+    const PropertyRule* rule = FindPropertyRule(field);
+    if (!rule) return Rejected("'" + field + "' is not a settable property");
+    if (rule->kind == PropertyKind::Bool)
+    {
+        if (!value.isBool) return Rejected("'" + field + "' must be true or false");
+        return Result(EditOutcome::Applied);
+    }
+    if (value.isBool) return Rejected("'" + field + "' must be a number");
+    char range[96];
+    if (rule->kind == PropertyKind::Float)
+    {
+        if (!IsFiniteFloatField(value.number)) return Rejected("'" + field + "' must be a finite number that fits a float");
+        if (rule->ranged && !(value.number >= rule->lo && value.number <= rule->hi))
+        {
+            snprintf(range, sizeof(range), "[%g, %g]", rule->lo, rule->hi);
+            return Rejected("'" + field + "' must be within " + range);
+        }
+        return Result(EditOutcome::Applied);
+    }
+    if (!std::isfinite(value.number) || value.number != std::floor(value.number))
+        return Rejected("'" + field + "' must be an integer");
+    if (!(value.number >= rule->lo && value.number <= rule->hi))
+    {
+        snprintf(range, sizeof(range), "%.0f..%.0f", rule->lo, rule->hi);
+        return Rejected("'" + field + "' must be within " + range);
+    }
+    return Result(EditOutcome::Applied);
+}
+
+void ApplySetProperty(Emitter& emitter, const std::string& field, const PropertyValue& value)
+{
+    const PropertyRule* rule = FindPropertyRule(field);
+    assert(rule != nullptr);
+    if (!rule) return;
+    void* target = rule->ref(emitter);
+    switch (rule->kind)
+    {
+        case PropertyKind::Bool:  *static_cast<bool*>(target)          = value.boolValue; break;
+        case PropertyKind::Float: *static_cast<float*>(target)         = static_cast<float>(value.number); break;
+        case PropertyKind::ULong: *static_cast<unsigned long*>(target) = static_cast<unsigned long>(value.number); break;
+        case PropertyKind::UInt:  *static_cast<unsigned int*>(target)  = static_cast<unsigned int>(value.number); break;
+        case PropertyKind::Int:   *static_cast<int*>(target)           = static_cast<int>(value.number); break;
+    }
+}
+
+PropertyValue GetProperty(const Emitter& emitter, const std::string& field)
+{
+    PropertyValue value = {false, false, 0.0};
+    const PropertyRule* rule = FindPropertyRule(field);
+    assert(rule != nullptr);
+    if (!rule) return value;
+    const void* source = rule->ref(const_cast<Emitter&>(emitter));
+    switch (rule->kind)
+    {
+        case PropertyKind::Bool:  value.isBool = true; value.boolValue = *static_cast<const bool*>(source); break;
+        case PropertyKind::Float: value.number = *static_cast<const float*>(source); break;
+        case PropertyKind::ULong: value.number = *static_cast<const unsigned long*>(source); break;
+        case PropertyKind::UInt:  value.number = *static_cast<const unsigned int*>(source); break;
+        case PropertyKind::Int:   value.number = *static_cast<const int*>(source); break;
+    }
+    return value;
+}
+
+std::vector<std::string> PropertyFootprint(const std::string& field)
+{
+    std::vector<std::string> paths = {field};
+    if (field == "lifetime" || field == "randomLifetimePerc") paths.push_back("groups[1]");
+    if (field == "randomRotation") { paths.push_back("randomRotationAverage"); paths.push_back("tracks[6]"); }
+    if (field == "randomRotationAverage") paths.push_back("tracks[6]");
+    return paths;
+}
+
+EditResult ValidateRename(const ParticleSystem& system, const Emitter& target, const std::string& name)
+{
+    if (name.empty()) return Rejected("rename: the name must not be empty");
+    if (name.find('\0') != std::string::npos) return Rejected("rename: the name must not contain a NUL");
+    if (!IsValidUtf8(name)) return Rejected("rename: the name must be valid UTF-8");
+    if (name == target.name) return Result(EditOutcome::NoOpUnchanged);
+    std::vector<std::string> names;
+    bool taken = false;
+    for (const Emitter* e : system.getEmitters())
+    {
+        names.push_back(e->name);
+        if (e != &target && e->name == name) taken = true;
+    }
+    if (taken)
+        return Rejected("rename: another emitter is already named '" + name + "' (a free name is '" +
+                        NextDuplicateName(names, name) + "')");
+    return Result(EditOutcome::Applied);
+}
+
+EditResult ValidateTextureName(const std::string& name, bool colorTexture)
+{
+    const char* which = colorTexture ? "colorTexture" : "normalTexture";
+    if (colorTexture && name.empty()) return Rejected(std::string(which) + " must not be empty");
+    if (name.find('\0') != std::string::npos) return Rejected(std::string(which) + " must not contain a NUL");
+    if (!IsValidUtf8(name)) return Rejected(std::string(which) + " must be valid UTF-8");
+    if (name.size() > kMaxTextureNameBytes)
+        return Rejected(std::string(which) + " must be at most " + std::to_string(kMaxTextureNameBytes) + " bytes");
+    return Result(EditOutcome::Applied);
+}
+
+EditResult ValidateRescale(const Emitter& emitter, double timeScale, double sizeScale)
+{
+    // Normal floats only: a subnormal scale's reciprocal overflows.
+    if (!(IsFiniteFloatField(timeScale) && timeScale >= FLT_MIN))
+        return Rejected("rescale: the time scale must be a finite number above 0");
+    if (!(IsFiniteFloatField(sizeScale) && sizeScale >= FLT_MIN))
+        return Rejected("rescale: the size scale must be a finite number above 0");
+    const float t = static_cast<float>(timeScale);
+    if (t == 1.0f || emitter.isWeatherParticle) return Result(EditOutcome::Applied);
+    // Rescale.cpp converts these through an int, in float arithmetic.
+    if (emitter.useBursts)
+    {
+        // A zero delay gives an infinite rate; a tiny one of either sign, a
+        // rate past the int range.
+        const float perSecond = 1.0f / (emitter.burstDelay * t) * 10000.0f + 0.5f;
+        if (!(perSecond >= -2147483648.0f && perSecond < 2147483648.0f))
+            return Rejected("rescale: the burst delay becomes too close to 0 to convert");
+    }
+    else
+    {
+        const float perSecond = emitter.nParticlesPerSecond / t;
+        if (!(perSecond < 2147483648.0f)) return Rejected("rescale: the particle rate becomes too large to convert");
+        // A fractional rate becomes bursts of one every 1/rate seconds.
+        if (perSecond != std::floor(perSecond) && !std::isfinite(1.0f / perSecond))
+            return Rejected("rescale: the particle rate becomes too small to convert");
+    }
+    return Result(EditOutcome::Applied);
+}
+
+EditResult ValidateKeyCount(const Track& track, size_t adding)
+{
+    // The file stores the two endpoints and the keys between them.
+    const size_t total    = track.keys.size() + adding;
+    const size_t interior = total >= 2 ? total - 2 : 0;
+    if (interior >= kMaxAloTrackKeys)
+        return Rejected("a track keeps fewer than " + std::to_string(kMaxAloTrackKeys) + " interior keys");
+    return Result(EditOutcome::Applied);
+}
+
+std::vector<int> LockedDependents(const Emitter& emitter, int source)
+{
+    std::vector<int> dependents;
+    if (source < 0 || source >= 4) return dependents;
+    for (int j = 0; j < 4; j++)
+        if (j != source && emitter.tracks[j] == &emitter.trackContents[source]) dependents.push_back(j);
+    return dependents;
+}
+
+EditResult ValidateTrackEditLocks(const Emitter& emitter, int track, bool allowDependents)
+{
+    if (track < 0 || track >= ParticleSystem::NUM_TRACKS) return Rejected("no such track");
+    if (track >= 4) return Result(EditOutcome::Applied);
+    if (emitter.tracks[track] != &emitter.trackContents[track])
+    {
+        int source = track;
+        for (int j = 0; j < 4; j++)
+            if (emitter.tracks[track] == &emitter.trackContents[j]) source = j;
+        return Rejected("tracks[" + std::to_string(track) + "] is locked to tracks[" + std::to_string(source) +
+                        "]; edit tracks[" + std::to_string(source) + "]");
+    }
+    const std::vector<int> dependents = LockedDependents(emitter, track);
+    if (!dependents.empty() && !allowDependents)
+    {
+        std::string list;
+        for (int j : dependents) list += (list.empty() ? "" : ", ") + std::string("tracks[") + std::to_string(j) + "]";
+        return Rejected("tracks[" + std::to_string(track) + "] also drives " + list +
+                        ", which are locked to it; name them in the edit's footprint to change them too");
+    }
+    return Result(EditOutcome::Applied);
 }

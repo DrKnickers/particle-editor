@@ -453,6 +453,8 @@ void ParticleSystem::setLinkExemptFlags(uint32_t                 groupId,
 void ParticleSystem::ValidateEmitterGraph()
 {
     const size_t n = m_emitters.size();
+    m_graphRepairs.clear();
+    char repair[512];
 
     // Pass 1: sanitise spawn indices so the graph is a single-parent forest.
     //  (a) out-of-range index -> "no spawn". A malformed file (external tool,
@@ -480,6 +482,9 @@ void ParticleSystem::ValidateEmitterGraph()
             {
                 printf("[Load] emitter %zu '%s' has invalid spawn index %zu (%s); clearing\n",
                        i, e->name.c_str(), c, reason); fflush(stdout);
+                snprintf(repair, sizeof(repair), "emitters[%zu].%s: spawn index %zu cleared (%s)",
+                         i, s == 0 ? "spawnOnDeath" : "spawnDuringLife", c, reason);
+                m_graphRepairs.push_back(repair);
                 *slots[s] = (size_t)-1;
             }
             else
@@ -523,6 +528,9 @@ void ParticleSystem::ValidateEmitterGraph()
                 // Back-edge into the active path: this link closes a cycle.
                 printf("[Load] emitter %zu '%s' closes a spawn cycle back to %zu; clearing\n",
                        u, e->name.c_str(), v); fflush(stdout);
+                snprintf(repair, sizeof(repair), "emitters[%zu].%s: spawn index %zu cleared (closes a cycle)",
+                         u, slotIdx == 0 ? "spawnOnDeath" : "spawnDuringLife", v);
+                m_graphRepairs.push_back(repair);
                 if (slotIdx == 0) e->spawnOnDeath    = (size_t)-1;
                 else              e->spawnDuringLife = (size_t)-1;
             }
@@ -537,6 +545,9 @@ void ParticleSystem::ValidateEmitterGraph()
                 // an over-deep chain arrives as a series of capped chains.
                 printf("[Load] emitter %zu '%s' exceeds the spawn depth cap %lu at %zu; clearing\n",
                        u, e->name.c_str(), kMaxEmitterTreeDepth, v); fflush(stdout);
+                snprintf(repair, sizeof(repair), "emitters[%zu].%s: spawn index %zu cleared (exceeds the depth cap %lu)",
+                         u, slotIdx == 0 ? "spawnOnDeath" : "spawnDuringLife", v, kMaxEmitterTreeDepth);
+                m_graphRepairs.push_back(repair);
                 if (slotIdx == 0) e->spawnOnDeath    = (size_t)-1;
                 else              e->spawnDuringLife = (size_t)-1;
             }
