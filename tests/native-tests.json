@@ -50,7 +50,7 @@
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
     "test_authoring_parity": {
-      "sources": ["src/host/BridgeDispatch_EmitterTracks.cpp", "src/effect/ParticleAuthoring.cpp", "src/simulation/SpawnerDriver.cpp", "src/simulation/ParticleRandom.cpp", "src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp"],
+      "sources": ["src/host/BridgeDispatch_EmitterTracks.cpp", "src/host/BridgeDispatch_EmitterProperties.cpp", "src/effect/Rescale.cpp", "src/effect/ParticleAuthoring.cpp", "src/simulation/SpawnerDriver.cpp", "src/simulation/ParticleRandom.cpp", "src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp"],
       "includes": ["src/host"],
       "uses": ["expat", "dxsdk", "webview2"],
       "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
@@ -178,6 +178,12 @@
     },
     "test_tool_selector": {
       "sources": ["src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp"],
+      "uses": ["expat", "dxsdk", "webview2"],
+      "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "test_tool_patch": {
+      "sources": ["src/host/ToolPatch.cpp", "src/host/ToolIO.cpp", "src/effect/ParticleAuthoring.cpp", "src/effect/Rescale.cpp", "src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp"],
+      "includes": ["src/host"],
       "uses": ["expat", "dxsdk", "webview2"],
       "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },

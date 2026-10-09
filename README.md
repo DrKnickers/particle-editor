@@ -30,6 +30,41 @@ opens Microsoft's download page for it.
 - **Safety net** — autosave with crash recovery, atomic saves, real undo/redo, and
   defensive parsing of untrusted `.alo` / `.meg` / `.xml` files.
 
+## Command-line tools
+
+`ParticleEditor.exe --tool` reads, checks and edits an `.alo` without opening a window, so
+scripts and agents can work on effects directly. It needs no game install.
+
+```text
+ParticleEditor.exe --tool inspect  <in.alo> --out <inspect.json>
+ParticleEditor.exe --tool validate <in.alo> --out <report.json>
+ParticleEditor.exe --tool patch    <in.alo> <request.json> --out <candidate.alo> --report <report.json>
+```
+
+`inspect` writes every value the file saves as JSON, with `sourceDocumentHash` (the
+SHA-256 of the input). `validate` reports whether the file loads exactly as written.
+`patch` applies a request's edits to one emitter, which it selects by that hash and the
+emitter's name. It writes the candidate only after verifying it, and never overwrites the
+input. The exit code says what happened: 0 ok, 2 usage, 3 invalid source, 4 the selector
+did not match, 5 an edit was refused, 6 a verification failed, 13 a file could not be
+written.
+
+The exe is a Windows program, so wait for it explicitly. From Node:
+
+```js
+const { status } = spawnSync("ParticleEditor.exe", ["--tool", "inspect", "fx.alo", "--out", "fx.json"]);
+```
+
+From PowerShell (`&` does not wait for a Windows program):
+
+```powershell
+$p = Start-Process ParticleEditor.exe -ArgumentList '--tool','validate','fx.alo','--out','report.json' -Wait -PassThru
+$p.ExitCode
+```
+
+The request format, every edit and the report are documented in
+[docs/CAPTURE_MODES.md](docs/CAPTURE_MODES.md#window-free-cli----tool-inspect----tool-validate----tool-patch).
+
 ## Learning it
 
 The [project site](https://drknickers.github.io/particle-editor/) carries a full guide:

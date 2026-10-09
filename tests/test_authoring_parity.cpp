@@ -23,6 +23,10 @@
 // sequence. The result must match tests/fixtures/authoring-parity/baseline.golden.txt
 // line for line; the baseline was recorded from the handlers before PR 3.
 //
+// It also holds the --tool boundary table (Phase 4B PR 3): where the tool's
+// rules and the bridge differ on set-properties, rename and rescale, each
+// difference must be an expected one (see "Tool boundary table" below).
+//
 //   test_authoring_parity.exe            compare against the baseline
 //   test_authoring_parity.exe --update   rewrite the baseline (only when a
 //                                        behavior change is intended)
@@ -36,6 +40,8 @@
 #include "host/LayoutBroker.h"
 
 #include "effect/LinkGroup.h"
+#include "effect/ParticleAuthoring.h"
+#include "effect/Rescale.h"
 #include "effect/ParticleSystem.h"
 #include "simulation/ParticleSystemInstance.h"
 #include "common/files.h"
@@ -234,6 +240,22 @@ struct AuthoringParityTestAccess
         try
         {
             if (!d.TryDispatchEmitterTracks(ctx)) return "unhandled";
+        }
+        catch (const std::exception& e)
+        {
+            return std::string("throw:") + e.what();
+        }
+        return ctx.res.dump();
+    }
+
+    // The same, through the real set-properties handler.
+    static std::string DispatchProperties(BridgeDispatcher& d, const std::string& kind, const json& params)
+    {
+        const std::string id = "p";
+        BridgeRequestContext ctx{d, id, kind, params, json()};
+        try
+        {
+            if (!d.TryDispatchEmitterProperties(ctx)) return "unhandled";
         }
         catch (const std::exception& e)
         {
@@ -517,6 +539,166 @@ static std::string Record(host::BridgeDispatcher& d, size_t n, const std::string
          + " | post=" + CurrentStateTag();
 }
 
+// ===========================================================================
+// Tool boundary table (Phase 4B PR 3, plan risk 3)
+// ===========================================================================
+//
+// The --tool verbs apply ParticleAuthoring's tool-only rules (owner decision
+// 6); the bridge keeps its own. For each boundary input, the table records
+// what each side does and must match the expected class:
+//   same            both apply, and the documents serialize to the same bytes
+//   tool-stricter   the tool refuses; the bridge applies (listed: decision 6)
+//   bridge-narrower the tool applies; the bridge skips the value
+//   both-refuse     the tool refuses and the bridge skips
+// Any row where both apply but the bytes differ fails. set-properties runs
+// the REAL handler (BridgeDispatch_EmitterProperties.cpp). The rename and
+// rescale handlers (BridgeDispatch_Emitters.cpp:581, BridgeDispatch_Engine.cpp:873)
+// are one-line wrappers in TUs this test does not link, so their rows apply
+// the same core action directly: `name = value`, and DoRescaleEmitter.
+// Bytes are written from memory, with no name stamp.
+
+enum class Side { Applied, Refused };
+
+static const char* ClassOf(Side tool, Side bridge)
+{
+    if (tool == Side::Applied) return bridge == Side::Applied ? "same" : "bridge-narrower";
+    return bridge == Side::Applied ? "tool-stricter" : "both-refuse";
+}
+
+static int g_tableFailures = 0;
+
+static void Row(const std::string& label, Side tool, Side bridge, bool bytesEqual, const char* expected)
+{
+    const std::string got = ClassOf(tool, bridge);
+    const bool diverged = tool == Side::Applied && bridge == Side::Applied && !bytesEqual;
+    const bool ok = got == expected && !diverged;
+    std::printf("  %s %-58s %s%s\n", ok ? "ok:  " : "FAIL:", label.c_str(), got.c_str(), diverged ? " (bytes differ)" : "");
+    if (!ok)
+    {
+        g_tableFailures++;
+        if (got != expected) std::printf("        expected %s\n", expected);
+    }
+}
+
+struct PropertyRow
+{
+    const char* field;
+    json        value;
+    const char* expected;
+};
+
+static void PropertyBoundaryTable(host::BridgeDispatcher& d, const Bytes& image)
+{
+    std::printf("tool boundary table: set-properties (real handler)\n");
+    const PropertyRow rows[] = {
+        {"lifetime", 2.5, "same"},
+        {"lifetime", -1.0, "same"},
+        {"lifetime", 1e39, "tool-stricter"},                  // the bridge stores infinity
+        {"gravity", -0.0, "same"},
+        {"blendMode", 13, "same"},
+        {"blendMode", 14, "tool-stricter"},                   // reloads as 0
+        {"blendMode", -1, "tool-stricter"},                   // the bridge casts it to 0xFFFFFFFF
+        {"nTriangles", 5, "same"},
+        {"nTriangles", 0, "tool-stricter"},                   // reloads as 1
+        {"nBursts", 4294967295u, "tool-stricter"},            // the bridge applies it; it reloads as 0
+        {"nBursts", 4294967295.0, "both-refuse"},             // as a JSON float it is past the bridge's INT_MAX
+        {"nParticlesPerBurst", 2.0, "same"},
+        {"nParticlesPerBurst", 2.5, "tool-stricter"},         // the bridge truncates to 2
+        {"textureSize", -1, "tool-stricter"},                 // the bridge casts it to 0xFFFFFFFF
+        {"groundBehavior", 3, "same"},
+        {"groundBehavior", 4, "tool-stricter"},               // outside the enum
+        {"emitFromMesh", 2, "same"},
+        {"emitFromMesh", -1, "tool-stricter"},                // outside the enum
+        {"randomRotationVariance", 0.5, "same"},
+        {"randomRotationVariance", 1.5, "tool-stricter"},     // the loader clamps it
+        {"bounciness", 1e39, "both-refuse"},                  // the bridge checks bounciness
+        {"useBursts", true, "same"},
+        {"useBursts", 1, "both-refuse"},                      // a number for a boolean
+        {"index", 3, "tool-stricter"},                        // positional; not settable
+    };
+    for (const PropertyRow& row : rows)
+    {
+        // The bridge.
+        g_system = Load(image);
+        json patch = json::object();
+        patch[row.field] = row.value;
+        const std::string res = host::AuthoringParityTestAccess::DispatchProperties(d, "emitters/set-properties",
+                                                                                    {{"id", 0}, {"patch", patch}});
+        json envelope = json::parse(res, nullptr, false);
+        bool skipped = false;
+        if (envelope.is_object() && envelope.contains("data") && envelope["data"].contains("skipped"))
+            for (const json& k : envelope["data"]["skipped"]) skipped = skipped || k == row.field;
+        const Side bridge = skipped ? Side::Refused : Side::Applied;
+        const Bytes bridgeBytes = Serialize(*g_system);
+
+        // The tool.
+        std::unique_ptr<ParticleSystem> tool = Load(image);
+        PropertyValue value = {row.value.is_boolean(), row.value.is_boolean() && row.value.get<bool>(),
+                               row.value.is_number() ? row.value.get<double>() : 0.0};
+        Side toolSide = Side::Refused;
+        if (ValidateSetProperty(row.field, value).outcome == EditOutcome::Applied)
+        {
+            ApplySetProperty(tool->getEmitter(0), row.field, value);
+            toolSide = Side::Applied;
+        }
+        Row(std::string(row.field) + " = " + row.value.dump(), toolSide, bridge, Serialize(*tool) == bridgeBytes, row.expected);
+    }
+    g_system.reset();
+}
+
+static void RenameAndRescaleTable(const Bytes& image)
+{
+    std::printf("tool boundary table: rename (core action)\n");
+    struct NameRow { std::string name; const char* expected; };
+    const NameRow names[] = {
+        {"Fresh", "same"},
+        {"E0", "same"},                          // its current name: the tool reports unchanged
+        {"E1", "tool-stricter"},                 // another emitter's name
+        {"", "tool-stricter"},
+        {std::string("a\0b", 3), "tool-stricter"},
+        {"\xC3\x28", "tool-stricter"},           // not UTF-8
+    };
+    for (const NameRow& row : names)
+    {
+        std::unique_ptr<ParticleSystem> bridge = Load(image), tool = Load(image);
+        bridge->getEmitter(0).name = row.name;   // emitters/rename: target->name = name
+        Side toolSide = Side::Refused;
+        const EditResult r = ValidateRename(*tool, tool->getEmitter(0), row.name);
+        if (r.outcome != EditOutcome::Rejected) { tool->getEmitter(0).name = row.name; toolSide = Side::Applied; }
+        Row("rename to " + json(row.name).dump(0, ' ', false, json::error_handler_t::replace), toolSide, Side::Applied,
+            Serialize(*tool) == Serialize(*bridge), row.expected);
+    }
+
+    std::printf("tool boundary table: rescale (core action)\n");
+    struct ScaleRow { double time, size; bool bridgeDefined; const char* expected; };
+    const ScaleRow scales[] = {
+        {2, 1, true, "same"},
+        {0.5, 0.5, true, "same"},
+        {1, 3, true, "same"},
+        {3, 1, true, "same"},                    // a fractional rate switches to bursts
+        {-1, 1, true, "tool-stricter"},
+        {0, 1, false, "tool-stricter"},          // the bridge divides by zero
+        {1e-9, 1, true, "same"},                 // a rate of 1e9 still fits an int
+        {1e-10, 1, false, "tool-stricter"},      // 1e10 does not: the bridge's cast overflows
+    };
+    for (const ScaleRow& row : scales)
+    {
+        std::unique_ptr<ParticleSystem> bridge = Load(image), tool = Load(image);
+        // engine/action/rescale-emitter: DoRescaleEmitter(target, pct / 100, ...).
+        if (row.bridgeDefined) DoRescaleEmitter(&bridge->getEmitter(0), (float)row.time, (float)row.size);
+        Side toolSide = Side::Refused;
+        if (ValidateRescale(tool->getEmitter(0), row.time, row.size).outcome == EditOutcome::Applied)
+        {
+            DoRescaleEmitter(&tool->getEmitter(0), (float)row.time, (float)row.size);
+            toolSide = Side::Applied;
+        }
+        char label[64];
+        std::snprintf(label, sizeof(label), "rescale time %g size %g%s", row.time, row.size,
+                      row.bridgeDefined ? "" : " (bridge side not run: undefined)");
+        Row(label, toolSide, Side::Applied, Serialize(*tool) == Serialize(*bridge), row.expected);
+    }
+}
+
 int main(int argc, char** argv)
 {
     const bool update = argc > 1 && std::strcmp(argv[1], "--update") == 0;
@@ -622,7 +804,11 @@ int main(int argc, char** argv)
 
     char msg[128];
     std::snprintf(msg, sizeof(msg), "%u edits match the recorded handler baseline", (unsigned)lines.size());
-    if (mismatches == 0) { std::printf("  ok: %s\n", msg); std::printf("all checks passed\n"); return 0; }
-    std::printf("  FAIL: %s (%d mismatching)\n", msg, mismatches);
+    if (mismatches == 0) std::printf("  ok: %s\n", msg);
+    else std::printf("  FAIL: %s (%d mismatching)\n", msg, mismatches);
+
+    PropertyBoundaryTable(*d, fixtures.front().image);
+    RenameAndRescaleTable(fixtures.front().image);
+    if (mismatches == 0 && g_tableFailures == 0) { std::printf("all checks passed\n"); return 0; }
     return 1;
 }

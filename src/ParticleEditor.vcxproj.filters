@@ -204,6 +204,12 @@
     <ClInclude Include="host\ToolMain.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="host\ToolIO.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\ToolPatch.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
     <ClInclude Include="host\ToolSelector.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
@@ -630,6 +636,12 @@
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\ToolMain.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\ToolIO.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\ToolPatch.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="..\tests\support\replay_hostile_crt.cpp">

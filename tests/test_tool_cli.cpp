@@ -1,11 +1,14 @@
-// `ParticleEditor.exe --tool` end to end: inspect (Phase 4B PR 1) and
-// validate (PR 2). Drives the built exe (NEEDS_EXE: run-native-unit-tests passes its path as argv[1]) on
-// fixtures this test writes, and checks exit codes, the output, the path-alias
-// refusals and that nothing else is left on disk. Every run has a deadline: a
-// tool run that opened a dialog would hang and fail here.
+// `ParticleEditor.exe --tool` end to end: inspect (Phase 4B PR 1), validate
+// (PR 2) and patch (PR 3). Drives the built exe (NEEDS_EXE:
+// run-native-unit-tests passes its path as argv[1]) on fixtures this test
+// writes, and checks exit codes, the output, the path-alias refusals and that
+// nothing else is left on disk. Every run has a deadline: a tool run that
+// opened a dialog would hang and fail here.
 //
 // Exit codes (src/host/ToolMain.h): 0 ok, 2 usage or alias, 3 invalid source,
-// 13 output not written. validate writes its report on exit 3 too.
+// 4 selector, 5 rule, 6 postcondition, 13 output not written. validate writes
+// its report on exit 3 too; patch writes one for every outcome but a usage or
+// alias refusal.
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -253,6 +256,92 @@ static void TestValidate(const std::string& goodHash)
 }
 
 
+// A patch request for the root of a fixture written by Fixture() ("Root",
+// or "Fum\xC3\xA9e" in good.alo) with the given mutations.
+static std::string PatchRequest(const std::string& hash, const char* root, const nlohmann::json& mutations)
+{
+    nlohmann::json path = nlohmann::json::array();
+    path.push_back({{"role", "root"}, {"name", root}});
+    const nlohmann::json request = {{"schema", 1},
+                                    {"selector", {{"sourceDocumentHash", hash}, {"rolePath", path}, {"expected", {{"name", root}}}}},
+                                    {"mutations", mutations}};
+    return request.dump();
+}
+
+static int Patch(const wchar_t* in, const wchar_t* request, const wchar_t* out, const wchar_t* report)
+{
+    return Run({L"--tool", L"patch", P(in), P(request), L"--out", P(out), L"--report", P(report)});
+}
+
+static void TestPatch(const std::string& goodHash)
+{
+    printf("patch\n");
+    const char* root = "Fum\xC3\xA9" "e";
+    nlohmann::json set = nlohmann::json::array();
+    set.push_back({{"op", "setProperty"}, {"field", "lifetime"}, {"value", 2.5}});
+    WriteAll(P(L"set.json"), PatchRequest(goodHash, root, set));
+    check(Patch(L"good.alo", L"set.json", L"cand.alo", L"cand.report.json") == 0, "a patch exits 0");
+    nlohmann::json r = ReadJson(P(L"cand.report.json"));
+    const std::string cand = ReadAll(P(L"cand.alo"));
+    checkReport(r.is_object() && r["outcome"] == "ok" && r["candidateHash"] == Sha256Hex(cand) &&
+                r["ops"][0]["fields"][0]["persisted"] == 2.5, "the report gives the outcome, the persisted value and the candidate's hash", r);
+    {
+        MemoryFile file;
+        file.write(cand.data(), static_cast<unsigned long>(cand.size()));
+        file.seek(0);
+        bool ok = false;
+        try { ParticleSystem loaded(&file); ok = loaded.getEmitter(0).lifetime == 2.5f && loaded.getName() == "cli_fixture"; }
+        catch (...) {}
+        check(ok, "the candidate loads with the new value and keeps the internal name");
+    }
+    check(Sha256Hex(ReadAll(P(L"good.alo"))) == goodHash, "the input is unchanged");
+
+    const std::string canonHash = Sha256Hex(ReadAll(P(L"canon.alo")));
+    WriteAll(P(L"zero.json"), PatchRequest(canonHash, "Root", nlohmann::json::array()));
+    check(Patch(L"canon.alo", L"zero.json", L"zero.alo", L"zero.report.json") == 0 && ReadAll(P(L"zero.alo")) == ReadAll(P(L"canon.alo")),
+          "a zero-op patch of a canonical file writes it back byte for byte");
+
+    WriteAll(P(L"stale.json"), PatchRequest(std::string(64, '0'), root, set));
+    check(Patch(L"good.alo", L"stale.json", L"x.alo", L"stale.report.json") == 4 && !Exists(P(L"x.alo")) &&
+          ReadJson(P(L"stale.report.json"))["refusal"]["category"] == "selector-hash-mismatch",
+          "a stale hash exits 4, with a report and no candidate");
+    nlohmann::json bad = nlohmann::json::array();
+    bad.push_back({{"op", "setBlendMode"}, {"value", 14}});
+    WriteAll(P(L"rule.json"), PatchRequest(goodHash, root, bad));
+    check(Patch(L"good.alo", L"rule.json", L"x.alo", L"rule.report.json") == 5 && !Exists(P(L"x.alo")), "a rule refusal exits 5");
+    WriteAll(P(L"broken.json"), "{\"schema\": 1,");
+    check(Patch(L"good.alo", L"broken.json", L"x.alo", L"broken.report.json") == 2 &&
+          ReadJson(P(L"broken.report.json"))["refusal"]["category"] == "request-malformed", "a malformed request exits 2 with a report");
+    check(Patch(L"good.alo", L"absent.json", L"x.alo", L"absent.report.json") == 2, "a missing request exits 2");
+    check(Patch(L"garbage.alo", L"set.json", L"x.alo", L"garbage.patch.json") == 3, "a source that does not load exits 3");
+    check(!Exists(P(L"x.alo")), "no refused patch wrote a candidate");
+
+    // Paths.
+    const wchar_t* names[] = {L"good.alo", L"set.json", L"alias.alo", L"alias.report.json"};
+    bool aliases = true;
+    for (int i = 0; i < 4; i++)
+        for (int j = i + 1; j < 4; j++)
+        {
+            const wchar_t* args[4] = {names[0], names[1], names[2], names[3]};
+            args[j] = args[i];
+            aliases = aliases && Patch(args[0], args[1], args[2], args[3]) == 2;
+        }
+    check(aliases, "every pair of the four paths naming one file exits 2");
+    check(Sha256Hex(ReadAll(P(L"good.alo"))) == goodHash && !Exists(P(L"alias.alo")) && !Exists(P(L"alias.report.json")),
+          "and writes nothing");
+    check(Run({L"--tool", L"patch", P(L"good.alo"), P(L"set.json"), L"--out", P(L"x.alo")}) == 2, "patch without --report exits 2");
+    check(Patch(L"good.alo", L"set.json", L"no such dir\\x.alo", L"nodir.report.json") == 13 &&
+          ReadJson(P(L"nodir.report.json"))["refusal"]["category"] == "io", "--out in a missing directory exits 13 with a report");
+    check(Patch(L"good.alo", L"set.json", L"adir", L"adir.report.json") == 13, "--out naming a directory exits 13");
+    WriteAll(P(L"readonly.alo"), "previous");
+    SetFileAttributesW(P(L"readonly.alo").c_str(), FILE_ATTRIBUTE_READONLY);
+    check(Patch(L"good.alo", L"set.json", L"readonly.alo", L"readonly.report.json") == 13 && ReadAll(P(L"readonly.alo")) == "previous",
+          "a read-only --out exits 13 and keeps its contents");
+    SetFileAttributesW(P(L"readonly.alo").c_str(), FILE_ATTRIBUTE_NORMAL);
+    check(Patch(L"good.alo", L"set.json", L"x.alo", L"no such dir\\r.json") == 13, "an unwritable report exits 13");
+    DeleteFileW(P(L"x.alo").c_str());   // that run committed its candidate before the report failed
+}
+
 int main(int argc, char** argv)
 {
     printf("test_tool_cli\n");
@@ -343,13 +432,18 @@ int main(int argc, char** argv)
     check(Run({L"--tool", L"inspect", P(L"good.alo"), L"--out", P(L"adir")}) == 13, "an output that is a directory exits 13");
 
     TestValidate(goodHash);
+    TestPatch(goodHash);
 
     printf("nothing else on disk\n");
     std::set<std::wstring> expected = before;
     for (const wchar_t* name : {L"good.json", L"relative.json", L"variance.json", L"link.alo", L"canon.alo",
                                 L"canon.report.json", L"good.report.json", L"selflink.report.json", L"nan.report.json",
                                 L"inf3f.report.json", L"badname.report.json", L"garbage.report.json", L"missing.report.json",
-                                L"variance.report.json", L"atlas.report.json"})
+                                L"variance.report.json", L"atlas.report.json", L"set.json", L"cand.alo",
+                                L"cand.report.json", L"zero.json", L"zero.alo", L"zero.report.json", L"stale.json",
+                                L"stale.report.json", L"rule.json", L"rule.report.json", L"broken.json",
+                                L"broken.report.json", L"absent.report.json", L"garbage.patch.json", L"nodir.report.json",
+                                L"adir.report.json", L"readonly.alo", L"readonly.report.json"})
         expected.insert(name);
     const std::set<std::wstring> after = Listing();
     check(after == expected, "only the expected outputs exist (no temp files)");

@@ -271,8 +271,9 @@ EditResult ValidateRename(const ParticleSystem& system, const ParticleSystem::Em
 
 // A texture name: not UTF-8, holding a NUL (the writer would save it and the
 // game would cut the name there) or longer than kMaxTextureNameBytes is
-// refused; so is an empty colour texture. An empty normal texture is legal
-// (it reloads as the default name).
+// refused. So is an empty name for either texture: an empty normal texture
+// saves no chunk and reloads as p_particle_depth_master.tga, so the file is
+// not a fixed point of a save (name the default instead).
 static const size_t kMaxTextureNameBytes = 259;
 EditResult ValidateTextureName(const std::string& name, bool colorTexture);
 

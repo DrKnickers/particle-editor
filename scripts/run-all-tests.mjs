@@ -19,6 +19,8 @@
 //                     path — bare test_resource_strings would prefer stale Release)
 //   playwright-native all registered specs vs the real app over CDP (pnpm test:native)
 //   msbuild-release   x64 Release (drive-smoke hard-requires the Release exe)
+//   tool-smoke        the window-free --tool verbs end to end on the Release exe:
+//                     inspect, validate, patch (scripts/tool-smoke.mjs; headless)
 //   render-goldens    deterministic --capture scenes vs checked-in goldens
 //                     (ffmpeg SSIM ≥ 0.9995 — see scripts/render-goldens.mjs)
 //   record-smoke      headless --record timeline produces renderable frames
@@ -520,6 +522,26 @@ export function prereq(lane, ok, what, hint, allowMissing = ALLOW_MISSING) {
   return fail(`missing prereq: ${what}`);
 }
 
+// The --tool verbs run before any window, device or game data, so this lane
+// needs only a fresh Release exe: no render desktop, no game install.
+export function runToolSmokeLane({
+  exists = existsSync, checkPrereq = prereq,
+  stale = (exe) => staleBinaryNote(exe, "tool-smoke"),
+  runSmoke = () => runExe(process.execPath, [join(repoRoot, "scripts", "tool-smoke.mjs"), "--exe", releaseExe]),
+} = {}) {
+  for (const [ok, what, hint] of [
+    [exists(releaseExe), "x64/Release/ParticleEditor.exe missing", "run the msbuild-release lane first"],
+    [exists(join(repoRoot, "scripts", "tool-smoke.mjs")), "scripts/tool-smoke.mjs missing", "restore the smoke script"],
+  ]) {
+    const p = checkPrereq("tool-smoke", ok, what, hint);
+    if (p) return p;
+  }
+  const note = stale(releaseExe);
+  if (note) return fail(note);
+  const code = runSmoke();
+  return code === 0 ? pass : fail(`tool smoke exit ${code}`);
+}
+
 export function runReplayProofLane({
   desktop = renderDesktopUsable, exists = existsSync, gameRoots = resolveReplayGameRoots,
   checkPrereq = prereq,
@@ -772,6 +794,11 @@ const LANES = [
       const stale = staleBinaryNote(releaseExe, "msbuild-release");
       return stale ? fail(stale) : pass;
     },
+  },
+  {
+    name: "tool-smoke",
+    deps: ["msbuild-release"],
+    run: () => runToolSmokeLane(),
   },
   {
     name: "render-goldens",

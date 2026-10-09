@@ -580,7 +580,10 @@ EditResult ValidateRename(const ParticleSystem& system, const Emitter& target, c
 EditResult ValidateTextureName(const std::string& name, bool colorTexture)
 {
     const char* which = colorTexture ? "colorTexture" : "normalTexture";
-    if (colorTexture && name.empty()) return Rejected(std::string(which) + " must not be empty");
+    if (name.empty())
+        return Rejected(colorTexture ? std::string(which) + " must not be empty"
+                                     : std::string(which) + " must not be empty; an empty one reloads as "
+                                       "p_particle_depth_master.tga, so name that");
     if (name.find('\0') != std::string::npos) return Rejected(std::string(which) + " must not contain a NUL");
     if (!IsValidUtf8(name)) return Rejected(std::string(which) + " must be valid UTF-8");
     if (name.size() > kMaxTextureNameBytes)

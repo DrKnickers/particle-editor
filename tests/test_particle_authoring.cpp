@@ -933,8 +933,9 @@ static void testRenameAndTextures()
           "empty, NUL-holding and non-UTF-8 names rejected");
     CHECK(ValidateRename(ps, first, "\xC3\xA9tincelle").outcome == EditOutcome::Applied, "a UTF-8 name is accepted");
 
-    CHECK(isRejected(ValidateTextureName("", true)) && ValidateTextureName("", false).outcome == EditOutcome::Applied,
-          "an empty colour texture is rejected, an empty normal texture is legal");
+    CHECK(isRejected(ValidateTextureName("", true)) && isRejected(ValidateTextureName("", false)) &&
+          ValidateTextureName("p_particle_depth_master.tga", false).outcome == EditOutcome::Applied,
+          "an empty texture name is rejected for both (an empty normal texture reloads as the default name)");
     CHECK(ValidateTextureName(std::string(kMaxTextureNameBytes, 'a'), true).outcome == EditOutcome::Applied &&
           isRejected(ValidateTextureName(std::string(kMaxTextureNameBytes + 1, 'a'), true)),
           "texture names are capped at kMaxTextureNameBytes");

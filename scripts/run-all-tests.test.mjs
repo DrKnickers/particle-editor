@@ -12,7 +12,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mkdirSync, mkdtempSync, openSync, closeSync, readFileSync, rmSync } from "node:fs";
 
-import { parseArgs, usage, shellSpawnSpec, spawnExitCode, parseSkippedCount, prereq, runReplayProofLane, runObserveLane } from "./run-all-tests.mjs";
+import { parseArgs, usage, shellSpawnSpec, spawnExitCode, parseSkippedCount, prereq, runReplayProofLane, runObserveLane, runToolSmokeLane } from "./run-all-tests.mjs";
 
 const scriptPath = join(dirname(fileURLToPath(import.meta.url)), "run-all-tests.mjs");
 
@@ -148,6 +148,43 @@ test("parseSkippedCount reads the render-goldens summary line", () => {
 test("parseSkippedCount ignores a number glued to a word, such as a test title", () => {
   assert.equal(parseSkippedCount("✔ checker rejects E11 skipped (10.5ms)\nℹ skipped 0"), 0);
   assert.equal(parseSkippedCount("✔ checker rejects E9 skipped\n  11 skipped"), 11);
+});
+
+test("tool-smoke follows msbuild-release in the registered gate", () => {
+  const r = runScript("--list");
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /msbuild-release\r?\ntool-smoke\r?\n/);
+});
+
+function toolSmokeLane(overrides = {}, allowMissing = false) {
+  return runToolSmokeLane({
+    exists: () => true, stale: () => null,
+    checkPrereq: (lane, ok, what, hint) => prereq(lane, ok, what, hint, new Set(allowMissing ? ["tool-smoke"] : [])),
+    runSmoke: () => 0, ...overrides,
+  });
+}
+
+for (const missing of ["Release", "tool-smoke.mjs"]) {
+  test(`tool-smoke missing ${missing} fails by default and --allow-missing visibly skips`, () => {
+    const overrides = { exists: (path) => !path.includes(missing), runSmoke: () => assert.fail("must not run") };
+    assert.equal(toolSmokeLane(overrides).status, "FAIL");
+    const allowed = toolSmokeLane(overrides, true);
+    assert.equal(allowed.status, "SKIP");
+    assert.match(allowed.note, /missing/);
+  });
+}
+
+test("tool-smoke refuses a stale Release exe without running it", () => {
+  const r = toolSmokeLane({ stale: () => "tool-smoke: exe older than its sources", runSmoke: () => assert.fail("must not run") });
+  assert.equal(r.status, "FAIL");
+  assert.match(r.note, /older/);
+});
+
+test("tool-smoke only passes after running the smoke; a failure cannot skip", () => {
+  let runs = 0;
+  assert.equal(toolSmokeLane({ runSmoke: () => { ++runs; return 0; } }).status, "PASS");
+  assert.equal(runs, 1);
+  assert.equal(toolSmokeLane({ runSmoke: () => 1 }, true).status, "FAIL");
 });
 
 test("replay-proof follows drive-smoke in the registered gate", () => {
