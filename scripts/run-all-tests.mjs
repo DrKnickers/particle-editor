@@ -31,6 +31,8 @@
 //                     is a missing prereq: pass --allow-missing drive-smoke
 //   replay-proof      headless replay experiments, retained PNGs and checked report.json
 //   observe           repeated observation bundles, filmstrip, playback and pinned telemetry
+//   vfx-loop          the canned closed loop end to end: observe, chained --tool patch,
+//                     observe, compare (scripts/vfx-loop/lane.mjs; pinned results)
 //
 // Missing prereqs are FAILURES with actionable messages by default; silent skips
 // are the enemy of a gate. `--allow-missing <lane>` downgrades that lane's missing
@@ -602,6 +604,37 @@ export function runObserveLane({
   return r.code === 0 ? pass : fail(`observe exit ${r.code}`);
 }
 
+export function runVfxLoopLane({
+  desktop = renderDesktopUsable, exists = existsSync, gameRoots = resolveReplayGameRoots,
+  checkPrereq = prereq,
+  probe = (bin) => spawnSync(bin, ["-version"], { encoding: "utf8", windowsHide: true, timeout: 10000 }),
+  runLoopLane = (roots) => runExeTee(process.execPath, [join(repoRoot, "scripts", "vfx-loop", "lane.mjs"),
+    ...roots.flatMap((root) => ["--game-root", root])]),
+} = {}) {
+  const rd = desktop();
+  if (!rd.ok) return skip(`no interactive render desktop — ${rd.reason}`);
+  for (const [ok, what, hint] of [
+    [exists(releaseExe), "x64/Release/ParticleEditor.exe missing", "run the msbuild-release lane first"],
+    [exists(join(repoRoot, "scripts", "vfx-loop", "lane.mjs")), "scripts/vfx-loop/lane.mjs missing", "restore the loop lane script"],
+  ]) {
+    const p = checkPrereq("vfx-loop", ok, what, hint);
+    if (p) return p;
+  }
+  const roots = gameRoots();
+  const p = checkPrereq("vfx-loop", roots.length > 0,
+    "missing game data (host GameDataPath / sibling / cwd lookup)",
+    "launch the editor once and choose an installed game data folder with a usable MEG archive");
+  if (p) return p;
+  for (const bin of ["ffmpeg", "ffprobe"]) {
+    const r = probe(bin);
+    const missing = checkPrereq("vfx-loop", r.status === 0 && !r.error && !r.signal,
+      `${bin} missing or -version failed`, `install ${bin} on PATH`);
+    if (missing) return missing;
+  }
+  const r = runLoopLane(roots);
+  return r.code === 0 ? pass : fail(`vfx-loop exit ${r.code}`);
+}
+
 const LANES = [
   {
     name: "lint",
@@ -911,6 +944,11 @@ const LANES = [
     name: "observe",
     deps: ["msbuild-release", "web-build"],
     run: () => runObserveLane(),
+  },
+  {
+    name: "vfx-loop",
+    deps: ["msbuild-release"],
+    run: () => runVfxLoopLane(),
   },
 ];
 

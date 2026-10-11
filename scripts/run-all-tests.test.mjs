@@ -12,7 +12,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mkdirSync, mkdtempSync, openSync, closeSync, readFileSync, rmSync } from "node:fs";
 
-import { parseArgs, usage, shellSpawnSpec, spawnExitCode, parseSkippedCount, prereq, runReplayProofLane, runObserveLane, runToolSmokeLane } from "./run-all-tests.mjs";
+import { parseArgs, usage, shellSpawnSpec, spawnExitCode, parseSkippedCount, prereq, runReplayProofLane, runObserveLane, runToolSmokeLane, runVfxLoopLane } from "./run-all-tests.mjs";
 
 const scriptPath = join(dirname(fileURLToPath(import.meta.url)), "run-all-tests.mjs");
 
@@ -292,4 +292,52 @@ test("observe cannot pass without actually running, and a failed lane cannot ski
   assert.equal(runs, 1);
   assert.equal(observeLane({ runObserve: () => ({ code: 1 }) }, true).status, "FAIL");
   assert.equal(observeLane({ runObserve: () => ({}) }).status, "FAIL");
+});
+
+test("vfx-loop immediately follows observe in the registered gate", () => {
+  const r = runScript("--list");
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /observe\r?\nvfx-loop\r?\n/);
+});
+
+function vfxLoopLane(overrides = {}, allowMissing = false) {
+  return runVfxLoopLane({
+    desktop: () => ({ ok: true }), exists: () => true, gameRoots: () => ["installed-game"],
+    probe: () => ({ status: 0 }),
+    checkPrereq: (lane, ok, what, hint) => prereq(lane, ok, what, hint, new Set(allowMissing ? ["vfx-loop"] : [])),
+    runLoopLane: () => ({ code: 0 }), ...overrides,
+  });
+}
+
+test("vfx-loop visibly skips without a render desktop and never runs", () => {
+  const r = vfxLoopLane({ desktop: () => ({ ok: false, reason: "locked" }),
+    probe: () => assert.fail("must not probe"), runLoopLane: () => assert.fail("must not run") });
+  assert.equal(r.status, "SKIP");
+  assert.match(r.note, /render desktop.*locked/);
+});
+
+for (const missing of ["Release", "lane.mjs"]) {
+  test(`vfx-loop missing ${missing} fails by default and --allow-missing visibly skips`, () => {
+    const overrides = { exists: (path) => !path.includes(missing), runLoopLane: () => assert.fail("must not run") };
+    assert.equal(vfxLoopLane(overrides).status, "FAIL");
+    const allowed = vfxLoopLane(overrides, true);
+    assert.equal(allowed.status, "SKIP");
+    assert.match(allowed.note, /missing/);
+  });
+}
+
+for (const [name, overrides] of [
+  ["ffmpeg", { probe: (bin) => ({ status: bin === "ffmpeg" ? null : 0, error: bin === "ffmpeg" ? new Error("ENOENT") : null }) }],
+  ["game data", { gameRoots: () => [] }],
+]) test(`vfx-loop missing ${name} cannot pass: FAIL or visible allowed SKIP`, () => {
+  const guarded = { ...overrides, runLoopLane: () => assert.fail("must not run") };
+  assert.equal(vfxLoopLane(guarded).status, "FAIL");
+  assert.equal(vfxLoopLane(guarded, true).status, "SKIP");
+});
+
+test("vfx-loop passes only by running, and a failed run cannot skip", () => {
+  let runs = 0;
+  assert.equal(vfxLoopLane({ runLoopLane: (roots) => { ++runs; assert.deepEqual(roots, ["installed-game"]); return { code: 0 }; } }).status, "PASS");
+  assert.equal(runs, 1);
+  assert.equal(vfxLoopLane({ runLoopLane: () => ({ code: 1 }) }, true).status, "FAIL");
 });

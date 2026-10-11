@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "requests": [
+    {
+      "schema": 1,
+      "selector": {
+        "sourceDocumentHash": "d4962fe6ed91fea971cdcac94ddca4e1a63eff8ba488107f553afdb8403b952c",
+        "rolePath": [{ "role": "root", "name": "Fire" }],
+        "expected": { "name": "Fire", "lifetime": 0.4000000059604645 }
+      },
+      "mutations": [{ "op": "setProperty", "field": "lifetime", "value": 0.46 }]
+    },
+    {
+      "schema": 1,
+      "selector": {
+        "sourceDocumentHash": "d4962fe6ed91fea971cdcac94ddca4e1a63eff8ba488107f553afdb8403b952c",
+        "rolePath": [{ "role": "root", "name": "Smoke" }],
+        "expected": { "name": "Smoke", "burstDelay": 0.04999999701976776 }
+      },
+      "mutations": [{ "op": "setProperty", "field": "burstDelay", "value": 0.03 }]
+    },
+    {
+      "schema": 1,
+      "selector": {
+        "sourceDocumentHash": "d4962fe6ed91fea971cdcac94ddca4e1a63eff8ba488107f553afdb8403b952c",
+        "rolePath": [{ "role": "root", "name": "Smoke Slow" }],
+        "expected": { "name": "Smoke Slow", "lifetime": 2 }
+      },
+      "mutations": [{ "op": "setProperty", "field": "lifetime", "value": 1.7 }]
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "brief": "Preserve the existing explosion design. Hold the fireball slightly longer, establish smoke earlier, shorten the final smoke tail by 15 percent, and do not increase peak particle count.",
+  "observation": {
+    "scenario": {
+      "seed": 305419896,
+      "algorithmVersion": 1,
+      "clockAnchor": 0,
+      "spawnPosition": [0, 0, 0],
+      "spawnVelocity": [0, 0, 0],
+      "maxFrames": 300,
+      "overloadGuardEnabled": true,
+      "overloadGuardLimit": 10000,
+      "estimatedParticlesPerInstance": 0
+    },
+    "lifecycle": { "type": "oneshot", "quietTailFrames": 15 },
+    "output": { "strideInterval": 15, "playbackStride": 0, "maxBytes": 209715200 }
+  },
+  "budgets": [
+    { "id": "peak-particles-not-increased", "metric": "peakParticles", "maxDelta": 0 }
+  ]
+}

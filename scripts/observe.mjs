@@ -35,7 +35,7 @@ export function playbackMetrics(capture) {
   return { frameCount: count, duration: count ? count / fps : 0, fps };
 }
 
-export function checkCapture(directory, { io = fs, spec } = {}) {
+export function checkCapture(directory, { io = fs, spec, assembledPngs = [] } = {}) {
   const errors = [];
   const pngHashes = {};
   let capture;
@@ -119,9 +119,27 @@ export function checkCapture(directory, { io = fs, spec } = {}) {
     require(samples.length === capture.lifecycle.finalFrame + 1 && samples.every((v, i) => v.frame === i), "telemetry missing simulation frame");
     // Reject extra PNGs, including numbering gaps beyond image2's stopping point.
     for (const name of bundleFiles(directory, io).filter((v) => v.endsWith(".png")))
-      require(seen.has(name), `unlisted PNG: ${name}`);
+      require(seen.has(name) || assembledPngs.includes(name), `unlisted PNG: ${name}`);
   } catch (error) { errors.push(`capture marker missing or malformed: ${error.message}`); }
   return { capture, errors, pngHashes };
+}
+
+// A finished bundle: the final marker exists and its deterministic hashes still
+// match capture.json and the filmstrip assembly added.
+export function checkAssembledBundle(directory, { io = fs } = {}) {
+  let manifest;
+  try { manifest = JSON.parse(io.readFileSync(bundlePath(directory, "manifest.json", io), "utf8")); }
+  catch (error) { return { capture: undefined, errors: [`bundle incomplete (manifest.json): ${error.message}`] }; }
+  const filmstripHash = manifest.deterministic?.filmstripSha256 ?? null;
+  const checked = checkCapture(directory, { io, assembledPngs: filmstripHash ? ["filmstrip.png"] : [] });
+  const errors = [...checked.errors];
+  try {
+    if (manifest.deterministic?.captureSha256 !== sha256(io.readFileSync(join(directory, "capture.json"))))
+      errors.push("manifest capture hash differs from capture.json");
+    if (filmstripHash && filmstripHash !== sha256(io.readFileSync(bundlePath(directory, "filmstrip.png", io))))
+      errors.push("manifest filmstrip hash differs from filmstrip.png");
+  } catch (error) { errors.push(`bundle evidence missing: ${error.message}`); }
+  return { capture: checked.capture, errors };
 }
 
 export function bundleFiles(directory, io = fs) {
