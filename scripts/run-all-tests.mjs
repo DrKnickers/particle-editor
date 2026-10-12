@@ -32,7 +32,8 @@
 //   replay-proof      headless replay experiments, retained PNGs and checked report.json
 //   observe           repeated observation bundles, filmstrip, playback and pinned telemetry
 //   vfx-loop          the canned closed loop end to end: observe, chained --tool patch,
-//                     observe, compare (scripts/vfx-loop/lane.mjs; pinned results)
+//                     observe, compare, four-seed review, outcome, promotion package
+//                     (scripts/vfx-loop/lane.mjs; pinned results)
 //
 // Missing prereqs are FAILURES with actionable messages by default; silent skips
 // are the enemy of a gate. `--allow-missing <lane>` downgrades that lane's missing

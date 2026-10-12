@@ -222,5 +222,5 @@ export async function writeComparison(baselineDir, candidateDir, outDir, { budge
   io.writeFileSync(join(outDir, "telemetry-delta.json"), serialise(telemetryDelta(baseline.samples, candidate.samples, before, after)));
   io.writeFileSync(join(outDir, "random-schedule-note.json"), serialise(schedule));
   io.writeFileSync(join(outDir, "review.json"), serialise(review));
-  return { metrics, review, schedule };
+  return { metrics, review, schedule, summaries: { baseline: before, candidate: after } };
 }

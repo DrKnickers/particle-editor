@@ -1,5 +1,6 @@
 // [vfx-loop] The vfx-loop gate lane: the canned §18.2 loop end to end on the
-// Release exe, ffmpeg and the game install, against the guide's example effect.
+// Release exe, ffmpeg and the game install, against the guide's example effect:
+// one round, the four-seed review, the outcome and the promotion package.
 // The unit tests cover the logic with fakes; this proves the real chain holds.
 //
 //   node scripts/vfx-loop/lane.mjs [--exe path] [--game-root path ...] [--measure]
@@ -19,22 +20,28 @@ const scratch = join(repoRoot, "tests/.tmp/vfx-loop");
 const FIXTURE = join(repoRoot, "site/guide/downloads/P_EXPLOSION_EXAMPLE.ALO");
 const here = (name) => join(repoRoot, "scripts/vfx-loop/fixtures", name);
 
-// Pins measured 2026-10-10 on the owner's native build (node scripts/vfx-loop/lane.mjs --measure).
+// Pins measured 2026-10-11 on the owner's native build (node scripts/vfx-loop/lane.mjs --measure).
 export const PINNED = {
+  outcome: "PASS_FOR_HUMAN_REVIEW",
+  stop: "author-finished",
   candidateHash: "3780b1b8474c3e6aeef897cf62212a881e7f147ed6093b63d2979b8acb1a1509",
-  peakParticles: [171, 171],
   pairs: 13,
   firstRandomDivergence: 2,
   identicalSelectedFrames: [0, 105, 120, 122, 135, 137],
   budgetsPass: true,
+  seeds: [
+    { seed: 305419896, peakParticles: [171, 171], budgetsPass: true },
+    { seed: 2959855665, peakParticles: [168, 168], budgetsPass: true },
+    { seed: 1319324138, peakParticles: [167, 167], budgetsPass: true },
+    { seed: 3973759907, peakParticles: [172, 172], budgetsPass: true },
+  ],
 };
 
-export function measuredValues(summary, metrics, review, schedule) {
-  const budget = (id) => metrics.budgets.find((v) => v.id === id);
-  const peak = budget("peak-particles-not-increased");
-  return { candidateHash: summary.candidate.sha256, peakParticles: [peak.baseline, peak.candidate],
+export function measuredValues(summary, metrics, review, schedule, matrix) {
+  return { outcome: summary.outcome, stop: summary.stop.condition, candidateHash: summary.candidate?.sha256 ?? null,
     pairs: review.pairs.length, firstRandomDivergence: schedule.firstDivergentFrame,
-    identicalSelectedFrames: metrics.drift.identicalSelectedFrames, budgetsPass: metrics.budgetsPass };
+    identicalSelectedFrames: metrics.drift.identicalSelectedFrames, budgetsPass: metrics.budgetsPass,
+    seeds: matrix.seeds.map((v) => ({ seed: v.seed, peakParticles: v.peakParticles, budgetsPass: v.budgetsPass })) };
 }
 
 function cleanScratch(path) {
@@ -52,17 +59,21 @@ export async function runLane({ exe = join(repoRoot, "x64/Release/ParticleEditor
   fs.copyFileSync(FIXTURE, source);
   const original = fs.readFileSync(FIXTURE);
   const readJson = (path) => JSON.parse(fs.readFileSync(path, "utf8"));
-  const summary = await runLoop({ task: readJson(here("task-18-2.json")), source, patchSet: readJson(here("canned-18-2.patch.json")),
+  const summary = await runLoop({ task: readJson(here("task-18-2.json")), source, patchSets: [readJson(here("canned-18-2.patch.json"))],
     out, exe, roots, run, say });
   const errors = [];
   const require = (ok, message) => { if (!ok) errors.push(message); };
   require(summary.failure === null, `loop failed: ${JSON.stringify(summary.failure)}`);
-  require(summary.steps.filter((v) => v.step.startsWith("patch-0")).length === 3, "expected three chained patch steps");
+  require(summary.steps.filter((v) => /^round-01-patch-0/.test(v.step)).length === 3, "expected three chained patch steps");
   require(fs.readFileSync(FIXTURE).equals(original) && sha256(fs.readFileSync(source)) === sha256(original), "a source changed");
+  const comparison = join(out, "rounds/01/comparison");
   for (const name of ["paired-filmstrip.png", "metrics.json", "telemetry-delta.json", "random-schedule-note.json", "review.json"])
-    require(fs.existsSync(join(out, "comparison", name)), `missing comparison/${name}`);
-  const metrics = readJson(join(out, "comparison/metrics.json")), review = readJson(join(out, "comparison/review.json"));
-  const values = measuredValues(summary, metrics, review, readJson(join(out, "comparison/random-schedule-note.json")));
+    require(fs.existsSync(join(comparison, name)), `missing rounds/01/comparison/${name}`);
+  for (const name of ["four-seed/matrix.json", "package/package.json", "package/README.md"])
+    require(fs.existsSync(join(out, name)), `missing ${name}`);
+  const metrics = readJson(join(comparison, "metrics.json")), review = readJson(join(comparison, "review.json"));
+  const values = measuredValues(summary, metrics, review, readJson(join(comparison, "random-schedule-note.json")),
+    readJson(join(out, "four-seed/matrix.json")));
   if (measure) say(`export const PINNED = ${JSON.stringify(values, null, 2)};`);
   else if (!pins) errors.push("PINNED is null; the owner must run node scripts/vfx-loop/lane.mjs --measure");
   else for (const key of Object.keys(pins))

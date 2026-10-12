@@ -91,10 +91,13 @@ export async function bundle(directory, specValue = spec(), options = {}) {
   return directory;
 }
 
-// Fake exe + ffmpeg. `observeOptions(aloBytes)` shapes each observation (for
-// example, more particles for one candidate); `refuse(name)` makes --tool patch
-// refuse that emitter with { code, category }.
-export function fakeExe({ observeOptions = () => ({}), refuse = () => null, validate = () => 0, calls = [] } = {}) {
+// Fake exe + ffmpeg. `observeOptions(aloBytes, spec)` shapes each observation
+// (for example, more particles for one candidate under one seed);
+// `observeExit(aloBytes)` fails --observe with that code; `refuse(name)` makes
+// --tool patch refuse that emitter with { code, category }; `crash(verb)` makes
+// a --tool verb exit with that code, as a tool failure would.
+export function fakeExe({ observeOptions = () => ({}), observeExit = () => 0, refuse = () => null, validate = () => 0,
+  crash = () => 0, calls = [] } = {}) {
   const ffmpeg = fakeFfmpeg(calls);
   return async (bin, args, options) => {
     if (bin === "ffmpeg") return ffmpeg(bin, args, options);
@@ -102,10 +105,13 @@ export function fakeExe({ observeOptions = () => ({}), refuse = () => null, vali
     const ok = (code = 0) => ({ code, signal: null, stdout: "", stderr: `[fake] exit=${code}` });
     if (args[0] === "--observe") {
       const specValue = JSON.parse(fs.readFileSync(args[1], "utf8")), alo = fs.readFileSync(specValue.scenario.aloPath);
-      writeNative(args[2], specValue, { sourceHash: sha256(alo), ...observeOptions(alo) });
+      const code = observeExit(alo);
+      if (code) return ok(code);
+      writeNative(args[2], specValue, { sourceHash: sha256(alo), ...observeOptions(alo, specValue) });
       return ok();
     }
     const [, verb, input] = args;
+    if (crash(verb)) return ok(crash(verb));
     if (verb === "inspect") {
       fs.writeFileSync(args[4], json({ schema: 1, sourceDocumentHash: sha256(fs.readFileSync(input)), emitters: [] }));
       return ok();
