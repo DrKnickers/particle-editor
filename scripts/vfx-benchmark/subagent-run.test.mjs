@@ -45,7 +45,11 @@ test("the schedule: three primary attempts per case, one bundle-only per eligibl
   const s = schedule(corpus);
   assert.equal(s.filter((x) => x.condition === "primary").length, 9);
   assert.deepEqual(s.filter((x) => x.condition === "bundle-only").map((x) => x.caseId), ["a", "c"]);
-  // A draw-order case is the frames-alone test of order: three bundle-only attempts.
-  const order = schedule({ attempts: 3, cases: [{ id: "d", kind: "defect", class: "draw-order", secondaryEligible: true }] });
-  assert.deepEqual(order.filter((x) => x.condition === "bundle-only").map((x) => x.attempt), [1, 2, 3]);
+  // A draw-order case is the frames-alone test of order: three bundle-only attempts, and three for the clean
+  // control of its base, whose pack reads the same. Another base's control and a decoy keep one.
+  const order = schedule({ attempts: 3, cases: [{ id: "d", kind: "defect", class: "draw-order", base: "E", secondaryEligible: true },
+    { id: "e", kind: "control", shape: "single", base: "E" }, { id: "x", kind: "control", shape: "single", base: "E", decoy: true },
+    { id: "f", kind: "control", shape: "single", base: "F" }] });
+  const blind = (id) => order.filter((x) => x.condition === "bundle-only" && x.caseId === id).map((x) => x.attempt);
+  assert.deepEqual([blind("d"), blind("e"), blind("x"), blind("f")], [[1, 2, 3], [1, 2, 3], [1], [1]]);
 });

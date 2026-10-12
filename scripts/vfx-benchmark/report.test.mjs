@@ -174,3 +174,14 @@ test("emitter names that overlap the report vocabulary never reach the aggregate
   assert.ok(!text.includes("units"));
   assert.ok(!text.includes("errors"));
 });
+
+test("the draw-order claim rate counts only the clean controls of bases that carry a draw-order case", () => {
+  const c = corpus({ cases: [
+    { id: "d", kind: "defect", class: "draw-order", base: "E", stratum: "objective", shape: "single", secondaryEligible: true },
+    { id: "cE", kind: "control", base: "E", shape: "single" }, { id: "xE", kind: "control", base: "E", shape: "single", decoy: true },
+    { id: "cF", kind: "control", base: "F", shape: "single" }] });
+  const claim = () => ({ ...flagged(), units: [{ label: "fp", category: "draw-order", direction: "wrong-order", errors: [] }] });
+  // E's clean control claims once in three attempts; the decoy and F's control claim every time and are not counted.
+  const scores = scoresFor(c, (k, a) => (k.id === "cE" ? (a === 1 ? claim() : clean()) : k.kind === "control" ? claim() : hit()), "bundle-only");
+  assert.deepEqual(aggregate(c, scores, "claude", "bundle-only", c.cases).orderClaims, { flagged: 1, scheduled: 3 });
+});

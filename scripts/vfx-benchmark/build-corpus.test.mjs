@@ -316,19 +316,20 @@ test("a draw-order case's bundle-only pack is order-blind: it reads like its bas
   const { attempts } = prepare({ storeRoot, runRoot, agent: "claude", model: "opus" });
   const blind = attempts.filter((a) => a.caseId === map.order && a.condition === "bundle-only");
   assert.deepEqual(blind.map((a) => a.attempt).sort(), [1, 2, 3]);
+  assert.equal(attempts.filter((a) => a.caseId === map["control-A"] && a.condition === "bundle-only").length, 3);
   for (const a of attempts) {
     const k = locked.cases.find((x) => x.id === a.caseId);
     const usable = k.kind === "defect" ? s.json("cases", k.id, "answers.json").frames.variants.filter((v) => v.policy[a.condition]) : [];
     let findings = usable.length ? [canonicalFinding(usable[0], a.condition, textures)] : [];
     if (a.caseId === map.order && a.condition === "bundle-only" && a.attempt !== 1) findings = findings.map((x) => renumberFinding(x, [1, 0]));
     // The clean control's pack reads the same as the order case's: the same claim there is a false alarm.
-    if (a.caseId === map["control-A"] && a.condition === "bundle-only") findings = [inPack];
+    if (a.caseId === map["control-A"] && a.condition === "bundle-only" && a.attempt !== 1) findings = [inPack];
     fs.writeFileSync(join(runRoot, "attempts", a.id, "out", "findings.json"), JSON.stringify({ findings }));
   }
   fs.writeFileSync(join(runRoot, "private", "audit.json"), JSON.stringify(Object.fromEntries(attempts.map((a) => [a.id, { transcript: `${a.id}.jsonl`, calls: 3, violations: [], escapes: [] }]))));
   const run = score({ storeRoot, runRoot });
   assert.equal(run.report.agents[0].bundleOnly.classes["draw-order"].scheduled, 3);
-  assert.match(markdown(run.report), /draw order from the frames alone 66\.7 % \(diagnosis 66\.7 %; a draw-order claim on a clean control 100\.0 %\)/);
+  assert.match(markdown(run.report), /draw order from the frames alone 66\.7 % \(diagnosis 66\.7 %; a draw-order claim on the same bases' clean controls 66\.7 %\)/);
 });
 
 test("the order-blind comparison sets the frames aside and catches every other difference", () => {

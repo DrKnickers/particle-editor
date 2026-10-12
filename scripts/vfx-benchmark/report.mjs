@@ -24,11 +24,19 @@ function attemptsFor(scores, agent, condition, caseId, count) {
   return Array.from({ length: count }, (_, i) => found.find((s) => s.attempt === i + 1)?.score ?? null);
 }
 
+// A clean control on a base that carries a draw-order case. Its bundle-only
+// pack reads exactly like that case's, so its draw-order claims are what the
+// case's bundle-only hits are measured against.
+export function matchedControl(corpus, c) {
+  return c.kind === "control" && !c.decoy && corpus.cases.some((x) => x.class === "draw-order" && x.base === c.base);
+}
+
 // Scheduled attempts of one case under one condition: `attempts` in the
 // primary condition, one bundle-only attempt, except that a draw-order case,
-// the only test of whether the frames alone show the order, gets `attempts`.
+// the only test of whether the frames alone show the order, and its matched
+// control get `attempts`.
 export function attemptsOf(corpus, c, condition) {
-  return condition === "primary" || c.class === "draw-order" ? corpus.attempts : 1;
+  return condition === "primary" || c.class === "draw-order" || matchedControl(corpus, c) ? corpus.attempts : 1;
 }
 
 // The metrics of one agent under one condition over the given cases.
@@ -60,9 +68,11 @@ export function aggregate(corpus, scores, agent, condition, cases) {
       out.controls.flagged += flagged;
       out.controls.scheduled += n;
       if (c.decoy) { out.decoys.flagged += flagged; out.decoys.scheduled += n; }
-      // A clean effect called mis-ordered: what a draw-order hit has to beat.
-      out.orderClaims.flagged += attempts.filter((s) => s?.units?.some((u) => u.category === "draw-order")).length;
-      out.orderClaims.scheduled += n;
+      // The same base, clean, called mis-ordered: what a draw-order hit has to beat.
+      if (matchedControl(corpus, c)) {
+        out.orderClaims.flagged += attempts.filter((s) => s?.units?.some((u) => u.category === "draw-order")).length;
+        out.orderClaims.scheduled += n;
+      }
       const base = (out.bases[c.base] ??= { controlFlags: 0, controlAttempts: 0, seedControlFlags: 0, seedControlAttempts: 0 });
       if (c.shape === "three") { base.seedControlFlags += flagged; base.seedControlAttempts += n; }
       else { base.controlFlags += flagged; base.controlAttempts += n; }
@@ -226,7 +236,7 @@ export function markdown(report) {
     if (a.primary.decoyFlag !== null) lines.push(`Decoy controls (a reorder that cannot show; counted in the control flags): flags ${fmt(a.primary.decoyFlag)}.`, "");
     const order = a.bundleOnly.classes["draw-order"];
     lines.push(`Diagnosis without source inspection (bundle-only, does not gate): subjective ${fmt(a.bundleOnly.subjective)}, ` +
-      `${order ? `draw order from the frames alone ${fmt(order.identified)} (diagnosis ${fmt(order.diagnosisOnly)}; a draw-order claim on a clean control ${fmt(a.bundleOnly.orderClaim)}), ` : ""}` +
+      `${order ? `draw order from the frames alone ${fmt(order.identified)} (diagnosis ${fmt(order.diagnosisOnly)}; a draw-order claim on the same bases' clean controls ${fmt(a.bundleOnly.orderClaim)}), ` : ""}` +
       `control flags ${fmt(a.bundleOnly.controlFlag)}, completion ${fmt(a.bundleOnly.completion)}.`, "");
   }
   if (report.secondaryIneligible.length) lines.push(`Secondary-ineligible: ${report.secondaryIneligible.join(", ")}.`, "");

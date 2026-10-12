@@ -43,7 +43,7 @@ export function attemptPrompt(dir) {
 
 // The scheduled attempts (attemptsOf): three per case in the primary condition;
 // in the bundle-only condition, per secondary-eligible case and control, one
-// (three for a draw-order case).
+// (three for a draw-order case and its base's clean control).
 export function schedule(corpus) {
   const out = [];
   for (const c of corpus.cases) {
