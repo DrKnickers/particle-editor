@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sha256 } from "../observe.mjs";
-import { runLoop, checkTask, checkPatchSet, taskPath, decideOutcome, EXIT, OUTCOME } from "./loop.mjs";
+import { runLoop, checkTask, checkPatchSet, parsePatchSet, taskPath, decideOutcome, EXIT, OUTCOME } from "./loop.mjs";
 import { variationSeeds } from "./four-seed.mjs";
 import { fakeExe } from "./testing.mjs";
 
@@ -166,6 +166,22 @@ test("a malformed finding or patch set rejects the round, not the run", async (t
   assert.match(summary.rounds[1].reason, /schema must be 1/);
   assert.equal(summary.stop.condition, "two-rejections");
   assert.equal(summary.outcome, OUTCOME.technical);
+});
+
+test("a patch set that is not JSON rejects its round, not the run, and keeps the author's bytes", async (t) => {
+  const { source, task, out } = setup(t);
+  const text = '```json\n{ "schema": 1, "requests": [] ,}\n```';
+  const summary = await runLoop({ task, source, patchSets: [parsePatchSet(text), ROUND_1()], out, run: fakeExe(), say: quiet });
+  assert.match(summary.rounds[0].reason, /^patch set: not JSON/);
+  assert.equal(fs.readFileSync(join(out, "rounds/01/patch-set.json"), "utf8"), text);
+  assert.equal(summary.rounds[1].accepted, true);
+  assert.equal(summary.outcome, OUTCOME.pass);
+});
+
+test("null findings and a null flag mean none", () => {
+  const hash = sha256(Buffer.from(SOURCE));
+  assert.deepEqual(checkPatchSet({ ...ROUND_1(), findings: null, needsHumanJudgment: null }, hash), []);
+  assert.deepEqual(parsePatchSet('{"schema":1}'), { schema: 1 });
 });
 
 async function blockedRun(t, change, { outcome, exitCode, step, message }) {

@@ -75,10 +75,19 @@ export function checkTask(task) {
   return problems;
 }
 
+// A patch set JSON cannot parse is still the author's round: it is rejected
+// with the parse error, and the author's bytes are kept as written.
+export const UNREADABLE = Symbol("unreadable");
+export function parsePatchSet(text) {
+  try { return JSON.parse(text); }
+  catch (error) { return { [UNREADABLE]: { text, error: error.message } }; }
+}
+
 // Problems with one round's patch set. Any problem rejects the round: the
 // author wrote it, so it is the author's to fix, not a reason to stop the run.
 export function checkPatchSet(set, inputHash) {
   const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+  if (set?.[UNREADABLE]) return [`patch set: not JSON (${set[UNREADABLE].error})`];
   if (!object(set) || set.schema !== 1) return ["patch set: schema must be 1"];
   if (!Array.isArray(set.requests) || set.requests.length === 0) return ["patch set: requests must be a non-empty array"];
   const problems = [], targets = new Set();
@@ -98,13 +107,14 @@ export function checkPatchSet(set, inputHash) {
     if (targets.has(target)) problems.push(`patch set: requests[${i}] targets ${target} again; put one emitter's edits in one request`);
     targets.add(target);
   }
-  if (set.findings !== undefined) {
+  // null, like an absent key, means "none".
+  if (set.findings != null) {
     if (!Array.isArray(set.findings)) problems.push("patch set: findings must be an array");
     else for (const [i, finding] of set.findings.entries())
       for (const key of FINDING_KEYS) if (!object(finding) || !(key in finding))
         problems.push(`patch set: findings[${i}] is missing ${key} (§18.3)`);
   }
-  if (set.needsHumanJudgment !== undefined && (typeof set.needsHumanJudgment !== "string" || !set.needsHumanJudgment.trim()))
+  if (set.needsHumanJudgment != null && (typeof set.needsHumanJudgment !== "string" || !set.needsHumanJudgment.trim()))
     problems.push("patch set: needsHumanJudgment must be a non-empty reason");
   return problems;
 }
@@ -223,7 +233,7 @@ export async function runLoop({ task, source, patchSets, out, exe = join(repoRoo
     const playRound = async (r, patchSet, input, inputHash) => {
       const root = `rounds/${pad(r)}`, entry = { round: r, input: { sha256: inputHash }, accepted: false, reason: null };
       const reject = (reason) => Object.assign(entry, { reason });
-      io.writeFileSync(at(`${root}/patch-set.json`), serialise(patchSet));
+      io.writeFileSync(at(`${root}/patch-set.json`), patchSet?.[UNREADABLE] ? patchSet[UNREADABLE].text : serialise(patchSet));
       entry.patchSet = `${root}/patch-set.json`;
       entry.findings = Array.isArray(patchSet?.findings) ? patchSet.findings.length : 0;
       const problems = checkPatchSet(patchSet, inputHash);
@@ -360,7 +370,11 @@ export async function main(argv = process.argv.slice(2)) {
     try { return JSON.parse(fs.readFileSync(path, "utf8")); }
     catch (error) { throw fail(`cannot read ${path}: ${error.message}`, EXIT.input); }
   };
-  const summary = await runLoop({ task: parse(options.task), source: options.source, patchSets: patches.map(parse),
+  const readPatchSet = (path) => {
+    try { return parsePatchSet(fs.readFileSync(path, "utf8")); }
+    catch (error) { throw fail(`cannot read ${path}: ${error.message}`, EXIT.input); }
+  };
+  const summary = await runLoop({ task: parse(options.task), source: options.source, patchSets: patches.map(readPatchSet),
     out: options.out, exe, roots });
   console.log(`[vfx-loop] completed ${options.out}: ${summary.outcome} (${summary.stop.condition}); see package/README.md`);
   return EXIT.ok;
