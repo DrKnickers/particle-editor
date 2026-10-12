@@ -86,6 +86,8 @@ private:
 public:
 	// This instance is dead when there are no more particles and no more coming either
 	bool  IsDead() const { return DoneSpawning() && m_primitives.empty(); }
+	// Live particles: one primitive each, as the engine-wide count tracks them.
+	size_t ParticleCount() const { return m_primitives.size(); }
 
 	int   Kill();
 	void  onParticleSystemChanged(const Engine& engine, int track);

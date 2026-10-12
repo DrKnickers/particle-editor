@@ -16,16 +16,78 @@ struct ObservationSample
     std::uint64_t runtimeGuardRefusals, hardGuardRefusals, indexCapRefusals;
     bool overloadActive;
     bool spawnerIdle;
+    // Live particles per authored emitter index; sums to particles.
+    std::vector<int> perEmitter;
 };
 
 enum class ObservationStatus { Running, NaturalEnd, Capped, SpawnLimited, Failed };
 
+// Fixed allowance for capture.json, the summary and the log.
+const std::uint64_t ObservationReserveBytes = 1024 * 1024;
+
 // Early refusal only: GDI+ can exceed this estimate; actual writes enforce the quota.
+// Telemetry is already serialised by then, so its bytes are exact.
 inline std::uint64_t ObservationPreflightBytes(std::uint64_t measuredPngBytes,
-                                              std::uint64_t pngs, std::uint64_t samples)
+                                              std::uint64_t pngs, std::uint64_t telemetryBytes)
 {
     const std::uint64_t perPng = measuredPngBytes + measuredPngBytes / 2 + measuredPngBytes % 2;
-    return perPng * pngs + 512 * samples + 1024 * 1024;
+    return perPng * pngs + telemetryBytes + ObservationReserveBytes;
+}
+
+// Counts each telemetry line as its sample is retained, so the per-emitter
+// arrays can never hold more than the spec's budget, whatever the emitter count.
+class TelemetryByteBudget
+{
+public:
+    explicit TelemetryByteBudget(std::uint64_t maxBytes) : m_maxBytes(maxBytes) {}
+
+    // False at the first line that takes the total plus the reserve past maxBytes.
+    bool Add(std::uint64_t lineBytes)
+    {
+        m_bytes += lineBytes;
+        return m_bytes + ObservationReserveBytes <= m_maxBytes;
+    }
+    std::uint64_t Bytes() const { return m_bytes; }
+
+private:
+    std::uint64_t m_maxBytes;
+    std::uint64_t m_bytes = 0;
+};
+
+// True when the per-emitter counts account for every live particle.
+inline bool PerEmitterSumMatches(const ObservationSample& sample)
+{
+    long long sum = 0;
+    for (int count : sample.perEmitter) sum += count;
+    return sum == sample.particles;
+}
+
+// One authored emitter's landmarks. Frames follow the global convention:
+// peakFrame is a frame, peakParticles the emitter's maximum live count.
+struct EmitterLandmarks
+{
+    std::optional<int> firstActive, peakFrame, lastActive;
+    int peakParticles = 0;
+};
+
+inline std::vector<EmitterLandmarks> PerEmitterLandmarks(const std::vector<ObservationSample>& samples, size_t emitters)
+{
+    std::vector<EmitterLandmarks> result(emitters);
+    for (const ObservationSample& sample : samples)
+        for (size_t i = 0; i < emitters && i < sample.perEmitter.size(); ++i)
+        {
+            const int count = sample.perEmitter[i];
+            if (count <= 0) continue;
+            EmitterLandmarks& emitter = result[i];
+            if (!emitter.firstActive) emitter.firstActive = sample.frame;
+            if (count > emitter.peakParticles)
+            {
+                emitter.peakParticles = count;
+                emitter.peakFrame = sample.frame;
+            }
+            emitter.lastActive = sample.frame;
+        }
+    return result;
 }
 
 inline const char* ObservationStatusString(ObservationStatus status)

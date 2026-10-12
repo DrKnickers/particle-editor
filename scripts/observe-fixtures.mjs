@@ -3,7 +3,7 @@
 
 export const OBSERVE_FIXTURE_KINDS = [
   "late-flash", "guard-short", "death-child", "child-starve",
-  "budget-bailout", "budget-bailout-skip", "index-cap",
+  "budget-bailout", "budget-bailout-skip", "index-cap", "wide",
 ];
 
 const base = {
@@ -64,6 +64,8 @@ function expectedEmitters(kind) {
       }),
     ];
     case "index-cap": return [emitter("burst", 20000, 0.5)];
+    // Every telemetry line carries 4096 per-emitter counts.
+    case "wide": return Array.from({ length: 4096 }, (_, i) => emitter(`wide-${String(i).padStart(4, "0")}`, 1, 0.25));
     default: return null;
   }
 }

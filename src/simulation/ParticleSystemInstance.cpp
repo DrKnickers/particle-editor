@@ -27,6 +27,16 @@ void ParticleSystemInstance::AppendLiveParticleSamples(
     }
 }
 
+void ParticleSystemInstance::PerEmitterParticleCounts(std::vector<int>& counts) const
+{
+    for (const auto& emitter : m_emitters)
+    {
+        const size_t rank = emitter->GetSourceRank();
+        if (rank >= counts.size()) counts.resize(rank + 1, 0);
+        counts[rank] += static_cast<int>(emitter->ParticleCount());
+    }
+}
+
 void ParticleSystemInstance::ReleaseDeviceTextures()
 {
     for (auto& emitter : m_emitters)

@@ -20,7 +20,8 @@ const scratch = join(repoRoot, "tests/.tmp/vfx-loop");
 const FIXTURE = join(repoRoot, "site/guide/downloads/P_EXPLOSION_EXAMPLE.ALO");
 const here = (name) => join(repoRoot, "scripts/vfx-loop/fixtures", name);
 
-// Pins measured 2026-10-11 on the owner's native build (node scripts/vfx-loop/lane.mjs --measure).
+// Pins measured 2026-10-11 on the owner's native build (node scripts/vfx-loop/lane.mjs --measure);
+// lastActiveShift after per-emitter telemetry landed.
 export const PINNED = {
   outcome: "PASS_FOR_HUMAN_REVIEW",
   stop: "author-finished",
@@ -35,13 +36,19 @@ export const PINNED = {
     { seed: 1319324138, peakParticles: [167, 167], budgetsPass: true },
     { seed: 3973759907, peakParticles: [172, 172], budgetsPass: true },
   ],
+  // The whole effect ends on the same frame; the shortened emitters end earlier.
+  lastActiveShift: { effect: 0, emitters: { "Smoke Slow": -18, "Smoke": -2, "Debris": 0, "Debris_1": 0, "Debris_2": 0,
+    "Debris_3": 0, "Fire": 3, "Fire Details": 0, "Flash Small": 0, "Flash Large": 0, "Shockwave": 0, "Sparks": 0 } },
 };
 
-export function measuredValues(summary, metrics, review, schedule, matrix) {
+export function measuredValues(summary, metrics, review, schedule, matrix, delta) {
   return { outcome: summary.outcome, stop: summary.stop.condition, candidateHash: summary.candidate?.sha256 ?? null,
     pairs: review.pairs.length, firstRandomDivergence: schedule.firstDivergentFrame,
     identicalSelectedFrames: metrics.drift.identicalSelectedFrames, budgetsPass: metrics.budgetsPass,
-    seeds: matrix.seeds.map((v) => ({ seed: v.seed, peakParticles: v.peakParticles, budgetsPass: v.budgetsPass })) };
+    seeds: matrix.seeds.map((v) => ({ seed: v.seed, peakParticles: v.peakParticles, budgetsPass: v.budgetsPass })),
+    // Whole-effect lastActive against each emitter's: the per-emitter series attribute the edits.
+    lastActiveShift: { effect: delta?.lifecycle?.lastActive?.delta ?? null,
+      emitters: Object.fromEntries((delta?.emitters ?? []).map((v) => [v.name, v.lifecycle.lastActive.delta])) } };
 }
 
 function cleanScratch(path) {
@@ -73,7 +80,7 @@ export async function runLane({ exe = join(repoRoot, "x64/Release/ParticleEditor
     require(fs.existsSync(join(out, name)), `missing ${name}`);
   const metrics = readJson(join(comparison, "metrics.json")), review = readJson(join(comparison, "review.json"));
   const values = measuredValues(summary, metrics, review, readJson(join(comparison, "random-schedule-note.json")),
-    readJson(join(out, "four-seed/matrix.json")));
+    readJson(join(out, "four-seed/matrix.json")), readJson(join(comparison, "telemetry-delta.json")));
   if (measure) say(`export const PINNED = ${JSON.stringify(values, null, 2)};`);
   else if (!pins) errors.push("PINNED is null; the owner must run node scripts/vfx-loop/lane.mjs --measure");
   else for (const key of Object.keys(pins))

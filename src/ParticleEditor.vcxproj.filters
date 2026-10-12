@@ -222,6 +222,9 @@
     <ClInclude Include="host\PreviewScenarioJson.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="host\ObservationSampleJson.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
     <ClInclude Include="host\ObservationSpecJson.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>

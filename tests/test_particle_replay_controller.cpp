@@ -449,7 +449,7 @@ static void SourcePins()
           frame.find("observe->AfterRender(succeeded)") != std::string::npos,
           "proof selects Strict, observe selects Observe, and both bracket incidental renders");
     CHECK(observe.find("CheckSettings(context)") != std::string::npos &&
-          observe.find("SampleJson(sample) != SampleJson(samples[frame])") != std::string::npos &&
+          observe.find("ObservationSampleJson(sample) != ObservationSampleJson(samples[frame])") != std::string::npos &&
           observe.find("deps.buildHooks(path.wstring()).readback") != std::string::npos &&
           observe.find("second.Reset() && captureHooks.render() && captureHooks.readback()") != std::string::npos,
           "observe compares every update including RNG and renders frame zero without another update");
@@ -458,8 +458,14 @@ static void SourcePins()
           observe.find("measured.SeekTo(measuredFrame, false)") != std::string::npos &&
           observe.find("std::filesystem::file_size(scratchPath, sizeError)") != std::string::npos &&
           observe.find("std::filesystem::remove(scratchPath, removeError)") != std::string::npos &&
-          observe.find("ObservationPreflightBytes(measuredBytes, choices.size() + playbackCount, samples.size())") != std::string::npos,
+          observe.find("ObservationPreflightBytes(measuredBytes, choices.size() + playbackCount, telemetryBudget.Bytes())") != std::string::npos,
           "observe preflight measures a destination-only peak render without sampling and removes its scratch PNG");
+    {
+        const size_t budget = observe.find("telemetryBudget.Add(ObservationSampleLine(sample).size())");
+        const size_t retain = observe.find("samples.push_back(std::move(sample))");
+        CHECK(budget != std::string::npos && retain != std::string::npos && budget < retain,
+              "observe counts each telemetry line against the budget before retaining its sample");
+    }
     CHECK(proof.find("emitter->colorTexture =") == std::string::npos &&
           proof.find("emitter->normalTexture =") == std::string::npos &&
           support.find("emitter->colorTexture =") == std::string::npos &&

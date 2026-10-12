@@ -35,6 +35,50 @@ export function playbackMetrics(capture) {
   return { frameCount: count, duration: count ? count / fps : 0, fps };
 }
 
+// Per-emitter telemetry is optional: a bundle from before it has neither the
+// lifecycle's emitters nor any line's perEmitter. When present, both must be,
+// every line must account for its particles, and the landmarks must follow
+// from the lines.
+function checkPerEmitter(lifecycle, samples, optionalFrame, require) {
+  const count = (value) => Number.isSafeInteger(value) && value >= 0;
+  const emitters = lifecycle.emitters;
+  const lines = samples.filter((v) => v.perEmitter !== undefined).length;
+  if (emitters === undefined && lines === 0) return;
+  if (!Array.isArray(emitters) || lines !== samples.length) {
+    require(false, "per-emitter telemetry must be in the lifecycle and on every line, or in neither");
+    return;
+  }
+  require(emitters.every((v, i) => v?.index === i && typeof v.name === "string" &&
+    ["firstActive", "peakFrame", "lastActive"].every((key) => optionalFrame(v[key])) && count(v.peakParticles)),
+    "invalid lifecycle emitters");
+  require(samples.every((v) => Array.isArray(v.perEmitter) && v.perEmitter.length === emitters.length &&
+    v.perEmitter.every(count) && v.perEmitter.reduce((a, b) => a + b, 0) === v.particles),
+    "per-emitter counts do not account for every particle");
+  const landmarks = emitters.map((_, i) => {
+    const mark = { firstActive: null, peakFrame: null, lastActive: null, peakParticles: 0 };
+    for (const sample of samples) {
+      const n = sample.perEmitter?.[i] ?? 0;
+      if (n <= 0) continue;
+      if (mark.firstActive === null) mark.firstActive = sample.frame;
+      if (n > mark.peakParticles) { mark.peakParticles = n; mark.peakFrame = sample.frame; }
+      mark.lastActive = sample.frame;
+    }
+    return mark;
+  });
+  require(emitters.every((v, i) => Object.entries(landmarks[i]).every(([key, value]) => v?.[key] === value)),
+    "lifecycle emitter landmarks differ from the per-emitter telemetry");
+}
+
+// The device the frames came from. Optional, as legacy bundles lack it.
+function checkRender(render, require) {
+  const count = (value) => Number.isSafeInteger(value) && value >= 0;
+  require(typeof render?.adapter?.description === "string" && count(render.adapter.vendorId) &&
+    count(render.adapter.deviceId) && /^\d+\.\d+\.\d+\.\d+$/.test(render.adapter.driverVersion ?? "") &&
+    count(render.displayFormat) && count(render.depthStencilFormat) &&
+    count(render.multisample?.type) && count(render.multisample?.quality) &&
+    ["HWVP", "SOFTWARE_VP"].includes(render.vertexProcessing), "invalid render profile");
+}
+
 export function checkCapture(directory, { io = fs, spec, assembledPngs = [] } = {}) {
   const errors = [];
   const pngHashes = {};
@@ -117,6 +161,8 @@ export function checkCapture(directory, { io = fs, spec, assembledPngs = [] } = 
     require(isDeepStrictEqual(summary, capture.lifecycle), "telemetry summary differs from lifecycle");
     const samples = io.readFileSync(join(directory, "telemetry/frames.jsonl"), "utf8").trim().split("\n").map(JSON.parse);
     require(samples.length === capture.lifecycle.finalFrame + 1 && samples.every((v, i) => v.frame === i), "telemetry missing simulation frame");
+    checkPerEmitter(capture.lifecycle, samples, optionalFrame, require);
+    if (capture.render !== undefined) checkRender(capture.render, require);
     // Reject extra PNGs, including numbering gaps beyond image2's stopping point.
     for (const name of bundleFiles(directory, io).filter((v) => v.endsWith(".png")))
       require(seen.has(name) || assembledPngs.includes(name), `unlisted PNG: ${name}`);

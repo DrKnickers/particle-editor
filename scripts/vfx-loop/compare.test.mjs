@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkAssembledBundle } from "../observe.mjs";
 import { writeComparison, alignmentDiff, checkBudgets, pairFrames, placeholderPng, readIhdr,
-  buildPairedFilmstripArgs, randomSchedule, METRICS, TECHNICAL_BUDGETS } from "./compare.mjs";
+  buildPairedFilmstripArgs, randomSchedule, telemetryDelta, METRICS, TECHNICAL_BUDGETS } from "./compare.mjs";
 import { bundle, spec, fakeFfmpeg, png, PROFILE } from "./testing.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -148,6 +148,29 @@ test("a non-empty comparison directory is refused", async (t) => {
   const { baseline, candidate, out } = await pair(t);
   fs.mkdirSync(out); fs.writeFileSync(join(out, "stale.json"), "{}");
   await assert.rejects(writeComparison(baseline, candidate, out, { run: fakeFfmpeg() }), (error) => error.exitCode === 13);
+});
+
+test("per-emitter telemetry attributes a change the whole-effect totals hide", () => {
+  // Shortening "Smoke Slow" leaves lastActive alone while "Sparks" lives just as long.
+  const sample = (frame, perEmitter) => ({ frame, particles: perEmitter[0] + perEmitter[1], perEmitter, emitters: 2, instances: 1, rngDrawCount: frame });
+  const before = [sample(0, [2, 2]), sample(1, [2, 2]), sample(2, [2, 2])];
+  const after = [sample(0, [2, 2]), sample(1, [0, 2]), sample(2, [0, 2])];
+  const life = { status: "natural-end", finalFrame: 2, firstActive: 0, lastActive: 2, peakParticles: 4 };
+  const emitters = (slowLast) => [
+    { index: 0, name: "Smoke Slow", firstActive: 0, peakFrame: 0, lastActive: slowLast, peakParticles: 2 },
+    { index: 1, name: "Sparks", firstActive: 0, peakFrame: 0, lastActive: 2, peakParticles: 2 }];
+  const delta = telemetryDelta(before, after, life, life, emitters(2), emitters(0));
+  assert.equal(delta.scope, "per-emitter");
+  assert.equal(delta.lifecycle.lastActive.delta, 0);
+  assert.deepEqual(delta.emitters[0].lifecycle.lastActive, { baseline: 2, candidate: 0, delta: -2 });
+  assert.equal(delta.emitters[1].lifecycle.lastActive.delta, 0);
+  assert.deepEqual(delta.emitters[0].series, { baseline: [2, 2, 2], candidate: [2, 0, 0] });
+
+  const legacy = telemetryDelta(before, after, life, life, undefined, emitters(0));
+  assert.deepEqual([legacy.scope, legacy.emitters], ["engine-wide", null]);
+  assert.match(legacy.note, /no per-emitter telemetry/);
+  const renamed = emitters(0); renamed[1].name = "Embers";
+  assert.match(telemetryDelta(before, after, life, life, emitters(2), renamed).note, /different emitters/);
 });
 
 test("random schedule divergence names the first differing frame (§9.8)", () => {

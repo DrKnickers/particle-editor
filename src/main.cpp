@@ -478,9 +478,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 						genReplayFixtureKind != L"late-flash" && genReplayFixtureKind != L"guard-short" &&
 						genReplayFixtureKind != L"death-child" && genReplayFixtureKind != L"child-starve" &&
 						genReplayFixtureKind != L"budget-bailout" && genReplayFixtureKind != L"budget-bailout-skip" &&
-						genReplayFixtureKind != L"index-cap")
+						genReplayFixtureKind != L"index-cap" && genReplayFixtureKind != L"wide")
 					{
-						fwprintf(stderr, L"--gen-replay-proof-fixture requires weather, guard, late-flash, guard-short, death-child, child-starve, budget-bailout, budget-bailout-skip or index-cap\n");
+						fwprintf(stderr, L"--gen-replay-proof-fixture requires weather, guard, late-flash, guard-short, death-child, child-starve, budget-bailout, budget-bailout-skip, index-cap or wide\n");
 						return 2;
 					}
 				}
@@ -982,6 +982,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			}
 			else if (genReplayFixtureKind == L"guard-short" || genReplayFixtureKind == L"index-cap")
 				configure(root, "burst", genReplayFixtureKind == L"guard-short" ? 2048 : 20000, 0.5f);
+			else if (genReplayFixtureKind == L"wide")
+			{
+				// 4096 one-particle roots: every telemetry line carries 4096 per-emitter
+				// counts, so a tight byte budget refuses during collection.
+				char name[16];
+				for (int i = 0; i < 4096; ++i)
+				{
+					auto* e = i == 0 ? root : system->addRootEmitter();
+					if (!e) return 3;
+					sprintf_s(name, sizeof(name), "wide-%04d", i);
+					configure(e, name, 1, 0.25f);
+				}
+			}
 			else if (genReplayFixtureKind == L"death-child" || genReplayFixtureKind == L"child-starve")
 			{
 				const bool starve = genReplayFixtureKind == L"child-starve";

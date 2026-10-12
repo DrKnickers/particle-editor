@@ -44,6 +44,7 @@ const fixtures = {
     emitter("catch-up", 1, 0.5, { nBursts: 30, burstDelay: Math.fround(0.01), initialDelay: 0.0078125, skipTime: 0.25 }),
   ],
   "index-cap": [emitter("burst", 20000, 0.5)],
+  "wide": Array.from({ length: 4096 }, (_, i) => emitter(`wide-${String(i).padStart(4, "0")}`, 1, 0.25)),
 };
 
 function attestation(kind) {
@@ -70,7 +71,11 @@ for (const kind of OBSERVE_FIXTURE_KINDS) {
       delete fields[key];
       assert.ok(validateObserveFixture(fields, kind).length > 0, key);
     }
-    valid.emitters.forEach((e, index) => {
+    // The wide kind's 4096 identical emitters: walk the first, second, middle and last.
+    const last = valid.emitters.length - 1;
+    const indices = last > 8 ? [0, 1, last >> 1, last] : valid.emitters.map((_, index) => index);
+    indices.forEach((index) => {
+      const e = valid.emitters[index];
       for (const [key, value] of Object.entries(e)) {
         const fields = structuredClone(valid);
         delete fields.emitters[index][key];

@@ -8,7 +8,7 @@
 //     paired-filmstrip.png       each tile = baseline frame over candidate frame
 //     selected-frame-pairs/      frame-NNNNN.baseline.png / .candidate.png
 //     metrics.json               budgets (task + technical) and drift flags
-//     telemetry-delta.json       engine-wide per-frame series and lifecycle shifts
+//     telemetry-delta.json       whole-effect and per-emitter series and lifecycle shifts
 //     random-schedule-note.json  where the two random schedules diverge (§9.8)
 //     review.json                the frame pairs and the technical gate, for a human
 import * as fs from "node:fs";
@@ -73,20 +73,41 @@ export function checkBudgets(budgets, baseline, candidate) {
     });
 }
 
-export function telemetryDelta(baselineSamples, candidateSamples, baseline, candidate) {
+const shift = (before, after) => ({ baseline: before, candidate: after,
+  delta: Number.isFinite(before) && Number.isFinite(after) ? after - before : null });
+
+// Per-emitter landmark shifts and series, by authored index, when both bundles
+// carry per-emitter telemetry for the same emitter list. A patch edits emitters
+// in place, so the lists normally match; anything else is reported, not guessed.
+function emitterDelta(baselineSamples, candidateSamples, baselineEmitters, candidateEmitters) {
+  if (!Array.isArray(baselineEmitters) || !Array.isArray(candidateEmitters))
+    return { emitters: null, reason: "a bundle has no per-emitter telemetry" };
+  if (baselineEmitters.length !== candidateEmitters.length ||
+      baselineEmitters.some((v, i) => v.name !== candidateEmitters[i].name))
+    return { emitters: null, reason: "the two bundles list different emitters" };
+  return { emitters: baselineEmitters.map((before, index) => {
+    const after = candidateEmitters[index];
+    return { index, name: before.name,
+      lifecycle: Object.fromEntries(["firstActive", "peakFrame", "lastActive", "peakParticles"]
+        .map((key) => [key, shift(before[key], after[key])])),
+      series: { baseline: baselineSamples.map((v) => v.perEmitter[index]), candidate: candidateSamples.map((v) => v.perEmitter[index]) } };
+  }) };
+}
+
+export function telemetryDelta(baselineSamples, candidateSamples, baseline, candidate, baselineEmitters, candidateEmitters) {
   const series = {};
   for (const field of ["particles", "emitters", "instances", "rngDrawCount"])
     series[field] = { baseline: baselineSamples.map((v) => v[field]), candidate: candidateSamples.map((v) => v[field]) };
   const lifecycle = {};
-  for (const key of METRICS) {
-    const before = baseline[key], after = candidate[key];
-    lifecycle[key] = { baseline: before, candidate: after,
-      delta: Number.isFinite(before) && Number.isFinite(after) ? after - before : null };
-  }
+  for (const key of METRICS) lifecycle[key] = shift(baseline[key], candidate[key]);
   lifecycle.status = { baseline: baseline.status, candidate: candidate.status };
-  return { schemaVersion: 1, scope: "engine-wide",
-    note: "Observation telemetry has no per-emitter series yet, so these are whole-effect totals per simulated frame; a series ends where its run ended.",
-    lifecycle, series };
+  const { emitters, reason } = emitterDelta(baselineSamples, candidateSamples, baselineEmitters, candidateEmitters);
+  const ends = "a series ends where its run ended.";
+  return { schemaVersion: 1, scope: emitters ? "per-emitter" : "engine-wide",
+    note: emitters
+      ? `Whole-effect totals and each emitter's own series per simulated frame, by authored index; ${ends}`
+      : `Whole-effect totals per simulated frame only, because ${reason}; ${ends}`,
+    lifecycle, series, emitters };
 }
 
 export function randomSchedule(baselineCapture, candidateCapture, baselineSamples, candidateSamples) {
@@ -219,7 +240,8 @@ export async function writeComparison(baselineDir, candidateDir, outDir, { budge
     advisory: "Evidence for a human decision. Nothing here ranks the two effects (design §13.3); the human decides which to keep.",
     alignment: { aligned: true, compared: ALIGNED }, technicalGate, pairs, decision: null };
   io.writeFileSync(join(outDir, "metrics.json"), serialise(metrics));
-  io.writeFileSync(join(outDir, "telemetry-delta.json"), serialise(telemetryDelta(baseline.samples, candidate.samples, before, after)));
+  io.writeFileSync(join(outDir, "telemetry-delta.json"), serialise(telemetryDelta(baseline.samples, candidate.samples, before, after,
+    baseline.capture.lifecycle.emitters, candidate.capture.lifecycle.emitters)));
   io.writeFileSync(join(outDir, "random-schedule-note.json"), serialise(schedule));
   io.writeFileSync(join(outDir, "review.json"), serialise(review));
   return { metrics, review, schedule, summaries: { baseline: before, candidate: after } };

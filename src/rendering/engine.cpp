@@ -178,6 +178,11 @@ std::vector<LiveParticleSample> Engine::GetLiveParticleSamples() const
     return samples;
 }
 
+void Engine::PerEmitterParticleCounts(std::vector<int>& counts) const
+{
+    for (const auto& instance : m_instances) instance->PerEmitterParticleCounts(counts);
+}
+
 ParticleSystemInstanceHandle Engine::MakeInstanceHandle(
     ParticleSystemInstance* instance) const
 {
@@ -1031,6 +1036,9 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 	m_adapterDescription[0] = '\0';
 	m_adapterVendorId   = 0;
 	m_adapterDeviceId   = 0;
+	m_adapterDriverVersion  = 0;
+	m_creationDisplayFormat = D3DFMT_UNKNOWN;
+	m_vertexProcessingMode  = "";
 	// ground-lighting effect + tangent-space decl + normal-map state
 	m_pGroundEffect            = NULL;
 	m_pGroundDecl              = NULL;
@@ -1109,6 +1117,7 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 		throw runtime_error("Unable to get current display mode");
 	}
 
+	m_creationDisplayFormat = DisplayMode.Format;
 	if ((m_presentationParameters.AutoDepthStencilFormat = GetDepthStencilFormat(DisplayMode.Format, true)) == D3DFMT_UNKNOWN)
 	{
 		SAFE_RELEASE(m_pDirect3D);
@@ -1159,6 +1168,8 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 		          adapterIdent.Description, _TRUNCATE);
 		m_adapterVendorId = (unsigned long)adapterIdent.VendorId;
 		m_adapterDeviceId = (unsigned long)adapterIdent.DeviceId;
+		m_adapterDriverVersion = (unsigned long long)adapterIdent.DriverVersion.QuadPart;
+		m_vertexProcessingMode = vpModeName;
 		printf("[D3D9Ex] device created (%s multithreaded) adapter=%s "
 		       "VendorId=0x%lX DeviceId=0x%lX\n",
 		       vpModeName, adapterIdent.Description,

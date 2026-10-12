@@ -556,6 +556,9 @@ public:
     int GetNumParticles() const { return m_numParticles; }
     int GetNumInstances() const { return (int)m_instances.size(); }
     std::vector<LiveParticleSample> GetLiveParticleSamples() const;
+    // Live particles per authored emitter index, summed over every instance.
+    // Reading only; counts is grown to fit and never shrunk.
+    void PerEmitterParticleCounts(std::vector<int>& counts) const;
 
     // Count of currently-alive instances that were emitted by the
     // SpawnerDriver (vs. Shift-click spawns or future sources). Used
@@ -698,6 +701,15 @@ public:
 	const char*   GetAdapterDescription() const { return m_adapterDescription; }
 	unsigned long GetAdapterVendorId()    const { return m_adapterVendorId; }
 	unsigned long GetAdapterDeviceId()    const { return m_adapterDeviceId; }
+	// The rest of the device's render profile, for observation bundles: the
+	// driver build, the formats and multisampling the device was created
+	// with, and whether hardware vertex processing was granted.
+	unsigned long long GetAdapterDriverVersion() const { return m_adapterDriverVersion; }
+	D3DFORMAT     GetCreationDisplayFormat() const { return m_creationDisplayFormat; }
+	D3DFORMAT     GetCreationDepthStencilFormat() const { return m_presentationParameters.AutoDepthStencilFormat; }
+	D3DMULTISAMPLE_TYPE GetCreationMultiSampleType() const { return m_presentationParameters.MultiSampleType; }
+	DWORD         GetCreationMultiSampleQuality() const { return m_presentationParameters.MultiSampleQuality; }
+	const char*   GetVertexProcessingMode() const { return m_vertexProcessingMode; }
 	bool IsSkydomeUsingEmbeddedResource() const
 	{ return m_skydomeUsesEmbeddedResource; }
 
@@ -1507,6 +1519,9 @@ private:
 	char							m_adapterDescription[512];
 	unsigned long					m_adapterVendorId;
 	unsigned long					m_adapterDeviceId;
+	unsigned long long				m_adapterDriverVersion;
+	D3DFORMAT						m_creationDisplayFormat;
+	const char*						m_vertexProcessingMode;
 	IDirect3DVertexDeclaration9*	m_pDeclaration;
 
 	// D3D9Ex event query for cross-device

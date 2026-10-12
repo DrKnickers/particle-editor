@@ -7,7 +7,7 @@ import { deflateSync } from "node:zlib";
 import { checkCapture, buildConcatList, buildFilmstripArgs, buildManifest, checkQuota,
   compareRepeat, spawnWithDeadline, assembleBundle, runObservation, observe, sha256,
   playbackMetrics, checkPlaybackProbe } from "./observe.mjs";
-import { PINNED, observationCases, checkCase, measuredValues, generateFixtures } from "./observe-lane.mjs";
+import { PINNED, observationCases, checkCase, measuredValues, generateFixtures, predictedTelemetryRefusal } from "./observe-lane.mjs";
 import { runObserveLane, prereq } from "./run-all-tests.mjs";
 import { TEXTURES } from "./replay-proof.mjs";
 
@@ -97,6 +97,59 @@ for (const [name, mutation, expected] of [
   ["stride order", (dir) => mutateCapture(dir, (c) => { c.stride.reverse(); }), /stride/],
 ]) test(`capture checker rejects ${name}`, (t) => {
   const dir = temporary(t), capture = fixture(dir, { playbackStride: 2 }); mutation(dir, capture);
+  assert.match(checkCapture(dir).errors.join("; "), expected);
+});
+
+// A bundle with per-emitter telemetry: emitter 0 holds the one particle until
+// frame 10, then emitter 1 does. The render profile is the device the frames came from.
+const RENDER = { adapter: { description: "Test Adapter", vendorId: 4318, deviceId: 7682, driverVersion: "32.0.15.6094" },
+  displayFormat: 22, depthStencilFormat: 75, multisample: { type: 4, quality: 0 }, vertexProcessing: "HWVP" };
+function perEmitterFixture(directory) {
+  const capture = fixture(directory);
+  const finalFrame = capture.lifecycle.finalFrame;
+  const counts = (frame) => (frame < 10 ? [1, 0] : [0, 1]);
+  capture.lifecycle.emitters = [
+    { index: 0, name: "Core", firstActive: 0, peakFrame: 0, lastActive: 9, peakParticles: 1 },
+    { index: 1, name: "Tail", firstActive: 10, peakFrame: 10, lastActive: finalFrame, peakParticles: 1 }];
+  capture.render = RENDER;
+  fs.writeFileSync(join(directory, "capture.json"), json(capture));
+  fs.writeFileSync(join(directory, "telemetry/summary.json"), json(capture.lifecycle));
+  fs.writeFileSync(join(directory, "telemetry/frames.jsonl"), Array.from({ length: finalFrame + 1 },
+    (_, frame) => JSON.stringify({ frame, particles: 1, perEmitter: counts(frame), spawnerIdle: true }) + "\n").join(""));
+  return capture;
+}
+function mutateTelemetry(directory, mutate) {
+  const path = join(directory, "telemetry/frames.jsonl");
+  const lines = fs.readFileSync(path, "utf8").trim().split("\n").map(JSON.parse);
+  mutate(lines);
+  fs.writeFileSync(path, lines.map((v) => JSON.stringify(v) + "\n").join(""));
+}
+function mutateLifecycle(directory, mutate) {
+  mutateCapture(directory, (c) => mutate(c.lifecycle));
+  const capture = JSON.parse(fs.readFileSync(join(directory, "capture.json"), "utf8"));
+  fs.writeFileSync(join(directory, "telemetry/summary.json"), json(capture.lifecycle));
+}
+
+test("capture checker accepts per-emitter telemetry and a render profile, and a legacy bundle without either", (t) => {
+  const dir = temporary(t); perEmitterFixture(dir);
+  assert.deepEqual(checkCapture(dir).errors, []);
+  const legacy = temporary(t); fixture(legacy);
+  assert.deepEqual(checkCapture(legacy).errors, []);
+});
+for (const [name, mutation, expected] of [
+  ["a sum that misses a particle", (dir) => mutateTelemetry(dir, (lines) => { lines[3].perEmitter = [0, 0]; }), /account for every particle/],
+  ["a short per-emitter array", (dir) => mutateTelemetry(dir, (lines) => { lines[0].perEmitter = [1]; }), /account for every particle/],
+  ["a line without perEmitter", (dir) => mutateTelemetry(dir, (lines) => { delete lines[5].perEmitter; }), /or in neither/],
+  ["lines without lifecycle emitters", (dir) => mutateLifecycle(dir, (l) => { delete l.emitters; }), /or in neither/],
+  ["a landmark the lines contradict", (dir) => mutateLifecycle(dir, (l) => { l.emitters[1].firstActive = 11; }), /landmarks differ/],
+  ["a peak count the lines contradict", (dir) => mutateLifecycle(dir, (l) => { l.emitters[0].peakParticles = 2; }), /landmarks differ/],
+  ["an emitter out of order", (dir) => mutateLifecycle(dir, (l) => { l.emitters.reverse(); }), /invalid lifecycle emitters/],
+  ["an emitter without a name", (dir) => mutateLifecycle(dir, (l) => { delete l.emitters[0].name; }), /invalid lifecycle emitters/],
+  ["a landmark past the final frame", (dir) => mutateLifecycle(dir, (l) => { l.emitters[1].lastActive = 99; }), /invalid lifecycle emitters/],
+  ["a render profile without a driver version", (dir) => mutateCapture(dir, (c) => { c.render.adapter.driverVersion = "unknown"; }), /render profile/],
+  ["an unknown vertex-processing mode", (dir) => mutateCapture(dir, (c) => { c.render.vertexProcessing = "MIXED"; }), /render profile/],
+]) test(`capture checker rejects ${name}`, (t) => {
+  const dir = temporary(t); perEmitterFixture(dir); mutation(dir);
   assert.match(checkCapture(dir).errors.join("; "), expected);
 });
 
@@ -350,8 +403,8 @@ test("manifest publication is the last write, using a checked temporary marker t
   assert.ok(!fs.existsSync(join(dir, "manifest.json.tmp")));
 });
 
-test("all fourteen lane rows are pinned, and a null pin still fails until measured", () => {
-  const cases = observationCases(); assert.equal(cases.length, 14);
+test("all sixteen lane rows are pinned, and a null pin still fails until measured", () => {
+  const cases = observationCases(); assert.equal(cases.length, 16);
   assert.deepEqual(cases.map((v) => v.name), Object.keys(PINNED));
   for (const [name, row] of Object.entries(PINNED)) {
     assert.ok(Object.values(row).every((v) => v !== null), `${name} has an unmeasured pin`);
@@ -368,13 +421,45 @@ test("all fourteen lane rows are pinned, and a null pin still fails until measur
 
 test("late flash measures the first increase after zero and pins onset, final and last-active", () => {
   const capture = { lifecycle: { status: "natural-end", finalFrame: 91, firstActive: 0, lastActive: 76,
-    limits: { runtimeGuard: { total: 0 }, hardGuard: { total: 0 }, indexCap: { total: 0 } } } };
-  const values = measuredValues("late-flash", capture, [{ frame: 0, particles: 1 }, { frame: 45, particles: 1 },
-    { frame: 46, particles: 2 }, { frame: 47, particles: 3 }]);
-  assert.equal(values.flashOnset, 46);
+    limits: { runtimeGuard: { total: 0 }, hardGuard: { total: 0 }, indexCap: { total: 0 } },
+    emitters: [{ firstActive: 0 }, { firstActive: 2 }] } };
+  const samples = [{ frame: 0, particles: 1, perEmitter: [1, 0] }, { frame: 1, particles: 1, perEmitter: [1, 0] },
+    { frame: 2, particles: 9, perEmitter: [1, 8] }, { frame: 3, particles: 10, perEmitter: [2, 8] }];
+  const values = measuredValues("late-flash", capture, samples);
+  assert.equal(values.flashOnset, 2);
+  assert.deepEqual(values.emitterFirstActive, [0, 2]);
+  assert.deepEqual(values.perEmitterAtOnset, [1, 8]);
   assert.deepEqual(checkCase("late-flash", values, { pins: { "late-flash": values } }), []);
   assert.deepEqual(checkCase("late-flash", values, { measure: true }), []);
-  assert.match(checkCase("late-flash", { ...values, flashOnset: 47 }, { pins: { "late-flash": values } }).join(), /flashOnset differs/);
+  assert.match(checkCase("late-flash", { ...values, flashOnset: 3 }, { pins: { "late-flash": values } }).join(), /flashOnset differs/);
+  // The core grows at the onset instead: the flash emitter no longer explains it.
+  assert.match(checkCase("late-flash", { ...values, perEmitterAtOnset: [9, 0] }, { measure: true }).join(), /one burst of 8/);
+});
+
+test("death child is measured per emitter: it starts the frame after its parent's last", () => {
+  const capture = { lifecycle: { status: "natural-end", finalFrame: 6, firstActive: 0, lastActive: 4,
+    limits: { runtimeGuard: { total: 0 }, hardGuard: { total: 0 }, indexCap: { total: 0 } },
+    emitters: [{ firstActive: 0, lastActive: 1 }, { firstActive: 2, lastActive: 4 }] } };
+  const samples = [[2, 0], [2, 0], [0, 2], [0, 2], [0, 2], [0, 0], [0, 0]].map((perEmitter, frame) =>
+    ({ frame, particles: perEmitter[0] + perEmitter[1], perEmitter }));
+  const values = measuredValues("death-child", capture, samples);
+  assert.deepEqual([values.emitterFirstActive, values.emitterLastActive, values.perEmitterAtParentLast], [[0, 2], [1, 4], [2, 0]]);
+  const semantic = (changes) => checkCase("death-child", { ...values, lastActive: 59, ...changes }, { measure: true }).join();
+  assert.equal(semantic({ emitterLastActive: [1, 59] }), "");
+  assert.match(semantic({ emitterLastActive: [1, 59], emitterFirstActive: [0, 3] }), /frame after its parent's last/);
+  assert.match(semantic({ emitterLastActive: [1, 58] }), /end the effect/);
+});
+
+test("the telemetry refusal is predicted from the wide case's line bytes, reserve included", () => {
+  // 100 bytes a line with its newline; a total landing exactly on the budget is admitted.
+  const lines = ["x".repeat(99), "y".repeat(99), "z".repeat(99)];
+  assert.equal(predictedTelemetryRefusal(lines, 1024 * 1024 + 150), 1);
+  assert.equal(predictedTelemetryRefusal(lines, 1024 * 1024 + 200), 2);
+  assert.equal(predictedTelemetryRefusal(lines, 1024 * 1024 + 300), null);
+  const values = { exitCode: 16, failureHook: "quota-telemetry", failureFrame: 7, predictedFrame: 7 };
+  assert.deepEqual(checkCase("quota-telemetry", values, { measure: true }), []);
+  assert.match(checkCase("quota-telemetry", { ...values, failureFrame: 8 }, { measure: true }).join(), /line bytes predict/);
+  assert.match(checkCase("quota-telemetry", { ...values, failureHook: "quota" }, { measure: true }).join(), /line bytes predict/);
 });
 
 test("lane checks exact counters and independent semantic assertions even with matching pins", () => {
@@ -385,9 +470,9 @@ test("lane checks exact counters and independent semantic assertions even with m
   assert.match(checkCase("death-child", { ...values, status: "natural-end", lastActive: 58 }, { measure: true }).join(), /frame 59/);
 });
 
-test("fixture generator lazily accepts an injected attestation contract for all seven kinds", async (t) => {
+test("fixture generator lazily accepts an injected attestation contract for all eight kinds", async (t) => {
   const dir = temporary(t), calls = [], validated = [];
-  const kinds = ["late-flash", "guard-short", "death-child", "child-starve", "budget-bailout", "budget-bailout-skip", "index-cap"];
+  const kinds = ["late-flash", "guard-short", "death-child", "child-starve", "budget-bailout", "budget-bailout-skip", "index-cap", "wide"];
   await generateFixtures("exe", ["game"], dir, {
     fixtureContract: { OBSERVE_FIXTURE_KINDS: kinds, validateObserveFixture: (fields, kind) => { validated.push(kind); return fields?.reloaded ? [] : ["not reloaded"]; } },
     run: async (exe, args, options) => {

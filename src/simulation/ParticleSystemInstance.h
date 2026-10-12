@@ -119,6 +119,9 @@ public:
 	int  Update(TimeF currentTime);
     void AppendLiveParticleSamples(
         int instanceIndex, std::vector<LiveParticleSample>& samples) const;
+    // Adds each emitter instance's live count at its authored index, growing
+    // counts to fit. Children share their source emitter's index.
+    void PerEmitterParticleCounts(std::vector<int>& counts) const;
 	void RenderNormal(IDirect3DDevice9* pDevice);
 	void RenderHeat(IDirect3DDevice9* pDevice);
 	// Shared rank-ordered draw pass for RenderNormal/RenderHeat.

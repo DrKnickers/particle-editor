@@ -1,4 +1,5 @@
 #include "simulation/ObservationLifecycle.h"
+#include "host/ObservationSampleJson.h"
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -49,14 +50,82 @@ int main()
     using Status = ObservationStatus;
     using Type = ObservationSpec::Lifecycle::Type;
     const ObservationSpec defaults = ValidSpec();
-    CHECK(ObservationPreflightBytes(10000, 2, 11) == 1084208,
-          "preflight includes one and a half measured PNG bytes, telemetry and reserve");
-    CHECK(ObservationPreflightBytes(3, 2, 1) == 1049098,
+    CHECK(ObservationPreflightBytes(10000, 2, 5632) == 1084208,
+          "preflight includes one and a half measured PNG bytes, the telemetry bytes and the reserve");
+    CHECK(ObservationPreflightBytes(3, 2, 512) == 1049098,
           "fractional per-PNG bytes round upward before multiplying the count");
-    CHECK(ObservationPreflightBytes(10000000, 0, 1) == 1049088,
+    CHECK(ObservationPreflightBytes(10000000, 0, 512) == 1049088,
           "no PNGs still reserve telemetry and metadata bytes");
-    CHECK(ObservationPreflightBytes(64ull * 1024 * 1024, 3665, 3601) == 368933872128ull,
+    CHECK(ObservationPreflightBytes(64ull * 1024 * 1024, 3665, 3601ull * 512) == 368933872128ull,
           "3600-frame large-PNG playback preflight keeps exact 64-bit arithmetic");
+    {
+        // A 65,536-emitter effect: every line carries 65,536 counts, all zero here.
+        ObservationSample narrow = Quiet(0);
+        ObservationSample wide = Quiet(0); wide.perEmitter.assign(65536, 0);
+        CHECK(ObservationSampleLine(wide).size() == ObservationSampleLine(narrow).size() + 2 * 65536 - 1,
+              "a line's per-emitter array costs one digit and one comma per emitter");
+        const std::uint64_t budget = 4ull * 1024 * 1024;
+        auto refusalFrame = [&](bool counts) -> int
+        {
+            TelemetryByteBudget accounted(budget);
+            for (int frame = 0; frame < 3601; ++frame)
+            {
+                ObservationSample sample = Quiet(frame);
+                if (counts) sample.perEmitter.assign(65536, 0);
+                if (!accounted.Add(ObservationSampleLine(sample).size())) return frame;
+            }
+            return -1;
+        };
+        int predicted = -1;
+        std::uint64_t total = 0;
+        for (int frame = 0; frame < 3601 && predicted < 0; ++frame)
+        {
+            ObservationSample sample = Quiet(frame); sample.perEmitter.assign(65536, 0);
+            total += ObservationSampleLine(sample).size();
+            if (total + 1024 * 1024 > budget) predicted = frame;
+        }
+        const int refused = refusalFrame(true);
+        CHECK(refused == predicted && refused > 1,
+              "the budget retains several wide samples and refuses at the frame their serialised lengths predict");
+        CHECK(refusalFrame(false) != refused,
+              "omitting the per-emitter bytes moves the refusal, so the accounting is observable");
+        TelemetryByteBudget exact(1024 * 1024 + 100);
+        CHECK(exact.Add(60) && exact.Add(40) && exact.Bytes() == 100 && !exact.Add(1),
+              "the budget admits a line that lands exactly on maxBytes and refuses the next byte");
+    }
+    {
+        ObservationSample sample = Quiet(0); sample.particles = 5; sample.perEmitter = { 2, 0, 3 };
+        CHECK(PerEmitterSumMatches(sample), "per-emitter counts that sum to the particle count match");
+        sample.perEmitter = { 2, 0, 2 };
+        CHECK(!PerEmitterSumMatches(sample), "a missing particle breaks the per-emitter sum");
+        sample.particles = 0; sample.perEmitter.clear();
+        CHECK(PerEmitterSumMatches(sample), "an effect with no emitters and no particles matches");
+    }
+    {
+        // Emitter 0 is a parent; emitter 1 overlaps it; emitter 2 is a child that starts after its parent.
+        const int counts[][3] = { { 0, 0, 0 }, { 3, 0, 0 }, { 5, 2, 0 }, { 5, 4, 0 }, { 1, 4, 6 }, { 0, 0, 6 }, { 0, 0, 0 } };
+        std::vector<ObservationSample> series;
+        for (int frame = 0; frame < 7; ++frame)
+        {
+            ObservationSample sample = Quiet(frame);
+            sample.perEmitter.assign(counts[frame], counts[frame] + 3);
+            for (int count : sample.perEmitter) sample.particles += count;
+            series.push_back(sample);
+        }
+        const auto none = PerEmitterLandmarks({ Quiet(0), Quiet(1) }, 2);
+        CHECK(none.size() == 2 && !none[0].firstActive && !none[1].peakFrame && none[1].peakParticles == 0,
+              "an emitter that never emits has null landmarks and peak zero");
+        const auto marks = PerEmitterLandmarks(series, 3);
+        CHECK(*marks[0].firstActive == 1 && *marks[0].peakFrame == 2 && *marks[0].lastActive == 4 && marks[0].peakParticles == 5,
+              "one emitter's landmarks are frames, with its first peak kept in a tie");
+        CHECK(*marks[1].firstActive == 2 && *marks[1].peakFrame == 3 && *marks[1].lastActive == 4 && marks[1].peakParticles == 4,
+              "an overlapping emitter keeps its own landmarks");
+        CHECK(*marks[2].firstActive == 4 && *marks[2].peakFrame == 4 && *marks[2].lastActive == 5 && marks[2].peakParticles == 6,
+              "a child that starts after its parent is landmarked after it");
+        ObservationSample frameZero = Quiet(0); frameZero.particles = 1; frameZero.perEmitter = { 1 };
+        const auto zero = PerEmitterLandmarks({ frameZero }, 1);
+        CHECK(zero[0].peakFrame && *zero[0].peakFrame == 0, "frame zero is a valid per-emitter peak");
+    }
     CHECK(ValidateObservationSpec(defaults).empty(), "synthetic spec is valid");
     const Status statuses[] = { Status::Running, Status::NaturalEnd, Status::Capped, Status::SpawnLimited, Status::Failed };
     const char* names[] = { "running", "natural-end", "capped", "spawn-limited", "failed" };

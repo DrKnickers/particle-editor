@@ -12,8 +12,8 @@ const serialise = (value) => JSON.stringify(value, null, 2) + "\n";
 
 const ADVISORY = "Evidence for a human decision. No metric ranks the two effects (design §13.3); the loop checked only " +
   "explicit budgets and technical gates. Nothing has been promoted: the source is untouched.";
-const LIMITATION = "Telemetry is whole-effect: the comparison cannot attribute a change to one emitter, and an edit " +
-  "hidden behind another emitter's timing (for example a shortened tail that another emitter outlives) does not show.";
+const LIMITATION = "Budgets are whole-effect: per-emitter shifts are reported in the telemetry delta but never budgeted, " +
+  "so a change one emitter's timing hides from the whole effect (a shortened tail another emitter outlives) passes every budget.";
 
 export function buildPackage(summary, matrix = null) {
   const last = summary.rounds?.find((v) => v.round === summary.candidate?.round) ?? null;

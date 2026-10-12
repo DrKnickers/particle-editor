@@ -1,7 +1,9 @@
 #include "ObservationRunner.h"
+#include "ObservationSampleJson.h"
 #include "ObservationSpecJson.h"
 #include "BridgeDispatcher.h"
 #include "StringConv.h"
+#include "effect/ParticleAuthoring.h"
 #include "rendering/engine.h"
 #include "simulation/ObservationLifecycle.h"
 #include "simulation/ParticleRandom.h"
@@ -21,12 +23,31 @@ using Clock = std::chrono::steady_clock;
 
 json OptionalFrame(const std::optional<int>& frame) { return frame ? json(*frame) : json(nullptr); }
 
-json SampleJson(const ObservationSample& s)
+// The adapter description is in the ANSI code page, not UTF-8.
+std::string AnsiToUtf8(const char* text)
 {
-    return {{"frame", s.frame}, {"instances", s.instances}, {"emitters", s.emitters},
-        {"particles", s.particles}, {"rngDrawCount", s.rngDrawCount}, {"rngState", s.rngState},
-        {"runtimeGuardRefusals", s.runtimeGuardRefusals}, {"hardGuardRefusals", s.hardGuardRefusals},
-        {"indexCapRefusals", s.indexCapRefusals}, {"overloadActive", s.overloadActive}, {"spawnerIdle", s.spawnerIdle}};
+    const int length = MultiByteToWideChar(CP_ACP, 0, text, -1, nullptr, 0);
+    if (length <= 1) return "";
+    std::wstring wide(static_cast<size_t>(length), L'\0');
+    MultiByteToWideChar(CP_ACP, 0, text, -1, wide.data(), length);
+    wide.resize(static_cast<size_t>(length) - 1);
+    return WideToUtf8(wide);
+}
+
+json RenderProfile(const Engine& engine)
+{
+    const unsigned long long version = engine.GetAdapterDriverVersion();
+    char driver[96];
+    sprintf_s(driver, sizeof(driver), "%llu.%llu.%llu.%llu", version >> 48, (version >> 32) & 0xFFFF,
+        (version >> 16) & 0xFFFF, version & 0xFFFF);
+    return {{"adapter", {{"description", AnsiToUtf8(engine.GetAdapterDescription())},
+            {"vendorId", engine.GetAdapterVendorId()}, {"deviceId", engine.GetAdapterDeviceId()},
+            {"driverVersion", driver}}},
+        {"displayFormat", static_cast<int>(engine.GetCreationDisplayFormat())},
+        {"depthStencilFormat", static_cast<int>(engine.GetCreationDepthStencilFormat())},
+        {"multisample", {{"type", static_cast<int>(engine.GetCreationMultiSampleType())},
+            {"quality", engine.GetCreationMultiSampleQuality()}}},
+        {"vertexProcessing", engine.GetVertexProcessingMode()}};
 }
 
 json Paths(const std::vector<std::wstring>& paths)
@@ -77,6 +98,8 @@ struct ObservationRunner::Impl
         {"stride", json::array()}, {"playback", json::array()}};
     ReplayRunContext context;
     std::vector<ObservationSample> samples;
+    TelemetryByteBudget telemetryBudget{0};
+    size_t emitterCount = 0;
     std::map<int, SelectedFrame> selected;
     std::map<int, int> playback;
     std::vector<std::filesystem::path> files, directories;
@@ -212,10 +235,22 @@ struct ObservationRunner::Impl
             deps.engine->RuntimeGuardRefusalCountForObservation() - runtimeBaseline,
             deps.engine->HardGuardRefusalCountForObservation() - hardBaseline,
             deps.engine->IndexCapRefusalCountForObservation() - indexBaseline,
-            deps.engine->IsSpawnOverloadActive(), observation.spawnerIdle()};
-        if (pass == 1) samples.push_back(sample);
+            deps.engine->IsSpawnOverloadActive(), observation.spawnerIdle(),
+            std::vector<int>(emitterCount, 0)};
+        deps.engine->PerEmitterParticleCounts(sample.perEmitter);
+        if (sample.perEmitter.size() != emitterCount)
+            return Fail(4, "per-emitter", "an emitter instance has no authored emitter");
+        if (!PerEmitterSumMatches(sample))
+            return Fail(4, "per-emitter", "per-emitter counts do not sum to the particle count");
+        if (pass == 1)
+        {
+            // Count the line before retaining the sample: memory stays within the budget.
+            if (!telemetryBudget.Add(ObservationSampleLine(sample).size()))
+                return Fail(16, "quota-telemetry", "telemetry bytes exceeded maxBytes at frame " + std::to_string(frame));
+            samples.push_back(std::move(sample));
+        }
         else if (pass == 2 && (frame < 0 || static_cast<size_t>(frame) >= samples.size() ||
-                 SampleJson(sample) != SampleJson(samples[frame])))
+                 ObservationSampleJson(sample) != ObservationSampleJson(samples[frame])))
             return Fail(15, "determinism", "pass 2 sample differs from pass 1 at frame " + std::to_string(frame));
         return true;
     }
@@ -348,6 +383,18 @@ struct ObservationRunner::Impl
                 {"indexCap", {{"total", lifecycle.IndexCapRefusals()}, {"firstFrame", OptionalFrame(lifecycle.FirstIndexCapFrame())}}}}}};
     }
 
+    json EmitterSummary() const
+    {
+        const auto& emitters = deps.particleSystem->getEmitters();
+        const auto landmarks = PerEmitterLandmarks(samples, emitterCount);
+        json result = json::array();
+        for (size_t i = 0; i < emitterCount; ++i)
+            result.push_back({{"index", i}, {"name", emitters[i]->name},
+                {"firstActive", OptionalFrame(landmarks[i].firstActive)}, {"peakFrame", OptionalFrame(landmarks[i].peakFrame)},
+                {"lastActive", OptionalFrame(landmarks[i].lastActive)}, {"peakParticles", landmarks[i].peakParticles}});
+        return result;
+    }
+
     bool Execute()
     {
         std::ifstream input(std::filesystem::path(specPath), std::ios::binary);
@@ -356,10 +403,17 @@ struct ObservationRunner::Impl
         if (error.empty()) error = ValidateObservationSpec(spec);
         if (!error.empty()) return Fail(2, "spec", error);
         validated = true;
+        telemetryBudget = TelemetryByteBudget(spec.output.maxBytes);
         capture["spec"] = json::parse(SerializeObservationSpec(spec));
         Log("[observe] spec %s\n", capture["spec"].dump().c_str());
         if (!deps.engine) return Fail(8, "admitDevice", "engine unavailable");
         if (!WaitReady(context) || !PumpMessages(context) || !LoadDocument(context, spec.scenario.aloPath)) return false;
+        const auto& emitters = deps.particleSystem->getEmitters();
+        emitterCount = emitters.size();
+        // Names go into the bundle verbatim; a replacement decode would merge distinct names.
+        for (size_t i = 0; i < emitterCount; ++i)
+            if (!IsValidUtf8(emitters[i]->name))
+                return Fail(3, "emitter-name", "emitter " + std::to_string(i) + " name is not valid UTF-8");
         const std::string sourceHash = Sha256(spec.scenario.aloPath);
         if (sourceHash.empty()) return Fail(13, "source-hash", "source hash failed");
         capture["source"] = {{"path", WideToUtf8(std::filesystem::path(spec.scenario.aloPath).generic_wstring())},
@@ -368,6 +422,7 @@ struct ObservationRunner::Impl
         const auto modHash = HashBytes(mods.dump());
         if (modHash.empty()) return Fail(13, "mod-path-hash", "selected mod path hash failed");
         capture["content"] = {{"gameRoots", Paths(observation.gameRoots())}, {"selectedModPaths", mods}, {"sha256", modHash}};
+        capture["render"] = RenderProfile(*deps.engine);
         capture["random"] = {{"algorithm", "legacy-msvc"}, {"algorithmVersion", spec.scenario.algorithmVersion}, {"seed", spec.scenario.seed}};
         auto preparation = Hooks();
         if (!preparation.admitDevice() || !preparation.pinSettings(spec.scenario)) return false;
@@ -399,6 +454,7 @@ struct ObservationRunner::Impl
         EndPass();
         if (!ok) return context.failed() ? false : Fail(9, "pass-1", "controller failed");
         capture["lifecycle"] = Summary(lifecycle);
+        capture["lifecycle"]["emitters"] = EmitterSummary();
         Log("[observe] lifecycle=%s finalFrame=%d\n", ObservationStatusString(lifecycle.Status()), lifecycle.FinalFrame());
 
         // Measure one destination-only render; Reset in pass 2 restores the sample stream.
@@ -431,7 +487,7 @@ struct ObservationRunner::Impl
         Log("[observe] preflight frame=%d pngBytes=%llu\n", measuredFrame, static_cast<unsigned long long>(measuredBytes));
         std::uint64_t playbackCount = spec.output.playbackStride == 0 ? 0 :
             (lifecycle.ReviewEndFrame() - lifecycle.ReviewStartFrame()) / spec.output.playbackStride + 1;
-        const auto estimate = ObservationPreflightBytes(measuredBytes, choices.size() + playbackCount, samples.size());
+        const auto estimate = ObservationPreflightBytes(measuredBytes, choices.size() + playbackCount, telemetryBudget.Bytes());
         Log("[observe] preflightBytes=%llu maxBytes=%llu\n", static_cast<unsigned long long>(estimate),
             static_cast<unsigned long long>(spec.output.maxBytes));
         if (estimate > spec.output.maxBytes) return Fail(16, "quota-preflight", "estimated native output bytes exceeded maxBytes");
@@ -455,7 +511,8 @@ struct ObservationRunner::Impl
         if (!ok) return context.failed() ? false : Fail(9, "pass-2", "controller failed");
         if (!Directory("telemetry")) return false;
         std::string telemetry;
-        for (const auto& sample : samples) telemetry += SampleJson(sample).dump() + "\n";
+        telemetry.reserve(static_cast<size_t>(telemetryBudget.Bytes()));
+        for (const auto& sample : samples) telemetry += ObservationSampleLine(sample);
         return Write("telemetry/frames.jsonl", telemetry) && Write("telemetry/summary.json", capture["lifecycle"].dump(2));
     }
 

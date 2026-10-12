@@ -197,6 +197,7 @@
     <ClInclude Include="host\ToolPatch.h" />
     <ClInclude Include="host\ToolSelector.h" />
     <ClInclude Include="host\PreviewScenarioJson.h" />
+    <ClInclude Include="host\ObservationSampleJson.h" />
     <ClInclude Include="host\ObservationSpecJson.h" />
     <ClInclude Include="host\DriveRunner.h" />
     <ClInclude Include="host\HostRunUtil.h" />
