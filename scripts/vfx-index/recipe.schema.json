@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "A registered VFX recipe (design §20.6)",
+  "description": "A reviewed, reusable piece of an existing effect. recipes.mjs implements exactly this shape, plus the per-type emitter counts and the catalog checks this schema cannot express.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "type", "title", "source", "dependencies", "expectedTextures", "safeTransforms"],
+  "properties": {
+    "schema": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$", "maxLength": 80 },
+    "type": {
+      "enum": ["single-emitter", "subtree", "layer-group", "template"],
+      "description": "single-emitter: one emitter. subtree: a root and its children, root first. layer-group: two or more root emitters in draw order. template: the complete effect (no emitters list)."
+    },
+    "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "description": { "type": "string", "maxLength": 2000 },
+    "tags": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 40 }, "maxItems": 20 },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["effect", "sha256", "contentStackHash"],
+      "properties": {
+        "effect": { "type": "string", "minLength": 1, "description": "The effect's file as the index lists it, e.g. DATA\\ART\\MODELS\\P_EXPLOSION_MED01.ALO" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "contentStackHash": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "emitters": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Emitter names; required for every type except template" },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "name"],
+        "properties": {
+          "kind": { "enum": ["texture", "effect", "shader"] },
+          "name": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "expectedTextures": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["canonicalName", "sha256"],
+        "properties": {
+          "canonicalName": { "type": "string", "minLength": 1 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      }
+    },
+    "safeTransforms": {
+      "type": "array",
+      "description": "Parameters a reuse may change, each with its safe range. Empty means the recipe is reused as is.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["field"],
+        "properties": {
+          "field": { "type": "string", "minLength": 1, "description": "An emitter property, as --tool patch names it" },
+          "min": { "type": "number" },
+          "max": { "type": "number" },
+          "note": { "type": "string", "maxLength": 400 }
+        }
+      }
+    }
+  }
+}

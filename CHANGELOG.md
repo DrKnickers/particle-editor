@@ -10,6 +10,7 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ### Added
 
+- `node scripts/vfx-index/build.mjs` builds a searchable catalog of the textures a game and mod stack's effects use, and `search.mjs` finds candidates by file name, emitter, effect, blend mode or how effects use them, alongside reviewed recipes registered with `recipes.mjs register-recipe` (#917)
 - `ParticleEditor.exe --tool index --out <records.json> [--layer <dir>]... <game-root>...` lists every particle effect a game and mod stack reaches, and for each emitter the texture it uses, found and fingerprinted exactly as the editor finds it, with the emitter's blend mode, orientation and atlas frames
 - `ParticleEditor.exe --tool patch <in.alo> <request.json> --out <candidate.alo> --report <report.json>` edits one emitter from a JSON request and writes the result only after verifying it, refusing edits the editor would silently adjust and never touching the input
 - `ParticleEditor.exe --tool validate <in.alo> --out <report.json>` checks that a particle file loads exactly as written and reports whether saving it would change its bytes, with warnings for a mismatched internal name and atlas frames outside the grid
