@@ -70,6 +70,12 @@ export function tools({ exe = DEFAULT_EXE, run = spawnWithDeadline, roots = [], 
       if (result.code !== 0) throw toolError("inspect", result);
       return JSON.parse(io.readFileSync(out, "utf8"));
     },
+    // Exit 0 loads exactly as written, 3 does not; the report is written either way.
+    async validate(alo, out) {
+      const result = await run(exe, ["--tool", "validate", alo, "--out", out], { timeoutMs: 120000 });
+      if (result.code !== 0 && result.code !== 3) throw toolError("validate", result);
+      return { code: result.code, report: JSON.parse(io.readFileSync(out, "utf8")) };
+    },
     async patch(alo, requestPath, out, reportPath) {
       const result = await run(exe, ["--tool", "patch", alo, requestPath, "--out", out, "--report", reportPath], { timeoutMs: 120000 });
       if (result.code !== 0) throw toolError("patch", result);

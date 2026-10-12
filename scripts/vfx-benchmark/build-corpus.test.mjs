@@ -6,6 +6,8 @@ import { join } from "node:path";
 import { draft, lock } from "./build-corpus.mjs";
 import { checkStore } from "./check-corpus.mjs";
 import { writeTruth } from "./blind-page.mjs";
+import { deriveTruth } from "./derive-truth.mjs";
+import { prepare, score } from "./subagent-run.mjs";
 import { contextFor } from "./context.mjs";
 import { canonicalFinding } from "./answers.mjs";
 import { scoreAttempt } from "./score.mjs";
@@ -153,6 +155,63 @@ test("draft, blind pass and lock: a corpus whose every answer scores and whose c
   s.writeJson(["corpus.json"], lockedCorpus);
   fs.writeFileSync(s.at("cases", map.late, "extra.txt"), "x");
   assert.match(checkStore(storeRoot).join("\n"), /extra.txt is not pinned/);
+});
+
+test("derive-truth: a corpus without a person locks on the planted answers, and every one scores", async (t) => {
+  const { storeRoot, exe, ids } = setUp(t);
+  const s = store(storeRoot);
+  const skeleton = s.json("corpus.json");
+  delete skeleton.seedSearch;
+  s.writeJson(["corpus.json"], { ...skeleton, seedAbsence: "c" });
+  const drafted = await draft({ root: storeRoot, exe, run: fakeBenchExe(), ssim: fakeSsim, ids, say: () => {} });
+  assert.equal(drafted.cases.length, 4);
+  deriveTruth({ root: storeRoot, say: () => {} });
+  const map = s.json("authoring-map.json");
+  const texture = s.json("cases", map.texture, "truth.json").transports.frames.variants[0];
+  assert.deepEqual([texture.category, texture.policy.primary, texture.correction.field], ["missing-texture", "inspect", "colorTexture"]);
+  assert.deepEqual(s.json("cases", map["control-A"], "truth.json").transports["contact-sheets"], { visible: false, variants: [] });
+  const locked = lock({ root: storeRoot, say: () => {} });
+  const textures = JSON.parse(s.text("packs", map.short, "textures.json"));
+  for (const c of locked.cases.filter((x) => x.kind === "defect")) {
+    const answers = s.json("cases", c.id, "answers.json").frames.variants;
+    const finding = canonicalFinding(answers[0], "primary", textures);
+    const score = scoreAttempt({ caseInfo: c, answers, findings: [finding], context: contextFor(s, c, "primary", textures), rubric: RUBRIC });
+    assert.equal(score.identified, true, c.class);
+  }
+  assert.deepEqual(checkStore(storeRoot), []);
+
+  // A sub-agent run over it: staged, answered perfectly, audited clean, scored.
+  const runRoot = join(storeRoot, "..", "..", "runs", "run-1");
+  const { attempts } = prepare({ storeRoot, runRoot, agent: "claude", model: "opus" });
+  assert.equal(attempts.length, locked.cases.length * 3 + locked.cases.filter((c) => c.kind === "control" || c.secondaryEligible).length);
+  assert.equal(JSON.parse(fs.readFileSync(join(runRoot, "private", "prompts.json"), "utf8"))[attempts[0].id].includes(join(runRoot, "attempts", attempts[0].id).replace(/\//g, "\\")), true);
+  for (const a of attempts) {
+    const c = locked.cases.find((x) => x.id === a.caseId);
+    const answers = c.kind === "defect" ? s.json("cases", c.id, "answers.json").frames.variants.filter((v) => v.policy[a.condition]) : [];
+    const findings = answers.length ? [canonicalFinding(answers[0], a.condition, textures)] : [];
+    fs.writeFileSync(join(runRoot, "attempts", a.id, "out", "findings.json"), JSON.stringify({ findings }));
+  }
+  const clean = Object.fromEntries(attempts.map((a) => [a.id, { transcript: `${a.id}.jsonl`, calls: 3, violations: [], escapes: [] }]));
+  fs.writeFileSync(join(runRoot, "private", "audit.json"), JSON.stringify(clean));
+  const run = score({ storeRoot, runRoot });
+  assert.equal(run.report.agents[0].primary.verdict.status, "GRADUATED", run.line);
+  assert.equal(run.rows.filter((r) => r.class !== "control").every((r) => r.identified), true);
+  // A voided attempt's answer is discarded, however good it is.
+  const perfect = attempts.find((a) => a.condition === "primary" && locked.cases.find((c) => c.id === a.caseId).kind === "defect");
+  clean[perfect.id].violations = ["Bash is not an allowed tool"];
+  fs.writeFileSync(join(runRoot, "private", "audit.json"), JSON.stringify(clean));
+  const voided = score({ storeRoot, runRoot });
+  assert.deepEqual(["verdict", "identified"].map((k) => voided.rows.find((r) => r.id === perfect.id)[k]), ["voided", false]);
+  assert.equal(voided.report.canary, "passed");
+  clean[perfect.id].escapes = ["Read C:/elsewhere is outside the attempt"];
+  fs.writeFileSync(join(runRoot, "private", "audit.json"), JSON.stringify(clean));
+  assert.notEqual(score({ storeRoot, runRoot }).report.agents[0].primary.verdict.status, "GRADUATED");
+});
+
+test("derive-truth refuses the seed case, whose answer is a judgement of intent", async (t) => {
+  const { storeRoot, exe, ids } = setUp(t);
+  await draft({ root: storeRoot, exe, run: fakeBenchExe(), ssim: fakeSsim, ids, say: () => {} });
+  assert.throws(() => deriveTruth({ root: storeRoot, say: () => {} }), /seed case/);
 });
 
 test("draft refuses a base without its canonicalisation proof, and a case that is not what its recipe says", async (t) => {

@@ -27,7 +27,7 @@ export function reparsePoints(root, io = fs) {
   return found;
 }
 
-function packExpected(dir, inspect, io) {
+export function packExpected(dir, inspect, io) {
   const three = THREE.every((l) => io.existsSync(join(dir, l, "selected.json")));
   const bundles = three ? THREE : ["bundle"];
   const frames = {};

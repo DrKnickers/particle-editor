@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import { join } from "node:path";
-import { prepare, verify } from "./canonicalise.mjs";
+import { fromSource, prepare, verify } from "./canonicalise.mjs";
 import { pinFiles, sha256, store } from "./store.mjs";
 import { effectBytes, emitter, fakeBenchExe } from "./testing.mjs";
 
@@ -61,4 +61,55 @@ test("a byte-identical re-save whose inspect output differs is refused", async (
   await assert.rejects(verify({ root, base: "A", exe, run }), /not inspect-identical/);
   assert.equal(sha256(s.read("bases", "A", "effect.alo")), s.json("bases", "A", "effect.first.json").sha256);
   assert.ok(!s.exists("bases", "A", "effect.second.inspect.json"));
+});
+
+// A stock source: the exporter stores the lifetime group on X, the editor's serialiser derives it onto Y.
+function setUpSource(t) {
+  const root = fs.mkdtempSync(join(os.tmpdir(), "vfx-canon-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const s = store(root);
+  s.writeJson(["corpus.json"], { schemaVersion: 1, state: "draft", bases: [{ id: "A" }] });
+  const e = emitter(0, "Fireball", { lifetime: 2, randomLifetimePerc: 0.5 });
+  e.groups[1] = { ...e.groups[1], minX: e.groups[1].minY, maxX: e.groups[1].maxY, minY: 0, maxY: 0 };
+  const source = join(root, "source.alo");
+  fs.writeFileSync(source, effectBytes([e, emitter(1, "Smoke")]));
+  const exe = join(root, "fake.exe");
+  fs.writeFileSync(exe, "fake exe");
+  return { root, s, exe, source };
+}
+
+// The fake exe plus --tool validate, and an optional edit of the patch output.
+function withValidate({ code = 0, canonical = true, edit } = {}) {
+  const real = fakeBenchExe();
+  return async (bin, args, options) => {
+    if (args[1] === "validate") {
+      fs.writeFileSync(args[4], JSON.stringify({ schema: 1, ...(canonical === null ? {} : { canonical }) }));
+      return { code, signal: null, stdout: "", stderr: "" };
+    }
+    const result = await real(bin, args, options);
+    if (args[1] === "patch" && edit) fs.writeFileSync(args[5], JSON.stringify(edit(JSON.parse(fs.readFileSync(args[5], "utf8")))));
+    return result;
+  };
+}
+
+test("--from: a no-net-edit native save of a stock source is recorded as the base, absorbing only the lifetime group", async (t) => {
+  const { root, s, exe, source } = setUpSource(t);
+  const hash = await fromSource({ root, base: "A", source, exe, run: withValidate() });
+  assert.equal(hash, sha256(s.read("bases", "A", "effect.alo")));
+  assert.equal(s.json("corpus.json").bases[0].canonical, hash);
+  assert.deepEqual(fs.readdirSync(s.at("bases", "A")), ["effect.alo"]);
+  await assert.rejects(fromSource({ root, base: "A", source, exe, run: withValidate() }), /already exists/);
+});
+
+test("--from refuses a save that is not canonical, or that changed the persisted state, and removes it", async (t) => {
+  for (const [run, message] of [
+    [withValidate({ code: 3, canonical: false }), /not canonical/],
+    [withValidate({ code: 0, canonical: null }), /not canonical/],
+    [withValidate({ edit: (e) => ({ ...e, emitters: e.emitters.map((m, i) => (i === 1 ? { ...m, nParticlesPerBurst: 9 } : m)) }) }), /changed the persisted state/],
+  ]) {
+    const { root, s, exe, source } = setUpSource(t);
+    await assert.rejects(fromSource({ root, base: "A", source, exe, run }), message);
+    assert.equal(s.exists("bases", "A", "effect.alo"), false);
+    assert.equal(s.json("corpus.json").bases[0].canonical, undefined);
+  }
 });
