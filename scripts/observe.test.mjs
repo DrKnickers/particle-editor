@@ -153,6 +153,63 @@ for (const [name, mutation, expected] of [
   assert.match(checkCapture(dir).errors.join("; "), expected);
 });
 
+// Content evidence as the runner writes it: two resolved textures, one
+// unresolved, a MEG shader, and the placeholder for the missing name.
+const LOOSE = { kind: "loose", path: "C:/content/SOFT.TGA" };
+const LEDGER = [
+  { type: "shader", identity: "ENGINE\\PRIMALPHA.FX", requests: ["Engine\\PrimAlpha.fx"],
+    attempts: [{ name: "ENGINE\\PRIMALPHA.FX", result: "not-found", winner: null, sha256: null },
+      { name: "Data\\Art\\Shaders\\ENGINE\\PRIMALPHA.FX", result: "resolved", sha256: "c".repeat(64),
+        winner: { kind: "archive", path: "C:/game/Data/Shaders.meg", member: "DATA\\ART\\SHADERS\\ENGINE\\PRIMALPHA.FX", start: 40, size: 9 } }],
+    outcome: "resolved", winner: { kind: "archive", path: "C:/game/Data/Shaders.meg", member: "DATA\\ART\\SHADERS\\ENGINE\\PRIMALPHA.FX", start: 40, size: 9 },
+    sha256: "c".repeat(64) },
+  { type: "texture", identity: "ABSENT.TGA", requests: ["absent.tga"],
+    attempts: [{ name: "ABSENT.TGA", result: "not-found", winner: null, sha256: null },
+      { name: "Data\\Art\\Textures\\ABSENT.TGA", result: "read-rejected", winner: LOOSE, sha256: null, size: 0, reason: "empty" }],
+    outcome: "default-substituted", winner: { kind: "embedded", resourceId: "IDB_MISSING" }, sha256: "d".repeat(64) },
+  { type: "texture", identity: "SOFT.TGA", requests: ["soft.tga", "SOFT.TGA"],
+    attempts: [{ name: "SOFT.TGA", result: "resolved", winner: LOOSE, sha256: "e".repeat(64) }],
+    outcome: "resolved", winner: LOOSE, sha256: "e".repeat(64) },
+];
+function contentFixture(directory) {
+  const capture = fixture(directory);
+  mutateCapture(directory, (c) => {
+    c.content.resolvedTextures = ["SOFT.TGA", "soft.tga"];
+    c.content.unresolvedTextures = ["absent.tga"];
+    c.content.resolvedTextureProvenance = {
+      "SOFT.TGA": { identity: "SOFT.TGA", winner: LOOSE, sha256: "e".repeat(64) },
+      "soft.tga": { identity: "SOFT.TGA", winner: LOOSE, sha256: "e".repeat(64) } };
+    c.content.loadedAssets = structuredClone(LEDGER);
+  });
+  return capture;
+}
+test("capture checker accepts texture attestation with its asset ledger", (t) => {
+  const dir = temporary(t); contentFixture(dir);
+  assert.deepEqual(checkCapture(dir).errors, []);
+});
+for (const [name, mutate, expected] of [
+  ["one attestation array without the rest", (c) => { delete c.unresolvedTextures; }, /present together/],
+  ["a ledger without the attestation", (c) => { for (const k of ["resolvedTextures", "unresolvedTextures", "resolvedTextureProvenance"]) delete c[k]; }, /present together/],
+  ["a non-string attested name", (c) => { c.unresolvedTextures = [7]; }, /must be names/],
+  ["a name both resolved and unresolved", (c) => { c.unresolvedTextures.push("soft.tga"); }, /overlap/],
+  ["a resolved name without provenance", (c) => { delete c.resolvedTextureProvenance["soft.tga"]; }, /cover exactly/],
+  ["provenance for an unresolved name", (c) => { c.resolvedTextureProvenance["absent.tga"] = c.resolvedTextureProvenance["soft.tga"]; }, /cover exactly/],
+  ["provenance on the placeholder", (c) => { c.resolvedTextureProvenance["soft.tga"].winner = { kind: "embedded", resourceId: "IDB_MISSING" }; }, /cover exactly/],
+  ["a not-found attempt with a winner", (c) => { c.loadedAssets[0].attempts[0].winner = LOOSE; }, /invalid asset ledger/],
+  ["a read-rejected attempt with a hash", (c) => { c.loadedAssets[1].attempts[1].sha256 = "f".repeat(64); }, /invalid asset ledger/],
+  ["a read-rejected attempt without its size", (c) => { delete c.loadedAssets[1].attempts[1].size; }, /invalid asset ledger/],
+  ["a resolved attempt without a hash", (c) => { c.loadedAssets[2].attempts[0].sha256 = null; }, /invalid asset ledger/],
+  ["an archive winner without its range", (c) => { delete c.loadedAssets[0].winner.start; }, /invalid asset ledger/],
+  ["a loose winner carrying a resource id", (c) => { c.loadedAssets[2].winner = { ...LOOSE, resourceId: "IDB_MISSING" }; }, /invalid asset ledger/],
+  ["a resolved outcome on the embedded fallback", (c) => { c.loadedAssets[1].outcome = "resolved"; }, /invalid asset ledger/],
+  ["a substituted outcome on a loose file", (c) => { c.loadedAssets[2].outcome = "default-substituted"; }, /invalid asset ledger/],
+  ["a failed outcome with a winner", (c) => { c.loadedAssets[2].outcome = "failed"; }, /invalid asset ledger/],
+]) test(`capture checker rejects ${name}`, (t) => {
+  const dir = temporary(t); contentFixture(dir);
+  mutateCapture(dir, (c) => mutate(c.content));
+  assert.match(checkCapture(dir).errors.join("; "), expected);
+});
+
 test("capture checker rejects a directory junction escaping the bundle", (t) => {
   const root = temporary(t), dir = join(root, "bundle"), outside = join(root, "outside");
   const capture = fixture(dir); fs.renameSync(join(dir, "selected-frames"), outside);
@@ -403,8 +460,8 @@ test("manifest publication is the last write, using a checked temporary marker t
   assert.ok(!fs.existsSync(join(dir, "manifest.json.tmp")));
 });
 
-test("all sixteen lane rows are pinned, and a null pin still fails until measured", () => {
-  const cases = observationCases(); assert.equal(cases.length, 16);
+test("all seventeen lane rows are pinned, and a null pin still fails until measured", () => {
+  const cases = observationCases(); assert.equal(cases.length, 17);
   assert.deepEqual(cases.map((v) => v.name), Object.keys(PINNED));
   for (const [name, row] of Object.entries(PINNED)) {
     assert.ok(Object.values(row).every((v) => v !== null), `${name} has an unmeasured pin`);
@@ -422,7 +479,8 @@ test("all sixteen lane rows are pinned, and a null pin still fails until measure
 test("late flash measures the first increase after zero and pins onset, final and last-active", () => {
   const capture = { lifecycle: { status: "natural-end", finalFrame: 91, firstActive: 0, lastActive: 76,
     limits: { runtimeGuard: { total: 0 }, hardGuard: { total: 0 }, indexCap: { total: 0 } },
-    emitters: [{ firstActive: 0 }, { firstActive: 2 }] } };
+    emitters: [{ firstActive: 0 }, { firstActive: 2 }] },
+    content: { resolvedTextures: ["a.tga", "b.tga"], unresolvedTextures: [] } };
   const samples = [{ frame: 0, particles: 1, perEmitter: [1, 0] }, { frame: 1, particles: 1, perEmitter: [1, 0] },
     { frame: 2, particles: 9, perEmitter: [1, 8] }, { frame: 3, particles: 10, perEmitter: [2, 8] }];
   const values = measuredValues("late-flash", capture, samples);
@@ -470,9 +528,10 @@ test("lane checks exact counters and independent semantic assertions even with m
   assert.match(checkCase("death-child", { ...values, status: "natural-end", lastActive: 58 }, { measure: true }).join(), /frame 59/);
 });
 
-test("fixture generator lazily accepts an injected attestation contract for all eight kinds", async (t) => {
+test("fixture generator lazily accepts an injected attestation contract for all nine kinds", async (t) => {
   const dir = temporary(t), calls = [], validated = [];
-  const kinds = ["late-flash", "guard-short", "death-child", "child-starve", "budget-bailout", "budget-bailout-skip", "index-cap", "wide"];
+  const kinds = ["late-flash", "guard-short", "death-child", "child-starve", "budget-bailout", "budget-bailout-skip", "index-cap", "wide",
+    "missing-texture"];
   await generateFixtures("exe", ["game"], dir, {
     fixtureContract: { OBSERVE_FIXTURE_KINDS: kinds, validateObserveFixture: (fields, kind) => { validated.push(kind); return fields?.reloaded ? [] : ["not reloaded"]; } },
     run: async (exe, args, options) => {

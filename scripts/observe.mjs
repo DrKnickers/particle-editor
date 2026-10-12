@@ -69,6 +69,68 @@ function checkPerEmitter(lifecycle, samples, optionalFrame, require) {
     "lifecycle emitter landmarks differ from the per-emitter telemetry");
 }
 
+// Which file an asset's bytes came from: the fields its kind requires, no others.
+function validWinner(winner) {
+  const count = (value) => Number.isSafeInteger(value) && value >= 0;
+  if (winner?.kind === "loose") return typeof winner.path === "string" && winner.path.length > 0 &&
+    winner.member === undefined && winner.resourceId === undefined;
+  if (winner?.kind === "archive") return typeof winner.path === "string" && winner.path.length > 0 &&
+    typeof winner.member === "string" && winner.member.length > 0 && count(winner.start) && count(winner.size) &&
+    winner.resourceId === undefined;
+  if (winner?.kind === "embedded") return typeof winner.resourceId === "string" && winner.resourceId.length > 0 &&
+    winner.path === undefined;
+  return false;
+}
+
+// One ledger attempt: which of winner, hash and size are set follows the result.
+function validAttempt(attempt, hash) {
+  if (typeof attempt?.name !== "string") return false;
+  switch (attempt.result) {
+    case "not-found": return attempt.winner === null && attempt.sha256 === null;
+    case "read-rejected": return validWinner(attempt.winner) && attempt.sha256 === null &&
+      Number.isSafeInteger(attempt.size) && attempt.size >= 0 && typeof attempt.reason === "string";
+    case "decode-failed":
+    case "resolved": return validWinner(attempt.winner) && hash(attempt.sha256);
+    default: return false;
+  }
+}
+
+function validRecord(record, hash) {
+  const used = ["resolved", "default-substituted"].includes(record?.outcome);
+  return ["texture", "shader"].includes(record?.type) && typeof record.identity === "string" && record.identity.length > 0 &&
+    Array.isArray(record.requests) && record.requests.length > 0 && record.requests.every((v) => typeof v === "string") &&
+    Array.isArray(record.attempts) && record.attempts.every((v) => validAttempt(v, hash)) &&
+    (used ? validWinner(record.winner) && hash(record.sha256) &&
+      (record.outcome === "default-substituted") === (record.winner.kind === "embedded")
+      : record.outcome === "failed" && record.winner === null && record.sha256 === null);
+}
+
+// The texture attestation and the asset ledger are optional together: a bundle
+// from before them has none of the four fields. When present, the attested
+// names are disjoint, every resolved name has its provenance and nothing else
+// does, and every ledger record is well formed.
+function checkContentEvidence(content, hash, require) {
+  const keys = ["resolvedTextures", "unresolvedTextures", "resolvedTextureProvenance", "loadedAssets"];
+  const present = keys.filter((key) => content?.[key] !== undefined);
+  if (!present.length) return;
+  if (present.length !== keys.length) {
+    require(false, "texture attestation and the asset ledger must be present together or not at all");
+    return;
+  }
+  const names = (value) => Array.isArray(value) && value.every((v) => typeof v === "string" && v.length > 0);
+  const { resolvedTextures: resolved, unresolvedTextures: unresolved, resolvedTextureProvenance: provenance } = content;
+  require(names(resolved) && names(unresolved), "texture attestation entries must be names");
+  if (!names(resolved) || !names(unresolved)) return;
+  require(!resolved.some((v) => unresolved.includes(v)), "resolved and unresolved textures overlap");
+  require(provenance && typeof provenance === "object" && !Array.isArray(provenance) &&
+    isDeepStrictEqual(Object.keys(provenance).sort(), [...resolved].sort()) &&
+    Object.values(provenance).every((v) => typeof v?.identity === "string" && validWinner(v.winner) &&
+      v.winner.kind !== "embedded" && hash(v.sha256)),
+    "texture provenance must cover exactly the resolved textures");
+  require(Array.isArray(content.loadedAssets) && content.loadedAssets.every((v) => validRecord(v, hash)),
+    "invalid asset ledger");
+}
+
 // The device the frames came from. Optional, as legacy bundles lack it.
 function checkRender(render, require) {
   const count = (value) => Number.isSafeInteger(value) && value >= 0;
@@ -98,6 +160,7 @@ export function checkCapture(directory, { io = fs, spec, assembledPngs = [] } = 
       typeof capture.spec.scenario === "object", "invalid tool / spec schema");
     require(typeof capture.source?.path === "string" && hash(capture.source?.sha256) && count(capture.source?.bytes), "invalid source evidence");
     require(Array.isArray(capture.content?.gameRoots) && Array.isArray(capture.content?.selectedModPaths) && hash(capture.content?.sha256), "invalid content evidence");
+    checkContentEvidence(capture.content, hash, require);
     require(count(capture.random?.seed) && capture.random.seed <= 0xffffffff && capture.random.algorithmVersion === 1,
       "invalid random evidence");
     require(capture.profile && typeof capture.profile === "object" && !Array.isArray(capture.profile) &&

@@ -478,9 +478,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 						genReplayFixtureKind != L"late-flash" && genReplayFixtureKind != L"guard-short" &&
 						genReplayFixtureKind != L"death-child" && genReplayFixtureKind != L"child-starve" &&
 						genReplayFixtureKind != L"budget-bailout" && genReplayFixtureKind != L"budget-bailout-skip" &&
-						genReplayFixtureKind != L"index-cap" && genReplayFixtureKind != L"wide")
+						genReplayFixtureKind != L"index-cap" && genReplayFixtureKind != L"wide" &&
+						genReplayFixtureKind != L"missing-texture")
 					{
-						fwprintf(stderr, L"--gen-replay-proof-fixture requires weather, guard, late-flash, guard-short, death-child, child-starve, budget-bailout, budget-bailout-skip, index-cap or wide\n");
+						fwprintf(stderr, L"--gen-replay-proof-fixture requires weather, guard, late-flash, guard-short, death-child, child-starve, budget-bailout, budget-bailout-skip, index-cap, wide or missing-texture\n");
 						return 2;
 					}
 				}
@@ -982,6 +983,21 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			}
 			else if (genReplayFixtureKind == L"guard-short" || genReplayFixtureKind == L"index-cap")
 				configure(root, "burst", genReplayFixtureKind == L"guard-short" ? 2048 : 20000, 0.5f);
+			else if (genReplayFixtureKind == L"missing-texture")
+			{
+				// The missing texture is first requested mid-pass: a during-life child is
+				// constructed (and requests its textures) when its delayed parent first
+				// spawns, so its own zero delay leaves its first frame at the parent's.
+				configure(root, "parent", 4, 0.5f);
+				root->initialDelay = 0.5f;
+				auto* child = system->addLifetimeEmitter(root);
+				if (!child) return 3;
+				configure(child, "missing-child", 1, 0.25f);
+				child->colorTexture = "tests\\fixtures\\observe\\zz_observe_absent.tga";
+				child->useBursts = false;
+				child->nParticlesPerSecond = 30;
+				root->spawnDuringLife = child->index;
+			}
 			else if (genReplayFixtureKind == L"wide")
 			{
 				// 4096 one-particle roots: every telemetry line carries 4096 per-emitter

@@ -338,7 +338,31 @@ double EngQpcUs(LONGLONG a, LONGLONG b)
 IDirect3DTexture9* Engine::GetTexture(const string& name) const
 {
 	if (DeviceCallsBlocked()) return NULL;
-	return GetTextureForDeviceReset(name);
+	return m_textureManager.getEmitterTexture(m_pDevice, name);
+}
+
+void Engine::ResetTextureAttestation()
+{
+	m_textureManager.ResetTextureAttestation();
+}
+
+void Engine::TakeTextureAttestation(std::vector<std::string>& resolved, std::vector<std::string>& unresolved)
+{
+	m_textureManager.TakeTextureAttestation(resolved, unresolved);
+}
+
+std::string Engine::TakeAssetLedger(std::vector<AssetRecord>& records) const
+{
+	records.clear();
+	std::string unverifiable;
+	for (const AssetLedger* ledger : { m_textureManager.GetAssetLedger(), m_shaderManager.GetAssetLedger() })
+	{
+		if (ledger == NULL) continue;
+		const std::vector<AssetRecord> snapshot = ledger->Snapshot();
+		records.insert(records.end(), snapshot.begin(), snapshot.end());
+		if (unverifiable.empty()) unverifiable = ledger->Unverifiable();
+	}
+	return unverifiable;
 }
 
 IDirect3DTexture9* Engine::GetTextureForDeviceReset(const string& name) const

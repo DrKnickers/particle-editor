@@ -45,6 +45,11 @@ const fixtures = {
   ],
   "index-cap": [emitter("burst", 20000, 0.5)],
   "wide": Array.from({ length: 4096 }, (_, i) => emitter(`wide-${String(i).padStart(4, "0")}`, 1, 0.25)),
+  "missing-texture": [
+    emitter("parent", 4, 0.5, { initialDelay: 0.5, spawnDuringLife: 1 }),
+    emitter("missing-child", 1, 0.25, { parent: 0, useBursts: false, nParticlesPerSecond: 30,
+      colorTexture: "tests\\fixtures\\observe\\zz_observe_absent.tga" }),
+  ],
 };
 
 function attestation(kind) {

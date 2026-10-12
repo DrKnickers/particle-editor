@@ -44,6 +44,13 @@
       "uses": ["dxsdk"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
+    "test_asset_ledger": {
+      "sources": ["src/gamedata/AssetCache.cpp", "src/gamedata/AssetLedger.cpp", "src/gamedata/managers.cpp",
+        "src/gamedata/MegaFiles.cpp", "src/gamedata/xml.cpp", "src/gamedata/Effect.cpp", "src/common/crc32.cpp",
+        "src/common/sha256.cpp", "src/common/files.cpp", "src/common/utils.cpp"],
+      "uses": ["expat-lib", "dxsdk"],
+      "libs": ["d3dx9.lib", "d3d9.lib", "shlwapi.lib", "user32.lib", "advapi32.lib"]
+    },
     "test_asset_safety_integration": {
       "sources": ["src/gamedata/GameObjectCatalog.cpp", "src/rendering/SkydomeEnvironment.cpp", "src/gamedata/AloModel.cpp", "src/effect/ChunkReader.cpp", "src/gamedata/xml.cpp", "src/common/files.cpp", "src/common/utils.cpp"],
       "uses": ["expat-lib", "dxsdk", "webview2"],

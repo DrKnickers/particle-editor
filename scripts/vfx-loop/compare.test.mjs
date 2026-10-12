@@ -125,6 +125,23 @@ for (const [field, options, path] of [
   assert.equal(fs.existsSync(out), false);
 });
 
+test("alignment compares the content stack and the assets both runs loaded, not what each effect asked for", () => {
+  const asset = (identity, sha256) => ({ type: "texture", identity, requests: [identity], attempts: [], outcome: "resolved",
+    winner: { kind: "loose", path: `C:/c/${identity}` }, sha256 });
+  const capture = (assets, extra = {}) => ({ tool: "t", spec: {}, random: {}, profile: {}, geometry: {}, render: { vertexProcessing: "HWVP" },
+    content: { gameRoots: ["C:/g"], selectedModPaths: [], sha256: "a".repeat(64), loadedAssets: assets,
+      resolvedTextures: assets.map((v) => v.identity), unresolvedTextures: [], resolvedTextureProvenance: {}, ...extra } });
+  const baseline = capture([asset("SMOKE.TGA", "1".repeat(64)), asset("FIRE.TGA", "2".repeat(64))]);
+  // The candidate swapped FIRE for EMBER: each run's own textures are not compared.
+  assert.deepEqual(alignmentDiff(baseline, capture([asset("SMOKE.TGA", "1".repeat(64)), asset("EMBER.TGA", "3".repeat(64))])), []);
+  // The same file with other bytes between the two runs is drift, not the edit.
+  const drifted = alignmentDiff(baseline, capture([asset("SMOKE.TGA", "9".repeat(64)), asset("FIRE.TGA", "2".repeat(64))]));
+  assert.deepEqual(drifted.map((v) => v.path), ["loadedAssets.texture:SMOKE.TGA.sha256"]);
+  const device = capture([asset("SMOKE.TGA", "1".repeat(64)), asset("FIRE.TGA", "2".repeat(64))]);
+  device.render.vertexProcessing = "SOFTWARE_VP";
+  assert.deepEqual(alignmentDiff(baseline, device).map((v) => v.path), ["render.vertexProcessing"]);
+});
+
 test("the source path is the one intended difference", () => {
   const capture = (aloPath) => ({ tool: "t", spec: { scenario: { aloPath, seed: 1 } }, random: {}, profile: {}, geometry: {}, content: {} });
   assert.deepEqual(alignmentDiff(capture("C:/a/source.alo"), capture("C:/a/candidate.alo")), []);

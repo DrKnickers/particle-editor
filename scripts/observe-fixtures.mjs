@@ -3,7 +3,7 @@
 
 export const OBSERVE_FIXTURE_KINDS = [
   "late-flash", "guard-short", "death-child", "child-starve",
-  "budget-bailout", "budget-bailout-skip", "index-cap", "wide",
+  "budget-bailout", "budget-bailout-skip", "index-cap", "wide", "missing-texture",
 ];
 
 const base = {
@@ -64,6 +64,12 @@ function expectedEmitters(kind) {
       }),
     ];
     case "index-cap": return [emitter("burst", 20000, 0.5)];
+    // A missing texture first requested mid-pass, by a child of a delayed parent.
+    case "missing-texture": return [
+      emitter("parent", 4, 0.5, { initialDelay: 0.5, spawnDuringLife: 1 }),
+      emitter("missing-child", 1, 0.25, { parent: 0, useBursts: false, nParticlesPerSecond: 30,
+        colorTexture: "tests\\fixtures\\observe\\zz_observe_absent.tga" }),
+    ];
     // Every telemetry line carries 4096 per-emitter counts.
     case "wide": return Array.from({ length: 4096 }, (_, i) => emitter(`wide-${String(i).padStart(4, "0")}`, 1, 0.25));
     default: return null;

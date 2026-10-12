@@ -829,6 +829,8 @@ int main()
             ReadSource(repoRoot / "src" / "gamedata" / "managers.h");
         const std::string managerSource =
             ReadSource(repoRoot / "src" / "gamedata" / "managers.cpp");
+        const std::string assetCacheHeader =
+            ReadSource(repoRoot / "src" / "gamedata" / "AssetCache.h");
         const std::string emitterHeader =
             ReadSource(repoRoot / "src" / "simulation" / "EmitterInstance.h");
         const std::string emitterSource =
@@ -1256,7 +1258,8 @@ int main()
                    Contains(managerHeader, "void OnResetDevice() override;") &&
                    Contains(managerSource, "void ShaderManager::OnLostDevice()") &&
                    Contains(managerSource, "void ShaderManager::OnResetDevice()") &&
-                   CountOccurrences(managerSource, "std::set<Effect*> unique;") == 2,
+                   CountOccurrences(managerSource, "for (Effect* effect : cache.Unique())") == 2 &&
+                   Contains(assetCacheHeader, "if (m_default != NULL) unique.insert(m_default);"),
                    true);
 
         const size_t releaseBegin =

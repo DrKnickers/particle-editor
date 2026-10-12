@@ -81,6 +81,9 @@
     <ClInclude Include="common\files.h">
       <Filter>Header Files\common</Filter>
     </ClInclude>
+    <ClInclude Include="common\sha256.h">
+      <Filter>Header Files\common</Filter>
+    </ClInclude>
     <ClInclude Include="effect\LinkGroup.h">
       <Filter>Header Files\effect</Filter>
     </ClInclude>
@@ -88,6 +91,12 @@
       <Filter>Header Files\gamedata</Filter>
     </ClInclude>
     <ClInclude Include="gamedata\MegaFiles.h">
+      <Filter>Header Files\gamedata</Filter>
+    </ClInclude>
+    <ClInclude Include="gamedata\AssetCache.h">
+      <Filter>Header Files\gamedata</Filter>
+    </ClInclude>
+    <ClInclude Include="gamedata\AssetLedger.h">
       <Filter>Header Files\gamedata</Filter>
     </ClInclude>
     <ClInclude Include="simulation\MouseCursor.h">
@@ -500,6 +509,9 @@
     <ClCompile Include="common\files.cpp">
       <Filter>Source Files\common</Filter>
     </ClCompile>
+    <ClCompile Include="common\sha256.cpp">
+      <Filter>Source Files\common</Filter>
+    </ClCompile>
     <ClCompile Include="effect\LinkGroup.cpp">
       <Filter>Source Files\effect</Filter>
     </ClCompile>
@@ -510,6 +522,12 @@
       <Filter>Source Files\gamedata</Filter>
     </ClCompile>
     <ClCompile Include="gamedata\MegaFiles.cpp">
+      <Filter>Source Files\gamedata</Filter>
+    </ClCompile>
+    <ClCompile Include="gamedata\AssetCache.cpp">
+      <Filter>Source Files\gamedata</Filter>
+    </ClCompile>
+    <ClCompile Include="gamedata\AssetLedger.cpp">
       <Filter>Source Files\gamedata</Filter>
     </ClCompile>
     <ClCompile Include="simulation\ParticleRandom.cpp">

@@ -34,14 +34,30 @@ export const TECHNICAL_BUDGETS = ["runtimeGuardRefusals", "hardGuardRefusals", "
 // Everything §13.1 requires to match, as the capture records it. The source
 // path and hash differ on purpose; the camera, environment, wind and gravity
 // are fields of the fixed observation profile.
-export const ALIGNED = ["tool", "spec (except scenario.aloPath)", "random", "profile", "geometry", "content"];
+export const ALIGNED = ["tool", "spec (except scenario.aloPath)", "random", "profile", "geometry", "render",
+  "content stack", "assets both runs loaded"];
+
+// An asset both runs loaded must have come from the same file with the same
+// bytes; what each effect asks for may differ, so assets one run alone loaded
+// and the emitter attestation are not compared.
+function sharedAssets(baseline, candidate) {
+  const index = (capture) => new Map((capture.content?.loadedAssets ?? [])
+    .map((v) => [`${v.type}:${v.identity}`, { outcome: v.outcome, winner: v.winner, sha256: v.sha256 }]));
+  const a = index(baseline), b = index(candidate);
+  const shared = [...a.keys()].filter((key) => b.has(key)).sort();
+  return [Object.fromEntries(shared.map((key) => [key, a.get(key)])), Object.fromEntries(shared.map((key) => [key, b.get(key)]))];
+}
 
 export function alignmentDiff(baseline, candidate) {
-  const project = (capture) => {
+  const [baselineAssets, candidateAssets] = sharedAssets(baseline, candidate);
+  const project = (capture, assets) => {
     const spec = structuredClone(capture.spec);
     if (spec?.scenario) delete spec.scenario.aloPath;
+    const content = capture.content ?? {};
     return { tool: capture.tool, spec, random: capture.random, profile: capture.profile,
-      geometry: capture.geometry, content: capture.content };
+      geometry: capture.geometry, render: capture.render,
+      content: { gameRoots: content.gameRoots, selectedModPaths: content.selectedModPaths, sha256: content.sha256 },
+      loadedAssets: assets };
   };
   const differences = [];
   const plain = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -50,7 +66,7 @@ export function alignmentDiff(baseline, candidate) {
       for (const key of [...new Set([...Object.keys(a), ...Object.keys(b)])].sort())
         walk(a[key], b[key], path ? `${path}.${key}` : key);
     } else if (!isDeepStrictEqual(a, b)) differences.push({ path, baseline: a ?? null, candidate: b ?? null });
-  })(project(baseline), project(candidate), "");
+  })(project(baseline, baselineAssets), project(candidate, candidateAssets), "");
   return differences;
 }
 

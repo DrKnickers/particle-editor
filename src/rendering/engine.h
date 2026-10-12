@@ -199,7 +199,14 @@ public:
 	bool KillParticleSystem(ParticleSystemInstanceHandle handle);
 	void Clear();
 	
+	// The emitter texture path: attests each requested name (see ITextureManager).
 	IDirect3DTexture9* GetTexture(const std::string& name) const;
+	// Observation evidence: the emitter texture attestation, and the whole asset
+	// ledger of both managers, textures first. TakeAssetLedger returns why the
+	// ledger cannot vouch for a load (a short read), or "".
+	void ResetTextureAttestation();
+	void TakeTextureAttestation(std::vector<std::string>& resolved, std::vector<std::string>& unresolved);
+	std::string TakeAssetLedger(std::vector<AssetRecord>& records) const;
 
 	void OnParticleSystemChanged(int track);
 	// Two-phase device-Reset texture lifecycle for every live emitter.

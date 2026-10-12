@@ -10,9 +10,10 @@ using namespace std;
 //
 // MegaFile class
 //
-MegaFile::MegaFile(IFile* file)
+MegaFile::MegaFile(IFile* file, const std::wstring& path)
 {
 	this->file = file;
+	this->path = path;
 	this->file->AddRef();
 
 	try
@@ -115,7 +116,7 @@ MegaFile::~MegaFile()
 	file->Release();
 }
 
-IFile* MegaFile::getFile(std::string path) const
+IFile* MegaFile::getFile(std::string path, Member* member) const
 {
 	try
 	{
@@ -138,6 +139,12 @@ IFile* MegaFile::getFile(std::string path) const
 				{
 					if (filenames[files[mid].nameIndex] == path)
 					{
+						if (member != NULL)
+						{
+							member->name  = filenames[files[mid].nameIndex];
+							member->start = files[mid].start;
+							member->size  = files[mid].size;
+						}
 						return new SubFile(file, files[mid].start, files[mid].size);
 					}
 				}

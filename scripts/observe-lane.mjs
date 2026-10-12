@@ -1,5 +1,5 @@
 // Pins measured 2026-10-06 on the owner's native build (node scripts/observe-lane.mjs --measure);
-// the per-emitter pins 2026-10-11.
+// the per-emitter and texture-attestation pins 2026-10-11.
 import * as fs from "node:fs";
 import { dirname, join, resolve, relative, isAbsolute } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -23,12 +23,19 @@ export const PINNED = {
   "death-child": { status: "natural-end", finalFrame: 76, runtimeGuard: 0, hardGuard: 0, indexCap: 0, lastActive: 61,
     emitterFirstActive: [0, 16], emitterLastActive: [15, 61], perEmitterAtParentLast: [8, 0] },
   "late-flash": { status: "natural-end", finalFrame: 90, runtimeGuard: 0, hardGuard: 0, indexCap: 0, firstActive: 0, lastActive: 75, flashOnset: 46,
-    emitterFirstActive: [0, 46], perEmitterAtOnset: [64, 8] },
+    emitterFirstActive: [0, 46], perEmitterAtOnset: [64, 8],
+    resolvedTextures: ["tests\\fixtures\\bumptest\\zz_bumptest_nm.tga", "tests\\fixtures\\observe\\zz_observe_soft.tga"], unresolvedTextures: [] },
   "sparse-playback": { status: "capped", finalFrame: 300, runtimeGuard: 0, hardGuard: 0, indexCap: 0, playbackFrames: 301, playbackDuration: 5.016666666666667 },
   "quota-guard": { exitCode: 16 },
   "wide": { status: "natural-end", finalFrame: 30, runtimeGuard: 0, hardGuard: 0, indexCap: 0, activeEmitters: 4096, telemetryBytes: 260920 },
   "quota-telemetry": { exitCode: 16, failureHook: "quota-telemetry", failureFrame: 7, predictedFrame: 7 },
+  "missing-texture": { status: "natural-end", finalFrame: 88, runtimeGuard: 0, hardGuard: 0, indexCap: 0,
+    emitterFirstActive: [30, 30], resolvedTextures: ["tests\\fixtures\\bumptest\\zz_bumpgold_rock.tga", "tests\\fixtures\\bumptest\\zz_bumptest_nm.tga"],
+    unresolvedTextures: ["tests\\fixtures\\observe\\zz_observe_absent.tga"] },
 };
+
+// The name the missing-texture fixture plants; no such file exists anywhere.
+export const MISSING_TEXTURE = "tests\\fixtures\\observe\\zz_observe_absent.tga";
 
 // The quota-telemetry case's budget: the reserve plus 64 KiB of telemetry.
 export const TELEMETRY_QUOTA_BYTES = 1024 * 1024 + 64 * 1024;
@@ -74,6 +81,7 @@ export function observationCases(fixtureDirectory = join(scratch, "fixtures")) {
     // telemetry alone exceeds. The guard would cap the 4096 roots at 500 particles.
     make("wide", generated("wide"), { scenario: { overloadGuardEnabled: false } }),
     make("quota-telemetry", generated("wide"), { scenario: { overloadGuardEnabled: false }, output: { maxBytes: TELEMETRY_QUOTA_BYTES } }),
+    make("missing-texture", generated("missing-texture")),
   ];
 }
 
@@ -81,7 +89,8 @@ export async function generateFixtures(exe, roots, directory, { run = spawnWithD
   // The other PR C job owns this module. Keep imports lazy so pure script tests
   // can inject its contract before that job has landed.
   const contract = fixtureContract ?? await import("./observe-fixtures.mjs");
-  const kinds = ["late-flash", "guard-short", "death-child", "child-starve", "budget-bailout", "budget-bailout-skip", "index-cap", "wide"];
+  const kinds = ["late-flash", "guard-short", "death-child", "child-starve", "budget-bailout", "budget-bailout-skip", "index-cap", "wide",
+    "missing-texture"];
   if (!Array.isArray(contract.OBSERVE_FIXTURE_KINDS) ||
       !isDeepStrictEqual([...contract.OBSERVE_FIXTURE_KINDS].sort(), [...kinds].sort()))
     throw new Error("observation fixture kinds differ from the PR C contract");
@@ -110,7 +119,12 @@ export function measuredValues(name, capture, samples, manifest) {
   if (["death-child", "late-flash"].includes(name)) values.lastActive = life.lastActive;
   if (name === "late-flash") values.flashOnset = samples.find((v, i) => i > 0 && v.particles > samples[i - 1].particles)?.frame ?? null;
   // Per-emitter telemetry: emitters are [core, flash] and [parent, death-child].
-  if (["death-child", "late-flash"].includes(name)) values.emitterFirstActive = life.emitters?.map((v) => v.firstActive) ?? null;
+  if (["death-child", "late-flash", "missing-texture"].includes(name)) values.emitterFirstActive = life.emitters?.map((v) => v.firstActive) ?? null;
+  // The emitter texture attestation, by original requested name.
+  if (["late-flash", "missing-texture"].includes(name)) {
+    values.resolvedTextures = capture.content?.resolvedTextures ?? null;
+    values.unresolvedTextures = capture.content?.unresolvedTextures ?? null;
+  }
   if (name === "late-flash") values.perEmitterAtOnset = samples[values.flashOnset]?.perEmitter ?? null;
   if (name === "death-child") {
     values.emitterLastActive = life.emitters?.map((v) => v.lastActive) ?? null;
@@ -129,7 +143,7 @@ export function checkCase(name, values, { pins = PINNED, measure = false } = {})
   const errors = [];
   const require = (ok, message) => { if (!ok) errors.push(`${name}: ${message}`); };
   const expectedStatus = ["replay-weather", "replay-guard"].includes(name) ? "capped"
-    : ["death-child", "late-flash", "wide"].includes(name) ? "natural-end"
+    : ["death-child", "late-flash", "wide", "missing-texture"].includes(name) ? "natural-end"
     : ["singleton-emitter", "bump-cutout", "sparse-playback", "quota-guard", "quota-telemetry"].includes(name) ? null : "spawn-limited";
   if (expectedStatus) require(values.status === expectedStatus, `expected ${expectedStatus}, got ${values.status}`);
   const runtimeCases = ["replay-guard", "guard-short-runtime", "child-starve", "budget-bailout", "budget-bailout-skip"];
@@ -147,6 +161,13 @@ export function checkCase(name, values, { pins = PINNED, measure = false } = {})
     "the death child must start the frame after its parent's last and end the effect");
   if (name === "sparse-playback") require(values.finalFrame === 300 && values.playbackFrames === 301 && values.playbackDuration === 301 / 60, "stride-1 playback must span the 300-frame cap");
   if (name === "quota-guard") require(values.exitCode === 16, "expected quota exit 16");
+  if (name === "late-flash") require(values.resolvedTextures?.length === 2 && values.unresolvedTextures?.length === 0,
+    "both emitters' soft and normal textures must attest as resolved");
+  // The planted name is first requested mid-pass, when the delayed parent first spawns its child.
+  if (name === "missing-texture") require(values.emitterFirstActive?.[1] > 0 &&
+    isDeepStrictEqual(values.unresolvedTextures, [MISSING_TEXTURE]) && values.resolvedTextures?.length === 2 &&
+    !values.resolvedTextures.includes(MISSING_TEXTURE),
+    "the child's missing texture, first requested after frame 0, must be the one unresolved name");
   if (name === "wide") require(values.activeEmitters === 4096, "every one of the 4096 roots must emit its particle at frame 0");
   if (name === "quota-telemetry") require(values.exitCode === 16 && values.failureHook === "quota-telemetry" &&
     Number.isInteger(values.failureFrame) && values.failureFrame > 0 && values.failureFrame === values.predictedFrame,

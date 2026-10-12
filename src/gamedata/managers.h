@@ -6,6 +6,7 @@
 #include <vector>
 #include "Effect.h"
 #include "MegaFiles.h"
+#include "AssetCache.h"
 
 //
 // Manager interfaces
@@ -14,6 +15,14 @@ class IFileManager
 {
 public:
 	virtual IFile* getFile(const std::string& path) = 0;
+
+	// getFile, also naming the file that won (a loose path or an archive member)
+	// for the asset ledger. Default: no identity, so simple mocks still work.
+	virtual IFile* getFileWithWinner(const std::string& path, AssetWinner* winner)
+	{
+		if (winner != NULL) *winner = AssetWinner();
+		return getFile(path);
+	}
 
 	// Hot-swap the priority basepath for active-mod loose-file lookups.
 	// Default is a no-op so simple test mocks don't have to implement
@@ -63,6 +72,19 @@ public:
 	// because under D3D9Ex the D3DX helpers create D3DPOOL_DEFAULT
 	// textures that must be released before IDirect3DDevice9::Reset.
 	virtual void OnLostDevice() = 0;
+
+	// The emitter path: getTexture, also attesting the requested name as resolved
+	// or unresolved (the placeholder, or nothing). Shader annotations keep calling
+	// getTexture. Defaults: no attestation, for simple mocks.
+	virtual IDirect3DTexture9* getEmitterTexture(IDirect3DDevice9* pDevice, std::string name) { return getTexture(pDevice, name); }
+	virtual void ResetTextureAttestation() {}
+	// Sorted; clears the attestation.
+	virtual void TakeTextureAttestation(std::vector<std::string>& resolved, std::vector<std::string>& unresolved)
+	{
+		resolved.clear();
+		unresolved.clear();
+	}
+	virtual const AssetLedger* GetAssetLedger() const { return NULL; }
 };
 
 class IShaderManager
@@ -70,6 +92,7 @@ class IShaderManager
 public:
 	virtual Effect* getShader(IDirect3DDevice9* pDevice, std::string name) = 0;
 	virtual void Clear() = 0;
+	virtual const AssetLedger* GetAssetLedger() const { return NULL; }
 	// Fan out D3DX effect lifecycle calls to every unique cached Effect.
 	// A fallback Effect can occupy several cache keys, so implementations must
 	// deduplicate by object identity before invoking either callback.
@@ -84,22 +107,16 @@ public:
 //
 class TextureManager : public ITextureManager
 {
-	typedef std::map<std::string,IDirect3DTexture9*> TextureMap;
-
-	TextureMap			textures;
-	std::string			basePath;
-	IFileManager*		fileManager;
-	IDirect3DTexture9*  pDefaultTexture;
-
-	// Takes the decoded bytes by reference rather
-	// than an IFile* — file lifetime + exact-byte reads are handled by
-	// ReadAndRelease at the call sites.
-	static IDirect3DTexture9* createTexture(IDirect3DDevice9* pDevice, const std::vector<unsigned char>& bytes);
-
-	IDirect3DTexture9* load(IDirect3DDevice9* pDevice, const std::string& filename);
+	AssetCache<IDirect3DTexture9> cache;
+	// Emitter-requested names by provenance; a name is in exactly one set.
+	std::set<std::string>         resolved, unresolved;
 
 public:
 	IDirect3DTexture9* getTexture(IDirect3DDevice9* pDevice, std::string filename);
+	IDirect3DTexture9* getEmitterTexture(IDirect3DDevice9* pDevice, std::string filename) override;
+	void ResetTextureAttestation() override;
+	void TakeTextureAttestation(std::vector<std::string>& resolved, std::vector<std::string>& unresolved) override;
+	const AssetLedger* GetAssetLedger() const override { return &cache.Ledger(); }
 
 	void Clear();
 
@@ -112,28 +129,15 @@ public:
 	void OnLostDevice() override;
 
 	TextureManager(IFileManager* fileManager, const std::string& basePath);
-
-	~TextureManager();
 };
 
 class ShaderManager : public IShaderManager
 {
-	typedef std::map<std::string,Effect*> ShaderMap;
-
-	ShaderMap	  shaders;
-	std::string	  basePath;
-	IFileManager* fileManager;
-	Effect*       pDefaultShader;
-
-	// Takes decoded bytes by reference rather than
-	// an IFile* (file lifetime + exact-byte reads handled by
-	// ReadAndRelease at call sites).
-	static Effect* createShader(IDirect3DDevice9* pDevice, const std::vector<unsigned char>& bytes);
-
-	Effect* load(IDirect3DDevice9* pDevice, const std::string& filename);
+	AssetCache<Effect> cache;
 
 public:
 	Effect* getShader(IDirect3DDevice9* pDevice, std::string filename);
+	const AssetLedger* GetAssetLedger() const override { return &cache.Ledger(); }
 
 	void Clear();
 
@@ -142,8 +146,6 @@ public:
 	void OnResetDevice() override;
 
 	ShaderManager(IFileManager* fileManager, const std::string& basePath);
-
-	~ShaderManager();
 };
 
 //
@@ -171,6 +173,7 @@ class FileManager : public IFileManager
 
 public:
 	IFile* getFile(const std::string& path);
+	IFile* getFileWithWinner(const std::string& path, AssetWinner* winner) override;
 
 	// Hot-swap the active "mod": its content roots (mod folder + bundled
 	// sub-content folders) are checked before the regular basepaths during

@@ -3,6 +3,7 @@
 #include "ObservationSpecJson.h"
 #include "BridgeDispatcher.h"
 #include "StringConv.h"
+#include "common/sha256.h"
 #include "effect/ParticleAuthoring.h"
 #include "rendering/engine.h"
 #include "simulation/ObservationLifecycle.h"
@@ -13,7 +14,6 @@
 #include <cstdio>
 #include <fstream>
 #include <map>
-#include <wincrypt.h>
 
 namespace host {
 namespace {
@@ -58,23 +58,73 @@ json Paths(const std::vector<std::wstring>& paths)
 }
 
 // Hash the canonical ordered mod-path JSON, including the empty unmodded list.
-std::string HashBytes(const std::string& bytes)
+std::string HashBytes(const std::string& bytes) { return Sha256Hex(bytes.data(), bytes.size()); }
+
+json WinnerJson(const AssetWinner& winner)
 {
-    HCRYPTPROV provider = 0;
-    HCRYPTHASH hash = 0;
-    if (!CryptAcquireContextW(&provider, nullptr, nullptr, PROV_RSA_AES, CRYPT_VERIFYCONTEXT)) return "";
-    BYTE digest[32] = {};
-    DWORD size = sizeof(digest);
-    const bool ok = CryptCreateHash(provider, CALG_SHA_256, 0, 0, &hash) &&
-        CryptHashData(hash, reinterpret_cast<const BYTE*>(bytes.data()), static_cast<DWORD>(bytes.size()), 0) &&
-        CryptGetHashParam(hash, HP_HASHVAL, digest, &size, 0) && size == sizeof(digest);
-    if (hash) CryptDestroyHash(hash);
-    CryptReleaseContext(provider, 0);
-    if (!ok) return "";
-    const char* hex = "0123456789abcdef";
-    std::string result;
-    for (BYTE byte : digest) { result += hex[byte >> 4]; result += hex[byte & 15]; }
-    return result;
+    switch (winner.kind)
+    {
+    case AssetWinner::Kind::Loose: return {{"kind", "loose"}, {"path", winner.path}};
+    case AssetWinner::Kind::Archive: return {{"kind", "archive"}, {"path", winner.path}, {"member", winner.member},
+        {"start", winner.start}, {"size", winner.size}};
+    case AssetWinner::Kind::Embedded: return {{"kind", "embedded"}, {"resourceId", winner.resourceId}};
+    default: return nullptr;
+    }
+}
+
+const char* OutcomeString(AssetRecord::Outcome outcome)
+{
+    switch (outcome)
+    {
+    case AssetRecord::Outcome::Resolved: return "resolved";
+    case AssetRecord::Outcome::DefaultSubstituted: return "default-substituted";
+    default: return "failed";
+    }
+}
+
+// The nullability of winner, hash and size follows the attempt's result.
+json AttemptJson(const AssetAttempt& attempt)
+{
+    static const char* results[] = { "not-found", "read-rejected", "decode-failed", "resolved" };
+    const auto result = attempt.result;
+    json value = {{"name", attempt.name}, {"result", results[static_cast<int>(result)]},
+        {"winner", result == AssetAttempt::Result::NotFound ? json(nullptr) : WinnerJson(attempt.winner)},
+        {"sha256", result == AssetAttempt::Result::DecodeFailed || result == AssetAttempt::Result::Resolved
+            ? json(attempt.sha256) : json(nullptr)}};
+    if (result == AssetAttempt::Result::ReadRejected)
+    {
+        value["size"] = attempt.reportedSize;
+        value["reason"] = attempt.reason;
+    }
+    if (!attempt.reason.empty() && result != AssetAttempt::Result::ReadRejected) value["reason"] = attempt.reason;
+    return value;
+}
+
+json RecordJson(const AssetRecord& record)
+{
+    json attempts = json::array();
+    for (const auto& attempt : record.attempts) attempts.push_back(AttemptJson(attempt));
+    const bool used = record.outcome != AssetRecord::Outcome::Failed;
+    return {{"type", record.type}, {"identity", record.identity}, {"requests", record.requests},
+        {"attempts", attempts}, {"outcome", OutcomeString(record.outcome)},
+        {"winner", used ? WinnerJson(record.winner) : json(nullptr)},
+        {"sha256", used ? json(record.sha256) : json(nullptr)}};
+}
+
+// Every string the ledger serialises, so a name that is not UTF-8 is refused
+// before nlohmann would throw on it.
+bool LedgerIsUtf8(const std::vector<AssetRecord>& records)
+{
+    for (const auto& record : records)
+    {
+        if (!IsValidUtf8(record.identity) || !IsValidUtf8(record.winner.path) || !IsValidUtf8(record.winner.member))
+            return false;
+        for (const auto& name : record.requests) if (!IsValidUtf8(name)) return false;
+        for (const auto& attempt : record.attempts)
+            if (!IsValidUtf8(attempt.name) || !IsValidUtf8(attempt.winner.path) || !IsValidUtf8(attempt.winner.member))
+                return false;
+    }
+    return true;
 }
 
 std::string FramePath(const char* directory, const char* pattern, int frame)
@@ -383,6 +433,35 @@ struct ObservationRunner::Impl
                 {"indexCap", {{"total", lifecycle.IndexCapRefusals()}, {"firstFrame", OptionalFrame(lifecycle.FirstIndexCapFrame())}}}}}};
     }
 
+    // The textures the emitters asked for, by provenance, and the asset ledger:
+    // which file every loaded rendering asset came from and its bytes' hash.
+    bool RecordContentEvidence()
+    {
+        std::vector<std::string> resolved, unresolved;
+        deps.engine->TakeTextureAttestation(resolved, unresolved);
+        std::vector<AssetRecord> records;
+        const std::string unverifiable = deps.engine->TakeAssetLedger(records);
+        if (!unverifiable.empty()) return Fail(13, "asset-ledger", unverifiable);
+        if (!LedgerIsUtf8(records)) return Fail(4, "asset-ledger", "an asset name or path is not valid UTF-8");
+        json loaded = json::array(), provenance = json::object();
+        for (const auto& record : records) loaded.push_back(RecordJson(record));
+        for (const auto& name : resolved)
+        {
+            // The latest texture load whose requests include the name: the one in use.
+            const AssetRecord* found = nullptr;
+            for (const auto& record : records)
+                if (record.type == "texture" && record.requests.count(name)) found = &record;
+            if (!found || found->outcome != AssetRecord::Outcome::Resolved)
+                return Fail(4, "texture-provenance", "resolved texture " + name + " has no resolved ledger entry");
+            provenance[name] = {{"identity", found->identity}, {"winner", WinnerJson(found->winner)}, {"sha256", found->sha256}};
+        }
+        capture["content"]["resolvedTextures"] = resolved;
+        capture["content"]["unresolvedTextures"] = unresolved;
+        capture["content"]["resolvedTextureProvenance"] = provenance;
+        capture["content"]["loadedAssets"] = loaded;
+        return true;
+    }
+
     json EmitterSummary() const
     {
         const auto& emitters = deps.particleSystem->getEmitters();
@@ -412,8 +491,12 @@ struct ObservationRunner::Impl
         emitterCount = emitters.size();
         // Names go into the bundle verbatim; a replacement decode would merge distinct names.
         for (size_t i = 0; i < emitterCount; ++i)
+        {
             if (!IsValidUtf8(emitters[i]->name))
                 return Fail(3, "emitter-name", "emitter " + std::to_string(i) + " name is not valid UTF-8");
+            if (!IsValidUtf8(emitters[i]->colorTexture) || !IsValidUtf8(emitters[i]->normalTexture))
+                return Fail(3, "emitter-texture", "emitter " + std::to_string(i) + " texture name is not valid UTF-8");
+        }
         const std::string sourceHash = Sha256(spec.scenario.aloPath);
         if (sourceHash.empty()) return Fail(13, "source-hash", "source hash failed");
         capture["source"] = {{"path", WideToUtf8(std::filesystem::path(spec.scenario.aloPath).generic_wstring())},
@@ -442,6 +525,8 @@ struct ObservationRunner::Impl
         if (!CheckGeometry(context, "resize-after")) return false;
 
         ObservationLifecycle lifecycle(spec);
+        // Both passes' emitters, late children included, attest their textures.
+        deps.engine->ResetTextureAttestation();
         BeginPass(1);
         ParticleReplayController first(spec.scenario, Hooks());
         bool ok = first.Reset();
@@ -509,6 +594,7 @@ struct ObservationRunner::Impl
         for (int f = 1; ok && f <= lifecycle.FinalFrame(); ++f) ok = second.Advance(WantsCapture(f));
         EndPass();
         if (!ok) return context.failed() ? false : Fail(9, "pass-2", "controller failed");
+        if (!RecordContentEvidence()) return false;
         if (!Directory("telemetry")) return false;
         std::string telemetry;
         telemetry.reserve(static_cast<size_t>(telemetryBudget.Bytes()));
