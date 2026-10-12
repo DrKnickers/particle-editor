@@ -31,7 +31,8 @@ import { labelTrio, prng, seedSearch } from "./seed.mjs";
 import { allowlist, buildPack, inventory } from "./pack.mjs";
 import { rulesMarkdown } from "./rules.mjs";
 import { lockAnswerCheck } from "./score.mjs";
-import { contextFor } from "./context.mjs";
+import { contextFor, orderBlind } from "./context.mjs";
+import { invertMap } from "./semantic.mjs";
 import { PERCEPTIBLE } from "./derive-truth.mjs";
 import { RUBRIC } from "./schema-check.mjs";
 import { DEFAULT_EXE, exeLedger, pinFiles, readLines, repoRoot, serialise, sha256, store, tools } from "./store.mjs";
@@ -73,6 +74,14 @@ async function alignedSsim(baseDir, caseDir, baseCapture, caseCapture, ssim) {
     out[b.frame] = Math.min(r.all, 0.999999);   // bytes differ: never report identity
   }
   return out;
+}
+
+// The files of two pack manifests that differ, frames aside: a missing file,
+// or any other file whose bytes differ.
+export function readsDifferently(mine, theirs) {
+  const files = (m) => new Map(m.files.map((f) => [f.path, f.sha256]));
+  const a = files(mine), b = files(theirs);
+  return [...new Set([...a.keys(), ...b.keys()])].filter((p) => !a.has(p) || !b.has(p) || (!p.endsWith(".png") && a.get(p) !== b.get(p))).sort();
 }
 
 export async function draft({ root, exe = DEFAULT_EXE, run = spawnWithDeadline, ssim = ffmpegSsim, diff = blockDiff, io = fs, say = console.log, ids = () => randomBytes(4).toString("hex") }) {
@@ -227,17 +236,30 @@ export async function draft({ root, exe = DEFAULT_EXE, run = spawnWithDeadline, 
       if (shown.length) throw new CorpusError(`${c.name}: the decoy's reorder shows (frames ${shown.join(", ")} change by ${PERCEPTIBLE} or more); it is a defect, not a control`);
     }
 
-    // Packs: primary (with inspect.json) for every case; bundle-only for subjective cases and controls.
+    // Packs: primary (with inspect.json) for every case; bundle-only for subjective cases, draw-order cases and
+    // controls. A permutation's bundle-only pack is order-blind: the base's intent and numbering throughout.
     const bundles = Object.fromEntries(Object.entries(c.captures).map(([label, v]) => [label, v.dir]));
     const shared = sharedFiles(caseIntent(c.base.intent, c.recipe), textures);
     const primary = await buildPack({ out: s.at("packs", c.id), bundles, shared, inspectJson: s.read(...caseDir, "inspect.json"), run, io });
     s.writeJson(["packs", `${c.id}.manifest.json`], primary.manifest);
     const stratum = c.kind === "defect" ? CLASS[c.recipe.class].stratum : null;
-    if (c.kind === "control" || stratum === "subjective") {
-      const secondary = await buildPack({ out: s.at("packs-bundle-only", c.id), bundles, shared, run, io });
+    if (c.kind === "control" || stratum === "subjective" || c.recipe.class === "draw-order") {
+      const blind = orderBlind("bundle-only", c.recipe);
+      const secondary = await buildPack({ out: s.at("packs-bundle-only", c.id), bundles, run, io,
+        shared: blind ? sharedFiles(c.base.intent, textures) : shared, toPack: blind ? invertMap(c.recipe.map) : null });
       s.writeJson(["packs-bundle-only", `${c.id}.manifest.json`], secondary.manifest);
+      c.bundleOnly = secondary.manifest;
     }
     say(`[bench] ${c.name} -> ${c.id}: ${c.kind}, observed, packed`);
+  }
+
+  // An order-blind pack must read exactly like its base's control: the same files, and every one but the
+  // frames byte for byte. Otherwise its text could show the order, and the frames would not be the test.
+  for (const c of cases.filter((x) => x.bundleOnly && orderBlind("bundle-only", x.recipe))) {
+    const control = cases.find((x) => x.kind === "control" && x.recipe.kind === "none" && x.base.id === c.base.id);
+    if (!control) throw new CorpusError(`${c.name}: base ${c.base.id} has no control to compare its order-blind pack with`);
+    const differ = readsDifferently(c.bundleOnly, control.bundleOnly);
+    if (differ.length) throw new CorpusError(`${c.name}: its order-blind pack differs from its base's control in ${differ.join(", ")}`);
   }
 
   s.writeJson(["assets.json"], Object.fromEntries([...provenance.assets.entries()].sort(([a], [b]) => (a < b ? -1 : 1))));
@@ -311,7 +333,7 @@ export function lock({ root, io = fs, say = console.log, transports = ["frames",
       const contexts = { primary: contextFor(s, c, "primary", textures), "bundle-only": contextFor(s, c, "bundle-only", textures) };
       for (const e of lockAnswerCheck({ caseInfo: { kind: "control" }, variants: [], contexts, rubric: RUBRIC })) errors.push(`${c.id}: ${e}`);
     }
-    c.secondaryEligible = c.kind === "defect" && c.stratum === "subjective" &&
+    c.secondaryEligible = c.kind === "defect" && (c.stratum === "subjective" || c.class === "draw-order") &&
       Object.values(frozen).some((f) => f.variants?.some((v) => v.policy?.["bundle-only"]));
     s.writeJson(["cases", c.id, "answers.json"], frozen);
   }

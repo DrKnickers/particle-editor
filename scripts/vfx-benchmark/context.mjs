@@ -8,7 +8,8 @@ import { join } from "node:path";
 
 export const THREE = ["bundle-a", "bundle-b", "bundle-c"];
 
-export function contextFromPack({ packDir, condition, inspect, io = fs }) {
+// `toCase` (an order-blind pack): toCase[packIndex] = caseIndex.
+export function contextFromPack({ packDir, condition, inspect, toCase = null, io = fs }) {
   const read = (path) => JSON.parse(io.readFileSync(path, "utf8"));
   const three = THREE.every((l) => io.existsSync(join(packDir, l, "summary.json")));
   const bundles = {};
@@ -21,12 +22,21 @@ export function contextFromPack({ packDir, condition, inspect, io = fs }) {
   }
   return {
     condition, bundles, emitters: inspect.emitters, inspectInPack: io.existsSync(join(packDir, "inspect.json")),
-    textures: read(join(packDir, "textures.json")),
+    textures: read(join(packDir, "textures.json")), ...(toCase ? { toCase } : {}),
   };
+}
+
+// A permutation case's bundle-only pack is order-blind: it numbers the
+// emitters as the base does, so the pack index is the base index and the
+// recipe's map (map[baseIndex] = caseIndex) leads to the case's.
+export function orderBlind(condition, recipe) {
+  return condition === "bundle-only" && recipe.kind === "permutation";
 }
 
 // The same, for a case of a corpus store.
 export function contextFor(s, c, condition, textures, io = fs) {
   const packDir = s.at(condition === "primary" ? "packs" : "packs-bundle-only", c.id);
-  return { ...contextFromPack({ packDir, condition, inspect: s.json("cases", c.id, "inspect.json"), io }), textures };
+  const recipe = s.json("cases", c.id, "recipe.json");
+  const toCase = orderBlind(condition, recipe) ? recipe.map : null;
+  return { ...contextFromPack({ packDir, condition, inspect: s.json("cases", c.id, "inspect.json"), toCase, io }), textures };
 }

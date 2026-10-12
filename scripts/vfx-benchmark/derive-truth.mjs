@@ -69,7 +69,9 @@ export function plantedVariant(recipe, baseInspect, caseInspect, drift, peaks = 
 // A draw-order case: the recipe's relation (the emitter that should be in
 // front, and the one behind, by case identity) and a reorder. Its evidence is
 // the frames alone, and only the candidate frames (both roots live) whose
-// image changed: a frame where the two do not overlap shows no order.
+// image changed: a frame where the two do not overlap shows no order. The
+// same answer holds in the order-blind bundle-only pack, where only the
+// frames can show the order.
 function plantedReorder(recipe, cls, drift, peaks) {
   const { front, back } = recipe.relation;
   const ssim = drift?.ssim ?? {};
@@ -78,7 +80,7 @@ function plantedReorder(recipe, cls, drift, peaks) {
   const window = { image: perceptible ? image : [], telemetry: [] };
   const variant = { bundleId: "bundle", category: cls.category, direction: cls.direction,
     emitters: [ref(front), ref(back)].sort((a, b) => a.index - b.index), relation: { front: ref(front), back: ref(back) },
-    windows: { bundle: window }, policy: { primary: "frames", "bundle-only": null }, correction: { kind: "reorder" } };
+    windows: { bundle: window }, policy: { primary: "frames", "bundle-only": perceptible ? "frames" : null }, correction: { kind: "reorder" } };
   return { variant, visible: perceptible };
 }
 

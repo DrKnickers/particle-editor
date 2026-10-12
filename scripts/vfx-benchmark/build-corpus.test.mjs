@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import { join } from "node:path";
-import { draft, lock } from "./build-corpus.mjs";
+import { draft, lock, readsDifferently } from "./build-corpus.mjs";
 import { checkStore } from "./check-corpus.mjs";
 import { writeTruth } from "./blind-page.mjs";
 import { deriveTruth } from "./derive-truth.mjs";
@@ -11,6 +11,7 @@ import { prepare, score } from "./subagent-run.mjs";
 import { contextFor } from "./context.mjs";
 import { canonicalFinding } from "./answers.mjs";
 import { scoreAttempt } from "./score.mjs";
+import { invertMap, renumberFinding } from "./semantic.mjs";
 import { markdown } from "./report.mjs";
 import { RUBRIC } from "./schema-check.mjs";
 import { store, sha256 } from "./store.mjs";
@@ -260,6 +261,81 @@ test("draft refuses a decoy whose reorder shows", async (t) => {
   const { storeRoot, exe, ids } = setUpDecoy(t);
   await assert.rejects(draft({ root: storeRoot, exe, run: fakeBenchExe(), ssim: fakeSsim, diff: () => ({ ok: true, peak: 16 }), ids, say: () => {} }),
     /decoy's reorder shows .* it is a defect, not a control/);
+});
+
+// A store without the seed search and with one draw-order case: the smoke, meant to draw over the fireball, moved behind it.
+function setUpOrder(t) {
+  const set = setUp(t);
+  const s = store(set.storeRoot);
+  const skeleton = s.json("corpus.json");
+  delete skeleton.seedSearch;
+  s.writeJson(["corpus.json"], { ...skeleton, seedAbsence: "c" });
+  // Base A rewritten with unequal bursts: the fake tints a frame by position-weighted counts, so only then does the swap show where both live.
+  const [fire, smoke] = [emitter(0, "Fireball", { lifetime: 2, blendMode: 1 }), emitter(1, "Smoke", { lifetime: 3, initialDelay: f(0.5), nParticlesPerBurst: 3 })];
+  s.write(["bases", "A", "effect.alo"], effectBytes([fire, smoke]));
+  s.writeJson(["corpus.json"], { ...s.json("corpus.json"), requiredClasses: ["draw-order"],
+    bases: [{ id: "A", canonical: sha256(fs.readFileSync(s.at("bases", "A", "effect.alo"))) }, s.json("corpus.json").bases[1]] });
+  for (const name of ["short", "late", "texture"]) fs.rmSync(s.at("authoring", name), { recursive: true });
+  s.write(["authoring", "order", "effect.alo"], effectBytes([{ ...smoke, index: 0 }, { ...fire, index: 1 }]));
+  s.writeJson(["authoring", "order", "recipe.json"], { schemaVersion: 1, base: "A", kind: "permutation", class: "draw-order", map: [1, 0],
+    relation: { front: { index: 0, name: "Smoke" }, back: { index: 1, name: "Fireball" } } });
+  return { ...set, s };
+}
+
+test("a draw-order case's bundle-only pack is order-blind: it reads like its base's control, and scores through the base's numbering", async (t) => {
+  const { storeRoot, exe, ids, s } = setUpOrder(t);
+  await draft({ root: storeRoot, exe, run: fakeBenchExe(), ssim: fakeSsim, ids, say: () => {} });
+  const map = s.json("authoring-map.json");
+  // The primary pack states the case's numbering beside inspect.json; the bundle-only pack keeps the base's.
+  assert.match(s.text("packs", map.order, "intent.md"), /- Smoke \(0\) initialDelay: 0\.5\n- Fireball \(1\) lifetime: 2\n/);
+  assert.equal(s.text("packs-bundle-only", map.order, "intent.md"), s.text("bases", "A", "intent.md"));
+  assert.deepEqual(JSON.parse(s.text("packs-bundle-only", map.order, "summary.json")).emitters.map((e) => `${e.index} ${e.name}`), ["0 Fireball", "1 Smoke"]);
+  assert.deepEqual(readsDifferently(s.json("packs-bundle-only", `${map.order}.manifest.json`), s.json("packs-bundle-only", `${map["control-A"]}.manifest.json`)), []);
+  assert.notDeepEqual(readsDifferently(s.json("packs", `${map.order}.manifest.json`), s.json("packs", `${map["control-A"]}.manifest.json`)), []);
+
+  deriveTruth({ root: storeRoot, say: () => {}, diff: fakeDiff });
+  const locked = lock({ root: storeRoot, say: () => {} });
+  const c = locked.cases.find((x) => x.id === map.order);
+  assert.deepEqual([c.class, c.secondaryEligible], ["draw-order", true]);
+  assert.deepEqual(checkStore(storeRoot), []);
+
+  // An answer in the pack's numbering is the right one; the case's numbering names the wrong emitters there.
+  const textures = JSON.parse(s.text("packs", map.order, "textures.json"));
+  const answers = s.json("cases", map.order, "answers.json").frames.variants;
+  const context = contextFor(s, c, "bundle-only", textures);
+  assert.deepEqual(context.toCase, [1, 0]);
+  const inCase = canonicalFinding(answers[0], "bundle-only", textures);
+  const inPack = renumberFinding(inCase, invertMap(context.toCase));
+  assert.deepEqual([inPack.relation.front, inPack.relation.back], [{ index: 1, name: "Smoke" }, { index: 0, name: "Fireball" }]);
+  const scored = (finding) => scoreAttempt({ caseInfo: c, answers, findings: [finding], context, rubric: RUBRIC });
+  assert.equal(scored(inPack).identified, true);
+  assert.equal(scored(inCase).identified, false);
+
+  // Three bundle-only attempts for the draw-order case; one answers in the case's numbering and misses.
+  const runRoot = join(storeRoot, "..", "..", "runs", "run-1");
+  const { attempts } = prepare({ storeRoot, runRoot, agent: "claude", model: "opus" });
+  const blind = attempts.filter((a) => a.caseId === map.order && a.condition === "bundle-only");
+  assert.deepEqual(blind.map((a) => a.attempt).sort(), [1, 2, 3]);
+  for (const a of attempts) {
+    const k = locked.cases.find((x) => x.id === a.caseId);
+    const usable = k.kind === "defect" ? s.json("cases", k.id, "answers.json").frames.variants.filter((v) => v.policy[a.condition]) : [];
+    let findings = usable.length ? [canonicalFinding(usable[0], a.condition, textures)] : [];
+    if (a.caseId === map.order && a.condition === "bundle-only" && a.attempt !== 1) findings = findings.map((x) => renumberFinding(x, [1, 0]));
+    // The clean control's pack reads the same as the order case's: the same claim there is a false alarm.
+    if (a.caseId === map["control-A"] && a.condition === "bundle-only") findings = [inPack];
+    fs.writeFileSync(join(runRoot, "attempts", a.id, "out", "findings.json"), JSON.stringify({ findings }));
+  }
+  fs.writeFileSync(join(runRoot, "private", "audit.json"), JSON.stringify(Object.fromEntries(attempts.map((a) => [a.id, { transcript: `${a.id}.jsonl`, calls: 3, violations: [], escapes: [] }]))));
+  const run = score({ storeRoot, runRoot });
+  assert.equal(run.report.agents[0].bundleOnly.classes["draw-order"].scheduled, 3);
+  assert.match(markdown(run.report), /draw order from the frames alone 66\.7 % \(diagnosis 66\.7 %; a draw-order claim on a clean control 100\.0 %\)/);
+});
+
+test("the order-blind comparison sets the frames aside and catches every other difference", () => {
+  const m = (...files) => ({ files: files.map(([path, sha256]) => ({ path, sha256 })) });
+  assert.deepEqual(readsDifferently(m(["intent.md", "a"], ["frames/frame-00000.png", "x"]), m(["intent.md", "a"], ["frames/frame-00000.png", "y"])), []);
+  assert.deepEqual(readsDifferently(m(["summary.json", "a"], ["intent.md", "a"]), m(["summary.json", "b"], ["intent.md", "a"])), ["summary.json"]);
+  assert.deepEqual(readsDifferently(m(["frames/frame-00000.png", "x"]), m(["frames/frame-00015.png", "x"])), ["frames/frame-00000.png", "frames/frame-00015.png"]);
 });
 
 test("draft refuses a base without its canonicalisation proof, and a case that is not what its recipe says", async (t) => {

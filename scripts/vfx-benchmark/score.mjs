@@ -16,7 +16,7 @@
 //      every unmatched unit is a false positive.
 import { acceptScalar } from "./persisted.mjs";
 import { stepTrackEquivalent } from "./track.mjs";
-import { canonical, citesPath, correctionPath, inspectPath, normaliseFinding, sameRef } from "./semantic.mjs";
+import { canonical, citesPath, correctionPath, inspectPath, invertMap, normaliseFinding, renumberFinding, sameRef } from "./semantic.mjs";
 import { canonicalFinding, mergeAnswers, variantErrors } from "./answers.mjs";
 
 const SEVERITY_RANK = { low: 0, medium: 1, high: 2 };
@@ -198,7 +198,9 @@ export function lockAnswerCheck({ caseInfo, variants, contexts, rubric }) {
     let passing = 0;
     for (const answer of answers) {
       if (!answer.policy[condition]) continue;
-      const finding = canonicalFinding(answer, condition, context.textures);
+      // An order-blind pack names emitters by its own numbering: write the finding as an agent there would.
+      const canonicalCase = canonicalFinding(answer, condition, context.textures);
+      const finding = context.toCase ? renumberFinding(canonicalCase, invertMap(context.toCase)) : canonicalCase;
       const s = scoreAttempt({ caseInfo, answers, findings: [finding], context, rubric });
       if (s.identified && s.tp === 1) passing++;
       else errors.push(`${condition}: answer ${answer.id}'s canonical finding is not identified (${s.units[0]?.errors.join("; ") || "no full match"})`);

@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 import { checkStore, packExpected } from "./check-corpus.mjs";
 import { contextFor } from "./context.mjs";
 import { PACK_TIME, verifyPack } from "./pack.mjs";
-import { buildReport, markdown, verdictLine } from "./report.mjs";
+import { attemptsOf, buildReport, markdown, verdictLine } from "./report.mjs";
 import { checkFindings, RUBRIC } from "./schema-check.mjs";
 import { scoreAttempt } from "./score.mjs";
 import { prng, shuffle } from "./seed.mjs";
@@ -41,13 +41,15 @@ export function attemptPrompt(dir) {
   ].join("\n");
 }
 
-// The scheduled attempts: three per case in the primary condition, one per
-// secondary-eligible case and control in the bundle-only condition.
+// The scheduled attempts (attemptsOf): three per case in the primary condition;
+// in the bundle-only condition, per secondary-eligible case and control, one
+// (three for a draw-order case).
 export function schedule(corpus) {
   const out = [];
   for (const c of corpus.cases) {
-    for (let a = 1; a <= corpus.attempts; a++) out.push({ caseId: c.id, condition: "primary", attempt: a });
-    if (c.kind === "control" ? c.shape === "single" : c.secondaryEligible) out.push({ caseId: c.id, condition: "bundle-only", attempt: 1 });
+    for (let a = 1; a <= attemptsOf(corpus, c, "primary"); a++) out.push({ caseId: c.id, condition: "primary", attempt: a });
+    if (c.kind === "control" ? c.shape !== "single" : !c.secondaryEligible) continue;
+    for (let a = 1; a <= attemptsOf(corpus, c, "bundle-only"); a++) out.push({ caseId: c.id, condition: "bundle-only", attempt: a });
   }
   return out;
 }

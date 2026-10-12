@@ -24,16 +24,23 @@ function attemptsFor(scores, agent, condition, caseId, count) {
   return Array.from({ length: count }, (_, i) => found.find((s) => s.attempt === i + 1)?.score ?? null);
 }
 
+// Scheduled attempts of one case under one condition: `attempts` in the
+// primary condition, one bundle-only attempt, except that a draw-order case,
+// the only test of whether the frames alone show the order, gets `attempts`.
+export function attemptsOf(corpus, c, condition) {
+  return condition === "primary" || c.class === "draw-order" ? corpus.attempts : 1;
+}
+
 // The metrics of one agent under one condition over the given cases.
 export function aggregate(corpus, scores, agent, condition, cases) {
-  const n = condition === "primary" ? corpus.attempts : 1;
   const out = {
     objective: { identified: 0, scheduled: 0 }, subjective: { identified: 0, scheduled: 0 },
-    controls: { flagged: 0, scheduled: 0 }, decoys: { flagged: 0, scheduled: 0 }, completion: { completed: 0, scheduled: 0 },
+    controls: { flagged: 0, scheduled: 0 }, decoys: { flagged: 0, scheduled: 0 }, orderClaims: { flagged: 0, scheduled: 0 }, completion: { completed: 0, scheduled: 0 },
     tp: 0, redundant: 0, fp: 0, redundantEntries: 0, brier: { sum: 0, count: 0 },
     bySeverity: {}, classes: {}, bases: {}, exhausted: 0, unmapped: [],
   };
   for (const c of cases) {
+    const n = attemptsOf(corpus, c, condition);
     const attempts = attemptsFor(scores, agent, condition, c.id, n);
     for (const s of attempts) {
       out.completion.scheduled++;
@@ -53,6 +60,9 @@ export function aggregate(corpus, scores, agent, condition, cases) {
       out.controls.flagged += flagged;
       out.controls.scheduled += n;
       if (c.decoy) { out.decoys.flagged += flagged; out.decoys.scheduled += n; }
+      // A clean effect called mis-ordered: what a draw-order hit has to beat.
+      out.orderClaims.flagged += attempts.filter((s) => s?.units?.some((u) => u.category === "draw-order")).length;
+      out.orderClaims.scheduled += n;
       const base = (out.bases[c.base] ??= { controlFlags: 0, controlAttempts: 0, seedControlFlags: 0, seedControlAttempts: 0 });
       if (c.shape === "three") { base.seedControlFlags += flagged; base.seedControlAttempts += n; }
       else { base.controlFlags += flagged; base.controlAttempts += n; }
@@ -122,6 +132,7 @@ function rates(metrics) {
     subjective: pct(metrics.subjective.identified, metrics.subjective.scheduled),
     controlFlag: pct(metrics.controls.flagged, metrics.controls.scheduled),
     decoyFlag: pct(metrics.decoys.flagged, metrics.decoys.scheduled),
+    orderClaim: pct(metrics.orderClaims.flagged, metrics.orderClaims.scheduled),
     fdp: fdpDen === 0 ? null : pct(metrics.fp, fdpDen),
     completion: pct(metrics.completion.completed, metrics.completion.scheduled),
     brier: metrics.brier.count ? metrics.brier.sum / metrics.brier.count : null,
@@ -139,7 +150,7 @@ function rates(metrics) {
 // The full (private) report: per agent, primary verdict and scope, bundle-only beside it.
 export function buildReport(corpus, run, scores, human = null) {
   const primaryCases = corpus.cases;
-  const secondaryCases = corpus.cases.filter((c) => c.kind === "control" || (c.stratum === "subjective" && c.secondaryEligible));
+  const secondaryCases = corpus.cases.filter((c) => c.kind === "control" || c.secondaryEligible);
   const agents = run.agents.map((agent) => {
     const primary = aggregate(corpus, scores, agent.id, "primary", primaryCases);
     const v = verdict(corpus, run, primary);
@@ -150,7 +161,7 @@ export function buildReport(corpus, run, scores, human = null) {
       bundleOnly: rates(secondary),
     };
   });
-  const secondaryIneligible = corpus.cases.filter((c) => c.kind === "defect" && c.stratum === "subjective" && !c.secondaryEligible).map((c) => c.class).sort();
+  const secondaryIneligible = corpus.cases.filter((c) => c.kind === "defect" && (c.stratum === "subjective" || c.class === "draw-order") && !c.secondaryEligible).map((c) => c.class).sort();
   let baseline = null;
   if (human) {
     const humanCorpus = { ...corpus, attempts: 1 };
@@ -187,7 +198,7 @@ export function verdictLine(report, agent) {
 // prose. Refuses if any case id or frame-citation shape slipped through.
 export function publicReport(report, caseIds) {
   const pick = (r) => ({
-    objective: r.objective, subjective: r.subjective, controlFlag: r.controlFlag, decoyFlag: r.decoyFlag, fdp: r.fdp, completion: r.completion,
+    objective: r.objective, subjective: r.subjective, controlFlag: r.controlFlag, decoyFlag: r.decoyFlag, orderClaim: r.orderClaim, fdp: r.fdp, completion: r.completion,
     brier: r.brier, counts: r.counts, bySeverity: r.bySeverity, exhausted: r.exhausted,
     classes: Object.fromEntries(Object.entries(r.classes).map(([id, c]) => [id, { stratum: c.stratum, identified: c.identified, diagnosisOnly: c.diagnosisOnly, scheduled: c.scheduled }])),
   });
@@ -213,7 +224,10 @@ export function markdown(report) {
     for (const [id, c] of Object.entries(a.primary.classes)) lines.push(`| ${id} | ${c.stratum} | ${fmt(c.identified)} | ${fmt(c.diagnosisOnly)} |`);
     lines.push("", `Objective ${fmt(a.primary.objective)}, subjective ${fmt(a.primary.subjective)}, control flags ${fmt(a.primary.controlFlag)}, FDP ${fmt(a.primary.fdp)}, completion ${fmt(a.primary.completion)}, Brier ${a.primary.brier === null ? "undefined" : a.primary.brier.toFixed(3)}.`, "");
     if (a.primary.decoyFlag !== null) lines.push(`Decoy controls (a reorder that cannot show; counted in the control flags): flags ${fmt(a.primary.decoyFlag)}.`, "");
-    lines.push(`Diagnosis without source inspection (bundle-only, does not gate): subjective ${fmt(a.bundleOnly.subjective)}, control flags ${fmt(a.bundleOnly.controlFlag)}, completion ${fmt(a.bundleOnly.completion)}.`, "");
+    const order = a.bundleOnly.classes["draw-order"];
+    lines.push(`Diagnosis without source inspection (bundle-only, does not gate): subjective ${fmt(a.bundleOnly.subjective)}, ` +
+      `${order ? `draw order from the frames alone ${fmt(order.identified)} (diagnosis ${fmt(order.diagnosisOnly)}; a draw-order claim on a clean control ${fmt(a.bundleOnly.orderClaim)}), ` : ""}` +
+      `control flags ${fmt(a.bundleOnly.controlFlag)}, completion ${fmt(a.bundleOnly.completion)}.`, "");
   }
   if (report.secondaryIneligible.length) lines.push(`Secondary-ineligible: ${report.secondaryIneligible.join(", ")}.`, "");
   lines.push("Version 1 makes no claim about visual competence: the bundle-only condition still carries per-emitter telemetry.", "");

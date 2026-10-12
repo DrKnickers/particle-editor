@@ -11,6 +11,8 @@ You are reviewing one particle effect from *Star Wars: Empire at War: Forces of 
 - The observation: `frames/` (selected frames, PNG, named by simulation frame), `filmstrip.png` with its tile map `filmstrip.json`, `selected.png` with its tile map `selected.json`, `summary.json` (the effect's lifecycle and each emitter's first, peak and last active frames) and `frames.jsonl` (one line per simulated frame: live particles in total and per emitter).
 - `inspect.json`, when present: every value the effect file stores, per emitter.
 
+Emitters are named by number and name. In a pack without `inspect.json`, the numbers only name the emitters: they need not follow the order in which the emitters are drawn.
+
 Some packs hold three observations of the same unchanged file under different random seeds, in `bundle-a/`, `bundle-b/` and `bundle-c/`. There, a defect is a bundle that misbehaves against the intent; name it with `bundleId`, and use the seed rule in `rules.md` (moving a value toward its target does not apply when the file itself is unchanged).
 
 ## What to do

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import { join } from "node:path";
-import { allowlist, buildPack, inventory, pngHasText, stripPngText, stripRngLines, tileMap, verifyPack } from "./pack.mjs";
+import { allowlist, buildPack, inventory, pngHasText, renumbered, renumberSummary, stripPngText, stripRngLines, tileMap, verifyPack } from "./pack.mjs";
 import { bundle, fakeFfmpeg, png, spec } from "../vfx-loop/testing.mjs";
 
 function temporary(t) {
@@ -24,6 +24,20 @@ function withText(buffer) {
 test("stripRngLines drops the generator fields and keeps everything else", () => {
   const out = stripRngLines('{"frame":0,"particles":3,"rngState":9,"rngDrawCount":4,"perEmitter":[3]}\n{"frame":1,"particles":0,"rngState":1,"rngDrawCount":5,"perEmitter":[0]}\n');
   assert.equal(out, '{"frame":0,"particles":3,"perEmitter":[3]}\n{"frame":1,"particles":0,"perEmitter":[0]}\n');
+});
+
+test("an order-blind pack renumbers the telemetry's emitters, and refuses a renumbering it cannot apply", () => {
+  // The case drew smoke (0) before fire (1); the pack numbers them as the base does: fire 0, smoke 1.
+  const toPack = [1, 0];
+  assert.deepEqual(renumbered(["smoke", "fire"], toPack), ["fire", "smoke"]);
+  assert.throws(() => renumbered(["a", "b", "c"], toPack), /does not cover every emitter/);
+  assert.equal(stripRngLines('{"frame":0,"rngState":9,"perEmitter":[5,2]}\n', toPack), '{"frame":0,"perEmitter":[2,5]}\n');
+  const summary = { emitters: [{ firstActive: 0, index: 0, name: "smoke" }, { firstActive: 4, index: 1, name: "fire" }], peak: 9 };
+  const out = renumberSummary(JSON.stringify(summary, null, 2), toPack);
+  assert.deepEqual(JSON.parse(out).emitters, [{ firstActive: 4, index: 0, name: "fire" }, { firstActive: 0, index: 1, name: "smoke" }]);
+  // The observer's own layout: renumbering by the identity changes no byte.
+  assert.equal(renumberSummary(JSON.stringify(summary, null, 2), [0, 1]), JSON.stringify(summary, null, 2));
+  assert.throws(() => renumberSummary(JSON.stringify({ emitters: [{ index: 1 }, { index: 0 }] }), toPack), /not in index order/);
 });
 
 test("stripPngText removes text chunks and leaves the image bytes alone", () => {
@@ -69,6 +83,8 @@ test("a three-bundle pack keeps shared files at its root and frames per bundle; 
   assert.deepEqual(verifyPack(out, manifest, allowlist({ bundles: Object.keys(bundles), frames, inspect: false })), []);
   assert.ok(fs.existsSync(join(out, "bundle-b", "selected.json")));
   await assert.rejects(buildPack({ out, bundles, shared: SHARED, run: fakeFfmpeg() }), /exists/);
+  // inspect.json lists the emitters in draw order, so a pack that carries it keeps the case's numbering.
+  await assert.rejects(buildPack({ out: join(dir, "blind"), bundles, shared: SHARED, inspectJson: "{}\n", toPack: [0], run: fakeFfmpeg() }), /keeps the case's numbering/);
 });
 
 test("alternate data streams reported by the probe fail verification", async (t) => {

@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { interveneContract, nextFloat32, restoreContract, seedContract } from "./persisted.mjs";
 import { lockAnswerCheck, scoreAttempt } from "./score.mjs";
+import { invertMap, renumberFinding } from "./semantic.mjs";
 import { mergeAnswers } from "./answers.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -333,4 +334,24 @@ test("the lock-time check passes every canonical answer and refuses an unpassabl
   assert.match(lockAnswerCheck({ caseInfo: DEFECT, variants: [V0, unpassable], contexts, rubric }).join("\n"), /answer 1/);
   const bad = { ...V1, policy: { primary: "inspect", "bundle-only": "frames" }, windows: win([]) };
   assert.match(lockAnswerCheck({ caseInfo: DEFECT, variants: [V0, bad], contexts, rubric }).join("\n"), /bundle-only/);
+});
+
+test("an order-blind pack: every reference is renumbered to the case's before it is checked, and the lock check writes as an agent there would", () => {
+  // The pack numbers the emitters smoke 0, sparks 1, fireball 2; toCase[packIndex] = caseIndex.
+  const toCase = [1, 2, 0];
+  assert.deepEqual(invertMap(toCase), [2, 0, 1]);
+  assert.throws(() => invertMap([0, 0]), /not a permutation/);
+  assert.throws(() => invertMap([0, 2]), /not a permutation/);
+  const PACK_FIRE = { index: 2, name: "Fireball" };
+  const moved = renumberFinding({ ...finding({ suspectedEmitters: [PACK_FIRE, { index: 7, name: "Ghost" }], suggestedChange: { kind: "scalar", emitter: PACK_FIRE, field: "lifetime", value: 3.5 } }),
+    relation: { front: { index: 0, name: "Smoke" }, back: PACK_FIRE }, evidence: cite(img(45), { kind: "inspect", emitter: PACK_FIRE, field: "lifetime" }) }, toCase);
+  assert.deepEqual(moved.suspectedEmitters, [FIRE, { index: 7, name: "Ghost" }], "an index outside the map stays, and stays unknown");
+  assert.deepEqual([moved.relation.front, moved.relation.back, moved.suggestedChange.emitter, moved.evidence.citations[1].emitter], [SMOKE, FIRE, FIRE, FIRE]);
+  assert.deepEqual(moved.evidence.citations[0], img(45));
+
+  const blind = context({ condition: "bundle-only", inspectInPack: false, toCase });
+  const inPack = finding({ suspectedEmitters: [PACK_FIRE], suggestedChange: { kind: "scalar", emitter: PACK_FIRE, field: "lifetime", value: 3.5 } });
+  assert.equal(score([inPack], { ctx: blind }).identified, true);
+  assert.equal(score([finding()], { ctx: blind }).identified, false, "the case's numbering names the smoke's slot there");
+  assert.deepEqual(lockAnswerCheck({ caseInfo: DEFECT, variants: [V0, V1], contexts: { primary: context(), "bundle-only": blind }, rubric }), []);
 });

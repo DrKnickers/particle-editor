@@ -41,7 +41,8 @@ test("a draw-order case answers with its relation and a reorder, on the candidat
   assert.equal(seen.visible, true);
   assert.deepEqual(seen.variant, { bundleId: "bundle", category: "draw-order", direction: "wrong-order",
     emitters: [{ index: 0, name: "Fireball" }, { index: 1, name: "Smoke" }], relation: swap.relation,
-    windows: { bundle: { image: [20, 30], telemetry: [] } }, policy: { primary: "frames", "bundle-only": null }, correction: { kind: "reorder" } });
+    windows: { bundle: { image: [20, 30], telemetry: [] } }, policy: { primary: "frames", "bundle-only": "frames" }, correction: { kind: "reorder" } });
+  // The same answer holds in the order-blind bundle-only pack; an invisible reorder has none there either.
   const faint = plantedVariant(swap, inspect(), inspect(), drift, { 20: PERCEPTIBLE - 1, 30: 4, 40: 200 });
-  assert.deepEqual([faint.visible, faint.variant.windows.bundle.image], [false, []]);
+  assert.deepEqual([faint.visible, faint.variant.windows.bundle.image, faint.variant.policy["bundle-only"]], [false, [], null]);
 });

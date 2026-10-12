@@ -45,4 +45,7 @@ test("the schedule: three primary attempts per case, one bundle-only per eligibl
   const s = schedule(corpus);
   assert.equal(s.filter((x) => x.condition === "primary").length, 9);
   assert.deepEqual(s.filter((x) => x.condition === "bundle-only").map((x) => x.caseId), ["a", "c"]);
+  // A draw-order case is the frames-alone test of order: three bundle-only attempts.
+  const order = schedule({ attempts: 3, cases: [{ id: "d", kind: "defect", class: "draw-order", secondaryEligible: true }] });
+  assert.deepEqual(order.filter((x) => x.condition === "bundle-only").map((x) => x.attempt), [1, 2, 3]);
 });

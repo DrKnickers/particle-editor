@@ -61,6 +61,29 @@ export function citesPath(field, path) {
   return field === path || field.startsWith(`${path}.`) || field.startsWith(`${path}[`);
 }
 
+// The inverse of a permutation map (map[from] = to).
+export function invertMap(map) {
+  const out = new Array(map.length);
+  map.forEach((to, from) => { out[to] = from; });
+  if (out.length !== map.length || [...out.keys()].some((i) => !Number.isInteger(out[i]))) throw new Error("not a permutation");
+  return out;
+}
+
+// A finding written against an order-blind pack names emitters by the pack's
+// numbering; `map[packIndex]` gives the case's. An index the map does not
+// cover is kept, so it stays unknown.
+export function renumberFinding(finding, map) {
+  const to = (e) => (e && Number.isInteger(e.index) && e.index >= 0 && e.index < map.length ? { ...e, index: map[e.index] } : e);
+  const c = finding.suggestedChange;
+  return {
+    ...finding,
+    suspectedEmitters: finding.suspectedEmitters?.map(to),
+    ...(finding.relation ? { relation: { ...finding.relation, front: to(finding.relation.front), back: to(finding.relation.back) } } : {}),
+    evidence: { ...finding.evidence, citations: finding.evidence?.citations?.map((x) => (x.kind === "inspect" ? { ...x, emitter: to(x.emitter) } : x)) },
+    suggestedChange: c?.kind === "reorder" ? { ...c, front: to(c.front), back: to(c.back) } : c ? { ...c, emitter: to(c.emitter) } : c,
+  };
+}
+
 function emitterOf(context, e) {
   const found = context.emitters.find((x) => x.index === e.index);
   return found && found.name === e.name ? found : null;
@@ -112,6 +135,7 @@ function correctionOf(finding, context, errors) {
 // -> { errors, normal }. `normal` is set even with errors (raw identity), so
 // failed findings still de-duplicate among themselves.
 export function normaliseFinding(finding, context, rubric) {
+  if (context.toCase) finding = renumberFinding(finding, context.toCase);
   const errors = [];
   const { category, direction } = resolveAlias(rubric, finding.category, finding.direction);
   const known = Object.hasOwn(rubric.categories, category) && Object.hasOwn(rubric.categories[category].directions, direction);

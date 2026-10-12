@@ -22,12 +22,32 @@ export const BUNDLE_FILES = ["filmstrip.png", "filmstrip.json", "selected.png", 
 const RNG_FIELDS = ["rngState", "rngDrawCount"];
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
-export function stripRngLines(text) {
+// `toPack` (optional) renumbers the emitters: toPack[caseIndex] = packIndex.
+export function stripRngLines(text, toPack = null) {
   return text.split("\n").filter((l) => l.trim()).map((l) => {
     const value = JSON.parse(l);
     for (const k of RNG_FIELDS) delete value[k];
+    if (toPack) value.perEmitter = renumbered(value.perEmitter, toPack);
     return JSON.stringify(value);
   }).join("\n") + "\n";
+}
+
+// An order-blind pack (a draw-order case without inspect.json) numbers the
+// emitters as its base does, so neither the telemetry nor the intent shows
+// the order: out[toPack[i]] = list[i].
+export function renumbered(list, toPack) {
+  if (!Array.isArray(list) || list.length !== toPack.length) throw new Error("the renumbering does not cover every emitter");
+  const out = new Array(list.length);
+  list.forEach((v, i) => { out[toPack[i]] = v; });
+  return out;
+}
+
+export function renumberSummary(text, toPack) {
+  const summary = JSON.parse(text);
+  const at = summary.emitters.map((e) => e.index);
+  if (!at.every((index, i) => index === i)) throw new Error("summary.json emitters are not in index order");
+  summary.emitters = renumbered(summary.emitters, toPack).map((e, index) => ({ ...e, index }));
+  return JSON.stringify(summary, null, 2);   // the observer's own layout, so a renumbering that changes nothing changes no byte
 }
 
 // PNG chunks that carry text or a timestamp are dropped; image data is kept byte for byte.
@@ -92,7 +112,9 @@ function listTree(root, io = fs) {
 }
 
 // Builds one pack. `bundles`: { label: bundleDirectory } (one entry, or bundle-a/b/c).
-export async function buildPack({ out, bundles, shared, inspectJson = null, run = spawnWithDeadline, io = fs }) {
+// `toPack` renumbers the telemetry's emitters (an order-blind pack).
+export async function buildPack({ out, bundles, shared, inspectJson = null, toPack = null, run = spawnWithDeadline, io = fs }) {
+  if (toPack && inspectJson !== null) throw new Error("a pack with inspect.json keeps the case's numbering");
   if (io.existsSync(out)) throw new Error(`pack directory exists: ${out}`);
   io.mkdirSync(out, { recursive: true });
   const written = {};
@@ -123,8 +145,9 @@ export async function buildPack({ out, bundles, shared, inspectJson = null, run 
     put(`${prefix}selected.png`, stripPngText(io.readFileSync(sheet)));
     io.rmSync(list); io.rmSync(sheet);
     put(`${prefix}selected.json`, `${JSON.stringify(tileMap(frames), null, 2)}\n`);
-    put(`${prefix}summary.json`, io.readFileSync(join(dir, "telemetry", "summary.json")));
-    put(`${prefix}frames.jsonl`, stripRngLines(io.readFileSync(join(dir, "telemetry", "frames.jsonl"), "utf8")));
+    const summary = io.readFileSync(join(dir, "telemetry", "summary.json"));
+    put(`${prefix}summary.json`, toPack ? renumberSummary(summary.toString("utf8"), toPack) : summary);
+    put(`${prefix}frames.jsonl`, stripRngLines(io.readFileSync(join(dir, "telemetry", "frames.jsonl"), "utf8"), toPack));
   }
   const manifest = manifestOf(written);
   const tree = listTree(out, io);

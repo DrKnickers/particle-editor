@@ -96,7 +96,7 @@ function writeObservation(dir, spec, alo, roots) {
     profile: { camera: { position: [0, -250, 125], target: [0, 0, 0], up: [0, 0, 1] }, gravity: [0, 0, -1], wind: [0, 0, 0], ground: false, bloom: false },
     geometry: { crop: [0, 0, 16, 16], rt: [16, 16], viewport: [0, 0, 16, 16] }, preparation: [], lifecycle, frames, stride, playback: [] };
   write("capture.json", json(capture));
-  write("telemetry/summary.json", json(lifecycle));
+  write("telemetry/summary.json", JSON.stringify(lifecycle, null, 2));   // as the observer writes it (dump(2), no newline)
   write("telemetry/frames.jsonl", per.map((p, frame) => `${JSON.stringify({ frame, instances: 1, emitters: p.length, particles: totals[frame], perEmitter: p,
     rngDrawCount: frame, rngState: frame * 7 + spec.scenario.seed, runtimeGuardRefusals: 0, hardGuardRefusals: 0, indexCapRefusals: 0, overloadActive: false, spawnerIdle: true })}\n`).join(""));
   write("logs/observe.log", "fake\n");
