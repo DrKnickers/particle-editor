@@ -274,6 +274,7 @@ export async function runLoop({ task, source, patchSets, out, exe = join(repoRoo
       Object.assign(entry, { observation: `${root}/observation`, comparison: `${root}/comparison` });
       entry.budgets = comparison.metrics.budgets;
       entry.firstRandomDivergence = comparison.schedule.firstDivergentFrame;
+      entry.pairedClip = comparison.clip ? `${root}/comparison/${comparison.clip.path}` : null;
       if (!comparison.metrics.budgetsPass)
         return reject(`budget failed on the primary seed: ${comparison.metrics.budgets.filter((v) => !v.pass).map((v) => v.id).join(", ")}`);
       Object.assign(entry, { accepted: true, reason: "validated, every request applied, every budget held on the primary seed" });

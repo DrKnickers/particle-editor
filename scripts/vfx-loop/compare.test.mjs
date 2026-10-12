@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkAssembledBundle } from "../observe.mjs";
 import { writeComparison, alignmentDiff, checkBudgets, pairFrames, placeholderPng, readIhdr,
-  buildPairedFilmstripArgs, randomSchedule, telemetryDelta, METRICS, TECHNICAL_BUDGETS } from "./compare.mjs";
+  buildPairedFilmstripArgs, buildPairedClipArgs, randomSchedule, telemetryDelta, METRICS, TECHNICAL_BUDGETS } from "./compare.mjs";
 import { bundle, spec, fakeFfmpeg, png, PROFILE } from "./testing.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -206,6 +206,39 @@ test("placeholder tiles copy the frame format and refuse ones they cannot make",
   }
   assert.throws(() => placeholderPng({ width: 1, height: 1, bitDepth: 16, colorType: 6 }), /unsupported/);
   assert.throws(() => readIhdr(Buffer.from("not a png")), /not a PNG/);
+});
+
+test("with playback on both sides, a paired clip runs as long as the longer run", async (t) => {
+  const root = temporary(t), playing = spec();
+  playing.output.playbackStride = 1;
+  const baseline = await bundle(join(root, "baseline"), playing, { particles: [5, 8, 3, 3, 0] });
+  const candidate = await bundle(join(root, "candidate"), playing, { particles: [5, 8, 0] });
+  const calls = [], out = join(root, "comparison");
+  const { review, clip } = await writeComparison(baseline, candidate, out, { run: fakeFfmpeg(calls) });
+  assert.deepEqual(clip, { path: "paired-preview.mp4", frames: 5, fps: 60,
+    layout: "baseline left, candidate right; the shorter run holds its last frame" });
+  assert.deepEqual(review.clip, clip);
+  assert.ok(fs.statSync(join(out, "paired-preview.mp4")).size > 0);
+  const args = calls.at(-1).args, inputs = args.filter((_, i, a) => a[i - 1] === "-i");
+  assert.deepEqual(inputs, [join(baseline, "playback-frames", "frame_%05d.png"), join(candidate, "playback-frames", "frame_%05d.png")]);
+  assert.equal(args[args.indexOf("-frames:v") + 1], "5");
+});
+
+test("without playback there is no paired clip", async (t) => {
+  const { baseline, candidate, out } = await pair(t);
+  const { review, clip } = await writeComparison(baseline, candidate, out, { run: fakeFfmpeg() });
+  assert.equal(clip, null);
+  assert.equal(review.clip, null);
+  assert.equal(fs.existsSync(join(out, "paired-preview.mp4")), false);
+});
+
+test("the paired clip holds the shorter run's last frame, side by side, in even dimensions", () => {
+  const args = buildPairedClipArgs({ baselineFrames: "b", candidateFrames: "c", fps: 30, frameCount: 9, out: "o.mp4" });
+  assert.equal(args[args.indexOf("-filter_complex") + 1], "[0:v]tpad=stop_mode=clone:stop=-1[a];[1:v]tpad=stop_mode=clone:stop=-1[b];" +
+    "[a][b]hstack=inputs=2,scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p[v]");
+  assert.deepEqual(args.filter((_, i, a) => a[i - 1] === "-framerate"), ["30", "30"]);
+  assert.equal(args.at(-1), "o.mp4");
+  assert.throws(() => buildPairedClipArgs({ baselineFrames: "b", candidateFrames: "c", fps: 60, frameCount: 0, out: "o" }), /at least one/);
 });
 
 test("the paired filmstrip skips tiling for a single pair", () => {

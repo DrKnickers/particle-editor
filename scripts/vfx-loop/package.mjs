@@ -17,7 +17,8 @@ const LIMITATION = "Budgets are whole-effect: per-emitter shifts are reported in
 
 export function buildPackage(summary, matrix = null) {
   const last = summary.rounds?.find((v) => v.round === summary.candidate?.round) ?? null;
-  const evidence = last && { pairedFilmstrip: `${last.comparison}/paired-filmstrip.png`, framePairs: `${last.comparison}/selected-frame-pairs`,
+  const evidence = last && { pairedClip: last.pairedClip ?? null,
+    pairedFilmstrip: `${last.comparison}/paired-filmstrip.png`, framePairs: `${last.comparison}/selected-frame-pairs`,
     metrics: `${last.comparison}/metrics.json`, telemetryDelta: `${last.comparison}/telemetry-delta.json`,
     randomSchedule: `${last.comparison}/random-schedule-note.json`, review: `${last.comparison}/review.json` };
   return { schemaVersion: 1, advisory: ADVISORY, brief: summary.brief, outcome: summary.outcome, stop: summary.stop ?? null,
@@ -49,7 +50,9 @@ export function renderReadme(pkg) {
       lines.push(`| ${v.round} | ${v.accepted ? "yes" : "no"} | ${String(v.reason).replaceAll("|", "\\|")} | ${link(v.patchSet)} | ${v.findings} |`);
   }
   if (pkg.evidence) {
-    lines.push("", "## Before and after (primary seed)", "", `- Paired filmstrip (baseline above candidate): ${link(pkg.evidence.pairedFilmstrip)}`,
+    lines.push("", "## Before and after (primary seed)", "");
+    if (pkg.evidence.pairedClip) lines.push(`- Paired clip (baseline left, candidate right): ${link(pkg.evidence.pairedClip)}`);
+    lines.push(`- Paired filmstrip (baseline above candidate): ${link(pkg.evidence.pairedFilmstrip)}`,
       `- Frame pairs: ${link(pkg.evidence.framePairs)}`, `- Budgets and drift flags: ${link(pkg.evidence.metrics)}`,
       `- Telemetry delta: ${link(pkg.evidence.telemetryDelta)}`, `- Random schedule: ${link(pkg.evidence.randomSchedule)}`);
   }

@@ -3,7 +3,7 @@
 // code spawns through. The fake --observe writes only the exe's own outputs,
 // so observe.mjs still assembles and checks every bundle itself.
 import * as fs from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { deflateSync } from "node:zlib";
 import { assembleBundle, sha256 } from "../observe.mjs";
 
@@ -51,6 +51,12 @@ export function writeNative(directory, spec, { sourceHash = "a".repeat(64), part
     write(name, bytes);
     return { frame, reasons: ["stride"], png: name, sha256: sha256(bytes) };
   });
+  // Playback: every Nth frame of the review window [0, finalFrame], densely numbered.
+  const step = spec.output.playbackStride;
+  const playback = step ? Array.from({ length: Math.floor(finalFrame / step) + 1 }, (_, index) => {
+    write(`playback-frames/frame_${String(index).padStart(5, "0")}.png`, png(tint(index * step)));
+    return { index, frame: index * step };
+  }) : [];
   const active = particles.map((v, i) => (v > 0 ? i : -1)).filter((i) => i >= 0);
   const peak = active.length ? particles.indexOf(Math.max(...particles)) : null;
   const lifecycle = { status: "natural-end", finalFrame, reviewWindow: [0, finalFrame], endedBeforeReview: false,
@@ -60,7 +66,7 @@ export function writeNative(directory, spec, { sourceHash = "a".repeat(64), part
     source: { path: spec.scenario.aloPath ?? "C:/effect.alo", sha256: sourceHash, bytes: 1 },
     content: { gameRoots: ["D:/game/"], selectedModPaths: [], sha256: "b".repeat(64) },
     random: { algorithm: "legacy-msvc", algorithmVersion: 1, seed: spec.scenario.seed ?? 1 },
-    profile, geometry: { crop, rt: [16, 16], viewport: crop }, preparation: [], lifecycle, frames, stride, playback: [] };
+    profile, geometry: { crop, rt: [16, 16], viewport: crop }, preparation: [], lifecycle, frames, stride, playback };
   edit(capture);
   write("capture.json", json(capture)); write("telemetry/summary.json", json(lifecycle));
   write("telemetry/frames.jsonl", particles.map((count, frame) => JSON.stringify({ frame, particles: count, emitters: 1,
@@ -76,10 +82,20 @@ export function spec(overrides = {}) {
 }
 
 // Fake ffmpeg: whatever it is asked to make, it writes a PNG at the last argument.
+// Fake ffprobe: an mp4 reports its -frames:v, or else its input's frame count,
+// at its -framerate.
 export function fakeFfmpeg(calls = []) {
+  const promised = new Map();
   return async (bin, args) => {
     calls.push({ bin, args });
+    if (bin === "ffprobe") {
+      const { frames, fps } = promised.get(args.at(-1));
+      return { code: 0, signal: null, stdout: JSON.stringify({ streams: [{ nb_read_frames: String(frames), duration: String(frames / fps) }] }), stderr: "" };
+    }
     if (bin !== "ffmpeg") throw new Error(`unexpected ${bin}`);
+    const at = args.indexOf("-frames:v"), rate = args.indexOf("-framerate");
+    if (rate >= 0) promised.set(args.at(-1), { fps: Number(args[rate + 1]),
+      frames: at >= 0 ? Number(args[at + 1]) : fs.readdirSync(dirname(args[args.indexOf("-i") + 1])).length });
     fs.writeFileSync(args.at(-1), png(200));
     return { code: 0, signal: null, stdout: "", stderr: "" };
   };
@@ -100,7 +116,7 @@ export function fakeExe({ observeOptions = () => ({}), observeExit = () => 0, re
   crash = () => 0, calls = [] } = {}) {
   const ffmpeg = fakeFfmpeg(calls);
   return async (bin, args, options) => {
-    if (bin === "ffmpeg") return ffmpeg(bin, args, options);
+    if (bin === "ffmpeg" || bin === "ffprobe") return ffmpeg(bin, args, options);
     calls.push({ bin, args });
     const ok = (code = 0) => ({ code, signal: null, stdout: "", stderr: `[fake] exit=${code}` });
     if (args[0] === "--observe") {

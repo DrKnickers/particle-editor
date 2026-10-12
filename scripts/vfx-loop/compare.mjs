@@ -6,6 +6,7 @@
 //
 //   comparison/
 //     paired-filmstrip.png       each tile = baseline frame over candidate frame
+//     paired-preview.mp4         baseline left, candidate right; only when both runs recorded playback
 //     selected-frame-pairs/      frame-NNNNN.baseline.png / .candidate.png
 //     metrics.json               budgets (task + technical) and drift flags
 //     telemetry-delta.json       whole-effect and per-emitter series and lifecycle shifts
@@ -199,6 +200,19 @@ export function buildPairedFilmstripArgs({ baselineList, candidateList, out, cou
     "-filter_complex", filter, "-frames:v", "1", "-c:v", "png", out];
 }
 
+// Both runs' playback frames side by side at the playback rate. The shorter run
+// holds its last frame until the longer one ends. Even dimensions, yuv420p and
+// the bt709 tags follow clip-encode's encoder, so every player shows it alike.
+export function buildPairedClipArgs({ baselineFrames, candidateFrames, fps, frameCount, out }) {
+  if (!Number.isInteger(frameCount) || frameCount < 1) throw fail("a paired clip needs at least one frame");
+  const input = (dir) => ["-framerate", String(fps), "-i", join(dir, "frame_%05d.png")];
+  const hold = "tpad=stop_mode=clone:stop=-1";
+  return ["-y", ...input(baselineFrames), ...input(candidateFrames), "-filter_complex",
+    `[0:v]${hold}[a];[1:v]${hold}[b];[a][b]hstack=inputs=2,scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p[v]`,
+    "-map", "[v]", "-frames:v", String(frameCount), "-c:v", "libx264", "-crf", "20", "-preset", "slow",
+    "-colorspace", "bt709", "-color_primaries", "bt709", "-color_range", "tv", "-movflags", "+faststart", "-an", out];
+}
+
 export async function writeComparison(baselineDir, candidateDir, outDir, { budgets = [], run = spawnWithDeadline, io = fs } = {}) {
   const read = (directory, label) => {
     const checked = checkAssembledBundle(directory, { io });
@@ -239,6 +253,20 @@ export async function writeComparison(baselineDir, candidateDir, outDir, { budge
   }
   if (!io.readFileSync(filmstrip).subarray(0, 8).equals(PNG)) throw fail("paired filmstrip has a bad PNG signature");
 
+  // Stills hide timing; a clip shows it. The specs are aligned, so both runs
+  // recorded playback or neither did.
+  let clip = null;
+  if (baseline.capture.playback.length && candidate.capture.playback.length) {
+    const fps = 60 / baseline.capture.spec.output.playbackStride;
+    const frames = Math.max(baseline.capture.playback.length, candidate.capture.playback.length);
+    const out = join(outDir, "paired-preview.mp4");
+    const result = await run("ffmpeg", buildPairedClipArgs({ baselineFrames: join(baselineDir, "playback-frames"),
+      candidateFrames: join(candidateDir, "playback-frames"), fps, frameCount: frames, out }), { timeoutMs: 300000 });
+    if (result.code !== 0) throw fail(`ffmpeg exit ${result.code} making the paired clip: ${result.stderr}`);
+    if (!io.existsSync(out) || !io.statSync(out).size) throw fail("ffmpeg wrote no paired clip");
+    clip = { path: "paired-preview.mp4", frames, fps, layout: "baseline left, candidate right; the shorter run holds its last frame" };
+  }
+
   const before = summarise(baseline.capture, baseline.samples), after = summarise(candidate.capture, candidate.samples);
   const checked = checkBudgets(budgets, before, after);
   const images = pairs.filter((p) => p.baseline.state === "captured" && p.candidate.state === "captured");
@@ -254,11 +282,11 @@ export async function writeComparison(baselineDir, candidateDir, outDir, { budge
       firstRandomDivergence: schedule.firstDivergentFrame } };
   const review = { schemaVersion: 1,
     advisory: "Evidence for a human decision. Nothing here ranks the two effects (design §13.3); the human decides which to keep.",
-    alignment: { aligned: true, compared: ALIGNED }, technicalGate, pairs, decision: null };
+    alignment: { aligned: true, compared: ALIGNED }, technicalGate, clip, pairs, decision: null };
   io.writeFileSync(join(outDir, "metrics.json"), serialise(metrics));
   io.writeFileSync(join(outDir, "telemetry-delta.json"), serialise(telemetryDelta(baseline.samples, candidate.samples, before, after,
     baseline.capture.lifecycle.emitters, candidate.capture.lifecycle.emitters)));
   io.writeFileSync(join(outDir, "random-schedule-note.json"), serialise(schedule));
   io.writeFileSync(join(outDir, "review.json"), serialise(review));
-  return { metrics, review, schedule, summaries: { baseline: before, candidate: after } };
+  return { metrics, review, schedule, clip, summaries: { baseline: before, candidate: after } };
 }

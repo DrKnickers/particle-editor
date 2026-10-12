@@ -70,6 +70,17 @@ test("one accepted round runs the four-seed review and passes for human review",
   assert.deepEqual(readJson(join(out, "loop.json")), summary);
 });
 
+test("a task that records playback puts the paired clip in the package", async (t) => {
+  const { source, task, out } = setup(t);
+  task.observation.output.playbackStride = 1;
+  const summary = await runLoop({ task, source, patchSets: [ROUND_1()], out, run: fakeExe(), say: quiet });
+  assert.equal(summary.rounds[0].pairedClip, "rounds/01/comparison/paired-preview.mp4");
+  assert.ok(fs.existsSync(join(out, summary.rounds[0].pairedClip)));
+  assert.equal(readJson(join(out, "package/package.json")).evidence.pairedClip, "rounds/01/comparison/paired-preview.mp4");
+  assert.match(fs.readFileSync(join(out, "package/README.md"), "utf8"),
+    /- Paired clip \(baseline left, candidate right\): \[rounds\/01\/comparison\/paired-preview\.mp4\]/);
+});
+
 test("a later round builds on the last accepted candidate", async (t) => {
   const { source, task, out } = setup(t);
   const round1 = after(SOURCE, "Fire", "Smoke", "Smoke Slow");
