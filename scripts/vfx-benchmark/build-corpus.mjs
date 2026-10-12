@@ -20,7 +20,7 @@ import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnWithDeadline } from "../observe.mjs";
-import { ssim as ffmpegSsim } from "../lib/ssim.mjs";
+import { blockDiff, ssim as ffmpegSsim } from "../lib/ssim.mjs";
 import { admitBase, admitRecipe, checkCorpus, checkRecipe, checkRoots } from "./corpus.mjs";
 import { inspectDiff, patchRequest, positionOf, verifyRecipe } from "./recipe.mjs";
 import { caseIntent, checkTargets, freezeVariant, parseTargets } from "./freeze.mjs";
@@ -32,6 +32,7 @@ import { allowlist, buildPack, inventory } from "./pack.mjs";
 import { rulesMarkdown } from "./rules.mjs";
 import { lockAnswerCheck } from "./score.mjs";
 import { contextFor } from "./context.mjs";
+import { PERCEPTIBLE } from "./derive-truth.mjs";
 import { RUBRIC } from "./schema-check.mjs";
 import { DEFAULT_EXE, exeLedger, pinFiles, readLines, repoRoot, serialise, sha256, store, tools } from "./store.mjs";
 
@@ -74,7 +75,7 @@ async function alignedSsim(baseDir, caseDir, baseCapture, caseCapture, ssim) {
   return out;
 }
 
-export async function draft({ root, exe = DEFAULT_EXE, run = spawnWithDeadline, ssim = ffmpegSsim, io = fs, say = console.log, ids = () => randomBytes(4).toString("hex") }) {
+export async function draft({ root, exe = DEFAULT_EXE, run = spawnWithDeadline, ssim = ffmpegSsim, diff = blockDiff, io = fs, say = console.log, ids = () => randomBytes(4).toString("hex") }) {
   const s = store(root, io);
   const corpus = s.json("corpus.json");
   if (corpus.state !== "draft") throw new CorpusError("a locked corpus is immutable; start a new version");
@@ -113,6 +114,7 @@ export async function draft({ root, exe = DEFAULT_EXE, run = spawnWithDeadline, 
     refuse(checkRecipe(recipe).map((e) => `${name}: ${e}`));
     const base = bases[recipe.base];
     if (!base) throw new CorpusError(`${name}: unknown base ${recipe.base}`);
+    if (recipe.decoy) { cases.push({ name, recipe, base, kind: "control", shape: "single" }); continue; }
     if (!CLASS[recipe.class]) throw new CorpusError(`${name}: unknown class ${recipe.class}`);
     cases.push({ name, recipe, base, kind: "defect", shape: "single" });
   }
@@ -156,13 +158,14 @@ export async function draft({ root, exe = DEFAULT_EXE, run = spawnWithDeadline, 
 
   for (const c of cases) {
     const caseDir = ["cases", c.id];
-    const source = c.kind === "control" || c.recipe.kind === "seed" ? s.at("bases", c.base.id, "effect.alo") : s.at("authoring", c.name, "effect.alo");
+    const fromBase = c.recipe.kind === "none" || c.recipe.kind === "seed";
+    const source = fromBase ? s.at("bases", c.base.id, "effect.alo") : s.at("authoring", c.name, "effect.alo");
     s.write([...caseDir, "effect.alo"], io.readFileSync(source));
     s.writeJson([...caseDir, "recipe.json"], c.recipe);
     const alo = s.at(...caseDir, "effect.alo");
     const inspect = await t.inspect(alo, s.at(...caseDir, "inspect.json"));
     c.inspect = inspect;
-    if (c.kind === "control" || c.recipe.kind === "seed") {
+    if (fromBase) {
       if (s.hash(...caseDir, "effect.alo") !== s.hash("bases", c.base.id, "effect.alo")) throw new CorpusError(`${c.name}: not byte-identical to its base`);
     }
     let patchedInspect = null;
@@ -207,6 +210,23 @@ export async function draft({ root, exe = DEFAULT_EXE, run = spawnWithDeadline, 
       for (const w of drift.warnings) say(`[bench] ${c.name}: warning: ${w}`);
     }
 
+    // A decoy must look like its base: a reorder that shows is a defect, not a control.
+    if (c.recipe.decoy) {
+      const caseFrames = new Map(c.captures.bundle.capture.frames.map((f) => [f.frame, f]));
+      const peaks = {};
+      for (const b of c.base.capture.frames) {
+        const f = caseFrames.get(b.frame);
+        if (!f) throw new CorpusError(`${c.name}: frame ${b.frame} is missing from the decoy`);
+        if (f.sha256 === b.sha256) continue;
+        const r = diff(join(c.base.dir, b.png), join(c.captures.bundle.dir, f.png));
+        if (!r.ok) throw new CorpusError(`${c.name} frame ${b.frame}: ${r.why}`);
+        peaks[b.frame] = r.peak;
+      }
+      s.writeJson([...caseDir, "decoy.json"], { peaks });
+      const shown = Object.keys(peaks).filter((f) => peaks[f] >= PERCEPTIBLE);
+      if (shown.length) throw new CorpusError(`${c.name}: the decoy's reorder shows (frames ${shown.join(", ")} change by ${PERCEPTIBLE} or more); it is a defect, not a control`);
+    }
+
     // Packs: primary (with inspect.json) for every case; bundle-only for subjective cases and controls.
     const bundles = Object.fromEntries(Object.entries(c.captures).map(([label, v]) => [label, v.dir]));
     const shared = sharedFiles(caseIntent(c.base.intent, c.recipe), textures);
@@ -226,7 +246,8 @@ export async function draft({ root, exe = DEFAULT_EXE, run = spawnWithDeadline, 
     ...corpus,
     provenance: { ...corpus.provenance, exeSha256: ledger.sha256, render: provenance.render },
     cases: cases.map((c) => ({ id: c.id, base: c.base.id, kind: c.kind, shape: c.shape,
-      ...(c.kind === "defect" ? { class: c.recipe.class, stratum: CLASS[c.recipe.class].stratum } : {}) })),
+      ...(c.kind === "defect" ? { class: c.recipe.class, stratum: CLASS[c.recipe.class].stratum } : {}),
+      ...(c.recipe.decoy ? { decoy: true } : {}) })),
     order,
     ...(seedAbsence ? { seedAbsence } : {}),
     hashes: {

@@ -11,6 +11,7 @@ import { prepare, score } from "./subagent-run.mjs";
 import { contextFor } from "./context.mjs";
 import { canonicalFinding } from "./answers.mjs";
 import { scoreAttempt } from "./score.mjs";
+import { markdown } from "./report.mjs";
 import { RUBRIC } from "./schema-check.mjs";
 import { store, sha256 } from "./store.mjs";
 import { effectBytes, emitter, fakeBenchExe, fakeSsim } from "./testing.mjs";
@@ -214,6 +215,51 @@ test("derive-truth refuses the seed case, whose answer is a judgement of intent"
   const { storeRoot, exe, ids } = setUp(t);
   await draft({ root: storeRoot, exe, run: fakeBenchExe(), ssim: fakeSsim, ids, say: () => {} });
   assert.throws(() => deriveTruth({ root: storeRoot, say: () => {}, diff: fakeDiff }), /seed case/);
+});
+
+// A store without the seed search and with one decoy: Fireball and Smoke swapped.
+function setUpDecoy(t) {
+  const set = setUp(t);
+  const s = store(set.storeRoot);
+  const skeleton = s.json("corpus.json");
+  delete skeleton.seedSearch;
+  s.writeJson(["corpus.json"], { ...skeleton, seedAbsence: "c" });
+  const [fire, smoke] = FIRE();
+  s.write(["authoring", "decoy", "effect.alo"], effectBytes([{ ...smoke, index: 0 }, { ...fire, index: 1 }]));
+  s.writeJson(["authoring", "decoy", "recipe.json"], { schemaVersion: 1, base: "A", kind: "permutation", map: [1, 0], decoy: true });
+  return { ...set, s };
+}
+
+test("a decoy reorder is a control the draft proves invisible, and its flags are reported apart", async (t) => {
+  const { storeRoot, exe, ids, s } = setUpDecoy(t);
+  const drafted = await draft({ root: storeRoot, exe, run: fakeBenchExe(), ssim: fakeSsim, diff: () => ({ ok: true, peak: 15 }), ids, say: () => {} });
+  const map = s.json("authoring-map.json");
+  const entry = drafted.cases.find((c) => c.id === map.decoy);
+  assert.deepEqual([entry.kind, entry.shape, entry.decoy, entry.class], ["control", "single", true, undefined]);
+  assert.ok(Object.values(s.json("cases", map.decoy, "decoy.json").peaks).length > 0, "the swapped fake frames differ, so every peak is recorded");
+  assert.match(s.text("packs", map.decoy, "intent.md"), /- Smoke \(0\) initialDelay: 0\.5\n- Fireball \(1\) lifetime: 2\n/);
+  assert.ok(s.exists("packs-bundle-only", map.decoy, "intent.md"), "a decoy has a bundle-only pack, like every control");
+
+  deriveTruth({ root: storeRoot, say: () => {}, diff: fakeDiff });
+  assert.deepEqual(s.json("cases", map.decoy, "truth.json").transports.frames, { visible: false, variants: [] });
+  lock({ root: storeRoot, say: () => {} });
+  assert.deepEqual(checkStore(storeRoot), []);
+
+  // Every decoy attempt flagged (an unreadable answer is a flag); every other control clean.
+  const runRoot = join(storeRoot, "..", "..", "runs", "run-1");
+  const { attempts } = prepare({ storeRoot, runRoot, agent: "claude", model: "opus" });
+  for (const a of attempts) fs.writeFileSync(join(runRoot, "attempts", a.id, "out", "findings.json"), a.caseId === map.decoy ? "not json" : JSON.stringify({ findings: [] }));
+  fs.writeFileSync(join(runRoot, "private", "audit.json"), JSON.stringify(Object.fromEntries(attempts.map((a) => [a.id, { transcript: `${a.id}.jsonl`, calls: 3, violations: [], escapes: [] }]))));
+  const run = score({ storeRoot, runRoot });
+  const primary = run.report.agents[0].primary;
+  assert.deepEqual([primary.decoyFlag, primary.controlFlag], [100, 50]);
+  assert.match(markdown(run.report), /Decoy controls \(a reorder that cannot show; counted in the control flags\): flags 100\.0 %/);
+});
+
+test("draft refuses a decoy whose reorder shows", async (t) => {
+  const { storeRoot, exe, ids } = setUpDecoy(t);
+  await assert.rejects(draft({ root: storeRoot, exe, run: fakeBenchExe(), ssim: fakeSsim, diff: () => ({ ok: true, peak: 16 }), ids, say: () => {} }),
+    /decoy's reorder shows .* it is a defect, not a control/);
 });
 
 test("draft refuses a base without its canonicalisation proof, and a case that is not what its recipe says", async (t) => {

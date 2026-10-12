@@ -9,7 +9,7 @@
 // corpus: {
 //   targets: { objective, subjective, controlFlag, fdp, completion }   percentages
 //   attempts: scheduled attempts per case (3)
-//   cases: [{ id, kind: "defect" | "control", class, base, stratum, shape: "single" | "three", secondaryEligible }]
+//   cases: [{ id, kind: "defect" | "control", class, base, stratum, shape: "single" | "three", secondaryEligible, decoy }]
 //   requiredClasses: [class ids], reducedClassList: [uncovered class ids] | null, seedAbsence: reason | null
 // }
 // run: { agents: [{ id, model, imageCondition }], canary, probes: { name: status }, contentRoots, backend }
@@ -29,7 +29,7 @@ export function aggregate(corpus, scores, agent, condition, cases) {
   const n = condition === "primary" ? corpus.attempts : 1;
   const out = {
     objective: { identified: 0, scheduled: 0 }, subjective: { identified: 0, scheduled: 0 },
-    controls: { flagged: 0, scheduled: 0 }, completion: { completed: 0, scheduled: 0 },
+    controls: { flagged: 0, scheduled: 0 }, decoys: { flagged: 0, scheduled: 0 }, completion: { completed: 0, scheduled: 0 },
     tp: 0, redundant: 0, fp: 0, redundantEntries: 0, brier: { sum: 0, count: 0 },
     bySeverity: {}, classes: {}, bases: {}, exhausted: 0, unmapped: [],
   };
@@ -52,6 +52,7 @@ export function aggregate(corpus, scores, agent, condition, cases) {
       const flagged = attempts.filter((s) => !s || s.flagged).length;
       out.controls.flagged += flagged;
       out.controls.scheduled += n;
+      if (c.decoy) { out.decoys.flagged += flagged; out.decoys.scheduled += n; }
       const base = (out.bases[c.base] ??= { controlFlags: 0, controlAttempts: 0, seedControlFlags: 0, seedControlAttempts: 0 });
       if (c.shape === "three") { base.seedControlFlags += flagged; base.seedControlAttempts += n; }
       else { base.controlFlags += flagged; base.controlAttempts += n; }
@@ -120,6 +121,7 @@ function rates(metrics) {
     objective: pct(metrics.objective.identified, metrics.objective.scheduled),
     subjective: pct(metrics.subjective.identified, metrics.subjective.scheduled),
     controlFlag: pct(metrics.controls.flagged, metrics.controls.scheduled),
+    decoyFlag: pct(metrics.decoys.flagged, metrics.decoys.scheduled),
     fdp: fdpDen === 0 ? null : pct(metrics.fp, fdpDen),
     completion: pct(metrics.completion.completed, metrics.completion.scheduled),
     brier: metrics.brier.count ? metrics.brier.sum / metrics.brier.count : null,
@@ -185,7 +187,7 @@ export function verdictLine(report, agent) {
 // prose. Refuses if any case id or frame-citation shape slipped through.
 export function publicReport(report, caseIds) {
   const pick = (r) => ({
-    objective: r.objective, subjective: r.subjective, controlFlag: r.controlFlag, fdp: r.fdp, completion: r.completion,
+    objective: r.objective, subjective: r.subjective, controlFlag: r.controlFlag, decoyFlag: r.decoyFlag, fdp: r.fdp, completion: r.completion,
     brier: r.brier, counts: r.counts, bySeverity: r.bySeverity, exhausted: r.exhausted,
     classes: Object.fromEntries(Object.entries(r.classes).map(([id, c]) => [id, { stratum: c.stratum, identified: c.identified, diagnosisOnly: c.diagnosisOnly, scheduled: c.scheduled }])),
   });
@@ -210,6 +212,7 @@ export function markdown(report) {
     lines.push(`## ${a.id}`, "", verdictLine(report, a), "", "| Class | Stratum | Identified | Diagnosis only |", "|---|---|---|---|");
     for (const [id, c] of Object.entries(a.primary.classes)) lines.push(`| ${id} | ${c.stratum} | ${fmt(c.identified)} | ${fmt(c.diagnosisOnly)} |`);
     lines.push("", `Objective ${fmt(a.primary.objective)}, subjective ${fmt(a.primary.subjective)}, control flags ${fmt(a.primary.controlFlag)}, FDP ${fmt(a.primary.fdp)}, completion ${fmt(a.primary.completion)}, Brier ${a.primary.brier === null ? "undefined" : a.primary.brier.toFixed(3)}.`, "");
+    if (a.primary.decoyFlag !== null) lines.push(`Decoy controls (a reorder that cannot show; counted in the control flags): flags ${fmt(a.primary.decoyFlag)}.`, "");
     lines.push(`Diagnosis without source inspection (bundle-only, does not gate): subjective ${fmt(a.bundleOnly.subjective)}, control flags ${fmt(a.bundleOnly.controlFlag)}, completion ${fmt(a.bundleOnly.completion)}.`, "");
   }
   if (report.secondaryIneligible.length) lines.push(`Secondary-ineligible: ${report.secondaryIneligible.join(", ")}.`, "");

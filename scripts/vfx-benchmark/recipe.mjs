@@ -91,7 +91,7 @@ function verifyPermutation(recipe, base, kase) {
   const { emitters: be, ...baseRest } = base, { emitters: ce, ...caseRest } = kase;
   for (const path of inspectDiff(baseRest, caseRest)) errors.push(`system ${path} differs`);
   const front = recipe.relation?.front, back = recipe.relation?.back;
-  if (!front || !back) errors.push("a permutation records its {front, back} relation");
+  if (!recipe.decoy && (!front || !back)) errors.push("a permutation records its {front, back} relation");
   return errors;
 }
 

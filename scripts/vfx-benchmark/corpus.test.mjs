@@ -134,6 +134,26 @@ test("checkRecipe refuses renames and incomplete recipes", () => {
   assert.match(checkRecipe({ schemaVersion: 1, base: "A", kind: "field", answer: 1 }).join(), /unknown key answer/);
 });
 
+test("a decoy is a permutation with a map and no class or relation, verified and admitted without one", () => {
+  const decoy = { schemaVersion: 1, base: "A", kind: "permutation", map: [1, 0], decoy: true };
+  assert.deepEqual(checkRecipe(decoy), []);
+  assert.match(checkRecipe({ ...decoy, map: undefined }).join(), /map and relation/);
+  assert.match(checkRecipe({ ...decoy, class: "draw-order" }).join(), /decoy is a permutation with no class or relation/);
+  assert.match(checkRecipe({ ...decoy, relation: { front: {}, back: {} } }).join(), /decoy is a permutation with no class or relation/);
+  assert.match(checkRecipe({ ...decoy, kind: "field", target: {}, mutations: [{}] }).join(), /decoy is a permutation/);
+  assert.match(checkRecipe({ ...decoy, decoy: false }).join(), /decoy is a permutation/);
+  const { b, c, recipe } = swapped();
+  const asDecoy = { kind: "permutation", map: recipe.map, decoy: true };
+  assert.deepEqual(verifyRecipe({ recipe: asDecoy, baseInspect: b, caseInspect: c }), []);
+  assert.deepEqual(admitRecipe(asDecoy, b, c), []);
+  assert.match(verifyRecipe({ recipe: { kind: "permutation", map: recipe.map }, baseInspect: b, caseInspect: c }).join(), /relation/);
+  // In the corpus a decoy is a single-bundle control.
+  const withDecoy = corpus(); withDecoy.cases.push({ id: "d0", base: "A", kind: "control", shape: "single", decoy: true });
+  assert.deepEqual(checkCorpus(withDecoy), []);
+  withDecoy.cases.at(-1).kind = "defect";
+  assert.match(checkCorpus(withDecoy).join(), /a decoy is a single-bundle control/);
+});
+
 test("admitBase: empty colour textures, seed and draw-order rules", () => {
   const b = base();
   assert.deepEqual(admitBase(b), []);

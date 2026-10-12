@@ -80,13 +80,14 @@ export function checkCorpus(corpus) {
   }
   const ids = new Set();
   for (const [i, c] of (corpus.cases ?? []).entries()) {
-    if (!keys(c, ["id", "base", "kind", "shape"], ["class", "stratum", "secondaryEligible", "eligibility"], `cases[${i}]`, errors)) continue;
+    if (!keys(c, ["id", "base", "kind", "shape"], ["class", "stratum", "secondaryEligible", "eligibility", "decoy"], `cases[${i}]`, errors)) continue;
     if (ids.has(c.id)) errors.push(`cases[${i}]: duplicate id ${c.id}`);
     ids.add(c.id);
     if (!bases.has(c.base)) errors.push(`cases[${i}]: unknown base ${c.base}`);
     if (!CASE_KINDS.includes(c.kind)) errors.push(`cases[${i}]: kind must be defect or control`);
     if (!SHAPES.includes(c.shape)) errors.push(`cases[${i}]: shape must be single or three`);
     if (c.kind === "defect" && !CLASS_IDS.includes(c.class)) errors.push(`cases[${i}]: unknown class ${c.class}`);
+    if (c.decoy !== undefined && (c.decoy !== true || c.kind !== "control" || c.shape !== "single")) errors.push(`cases[${i}]: a decoy is a single-bundle control`);
   }
   // Required control strata: a single-bundle control per base a defect uses;
   // the three-seed control exactly when the seed case is present.
@@ -111,11 +112,13 @@ export function checkCorpus(corpus) {
 
 export function checkRecipe(recipe) {
   const errors = [];
-  if (!keys(recipe, ["schemaVersion", "base", "kind"], ["class", "category", "direction", "emitters", "target", "mutations", "map", "relation", "seeds", "outlier"], "recipe", errors)) return errors;
+  if (!keys(recipe, ["schemaVersion", "base", "kind"], ["class", "category", "direction", "emitters", "target", "mutations", "map", "relation", "seeds", "outlier", "decoy"], "recipe", errors)) return errors;
   if (!["field", "permutation", "seed", "none"].includes(recipe.kind)) errors.push("recipe: kind must be field, permutation, seed or none");
   if (recipe.kind === "field" && (!recipe.target || !Array.isArray(recipe.mutations) || recipe.mutations.length === 0)) errors.push("a field recipe names its target and mutations");
   if (recipe.kind === "field" && recipe.mutations?.some((m) => m.op === "rename")) errors.push("a case never renames an emitter");
-  if (recipe.kind === "permutation" && (!Array.isArray(recipe.map) || !recipe.relation)) errors.push("a permutation recipe records its map and relation");
+  // A decoy reorders emitters whose order cannot show: a control, so it names no class or relation.
+  if (recipe.decoy !== undefined && (recipe.decoy !== true || recipe.kind !== "permutation" || recipe.class !== undefined || recipe.relation !== undefined)) errors.push("a decoy is a permutation with no class or relation");
+  else if (recipe.kind === "permutation" && (!Array.isArray(recipe.map) || (!recipe.decoy && !recipe.relation))) errors.push("a permutation recipe records its map and relation");
   if (recipe.kind === "seed" && (!isObject(recipe.seeds) || !recipe.outlier)) errors.push("a seed recipe records its seed map and outlier");
   return errors;
 }
@@ -204,8 +207,8 @@ export function admitRecipe(recipe, baseInspect, caseInspect) {
       if (stepTrackEquivalent(bt.keys, ct.keys)) errors.push("the planted track plays like the base");
     }
   } else if (recipe.kind === "permutation") {
-    // The relation names case identities: what the agent sees.
-    for (const ref of [recipe.relation?.front, recipe.relation?.back]) {
+    // The relation names case identities: what the agent sees. A decoy has none.
+    for (const ref of recipe.decoy ? [] : [recipe.relation?.front, recipe.relation?.back]) {
       let at;
       try { at = positionOf(caseInspect, ref); } catch (e) { errors.push(e.message); continue; }
       const e = caseInspect.emitters[at];
