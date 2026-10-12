@@ -266,11 +266,13 @@ export function bundleFiles(directory, io = fs) {
   return result.sort();
 }
 
-export function buildConcatList(capture, directory) {
+// `frames` defaults to the stride order (the filmstrip); the benchmark's
+// contact sheet passes every selected frame.
+export function buildConcatList(capture, directory, frames = capture.stride) {
   const selected = new Map(capture.frames.map((v) => [v.frame, v.png]));
-  return capture.stride.map((frame) => {
+  return frames.map((frame) => {
     const name = selected.get(frame);
-    if (!name) throw fail(`stride frame ${frame} has no selected PNG`);
+    if (!name) throw fail(`frame ${frame} has no selected PNG`);
     const path = resolve(directory, name).replaceAll("\\", "/").replaceAll("'", "'\\''");
     return `file '${path}'\n`;
   }).join("");

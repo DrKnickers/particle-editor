@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Particle effect findings",
+  "description": "Your answer for one pack. An empty findings array means: no defect. Limits: at most 256 findings, 4,096 citations and 262,144 track keys in total, 65,536 keys per track proposal, 4,096 characters per string, 8 MiB per file; crossing one ends the attempt without a repair. Frames are frame numbers as named in filmstrip.json, selected.json and frames.jsonl. Emitters are named by their index and name as in summary.json (and inspect.json when present). Severity is reported and never changes the score.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["findings"],
+  "properties": {
+    "findings": {
+      "type": "array",
+      "maxItems": 256,
+      "items": { "$ref": "#/$defs/finding" }
+    }
+  },
+  "$defs": {
+    "emitter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "name"],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "name": { "type": "string" }
+      }
+    },
+    "frameCitation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "frame"],
+      "properties": {
+        "kind": { "enum": ["image", "telemetry"] },
+        "bundleId": { "type": "string", "description": "Required in a pack with bundle-a, bundle-b and bundle-c." },
+        "frame": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "inspectCitation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "emitter", "field"],
+      "properties": {
+        "kind": { "const": "inspect" },
+        "emitter": { "$ref": "#/$defs/emitter" },
+        "field": { "type": "string", "description": "A path in inspect.json under that emitter, such as lifetime or tracks[5]." }
+      }
+    },
+    "change": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "emitter", "field", "value"],
+          "properties": {
+            "kind": { "enum": ["scalar", "enum"] },
+            "emitter": { "$ref": "#/$defs/emitter" },
+            "field": { "type": "string" },
+            "value": { "type": "number" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "emitter", "field", "name"],
+          "properties": {
+            "kind": { "const": "texture" },
+            "emitter": { "$ref": "#/$defs/emitter" },
+            "field": { "type": "string", "description": "colorTexture or normalTexture." },
+            "name": { "type": "string", "description": "A name exactly as listed in textures.json." }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "emitter", "track", "keys"],
+          "properties": {
+            "kind": { "const": "track" },
+            "emitter": { "$ref": "#/$defs/emitter" },
+            "track": { "type": "integer", "minimum": 0, "description": "0 to 6: red, green, blue, alpha, scale, index, rotation speed." },
+            "keys": {
+              "description": "The whole track as [time, value] keys; the interpolation stays the track's own. Times run from 0 to 100.",
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 65536,
+              "items": { "type": "array", "prefixItems": [{ "type": "number" }, { "type": "number" }], "minItems": 2, "maxItems": 2 }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "front", "back"],
+          "properties": {
+            "kind": { "const": "reorder" },
+            "front": { "$ref": "#/$defs/emitter" },
+            "back": { "$ref": "#/$defs/emitter" }
+          }
+        }
+      ]
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["severity", "category", "direction", "claim", "suspectedEmitters", "evidence", "suggestedChange", "confidence"],
+      "properties": {
+        "id": { "type": "string" },
+        "severity": { "enum": ["low", "medium", "high"] },
+        "category": { "type": "string", "description": "A category from rules.md." },
+        "direction": { "type": "string", "description": "A direction listed under that category in rules.md." },
+        "claim": { "type": "string" },
+        "bundleId": { "type": "string", "description": "Required in a pack with bundle-a, bundle-b and bundle-c." },
+        "suspectedEmitters": { "type": "array", "items": { "$ref": "#/$defs/emitter" } },
+        "relation": {
+          "description": "Required for draw-order: the emitter that should be in front and the one that should be behind.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["front", "back"],
+          "properties": { "front": { "$ref": "#/$defs/emitter" }, "back": { "$ref": "#/$defs/emitter" } }
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["citations"],
+          "properties": {
+            "citations": {
+              "type": "array",
+              "items": { "oneOf": [{ "$ref": "#/$defs/frameCitation" }, { "$ref": "#/$defs/inspectCitation" }] }
+            }
+          }
+        },
+        "suggestedChange": { "$ref": "#/$defs/change" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    }
+  }
+}
