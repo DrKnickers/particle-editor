@@ -31,6 +31,25 @@ export function parseTargets(markdown) {
   return { targets, errors };
 }
 
+// The intent a case's pack carries. A permutation case moves emitters, so its
+// targets are renumbered through the recipe's base -> case map and listed in
+// the case's order: the base's numbering would state the swap outright.
+export function caseIntent(intent, recipe) {
+  if (recipe.kind !== "permutation") return intent;
+  return intent.replace(/^(##\s+Targets\s*$)([\s\S]*?)(?=^##\s|(?![\s\S]))/m, (_, heading, body) => {
+    const lines = body.split("\n");
+    const slots = lines.flatMap((l, i) => (/^- /.test(l) ? [i] : []));
+    const renumbered = slots.map((i) => {
+      const m = /^- (.+) \((\d+)\) ([^\r]*)(\r?)$/.exec(lines[i]);
+      const at = m ? recipe.map[Number(m[2])] : undefined;
+      if (at === undefined) throw new Error(`unreadable target line: ${lines[i]}`);
+      return { at, line: `- ${m[1]} (${at}) ${m[3]}${m[4]}` };
+    }).sort((a, b) => a.at - b.at);   // stable: an emitter's lines keep their order
+    slots.forEach((i, k) => { lines[i] = renumbered[k].line; });
+    return heading + lines.join("\n");
+  });
+}
+
 // A stated target must be the base's persisted value exactly, printed as it persists.
 export function checkTargets(targets, baseInspect, printed) {
   const errors = [];

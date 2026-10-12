@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SSIM_MIN, ssim } from "./ssim.mjs";
+import { SSIM_MIN, blockDiff, ssim } from "./ssim.mjs";
 
 const has = (bin) => spawnSync(bin, ["-version"]).status === 0;
 const ffmpegReady = has("ffmpeg");
@@ -50,4 +50,17 @@ test("missing input reports an ffmpeg SSIM failure", { skip: !ffmpegReady && "ff
 
   assert.equal(score.ok, false);
   assert.match(score.why, /ffmpeg ssim failed/);
+});
+
+test("the block difference is 0 for identical images and the luminance step for a changed block", { skip: !ffmpegReady && "ffmpeg not installed" }, () => {
+  const dir = mkdtempSync(join(tmpdir(), "ssim-"));
+  const black = join(dir, "black.png");
+  const grey = join(dir, "grey.png");
+  writeColorPng(black, "black");
+  writeColorPng(grey, "0x404040");
+  assert.deepEqual(blockDiff(black, black), { ok: true, peak: 0 });
+  const step = blockDiff(black, grey);
+  assert.equal(step.ok, true, step.why);
+  assert.ok(Math.abs(step.peak - 64) <= 1, `peak ${step.peak} is not the 64-level step`);
+  assert.equal(blockDiff(black, join(dir, "missing.png")).ok, false);
 });

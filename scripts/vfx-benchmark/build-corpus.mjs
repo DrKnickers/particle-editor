@@ -23,7 +23,7 @@ import { spawnWithDeadline } from "../observe.mjs";
 import { ssim as ffmpegSsim } from "../lib/ssim.mjs";
 import { admitBase, admitRecipe, checkCorpus, checkRecipe, checkRoots } from "./corpus.mjs";
 import { inspectDiff, patchRequest, positionOf, verifyRecipe } from "./recipe.mjs";
-import { checkTargets, freezeVariant, parseTargets } from "./freeze.mjs";
+import { caseIntent, checkTargets, freezeVariant, parseTargets } from "./freeze.mjs";
 import { persistedText } from "./persisted.mjs";
 import { driftFloor, windowErrors } from "./drift.mjs";
 import { checkAttestation, checkBundle, checkDependencies, assetSet } from "./provenance.mjs";
@@ -209,7 +209,7 @@ export async function draft({ root, exe = DEFAULT_EXE, run = spawnWithDeadline, 
 
     // Packs: primary (with inspect.json) for every case; bundle-only for subjective cases and controls.
     const bundles = Object.fromEntries(Object.entries(c.captures).map(([label, v]) => [label, v.dir]));
-    const shared = sharedFiles(c.base.intent, textures);
+    const shared = sharedFiles(caseIntent(c.base.intent, c.recipe), textures);
     const primary = await buildPack({ out: s.at("packs", c.id), bundles, shared, inspectJson: s.read(...caseDir, "inspect.json"), run, io });
     s.writeJson(["packs", `${c.id}.manifest.json`], primary.manifest);
     const stratum = c.kind === "defect" ? CLASS[c.recipe.class].stratum : null;
@@ -258,7 +258,7 @@ export function lock({ root, io = fs, say = console.log, transports = ["frames",
     truths[c.id] = truth;
     const recipe = s.json("cases", c.id, "recipe.json");
     const baseInspect = s.json("bases", c.base, "inspect.json"), caseInspect = s.json("cases", c.id, "inspect.json");
-    const { targets } = parseTargets(s.text("bases", c.base, "intent.md"));
+    const { targets } = parseTargets(caseIntent(s.text("bases", c.base, "intent.md"), recipe));
     const drift = c.kind === "defect" && c.shape === "single" ? s.json("cases", c.id, "drift.json") : null;
     const frozen = {};
     for (const transport of transports) {

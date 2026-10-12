@@ -17,6 +17,8 @@ import { effectBytes, emitter, fakeBenchExe, fakeSsim } from "./testing.mjs";
 
 const f = Math.fround;
 const json = (v) => `${JSON.stringify(v, null, 2)}\n`;
+// Every changed frame counts as perceptible: the fake frames are flat colours.
+const fakeDiff = () => ({ ok: true, peak: 255 });
 const SPEC = { schemaVersion: 1, scenario: { schemaVersion: 1, seed: 305419896, algorithmVersion: 1, clockAnchor: 0, spawnPosition: [0, 0, 0],
   spawnVelocity: [0, 0, 0], maxFrames: 300, overloadGuardEnabled: true, overloadGuardLimit: 10000, estimatedParticlesPerInstance: 0 },
   lifecycle: { type: "oneshot", quietTailFrames: 15 }, output: { strideInterval: 15, playbackStride: 0, maxBytes: 209715200 } };
@@ -165,7 +167,7 @@ test("derive-truth: a corpus without a person locks on the planted answers, and 
   s.writeJson(["corpus.json"], { ...skeleton, seedAbsence: "c" });
   const drafted = await draft({ root: storeRoot, exe, run: fakeBenchExe(), ssim: fakeSsim, ids, say: () => {} });
   assert.equal(drafted.cases.length, 4);
-  deriveTruth({ root: storeRoot, say: () => {} });
+  deriveTruth({ root: storeRoot, say: () => {}, diff: fakeDiff });
   const map = s.json("authoring-map.json");
   const texture = s.json("cases", map.texture, "truth.json").transports.frames.variants[0];
   assert.deepEqual([texture.category, texture.policy.primary, texture.correction.field], ["missing-texture", "inspect", "colorTexture"]);
@@ -211,7 +213,7 @@ test("derive-truth: a corpus without a person locks on the planted answers, and 
 test("derive-truth refuses the seed case, whose answer is a judgement of intent", async (t) => {
   const { storeRoot, exe, ids } = setUp(t);
   await draft({ root: storeRoot, exe, run: fakeBenchExe(), ssim: fakeSsim, ids, say: () => {} });
-  assert.throws(() => deriveTruth({ root: storeRoot, say: () => {} }), /seed case/);
+  assert.throws(() => deriveTruth({ root: storeRoot, say: () => {}, diff: fakeDiff }), /seed case/);
 });
 
 test("draft refuses a base without its canonicalisation proof, and a case that is not what its recipe says", async (t) => {

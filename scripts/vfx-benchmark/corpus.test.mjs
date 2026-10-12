@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { admitBase, admitRecipe, checkCorpus, checkRecipe, checkRoots, coveringRoots } from "./corpus.mjs";
 import { inspectDiff, patchRequest, rolePath, verifyRecipe } from "./recipe.mjs";
-import { checkTargets, freezeVariant, parseTargets } from "./freeze.mjs";
+import { caseIntent, checkTargets, freezeVariant, parseTargets } from "./freeze.mjs";
 import { persistedText } from "./persisted.mjs";
 import { RUBRIC } from "./schema-check.mjs";
 
@@ -215,6 +215,16 @@ test("intent targets: parsed, and equal to the persisted base exactly", () => {
   const close = parseTargets("## Targets\n- Sparks (2) nParticlesPerBurst: 16777216\n").targets;
   assert.match(checkTargets(close, count, persistedText).join(), /not the persisted 16777217/);
   assert.match(parseTargets("# no targets\n").errors.join(), /no ## Targets/);
+});
+
+test("a permutation case's intent states its targets in the case's numbering and order", () => {
+  const intent = "# Campfire\n\nThe flame glows in front of the smoke.\n\n## Targets\n\n- smoke (0) lifetime: 2\n- smoke (0) initialDelay: 0\n- fire (1) lifetime: 0.5\n- soft (2) lifetime: 1\n\n## Notes\n\n- kept (0)\n";
+  const swapped = caseIntent(intent, { kind: "permutation", map: [1, 0, 2] });
+  assert.equal(swapped, "# Campfire\n\nThe flame glows in front of the smoke.\n\n## Targets\n\n- fire (0) lifetime: 0.5\n- smoke (1) lifetime: 2\n- smoke (1) initialDelay: 0\n- soft (2) lifetime: 1\n\n## Notes\n\n- kept (0)\n");
+  assert.deepEqual(parseTargets(swapped).errors, []);
+  assert.equal(caseIntent(intent, { kind: "field" }), intent, "a field case keeps the base's intent");
+  assert.equal(caseIntent(intent.replace(/\n/g, "\r\n"), { kind: "permutation", map: [1, 0, 2] }), swapped.replace(/\n/g, "\r\n"));
+  assert.throws(() => caseIntent("## Targets\n- smoke (3) lifetime: 2\n", { kind: "permutation", map: [1, 0, 2] }), /unreadable target line/);
 });
 
 const TARGETS = parseTargets("## Targets\n- Fireball (0) lifetime: 4\n- Smoke (1) initialDelay: 0.2\n").targets;

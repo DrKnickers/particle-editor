@@ -12,6 +12,7 @@
 #include "ToolMain.h"
 #include "ToolIO.h"
 #include "ToolPatch.h"
+#include "ToolReorder.h"
 #include "effect/ParticleSystem.h"
 #include "effect/ParticleSystemJson.h"
 #include "effect/ParticleSystemIO.h"
@@ -26,7 +27,8 @@ namespace
 const wchar_t* kUsage =
     L"usage: ParticleEditor.exe --tool inspect  <in.alo> --out <inspect.json>\n"
     L"       ParticleEditor.exe --tool validate <in.alo> --out <report.json>\n"
-    L"       ParticleEditor.exe --tool patch    <in.alo> <patch.json> --out <candidate.alo> --report <report.json>\n";
+    L"       ParticleEditor.exe --tool patch    <in.alo> <patch.json> --out <candidate.alo> --report <report.json>\n"
+    L"       ParticleEditor.exe --tool reorder  <in.alo> <reorder.json> --out <candidate.alo> --report <report.json>\n";
 
 std::vector<std::wstring> CommandLineArgs()
 {
@@ -166,9 +168,25 @@ int Validate(const std::wstring& input, const std::wstring& output)
     return code;
 }
 
-// The four paths must name four different files. The report is written for
-// every outcome once they do.
-int Patch(const std::wstring& input, const std::wstring& request, const std::wstring& output, const std::wstring& reportPath)
+// The request verbs (patch, reorder): the four paths must name four different
+// files. The report is written for every outcome once they do.
+typedef int (*RequestRunner)(const std::string& source, const std::string& hash, const std::string& request,
+                             const std::wstring& input, const std::wstring& output, nlohmann::json* report);
+
+int RunPatchVerb(const std::string& source, const std::string& hash, const std::string& request,
+                 const std::wstring& input, const std::wstring& output, nlohmann::json* report)
+{
+    return RunPatch(source, hash, request, input, output, PatchHooks(), report);
+}
+
+int RunReorderVerb(const std::string& source, const std::string& hash, const std::string& request,
+                   const std::wstring&, const std::wstring& output, nlohmann::json* report)
+{
+    return RunReorder(source, hash, request, output, report);
+}
+
+int RequestVerb(const char* verb, RequestRunner runner, const std::wstring& input, const std::wstring& request,
+                const std::wstring& output, const std::wstring& reportPath)
 {
     const std::wstring* paths[] = {&input, &request, &output, &reportPath};
     for (int i = 0; i < 4; i++)
@@ -184,23 +202,23 @@ int Patch(const std::wstring& input, const std::wstring& request, const std::wst
     if (!ReadFileBytes(input, &source, &error))
     {
         code = kExitSource;
-        report = {{"schema", 1}, {"verb", "patch"}, {"outcome", "refused"}, {"exitCode", code},
+        report = {{"schema", 1}, {"verb", verb}, {"outcome", "refused"}, {"exitCode", code},
                   {"refusal", {{"category", "source-invalid"}, {"reason", "the source could not be read: " + error}, {"op", nullptr}}}};
     }
     else if (!ReadFileBytes(request, &requestBytes, &error))
     {
         code = kExitUsage;
-        report = {{"schema", 1}, {"verb", "patch"}, {"outcome", "refused"}, {"exitCode", code},
+        report = {{"schema", 1}, {"verb", verb}, {"outcome", "refused"}, {"exitCode", code},
                   {"refusal", {{"category", "request-malformed"}, {"reason", "the request could not be read: " + error}, {"op", nullptr}}}};
     }
     else if (const std::string hash = Sha256Hex(source); hash.empty())
     {
         code = kExitInternal;
-        report = {{"schema", 1}, {"verb", "patch"}, {"outcome", "refused"}, {"exitCode", code},
+        report = {{"schema", 1}, {"verb", verb}, {"outcome", "refused"}, {"exitCode", code},
                   {"refusal", {{"category", "internal"}, {"reason", "the source could not be hashed"}, {"op", nullptr}}}};
     }
     else
-        code = RunPatch(source, hash, requestBytes, input, output, PatchHooks(), &report);
+        code = runner(source, hash, requestBytes, input, output, &report);
     // A name that is not UTF-8 is refused before it reaches the report;
     // replace any stray bytes so the report is always valid JSON.
     if (!WriteFileAtomically(reportPath, report.dump(2, ' ', false, nlohmann::json::error_handler_t::replace) + "\n"))
@@ -208,7 +226,7 @@ int Patch(const std::wstring& input, const std::wstring& request, const std::wst
         fwprintf(stderr, L"[tool] cannot write %ls (error %lu)\n", reportPath.c_str(), GetLastError());
         return kExitIo;
     }
-    fprintf(stderr, "[tool] verb=patch exit=%d", code);
+    fprintf(stderr, "[tool] verb=%s exit=%d", verb, code);
     if (report.contains("refusal")) fprintf(stderr, " %s: %s", report["refusal"]["category"].get<std::string>().c_str(),
                                             report["refusal"]["reason"].get<std::string>().c_str());
     fprintf(stderr, "\n");
@@ -231,7 +249,10 @@ int Run(const std::vector<std::wstring>& args)
         return Validate(args[3], args[5]);
     if (args[2] == L"patch" && args.size() == 9 && args[5] == L"--out" && args[7] == L"--report" && !args[3].empty() &&
         !args[4].empty() && !args[6].empty() && !args[8].empty())
-        return Patch(args[3], args[4], args[6], args[8]);
+        return RequestVerb("patch", RunPatchVerb, args[3], args[4], args[6], args[8]);
+    if (args[2] == L"reorder" && args.size() == 9 && args[5] == L"--out" && args[7] == L"--report" && !args[3].empty() &&
+        !args[4].empty() && !args[6].empty() && !args[8].empty())
+        return RequestVerb("reorder", RunReorderVerb, args[3], args[4], args[6], args[8]);
     fwprintf(stderr, L"[tool] unrecognised arguments\n%ls", kUsage);
     return kExitUsage;
 }

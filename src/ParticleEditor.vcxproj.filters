@@ -219,6 +219,9 @@
     <ClInclude Include="host\ToolPatch.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="host\ToolReorder.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
     <ClInclude Include="host\ToolSelector.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
@@ -663,6 +666,9 @@
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\ToolPatch.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\ToolReorder.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="..\tests\support\replay_hostile_crt.cpp">

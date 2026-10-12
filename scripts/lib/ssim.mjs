@@ -22,3 +22,21 @@ export function ssim(a, b) {
   }
   return { ok: true, all: Number(m[1]) };
 }
+
+// The largest change in mean luminance over any 16x16 block, 0-255: a local
+// measure, where whole-frame SSIM averages a small change away. Same-sized
+// images only; ffmpeg's blend refuses others.
+export function blockDiff(a, b) {
+  const r = spawnSync(
+    "ffmpeg",
+    ["-hide_banner", "-loglevel", "error", "-i", a, "-i", b, "-filter_complex",
+      "[0]format=gray[x];[1]format=gray[y];[x][y]blend=all_mode=difference,scale=iw/16:ih/16:flags=area",
+      "-f", "rawvideo", "-pix_fmt", "gray", "-"],
+    { shell: false, maxBuffer: 1 << 26 },
+  );
+  if (r.error) return { ok: false, why: `ffmpeg spawn failed (${r.error.code}) — is ffmpeg on PATH?` };
+  if (r.status !== 0 || !r.stdout?.length) return { ok: false, why: `ffmpeg block difference failed (exit ${r.status}): ${String(r.stderr ?? "").trim()}` };
+  let peak = 0;
+  for (const v of r.stdout) if (v > peak) peak = v;
+  return { ok: true, peak };
+}

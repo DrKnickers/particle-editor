@@ -9,10 +9,13 @@
 // What this gives up (the report says so): there is no human baseline, no
 // alternative answers (a finding must name the planted correction), and
 // visibility means "the drift floor measured a change in the telemetry, or
-// an image change below PERCEPTIBLE SSIM", not "a person saw it". The seed case needs a judgement of intent, so it is refused here: a
-// corpus without a person declares its absence instead.
+// an aligned frame changed by at least PERCEPTIBLE in some 16x16 block", not
+// "a person saw it". The seed case needs a judgement of intent, so it is
+// refused here: a corpus without a person declares its absence instead.
 import fs from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { blockDiff } from "../lib/ssim.mjs";
 import { TRANSPORTS, writeTruth } from "./blind-page.mjs";
 import { positionOf } from "./recipe.mjs";
 import { RUBRIC } from "./schema-check.mjs";
@@ -21,16 +24,21 @@ import { store } from "./store.mjs";
 const CLASS = Object.fromEntries(RUBRIC.classes.map((c) => [c.id, c]));
 const ADDITIVE = RUBRIC.categories["blend-mode"].directions["should-be-additive"][0].acceptable;
 const ref = (e) => ({ index: e.index, name: e.name });
-// SSIM below which an aligned frame's change is treated as one a person would see.
-// Frames are mostly black, so SSIM is generous: a 0.974 frame of dark smoke on
-// the dark background was checked by eye and showed nothing.
-export const PERCEPTIBLE = 0.95;
+// The block luminance change (blockDiff, 0-255) from which an aligned frame's
+// change is treated as one a person would see. Whole-frame SSIM averages a
+// local change away (a flame dimmed behind smoke, plainly visible, scored
+// 0.986), so the measure is local. Calibrated on stored cases: the controls
+// peak at 1; a dark smoke cloud of uneven puffs, checked by eye and showing
+// nothing, at 12; the weakest case an agent still found, at 19.
+export const PERCEPTIBLE = 16;
 
-// The planted diagnosis and correction of one field recipe.
-export function plantedVariant(recipe, baseInspect, caseInspect, drift) {
+// The planted diagnosis and correction of one field or permutation recipe.
+// `peaks` holds each changed aligned frame's block difference.
+export function plantedVariant(recipe, baseInspect, caseInspect, drift, peaks = {}) {
   const cls = CLASS[recipe.class];
   if (!cls) throw new Error(`unknown class ${recipe.class}`);
-  if (recipe.kind !== "field") throw new Error(`${recipe.class}: only field recipes are derived (a ${recipe.kind} recipe needs a person)`);
+  if (recipe.kind === "permutation") return plantedReorder(recipe, cls, drift, peaks);
+  if (recipe.kind !== "field") throw new Error(`${recipe.class}: only field and permutation recipes are derived (a ${recipe.kind} recipe needs a person)`);
   const target = caseInspect.emitters[positionOf(caseInspect, recipe.target)];
   const emitter = ref(target);
   const m = recipe.mutations[0];
@@ -46,8 +54,8 @@ export function plantedVariant(recipe, baseInspect, caseInspect, drift) {
     case "replaceTrack": correction = { kind: "track", emitter, track: m.track }; break;
     default: throw new Error(`${recipe.class}: no derived correction for ${m.op}`);
   }
-  // An image-only change counts only if some aligned frame drops below PERCEPTIBLE.
-  const perceptible = Object.values(drift?.ssim ?? {}).some((v) => v < PERCEPTIBLE);
+  // An image-only change counts only if some aligned frame changed perceptibly.
+  const perceptible = Object.values(peaks).some((v) => v >= PERCEPTIBLE);
   const window = { image: perceptible ? drift?.candidateImage ?? [] : [], telemetry: drift?.candidateTelemetry ?? [] };
   const any = window.image.length > 0 || window.telemetry.length > 0;
   const policy = cls.category === "missing-texture"
@@ -58,7 +66,38 @@ export function plantedVariant(recipe, baseInspect, caseInspect, drift) {
   return { variant, visible: cls.category === "missing-texture" || any };
 }
 
-export function deriveTruth({ root, io = fs, say = console.log }) {
+// A draw-order case: the recipe's relation (the emitter that should be in
+// front, and the one behind, by case identity) and a reorder. Its evidence is
+// the frames alone, and only the candidate frames (both roots live) whose
+// image changed: a frame where the two do not overlap shows no order.
+function plantedReorder(recipe, cls, drift, peaks) {
+  const { front, back } = recipe.relation;
+  const ssim = drift?.ssim ?? {};
+  const image = (drift?.candidateImage ?? []).filter((f) => ssim[f] !== undefined && ssim[f] < 1);
+  const perceptible = image.some((f) => peaks[f] >= PERCEPTIBLE);
+  const window = { image: perceptible ? image : [], telemetry: [] };
+  const variant = { bundleId: "bundle", category: cls.category, direction: cls.direction,
+    emitters: [ref(front), ref(back)].sort((a, b) => a.index - b.index), relation: { front: ref(front), back: ref(back) },
+    windows: { bundle: window }, policy: { primary: "frames", "bundle-only": null }, correction: { kind: "reorder" } };
+  return { variant, visible: perceptible };
+}
+
+// The block difference of every aligned frame whose image changed (SSIM < 1).
+function changedPeaks(s, c, drift, diff) {
+  const peaks = {};
+  if (!drift) return peaks;
+  const frames = (dir) => new Map(s.json("bundles", dir, "capture.json").frames.map((f) => [f.frame, f.png]));
+  const base = frames(`base-${c.base}`), kase = frames(c.id);
+  for (const [frame, value] of Object.entries(drift.ssim ?? {})) {
+    if (!(value < 1)) continue;
+    const r = diff(join(s.at("bundles", `base-${c.base}`), base.get(Number(frame))), join(s.at("bundles", c.id), kase.get(Number(frame))));
+    if (!r.ok) throw new Error(`${c.id} frame ${frame}: ${r.why}`);
+    peaks[frame] = r.peak;
+  }
+  return peaks;
+}
+
+export function deriveTruth({ root, io = fs, say = console.log, diff = blockDiff }) {
   const s = store(root, io);
   const corpus = s.json("corpus.json");
   for (const c of corpus.cases) {
@@ -68,7 +107,8 @@ export function deriveTruth({ root, io = fs, say = console.log }) {
       const recipe = s.json("cases", c.id, "recipe.json");
       if (recipe.kind === "seed") throw new Error(`${c.id}: the seed case's answer is a judgement of intent; derive-truth refuses it`);
       const drift = s.exists("cases", c.id, "drift.json") ? s.json("cases", c.id, "drift.json") : null;
-      const { variant, visible } = plantedVariant(recipe, s.json("bases", c.base, "inspect.json"), s.json("cases", c.id, "inspect.json"), drift);
+      const peaks = changedPeaks(s, c, drift, diff);
+      const { variant, visible } = plantedVariant(recipe, s.json("bases", c.base, "inspect.json"), s.json("cases", c.id, "inspect.json"), drift, peaks);
       truth = { visible, variants: visible ? [variant] : [] };
     }
     writeTruth(root, c.id, { transports: Object.fromEntries(TRANSPORTS.map((t) => [t, truth])) }, io);

@@ -76,6 +76,12 @@ export function tools({ exe = DEFAULT_EXE, run = spawnWithDeadline, roots = [], 
       if (result.code !== 0 && result.code !== 3) throw toolError("validate", result);
       return { code: result.code, report: JSON.parse(io.readFileSync(out, "utf8")) };
     },
+    // Moves one root emitter (draw-order authoring); the report holds the map.
+    async reorder(alo, requestPath, out, reportPath) {
+      const result = await run(exe, ["--tool", "reorder", alo, requestPath, "--out", out, "--report", reportPath], { timeoutMs: 120000 });
+      if (result.code !== 0) throw toolError("reorder", result);
+      return JSON.parse(io.readFileSync(reportPath, "utf8"));
+    },
     async patch(alo, requestPath, out, reportPath) {
       const result = await run(exe, ["--tool", "patch", alo, requestPath, "--out", out, "--report", reportPath], { timeoutMs: 120000 });
       if (result.code !== 0) throw toolError("patch", result);

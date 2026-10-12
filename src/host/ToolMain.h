@@ -8,6 +8,7 @@
 //   --tool inspect  <in.alo> --out <inspect.json>
 //   --tool validate <in.alo> --out <report.json>
 //   --tool patch    <in.alo> <patch.json> --out <candidate.alo> --report <report.json>
+//   --tool reorder  <in.alo> <reorder.json> --out <candidate.alo> --report <report.json>
 //
 // `validate` always writes its report. It exits 0 when the source loads
 // exactly as written (the report also says whether a save reproduces its
@@ -15,7 +16,9 @@
 // failure, a spawn link the loader cleared, or a value inspect cannot report.
 //
 // `patch` (ToolPatch.h) writes its report for every outcome once its four
-// paths are distinct; --out is replaced only by a verified candidate.
+// paths are distinct; --out is replaced only by a verified candidate. `reorder`
+// (ToolReorder.h) takes the same four paths and moves one root emitter; it
+// authors the defect benchmark's draw-order cases.
 //
 // Results go to files, never stdout (the exe is a Windows-subsystem program,
 // and the loader prints diagnostics to stdout); errors go to stderr.
