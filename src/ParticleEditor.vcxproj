@@ -195,6 +195,8 @@
     <ClInclude Include="host\ReplayProofRunner.h" />
     <ClInclude Include="host\ReplayRunSupport.h" />
     <ClInclude Include="host\ObservationRunner.h" />
+    <ClInclude Include="host\ContentStack.h" />
+    <ClInclude Include="host\ToolIndex.h" />
     <ClInclude Include="host\ToolIO.h" />
     <ClInclude Include="host\ToolMain.h" />
     <ClInclude Include="host\ToolPatch.h" />
@@ -311,6 +313,7 @@
     </ClCompile>
     <ClCompile Include="host\ReplayRunSupport.cpp" />
     <ClCompile Include="host\ObservationRunner.cpp" />
+    <ClCompile Include="host\ToolIndex.cpp" />
     <ClCompile Include="host\ToolIO.cpp" />
     <ClCompile Include="host\ToolMain.cpp" />
     <ClCompile Include="host\ToolPatch.cpp" />

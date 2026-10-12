@@ -9,6 +9,7 @@
 //   --tool validate <in.alo> --out <report.json>
 //   --tool patch    <in.alo> <patch.json> --out <candidate.alo> --report <report.json>
 //   --tool reorder  <in.alo> <reorder.json> --out <candidate.alo> --report <report.json>
+//   --tool index    --out <records.json> [--layer <dir>]... <game-root>...
 //
 // `validate` always writes its report. It exits 0 when the source loads
 // exactly as written (the report also says whether a save reproduces its
@@ -19,6 +20,11 @@
 // paths are distinct; --out is replaced only by a verified candidate. `reorder`
 // (ToolReorder.h) takes the same four paths and moves one root emitter; it
 // authors the defect benchmark's draw-order cases.
+//
+// `index` (ToolIndex.h) lists every particle system the content stack reaches
+// (the game roots, as --observe takes them, under the mod layers, highest
+// first) and every texture its emitters name, resolved and hashed as the
+// editor resolves them: the records the asset index is built from.
 //
 // Results go to files, never stdout (the exe is a Windows-subsystem program,
 // and the loader prints diagnostics to stdout); errors go to stderr.

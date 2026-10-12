@@ -13,6 +13,14 @@
 
 class IFileManager;
 
+// An asset's identity, the cache key: the name uppercased, then reduced to a
+// safe relative name (F-PATH: strip absolute/UNC/.. before any CreateFile).
+inline std::string AssetIdentity(std::string name)
+{
+    std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return (char)toupper(c); });
+    return SanitizeAssetName(name);
+}
+
 // Turns an asset's bytes into a resource, and makes the embedded fallback.
 // The managers pass the D3D9 decoders; tests pass stubs, so the real lookup,
 // retry, cache and fallback chain runs without a device.
@@ -67,9 +75,7 @@ public:
     T* Get(IAssetDecoder<T>& decoder, const std::string& original)
     {
         size_t pos;
-        std::string filename = original;
-        std::transform(filename.begin(), filename.end(), filename.begin(), [](unsigned char c) { return (char)toupper(c); });
-        filename = SanitizeAssetName(filename);   // F-PATH: strip absolute/UNC/.. before any CreateFile
+        std::string filename = AssetIdentity(original);
 
         // Cache lookup first: the literal path below never reaches Load(), so a
         // repeat request would otherwise reload and strand the new resource.

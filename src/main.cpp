@@ -1290,7 +1290,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			// same -1 sentinel.
 			return -1;
 		}
-		TextureManager textureManager(fileManager, "Data\\Art\\Textures\\");
+		TextureManager textureManager(fileManager, kTextureBasePath);
 		ShaderManager  shaderManager (fileManager, "Data\\Art\\Shaders\\");
 		host::HostLaunchOptions launch;
 		launch.useDevUi             = devUi;

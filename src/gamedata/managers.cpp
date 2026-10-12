@@ -254,6 +254,44 @@ void FileManager::SetLayers(const vector<wstring>& absoluteLayers)
 		});
 }
 
+vector<string> FileManager::listFiles(const string& directory, const string& extension) const
+{
+	auto upper = [](string s) {
+		transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return (char)toupper(c); });
+		return s;
+	};
+	const string folder = upper(directory), suffix = upper(extension);
+	set<string> names;
+	auto add = [&](const string& name) {
+		// Directly in the folder: no separator after it.
+		const string path = upper(name);
+		if (path.size() > folder.size() + suffix.size() && path.compare(0, folder.size(), folder) == 0 &&
+			path.compare(path.size() - suffix.size(), suffix.size(), suffix) == 0 &&
+			path.find_first_of("\\/", folder.size()) == string::npos)
+			names.insert(path);
+	};
+
+	vector<wstring> roots(modContentRoots);
+	roots.insert(roots.end(), basepaths.begin(), basepaths.end());
+	for (const wstring& root : roots)
+	{
+		WIN32_FIND_DATAW found;
+		HANDLE search = FindFirstFileW((root + AnsiToWide(folder) + L"*").c_str(), &found);
+		if (search == INVALID_HANDLE_VALUE) continue;
+		do
+		{
+			if (found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+			// A name the ANSI code page cannot spell, getFile cannot open either.
+			const string name = WideToAnsi(found.cFileName, "?");
+			if (name.find('?') == string::npos) add(folder + name);
+		} while (FindNextFileW(search, &found));
+		FindClose(search);
+	}
+	for (const MegaFile* mega : megafiles)
+		for (const string& name : mega->getFilenames()) add(name);
+	return vector<string>(names.begin(), names.end());
+}
+
 //
 // Texture and shader managers
 //
@@ -380,7 +418,7 @@ void TextureManager::OnLostDevice()
 }
 
 TextureManager::TextureManager(IFileManager* fileManager, const std::string& basePath)
-	: cache("texture", fileManager, basePath, ".DDS", kMaxTextureAssetBytes)
+	: cache("texture", fileManager, basePath, kTextureRetryExtension, kMaxTextureAssetBytes)
 {
 }
 

@@ -13,7 +13,7 @@ const sourceRoot = process.env.SRC_INCLUDE_ROOT ? resolve(process.env.SRC_INCLUD
 const exemptions = new Map([
   ["version.h", {
     reason: "Canonical application version at the src root (the compiler's root include path)",
-    callers: ["main.cpp", "host/ObservationRunner.cpp"],
+    callers: ["main.cpp", "host/ObservationRunner.cpp", "host/ToolIndex.cpp"],
   }],
   ["WebView2.h", {
     reason: "WebView2 SDK header supplied by NuGet",

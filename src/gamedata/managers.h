@@ -131,6 +131,11 @@ public:
 	TextureManager(IFileManager* fileManager, const std::string& basePath);
 };
 
+// The texture manager's lookup: the folder under each content root, and the
+// extension a name that is not found retries with.
+static const char kTextureBasePath[]       = "Data\\Art\\Textures\\";
+static const char kTextureRetryExtension[] = ".DDS";
+
 class ShaderManager : public IShaderManager
 {
 	AssetCache<Effect> cache;
@@ -201,6 +206,11 @@ public:
 	// The stack-aware successor to SetModPath/SetSubmods; ModManager drives it.
 	void SetLayers(const std::vector<std::wstring>& absoluteLayers) override;
 	const std::vector<std::wstring>& GetContentRoots() const override { return modContentRoots; }
+
+	// The names of the files directly in `directory` (a relative folder ending in
+	// a backslash) that end in `extension`, across every content root, base path
+	// and MEG: uppercased, sorted, each once. getFile names each one's winner.
+	std::vector<std::string> listFiles(const std::string& directory, const std::string& extension) const;
 
 	FileManager(const std::vector<std::wstring>& basepaths);
 	~FileManager();

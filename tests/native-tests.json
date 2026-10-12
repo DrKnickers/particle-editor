@@ -200,6 +200,12 @@
       "uses": ["expat", "dxsdk", "webview2"],
       "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
+    "test_tool_index": {
+      "sources": ["src/host/ToolIndex.cpp", "src/host/ToolIO.cpp", "src/gamedata/AssetCache.cpp", "src/gamedata/AssetLedger.cpp", "src/gamedata/managers.cpp", "src/gamedata/MegaFiles.cpp", "src/gamedata/xml.cpp", "src/gamedata/Effect.cpp", "src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/sha256.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp"],
+      "includes": ["src/host"],
+      "uses": ["expat-lib", "dxsdk", "webview2"],
+      "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
     "test_tool_cli": {
       "sources": ["src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp"],
       "uses": ["expat", "dxsdk", "webview2"],

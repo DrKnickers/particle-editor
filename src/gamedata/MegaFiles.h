@@ -32,6 +32,8 @@ public:
 	// member, when given, receives the found member's name and byte range.
 	IFile*             getFile(std::string path, Member* member = NULL) const;
 	const std::wstring& getPath() const { return path; }
+	// Every member's name, as stored in the archive.
+	const std::vector<std::string>& getFilenames() const { return filenames; }
 
 	// path names the archive on disk, for the asset ledger; empty when unknown.
 	MegaFile(IFile* file, const std::wstring& path = L"");

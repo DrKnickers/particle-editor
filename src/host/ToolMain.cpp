@@ -10,6 +10,7 @@
 #include <vector>
 #include <crtdbg.h>
 #include "ToolMain.h"
+#include "ToolIndex.h"
 #include "ToolIO.h"
 #include "ToolPatch.h"
 #include "ToolReorder.h"
@@ -28,7 +29,8 @@ const wchar_t* kUsage =
     L"usage: ParticleEditor.exe --tool inspect  <in.alo> --out <inspect.json>\n"
     L"       ParticleEditor.exe --tool validate <in.alo> --out <report.json>\n"
     L"       ParticleEditor.exe --tool patch    <in.alo> <patch.json> --out <candidate.alo> --report <report.json>\n"
-    L"       ParticleEditor.exe --tool reorder  <in.alo> <reorder.json> --out <candidate.alo> --report <report.json>\n";
+    L"       ParticleEditor.exe --tool reorder  <in.alo> <reorder.json> --out <candidate.alo> --report <report.json>\n"
+    L"       ParticleEditor.exe --tool index    --out <records.json> [--layer <dir>]... <game-root>...\n";
 
 std::vector<std::wstring> CommandLineArgs()
 {
@@ -233,6 +235,46 @@ int RequestVerb(const char* verb, RequestRunner runner, const std::wstring& inpu
     return code;
 }
 
+// --tool index --out <records.json> [--layer <dir>]... <game-root>...
+int Index(const std::vector<std::wstring>& args)
+{
+    IndexStack stack;
+    for (size_t i = 5; i < args.size(); i++)
+    {
+        if (args[i] == L"--layer" && i + 1 < args.size() && !args[i + 1].empty())
+            stack.layers.push_back(args[++i]);
+        else if (!args[i].empty() && args[i][0] != L'-')
+            stack.gameRoots.push_back(args[i]);
+        else
+        {
+            fwprintf(stderr, L"[tool] unrecognised index argument %ls\n%ls", args[i].c_str(), kUsage);
+            return kExitUsage;
+        }
+    }
+    if (stack.gameRoots.empty())
+    {
+        fwprintf(stderr, L"[tool] index needs at least one game root\n%ls", kUsage);
+        return kExitUsage;
+    }
+    nlohmann::json records;
+    std::string error;
+    const int code = RunIndex(stack, &records, &error);
+    if (code != kExitOk)
+    {
+        fprintf(stderr, "[tool] verb=index exit=%d %s\n", code, error.c_str());
+        return code;
+    }
+    // An emitter or texture name that is not UTF-8 is kept, its stray bytes replaced.
+    if (!WriteFileAtomically(args[4], records.dump(2, ' ', false, nlohmann::json::error_handler_t::replace) + "\n"))
+    {
+        fwprintf(stderr, L"[tool] cannot write %ls (error %lu)\n", args[4].c_str(), GetLastError());
+        return kExitIo;
+    }
+    fprintf(stderr, "[tool] verb=index exit=0 records=%zu contentStack=%s\n", records["records"].size(),
+            records["content"]["sha256"].get<std::string>().c_str());
+    return kExitOk;
+}
+
 int Run(const std::vector<std::wstring>& args)
 {
     // args[0] is the exe. The tool takes the whole command line: `--tool`
@@ -253,6 +295,8 @@ int Run(const std::vector<std::wstring>& args)
     if (args[2] == L"reorder" && args.size() == 9 && args[5] == L"--out" && args[7] == L"--report" && !args[3].empty() &&
         !args[4].empty() && !args[6].empty() && !args[8].empty())
         return RequestVerb("reorder", RunReorderVerb, args[3], args[4], args[6], args[8]);
+    if (args[2] == L"index" && args.size() >= 6 && args[3] == L"--out" && !args[4].empty())
+        return Index(args);
     fwprintf(stderr, L"[tool] unrecognised arguments\n%ls", kUsage);
     return kExitUsage;
 }

@@ -2,6 +2,7 @@
 #include "ObservationSampleJson.h"
 #include "ObservationSpecJson.h"
 #include "BridgeDispatcher.h"
+#include "ContentStack.h"
 #include "StringConv.h"
 #include "common/sha256.h"
 #include "effect/ParticleAuthoring.h"
@@ -48,28 +49,6 @@ json RenderProfile(const Engine& engine)
         {"multisample", {{"type", static_cast<int>(engine.GetCreationMultiSampleType())},
             {"quality", engine.GetCreationMultiSampleQuality()}}},
         {"vertexProcessing", engine.GetVertexProcessingMode()}};
-}
-
-json Paths(const std::vector<std::wstring>& paths)
-{
-    json result = json::array();
-    for (const auto& path : paths) result.push_back(WideToUtf8(std::filesystem::path(path).generic_wstring()));
-    return result;
-}
-
-// Hash the canonical ordered mod-path JSON, including the empty unmodded list.
-std::string HashBytes(const std::string& bytes) { return Sha256Hex(bytes.data(), bytes.size()); }
-
-json WinnerJson(const AssetWinner& winner)
-{
-    switch (winner.kind)
-    {
-    case AssetWinner::Kind::Loose: return {{"kind", "loose"}, {"path", winner.path}};
-    case AssetWinner::Kind::Archive: return {{"kind", "archive"}, {"path", winner.path}, {"member", winner.member},
-        {"start", winner.start}, {"size", winner.size}};
-    case AssetWinner::Kind::Embedded: return {{"kind", "embedded"}, {"resourceId", winner.resourceId}};
-    default: return nullptr;
-    }
 }
 
 const char* OutcomeString(AssetRecord::Outcome outcome)
@@ -501,10 +480,11 @@ struct ObservationRunner::Impl
         if (sourceHash.empty()) return Fail(13, "source-hash", "source hash failed");
         capture["source"] = {{"path", WideToUtf8(std::filesystem::path(spec.scenario.aloPath).generic_wstring())},
             {"sha256", sourceHash}, {"bytes", std::filesystem::file_size(spec.scenario.aloPath)}};
-        const auto mods = Paths(observation.selectedModPaths());
-        const auto modHash = HashBytes(mods.dump());
+        const auto mods = observation.selectedModPaths();
+        const auto modHash = ContentStackHash(mods);
         if (modHash.empty()) return Fail(13, "mod-path-hash", "selected mod path hash failed");
-        capture["content"] = {{"gameRoots", Paths(observation.gameRoots())}, {"selectedModPaths", mods}, {"sha256", modHash}};
+        capture["content"] = {{"gameRoots", ContentPaths(observation.gameRoots())}, {"selectedModPaths", ContentPaths(mods)},
+            {"sha256", modHash}};
         capture["render"] = RenderProfile(*deps.engine);
         capture["random"] = {{"algorithm", "legacy-msvc"}, {"algorithmVersion", spec.scenario.algorithmVersion}, {"seed", spec.scenario.seed}};
         auto preparation = Hooks();
