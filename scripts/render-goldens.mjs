@@ -104,10 +104,13 @@ export const SCENES = [
 // line is immediately followed by a "loaded WxH" tex-gate line — the placeholder
 // fallback (D3DXCreateTextureFromResource) never logs "loaded". Order-sensitive
 // on purpose: a later "loaded" for a DIFFERENT texture must not vouch for this one.
-function texGateResolved(stdout, name) {
+// The name matches without regard to case, as Windows paths and the texture
+// cache key do: the log carries the name as the caller spelled it.
+export function texGateResolved(stdout, name) {
   const lines = (stdout || "").split(/\r?\n/).filter((l) => l.includes("[tex-gate]"));
+  const wanted = `getTexture(${name})`.toUpperCase();
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i].includes(`getTexture(${name})`)) {
+    if (lines[i].toUpperCase().includes(wanted)) {
       return i + 1 < lines.length && lines[i + 1].includes("loaded ");
     }
   }

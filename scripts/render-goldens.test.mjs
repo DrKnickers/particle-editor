@@ -16,7 +16,22 @@ import {
   provenanceDrift,
   missingSceneInputs,
   retainGoldenCapture,
+  texGateResolved,
 } from "./render-goldens.mjs";
+
+test("the texture gate matches a name in any case, and only when the next tex-gate line loaded it", () => {
+  const log = [
+    "[tex-gate] getTexture(tests\\fixtures\\bumptest\\zz_bumpgold_rock.tga)",
+    "[tex-gate] loaded 256x256 fmt=21",
+    "[tex-gate] getTexture(P_Particle_Master.tga)",
+    "[tex-gate] D3DXCreateTextureFromFileInMemory FAILED hr=0x88760b59 (12 bytes)",
+    "[tex-gate] getTexture(other.tga)",
+    "[tex-gate] loaded 64x64 fmt=21",
+  ].join("\r\n");
+  assert.equal(texGateResolved(log, "TESTS\\FIXTURES\\BUMPTEST\\ZZ_BUMPGOLD_ROCK.TGA"), true);
+  assert.equal(texGateResolved(log, "P_PARTICLE_MASTER.TGA"), false);
+  assert.equal(texGateResolved(log, "MISSING.TGA"), false);
+});
 
 test("retained PNG survives temp cleanup and the final attempt replaces it", () => {
   const scratch = mkdtempSync(join(tmpdir(), "render-golden-retention-"));
