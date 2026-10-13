@@ -114,6 +114,9 @@
     <ClInclude Include="effect\ParticleAuthoring.h">
       <Filter>Header Files\effect</Filter>
     </ClInclude>
+    <ClInclude Include="effect\HoudiniValidationFixture.h">
+      <Filter>Header Files\effect</Filter>
+    </ClInclude>
     <ClInclude Include="effect\ParticleSystemJson.h">
       <Filter>Header Files\effect</Filter>
     </ClInclude>

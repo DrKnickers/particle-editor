@@ -1026,8 +1026,12 @@ struct HostWindowImpl
         // A golden capture resolves content unmodded — see
         // ShouldRestorePersistedModLayers. Skipping the restore (rather than
         // clearing and re-writing) means the daily driver's stack is never
-        // touched, so a killed or timed-out capture can't strand it.
-        if (ShouldRestorePersistedModLayers(m_captureGoldenProfile))
+        // touched, so a killed or timed-out capture can't strand it. An
+        // observe spec's contentLayers name the run's whole stack instead
+        // (launcher-checked folders), applied without persisting.
+        if (options.hasObserveContentLayers)
+            modManager->SetLayerStack(options.observeContentLayers, /*allowPersist=*/false);
+        else if (ShouldRestorePersistedModLayers(m_captureGoldenProfile))
             modManager->RestoreLastLayerStack();
     }
 

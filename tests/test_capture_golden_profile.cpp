@@ -336,6 +336,15 @@ int main()
                   "if(ShouldRestorePersistedModLayers(m_captureGoldenProfile))"
                   "modManager->RestoreLastLayerStack();") != std::string::npos,
               "the mod-layer restore is directly controlled by the predicate");
+        // An observe spec's explicit stack replaces the restore outright and
+        // never persists, so it can't leak into the daily driver's stack.
+        CHECK(compact.find(
+                  "if(options.hasObserveContentLayers)"
+                  "modManager->SetLayerStack(options.observeContentLayers,/*allowPersist=*/false);"
+                  "elseif(ShouldRestorePersistedModLayers(m_captureGoldenProfile))") != std::string::npos,
+              "explicit observe layers replace the restore and are never persisted");
+        CHECK(CountOccurrences(source, "options.observeContentLayers") == 1,
+              "explicit observe layers are applied from exactly one site");
         // No clear-and-restore anywhere: suppressing the read is the whole
         // point, and a write path would reintroduce the stranding window.
         CHECK(compact.find("SetLayerStack({})") == std::string::npos &&

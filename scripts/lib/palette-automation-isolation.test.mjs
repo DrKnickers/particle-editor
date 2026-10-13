@@ -33,6 +33,14 @@ test("automation isolates the texture palette before restoring the saved mod sta
     isolate < restore,
     "SetEphemeral(true) must run before RestoreLastLayerStack can load a persisted palette",
   );
+  // An observe spec's explicit stack also activates a primary mod, so it too
+  // must come after the isolation.
+  const explicit = hostSource.indexOf("modManager->SetLayerStack(options.observeContentLayers", constructor);
+  assert.notEqual(explicit, -1, "explicit observe layer stack not found");
+  assert.ok(
+    isolate < explicit,
+    "SetEphemeral(true) must run before an observe spec's layer stack can load a persisted palette",
+  );
 });
 
 test("observe shares proof's constructor and boot isolation at every entry point", () => {

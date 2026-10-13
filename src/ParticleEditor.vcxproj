@@ -123,6 +123,7 @@
     <ClInclude Include="simulation\ParticleSystemInstance.h" />
     <ClInclude Include="effect\Rescale.h" />
     <ClInclude Include="effect\ParticleAuthoring.h" />
+    <ClInclude Include="effect\HoudiniValidationFixture.h" />
     <ClInclude Include="effect\ParticleSystemJson.h" />
     <ClInclude Include="effect\PersistedProjection.h" />
     <ClInclude Include="effect\Autosave.h" />

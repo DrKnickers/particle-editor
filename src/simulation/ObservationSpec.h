@@ -3,11 +3,18 @@
 
 #include "PreviewScenario.h"
 #include <cstdint>
+#include <string>
+#include <vector>
 
 struct ObservationSpec
 {
     int schemaVersion = 1;
     PreviewScenario scenario;
+    // Schema 2 only: the content-layer stack for this run (absolute folders,
+    // UTF-8, front = highest precedence). It replaces whatever stack the run
+    // would otherwise use and is never persisted. Present and empty = unmodded.
+    bool hasContentLayers = false;
+    std::vector<std::string> contentLayers;
     struct Lifecycle
     {
         enum class Type { Oneshot, Continuous };
@@ -31,11 +38,64 @@ inline int ObservationRunCap(const ObservationSpec& spec)
         ? spec.lifecycle.warmupFrames + spec.lifecycle.reviewFrames : spec.scenario.maxFrames;
 }
 
+// Schema 2 is the schema that carries contentLayers, so each implies the
+// other. Each layer is a drive-rooted folder path; whether it exists is the
+// launcher's check, since this one stays file-system free.
+inline std::string ValidateObservationContentLayers(const ObservationSpec& spec)
+{
+    if (spec.hasContentLayers != (spec.schemaVersion == 2))
+        return spec.hasContentLayers ? "contentLayers requires schemaVersion 2"
+                                     : "schemaVersion 2 requires contentLayers";
+    if (spec.contentLayers.size() > 16) return "contentLayers allows at most 16 layers";
+    if (!spec.hasContentLayers && !spec.contentLayers.empty()) return "contentLayers is set without hasContentLayers";
+    const auto lower = [](std::string text)
+    {
+        for (char& c : text)
+        {
+            if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+            if (c == '/') c = '\\';
+        }
+        while (text.size() > 3 && text.back() == '\\') text.pop_back();
+        return text;
+    };
+    for (size_t i = 0; i < spec.contentLayers.size(); ++i)
+    {
+        const std::string& layer = spec.contentLayers[i];
+        const std::string field = "contentLayers[" + std::to_string(i) + "]";
+        // Short enough that a layer + Data\Art\Textures\ + a texture name stays
+        // inside MAX_PATH, the limit the content lookups run under.
+        if (layer.size() < 3 || layer.size() > 160) return field + " must be a folder path of 3 to 160 bytes";
+        const bool drive = ((layer[0] >= 'A' && layer[0] <= 'Z') || (layer[0] >= 'a' && layer[0] <= 'z')) &&
+            layer[1] == ':' && (layer[2] == '\\' || layer[2] == '/');
+        if (!drive) return field + " must be an absolute drive path";
+        for (const char c : layer)
+            if (static_cast<unsigned char>(c) < 0x20) return field + " must not contain control characters";
+        // Win32 drops a component's trailing dots and spaces when it opens the
+        // folder itself but not a file below it, so "D:\gen ." passes a
+        // folder check yet resolves no content. "." and ".." alias too.
+        size_t start = 3;
+        while (start < layer.size())
+        {
+            size_t end = layer.find_first_of("\\/", start);
+            if (end == std::string::npos) end = layer.size();
+            const std::string part = layer.substr(start, end - start);
+            if (part.empty() || part == "." || part == ".." || part.back() == '.' || part.back() == ' ')
+                return field + " has an empty, dot or space-ended folder name";
+            start = end + 1;
+        }
+        for (size_t j = 0; j < i; ++j)
+            if (lower(spec.contentLayers[j]) == lower(layer)) return field + " repeats an earlier layer";
+    }
+    return "";
+}
+
 inline std::string ValidateObservationSpec(const ObservationSpec& spec)
 {
     const std::string problem = ValidatePreviewScenario(spec.scenario);
     if (!problem.empty()) return problem;
-    if (spec.schemaVersion != 1) return "schemaVersion must be 1";
+    if (spec.schemaVersion != 1 && spec.schemaVersion != 2) return "schemaVersion must be 1 or 2";
+    const std::string layersProblem = ValidateObservationContentLayers(spec);
+    if (!layersProblem.empty()) return layersProblem;
     if (spec.scenario.maxFrames > 3600) return "scenario.maxFrames must be within [1, 3600]";
     if (spec.lifecycle.type != ObservationSpec::Lifecycle::Type::Oneshot &&
         spec.lifecycle.type != ObservationSpec::Lifecycle::Type::Continuous)

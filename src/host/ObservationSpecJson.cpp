@@ -11,7 +11,8 @@ using nlohmann::json;
 bool KnownField(const std::string& key, const std::string& level)
 {
     if (level == "observation")
-        return key == "schemaVersion" || key == "scenario" || key == "lifecycle" || key == "output";
+        return key == "schemaVersion" || key == "scenario" || key == "contentLayers" || key == "lifecycle" ||
+            key == "output";
     if (level == "lifecycle")
         return key == "type" || key == "quietTailFrames" || key == "warmupFrames" || key == "reviewFrames";
     return key == "strideInterval" || key == "playbackStride" || key == "maxBytes";
@@ -65,6 +66,18 @@ std::string host::ParseObservationSpec(const std::string& text, ObservationSpec&
         const std::string scenarioProblem = ParsePreviewScenario(object.at("scenario").dump(), parsed.scenario);
         if (!scenarioProblem.empty()) return scenarioProblem;
         ReadInteger(object, "schemaVersion", "observation", parsed.schemaVersion);
+        if (object.contains("contentLayers"))
+        {
+            const json& layers = object.at("contentLayers");
+            Require(layers.is_array(), "contentLayers", "must be an array of folder paths");
+            Require(layers.size() <= 16, "contentLayers", "allows at most 16 layers");
+            for (size_t i = 0; i < layers.size(); ++i)
+            {
+                Require(layers[i].is_string(), "contentLayers[" + std::to_string(i) + "]", "must be a string");
+                parsed.contentLayers.push_back(layers[i].get<std::string>());
+            }
+            parsed.hasContentLayers = true;
+        }
         if (object.contains("lifecycle"))
         {
             const json& lifecycle = object.at("lifecycle");
@@ -104,7 +117,7 @@ std::string host::SerializeObservationSpec(const ObservationSpec& spec)
 {
     const std::string problem = ValidateObservationSpec(spec);
     if (!problem.empty()) throw std::runtime_error(problem);
-    const json object = {
+    json object = {
         { "schemaVersion", spec.schemaVersion },
         { "scenario", json::parse(SerializePreviewScenario(spec.scenario)) },
         { "lifecycle", {
@@ -119,5 +132,6 @@ std::string host::SerializeObservationSpec(const ObservationSpec& spec)
             { "maxBytes", spec.output.maxBytes }
         } }
     };
+    if (spec.hasContentLayers) object["contentLayers"] = spec.contentLayers;
     return object.dump();
 }

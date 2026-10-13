@@ -224,6 +224,30 @@ test("capture checker checks supplied spec against normalized native defaults", 
   assert.match(checkCapture(dir, { spec: { output: { playbackStride: 4 } } }).errors.join(), /spec differs/);
 });
 
+test("capture checker binds a schema-2 spec's contentLayers to the recorded stack", (t) => {
+  const dir = temporary(t); fixture(dir);
+  const layered = (layers, selected) => mutateCapture(dir, (c) => {
+    c.spec.schemaVersion = 2; c.spec.contentLayers = layers; c.content.selectedModPaths = selected;
+  });
+  layered(["C:\\Gen\\Root\\", "D:/mods/b"], ["C:/Gen/Root", "D:/mods/b"]);
+  assert.deepEqual(checkCapture(dir).errors, []);
+  assert.deepEqual(checkCapture(dir, { spec: { schemaVersion: 2, contentLayers: ["C:\\Gen\\Root\\", "D:/mods/b"] } }).errors, []);
+  assert.match(checkCapture(dir, { spec: { schemaVersion: 2, contentLayers: ["D:/mods/b"] } }).errors.join(), /spec differs/);
+  layered([], []);
+  assert.deepEqual(checkCapture(dir).errors, [], "an empty stack is the unmodded control run");
+  for (const [layers, selected] of [[["C:/gen"], []], [[], ["C:/gen"]], [["C:/a", "C:/b"], ["C:/b", "C:/a"]], [["C:/a"], ["C:/a2"]],
+    [[5], [7]], [[null], [null]], [["C:/a"], [{}]]]) {
+    layered(layers, selected);
+    assert.match(checkCapture(dir).errors.join(), /differ from the spec's contentLayers/);
+  }
+  mutateCapture(dir, (c) => { delete c.spec.contentLayers; c.content.selectedModPaths = []; });
+  assert.match(checkCapture(dir).errors.join(), /must accompany spec schema 2/);
+  mutateCapture(dir, (c) => { c.spec.schemaVersion = 1; c.spec.contentLayers = []; });
+  assert.match(checkCapture(dir).errors.join(), /must accompany spec schema 2/);
+  mutateCapture(dir, (c) => { c.spec.schemaVersion = 3; delete c.spec.contentLayers; });
+  assert.match(checkCapture(dir).errors.join(), /spec schema/);
+});
+
 test("filmstrip concat list follows sparse stride order with appended final, including apostrophe escaping", (t) => {
   const root = temporary(t), dir = join(root, "owner's bundle"), capture = fixture(dir);
   assert.deepEqual(capture.stride, [0, 15, 30, 31]);

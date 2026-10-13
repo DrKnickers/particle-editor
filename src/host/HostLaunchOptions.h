@@ -9,6 +9,7 @@
 #define HOST_HOST_LAUNCH_OPTIONS_H
 
 #include <string>
+#include <vector>
 
 namespace host {
 
@@ -79,6 +80,10 @@ struct HostLaunchOptions
     // --observe <observation.json> <out-dir>: isolated two-pass observation.
     std::wstring observeSpecPath;
     std::wstring observeOutputDirectory;
+    // Schema-2 spec contentLayers: the run's whole layer stack, never
+    // persisted. Unset = the run's usual stack (none, for an observe run).
+    bool hasObserveContentLayers = false;
+    std::vector<std::wstring> observeContentLayers;
 
     // Performance-audit-only knobs (--perf-trace, --perf-trace-mode,
     // --perf-artifact-dir, --perf-webview-profile, or their ALO_PERF_*

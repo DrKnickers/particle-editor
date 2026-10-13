@@ -156,8 +156,20 @@ export function checkCapture(directory, { io = fs, spec, assembledPngs = [] } = 
     const hash = (value) => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
     const count = (value) => Number.isSafeInteger(value) && value >= 0;
     const optionalFrame = (value) => value === null || (count(value) && value <= capture.lifecycle.finalFrame);
-    require(typeof capture.tool === "string" && capture.tool.length > 0 && capture.spec?.schemaVersion === 1 &&
+    require(typeof capture.tool === "string" && capture.tool.length > 0 &&
+      (capture.spec?.schemaVersion === 1 || capture.spec?.schemaVersion === 2) &&
       typeof capture.spec.scenario === "object", "invalid tool / spec schema");
+    // Schema 2 names the run's whole stack, so the recorded stack must be it
+    // (native canonicalizes: forward slashes, no trailing separator).
+    const layers = capture.spec?.contentLayers;
+    require((capture.spec?.schemaVersion === 2) === Array.isArray(layers), "contentLayers must accompany spec schema 2");
+    if (Array.isArray(layers) && Array.isArray(capture.content?.selectedModPaths)) {
+      const selected = capture.content.selectedModPaths;
+      const canonical = (path) => path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+      require([...layers, ...selected].every((path) => typeof path === "string") &&
+        isDeepStrictEqual(layers.map(canonical), selected.map(canonical)),
+        "selected mod paths differ from the spec's contentLayers");
+    }
     require(typeof capture.source?.path === "string" && hash(capture.source?.sha256) && count(capture.source?.bytes), "invalid source evidence");
     require(Array.isArray(capture.content?.gameRoots) && Array.isArray(capture.content?.selectedModPaths) && hash(capture.content?.sha256), "invalid content evidence");
     checkContentEvidence(capture.content, hash, require);

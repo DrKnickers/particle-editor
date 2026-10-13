@@ -43,7 +43,8 @@ static bool SameSpec(const ObservationSpec& a, const ObservationSpec& b)
         a.lifecycle.type == b.lifecycle.type && a.lifecycle.quietTailFrames == b.lifecycle.quietTailFrames &&
         a.lifecycle.warmupFrames == b.lifecycle.warmupFrames && a.lifecycle.reviewFrames == b.lifecycle.reviewFrames &&
         a.output.strideInterval == b.output.strideInterval && a.output.playbackStride == b.output.playbackStride &&
-        a.output.maxBytes == b.output.maxBytes;
+        a.output.maxBytes == b.output.maxBytes &&
+        a.hasContentLayers == b.hasContentLayers && a.contentLayers == b.contentLayers;
 }
 
 static void Rejects(const ObservationSpec& spec, const char* field)
@@ -226,6 +227,62 @@ int main()
         CHECK(!host::ParseObservationSpec(text, parsed).empty(), "malformed or missing scenario rejected");
         CHECK(SameSpec(before, parsed), "malformed input leaves output unchanged");
     }
+
+    // Schema 2 = contentLayers: an explicit stack (empty = unmodded control).
+    ObservationSpec layered = defaults;
+    layered.schemaVersion = 2; layered.hasContentLayers = true;
+    CHECK(ValidateObservationSpec(layered).empty(), "schema 2 with an empty stack is valid");
+    layered.contentLayers = { "C:\\gen\\root", "d:/mods/Other Mod/", "C:\\\xE9\x9B\xAA" };
+    CHECK(ValidateObservationSpec(layered).empty(), "drive paths of either slash and UTF-8 are valid");
+    CHECK(host::ParseObservationSpec(host::SerializeObservationSpec(layered), parsed).empty() &&
+          SameSpec(layered, parsed), "contentLayers round trip in order");
+    CHECK(json::parse(host::SerializeObservationSpec(defaults)).count("contentLayers") == 0,
+          "schema 1 serializes without contentLayers");
+    spec = layered; spec.schemaVersion = 1; Rejects(spec, "contentLayers requires schemaVersion 2");
+    spec = layered; spec.hasContentLayers = false; spec.contentLayers.clear();
+    Rejects(spec, "schemaVersion 2 requires contentLayers");
+    for (const char* bad : { "", "C:", "gen\\root", "\\gen\\root", "\\\\server\\share", "1:\\x", "C:x\\y" })
+    {
+        spec = layered; spec.contentLayers = { bad }; Rejects(spec, "contentLayers[0]");
+    }
+    spec = layered; spec.contentLayers = { "C:\\gen\x01root" }; Rejects(spec, "control characters");
+    spec = layered; spec.contentLayers = { "C:\\gen\troot" }; Rejects(spec, "control characters");
+    spec = layered; spec.contentLayers = { "C:\\gen\\root " }; Rejects(spec, "space-ended folder name");
+    spec = layered; spec.contentLayers = { "C:\\Gen\\Root", "c:/gen/root/" }; Rejects(spec, "contentLayers[1] repeats");
+    spec = layered; spec.contentLayers = { "C:\\" + std::string(158, 'a') }; Rejects(spec, "contentLayers[0]");
+    spec.contentLayers = { "C:\\" + std::string(157, 'a') };
+    CHECK(ValidateObservationSpec(spec).empty(), "160-byte layer path is the inclusive bound");
+    // Win32 trims a component's trailing dots and spaces for the folder but not
+    // for files below it, so these would pass a folder check and load nothing.
+    for (const char* bad : { "C:\\gen .", "C:\\gen.", "C:\\gen..", "C:\\gen. \\x", "C:\\gen\\.", "C:\\gen\\..\\x",
+                             "C:\\gen\\\\x", "C:/gen//x", "C:\\gen \\x" })
+    {
+        spec = layered; spec.contentLayers = { bad }; Rejects(spec, "space-ended folder name");
+    }
+    for (const char* good : { "C:\\", "C:/", "C:\\gen\\", "C:\\a.b\\c d" })
+    {
+        spec = layered; spec.contentLayers = { good };
+        CHECK(ValidateObservationSpec(spec).empty(), "roots, trailing separators and inner dots or spaces are valid");
+    }
+    spec = layered; spec.contentLayers.clear();
+    for (int i = 0; i < 16; ++i) spec.contentLayers.push_back("C:\\layer" + std::to_string(i));
+    CHECK(ValidateObservationSpec(spec).empty(), "16 layers is the inclusive bound");
+    spec.contentLayers.push_back("C:\\layer16"); Rejects(spec, "at most 16");
+    const json layeredJson = json::parse(host::SerializeObservationSpec(layered));
+    for (const json& wrong : { json(nullptr), json::object(), json("C:\\gen"), json(true),
+                               json::array({ 1 }), json::array({ nullptr }) })
+    {
+        json input = layeredJson; input["contentLayers"] = wrong;
+        RejectsJson(input.dump(), parsed, "contentLayers");
+    }
+    json input2 = layeredJson; input2["contentLayers"] = json::array();
+    for (int i = 0; i < 17; ++i) input2["contentLayers"].push_back("C:\\layer" + std::to_string(i));
+    RejectsJson(input2.dump(), parsed, "at most 16");
+    input2 = layeredJson; input2["schemaVersion"] = 1;
+    RejectsJson(input2.dump(), parsed, "contentLayers requires schemaVersion 2");
+    input2 = layeredJson; input2.erase("contentLayers");
+    RejectsJson(input2.dump(), parsed, "schemaVersion 2 requires contentLayers");
+
     spec = defaults; spec.output.maxBytes = 0;
     bool threw = false;
     try { host::SerializeObservationSpec(spec); }

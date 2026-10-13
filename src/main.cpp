@@ -30,8 +30,10 @@
 #include "effect/ParticleSystem.h"
 #include "simulation/ParticleSystemInstance.h"
 #include "effect/Rescale.h"
+#include "effect/HoudiniValidationFixture.h"
 #include "effect/ParticleSystemIO.h"
 #include "gamedata/ModManager.h"
+#include "gamedata/ModLayers.h"
 #include "Resources/resource.h"
 
 // the WebView2 + D3D9 host declared here is the ONLY UI — WinMain runs
@@ -51,6 +53,7 @@
 #include <shlwapi.h>
 #include <shellapi.h>
 #include <commdlg.h>
+#include "host/StringConv.h"
 using namespace std;
 
 // Application version — single source of truth (also drives the binary's
@@ -117,6 +120,8 @@ static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv, v
 		if (arg == L"--capture" || arg == L"--capture-ref" ||
             arg == L"--replay-proof" || arg == L"--observe" || arg == L"--gen-replay-proof-fixture")
 			return 2;
+		if (arg == L"--gen-houdini-validation-fixture")
+			return 3;
 		if (arg == L"--snap-window")
 			return 1;
 		return 0;
@@ -309,6 +314,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		std::wstring genSingletonLinkFixturePath;
 		std::wstring genA11yFixturePath;
 		std::wstring genReplayFixtureKind, genReplayFixturePath;
+		// --gen-houdini-validation-fixture <kind> <texture-name> <path>: one
+		// emitter showing one generated texture (effect/HoudiniValidationFixture.h).
+		std::wstring genHoudiniFixtureKind, genHoudiniFixtureTexture, genHoudiniFixturePath;
 		std::wstring replayScenarioPath, replayOutputDirectory;
 		// --observe <observation.json> <out-dir>: fixed-profile lifecycle capture.
 		std::wstring observeSpecPath, observeOutputDirectory;
@@ -363,7 +371,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		{
 			for (const wchar_t* mode : {L"--capture", L"--capture-ref", L"--drive", L"--record",
 									   L"--snap-window", L"--test-host", L"--dev-ui",
-									   L"--gen-a11y-fixture", L"--gen-singleton-link-fixture", L"--gen-smoke-test"})
+									   L"--gen-a11y-fixture", L"--gen-singleton-link-fixture", L"--gen-smoke-test",
+									   L"--gen-houdini-validation-fixture"})
 				if (argv[i] == mode) replayConflict = true;
 			if (argv[i] == L"--dev-ui")    devUi    = true;
 			if (argv[i] == L"--test-host") testHost = true;
@@ -488,6 +497,24 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 				i += 2;
 				continue;
 			}
+			if (argv[i] == L"--gen-houdini-validation-fixture")
+			{
+				houdinifixture::Kind kind = houdinifixture::Kind::Puff;
+				// ASCII first: the ANSI conversion best-fits some wide characters to letters.
+				if (i + 3 >= argv.size() || argv[i + 3].empty() || argv[i + 3][0] == L'-' ||
+					!houdinifixture::ParseKind(argv[i + 1], kind) ||
+					std::any_of(argv[i + 2].begin(), argv[i + 2].end(), [](wchar_t c) { return c > 0x7F; }) ||
+					!houdinifixture::IsTextureName(WideToAnsi(argv[i + 2])))
+				{
+					fwprintf(stderr, L"--gen-houdini-validation-fixture requires <puff|ring|fireball> <texture.tga|.dds> <out.alo>\n");
+					return 2;
+				}
+				genHoudiniFixtureKind = argv[i + 1];
+				genHoudiniFixtureTexture = argv[i + 2];
+				genHoudiniFixturePath = argv[i + 3];
+				i += 3;
+				continue;
+			}
 			if (argv[i] == L"--capture" && i + 2 < argv.size())
 			{
 				captureAlo = argv[i + 1];
@@ -561,6 +588,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		if (perfTraceMode.empty())      perfTraceMode = readEnvW(L"ALO_PERF_TRACE_MODE");
 		if (perfArtifactDir.empty())    perfArtifactDir = readEnvW(L"ALO_PERF_ARTIFACT_DIR");
 		if (perfWebViewProfile.empty()) perfWebViewProfile = readEnvW(L"ALO_PERF_WEBVIEW_PROFILE");
+		// The flag itself sets replayConflict, so the replay check below can't
+		// tell a second mode apart from it; check the others by name.
+		if (!genHoudiniFixturePath.empty() &&
+			(!replayScenarioPath.empty() || !observeSpecPath.empty() || !genReplayFixturePath.empty() ||
+			 !captureAlo.empty() || !capturePng.empty() || !captureRef.empty() ||
+			 !driveScriptPath.empty() || !recordScriptPath.empty() || snapWindowFlagSeen ||
+			 testHost || devUi || !genSingletonLinkFixturePath.empty() ||
+			 !genA11yFixturePath.empty() || !genSmokeTestPath.empty()))
+		{
+			fwprintf(stderr, L"--gen-houdini-validation-fixture cannot be combined with other run modes\n");
+			return 2;
+		}
 		if ((!replayScenarioPath.empty() || !observeSpecPath.empty() || !genReplayFixturePath.empty()) &&
 			(replayConflict || !captureAlo.empty() || !capturePng.empty() || !captureRef.empty() ||
 			 !driveScriptPath.empty() || !recordScriptPath.empty() || snapWindowFlagSeen ||
@@ -615,7 +654,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		// launches keep their dialogs.
 #ifndef NDEBUG
 		if (((!captureAlo.empty() || !captureRef.empty()) && !capturePng.empty()) ||
-			!replayScenarioPath.empty() || !observeSpecPath.empty() || !genReplayFixturePath.empty())
+			!replayScenarioPath.empty() || !observeSpecPath.empty() || !genReplayFixturePath.empty() ||
+			!genHoudiniFixturePath.empty())
 		{
 			setvbuf(stderr, nullptr, _IONBF, 0);   // unbuffered: pre-crash traces survive a terminate
 			_set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
@@ -896,6 +936,40 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			// (the grid produces 12).
 			fwprintf(stderr, L"gen-smoke-test: wrote %s (root blendMode %d, %zu emitter(s))\n",
 			         genSmokeTestPath.c_str(), (int)e->blendMode, sys->getEmitters().size());
+			return 0;
+		}
+		if (!genHoudiniFixturePath.empty())
+		{
+			using PS = ParticleSystem;
+			houdinifixture::Kind kind = houdinifixture::Kind::Puff;
+			houdinifixture::ParseKind(genHoudiniFixtureKind, kind);
+			auto system = std::make_unique<PS>();
+			system->setName(DeriveParticleSystemName(genHoudiniFixturePath));
+			auto* e = system->addRootEmitter();
+			if (!e) return 3;
+			houdinifixture::Configure(e, kind, WideToAnsi(genHoudiniFixtureTexture));
+			std::string error;
+			if (!SaveParticleSystem(system.get(), genHoudiniFixturePath, &error))
+			{
+				fprintf(stderr, "houdini fixture save: %s\n", error.c_str());
+				return 3;
+			}
+			// Report what the file holds, not what was asked for.
+			auto loaded = LoadParticleSystem(genHoudiniFixturePath, &error);
+			if (!loaded || loaded->getEmitters().size() != 1)
+			{
+				fprintf(stderr, "houdini fixture reload: %s\n", loaded ? "expected one emitter" : error.c_str());
+				return 3;
+			}
+			const auto* r = loaded->getEmitters()[0];
+			nlohmann::json index = nlohmann::json::array();
+			for (const auto& key : r->tracks[PS::TRACK_INDEX]->keys) index.push_back({key.time, key.value});
+			const nlohmann::json fields = {{"kind", houdinifixture::KindName(kind)}, {"reloaded", true},
+				{"colorTexture", r->colorTexture}, {"normalTexture", r->normalTexture},
+				{"blendMode", r->blendMode}, {"textureSize", r->textureSize}, {"lifetime", r->lifetime},
+				{"nBursts", r->nBursts}, {"nParticlesPerBurst", r->nParticlesPerBurst},
+				{"indexInterpolation", r->tracks[PS::TRACK_INDEX]->interpolation}, {"index", index}};
+			printf("[houdini-fixture] %s\n", fields.dump().c_str());
 			return 0;
 		}
 		if (!genReplayFixturePath.empty() && genReplayFixtureKind != L"weather" && genReplayFixtureKind != L"guard")
@@ -1268,6 +1342,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			}
 			ParticleRandom::Seed(scenario.seed);
 		}
+		bool hasObserveContentLayers = false;
+		std::vector<std::wstring> observeContentLayers;
 		if (!observeSpecPath.empty())
 		{
 			std::ifstream input(std::filesystem::path(observeSpecPath), std::ios::binary);
@@ -1281,6 +1357,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 				fprintf(stderr, "[observe] spec: %s\n", error.c_str());
 				return 2;
 			}
+			// SetLayerStack quietly skips a missing layer, which would observe
+			// the wrong content, so a missing folder fails the run here. The
+			// probe uses the form FileManager builds its content roots from.
+			for (size_t i = 0; i < spec.contentLayers.size(); ++i)
+			{
+				const std::wstring layer = host::Utf8ToWide(spec.contentLayers[i]);
+				if (layer.empty() || !PathIsDirectoryW((modlayers::CanonicalizeLayerPath(layer) + L"\\").c_str()))
+				{
+					fprintf(stderr, "[observe] spec: contentLayers[%zu] is not an existing folder\n", i);
+					return 2;
+				}
+				observeContentLayers.push_back(layer);
+			}
+			hasObserveContentLayers = spec.hasContentLayers;
 			ParticleRandom::Seed(spec.scenario.seed);
 		}
 		FileManager* fileManager = createFileManager(NULL, argv, &gameRoots, interactiveSession);
@@ -1313,6 +1403,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		launch.replayOutputDirectory = replayOutputDirectory;
 		launch.observeSpecPath       = observeSpecPath;
 		launch.observeOutputDirectory = observeOutputDirectory;
+		launch.hasObserveContentLayers = hasObserveContentLayers;
+		launch.observeContentLayers  = observeContentLayers;
 		launch.perfTracePath        = perfTracePath;
 		launch.perfTraceMode        = perfTraceMode;
 		launch.perfArtifactDir      = perfArtifactDir;
