@@ -12,7 +12,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mkdirSync, mkdtempSync, openSync, closeSync, readFileSync, rmSync } from "node:fs";
 
-import { parseArgs, usage, shellSpawnSpec, spawnExitCode, parseSkippedCount, prereq, runReplayProofLane, runObserveLane, runToolSmokeLane, runVfxLoopLane } from "./run-all-tests.mjs";
+import { parseArgs, usage, shellSpawnSpec, spawnExitCode, parseSkippedCount, prereq, runReplayProofLane, runObserveLane, runToolSmokeLane, runVfxLoopLane, runHoudiniLane, selectLanes } from "./run-all-tests.mjs";
 
 const scriptPath = join(dirname(fileURLToPath(import.meta.url)), "run-all-tests.mjs");
 
@@ -340,4 +340,46 @@ test("vfx-loop passes only by running, and a failed run cannot skip", () => {
   assert.equal(vfxLoopLane({ runLoopLane: (roots) => { ++runs; assert.deepEqual(roots, ["installed-game"]); return { code: 0 }; } }).status, "PASS");
   assert.equal(runs, 1);
   assert.equal(vfxLoopLane({ runLoopLane: () => ({ code: 1 }) }, true).status, "FAIL");
+});
+
+test("houdini is the opt-in lane: --list marks it, and only --lane selects it", () => {
+  const r = runScript("--list");
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /vfx-loop\r?\nhoudini \(opt-in\)\r?\n$/);
+  assert.equal(r.stdout.match(/opt-in/g).length, 1, "houdini is the only opt-in lane");
+  const names = (only) => selectLanes(only).map((l) => l.name);
+  assert.ok(!names([]).includes("houdini"), "the default gate never runs houdini");
+  assert.deepEqual(names([]), names([]).filter((n) => n !== "houdini"));
+  assert.ok(names([]).includes("vfx-loop"));
+  assert.deepEqual(names(["houdini"]), ["houdini"]);
+  assert.deepEqual(names(["scripts", "houdini"]), ["scripts", "houdini"]);
+});
+
+function houdiniLane(overrides = {}, allowMissing = false) {
+  return runHoudiniLane({
+    platform: "win32", exists: () => true,
+    checkPrereq: (lane, ok, what, hint) => prereq(lane, ok, what, hint, new Set(allowMissing ? ["houdini"] : [])),
+    runLane: () => ({ code: 0 }), ...overrides,
+  });
+}
+
+for (const [missing, overrides, note] of [
+  ["Houdini", { exists: (path) => !path.includes("Houdini") }, /Houdini 19.5.435 missing/],
+  ["lane.mjs", { exists: (path) => !path.endsWith("lane.mjs") }, /lane.mjs missing/],
+  ["Windows", { platform: "linux" }, /Windows-only/],
+]) {
+  test(`houdini without ${missing} fails by default and --allow-missing visibly skips`, () => {
+    const never = { runLane: () => assert.fail("must not run") };
+    assert.equal(houdiniLane({ ...overrides, ...never }).status, "FAIL");
+    const allowed = houdiniLane({ ...overrides, ...never }, true);
+    assert.equal(allowed.status, "SKIP");
+    assert.match(allowed.note, note);
+  });
+}
+
+test("houdini passes only when its lane script exits 0", () => {
+  let runs = 0;
+  assert.equal(houdiniLane({ runLane: () => { ++runs; return { code: 0 }; } }).status, "PASS");
+  assert.equal(runs, 1);
+  assert.equal(houdiniLane({ runLane: () => ({ code: 1 }) }).status, "FAIL");
 });

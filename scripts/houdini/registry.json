@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "generators": {
+    "debug-atlas": {
+      "version": 1,
+      "testOnly": true,
+      "builder": "generators/debug_atlas.py",
+      "builderSha256": "992a3a59e9b8e68ee4bbbc72d69a5b318aca2607260e6ac487773157265460ee",
+      "renderer": "cop",
+      "grid": 4,
+      "params": {},
+      "tiers": {
+        "preview": { "cell": 32, "timeoutMin": 5, "maxStageMiB": 64 },
+        "validate": { "cell": 64, "timeoutMin": 5, "maxStageMiB": 64 },
+        "final": { "cell": 128, "timeoutMin": 5, "maxStageMiB": 128 }
+      }
+    }
+  }
+}

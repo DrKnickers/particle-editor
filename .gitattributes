@@ -35,3 +35,10 @@ site/guide/*.html   text eol=lf
 *.golden.yaml     text eol=lf
 *.golden.txt      text eol=lf
 *.snap            text eol=lf
+
+# Houdini generators. registry.json pins each builder by the SHA-256 of its
+# bytes (builderSha256), and run_generator.py refuses a builder that does not
+# match, so a CRLF-smudged checkout would refuse every generator. The cache
+# key hashes every file here too, so keep the whole folder byte-stable. The
+# folder holds text only; give a binary fixture its own `binary` rule first.
+scripts/houdini/**   text eol=lf

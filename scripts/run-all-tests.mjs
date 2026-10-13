@@ -36,6 +36,12 @@
 //                     observe, compare, four-seed review, outcome, promotion package
 //                     (scripts/vfx-loop/lane.mjs; pinned results)
 //
+// Opt-in lanes run only when named with --lane, and --list marks them:
+//   houdini           debug-atlas through the pinned Houdini build, the Job
+//                     Object launcher and the machine lock, plus kill and
+//                     lock-busy runs (scripts/houdini/lane.mjs; dev box only).
+//                     Its unit tests run in the default `scripts` lane.
+//
 // Missing prereqs are FAILURES with actionable messages by default; silent skips
 // are the enemy of a gate. `--allow-missing <lane>` downgrades that lane's missing
 // prereq to a visible SKIP. A lane failure SKIPs lanes that depend on it (visible,
@@ -63,6 +69,7 @@
 
 import { spawnSync } from "node:child_process";
 import { resolveReplayGameRoots } from "./replay-proof.mjs";
+import { HOUDINI_BUILD, PINNED as HOUDINI_PINNED } from "./houdini/houdini.mjs";
 import { existsSync, statSync, writeFileSync, readFileSync, unlinkSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -116,7 +123,8 @@ export function usage() {
     "  --allow-missing <a,b>  downgrade a lane's missing-prereq FAIL — or an",
     "                         over-budget internal-skip FAIL — to a visible SKIP",
     "  --skip-build           skip build lanes + native rebuilds (UNSAFE: assumes fresh artifacts)",
-    "  --list                 print the lane names and exit",
+    "  --list                 print the lane names and exit (opt-in lanes are marked;",
+    "                         they run only when named with --lane)",
     "  --help, -h             print this help and exit",
     "",
     "With no flags, runs the full gate. Use --list to see every lane name.",
@@ -639,6 +647,25 @@ export function runVfxLoopLane({
   return r.code === 0 ? pass : fail(`vfx-loop exit ${r.code}`);
 }
 
+// Opt-in: needs the pinned Houdini build, so only a dev box runs it, and only
+// when asked. A wrong build (hash mismatch) fails inside the lane itself.
+export function runHoudiniLane({
+  platform = process.platform, exists = existsSync, checkPrereq = prereq,
+  runLane = () => runExeTee(process.execPath, [join(repoRoot, "scripts", "houdini", "lane.mjs")]),
+} = {}) {
+  for (const [ok, what, hint] of [
+    [platform === "win32", "the houdini lane is Windows-only", "run it on the Windows dev box"],
+    [exists(HOUDINI_PINNED.hython.path) && exists(HOUDINI_PINNED.hoiiotool.path),
+      `Houdini ${HOUDINI_BUILD} missing (${HOUDINI_PINNED.hython.path})`, `install Houdini ${HOUDINI_BUILD}`],
+    [exists(join(repoRoot, "scripts", "houdini", "lane.mjs")), "scripts/houdini/lane.mjs missing", "restore the houdini lane script"],
+  ]) {
+    const p = checkPrereq("houdini", ok, what, hint);
+    if (p) return p;
+  }
+  const r = runLane();
+  return r.code === 0 ? pass : fail(`houdini exit ${r.code}`);
+}
+
 const LANES = [
   {
     name: "lint",
@@ -954,7 +981,17 @@ const LANES = [
     deps: ["msbuild-release"],
     run: () => runVfxLoopLane(),
   },
+  {
+    name: "houdini",
+    optIn: true,
+    run: () => runHoudiniLane(),
+  },
 ];
+
+// An opt-in lane runs only when named; with no --lane the default gate skips it.
+export function selectLanes(only, lanes = LANES) {
+  return only.length > 0 ? lanes.filter((l) => only.includes(l.name)) : lanes.filter((l) => !l.optIn);
+}
 
 // ---------------------------------------------------------------------------
 // Single-instance lock: several native tests use fixed temp paths and the CDP
@@ -999,9 +1036,9 @@ function main() {
     console.log(usage());
     return 1;
   }
-  const lanes = ONLY.length > 0 ? LANES.filter((l) => ONLY.includes(l.name)) : LANES;
+  const lanes = selectLanes(ONLY);
   if (LIST) {
-    for (const l of lanes) console.log(l.name);
+    for (const l of ONLY.length > 0 ? lanes : LANES) console.log(l.optIn ? `${l.name} (opt-in)` : l.name);
     return 0;
   }
   const unknown = ONLY.filter((n) => !LANES.some((l) => l.name === n));
