@@ -2306,10 +2306,12 @@ int HostWindowImpl::Run(int nCmdShow)
     dispatcher->SetExternalLaunchAllowed(IsFullyInteractive());
     // The editor's timeline replays through the interactive pin. Capture,
     // drive, record and observe runs own the clock themselves and refuse it;
-    // the replay proof opens one for its E12 experiment.
+    // the replay proof opens one for its E12 experiment, which the editor's
+    // panel does not follow.
     dispatcher->SetTimelineHost(
         [this]() { return BuildReplayHooks(L"", SpawnPolicy::Observe, PinMode::Interactive); },
-        m_runMode == RunMode::Interactive || m_runMode == RunMode::ReplayProof);
+        m_runMode == RunMode::Interactive || m_runMode == RunMode::ReplayProof,
+        /*tellEditor*/m_runMode == RunMode::Interactive);
     // Throttle the panel-refresh broadcasts during a --record run only
     // (NOT --drive, whose asserts must see every state change) so the driver's
     // rapid host-side edits don't saturate the web + starve the capture/ack loop.

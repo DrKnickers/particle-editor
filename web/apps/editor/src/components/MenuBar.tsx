@@ -33,6 +33,7 @@ import { useTreeContextStore } from "@/lib/tree/tree-context";
 import { requestEmitterRename } from "@/lib/tree/tree-action";
 import { toggleDock } from "@/lib/right-dock";
 import { RESET_CAMERA } from "@/lib/reset-camera";
+import { setTimelinePlaying, stepTimeline, toggleTimeline, useTimeline } from "@/lib/timeline";
 import { Modal } from "@/components/Modal";
 import { PreferencesDialog } from "@/screens/PreferencesDialog";
 import { ShortcutsDialog } from "@/screens/ShortcutsDialog";
@@ -123,6 +124,10 @@ export function MenuBar({
   // the toolbar); its settings stay in the Lighting pane — so no bloom state is
   // read here (no View-menu Bloom item).
   const paused = useEngineField(bridge, (s) => s.paused) ?? false;
+  // While the timeline is open, Pause and Step Forward drive it, and Clear is
+  // refused by the host (the session owns the simulation).
+  const timelineActive = useTimeline((s) => s.active);
+  const timelinePlaying = useTimeline((s) => s.playing);
   const heatDebug = useEngineField(bridge, (s) => s.heatDebug) ?? false;
   const canUndo = useEngineField(bridge, (s) => s.canUndo) ?? false;
   const canRedo = useEngineField(bridge, (s) => s.canRedo) ?? false;
@@ -400,6 +405,7 @@ export function MenuBar({
             </Menubar.Item>
             <Menubar.Item
               className={ITEM}
+              disabled={timelineActive}
               onSelect={send({
                 kind: "engine/action/clear",
                 params: {},
@@ -560,21 +566,33 @@ export function MenuBar({
             <Menubar.Separator className={SEPARATOR} />
             <Menubar.Item
               className={ITEM}
-              onSelect={send({
-                kind: "engine/set/paused",
-                params: { paused: !paused },
-              })}
+              data-testid="menu-view-timeline"
+              onSelect={() => { void toggleTimeline(bridge); }}
             >
-              <CheckSlot active={paused} />
+              <CheckSlot active={timelineActive} />
+              Timeline
+            </Menubar.Item>
+            <Menubar.Item
+              className={ITEM}
+              onSelect={timelineActive
+                ? () => { void setTimelinePlaying(bridge, !timelinePlaying); }
+                : send({
+                  kind: "engine/set/paused",
+                  params: { paused: !paused },
+                })}
+            >
+              <CheckSlot active={timelineActive ? !timelinePlaying : paused} />
               Pause<Hint>F8</Hint>
             </Menubar.Item>
             <Menubar.Item
               className={ITEM}
-              disabled={!paused}
-              onSelect={send({
-                kind: "engine/action/step-frames",
-                params: { frames: 1 },
-              })}
+              disabled={timelineActive ? timelinePlaying : !paused}
+              onSelect={timelineActive
+                ? () => stepTimeline(bridge, 1)
+                : send({
+                  kind: "engine/action/step-frames",
+                  params: { frames: 1 },
+                })}
             >
               <CheckSlot active={false} />
               Step Forward

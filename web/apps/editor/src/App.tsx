@@ -27,6 +27,7 @@ import { useSeedEmitterClipboard } from "@/lib/tree/emitter-clipboard";
 import { formatWindowTitle } from "@/lib/window-title";
 import { useBackingColorSync } from "@/lib/backing-color-sync";
 import { useAppAccelerators } from "@/lib/use-app-accelerators";
+import { useTimelineEvents } from "@/lib/timeline";
 import { applyMode, readStoredMode } from "@/lib/theme";
 import { applyOverloadGuard, readOverloadGuard } from "@/lib/overload-guard";
 import { applyMsaaLevel, readMsaaLevel } from "@/lib/msaa-quality";
@@ -181,6 +182,7 @@ function AppShell() {
   // the registered combos and emits `accelerator/pressed`; the hook routes
   // each to the same bridge call the matching menu item uses.
   useAppAccelerators(bridge);
+  useTimelineEvents(bridge);
 
   // Signal the native host once the editor chrome has actually painted. Headless
   // --capture mode gates its composite-window screenshot on this so it captures

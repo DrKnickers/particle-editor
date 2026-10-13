@@ -10,6 +10,7 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ### Added
 
+- View → Timeline (or the toolbar's film button) opens a timeline under the viewport that replays the effect from a single spawn: play, pause, step or drag the playhead to any frame of the first 10 seconds, loop, and try a new random variation, and an edit shows on the frame you are looking at straight away
 - An MCP client such as Claude Desktop can inspect, validate, patch and observe particle effects and search existing textures through a local adapter (`node scripts/mcp-adapter/server.mjs --exe <ParticleEditor.exe> --root <task folder>`), confined to one task folder and never overwriting a source file
 - `node scripts/vfx-index/build.mjs` builds a searchable catalog of the textures a game and mod stack's effects use, and `search.mjs` finds candidates by file name, emitter, effect, blend mode or how effects use them, alongside reviewed recipes registered with `recipes.mjs register-recipe`
 - `ParticleEditor.exe --tool index --out <records.json> [--layer <dir>]... <game-root>...` lists every particle effect a game and mod stack reaches, and for each emitter the texture it uses, found and fingerprinted exactly as the editor finds it, with the emitter's blend mode, orientation and atlas frames

@@ -26,6 +26,12 @@
 // Header badge. Subscribes to `spawner/active-count` and renders the
 // count as a small pill in the header. A small Stop glyph fires
 // `spawner/stop` and is disabled when count == 0.
+//
+// While the timeline is open the host refuses every spawner kind (the
+// session owns the simulation), so the body is one disabled <fieldset> with
+// a note, and Stop is disabled too. A fieldset disables native controls only
+// (a Spinner's wheel and arrow handlers read their own prop), so the three
+// senders also stand down while the session is open.
 
 import { useEffect, useRef, useState } from "react";
 import { Square, X } from "lucide-react";
@@ -41,6 +47,7 @@ import { Spinner } from "@/primitives/Spinner";
 import { ToolPanel } from "@/components/ToolPanel";
 import { setDock } from "@/lib/right-dock";
 import { makeDefaultSpawnerParams } from "@/lib/spawner-defaults";
+import { getTimelineState, useTimeline } from "@/lib/timeline";
 
 type Props = {
   bridge: Bridge;
@@ -137,6 +144,7 @@ export function SpawnerPane({ bridge }: Props) {
   /** Commit a new config to the host. Stores it in `lastCommitted` so
    *  the round-trip state/changed handler skips the echo. */
   const commit = (next: SpawnerParamsDto) => {
+    if (getTimelineState().active) return;
     lastCommitted.current = next;
     setConfig(next);
     void bridge.request({ kind: "spawner/start", params: next });
@@ -182,14 +190,17 @@ export function SpawnerPane({ bridge }: Props) {
     commit(patchSpawner(config, "squiggleFrequency", v));
 
   const handleTrigger = () => {
+    if (getTimelineState().active) return;
     void bridge.request({ kind: "spawner/trigger", params: {} });
   };
 
   const handleStop = () => {
+    if (getTimelineState().active) return;
     void bridge.request({ kind: "spawner/stop", params: {} });
   };
 
   const isAuto = config.mode === "auto";
+  const timelineActive = useTimeline((s) => s.active);
 
   return (
     <div className="panel h-full" aria-label="Spawner">
@@ -205,7 +216,7 @@ export function SpawnerPane({ bridge }: Props) {
           <button
             type="button"
             onClick={handleStop}
-            disabled={activeCount === 0}
+            disabled={activeCount === 0 || timelineActive}
             aria-label="Stop spawner"
             className="icon-btn disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -222,6 +233,13 @@ export function SpawnerPane({ bridge }: Props) {
         </div>
       </div>
       <div className="panel-body p-3">
+      {timelineActive && (
+        <p data-testid="spawner-timeline-note" className="mb-2 text-2xs text-text-3">
+          The spawner is paused while the timeline is open.
+        </p>
+      )}
+      {/* role="none": the fieldset only carries `disabled`; it is no group. */}
+      <fieldset role="none" disabled={timelineActive} className="m-0 min-w-0 border-0 p-0">
       <ToolPanel.Section title="Mode" alwaysOpen>
         {/* Native radios under a role="radiogroup" wrapper — keyboard
             arrows + tab navigation come from the browser, and the
@@ -506,6 +524,7 @@ export function SpawnerPane({ bridge }: Props) {
           />
         </ToolPanel.Row>
       </ToolPanel.Section>
+      </fieldset>
 
       </div>
     </div>

@@ -3,7 +3,9 @@
 //
 // Group 1 (file actions):       New · Open · Save · Save As
 // Group 2 (edit):               Undo · Redo
-// Group 3 (playback):           Play|Pause · Step · Step 10
+// Group 3 (playback):           Play|Pause · Step · Step 10 · Timeline
+//   While the timeline is open (lib/timeline.ts) the three transport
+//   buttons drive it instead of free-run, which the host refuses then.
 // Group 4 (viewport toggles):   Show ground · Show grid · Toggle bloom · Leave particles
 // Group 5 (panels):             Spawner toggle
 //   spacer
@@ -22,7 +24,7 @@
 import {
   FilePlus, FolderOpen, Save, SaveAll,
   Undo2, Redo2,
-  Play, Pause, ChevronRight, ChevronsRight,
+  Play, Pause, ChevronRight, ChevronsRight, Film,
   Sparkles, CirclePlus, Lightbulb, LayoutGrid,
 } from "lucide-react";
 import type { Bridge } from "@particle-editor/bridge-schema";
@@ -34,6 +36,7 @@ import { IconButton } from "@/primitives/IconButton";
 import { replaceDocument, runFileOp } from "@/lib/file-op";
 import { useEngineField } from "@/lib/use-engine-snapshot";
 import { fireAndReport } from "@/lib/status-feedback";
+import { setTimelinePlaying, stepTimeline, toggleTimeline, useTimeline } from "@/lib/timeline";
 
 type Props = { bridge: Bridge };
 
@@ -41,6 +44,9 @@ const ICON = { className: "size-3.5" } as const;
 
 export function Toolbar({ bridge }: Props) {
   const paused = useEngineField(bridge, (s) => s.paused) ?? false;
+  const timelineActive = useTimeline((s) => s.active);
+  const timelinePlaying = useTimeline((s) => s.playing);
+  const playing = timelineActive ? timelinePlaying : !paused;
   const canUndo = useEngineField(bridge, (s) => s.canUndo) ?? false;
   const canRedo = useEngineField(bridge, (s) => s.canRedo) ?? false;
   // leave-particles is a sim-behaviour toggle (default on); the ground/grid/bloom
@@ -110,25 +116,42 @@ export function Toolbar({ bridge }: Props) {
       {/* Group 3: playback */}
       <div className="tb-group">
         <IconButton
-          label={paused ? "Play" : "Pause"}
-          pressed={!paused}
-          onClick={() => { void fireAndReport(bridge, { kind: "engine/set/paused", params: { paused: !paused } }, paused ? "Play" : "Pause"); }}
+          label={playing ? "Pause" : "Play"}
+          pressed={playing}
+          onClick={() => {
+            if (timelineActive) void setTimelinePlaying(bridge, !timelinePlaying);
+            else void fireAndReport(bridge, { kind: "engine/set/paused", params: { paused: !paused } }, paused ? "Play" : "Pause");
+          }}
         >
-          {paused ? <Play {...ICON} /> : <Pause {...ICON} />}
+          {playing ? <Pause {...ICON} /> : <Play {...ICON} />}
         </IconButton>
         <IconButton
           label="Step"
           tip="Step one frame"
-          onClick={() => { void fireAndReport(bridge, { kind: "engine/action/step-frames", params: { frames: 1 } }, "Step"); }}
+          onClick={() => {
+            if (timelineActive) stepTimeline(bridge, 1);
+            else void fireAndReport(bridge, { kind: "engine/action/step-frames", params: { frames: 1 } }, "Step");
+          }}
         >
           <ChevronRight {...ICON} />
         </IconButton>
         <IconButton
           label="Step 10"
           tip="Step 10 frames"
-          onClick={() => { void fireAndReport(bridge, { kind: "engine/action/step-frames", params: { frames: 10 } }, "Step 10"); }}
+          onClick={() => {
+            if (timelineActive) stepTimeline(bridge, 10);
+            else void fireAndReport(bridge, { kind: "engine/action/step-frames", params: { frames: 10 } }, "Step 10");
+          }}
         >
           <ChevronsRight {...ICON} />
+        </IconButton>
+        <IconButton
+          label="Toggle timeline"
+          tip="Timeline: replay the effect frame by frame"
+          pressed={timelineActive}
+          onClick={() => { void toggleTimeline(bridge); }}
+        >
+          <Film {...ICON} />
         </IconButton>
       </div>
 

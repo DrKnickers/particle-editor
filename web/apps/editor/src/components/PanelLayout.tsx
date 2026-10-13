@@ -49,6 +49,7 @@ import { computeSceneRect, dockSlideTarget } from "@/lib/scene-rect";
 import { useDockAnim } from "@/lib/dock-anim";
 import { emitPerfTrace, makePerfSpanId } from "@/lib/perf-trace";
 import { ViewportSlot } from "./ViewportSlot";
+import { TimelinePanel } from "./TimelinePanel";
 import { OverloadBanner } from "./OverloadBanner";
 import { ViewportUnavailableNotice } from "./ViewportUnavailableNotice";
 import { CurveEditorPanel } from "@/screens/curve-editor/CurveEditorPanel";
@@ -653,19 +654,25 @@ export function PanelLayout({ bridge }: Props) {
             defaultSize={`${center.defaultLayout.viewport}%`}
             minSize="30%"
           >
-            <div
-              data-testid="quadrant-viewport"
-              className="relative h-full w-full min-h-0"
-            >
-              <ViewportSlot bridge={bridge} />
-              {/* Preview spawn-overload banner (overload guard) — a
-                  sibling of ViewportSlot inside this `relative`
-                  viewport-rect container so `absolute top-center`
-                  positioning needs no extra geometry. Registers its
-                  own viewport occlusion; see the component
-                  header for the full rationale. */}
-              <OverloadBanner bridge={bridge} />
-              <ViewportUnavailableNotice bridge={bridge} />
+            {/* The timeline row sits under the viewport rect, outside
+                quadrant-viewport, so that testid keeps matching the
+                viewport pixels exactly; opening it shrinks the scene rect. */}
+            <div className="flex h-full w-full min-h-0 flex-col">
+              <div
+                data-testid="quadrant-viewport"
+                className="relative min-h-0 w-full flex-1"
+              >
+                <ViewportSlot bridge={bridge} />
+                {/* Preview spawn-overload banner (overload guard) — a
+                    sibling of ViewportSlot inside this `relative`
+                    viewport-rect container so `absolute top-center`
+                    positioning needs no extra geometry. Registers its
+                    own viewport occlusion; see the component
+                    header for the full rationale. */}
+                <OverloadBanner bridge={bridge} />
+                <ViewportUnavailableNotice bridge={bridge} />
+              </div>
+              <TimelinePanel bridge={bridge} />
             </div>
           </Panel>
           <Separator className="ce-splitter ce-splitter-h" />

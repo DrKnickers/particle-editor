@@ -136,12 +136,15 @@ public:
     // and of the camera too when a weather emitter simulates around it. The
     // host supplies the hooks every replay is built from and
     // whether this run may open a timeline at all; the timeline/* kinds and
-    // ServiceTimeline drive it.
+    // ServiceTimeline drive it. `tellEditor` is whether `timeline/state`
+    // reaches the web: the replay proof's session is its own, and the editor's
+    // panel opening under the viewport would change the proof's render target.
     using TimelineHooksFactory = std::function<ParticleReplayController::Hooks()>;
-    void SetTimelineHost(TimelineHooksFactory factory, bool allowed)
+    void SetTimelineHost(TimelineHooksFactory factory, bool allowed, bool tellEditor)
     {
-        m_timelineHooks   = std::move(factory);
-        m_timelineAllowed = allowed;
+        m_timelineHooks       = std::move(factory);
+        m_timelineAllowed     = allowed;
+        m_timelineTellsEditor = tellEditor;
     }
     // The replay proof's E12 wraps the session's hooks with its own checks.
     const TimelineHooksFactory& TimelineHooks() const { return m_timelineHooks; }
@@ -512,6 +515,7 @@ private:
     {
         const ParticleSystem* document = nullptr;
         std::uint64_t documentChanges = 0;
+        std::uint64_t documentEdits = 0;
         std::uint32_t seed = 0;
         bool          guardEnabled = true;
         int           guardLimit = 0;
@@ -543,6 +547,7 @@ private:
     TimelineSession      m_timeline;
     TimelineHooksFactory m_timelineHooks;
     bool                 m_timelineAllowed = false;
+    bool                 m_timelineTellsEditor = false;
     bool                 m_timelineSeeded = false;
     std::uint32_t        m_timelineSeed = 0;
     // A gated kind's reply while the timeline owns the simulation.
@@ -612,6 +617,14 @@ private:
     // the engine's ref-transform aux). coalesceKey 0 = never coalesce
     // (structural ops must never fold across an add/delete/move).
     void captureUndo(DWORD coalesceKey = 0);
+    // Counts captureUndo() calls: a document handler calls it before it
+    // edits (one that then refuses costs a spare replay, never a wrong
+    // frame). The timeline's fingerprint counts these as well as the
+    // engine's applied changes: deleting, cutting, moving or reordering
+    // emitters and the leave-particles toggle edit the document without an
+    // engine apply. Reference-object and auto-cap captures bypass
+    // captureUndo(), so they don't count; neither is a replay input.
+    std::uint64_t m_documentEdits = 0;
     // Link-group propagation: after a shared (non-exempt) field edit on a
     // linked emitter, copy non-exempt params to every group sibling. MUST run
     // AFTER the mutation; reseats all live cursor iterators via

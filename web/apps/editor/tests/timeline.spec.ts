@@ -33,6 +33,18 @@ async function state(): Promise<TimelineStateDto> {
   return page.evaluate(() => window.bridge!.request({ kind: "timeline/set", params: {} }));
 }
 
+/** The session once its revision holds still for 300 ms (the web's estimate
+ *  push after a tree update lands a little after the request that caused it). */
+async function settled(): Promise<TimelineStateDto> {
+  let last = await state();
+  for (;;) {
+    await page.waitForTimeout(300);
+    const next = await state();
+    if (next.revision === last.revision) return next;
+    last = next;
+  }
+}
+
 test("begin opens at frame 0 and freezes the free-run clock; end restores it", async () => {
   const result = await page.evaluate(async () => {
     const b = window.bridge!;
@@ -233,6 +245,72 @@ test("an edit while parked replays the frame as a new revision; a camera move on
   const variation = await page.evaluate(() => window.bridge!.request({ kind: "timeline/new-variation", params: {} }));
   expect(variation.seed).not.toBe(parked.seed);
   expect(variation.frame).toBe(90);
+});
+
+test("edits the engine applies without a change count still replay: move and leave-particles", async () => {
+  // These edit the document without an engine apply; the session counts
+  // undo captures too, so each is exactly one new revision. Neither changes
+  // any other input: reordering two root emitters keeps the estimate's sum
+  // (the web pushes only a changed estimate), and leave-particles is no tree
+  // change. So each revision here can only come from the edit counter.
+  await page.evaluate(async () => {
+    const b = window.bridge!;
+    await b.request({ kind: "emitters/add-root", params: {} });
+    await b.request({ kind: "timeline/begin", params: {} });
+    await b.request({ kind: "timeline/seek", params: { frame: 60 } });
+  });
+  let revision = (await settled()).revision;
+  const edits = [
+    ["move up", { kind: "emitters/move", params: { id: 1, direction: "up" } }],
+    ["leave-particles off", { kind: "engine/set/leave-particles", params: { enabled: false } }],
+    ["move down", { kind: "emitters/move", params: { id: 0, direction: "down" } }],
+    ["leave-particles on", { kind: "engine/set/leave-particles", params: { enabled: true } }],
+  ] as const;
+  for (const [name, request] of edits) {
+    await page.evaluate((r) => window.bridge!.request(r as never), request);
+    const after = await settled();
+    expect(after.revision, name).toBe(revision + 1);
+    expect(after.frame, name).toBe(60);
+    revision = after.revision;
+  }
+});
+
+test("the panel drives the host's session through the real UI", async () => {
+  // The hand check's path, clicked through the real chrome against the real
+  // host: open, play, pause, scrub, step, edit while parked, new variation,
+  // close. (CDP blacks the viewport, so pixels are E12's job, not this test's.)
+  const panel = page.getByRole("region", { name: "Timeline" });
+  await expect(panel).toHaveCount(0);
+  await page.getByRole("button", { name: "Toggle timeline" }).click();
+  await expect(panel).toBeVisible();
+  expect(await state()).toMatchObject({ active: true, frame: 0, status: "paused" });
+
+  await panel.getByRole("button", { name: "Play" }).click();
+  await expect.poll(async () => (await state()).frame, { timeout: 3000 }).toBeGreaterThan(20);
+  await panel.getByRole("button", { name: "Pause" }).click();
+  const paused = await state();
+  expect(paused.playing).toBe(false);
+  await expect(panel.getByTestId("timeline-readout")).toContainText(`Frame ${paused.frame} / 600`);
+
+  await panel.getByRole("slider", { name: "Playhead" }).fill("300");
+  await expect.poll(async () => (await state()).frame).toBe(300);
+  await panel.getByRole("button", { name: "Next frame" }).click();
+  await expect.poll(async () => (await state()).frame).toBe(301);
+
+  const before = await state();
+  await page.evaluate(() => window.bridge!.request({
+    kind: "emitters/set-properties", params: { id: 0, patch: { lifetime: 4 } },
+  }));
+  await expect.poll(async () => (await state()).revision, { timeout: 3000 }).toBeGreaterThan(before.revision);
+  expect((await state()).frame).toBe(301);
+
+  await panel.getByRole("button", { name: "New variation" }).click();
+  await expect.poll(async () => (await state()).seed).not.toBe(before.seed);
+
+  await panel.getByRole("button", { name: "Close timeline" }).click();
+  await expect(panel).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Toggle timeline" })).toHaveAttribute("aria-pressed", "false");
+  await expect(state()).rejects.toThrow(/the timeline is not open/);
 });
 
 test("a page reload closes the host's session", async () => {

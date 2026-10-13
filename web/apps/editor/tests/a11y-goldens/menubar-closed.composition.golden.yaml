@@ -19,6 +19,7 @@
 - button "Play"
 - button "Step"
 - button "Step 10"
+- button "Toggle timeline"
 - button "Leave particles after instance death" [pressed]
 - button "Toggle Spawner panel" [pressed]
 - button "Toggle Lighting panel"

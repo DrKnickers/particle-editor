@@ -86,6 +86,7 @@ bool BridgeDispatcher::TimelineInputs::operator==(const TimelineInputs& other) c
 {
     // Bitwise camera comparison: any change, however small, is a new input.
     return document == other.document && documentChanges == other.documentChanges &&
+        documentEdits == other.documentEdits &&
         seed == other.seed && guardEnabled == other.guardEnabled &&
         guardLimit == other.guardLimit && estimate == other.estimate &&
         std::memcmp(camera, other.camera, sizeof(camera)) == 0;
@@ -119,6 +120,7 @@ BridgeDispatcher::TimelineInputs BridgeDispatcher::CurrentTimelineInputs() const
     TimelineInputs inputs;
     inputs.document = (m_pParticleSystem && *m_pParticleSystem) ? m_pParticleSystem->get() : nullptr;
     inputs.seed     = m_timelineSeed;
+    inputs.documentEdits = m_documentEdits;
     const PreviewScenario scenario = TimelineScenario();
     inputs.guardEnabled = scenario.overloadGuardEnabled;
     inputs.guardLimit   = scenario.overloadGuardLimit;
@@ -244,7 +246,7 @@ nlohmann::json BridgeDispatcher::TimelineStateJson() const
 void BridgeDispatcher::EmitTimelineState()
 {
     m_timeline.lastEmitTicks = TimelineTicks();
-    if (!m_emit) return;
+    if (!m_emit || !m_timelineTellsEditor) return;
     m_emit(json{{"type", "evt"}, {"kind", "timeline/state"}, {"payload", TimelineStateJson()}});
 }
 

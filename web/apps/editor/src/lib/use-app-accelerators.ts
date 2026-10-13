@@ -25,7 +25,8 @@ import { useEmitterSelectionStore } from "@/lib/tree/emitter-selection";
 import { moveEmitters } from "@/lib/tree/emitter-reorder";
 import { RESET_CAMERA } from "@/lib/reset-camera";
 import { bumpTextureEpoch } from "@/lib/atlas/atlas-preview-cache";
-import { fireAndReport } from "@/lib/status-feedback";
+import { fireAndReport, useStatusFeedback } from "@/lib/status-feedback";
+import { getTimelineState, setTimelinePlaying, stepTimeline } from "@/lib/timeline";
 
 const ACCEL_COMBOS = [
   "Ctrl+N",
@@ -84,6 +85,19 @@ export function useAppAccelerators(bridge: Bridge): void {
     const off = bridge.on("accelerator/pressed", (e) => {
       const combo = e.payload.combo;
       const st = stateRef.current;
+      // While the timeline is open it owns the simulation: F8 / F9 / F10
+      // drive it, and Clear and Spawn are unavailable (the host refuses them).
+      const timeline = getTimelineState();
+      if (timeline.active) {
+        if (combo === "F8") { void setTimelinePlaying(bridge, !timeline.playing); return; }
+        if (combo === "F9") { stepTimeline(bridge, 1); return; }
+        if (combo === "F10") { stepTimeline(bridge, 10); return; }
+        if (combo === "Ctrl+Del" || combo === "Ctrl+Space") {
+          useStatusFeedback.getState().announce(
+            `${combo === "Ctrl+Del" ? "Clear particles" : "Spawn"} is unavailable while the timeline is open`);
+          return;
+        }
+      }
       switch (combo) {
         // ── File ──
         case "Ctrl+N":

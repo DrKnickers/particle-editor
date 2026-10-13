@@ -124,6 +124,10 @@ export function Spinner({
   const [dragging, setDragging] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  // The prop, or a disabled ancestor <fieldset>: the wheel and the arrow
+  // column's press handlers are not native controls, so the fieldset does
+  // not reach them by itself.
+  const isDisabled = () => disabled || inputRef.current?.matches(":disabled") === true;
   const dragStartY = useRef(0);
   const dragStartValue = useRef(0);
   // The pointerId that started the current gesture, so a SECOND pointer (a
@@ -259,7 +263,7 @@ export function Spinner({
     if (el === null) return;
     const onWheelNative = (e: WheelEvent) => {
       const d = wheelDepsRef.current;
-      if (d.disabled) return;
+      if (d.disabled || inputRef.current?.matches(":disabled")) return;
       e.preventDefault();
       e.stopPropagation();
       // base step = the field's actual `step` (legacy Increment),
@@ -311,7 +315,7 @@ export function Spinner({
   // one of three gestures: a quick click (one ±step on release), a hold
   // (auto-repeat after a delay), or a vertical scrub (drag past threshold).
   const handleArrowsMouseDown = (e: React.MouseEvent) => {
-    if (disabled || e.button !== 0) return;
+    if (isDisabled() || e.button !== 0) return;
     // Run ONCE per gesture. The column binds both onPointerDown and onMouseDown:
     // a real mouse (and the --record cursor's activate press) fires pointerdown
     // THEN mousedown, so the pointerdown arms and the mousedown no-ops here. The

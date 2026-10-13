@@ -970,7 +970,11 @@ void BridgeDispatcher::reconcileSelectionAfterDeletion(unsigned int stableId)
 // in the engine's current reference-object transform as snapshot side-band
 // aux (engine-guarded) so undo/redo carries the ref transform on the same
 // timeline. Behavior for the ~30 particle-edit call sites is unchanged.
-void BridgeDispatcher::captureUndo(DWORD coalesceKey) { CaptureUndoPoint(coalesceKey); }
+void BridgeDispatcher::captureUndo(DWORD coalesceKey)
+{
+    ++m_documentEdits;
+    CaptureUndoPoint(coalesceKey);
+}
 
 // Link-group propagation. After a shared (non-exempt) field is
 // edited on a linked emitter, copy its non-exempt params to every
