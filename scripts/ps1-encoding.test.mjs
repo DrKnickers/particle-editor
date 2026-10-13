@@ -17,7 +17,9 @@ import { join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "x64", "release-stage", ".claude", ".codex"]);
+// `.tmp` folders are gitignored test scratch that other tests in the same run
+// create and delete, so walking them races (a file gone between readdir and stat).
+const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "x64", "release-stage", ".claude", ".codex", ".tmp"]);
 
 function collectPs1(dir, out = []) {
   for (const name of readdirSync(dir)) {

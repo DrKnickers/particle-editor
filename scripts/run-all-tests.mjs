@@ -20,7 +20,8 @@
 //   playwright-native all registered specs vs the real app over CDP (pnpm test:native)
 //   msbuild-release   x64 Release (drive-smoke hard-requires the Release exe)
 //   tool-smoke        the window-free --tool verbs end to end on the Release exe:
-//                     inspect, validate, patch (scripts/tool-smoke.mjs; headless)
+//                     inspect, validate, patch (scripts/tool-smoke.mjs; headless),
+//                     then the same through the MCP adapter (scripts/mcp-adapter/smoke.mjs)
 //   render-goldens    deterministic --capture scenes vs checked-in goldens
 //                     (ffmpeg SSIM ≥ 0.9995 — see scripts/render-goldens.mjs)
 //   record-smoke      headless --record timeline produces renderable frames
@@ -530,11 +531,13 @@ export function prereq(lane, ok, what, hint, allowMissing = ALLOW_MISSING) {
 export function runToolSmokeLane({
   exists = existsSync, checkPrereq = prereq,
   stale = (exe) => staleBinaryNote(exe, "tool-smoke"),
-  runSmoke = () => runExe(process.execPath, [join(repoRoot, "scripts", "tool-smoke.mjs"), "--exe", releaseExe]),
+  runSmoke = () => runExe(process.execPath, [join(repoRoot, "scripts", "tool-smoke.mjs"), "--exe", releaseExe]) ||
+    runExe(process.execPath, [join(repoRoot, "scripts", "mcp-adapter", "smoke.mjs"), "--exe", releaseExe]),
 } = {}) {
   for (const [ok, what, hint] of [
     [exists(releaseExe), "x64/Release/ParticleEditor.exe missing", "run the msbuild-release lane first"],
     [exists(join(repoRoot, "scripts", "tool-smoke.mjs")), "scripts/tool-smoke.mjs missing", "restore the smoke script"],
+    [exists(join(repoRoot, "scripts", "mcp-adapter", "smoke.mjs")), "scripts/mcp-adapter/smoke.mjs missing", "restore the MCP smoke script"],
   ]) {
     const p = checkPrereq("tool-smoke", ok, what, hint);
     if (p) return p;

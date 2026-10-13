@@ -164,7 +164,7 @@ function toolSmokeLane(overrides = {}, allowMissing = false) {
   });
 }
 
-for (const missing of ["Release", "tool-smoke.mjs"]) {
+for (const missing of ["Release", "tool-smoke.mjs", "mcp-adapter"]) {
   test(`tool-smoke missing ${missing} fails by default and --allow-missing visibly skips`, () => {
     const overrides = { exists: (path) => !path.includes(missing), runSmoke: () => assert.fail("must not run") };
     assert.equal(toolSmokeLane(overrides).status, "FAIL");
