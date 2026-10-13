@@ -145,8 +145,11 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
     // Note: spawner config is session state (matches legacy: "never
     // written into the .alo" per SpawnerDriver.h). It deliberately
     // does NOT set dirty=true.
+    // An open timeline owns the spawner (its replay spawns once at the
+    // origin): spawner/start, trigger and stop wait until it closes.
     if (kind == "spawner/start")
     {
+        if (RefuseWhileTimeline(ctx)) return true;
         ApplySpawnerStart(params);
         ctx.SendOk(json::object());
         EmitEngineStateChanged();
@@ -154,6 +157,7 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
     }
     if (kind == "spawner/trigger")
     {
+        if (RefuseWhileTimeline(ctx)) return true;
         // The host's render loop advances the driver's burst state; only
         // forward a trigger while all production borrows are bound.
         if (m_spawnerDriver
@@ -168,6 +172,7 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
     }
     if (kind == "spawner/stop")
     {
+        if (RefuseWhileTimeline(ctx)) return true;
         ApplySpawnerStop();
         ctx.SendOk(json::object());
         EmitEngineStateChanged();
@@ -212,6 +217,7 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
     {
         m_recordPreviewAttached.Reset();
     }
+    if (kind.rfind("preview/", 0) == 0 && RefuseWhileTimeline(ctx)) return true;
     if (kind == "preview/attach")
     {
         if (!m_engine || !m_pParticleSystem || !*m_pParticleSystem

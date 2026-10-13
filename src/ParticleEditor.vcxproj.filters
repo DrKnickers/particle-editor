@@ -126,6 +126,9 @@
     <ClInclude Include="simulation\PreviewScenario.h">
       <Filter>Header Files\simulation</Filter>
     </ClInclude>
+    <ClInclude Include="simulation\ReplayPlayClock.h">
+      <Filter>Header Files\simulation</Filter>
+    </ClInclude>
     <ClInclude Include="simulation\ObservationSpec.h">
       <Filter>Header Files\simulation</Filter>
     </ClInclude>
@@ -618,6 +621,9 @@
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\BridgeDispatch_SpawnerLighting.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\BridgeDispatch_Timeline.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\RestoredSettings.cpp">

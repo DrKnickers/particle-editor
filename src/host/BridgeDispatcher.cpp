@@ -1044,7 +1044,8 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         TryDispatchEmitterProperties(ctx) || TryDispatchEmitterTracks(ctx) ||
         TryDispatchLinkGroups(ctx) || TryDispatchEmitterClipboard(ctx) ||
         TryDispatchFile(ctx)   || TryDispatchAssets(ctx)   ||
-        TryDispatchShell(ctx)  || TryDispatchSpawner(ctx))
+        TryDispatchShell(ctx)  || TryDispatchSpawner(ctx) ||
+        TryDispatchTimeline(ctx))
     {
         return ctx.res;
     }
@@ -1588,8 +1589,10 @@ void BridgeDispatcher::EmitStatsTick(float fps, int emitters,
     // timer). Done BEFORE the stats-freeze gate so a refusal is never
     // swallowed by the test-only freeze knob.
     {
+        // An open timeline reports its own replay's refusals (status refused)
+        // and must not stop the user's spawner over them.
         Engine::SpawnRefusal refusal;
-        if (m_engine && m_engine->TakeSpawnRefusal(&refusal))
+        if (m_engine && !m_timeline.active && m_engine->TakeSpawnRefusal(&refusal))
         {
             // Surface the refusal to the web (transient banner).
             json env = {

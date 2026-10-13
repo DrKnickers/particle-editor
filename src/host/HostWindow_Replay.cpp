@@ -1,4 +1,5 @@
-// Replay hooks are dormant until the proof runner supplies a scenario.
+// Replay hooks: the proof and observation runs (golden profile) and the
+// editor's timeline (interactive pin) build every replay from these.
 #define _WIN32_WINNT 0x0A00
 #undef WINVER
 #define WINVER 0x0A00
@@ -8,7 +9,8 @@
 
 namespace host {
 
-ParticleReplayController::Hooks HostWindowImpl::BuildReplayHooks(const std::wstring& readbackPath, SpawnPolicy policy)
+ParticleReplayController::Hooks HostWindowImpl::BuildReplayHooks(const std::wstring& readbackPath, SpawnPolicy policy,
+                                                                 PinMode pinMode)
 {
     ParticleReplayController::Hooks hooks;
     auto spawnPending = std::make_shared<bool>(false);
@@ -16,11 +18,15 @@ ParticleReplayController::Hooks HostWindowImpl::BuildReplayHooks(const std::wstr
     {
         return engine && engine->PrepareDeviceForFrame();
     };
-    hooks.pinSettings = [this](const PreviewScenario& scenario)
+    hooks.pinSettings = [this, pinMode](const PreviewScenario& scenario)
     {
-        if (!engine || !m_fixedCaptureView) return false;
+        if (!engine || (pinMode == PinMode::Golden && !m_fixedCaptureView)) return false;
         engine->SetOverloadGuard(scenario.overloadGuardEnabled, scenario.overloadGuardLimit);
         engine->SetEstimatedLoad(scenario.estimatedParticlesPerInstance);
+        // The timeline keeps the user's view. The camera is still a replay
+        // input (weather placement, billboard baking), so the timeline
+        // re-replays when it moves instead of pinning it here.
+        if (pinMode == PinMode::Interactive) return !engine->DeviceCallsBlocked();
         if (!m_fixedCaptureView()) return false;
         engine->SetMsaaLevel(0);
         engine->SetSkydomeEnvironment(engine->GetSkydomeContext(), "", "");
@@ -95,6 +101,11 @@ ParticleReplayController::Hooks HostWindowImpl::BuildReplayHooks(const std::wstr
         };
     }
     return hooks;
+}
+
+bool HostWindowImpl::TimelineOwnsSimulation() const
+{
+    return dispatcher && dispatcher->TimelineActive();
 }
 
 }  // namespace host

@@ -374,9 +374,13 @@ static void SourcePins()
     const std::string host = ReadSource("src/host/HostWindow.cpp");
     const std::string wrapper = Body(host, "void HostWindowImpl::RenderD3D9()");
     const std::string frame = Body(host, "bool HostWindowImpl::RenderComposedFrame(bool simulate)");
-    CHECK(wrapper.find("RenderComposedFrame(m_runMode != RunMode::ReplayProof && m_runMode != RunMode::Observe);") != std::string::npos &&
+    CHECK(wrapper.find("RenderComposedFrame(m_runMode != RunMode::ReplayProof && m_runMode != RunMode::Observe &&\n"
+                       "                        !TimelineOwnsSimulation());") != std::string::npos &&
           Count(wrapper, "RenderComposedFrame(") == 1 && Count(wrapper, "Update") == 0,
-          "RenderD3D9 wrapper passes simulate false in ReplayProof and Observe");
+          "RenderD3D9 wrapper passes simulate false in ReplayProof, Observe and while the timeline is open");
+    const size_t interactive = wiring.find("if (pinMode == PinMode::Interactive) return !engine->DeviceCallsBlocked();");
+    CHECK(estimate < interactive && interactive < profile && Count(wiring, "PinMode::Interactive") == 1,
+          "the timeline's interactive pin sets guard and estimate, then returns before the golden profile");
     CHECK(frame.find("if (simulate && spawnerDriver && particleSystem && m_runMode != RunMode::Record)") != std::string::npos &&
           frame.find("if (simulate) m_mouseCursor.UpdateVelocity();") != std::string::npos &&
           frame.find("if (simulate) engine->Update();") != std::string::npos &&

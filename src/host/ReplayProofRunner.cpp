@@ -113,9 +113,12 @@ struct ReplayProofRunner::Impl
         return false;
     }
 
-    ParticleReplayController::Hooks Hooks()
+    ParticleReplayController::Hooks Hooks() { return Checked(deps.buildHooks(L"")); }
+
+    // The proof's checks around any replay's hooks: frame accounting, one
+    // completed Update per frame, pinned settings and profile, and geometry.
+    ParticleReplayController::Hooks Checked(ParticleReplayController::Hooks hooks)
     {
-        auto hooks = deps.buildHooks(L"");
         const auto admit = hooks.admitDevice;
         hooks.admitDevice = [this, admit]()
         {
@@ -314,6 +317,287 @@ struct ReplayProofRunner::Impl
         for (size_t i = 0; i < first.bytes.size(); i += 4)
             if (memcmp(first.bytes.data() + i, second.bytes.data() + i, 4) != 0) ++count;
         return CheckGeometry(context, "decode-after");
+    }
+
+    json Request(const char* id, const char* kind, const json& params = json::object())
+    {
+        return json::parse(deps.dispatchSync(json{
+            {"type", "req"}, {"id", id}, {"kind", kind}, {"params", params}}.dump()));
+    }
+
+    // The session's state, read through a no-op timeline/set.
+    json TimelineState() { return Request("e12-state", "timeline/set").value("data", json::object()); }
+
+    // A timeline/seek that must land on `f`. A forward seek continues the
+    // replay without a reset, so the frame counter carries across it.
+    bool TimelineSeek(const std::string& name, int f, bool capture, json* samples = nullptr)
+    {
+        const int current = frame;
+        BeginRun(name, [f, capture](int at) { return capture && at == f; });
+        frame = current;
+        const json response = Request("e12-seek", "timeline/seek", {{"frame", f}});
+        if (!response.value("ok", false) || response["data"].value("frame", -1) != f ||
+            response["data"].value("status", "") == "stale")
+            return Fail(4, "E12-seek", "timeline/seek did not land on frame " + std::to_string(f));
+        if (samples) samples->push_back(Sample(capture));
+        // Disarm the capture: a later replay of the same frame (the next
+        // request) must not overwrite this sample's evidence.
+        selectCapture = nullptr;
+        return !exitCode;
+    }
+
+    // One idle slot after an input changed: it must replay to the session's
+    // frame and present it.
+    bool TimelineService(const std::string& name, uint64_t revision, json* sample = nullptr)
+    {
+        const int f = TimelineState().value("frame", -1);
+        BeginRun(name, [f, sample](int at) { return sample && at == f; });
+        if (!deps.dispatcher.ServiceTimeline())
+            return Fail(4, "E12-service", name + ": a changed input did not replay the frame");
+        const json state = TimelineState();
+        if (state.value("frame", -1) != f || state.value("revision", uint64_t(0)) != revision + 1)
+            return Fail(4, "E12-service", name + ": the replay did not land on the frame as a new revision");
+        if (sample) *sample = Sample(true);
+        selectCapture = nullptr;
+        return !exitCode;
+    }
+
+    // One idle slot after a parked camera move on a document without weather
+    // emitters: no replay, one Update at the frozen time. The frame is then
+    // rendered and captured as the host's render would show it.
+    bool TimelineRebake(const std::string& name, json& sample)
+    {
+        const json before = TimelineState();
+        const int f = before.value("frame", -1);
+        const uint64_t updates = deps.engine->CompletedFullUpdateCountForObservation();
+        if (deps.dispatcher.ServiceTimeline())
+            return Fail(4, "E12-rebake", name + ": a camera move replayed a document without weather emitters");
+        const json after = TimelineState();
+        if (after.value("frame", -1) != f || after.value("revision", uint64_t(0)) != before.value("revision", uint64_t(0)) ||
+            deps.engine->CompletedFullUpdateCountForObservation() != updates + 1)
+            return Fail(4, "E12-rebake", name + ": the re-bake was not one Update at the parked frame");
+        BeginRun(name, [f](int at) { return at == f; });
+        frame = f;
+        auto hooks = Hooks();
+        if (!hooks.render() || !hooks.readback()) return false;
+        sample = Sample(true);
+        selectCapture = nullptr;
+        return !exitCode;
+    }
+
+    // E12: design 9.7 on the editor's timeline. Seeks go through the
+    // timeline/* kinds and every replay is built from the session's own hooks
+    // (the interactive pin, which leaves the view alone) wrapped in this
+    // runner's checks, so each frame must equal E1's.
+    bool Timeline(json& e12)
+    {
+        BridgeDispatcher& dispatcher = deps.dispatcher;
+        // E11 moved the camera: restore the profile the baseline ran under.
+        BeginRun("E12-profile", [](int) { return false; });
+        auto golden = Hooks();
+        if (!golden.admitDevice() || !golden.pinSettings(scenario)) return false;
+        const auto base = dispatcher.TimelineHooks();
+        if (!base) return Fail(4, "E12-begin", "the host supplied no timeline hooks");
+        dispatcher.SetTimelineHooks([this, base]() { return Checked(base()); });
+        dispatcher.SetTimelineSeed(scenario.seed);
+        const bool pausedBefore = IsPreviewPaused();
+        const float timeBefore = GetTimeF();
+
+        BeginRun("E12-begin", [](int) { return false; });
+        const json begin = Request("e12-begin", "timeline/begin");
+        e12["begin"] = begin;
+        if (!begin.value("ok", false) || !begin["data"].value("active", false) || begin["data"].value("frame", -1) != 0)
+            return Fail(4, "E12-begin", "timeline/begin did not open at frame 0");
+
+        // The session gate: each kind that would spawn, clear or move the
+        // clock behind the controller is refused and changes nothing.
+        const uint64_t updates = deps.engine->CompletedFullUpdateCountForObservation();
+        const float clock = GetTimeF();
+        e12["gate"] = json::array();
+        for (const char* kind : {"engine/set/paused", "engine/action/step-frames", "engine/action/clear",
+                                 "spawner/start", "spawner/trigger", "spawner/stop", "preview/attach"})
+        {
+            const json response = Request("e12-gate", kind,
+                std::string(kind) == "engine/set/paused" ? json{{"paused", false}} : json::object());
+            e12["gate"].push_back({{"kind", kind}, {"refused", !response.value("ok", true)}});
+            if (response.value("ok", true)) return Fail(4, "E12-gate", std::string(kind) + " ran while the timeline was open");
+        }
+        if (deps.engine->CompletedFullUpdateCountForObservation() != updates || GetTimeF() != clock ||
+            !IsPreviewPaused() || deps.engine->GetNumInstances() != 1)
+            return Fail(4, "E12-gate", "a refused kind changed the clock, instances or update count");
+
+        // 1. Seek each checked frame, run hostile work, seek back, seek again.
+        json frames = json::array(), again = json::array();
+        json hostile = {{"xmlParses", 0}, {"catalogBuilds", 0}, {"catalogObjects", 0}, {"crtCalls", 0}};
+        for (int f : checked)
+        {
+            const std::string at = std::to_string(f);
+            if (!TimelineSeek("E12-seek" + at, f, true, &frames) || !Hostile(hostile) ||
+                !TimelineSeek("E12-back" + at, f / 2, false) || !TimelineSeek("E12-again" + at, f, true, &again))
+                return false;
+        }
+        e12["frames"] = frames;
+        e12["again"] = again;
+        e12["hostile"] = hostile;
+        if (!Compare(json{{"frames", frames}}, "E12") || !Compare(json{{"frames", again}}, "E12-again")) return false;
+
+        // Park on the latest checked frame with the most particles, where
+        // each changed input below must show (a lifetime edit cannot show at
+        // frame 0, where every particle is newborn).
+        int parked = *checked.begin();
+        for (int f : checked)
+            if (Baseline(f)["particles"].get<int>() >= Baseline(parked)["particles"].get<int>()) parked = f;
+        if (!TimelineSeek("E12-park", parked, false)) return false;
+        e12["parked"] = parked;
+        const json& atPark = Baseline(parked);
+
+        // 2. An edit and its undo while parked: each replays the frame. The
+        // edit adds a particle to the burst and the rate, which changes every
+        // fixture's population (their flat curves and static weather hide a
+        // lifetime or gravity edit).
+        uint64_t revision = TimelineState().value("revision", uint64_t(0));
+        const auto* emitter = deps.particleSystem->getEmitters()[0];
+        const json edit = Request("e12-edit", "emitters/set-properties",
+            {{"id", 0}, {"patch", {{"nParticlesPerBurst", emitter->nParticlesPerBurst + 1},
+                                   {"nParticlesPerSecond", emitter->nParticlesPerSecond + 1}}}});
+        if (!edit.value("ok", false)) return Fail(4, "E12-edit", "the edit was not applied");
+        json edited;
+        if (!TimelineService("E12-edited", revision++, &edited)) return false;
+        e12["edited"] = edited;
+        if (edited["sha256"] == atPark["sha256"] && edited["particles"] == atPark["particles"])
+            return Fail(4, "E12-edit", "the edited replay shows E1's frame");
+        const json undo = Request("e12-undo", "undo/perform", {{"direction", "undo"}});
+        if (!undo.value("ok", false) || !undo["data"].value("applied", false))
+            return Fail(4, "E12-undo", "the undo was not applied");
+        if (!PrepareScene(context, Hooks())) return false;
+        json restored;
+        if (!TimelineService("E12-undone", revision++, &restored)) return false;
+        e12["undone"] = restored;
+        if (!Compare(json{{"frames", json::array({restored})}}, "E12-undo")) return false;
+
+        // 3. The camera. A weather document simulates around it, so a move
+        // replays; any other re-bakes its billboards with one Update at the
+        // frozen time. Either way the moved frame differs from E1's, and
+        // moving back shows E1's frame exactly: a re-bake drew nothing and
+        // changed nothing but the Updates it ran. The profile check holds the
+        // moved view meanwhile.
+        const bool cameraReplays = dispatcher.TimelineCameraIsInput();
+        e12["cameraReplays"] = cameraReplays;
+        const Engine::Camera camera = deps.engine->GetCamera();
+        Engine::Camera moved = camera;
+        moved.Position += D3DXVECTOR3(100, 0, 0);
+        deps.engine->SetCamera(moved);
+        context.profile = FixedProfile(*deps.engine);
+        json cameraMoved, back;
+        if (cameraReplays ? !TimelineService("E12-camera-moved", revision++, &cameraMoved)
+                          : !TimelineRebake("E12-camera-moved", cameraMoved))
+            return false;
+        e12["cameraMoved"] = cameraMoved;
+        if (cameraMoved["sha256"] == atPark["sha256"])
+            return Fail(4, "E12-camera", "the moved camera shows E1's image");
+        deps.engine->SetCamera(camera);
+        context.profile = report["profile"];
+        if (cameraReplays ? !TimelineService("E12-camera-back", revision++, &back)
+                          : !TimelineRebake("E12-camera-back", back))
+            return false;
+        e12["cameraRestored"] = back;
+        json expected = back;
+        if (!cameraReplays)
+        {
+            if (back["completedUpdates"].get<uint64_t>() != atPark["completedUpdates"].get<uint64_t>() + 2)
+                return Fail(4, "E12-camera", "the two re-bakes were not one Update each");
+            expected["completedUpdates"] = atPark["completedUpdates"];
+        }
+        if (!Compare(json{{"frames", json::array({expected})}}, "E12-camera")) return false;
+
+        // 4. A new variation changes frame 1's RNG, and its own seeks agree.
+        const json variation = Request("e12-variation", "timeline/new-variation");
+        const uint32_t seed = variation.value("data", json::object()).value("seed", scenario.seed);
+        json first = json::array(), second = json::array();
+        if (!variation.value("ok", false) || seed == scenario.seed ||
+            !TimelineSeek("E12-variation", 1, false, &first) || !Hostile(hostile) ||
+            !TimelineSeek("E12-variation-back", 0, false) || !TimelineSeek("E12-variation-again", 1, false, &second))
+            return Fail(4, "E12-variation", "new variation did not draw a new seed or replay");
+        e12["variation"] = {{"seed", seed}, {"first", first[0]}, {"second", second[0]}};
+        if (!Same(first[0], second[0], false) || first[0]["state"] == Baseline(1)["state"])
+            return Fail(4, "E12-variation", "the variation's frame 1 differs between seeks or matches E1");
+        dispatcher.SetTimelineSeed(scenario.seed);
+        revision = TimelineState().value("revision", uint64_t(0));
+        if (!TimelineService("E12-variation-restored", revision++) || !TimelineSeek("E12-repark", parked, false))
+            return false;
+
+        // 5. A guard push while parked: not applied directly, replayed in the
+        // next slot, and pushing the original back replays E1's frame. The
+        // proof ignores the web's own pushes; lift that for this request only.
+        auto push = [&](bool enabled, int limit)
+        {
+            dispatcher.SetReplayProofOwnsSettings(false);
+            const json response = Request("e12-guard", "engine/set/overload-guard",
+                {{"enabled", enabled}, {"maxParticles", limit}});
+            dispatcher.SetReplayProofOwnsSettings(true);
+            return response.value("ok", false);
+        };
+        if (!push(true, 1000) || deps.engine->OverloadGuardLimitForObservation() != scenario.overloadGuardLimit)
+            return Fail(4, "E12-guard", "a guard push during the session was applied outside a replay");
+        json guardLow;
+        if (!TimelineService("E12-guard-low", revision++, &guardLow)) return false;
+        e12["guardLow"] = guardLow;
+        if (guardLow["guard"]["limit"] != 1000 || deps.engine->OverloadGuardLimitForObservation() != 1000)
+            return Fail(4, "E12-guard", "the replay did not pin the pushed guard");
+        // A parked frame above the cap must lose particles to it.
+        if (atPark["particles"].get<int>() > 1000 && guardLow["particles"] == atPark["particles"])
+            return Fail(4, "E12-guard", "the lowered guard left the parked frame's population unchanged");
+        json guarded;
+        if (!push(scenario.overloadGuardEnabled, scenario.overloadGuardLimit) ||
+            !TimelineService("E12-guard-restored", revision++, &guarded))
+            return false;
+        e12["guardRestored"] = guarded;
+        if (!Compare(json{{"frames", json::array({guarded})}}, "E12-guard")) return false;
+
+        // 5b. The same for an estimate push.
+        auto pushEstimate = [&](double perInstance)
+        {
+            dispatcher.SetReplayProofOwnsSettings(false);
+            const json response = Request("e12-estimate", "engine/set/estimated-load", {{"perInstance", perInstance}});
+            dispatcher.SetReplayProofOwnsSettings(true);
+            return response.value("ok", false);
+        };
+        const double raised = scenario.estimatedParticlesPerInstance + 1.0;
+        if (!pushEstimate(raised) || deps.engine->EstimatedLoadForObservation() != scenario.estimatedParticlesPerInstance)
+            return Fail(4, "E12-estimate", "an estimate push during the session was applied outside a replay");
+        json estimated;
+        if (!TimelineService("E12-estimate-raised", revision++, &estimated)) return false;
+        e12["estimateRaised"] = estimated;
+        if (estimated["guard"]["estimate"] != raised || deps.engine->EstimatedLoadForObservation() != raised)
+            return Fail(4, "E12-estimate", "the replay did not pin the pushed estimate");
+        json estimateRestored;
+        if (!pushEstimate(scenario.estimatedParticlesPerInstance) ||
+            !TimelineService("E12-estimate-restored", revision++, &estimateRestored))
+            return false;
+        e12["estimateRestored"] = estimateRestored;
+        if (!Compare(json{{"frames", json::array({estimateRestored})}}, "E12-estimate")) return false;
+
+        // 6. Latency, recorded: a replay from a reset to frame 300, and the
+        // forward run to the end of the window.
+        const auto timed = [&](const char* name, int f)
+        {
+            const auto start = std::chrono::steady_clock::now();
+            const bool ok = TimelineSeek(name, f, false);
+            const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+            e12["latencyMs"][name] = ms;
+            return ok;
+        };
+        if (!TimelineSeek("E12-latency-zero", 0, false) || !timed("forwardToEnd", PreviewScenario{}.maxFrames) ||
+            !timed("resetTo300", 300))
+            return false;
+
+        const json end = Request("e12-end", "timeline/end");
+        dispatcher.SetTimelineHooks(base);
+        e12["end"] = end;
+        if (!end.value("ok", false) || end["data"].value("active", true) || IsPreviewPaused() != pausedBefore ||
+            GetTimeF() != timeBefore || deps.engine->GetNumInstances() != 0)
+            return Fail(4, "E12-end", "timeline/end did not restore the clock or clear the replay");
+        return !exitCode;
     }
 
     bool Experiments()
@@ -529,6 +813,13 @@ struct ReplayProofRunner::Impl
             experiments["E11"]["frames"] = result["frames"];
             if (!Compare(result, "E11")) return false;
         }
+
+        // The timeline spawns once, at rest at the origin; a moving spawn
+        // is not a scenario it can open.
+        const bool atRest = scenario.spawnPosition == D3DXVECTOR3(0, 0, 0) &&
+                            scenario.spawnVelocity == D3DXVECTOR3(0, 0, 0);
+        experiments["E12"] = {{"applicable", atRest}};
+        if (atRest && !Timeline(experiments["E12"])) return false;
         return !exitCode;
     }
 

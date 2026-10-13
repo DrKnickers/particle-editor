@@ -674,6 +674,30 @@ export type AutosaveOrphan = {
   stableMtimeMs: number | null;    // stable-tier file mtime, null if no stable file
 };
 
+// The interactive timeline's session (timeline/* kinds, timeline/state).
+// `timeSeconds` is frame / 60: time since the replay's frame zero, never a
+// particle's normalized lifetime (the curve editor's 0-100%). `seed` is the
+// variation; it is never saved into the document. `status`:
+//   closed  — no session is open
+//   paused / playing / ended — ended = parked on the last frame
+//   stale   — the last replay failed (a blocked device); the host retries
+//   empty   — the document has no emitters to spawn
+// `refused`: the overload guard refused the replay's spawn. `revision`
+// counts replays for changed inputs since the session opened.
+export type TimelineStatus = "closed" | "paused" | "playing" | "ended" | "stale" | "empty";
+export type TimelineStateDto = {
+  active: boolean;
+  playing: boolean;
+  loop: boolean;
+  frame: number;
+  timeSeconds: number;
+  maxFrames: number;
+  seed: number;
+  status: TimelineStatus;
+  refused: boolean;
+  revision: number;
+};
+
 export type Request =
   // File / recents
   // file/new and file/open (default "alo" filter) replace the document. The
@@ -1150,6 +1174,24 @@ export type Request =
   | { kind: "autosave/check-recovery";    params: Record<string, never> }
   | { kind: "autosave/recover";           params: { choice: "recent" | "stable" | "discard" } }
 
+  // Interactive timeline (design section 11). While a session is open the
+  // host's replay controller is the only thing that advances the simulation,
+  // and the frame on screen is the deterministic replay of the in-memory
+  // document to `frame`. `begin` and `end` are idempotent; the other kinds
+  // reject while no session is open. Free-run pause / step, Clear and the
+  // spawner kinds reject while one is open. Every response is the session's
+  // state; `timeline/state` pushes it during play and after host-side replays.
+  | { kind: "timeline/begin";             params: Record<string, never> }
+  | { kind: "timeline/end";               params: Record<string, never> }
+  // Clamped to [0, maxFrames]. Previous / next send frame -/+ 1; reset and
+  // jump-to-start send 0; jump-to-end sends maxFrames.
+  | { kind: "timeline/seek";              params: { frame: number } }
+  // An absent field is left unchanged.
+  | { kind: "timeline/set";               params: { playing?: boolean; loop?: boolean } }
+  // A new seed (from the OS, never the particle stream), replayed at the
+  // current frame.
+  | { kind: "timeline/new-variation";     params: Record<string, never> }
+
   | { kind: "register-accelerators";      params: { combos: string[] } };
 
 // One response shape per Request kind, keyed by kind. An interface (not a
@@ -1358,6 +1400,11 @@ export interface ResponseMap {
   "spawner/start": Record<string, never>;
   "spawner/trigger": Record<string, never>;
   "spawner/stop": Record<string, never>;
+  "timeline/begin": TimelineStateDto;
+  "timeline/end": TimelineStateDto;
+  "timeline/seek": TimelineStateDto;
+  "timeline/set": TimelineStateDto;
+  "timeline/new-variation": TimelineStateDto;
   "app/quit": Record<string, never>;
   "app/open-external": { opened: boolean };
   "engine/action/reset-view-settings": Record<string, never>;
@@ -1429,6 +1476,10 @@ export type Event =
   | { kind: "undo/changed";           payload: { canUndo: boolean; canRedo: boolean; label?: string } }
   | { kind: "accelerator/pressed";    payload: { combo: string } }
   | { kind: "spawner/active-count";   payload: { count: number } }
+  // The timeline session's state: at most ~15 Hz during play, after a
+  // host-side replay (an edit, undo, settings push or camera move while the
+  // timeline is open), and when the session ends.
+  | { kind: "timeline/state";         payload: TimelineStateDto }
   // Viewport mouse cursor's intersection with the
   // ground plane in world coords. Host throttles to ~30 Hz so the
   // status bar update doesn't saturate the bridge.

@@ -48,7 +48,9 @@
 #include "effect/ParticleSystem.h"   // full def needed for ParticleSystem::Emitter* in getEmitterById
 #include "simulation/MouseCursor.h"       // by-value record-preview anchor (preview/* record kinds)
 #include "simulation/SpawnerDriver.h"     // dispatcher-owned clamped SpawnerConfig
+#include "simulation/ReplayPlayClock.h"   // timeline play anchor
 #include "PreviewEncodeWorker.h"   // async texture-preview encode
+#include "ParticleReplayController.h"     // the timeline session's replay
 
 class Engine;
 class ParticleSystemInstance;
@@ -125,6 +127,38 @@ public:
     // app/open-external starts the default browser only when this is set, so a
     // headless run never opens a window nobody asked for. Off until set.
     void SetExternalLaunchAllowed(bool allowed) { m_externalLaunchAllowed = allowed; }
+
+    // ---- Interactive timeline (design section 11; BridgeDispatch_Timeline.cpp) ----
+    //
+    // While a timeline session is open, a ParticleReplayController is the
+    // only thing that advances the simulation: the frame on screen is always
+    // the replay of (document, seed, guard, estimate) to the session's frame,
+    // and of the camera too when a weather emitter simulates around it. The
+    // host supplies the hooks every replay is built from and
+    // whether this run may open a timeline at all; the timeline/* kinds and
+    // ServiceTimeline drive it.
+    using TimelineHooksFactory = std::function<ParticleReplayController::Hooks()>;
+    void SetTimelineHost(TimelineHooksFactory factory, bool allowed)
+    {
+        m_timelineHooks   = std::move(factory);
+        m_timelineAllowed = allowed;
+    }
+    // The replay proof's E12 wraps the session's hooks with its own checks.
+    const TimelineHooksFactory& TimelineHooks() const { return m_timelineHooks; }
+    void SetTimelineHooks(TimelineHooksFactory factory) { m_timelineHooks = std::move(factory); }
+    // The variation the next replay uses (E12 replays the proof's seed).
+    void SetTimelineSeed(std::uint32_t seed);
+    bool TimelineActive() const { return m_timeline.active; }
+    // Whether a camera move replays the session (a weather document) or only
+    // re-bakes the billboards at the frozen time.
+    bool TimelineCameraIsInput() const;
+    // Once per paced idle slot, before the frame renders: re-replay to the
+    // session's frame when an input changed, otherwise advance play (or,
+    // parked, re-bake a moved camera). Returns true when it already presented
+    // this slot's frame.
+    bool ServiceTimeline();
+    // Leave the session if one is open (app/ready after a page reload).
+    void EndTimeline();
 
     // Async texture-preview pipeline. The get-preview handler serves LRU
     // hits synchronously; a miss decodes on the UI thread (device-bound) and
@@ -453,7 +487,7 @@ private:
     // Each lives in its own TU (BridgeDispatch_<Domain>.cpp), holds that
     // domain's `kind ==` handlers, and returns true when it handled `kind`
     // (response written via ctx).
-    // DispatchInternal calls all ten in sequence; kinds are exact-match and
+    // DispatchInternal calls all eleven in sequence; kinds are exact-match and
     // mutually exclusive, so call order carries no semantics.
     friend struct BridgeRequestContext;   // RequireEngine/MarkDirty need privates
     bool TryDispatchEngine  (BridgeRequestContext& ctx);
@@ -466,6 +500,60 @@ private:
     bool TryDispatchAssets  (BridgeRequestContext& ctx);  // textures/mods
     bool TryDispatchShell   (BridgeRequestContext& ctx);  // window/layout/viewport/host/app/debug/stats/…
     bool TryDispatchSpawner (BridgeRequestContext& ctx);  // + settings
+    bool TryDispatchTimeline(BridgeRequestContext& ctx);  // timeline/*
+
+    // ---- Timeline session state (BridgeDispatch_Timeline.cpp) ----
+    // Everything a replay depends on besides the frame number. A slot whose
+    // inputs differ from the replayed frame's re-replays to that frame. An
+    // edit, undo, file swap, settings push or camera move needs no hook of
+    // its own: the engine counts every applied document change, and a swap
+    // replaces the document pointer.
+    struct TimelineInputs
+    {
+        const ParticleSystem* document = nullptr;
+        std::uint64_t documentChanges = 0;
+        std::uint32_t seed = 0;
+        bool          guardEnabled = true;
+        int           guardLimit = 0;
+        double        estimate = 0.0;
+        float         camera[9] = {};
+        bool operator==(const TimelineInputs& other) const;
+    };
+    struct TimelineSession
+    {
+        bool active = false;
+        bool playing = false;
+        bool loop = false;
+        bool stale = false;     // the last replay failed; retried next slot
+        bool empty = false;     // the document has no emitters to spawn
+        bool refused = false;   // the overload guard refused the spawn
+        int  frame = 0;
+        std::uint64_t revision = 0;      // re-replays for changed inputs
+        TimelineInputs replayed;         // inputs of the frame on screen
+        ReplayPlayAnchor anchor;
+        std::int64_t lastEmitTicks = 0;
+        bool  savedPaused = false;       // free-run clock to restore on end
+        float savedTime = 0.0f;
+        float bakedCamera[9] = {};       // the camera the frame's billboards hold
+        std::int64_t retryTicks = 0;     // the last stale retry (backoff)
+        bool replaying = false;          // a replay or play step is running
+        bool endPending = false;         // an end arrived during one
+        std::unique_ptr<ParticleReplayController> controller;
+    };
+    TimelineSession      m_timeline;
+    TimelineHooksFactory m_timelineHooks;
+    bool                 m_timelineAllowed = false;
+    bool                 m_timelineSeeded = false;
+    std::uint32_t        m_timelineSeed = 0;
+    // A gated kind's reply while the timeline owns the simulation.
+    bool RefuseWhileTimeline(BridgeRequestContext& ctx);
+    TimelineInputs CurrentTimelineInputs() const;
+    PreviewScenario TimelineScenario() const;
+    // Replays to `frame` from a reset, or forward from the current frame
+    // when nothing changed. Presents the destination. False marks stale.
+    bool ReplayTimelineTo(int frame);
+    nlohmann::json TimelineStateJson() const;
+    void EmitTimelineState();
 
     // Emits a `dirty/changed` event with the current m_dirty value.
     void EmitDirtyChanged();

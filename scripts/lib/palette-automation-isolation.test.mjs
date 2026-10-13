@@ -42,7 +42,8 @@ test("observe shares proof's constructor and boot isolation at every entry point
   assert.match(hostSource, /!options\.replayScenarioPath\.empty\(\) \|\| !options\.observeSpecPath\.empty\(\),\s*options\.useTestHost/);
   assert.match(hostSource, /m_runMode\(!options\.observeSpecPath\.empty\(\) \? RunMode::Observe/);
   assert.match(host, /SetReplayProofOwnsSettings\(m_runMode == RunMode::ReplayProof \|\| m_runMode == RunMode::Observe\)/);
-  assert.match(host, /RenderComposedFrame\(m_runMode != RunMode::ReplayProof && m_runMode != RunMode::Observe\)/);
+  assert.match(host, /RenderComposedFrame\(m_runMode != RunMode::ReplayProof && m_runMode != RunMode::Observe &&\s*!TimelineOwnsSimulation\(\)\)/);
+  assert.match(host, /const bool strictComposition = m_runMode == RunMode::ReplayProof \|\| m_runMode == RunMode::Observe;/);
   assert.match(host, /if \(m_webDead && !IsFullyInteractive\(\) && m_runMode != RunMode::ReplayProof && m_runMode != RunMode::Observe\)/);
   assert.match(host, /RunMode::Observe \? L"-observe-"/);
   assert.match(host, /RunMode::Observe \? "observe"/);

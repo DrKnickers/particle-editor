@@ -312,6 +312,11 @@ async function main() {
       // case where Blink's lazy a11y regresses (would leave
       // composition users with no screen-reader access to React).
       "tests/a11y-uia-composition-reachable.spec.ts",
+      // The interactive timeline through the bridge: play pacing from the
+      // idle slot, the session gate, replays for edits and camera moves,
+      // and the end restore. After the a11y goldens: its last test reloads
+      // the page to prove app/ready closes the host's session.
+      "tests/timeline.spec.ts",
       // Preview overload guard regression. Bombs the
       // live preview with rate=1e9 and asserts the engine plateaus at
       // the particle budget + latches `overload` on stats/tick instead

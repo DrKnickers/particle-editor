@@ -16,6 +16,10 @@ export const SCENARIOS = [
   { name: "replay-guard", file: "replay-guard.alo", guard: true },
   { name: "singleton-velocity", file: "singleton-emitter.alo", velocity: true },
 ];
+// The kinds the host refuses while the timeline is open, in E12's order
+// (preview/attach is record-only, so the web mock's list leaves it out).
+export const TIMELINE_GATED_KINDS = ["engine/set/paused", "engine/action/step-frames", "engine/action/clear",
+  "spawner/start", "spawner/trigger", "spawner/stop", "preview/attach"];
 export const OPTIONAL_STOCK = ["P_Large_Explosion.alo", "P_Explosion_Space_Large.alo"];
 
 function megPaths(root, read = readFileSync) {
@@ -149,7 +153,7 @@ export function checkReport(report, definition, scenario) {
       Number.isInteger(p.background) && p.ambient?.length === 4 && p.lights?.length === 3,
     "fixed profile missing or incorrect");
     const e = report.experiments ?? {};
-    for (let i = 1; i <= 11; ++i) require(!!e[`E${i}`], `missing experiment E${i}`);
+    for (let i = 1; i <= 12; ++i) require(!!e[`E${i}`], `missing experiment E${i}`);
     const baseline = new Map((e.E1?.frames ?? []).map((v) => [v.frame, v]));
     function samples(run, name, { limit = scenario.overloadGuardLimit, compare = true, stride = 1, probe = false } = {}) {
       require(isDeepStrictEqual(run?.frames?.map((v) => v.frame), frames), `${name}: missing or duplicate checked frame`);
@@ -232,6 +236,52 @@ export function checkReport(report, definition, scenario) {
     }
     require(e.E11?.applicable === !!definition.weather, "E11 weather restoration missing");
     if (definition.weather) samples(e.E11, "E11");
+    // E12: the editor's timeline. It spawns at rest at the origin, so a
+    // moving-spawn scenario does not apply.
+    require(e.E12?.applicable === !definition.velocity, "E12 timeline missing or wrong applicability");
+    if (!definition.velocity) {
+      const t = e.E12;
+      require(t.begin?.ok === true && t.begin.data?.active === true && t.begin.data.frame === 0 &&
+        t.begin.data.seed === scenario.seed && t.begin.data.status === "paused" && t.begin.data.refused === false,
+      "E12 begin did not open paused at frame 0 under the scenario seed");
+      require(isDeepStrictEqual(t.gate?.map((g) => g.kind), TIMELINE_GATED_KINDS) && t.gate.every((g) => g.refused === true),
+        "E12 a gated kind ran while the timeline was open");
+      samples({ frames: t.frames }, "E12");
+      samples({ frames: t.again }, "E12 again");
+      for (const field of ["xmlParses", "catalogBuilds", "catalogObjects", "crtCalls"])
+        require(t.hostile?.[field] > 0, `E12 zero hostile ${field}`);
+      // The changed inputs land on the latest checked frame with the most particles.
+      const parked = (e.E1?.frames ?? []).reduce((best, v) => (!best || v.particles >= best.particles ? v : best), null);
+      require(t.parked === parked?.frame, "E12 did not park on the most-populated checked frame");
+      const atParked = (sample) => capture(sample) && sample.frame === parked?.frame;
+      require(atParked(t.edited) && (t.edited.sha256 !== parked.sha256 || t.edited.particles !== parked.particles),
+        "E12 the edited replay is missing or shows E1's frame");
+      require(t.cameraReplays === !!definition.weather, "E12 camera replay decision does not match the weather document");
+      require(atParked(t.cameraMoved) && t.cameraMoved.sha256 !== parked.sha256, "E12 the moved camera is missing or shows E1's image");
+      // A re-bake is one same-time Update each way: E1's frame plus two Updates.
+      const rebaked = t.cameraReplays ? t.cameraRestored
+        : { ...t.cameraRestored, completedUpdates: t.cameraRestored?.completedUpdates - 2 };
+      require(atParked(t.cameraRestored) && sameFrame(parked, rebaked), "E12 camera replay differs from E1");
+      require(atParked(t.guardLow) && t.guardLow.guard?.limit === 1000 &&
+        (parked.particles <= 1000 || t.guardLow.particles !== parked.particles), "E12 the lowered guard did not replay under its cap");
+      require(atParked(t.estimateRaised) && t.estimateRaised.guard?.estimate === scenario.estimatedParticlesPerInstance + 1,
+        "E12 the raised estimate did not replay");
+      for (const [name, sample] of [["undo", t.undone], ["guard", t.guardRestored], ["estimate", t.estimateRestored]])
+        require(atParked(sample) && sameFrame(baseline.get(sample?.frame), sample), `E12 ${name} replay differs from E1`);
+      // Every E12 capture is its own evidence file.
+      const pngs = [...(t.frames ?? []), ...(t.again ?? []), t.edited, t.undone, t.cameraMoved, t.cameraRestored,
+        t.guardLow, t.guardRestored, t.estimateRaised, t.estimateRestored].map((v) => basename(String(v?.png ?? "")));
+      require(pngs.every((name) => name.startsWith("E12-")) && new Set(pngs).size === pngs.length,
+        "E12 captures missing, misnamed or overwritten");
+      require(t.variation?.seed !== scenario.seed && t.variation.first?.frame === 1 && t.variation.first.instances === 1 &&
+        t.variation.first.completedUpdates === 2 &&
+        sameFrame(t.variation.first, t.variation.second, false) && t.variation.first.state !== one?.state,
+        "E12 new variation did not change frame 1 or its seeks disagree");
+      require(Number.isFinite(t.latencyMs?.forwardToEnd) && t.latencyMs.forwardToEnd >= 0 &&
+        Number.isFinite(t.latencyMs?.resetTo300) && t.latencyMs.resetTo300 >= 0, "E12 latency not recorded");
+      require(t.end?.ok === true && t.end.data?.active === false && t.end.data.status === "closed" && t.end.data.frame === 300,
+        "E12 end did not close the session");
+    }
     const timings = e.E10?.timings ?? [];
     for (const timing of timings) {
       const values = timing.samplesMs;

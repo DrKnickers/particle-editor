@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { join, resolve } from "node:path";
-import { checkReport, checkCaptureFiles, checkedFrames, SCENARIOS, scenarioFor, validateGeneratedFixture, TEXTURES, resolveReplayGameRoots, findMegAsset } from "./replay-proof.mjs";
+import { checkReport, checkCaptureFiles, checkedFrames, SCENARIOS, scenarioFor, validateGeneratedFixture, TEXTURES, resolveReplayGameRoots, findMegAsset, TIMELINE_GATED_KINDS } from "./replay-proof.mjs";
 import { createHash } from "node:crypto";
 
 function fixture(definition = SCENARIOS[0]) {
@@ -40,6 +40,23 @@ function fixture(definition = SCENARIOS[0]) {
   }
   const E1 = run();
   const sought = () => ({ frames: structuredClone(E1.frames) });
+  // E12's samples: each its own capture, the changed inputs on the busiest checked frame.
+  const e12 = (name, value, changes = {}) => ({ ...structuredClone(value), png: `E12-${name}-${value.frame}.png`, ...changes });
+  function parkedE12(e1Frames) {
+    const parked = e1Frames.reduce((best, v) => (!best || v.particles >= best.particles ? v : best), null);
+    return {
+      parked: parked.frame,
+      edited: e12("edited", parked, { sha256: "e".repeat(64) }),
+      undone: e12("undone", parked),
+      cameraReplays: !!definition.weather,
+      cameraMoved: e12("camera-moved", parked, { sha256: "d".repeat(64), completedUpdates: parked.completedUpdates + 1 }),
+      cameraRestored: e12("camera-back", parked, definition.weather ? {} : { completedUpdates: parked.completedUpdates + 2 }),
+      guardLow: e12("guard-low", parked, { guard: { enabled: true, limit: 1000, estimate: 0 }, particles: Math.min(parked.particles, 1000) }),
+      guardRestored: e12("guard-restored", parked),
+      estimateRaised: e12("estimate-raised", parked, { guard: { enabled: true, limit: 10000, estimate: 1 } }),
+      estimateRestored: e12("estimate-restored", parked),
+    };
+  }
   const experiments = {
     E1, E2: sought(), E3: run(), E4: { ...sought(), xmlParses: 7, catalogBuilds: 7, catalogObjects: 7, crtCalls: 700 },
     E5: { ...sought(), editResponse: { ok: true, data: { applied: ["lifetime"], skipped: [] } },
@@ -50,6 +67,18 @@ function fixture(definition = SCENARIOS[0]) {
     E10: { timings: frames.flatMap((frame) => [true, false].map((renderIntermediate) => ({
       frame, renderIntermediate, samplesMs: [10, 11, 12, 13, 14], medianMs: 12, maximumMs: 14,
     }))) }, E11: { applicable: !!definition.weather, ...(definition.weather ? sought() : {}) },
+    E12: definition.velocity ? { applicable: false } : {
+      applicable: true,
+      begin: { ok: true, data: { active: true, frame: 0, seed: scenario.seed, status: "paused", refused: false } },
+      gate: TIMELINE_GATED_KINDS.map((kind) => ({ kind, refused: true })),
+      frames: E1.frames.map((v) => e12(`seek${v.frame}`, v)), again: E1.frames.map((v) => e12(`again${v.frame}`, v)),
+      hostile: { xmlParses: 7, catalogBuilds: 7, catalogObjects: 7, crtCalls: 700 },
+      ...parkedE12(E1.frames),
+      variation: { seed: (scenario.seed ^ 0x5a5a5a5a) >>> 0, first: { ...sample(1, 10000, 2, true), png: "", sha256: "" },
+        second: { ...sample(1, 10000, 2, true), png: "", sha256: "" } },
+      latencyMs: { forwardToEnd: 40, resetTo300: 20 },
+      end: { ok: true, data: { active: false, frame: 300, status: "closed" } },
+    },
   };
   if (definition.guard) Object.assign(experiments.E9, { high: run(), highAgain: run(), low: run(1000), lowRepeat: run(1000) });
   const report = {
@@ -63,7 +92,7 @@ function fixture(definition = SCENARIOS[0]) {
       firstParticleFrame: E1.frames.find((v) => v.particles > 0).frame, firstParticleDifferentPixels: 1, peakDifferentPixels: 1 },
     acceptance: { latencyRequired: !!definition.latencyRequired, thresholdMs: 250, accepted: true },
   };
-  return { report, scenario, definition };
+  return { report, scenario, definition, parkedE12 };
 }
 
 for (const definition of SCENARIOS) test(`good report passes: ${definition.name}`, () => {
@@ -117,6 +146,52 @@ const mutations = [
   ["E11 missing", (r) => delete r.experiments.E11, "weather"],
   ["E11 skipped", (r) => r.experiments.E11.applicable = false, "weather"],
   ["E11 wrong restored camera", (r) => r.experiments.E11.frames[1].profile.camera.position[0] = 100, "weather"],
+  ["E12 missing", (r) => delete r.experiments.E12],
+  ["E12 skipped", (r) => r.experiments.E12 = { applicable: false }],
+  ["E12 claimed on a moving spawn", (r) => r.experiments.E12.applicable = true, "velocity"],
+  ["E12 begin under another seed", (r) => ++r.experiments.E12.begin.data.seed],
+  ["E12 gated kind ran", (r) => r.experiments.E12.gate[2].refused = false],
+  ["E12 gated kind missing", (r) => r.experiments.E12.gate.pop()],
+  ["E12 seek differs", (r) => ++r.experiments.E12.frames[3].draws],
+  ["E12 repeat seek differs", (r) => r.experiments.E12.again[2].sha256 = "c".repeat(64)],
+  ["E12 missing checked frame", (r) => r.experiments.E12.frames.pop()],
+  ["E12 zero hostile work", (r) => r.experiments.E12.hostile.crtCalls = 0],
+  ["E12 undo replay differs", (r) => ++r.experiments.E12.undone.state],
+  ["E12 camera replay keeps the moved view", (r) => r.experiments.E12.cameraRestored.profile.camera.position[0] = 100],
+  ["E12 guard replay keeps the pushed limit", (r) => r.experiments.E12.guardRestored.guard.limit = 1000],
+  ["E12 replay not captured", (r) => r.experiments.E12.undone.png = ""],
+  ["E12 variation kept the seed", (r) => r.experiments.E12.variation.seed = r.scenario.seed],
+  ["E12 variation seeks disagree", (r) => ++r.experiments.E12.variation.second.draws],
+  ["E12 variation matches E1", (r) => r.experiments.E12.variation.first.state = r.experiments.E1.frames[1].state],
+  ["E12 latency missing", (r) => delete r.experiments.E12.latencyMs.resetTo300],
+  ["E12 end left the session open", (r) => r.experiments.E12.end.data.active = true],
+  ["E12 end on another frame", (r) => r.experiments.E12.end.data.frame = 0],
+  ["E12 begin not paused", (r) => r.experiments.E12.begin.data.status = "playing"],
+  ["E12 begin refused", (r) => r.experiments.E12.begin.data.refused = true],
+  ["E12 parked off the busiest frame", (r) => r.experiments.E12.parked = 1],
+  ["E12 parked on an earlier tie", (r) => r.experiments.E12.parked = 0],
+  ...["cameraMoved", "guardLow", "estimateRaised"].map((name) => [`E12 ${name} sampled off the parked frame`, (r) => {
+    const value = r.experiments.E12[name];
+    r.experiments.E12[name] = { ...value, frame: 60, png: `E12-${name}-60.png` };
+  }]),
+  ["E12 end status not closed", (r) => r.experiments.E12.end.data.status = "paused"],
+  ["E12 variation ran extra updates", (r) => { r.experiments.E12.variation.first.completedUpdates = 3; r.experiments.E12.variation.second.completedUpdates = 3; }],
+  ["E12 replay sampled off the parked frame", (r) => r.experiments.E12.undone = { ...structuredClone(r.experiments.E1.frames[1]), png: "E12-undone-1.png" }],
+  ["E12 edit shows E1's frame", (r) => r.experiments.E12.edited.sha256 = "a".repeat(64)],
+  ["E12 edit not captured", (r) => r.experiments.E12.edited.png = ""],
+  ["E12 camera decision on a plain document", (r) => r.experiments.E12.cameraReplays = true],
+  ["E12 camera decision on a weather document", (r) => r.experiments.E12.cameraReplays = false, "weather"],
+  ["E12 moved camera shows E1's image", (r) => r.experiments.E12.cameraMoved.sha256 = "a".repeat(64)],
+  ["E12 re-bake ran an extra update", (r) => ++r.experiments.E12.cameraRestored.completedUpdates],
+  ["E12 re-bake changed the RNG", (r) => ++r.experiments.E12.cameraRestored.draws],
+  ["E12 weather camera re-baked instead of replaying", (r) => r.experiments.E12.cameraRestored.completedUpdates += 2, "weather"],
+  ["E12 lowered guard not pinned", (r) => r.experiments.E12.guardLow.guard.limit = 10000],
+  ["E12 lowered guard kept the population", (r) => r.experiments.E12.guardLow.particles = 2048, "guard"],
+  ["E12 estimate not raised", (r) => r.experiments.E12.estimateRaised.guard.estimate = 0],
+  ["E12 estimate restore differs", (r) => ++r.experiments.E12.estimateRestored.draws],
+  ["E12 capture overwritten", (r) => r.experiments.E12.estimateRestored.png = r.experiments.E12.edited.png],
+  ["E12 capture misnamed", (r) => r.experiments.E12.frames[0].png = "f0.png"],
+  ["E12 variation without the instance", (r) => { r.experiments.E12.variation.first.instances = 0; r.experiments.E12.variation.second.instances = 0; }],
   ["failed hook", (r) => { r.exitCode = 10; r.failure = { hook: "update", frame: 1, message: "failed" }; }],
   ["geometry drift", (r) => ++r.experiments.E2.frames[1].geometry.crop[0]],
   ["missing resize measurement", (r) => delete r.resize],
@@ -177,6 +252,8 @@ test("a naturally expired single spawn may be absent at later checked frames", (
     for (const child of Object.values(value)) expire(child);
   }
   expire(f.report);
+  // E12 then parks on the latest frame that still has particles.
+  Object.assign(f.report.experiments.E12, f.parkedE12(f.report.experiments.E1.frames));
   assert.deepEqual(checkReport(f.report, f.definition, f.scenario).errors, []);
 });
 

@@ -157,7 +157,9 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // fire because WebView2 held focus). Then immediately enter
         // OBJECT_Z so the user can drag-Z in the same gesture and LMB-up
         // places it.
-        if ((wp & MK_SHIFT) && particleSystem && !particleSystem->getEmitters().empty())
+        // An open timeline owns the simulation: no cursor spawns.
+        if ((wp & MK_SHIFT) && particleSystem && !particleSystem->getEmitters().empty() &&
+            !TimelineOwnsSimulation())
         {
             int cx = (short)LOWORD(lp);
             int cy = (short)HIWORD(lp);
@@ -649,6 +651,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // misbehaves.
         if (LiveAttachedSystem() != nullptr) return 0;
         if (!particleSystem || particleSystem->getEmitters().empty()) return 0;
+        if (TimelineOwnsSimulation()) return 0;
 
         // Resolve cursor coords. Prefer the cached MOUSEMOVE position;
         // fall back to GetCursorPos+ScreenToClient if the cache hasn't

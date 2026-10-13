@@ -4,6 +4,7 @@ import type {
   Event,
   EngineStateDto,
   LightingSettingsDto,
+  TimelineStateDto,
 } from "@particle-editor/bridge-schema";
 
 export interface MockDispatchHost {
@@ -16,4 +17,5 @@ export interface MockDispatchHost {
   lightingOverride: LightingSettingsDto | null;
   lightingForceAlign: boolean;
   lastOverloadGuard: { enabled: boolean; maxParticles: number } | null;
+  timeline: TimelineStateDto;
 }

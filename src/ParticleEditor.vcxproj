@@ -129,6 +129,7 @@
     <ClInclude Include="effect\AtomicSave.h" />
     <ClInclude Include="simulation\ParticleRandom.h" />
     <ClInclude Include="simulation\PreviewScenario.h" />
+    <ClInclude Include="simulation\ReplayPlayClock.h" />
     <ClInclude Include="simulation\ObservationSpec.h" />
     <ClInclude Include="simulation\ObservationLifecycle.h" />
     <ClInclude Include="simulation\SpawnerDriver.h" />
@@ -303,6 +304,7 @@
     <ClCompile Include="host\BridgeDispatch_LinkGroups.cpp" />
     <ClCompile Include="host\BridgeDispatch_Shell.cpp" />
     <ClCompile Include="host\BridgeDispatch_SpawnerLighting.cpp" />
+    <ClCompile Include="host\BridgeDispatch_Timeline.cpp" />
     <ClCompile Include="host\CaptureRunner.cpp" />
     <ClCompile Include="host\CaptureTicker.cpp" />
     <ClCompile Include="host\ParticleReplayController.cpp" />

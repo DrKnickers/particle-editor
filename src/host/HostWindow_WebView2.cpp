@@ -199,6 +199,10 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
             if (hMain) KillTimer(hMain, kWebReloadDeadlineTimerId);
             Log("[webview] reloaded UI is back (app/ready)\n");
         }
+        // A fresh page starts with its timeline closed. Close the host's
+        // session too, so a reload or renderer crash never leaves the preview
+        // frozen under a timeline nobody can see.
+        if (dispatcher) dispatcher->EndTimeline();
         // Frameless title bar: replay the current maximized state now that the web
         // can receive it — a launch-maximized window's first WM_SIZE fired before
         // React existed, so the initial glyph would otherwise be stuck at Maximize.

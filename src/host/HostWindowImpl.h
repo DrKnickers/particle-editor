@@ -659,6 +659,11 @@ struct HostWindowImpl
     bool        useTestHost = false; // --test-host: CDP :9222 + DevTools
     enum class RunMode { Interactive, Capture, Drive, Record, ReplayProof, Observe };
     enum class SpawnPolicy { Strict, Observe };
+    // Golden pins the capture profile (camera, lights, sky, ground, MSAA) on
+    // every replay reset, for the proof, observation and capture runs.
+    // Interactive pins only what the simulation reads (guard and estimate),
+    // so the editor's timeline replays without touching the user's view.
+    enum class PinMode { Golden, Interactive };
     const RunMode m_runMode;
     const std::wstring m_replayScenarioPath;
     const std::wstring m_replayOutputDirectory;
@@ -711,6 +716,9 @@ struct HostWindowImpl
         return IsFullyInteractiveSession(
             m_runMode == RunMode::Capture, IsAutomationMode(), useTestHost);
     }
+    // While the editor's timeline is open its replay controller is the only
+    // thing that advances the simulation (BridgeDispatch_Timeline.cpp).
+    bool TimelineOwnsSimulation() const;
     int          m_recordTimelineFps = 0;    // latched at timeline-Init success; locks the
                                              // stats-tick FPS readout to the clip's virtual rate
     int          m_recordFrame = 0;          // current emitted frame (echoed in the ui/cursor `frame`)
@@ -1041,7 +1049,8 @@ struct HostWindowImpl
     // viewport HWND is handed to Engine's ctor in WM_CREATE.
     void RenderD3D9();
     bool RenderComposedFrame(bool simulate);
-    ParticleReplayController::Hooks BuildReplayHooks(const std::wstring& readbackPath, SpawnPolicy policy);
+    ParticleReplayController::Hooks BuildReplayHooks(const std::wstring& readbackPath, SpawnPolicy policy,
+                                                     PinMode pinMode = PinMode::Golden);
 
     HRESULT InitWebView2();
     // Wires every per-controller setup step that's common to both HWND

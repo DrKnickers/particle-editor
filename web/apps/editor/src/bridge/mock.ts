@@ -39,6 +39,7 @@ import type {
   EngineStateDto,
   EmitterTreeDto,
   LightingSettingsDto,
+  TimelineStateDto,
 } from "@particle-editor/bridge-schema";
 import {
   findEmitterNode,
@@ -59,6 +60,7 @@ export { seedMockPalette } from "./mock-dispatch/dispatch-assets";
 import { dispatchAssets } from "./mock-dispatch/dispatch-assets";
 import { dispatchShell } from "./mock-dispatch/dispatch-shell";
 import { dispatchSpawnerLighting } from "./mock-dispatch/dispatch-spawner-lighting";
+import { closedTimelineState, dispatchTimeline, TIMELINE_GATED_KINDS } from "./mock-dispatch/dispatch-timeline";
 import { EventHub } from "./event-hub";
 
 /** Returns true for request kinds that should mark the in-memory file
@@ -244,6 +246,9 @@ export class MockBridge implements Bridge, MockDispatchHost {
   // test-observable; no mock behavior depends on it.
   lastOverloadGuard: { enabled: boolean; maxParticles: number } | null = null;
 
+  // The timeline session (timeline/* kinds); no simulation behind it.
+  timeline: TimelineStateDto = closedTimelineState();
+
   // Ordered content-layer stack (absolute slash-free paths, front = highest
   // precedence; [] = Unmodded). Not part of the engine-state snapshot DTO — surfaced
   // only via the mods/list payload + driven by mods/set-layers.
@@ -339,6 +344,10 @@ export class MockBridge implements Bridge, MockDispatchHost {
 
   // ─── Request routing ─────────────────────────────
   private handle(req: Request): unknown {
+    // Mirrors the native host's RefuseWhileTimeline: an open timeline owns
+    // the clock and the spawner.
+    if (this.timeline.active && TIMELINE_GATED_KINDS.has(req.kind))
+      throw new Error(`${req.kind} is unavailable while the timeline is open`);
     switch (req.kind) {
       case "engine/state/snapshot":
       case "engine/set/ground":
@@ -477,6 +486,13 @@ export class MockBridge implements Bridge, MockDispatchHost {
       case "settings/lighting/set":
       case "settings/lighting-force-align/set":
         return dispatchSpawnerLighting.call(this, req);
+
+      case "timeline/begin":
+      case "timeline/end":
+      case "timeline/seek":
+      case "timeline/set":
+      case "timeline/new-variation":
+        return dispatchTimeline.call(this, req);
 
       // ---------------- emitters / undo: not yet implemented ----------------
       case "emitters/import-from-file":

@@ -533,6 +533,8 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
     // keeps any subscriber's mirror in sync.
     if (kind == "engine/set/paused")
     {
+        // The timeline owns the clock; its own timeline/set plays and pauses.
+        if (RefuseWhileTimeline(ctx)) return true;
         SetPreviewPaused(params.value("paused", false));
         ctx.SendOk(json::object());
         // paused is a view-only toggle (preview clock). Don't mark dirty.
@@ -556,7 +558,8 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         m_overloadGuardCached       = true;
         m_overloadGuardEnabled      = enabled;
         m_overloadGuardMaxParticles = maxParticles;
-        if (m_engine) m_engine->SetOverloadGuard(enabled, maxParticles);
+        // An open timeline replays with the new cache in its next slot.
+        if (m_engine && !m_timeline.active) m_engine->SetOverloadGuard(enabled, maxParticles);
         ctx.SendOk(json::object());
         return true;
     }
@@ -620,7 +623,9 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         if (perInstance < 0.0) perInstance = 0.0;
         m_estimatedLoadCached       = true;
         m_estimatedLoadPerInstance  = perInstance;
-        if (m_engine) m_engine->SetEstimatedLoad(perInstance);
+        // Applying it can clear live instances; an open timeline instead
+        // replays with the new cache in its next slot.
+        if (m_engine && !m_timeline.active) m_engine->SetEstimatedLoad(perInstance);
         ctx.SendOk(json::object());
         return true;
     }
@@ -662,6 +667,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
     if (kind == "engine/action/clear")
     {
         if (!ctx.RequireEngine(kind.c_str())) return true;
+        if (RefuseWhileTimeline(ctx)) return true;
         m_engine->Clear();
         ctx.SendOk(json::object());
         ctx.MarkDirty();
@@ -717,6 +723,8 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
     // a sync-time mutation.
     if (kind == "engine/action/step-frames")
     {
+        // The timeline steps with timeline/seek instead.
+        if (RefuseWhileTimeline(ctx)) return true;
         StepPreviewFrames(params.value("frames", 1));
         ctx.SendOk(json::object());
         return true;

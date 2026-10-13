@@ -866,7 +866,8 @@ void HostWindowImpl::ReleaseHostComObjects()
 // changes. The SpawnerPanel badge subscribes to that event unchanged.
 void HostWindowImpl::RenderD3D9()
 {
-    RenderComposedFrame(m_runMode != RunMode::ReplayProof && m_runMode != RunMode::Observe);
+    RenderComposedFrame(m_runMode != RunMode::ReplayProof && m_runMode != RunMode::Observe &&
+                        !TimelineOwnsSimulation());
 }
 
 bool HostWindowImpl::RenderComposedFrame(bool simulate)
@@ -955,12 +956,13 @@ bool HostWindowImpl::RenderComposedFrame(bool simulate)
     // no-op with the viewport area empty.
     bool composed = false;
     bool queryOk = false;
+    const bool strictComposition = m_runMode == RunMode::ReplayProof || m_runMode == RunMode::Observe;
     if (rendered && m_compositor && m_compositor->IsReady())
     {
         const uint64_t queryFailures = engine->EndFrameQueryFailureCountForTesting();
         const uint64_t queryTimeouts = engine->EndFrameQueryTimeoutCountForTesting();
         engine->IssueEndFrameQuery();
-        if (!simulate && (!engine->EndFrameQueryPresentForObservation() ||
+        if (strictComposition && (!engine->EndFrameQueryPresentForObservation() ||
             engine->EndFrameQueryLastIssueResultForObservation() != S_OK ||
             engine->DeviceCallsBlocked())) return finish(false);
         // [PERF] WaitEndFrameQuery is the suspected hot stage — time the
@@ -974,8 +976,9 @@ bool HostWindowImpl::RenderComposedFrame(bool simulate)
             engine->EndFrameQueryFailureCountForTesting() == queryFailures &&
             engine->EndFrameQueryTimeoutCountForTesting() == queryTimeouts &&
             !engine->DeviceCallsBlocked();
-        // Normal modes retain degraded composition; proof rejects stale pixels.
-        if (!simulate && !queryOk) return finish(false);
+        // Normal modes (the timeline included) retain degraded composition;
+        // proof and observe reject stale pixels.
+        if (strictComposition && !queryOk) return finish(false);
         // Pass the engine's current shared
         // handle so Compositor can lazy-detect AlphaCompositor::Resize
         // invalidation and re-open the D3D11 alias. Without this, a
@@ -2301,6 +2304,12 @@ int HostWindowImpl::Run(int nCmdShow)
     dispatcher->SetUndoStack(&undoStack);
     dispatcher->SetHostHwnd(hMain);
     dispatcher->SetExternalLaunchAllowed(IsFullyInteractive());
+    // The editor's timeline replays through the interactive pin. Capture,
+    // drive, record and observe runs own the clock themselves and refuse it;
+    // the replay proof opens one for its E12 experiment.
+    dispatcher->SetTimelineHost(
+        [this]() { return BuildReplayHooks(L"", SpawnPolicy::Observe, PinMode::Interactive); },
+        m_runMode == RunMode::Interactive || m_runMode == RunMode::ReplayProof);
     // Throttle the panel-refresh broadcasts during a --record run only
     // (NOT --drive, whose asserts must see every state change) so the driver's
     // rapid host-side edits don't saturate the web + starve the capture/ack loop.
@@ -2843,7 +2852,11 @@ int HostWindowImpl::Run(int nCmdShow)
             const LONGLONG now = PerfQpcNow();
             if (now >= nextFrameQpc)
             {
-                RenderD3D9();
+                // An open timeline first advances play or re-replays a changed
+                // input; when that replay already presented this slot's frame,
+                // skip the second present.
+                const bool presented = dispatcher && dispatcher->ServiceTimeline();
+                if (!presented) RenderD3D9();
                 // Deliver any live-coalesced trailing broadcast once per
                 // display frame — the primary flush path (the DispatchSync-top
                 // and stats-timer flushes cover pump-starved cases).
