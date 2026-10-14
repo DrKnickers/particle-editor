@@ -28,6 +28,8 @@ HOUDINI_DIR = os.path.dirname(HERE)
 GENERATORS_DIR = os.path.join(HOUDINI_DIR, "generators")
 REGISTRY_PATH = os.path.join(HOUDINI_DIR, "registry.json")
 FRAME_NAME = re.compile(r"^frames/frame_[0-9]{4}\.exr$")
+# The guard band profiles.mjs leaves round every frame (its PAD).
+PAD = 2
 
 
 class Rejected(Exception):
@@ -158,8 +160,11 @@ def main():
     import hou  # noqa: E402 -- only inside hython
 
     grid = entry["grid"]
-    ctx = {"params": job["params"], "seed": job["seed"], "tier": dict(entry["tiers"][job["tier"]]),
-           "tierName": job["tier"], "grid": grid, "threads": job["threads"]}
+    tier = dict(entry["tiers"][job["tier"]])
+    # Frames are rendered at `frame` texels a side; the packer insets each one
+    # by `pad` inside its `cell`.
+    ctx = {"params": job["params"], "seed": job["seed"], "tier": tier, "tierName": job["tier"],
+           "grid": grid, "pad": PAD, "frame": tier["cell"] - 2 * PAD, "threads": job["threads"]}
     workdir = os.getcwd()
     names = builder["generate"](hou, ctx)
     manifest = frame_manifest(names, grid * grid, workdir)

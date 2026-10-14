@@ -3,24 +3,38 @@
 //
 // Runs debug-atlas through the real wrapper, launcher, Job Object and Houdini
 // in a throwaway root, then checks:
-//   - the 16 frames decode to the oracle's colours in order, at the tier's size;
+//   - the published texture holds the oracle's 16 colours in order, each frame
+//     at its size, inset in its cell and upright (its orientation mark is top
+//     left);
+//   - the texture passed its profile and was published under its name;
+//   - the editor loads it from the root alone, and plays the cells 0..15 in
+//     order (validate.mjs, through the Release build);
+//   - the same inputs in a new root give the same texture bytes;
+//   - each profile's encode, through the real hoiiotool, passes its
+//     validators, keeps colour where alpha is partial, and a broken input
+//     fails them;
 //   - an identical re-run is a verified cache hit;
 //   - a run while the machine lock is held exits 7;
 //   - killing hython mid-run exits 8, with no stage and no cache entry left;
 //   - killing the wrapper alone (no tree kill) still ends hython, and the next
 //     run sweeps the abandoned stage.
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, readdirSync, rmSync, existsSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
-import { HFS, PINNED } from "./houdini.mjs";
+import { HFS } from "./houdini.mjs";
 import { acquireLock } from "./contain.mjs";
+import { sha256 } from "./cache.mjs";
+import { runHoiiotool } from "./generate.mjs";
+import { decodeTga } from "./images.mjs";
+import { PAD, atlasLayout, encodeArgs, packArgs, validateTexture } from "./profiles.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const generateScript = join(here, "generate.mjs");
+const validateScript = join(here, "validate.mjs");
 const system32 = win32.join(process.env.SystemRoot ?? "C:\\Windows", "System32");
-const GRID = 4, CELL = 32;
+const GRID = 4, CELL = 32, FRAME = CELL - 2 * PAD;
 const failures = [];
 const check = (ok, what) => {
   console.log(`[houdini-lane] ${ok ? "PASS" : "FAIL"} ${what}`);
@@ -60,28 +74,91 @@ const taskkill = (pid) => spawnSync(win32.join(system32, "taskkill.exe"), ["/F",
 const staged = (root) => (existsSync(join(root, ".staging")) ? readdirSync(join(root, ".staging")) : []);
 const cached = (root) => (existsSync(join(root, "cache")) ? readdirSync(join(root, "cache")) : []);
 
-// Each frame must be one flat colour: red = i % grid, green = i / grid, blue 0.5.
-function decodeFrames(entry) {
-  const frames = Array.from({ length: GRID * GRID }, (_, i) => join(entry, "frames", `frame_${String(i + 1).padStart(4, "0")}.exr`));
-  const r = spawnSync(PINNED.hoiiotool.path, ["--evaloff", "--wildcardoff", "--stats", ...frames], {
-    encoding: "utf8", windowsHide: true, timeout: 120000,
-    env: { SystemRoot: process.env.SystemRoot, PATH: `${system32};${win32.join(HFS, "bin")}` },
-  });
-  if (r.status !== 0) return [`hoiiotool exit ${r.status}: ${r.stderr}`];
-  const blocks = r.stdout.split(/\r?\n(?=\S)/).filter((block) => / : +\d+ x +\d+,/.test(block));
-  if (blocks.length !== frames.length) return [`hoiiotool reported ${blocks.length} frames`];
-  const span = GRID - 1;
-  return blocks.flatMap((block, i) => {
-    const size = / : +(\d+) x +(\d+),/.exec(block);
-    const colour = /Constant Color: ([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+)/.exec(block)?.slice(1).map(Number);
-    const want = [(i % GRID) / span, Math.floor(i / GRID) / span, 0.5, 1];
-    const errors = [];
-    if (Number(size[1]) !== CELL || Number(size[2]) !== CELL) errors.push(`frame ${i} is ${size[1]}x${size[2]}`);
-    // Half floats hold 1/3 as 0.333252.
-    if (!colour || colour.some((v, c) => Math.abs(v - want[c]) > 1e-3))
-      errors.push(`frame ${i} is ${colour ? colour.join(",") : "not flat"}, not ${want.map((v) => v.toFixed(3)).join(",")}`);
-    return errors;
-  });
+// Every texel of every cell's frame, in the published texture: red = i % grid
+// and green = i / grid in thirds, blue 0.5, except the frame's top-left
+// quarter-by-quarter corner, where blue is 1 (debug-atlas's orientation mark).
+// So cell order, frame size and placement, and each frame's orientation are
+// all checked, and the guard bands are black.
+function decodeTexture(path) {
+  const image = decodeTga(readFileSync(path)), layout = atlasLayout(GRID, CELL), mark = Math.floor(FRAME / 4);
+  const errors = [];
+  for (const cell of layout.cells) {
+    const want = [Math.round((cell.index % GRID) * 85), Math.round(Math.floor(cell.index / GRID) * 85)];
+    let wrong = 0, first = null;
+    for (let v = -PAD; v < FRAME + PAD; v++) {
+      for (let u = -PAD; u < FRAME + PAD; u++) {
+        const o = ((cell.frameY + v) * image.width + cell.frameX + u) * 4;
+        const inFrame = u >= 0 && v >= 0 && u < FRAME && v < FRAME;
+        const expected = !inFrame ? [0, 0, 0] : [...want, u < mark && v < mark ? 255 : 128];
+        const got = [...image.rgba.subarray(o, o + 3)];
+        if (got.some((value, c) => Math.abs(value - expected[c]) > 1)) { wrong++; first ??= `(${u},${v}) is ${got} not ${expected}`; }
+      }
+    }
+    if (wrong) errors.push(`cell ${cell.index}: ${wrong} texels wrong, first ${first}`);
+  }
+  return errors;
+}
+
+// validate.mjs as the editor-validation step runs it.
+function validate(entry, out) {
+  const r = spawnSync(process.execPath, [validateScript, "--entry", entry, "--out", out], { encoding: "utf8", windowsHide: true, timeout: 20 * 60000 });
+  const line = (r.stdout ?? "").split(/\r?\n/).find((v) => v.startsWith("[houdini-validate] {"));
+  try { return { code: r.status, record: line ? JSON.parse(line.slice(19)) : null }; } catch { return { code: r.status, record: null }; }
+}
+
+// Each profile through the real hoiiotool on a synthetic 1x1 layout: a frame
+// whose straight colour is (1, 0.5, 0) under an alpha ramp, premultiplied as a
+// renderer writes it. The encode must pass its validators and store that
+// colour wherever alpha is partial; a broken input must fail them.
+function profileEncodes(dir) {
+  mkdirSync(dir);
+  const env = { SystemRoot: process.env.SystemRoot, PATH: `${system32};${win32.join(HFS, "bin")}` };
+  const tool = (args) => {
+    const r = runHoiiotool(args, { cwd: dir, env, timeoutMs: 120000 });
+    if (r.code !== 0) throw new Error(`hoiiotool exit ${r.code}: ${r.stderr}`);
+  };
+  const layout = atlasLayout(1, 64), size = layout.frame;
+  const errorsOf = (file, blend) => { const bytes = readFileSync(join(dir, file)); return validateTexture(decodeTga(bytes), bytes.length, { blend, layout }); };
+  tool(["--evaloff", "--wildcardoff", "--pattern", `fill:left=1,0.5,0,1:right=1,0.5,0,0.03125`, `${size}x${size}`, "4", "--premult", "-d", "half", "-o", "ramp.exr"]);
+  tool(packArgs(["ramp.exr"], layout, "packed.exr"));
+  for (const blend of ["additive", "transparent"]) {
+    tool(encodeArgs(blend, "packed.exr", `${blend}.tga`));
+    const errors = errorsOf(`${blend}.tga`, blend);
+    check(errors.length === 0, `the ${blend} encode passes its validators${errors.length ? `: ${errors.join("; ")}` : ""}`);
+  }
+  // Straight colour survives at every partial alpha: the writer divides once.
+  // It divides the 8-bit premultiplied value, so colour is good to one
+  // premultiplied step, 255 / alpha (alpha 21: 10/21 reads 121 for 128). The
+  // plan's first recipe divided twice and read 255 for 128.
+  const image = decodeTga(readFileSync(join(dir, "transparent.tga")));
+  const drift = [];
+  for (let x = PAD; x < PAD + size; x += 4) {
+    const o = ((PAD + size / 2) * image.width + x) * 4, [r, g, b, a] = image.rgba.subarray(o, o + 4);
+    const slack = 255 / a + 2;
+    if (a >= 16 && (Math.abs(r - 255) > slack || Math.abs(g - 128) > slack || b > slack)) drift.push(`x ${x}: ${r},${g},${b} at alpha ${a}`);
+  }
+  check(drift.length === 0, `the transparent encode keeps (255,128,0) under partial alpha${drift.length ? `: ${drift.join("; ")}` : ""}`);
+  // A soft edge fading through the 8-bit rounding boundary (alpha 0.01 down to
+  // 0.00001): every texel the file holds at alpha 0 must carry the fill, not
+  // its own near-black premultiplied colour.
+  tool(["--evaloff", "--wildcardoff", "--pattern", `fill:left=1,0.5,0,0.01:right=1,0.5,0,0.00001`, `${size}x${size}`, "4", "--premult", "-d", "half", "-o", "fade.exr"]);
+  tool(packArgs(["fade.exr"], layout, "fade-packed.exr"));
+  tool(encodeArgs("transparent", "fade-packed.exr", "fade.tga"));
+  const fade = decodeTga(readFileSync(join(dir, "fade.tga"))), dark = [];
+  let clear = 0;
+  for (let x = PAD; x < PAD + size; x++) {
+    const o = ((PAD + size / 2) * fade.width + x) * 4, [r, g, b, a] = fade.rgba.subarray(o, o + 4);
+    if (a === 0) { clear++; if (r < 250 || Math.abs(g - 128) > 6 || b > 6) dark.push(`x ${x}: ${r},${g},${b}`); }
+  }
+  const fadeErrors = errorsOf("fade.tga", "transparent");
+  check(clear > 0 && dark.length === 0 && fadeErrors.length === 0,
+    `a soft edge's alpha-0 texels carry the fill (${clear} of ${size} clear${dark.length ? `; dark: ${dark.join("; ")}` : ""}${fadeErrors.length ? `; ${fadeErrors.join("; ")}` : ""})`);
+  // Broken inputs: no fill under the holes, and an additive band that isn't black.
+  tool(["--evaloff", "--wildcardoff", "packed.exr", "--clamp:min=0:max=1", "-d", "uint8", "--compression", "none", "-o", "unfilled.tga"]);
+  check(errorsOf("unfilled.tga", "transparent").some((v) => /dark fringe/.test(v)), "an unfilled transparent texture fails on its dark fringe");
+  tool(["--evaloff", "--wildcardoff", "--pattern", "constant:color=0.2,0.2,0.2,1", "64x64", "4", "-d", "half", "-o", "grey.exr"]);
+  tool(encodeArgs("additive", "grey.exr", "grey.tga"));
+  check(errorsOf("grey.tga", "additive").some((v) => /guard-band texels are not the black/.test(v)), "an additive texture with a grey band fails");
 }
 
 const base = mkdtempSync(join(tmpdir(), "pe-houdini-lane-"));
@@ -90,11 +167,29 @@ try {
   // 1. A miss, end to end.
   const first = await generate(root, 7);
   if (check(first.code === 0 && first.record?.hit === false, `debug-atlas generates (exit ${first.code}${first.record?.error ? `: ${first.record.error}` : ""})`)) {
-    const errors = decodeFrames(first.record.entry);
-    check(errors.length === 0, `the 16 frames decode to the oracle's colours in order${errors.length ? `: ${errors.join("; ")}` : ""}`);
+    const errors = decodeTexture(first.record.published);
+    check(errors.length === 0, `the texture holds the oracle's 16 colours in order, each frame upright in its cell${errors.length ? `: ${errors.join("; ")}` : ""}`);
     check(staged(root).length === 0, "the stage was removed after promotion");
     check(!alive(first.hython), "hython has exited");
+    const { texture, published, contentHash, profile } = first.record;
+    check(profile === "eaw-flipbook" && /^pe_gen_debug-atlas_[0-9a-f]{8}\.tga$/.test(texture) && texture.slice(-12, -4) === contentHash.slice(0, 8),
+      `the texture is named for its bytes (${texture}, ${profile})`);
+    check(published === join(root, "Data", "Art", "Textures", texture) && existsSync(published) && sha256(readFileSync(published)) === contentHash,
+      "the texture is published under Data\\Art\\Textures, byte for byte");
+
+    // The editor: from the root alone, fmt=21, the control differs, cells 0..15 in order.
+    const validated = validate(first.record.entry, join(base, "validate"));
+    check(validated.code === 0 && validated.record?.ok === true,
+      `the editor validates it (exit ${validated.code}${validated.record?.error ? `: ${validated.record.error}` : ""})`);
+    check(JSON.stringify(validated.record?.sequence) === JSON.stringify([...Array(16).keys()]),
+      `the fireball fixture plays the cells 0..15 in order (${JSON.stringify(validated.record?.sequence ?? null)})`);
+
+    // The same inputs elsewhere: the same bytes.
+    const elsewhere = await generate(join(base, "elsewhere"), 7);
+    check(elsewhere.code === 0 && elsewhere.record?.hit === false && elsewhere.record.contentHash === contentHash,
+      `a new root reproduces the texture byte for byte (${elsewhere.record?.contentHash ?? `exit ${elsewhere.code}`})`);
   }
+  profileEncodes(join(base, "profiles"));
 
   // 2. The same inputs are a verified hit.
   const second = await generate(root, 7);

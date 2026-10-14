@@ -6,6 +6,11 @@
 # decode to 0, 1, ..., grid*grid - 1; a flip, a transposition or an
 # off-by-one each give a wrong sequence.
 #
+# Each frame also carries an orientation mark: its top-left quarter-by-quarter
+# corner has blue = 1. A frame flipped or mirrored inside its cell moves the
+# mark, which a cell's flat colour can't show. The mark stays clear of the
+# frame's centre, where the editor validation reads the colour.
+#
 # The frames come from a compositing network, not a renderer: on the dev box a
 # Mantra frame costs ~10 s of fixed overhead, and the Karma ROP samples an
 # animated material once. An oracle needs exact flat colour fast; the
@@ -29,13 +34,14 @@ def index_colour(index, grid):
 
 
 def generate(hou, ctx):
-    grid, cell = ctx["grid"], ctx["tier"]["cell"]
+    # Frames fill the cell inside its guard band; the packer places them.
+    grid, size = ctx["grid"], ctx["frame"]
     count = grid * grid
     net = hou.node("/img").createNode("img", "atlas")
     colour = net.createNode("color", "flat")
     _parm(colour, "overridesize").set(1)
-    _parm(colour, "size1").set(cell)
-    _parm(colour, "size2").set(cell)
+    _parm(colour, "size1").set(size)
+    _parm(colour, "size2").set(size)
     _parm(colour, "length").set(count)
     _parm(colour, "colora").set(1.0)
     # One constant keyframe per frame: one render call covers the range.
@@ -48,8 +54,15 @@ def generate(hou, ctx):
             key.setExpression("constant()", hou.exprLanguage.Hscript)
             parm.setKeyframe(key)
 
+    # COP pixel coordinates start at the bottom left, so the top-left corner is
+    # low X and high Y. The bounds are integers from the tier, never job text.
+    mark = net.createNode("pixel", "mark")
+    mark.setInput(0, colour)
+    _parm(mark, "bexpr").setExpression("if($X < %d && $Y >= %d, 1, $B)" % (size // 4, size - size // 4),
+                                       hou.exprLanguage.Hscript)
+
     rop = hou.node("/out").createNode("comp", "frames")
-    _parm(rop, "coppath").set(colour.path())
+    _parm(rop, "coppath").set(mark.path())
     _parm(rop, "convertcolorspace").set(0)
     _parm(rop, "mkpath").set(1)
     _parm(rop, "copoutput").set("frames/frame_$F4.exr")

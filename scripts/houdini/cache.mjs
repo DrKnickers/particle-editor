@@ -86,21 +86,24 @@ export function checkManifest(text, count, dir, io = fs) {
   return manifest;
 }
 
-// Spec §21.6. "contentHash" is the frame manifest's hash until PR 2 packs a
-// texture; "usedBy" starts empty and validation starts "not-run".
-export function buildProvenance({ id, entry, key, params, seed, tier, build, hoiiotool, threads, manifestSha256 }) {
+// Spec §21.6. "contentHash" is the texture's SHA-256, the identity its name
+// carries; "usedBy" starts empty and validation starts "not-run".
+export function buildProvenance({ id, entry, key, params, seed, tier, build, hoiiotool, threads, manifestSha256, texture }) {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     generatorId: id,
     generatorVersion: entry.version,
     hdaVersion: entry.builderSha256,
     seed,
     parameters: params,
-    outputProfile: "frames",
-    contentHash: manifestSha256,
+    outputProfile: texture.profile,
+    contentHash: texture.sha256,
     particleEditorValidation: "not-run",
     gameVerification: "not-run",
     usedBy: [],
+    texture: { name: texture.name, blend: entry.blend, grid: entry.grid, cell: texture.cell, pad: texture.pad,
+      size: texture.size, bytes: texture.bytes },
+    framesManifestSha256: manifestSha256,
     cacheKey: key,
     tier,
     renderer: entry.renderer,
@@ -111,6 +114,7 @@ export function buildProvenance({ id, entry, key, params, seed, tier, build, hoi
 }
 
 export const serialise = (value) => `${JSON.stringify(value, null, 2)}\n`;
+export const TEXTURE_NAME = /^pe_gen_[a-z0-9-]{1,40}_[0-9a-f]{8}\.tga$/;
 
 // A cache hit is re-hashed before it is trusted; a bad entry is reported, not used.
 export function verifyEntry(dir, key, count, io = fs) {
@@ -118,15 +122,21 @@ export function verifyEntry(dir, key, count, io = fs) {
   try { provenance = JSON.parse(io.readFileSync(join(dir, "provenance.json"), "utf8")); }
   catch { throw fail("cache entry has no readable provenance", 4); }
   if (provenance.cacheKey !== key) throw fail("cache entry belongs to another key", 4);
+  const name = provenance.texture?.name;
+  if (typeof name !== "string" || !TEXTURE_NAME.test(name) || name.slice(-12, -4) !== String(provenance.contentHash).slice(0, 8))
+    throw fail("cache entry provenance names no texture of its own", 4);
+  let texture;
+  try { texture = io.readFileSync(join(dir, name)); } catch { throw fail("cache entry texture is missing", 4); }
+  if (sha256(texture) !== provenance.contentHash) throw fail("cache entry texture differs from its provenance", 4);
   const text = io.readFileSync(join(dir, "frames.manifest.json"));
-  if (sha256(text) !== provenance.contentHash) throw fail("cache entry manifest differs from its provenance", 4);
+  if (sha256(text) !== provenance.framesManifestSha256) throw fail("cache entry manifest differs from its provenance", 4);
   checkManifest(text.toString("utf8"), count, dir, io);
   return provenance;
 }
 
 // Least recently used first, by the entry folder's mtime (a hit touches it).
-// An entry holding a `published` marker is never evicted; PR 2 writes it when
-// a texture is copied out of the cache. Only folders the wrapper names (a
+// An entry holding a `published` marker is never evicted: its texture was
+// copied out to Data\Art\Textures. Only folders the wrapper names (a
 // 64-hex key holding provenance.json) are ever counted or removed.
 export const KEY = /^[0-9a-f]{64}$/;
 export function evict(cacheDir, maxBytes, { keep = null, io = fs } = {}) {

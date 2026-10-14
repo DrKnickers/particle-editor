@@ -39,7 +39,9 @@
 // Opt-in lanes run only when named with --lane, and --list marks them:
 //   houdini           debug-atlas through the pinned Houdini build, the Job
 //                     Object launcher and the machine lock, plus kill and
-//                     lock-busy runs (scripts/houdini/lane.mjs; dev box only).
+//                     lock-busy runs, the profile encodes, and the editor
+//                     validation through the Release build
+//                     (scripts/houdini/lane.mjs; dev box only).
 //                     Its unit tests run in the default `scripts` lane.
 //
 // Missing prereqs are FAILURES with actionable messages by default; silent skips
@@ -658,6 +660,8 @@ export function runHoudiniLane({
     [exists(HOUDINI_PINNED.hython.path) && exists(HOUDINI_PINNED.hoiiotool.path),
       `Houdini ${HOUDINI_BUILD} missing (${HOUDINI_PINNED.hython.path})`, `install Houdini ${HOUDINI_BUILD}`],
     [exists(join(repoRoot, "scripts", "houdini", "lane.mjs")), "scripts/houdini/lane.mjs missing", "restore the houdini lane script"],
+    // The editor validation observes the generated texture through this build.
+    [exists(releaseExe), "x64/Release/ParticleEditor.exe missing", "run the msbuild-release lane first"],
   ]) {
     const p = checkPrereq("houdini", ok, what, hint);
     if (p) return p;

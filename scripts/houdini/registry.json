@@ -5,8 +5,9 @@
       "version": 1,
       "testOnly": true,
       "builder": "generators/debug_atlas.py",
-      "builderSha256": "992a3a59e9b8e68ee4bbbc72d69a5b318aca2607260e6ac487773157265460ee",
+      "builderSha256": "b7e2c1abdd96294635101d26a7c0dcdb9dd0de9a6cad981a408f4549c494d11f",
       "renderer": "cop",
+      "blend": "additive",
       "grid": 4,
       "params": {},
       "tiers": {

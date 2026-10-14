@@ -14,7 +14,7 @@ const scratch = (t) => {
   return dir;
 };
 
-const ENTRY = { version: 1, builder: "generators/a.py", builderSha256: "b".repeat(64), renderer: "cop", grid: 2,
+const ENTRY = { version: 1, builder: "generators/a.py", builderSha256: "b".repeat(64), renderer: "cop", blend: "additive", grid: 2,
   params: { heat: { type: "float", min: 0, max: 2, default: 1 } },
   tiers: { preview: { cell: 32, timeoutMin: 5, maxStageMiB: 64 } } };
 const BASE = { id: "thing", entry: ENTRY, tree: { "a.py": "1".repeat(64), "registry.json": "2".repeat(64) },
@@ -101,8 +101,11 @@ test("the manifest must list exactly grid*grid present, unaltered frames in orde
   assert.throws(() => checkManifest(writeFrames(missing, 4, { skip: 3 }), 4, missing), /frame 3 is missing/);
 });
 
+const TEXTURE = { name: "pe_gen_thing_0123abcd.tga", sha256: `0123abcd${"e".repeat(56)}`, profile: "eaw-flipbook",
+  cell: 32, pad: 2, size: 64, bytes: 16402 };
 const provenance = (overrides = {}) => buildProvenance({ id: "thing", entry: ENTRY, key: "k".repeat(64), params: { heat: 1 },
-  seed: 7, tier: "preview", build: "19.5.435", hoiiotool: "OpenImageIO 2.3.14", threads: 4, manifestSha256: "m".repeat(64), ...overrides });
+  seed: 7, tier: "preview", build: "19.5.435", hoiiotool: "OpenImageIO 2.3.14", threads: 4, manifestSha256: "m".repeat(64),
+  texture: TEXTURE, ...overrides });
 
 test("provenance carries every spec §21.6 field and nothing about the machine", () => {
   const record = provenance();
@@ -114,6 +117,11 @@ test("provenance carries every spec §21.6 field and nothing about the machine",
   assert.equal(record.hdaVersion, ENTRY.builderSha256);
   assert.deepEqual(record.usedBy, []);
   assert.equal(record.particleEditorValidation, "not-run");
+  // The content hash is the texture's, and its name carries the hash's prefix.
+  assert.equal(record.contentHash, TEXTURE.sha256);
+  assert.equal(record.outputProfile, "eaw-flipbook");
+  assert.deepEqual(record.texture, { name: TEXTURE.name, blend: "additive", grid: 2, cell: 32, pad: 2, size: 64, bytes: 16402 });
+  assert.equal(record.framesManifestSha256, "m".repeat(64));
   const text = serialise(record);
   assert.doesNotMatch(text, /licen[cs]e|host|user|time|date|[A-Za-z]:\\|\/Users\//i);
   assert.equal(serialise(provenance()), text, "provenance is deterministic");
@@ -124,9 +132,25 @@ test("a cache hit is trusted only when every file re-hashes to its provenance", 
   const text = writeFrames(dir, 4);
   writeFileSync(join(dir, "frames.manifest.json"), text);
   const key = "k".repeat(64);
-  writeFileSync(join(dir, "provenance.json"), serialise(provenance({ key, manifestSha256: sha256(text) })));
-  assert.equal(verifyEntry(dir, key, 4).contentHash, sha256(text));
+  const bytes = Buffer.from("texture bytes"), textureSha256 = sha256(bytes);
+  const name = `pe_gen_thing_${textureSha256.slice(0, 8)}.tga`;
+  writeFileSync(join(dir, name), bytes);
+  const write = (texture) => writeFileSync(join(dir, "provenance.json"),
+    serialise(provenance({ key, manifestSha256: sha256(text), texture: { ...TEXTURE, name, sha256: textureSha256, ...texture } })));
+  write({});
+  assert.equal(verifyEntry(dir, key, 4).contentHash, textureSha256);
   assert.throws(() => verifyEntry(dir, "x".repeat(64), 4), /another key/);
+  // A name that isn't the wrapper's shape, or doesn't carry the hash's prefix, is not trusted.
+  for (const other of ["../provenance.json", "texture.tga", `pe_gen_thing_${"0".repeat(8)}.tga`]) {
+    write({ name: other });
+    assert.throws(() => verifyEntry(dir, key, 4), /names no texture of its own/, other);
+  }
+  write({});
+  writeFileSync(join(dir, name), "altered");
+  assert.throws(() => verifyEntry(dir, key, 4), /texture differs/);
+  rmSync(join(dir, name));
+  assert.throws(() => verifyEntry(dir, key, 4), /texture is missing/);
+  writeFileSync(join(dir, name), bytes);
   writeFileSync(join(dir, "frames", "frame_0003.exr"), "poisoned");
   assert.throws(() => verifyEntry(dir, key, 4), /frame 2 differs/);
   writeFileSync(join(dir, "frames.manifest.json"), `${text} `);

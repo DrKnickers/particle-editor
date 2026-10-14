@@ -6,6 +6,7 @@
 // or enum members; nothing a caller types reaches a Houdini string parameter.
 import * as fs from "node:fs";
 import { win32 } from "node:path";
+import { BLENDS } from "./profiles.mjs";
 
 export const ID = /^[a-z0-9-]{1,64}$/;
 export const TIERS = ["preview", "validate", "final"];
@@ -50,12 +51,15 @@ function checkSchema(name, rule) {
 function checkEntry(id, entry) {
   const what = `generator ${id}`;
   check(ID.test(id), `${what} id is malformed`);
-  const keys = ["version", "builder", "builderSha256", "renderer", "grid", "params", "tiers"];
+  // pe_gen_<id>_<8 hex>.tga must fit the editor fixture's 64-byte texture names.
+  check(id.length <= 40, `${what} id is longer than 40 characters`);
+  const keys = ["version", "builder", "builderSha256", "renderer", "blend", "grid", "params", "tiers"];
   exactKeys(entry, Object.hasOwn(entry ?? {}, "testOnly") ? [...keys, "testOnly"] : keys, what);
   check(integer(entry.version, 1, 1e6), `${what} version is not a positive integer`);
   check(typeof entry.builder === "string" && BUILDER.test(entry.builder), `${what} builder path is malformed`);
   check(typeof entry.builderSha256 === "string" && HEX64.test(entry.builderSha256), `${what} builderSha256 is malformed`);
   check(RENDERERS.includes(entry.renderer), `${what} renderer is unknown`);
+  check(BLENDS.includes(entry.blend), `${what} blend is not one of ${BLENDS.join(", ")}`);
   check([1, 2, 4, 8].includes(entry.grid), `${what} grid is not 1, 2, 4 or 8`);
   check(entry.testOnly === undefined || typeof entry.testOnly === "boolean", `${what} testOnly is not a boolean`);
   check(isObject(entry.params), `${what} params is not an object`);

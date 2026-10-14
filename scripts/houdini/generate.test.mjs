@@ -10,6 +10,7 @@ import { HOUDINI_DIR, generate, hythonFailure, parseArgs } from "./generate.mjs"
 import { PINNED } from "./houdini.mjs";
 import { ROOT_MARKER } from "./generate.mjs";
 import { sha256 } from "./cache.mjs";
+import { frameStatsText, syntheticAtlas } from "./test-atlas.mjs";
 
 const windows = { skip: process.platform !== "win32" && "generated roots are Windows drive paths" };
 const ARGS = { generator: "debug-atlas", seed: "7", tier: "preview" };
@@ -27,16 +28,32 @@ function writeOutput(cwd, count = 16) {
   writeFileSync(join(cwd, "frames.manifest.json"), JSON.stringify({ schemaVersion: 1, frames }));
 }
 
+// hoiiotool for the debug-atlas preview tier (grid 4, cell 32, 28-texel
+// frames): the stats it prints, then the packed and encoded files it writes.
+// `texture` replaces the encoded bytes; `stats` the printed stats.
+const ATLAS = syntheticAtlas({ grid: 4, cell: 32 });
+function fakeTool(calls, { stats = frameStatsText(16, 28), texture = ATLAS.tga(), code = 0, timedOut = false } = {}) {
+  return (args, options) => {
+    calls.tool.push({ args, options });
+    if (timedOut) return { code: null, stdout: "", stderr: "", error: "spawnSync hoiiotool.exe ETIMEDOUT", timedOut };
+    if (code !== 0) return { code, stdout: "", stderr: "hoiiotool ERROR: could not open", error: null };
+    if (args.includes("--stats")) return { code: 0, stdout: stats, stderr: "", error: null };
+    writeFileSync(join(options.cwd, args.at(-1)), args.at(-1) === "packed.exr" ? "packed" : texture);
+    return { code: 0, stdout: "", stderr: "", error: null };
+  };
+}
+
 function harness(t, overrides = {}) {
   const root = join(mkdtempSync(join(tmpdir(), "pe-houdini-gen-")), "generated");
   t.after(() => rmSync(join(root, ".."), { recursive: true, force: true }));
-  const calls = { run: [], lock: 0, released: 0, verify: 0, logs: [] };
+  const calls = { run: [], tool: [], lock: 0, released: 0, verify: 0, logs: [] };
   const behave = overrides.behave ?? ((s) => { writeOutput(s.cwd); writeFileSync(s.stdout, '[houdini-run] {"ok": true, "frames": 16}\n'); return { outcome: "exited", code: 0, pid: 42 }; });
   const seams = {
     gameRoots: () => [], repos: () => [join(HOUDINI_DIR, "..", "..")], staleWaitMs: 0,
     verify: () => { calls.verify++; },
     lock: async () => { calls.lock++; return overrides.busy ? null : { release: async () => { calls.released++; } }; },
     run: async (s, options) => { calls.run.push({ s, options }); options.onLaunched(42); return behave(s, options); },
+    tool: fakeTool(calls, overrides.tool),
     log: (text) => calls.logs.push(text), clock: () => "2026-10-13T00:00:00.000Z",
     ...overrides.seams,
   };
@@ -66,21 +83,47 @@ test("a miss runs hython contained, promotes the checked entry, and the next run
   assert.equal(job.registrySha256, sha256(readFileSync(join(HOUDINI_DIR, "registry.json"))));
   assert.deepEqual([job.id, job.seed, job.tier, job.threads], ["debug-atlas", 7, "preview", 4]);
 
+  // hoiiotool: stats, pack, encode, each in the stage with the allowlisted environment.
+  assert.deepEqual(h.calls.tool.map((c) => c.args.at(-1)), ["frames/frame_0016.exr", "packed.exr", "texture.tga"]);
+  for (const { args, options } of h.calls.tool) {
+    assert.deepEqual(args.slice(0, 2), ["--evaloff", "--wildcardoff"]);
+    assert.equal(options.cwd, s.cwd);
+    assert.deepEqual(Object.keys(options.env).sort(), Object.keys(s.env).sort());
+  }
+
   const entry = join(h.root, "cache", first.cacheKey);
+  const textureBytes = ATLAS.tga(), name = `pe_gen_debug-atlas_${sha256(textureBytes).slice(0, 8)}.tga`;
   assert.equal(first.entry, entry);
-  assert.deepEqual(readdirSync(entry).sort(), ["frames", "frames.manifest.json", "provenance.json"]);
+  assert.deepEqual([first.texture, first.profile, first.contentHash], [name, "eaw-flipbook", sha256(textureBytes)]);
+  assert.deepEqual(readdirSync(entry).sort(), ["frames", "frames.manifest.json", name, "provenance.json", "published"]);
   assert.equal(readdirSync(join(entry, "frames")).length, 16);
   const provenance = JSON.parse(readFileSync(join(entry, "provenance.json"), "utf8"));
-  assert.equal(provenance.contentHash, sha256(readFileSync(join(entry, "frames.manifest.json"))));
+  assert.equal(provenance.contentHash, sha256(textureBytes));
+  assert.equal(provenance.framesManifestSha256, sha256(readFileSync(join(entry, "frames.manifest.json"))));
+  assert.deepEqual(provenance.texture, { name, blend: "additive", grid: 4, cell: 32, pad: 2, size: 128, bytes: textureBytes.length });
+  // Published where a content layer keeps textures, byte for byte.
+  const published = join(h.root, "Data", "Art", "Textures", name);
+  assert.equal(first.published, published);
+  assert.deepEqual(readFileSync(published), textureBytes);
+  assert.deepEqual(readdirSync(join(h.root, "Data", "Art", "Textures")), [name]);
   assert.deepEqual(readdirSync(join(h.root, ".staging")), [], "the stage was removed");
   assert.deepEqual([h.calls.lock, h.calls.released, h.calls.verify], [1, 1, 1]);
   assert.deepEqual(h.calls.logs, ["[houdini-gen] launched 42"]);
 
+  // A hit republishes a missing texture without running anything.
+  rmSync(published);
   const second = await h.run();
-  assert.deepEqual([second.exitCode, second.hit, second.cacheKey, second.contentHash],
-    [0, true, first.cacheKey, first.contentHash]);
+  assert.deepEqual([second.exitCode, second.hit, second.cacheKey, second.contentHash, second.texture],
+    [0, true, first.cacheKey, first.contentHash, name]);
+  assert.deepEqual(readFileSync(published), textureBytes);
   assert.equal(h.calls.run.length, 1, "a hit does not run hython");
-  assert.deepEqual(audit(h.root).map((v) => [v.exitCode, v.hit]), [[0, false], [0, true]]);
+  assert.equal(h.calls.tool.length, 3, "a hit does not run hoiiotool");
+  // A torn or altered copy under the name is replaced, not trusted.
+  writeFileSync(published, "torn");
+  assert.equal((await h.run()).exitCode, 0);
+  assert.deepEqual(readFileSync(published), textureBytes);
+  assert.deepEqual(readdirSync(join(h.root, ".staging")), [], "the publish left no temporary file");
+  assert.deepEqual(audit(h.root).map((v) => [v.exitCode, v.hit]), [[0, false], [0, true], [0, true]]);
   assert.equal(audit(h.root)[0].time, "2026-10-13T00:00:00.000Z");
 });
 
@@ -225,6 +268,70 @@ test("frames that don't match the manifest are a validator failure (exit 4)", wi
     assert.equal(result.exitCode, 4, result.error);
     assert.ok(!existsSync(join(h.root, "cache", result.cacheKey)));
   }
+});
+
+test("the profile step fails closed: bad frames, a hoiiotool failure, a texture off its profile (exit 4)", windows, async (t) => {
+  const offProfile = syntheticAtlas({ grid: 4, cell: 32 });
+  offProfile.rgba[0] = 200; // one guard-band texel no longer black
+  for (const [tool, pattern] of [
+    [{ stats: frameStatsText(16, 28, { nan: 3 }) }, /frames failed the profile: .*NaN/],
+    [{ stats: frameStatsText(16, 32) }, /frames failed the profile: .*32x32, not 28x28/],
+    [{ stats: frameStatsText(16, 28, { channels: 3 }) }, /frames failed the profile: .*3 channels/],
+    [{ stats: frameStatsText(15, 28) }, /frames failed the profile/],
+    [{ code: 1 }, /^hoiiotool could not read the frames \(exit 1\)$/],
+    [{ texture: Buffer.from("not a tga") }, /texture is not a TGA/],
+    [{ texture: offProfile.tga() }, /texture failed the eaw-flipbook profile: 1 guard-band texels are not the black border/],
+  ]) {
+    const h = harness(t, { tool });
+    const result = await h.run();
+    assert.equal(result.exitCode, 4, `${pattern}: ${result.error}`);
+    assert.match(result.error, pattern);
+    // hoiiotool's own words are printed for debugging, never stored.
+    if (tool.code) assert.match(h.calls.logs.join("\n"), /hoiiotool output \(printed, not stored\):\nhoiiotool ERROR/);
+    assert.doesNotMatch(readFileSync(join(h.root, "audit.log"), "utf8"), /hoiiotool ERROR/);
+    assert.ok(!existsSync(join(h.root, "cache", result.cacheKey)));
+    assert.ok(!existsSync(join(h.root, "Data")), "nothing was published");
+    assert.deepEqual(readdirSync(join(h.root, ".staging")), []);
+  }
+});
+
+test("hoiiotool shares the tier's deadline: running past it is exit 5", windows, async (t) => {
+  const h = harness(t, { tool: { timedOut: true } });
+  const result = await h.run();
+  assert.equal(result.exitCode, 5, result.error);
+  assert.match(result.error, /preview deadline of 5 min passed while hoiiotool ran/);
+  assert.ok(h.calls.tool[0].options.timeoutMs <= 5 * 60000 && h.calls.tool[0].options.timeoutMs > 0);
+  assert.ok(!existsSync(join(h.root, "cache", result.cacheKey)));
+  // Past the deadline already, hoiiotool isn't started at all.
+  let clock = 0;
+  const late = harness(t, { seams: { now: () => clock }, behave: (s) => {
+    writeOutput(s.cwd); clock += 5 * 60000; return { outcome: "exited", code: 0, pid: 42 };
+  } });
+  assert.equal((await late.run()).exitCode, 5);
+  assert.equal(late.calls.tool.length, 0);
+});
+
+test("a link planted under the published name is replaced, never read through", windows, async (t) => {
+  let planted = false;
+  const renames = [];
+  const io = { ...fs,
+    lstatSync: (path, options) => (planted && /\\Textures\\pe_gen_/.test(path) ? { isSymbolicLink: () => true, isDirectory: () => false } : fs.lstatSync(path, options)),
+    renameSync: (from, to) => { renames.push(to); return fs.renameSync(from, to); } };
+  const h = harness(t, { seams: { io } });
+  const first = await h.run();
+  assert.equal(first.exitCode, 0, first.error);
+  planted = true;
+  renames.length = 0;
+  assert.equal((await h.run()).exitCode, 0);
+  assert.deepEqual(renames, [first.published], "the hit rewrote the name rather than trusting the link");
+});
+
+test("a root whose Data folder the wrapper did not make is refused", windows, async (t) => {
+  const h = harness(t);
+  mkdirSync(join(h.root, "Data", "Art"), { recursive: true });
+  const refused = await h.run();
+  assert.equal(refused.exitCode, 2);
+  assert.match(refused.error, /already holds files the generator did not make/);
 });
 
 test("too little free space is exit 6 before anything runs", windows, async (t) => {

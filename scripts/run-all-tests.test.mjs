@@ -366,6 +366,7 @@ function houdiniLane(overrides = {}, allowMissing = false) {
 for (const [missing, overrides, note] of [
   ["Houdini", { exists: (path) => !path.includes("Houdini") }, /Houdini 19.5.435 missing/],
   ["lane.mjs", { exists: (path) => !path.endsWith("lane.mjs") }, /lane.mjs missing/],
+  ["the Release build", { exists: (path) => !path.endsWith("ParticleEditor.exe") }, /x64\/Release\/ParticleEditor.exe missing/],
   ["Windows", { platform: "linux" }, /Windows-only/],
 ]) {
   test(`houdini without ${missing} fails by default and --allow-missing visibly skips`, () => {
