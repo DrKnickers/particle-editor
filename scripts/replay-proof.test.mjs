@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { join, resolve } from "node:path";
-import { checkReport, checkCaptureFiles, checkedFrames, SCENARIOS, scenarioFor, validateGeneratedFixture, TEXTURES, resolveReplayGameRoots, findMegAsset, TIMELINE_GATED_KINDS } from "./replay-proof.mjs";
+import { checkReport, checkCaptureFiles, checkedFrames, SCENARIOS, scenarioFor, validateGeneratedFixture, TEXTURES, resolveReplayGameRoots, findMegAsset, readStockFile, TIMELINE_GATED_KINDS } from "./replay-proof.mjs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { crc32 } from "node:zlib";
 import { createHash } from "node:crypto";
 
 function fixture(definition = SCENARIOS[0]) {
@@ -342,4 +345,26 @@ test("optional stock lookup validates the existing MEG layout and bounds", () =>
   const wrongCrc = Buffer.from(metadata);
   wrongCrc.writeUInt32LE(0, at); wrongCrc.writeUInt32LE(0, at + 20);
   assert.equal(findMegAsset(wrongCrc, name, size), null);
+});
+
+test("a stock file under Data\\ is read loose first, then from the root's MEGs", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "pe-stock-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, "Data"));
+  writeFileSync(join(root, "Data", "MegaFiles.xml"), "<Mega_Files><File>Data\\Config.meg</File></Mega_Files>");
+  // A one-member legacy MEG: header, name table, one 20-byte FileInfo, then the bytes.
+  const name = "DATA\\XML\\PARTICLES.XML", body = Buffer.from("<Particles/>");
+  const at = 8 + 2 + name.length, meg = Buffer.alloc(at + 20 + body.length);
+  meg.writeUInt32LE(1, 0); meg.writeUInt32LE(1, 4);
+  meg.writeUInt16LE(name.length, 8); meg.write(name, 10, "latin1");
+  meg.writeUInt32LE(crc32(Buffer.from(name, "latin1")), at);
+  meg.writeUInt32LE(body.length, at + 8); meg.writeUInt32LE(at + 20, at + 12); meg.writeUInt32LE(0, at + 16);
+  body.copy(meg, at + 20);
+  writeFileSync(join(root, "Data", "Config.meg"), meg);
+  assert.deepEqual(readStockFile([root], "XML\\PARTICLES.XML"), body);
+  assert.deepEqual(readStockFile([root], "xml\\particles.xml"), body);
+  assert.equal(readStockFile([root], "XML\\OTHER.XML"), null);
+  mkdirSync(join(root, "Data", "XML"));
+  writeFileSync(join(root, "Data", "XML", "PARTICLES.XML"), "loose");
+  assert.equal(readStockFile([root], "XML\\PARTICLES.XML").toString(), "loose");
 });

@@ -120,7 +120,7 @@ static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv, v
 		if (arg == L"--capture" || arg == L"--capture-ref" ||
             arg == L"--replay-proof" || arg == L"--observe" || arg == L"--gen-replay-proof-fixture")
 			return 2;
-		if (arg == L"--gen-houdini-validation-fixture")
+		if (arg == L"--gen-houdini-validation-fixture" || arg == L"--gen-houdini-review-fixture")
 			return 3;
 		if (arg == L"--snap-window")
 			return 1;
@@ -317,6 +317,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		// --gen-houdini-validation-fixture <kind> <texture-name> <path>: one
 		// emitter showing one generated texture (effect/HoudiniValidationFixture.h).
 		std::wstring genHoudiniFixtureKind, genHoudiniFixtureTexture, genHoudiniFixturePath;
+		// --gen-houdini-review-fixture: the same, lifted off the ground for the game.
+		bool genHoudiniFixtureReview = false;
 		std::wstring replayScenarioPath, replayOutputDirectory;
 		// --observe <observation.json> <out-dir>: fixed-profile lifecycle capture.
 		std::wstring observeSpecPath, observeOutputDirectory;
@@ -372,7 +374,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			for (const wchar_t* mode : {L"--capture", L"--capture-ref", L"--drive", L"--record",
 									   L"--snap-window", L"--test-host", L"--dev-ui",
 									   L"--gen-a11y-fixture", L"--gen-singleton-link-fixture", L"--gen-smoke-test",
-									   L"--gen-houdini-validation-fixture"})
+									   L"--gen-houdini-validation-fixture", L"--gen-houdini-review-fixture"})
 				if (argv[i] == mode) replayConflict = true;
 			if (argv[i] == L"--dev-ui")    devUi    = true;
 			if (argv[i] == L"--test-host") testHost = true;
@@ -497,7 +499,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 				i += 2;
 				continue;
 			}
-			if (argv[i] == L"--gen-houdini-validation-fixture")
+			if (argv[i] == L"--gen-houdini-validation-fixture" || argv[i] == L"--gen-houdini-review-fixture")
 			{
 				houdinifixture::Kind kind = houdinifixture::Kind::Puff;
 				// ASCII first: the ANSI conversion best-fits some wide characters to letters.
@@ -506,12 +508,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 					std::any_of(argv[i + 2].begin(), argv[i + 2].end(), [](wchar_t c) { return c > 0x7F; }) ||
 					!houdinifixture::IsTextureName(WideToAnsi(argv[i + 2])))
 				{
-					fwprintf(stderr, L"--gen-houdini-validation-fixture requires <puff|ring|fireball> <texture.tga|.dds> <out.alo>\n");
+					fwprintf(stderr, L"%ls requires <puff|ring|fireball> <texture.tga|.dds> <out.alo>\n", argv[i].c_str());
 					return 2;
 				}
 				genHoudiniFixtureKind = argv[i + 1];
 				genHoudiniFixtureTexture = argv[i + 2];
 				genHoudiniFixturePath = argv[i + 3];
+				genHoudiniFixtureReview = argv[i] == L"--gen-houdini-review-fixture";
 				i += 3;
 				continue;
 			}
@@ -597,7 +600,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			 testHost || devUi || !genSingletonLinkFixturePath.empty() ||
 			 !genA11yFixturePath.empty() || !genSmokeTestPath.empty()))
 		{
-			fwprintf(stderr, L"--gen-houdini-validation-fixture cannot be combined with other run modes\n");
+			fwprintf(stderr, L"--gen-houdini-validation-fixture / --gen-houdini-review-fixture cannot be combined with other run modes\n");
 			return 2;
 		}
 		if ((!replayScenarioPath.empty() || !observeSpecPath.empty() || !genReplayFixturePath.empty()) &&
@@ -947,7 +950,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			system->setName(DeriveParticleSystemName(genHoudiniFixturePath));
 			auto* e = system->addRootEmitter();
 			if (!e) return 3;
-			houdinifixture::Configure(e, kind, WideToAnsi(genHoudiniFixtureTexture));
+			houdinifixture::Configure(e, kind, WideToAnsi(genHoudiniFixtureTexture),
+				genHoudiniFixtureReview ? houdinifixture::kReviewLift : 0.0f);
 			std::string error;
 			if (!SaveParticleSystem(system.get(), genHoudiniFixturePath, &error))
 			{
@@ -967,7 +971,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			const nlohmann::json fields = {{"kind", houdinifixture::KindName(kind)}, {"reloaded", true},
 				{"colorTexture", r->colorTexture}, {"normalTexture", r->normalTexture},
 				{"blendMode", r->blendMode}, {"textureSize", r->textureSize}, {"lifetime", r->lifetime},
-				{"nBursts", r->nBursts}, {"nParticlesPerBurst", r->nParticlesPerBurst},
+				{"nBursts", r->nBursts}, {"lift", r->groups[PS::GROUP_POSITION].valZ}, {"nParticlesPerBurst", r->nParticlesPerBurst},
 				{"indexInterpolation", r->tracks[PS::TRACK_INDEX]->interpolation}, {"index", index}};
 			printf("[houdini-fixture] %s\n", fields.dump().c_str());
 			return 0;

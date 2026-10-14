@@ -7,9 +7,9 @@
 // --gen-houdini-validation-fixture <kind> <texture-name> <path>: one emitter
 // that shows one generated texture as plainly as the engine allows, so a
 // Houdini texture can be observed in isolation: one motionless particle at
-// the origin, white tint. The normal texture keeps the emitter default: a
-// file cannot record none (a missing chunk loads as the default), so the
-// observed attestation also names that one. Window-free so
+// the origin (or lifted, for review in game), white tint. The normal texture
+// keeps the emitter default: a file cannot record none (a missing chunk loads
+// as the default), so the observed attestation also names that one. Window-free so
 // tests/test_houdini_validation_fixture.cpp can pin it.
 namespace houdinifixture {
 
@@ -64,7 +64,12 @@ inline bool IsTextureName(const std::string& name)
     return name[0] != '.' && (extension == ".tga" || extension == ".dds");
 }
 
-inline void Configure(ParticleSystem::Emitter* e, Kind kind, const std::string& texture)
+// --gen-houdini-review-fixture: the same particle raised by its own scale, so
+// a camera-facing sprite spawned on the ground (the game's click marker) is
+// not cut in half by the terrain. Z is up.
+const float kReviewLift = 40.0f;
+
+inline void Configure(ParticleSystem::Emitter* e, Kind kind, const std::string& texture, float lift = 0)
 {
     using PS = ParticleSystem;
     using Track = PS::Emitter::Track;
@@ -113,6 +118,7 @@ inline void Configure(ParticleSystem::Emitter* e, Kind kind, const std::string& 
         e->groups[group].valY = 0;
         e->groups[group].valZ = 0;
     }
+    e->groups[PS::GROUP_POSITION].valZ = lift;
     // Defaults alias RGBA to red; separate the tracks before authoring them.
     for (int track : { PS::TRACK_RED_CHANNEL, PS::TRACK_GREEN_CHANNEL, PS::TRACK_BLUE_CHANNEL,
                        PS::TRACK_ALPHA_CHANNEL, PS::TRACK_SCALE, PS::TRACK_INDEX,

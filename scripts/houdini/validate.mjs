@@ -136,14 +136,13 @@ export function parseArgs(argv) {
   return args;
 }
 
-export async function validate({ entry, out, exe = join(repoRoot, "x64", "Release", "ParticleEditor.exe") }, {
-  io = fs, roots = () => resolveReplayGameRoots({}), observeRun = runObservation, fixture = writeFixture,
-} = {}) {
-  const record = { ok: false, exitCode: 4, entry };
+// A cache entry in a generated root, checked file by file against its
+// provenance, whose texture is published byte for byte.
+export function openEntry(entry, io = fs) {
   let provenance;
   try { provenance = JSON.parse(io.readFileSync(join(entry, "provenance.json"), "utf8")); }
   catch { throw fail(`not a cache entry: ${entry}`, 2); }
-  const { name, grid, blend, size } = provenance.texture ?? {};
+  const { name, grid } = provenance.texture ?? {};
   // The entry must sit under its own key, in a root the wrapper made.
   const root = resolve(entry, "..", "..");
   if (basename(entry) !== provenance.cacheKey || basename(dirname(entry)) !== "cache" || !io.existsSync(join(root, ROOT_MARKER)))
@@ -154,12 +153,22 @@ export async function validate({ entry, out, exe = join(repoRoot, "x64", "Releas
   if (typeof generator !== "string" || typeof name !== "string" || !name.startsWith(`pe_gen_${generator}_`))
     throw fail(`the entry's provenance names no generator matching its texture (${generator}, ${name})`, 4);
   verifyEntry(entry, provenance.cacheKey, grid * grid, io);
-  const kind = kindFor({ blend, grid });
-  Object.assign(record, { texture: name, kind, contentHash: provenance.contentHash });
   let published;
   try { published = io.readFileSync(join(root, "Data", "Art", "Textures", name)); }
   catch { throw fail(`${name} is not published under ${root}`, 4); }
   if (sha256(published) !== provenance.contentHash) throw fail(`the published ${name} differs from its cache entry`, 4);
+  return { provenance, root, published };
+}
+
+export async function validate({ entry, out, exe = join(repoRoot, "x64", "Release", "ParticleEditor.exe") }, {
+  io = fs, roots = () => resolveReplayGameRoots({}), observeRun = runObservation, fixture = writeFixture,
+} = {}) {
+  const record = { ok: false, exitCode: 4, entry };
+  const { provenance, root } = openEntry(entry, io);
+  const { name, grid, blend, size } = provenance.texture;
+  const generator = provenance.generatorId;
+  const kind = kindFor({ blend, grid });
+  Object.assign(record, { texture: name, kind, contentHash: provenance.contentHash });
   if (io.existsSync(out) && io.readdirSync(out).length) throw fail(`--out must be absent or empty: ${out}`, 2);
   io.mkdirSync(out, { recursive: true });
   const gameRoots = roots();

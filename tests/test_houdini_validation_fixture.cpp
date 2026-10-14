@@ -1,5 +1,6 @@
 // Pins effect/HoudiniValidationFixture.h: the one-emitter .alo that shows one
-// generated texture, written by --gen-houdini-validation-fixture. The Phase 8
+// generated texture, written by --gen-houdini-validation-fixture (and, lifted
+// off the ground, by --gen-houdini-review-fixture). The Phase 8
 // validators read a texture through this fixture, so a drift here (a second
 // particle, a tint, a misnumbered flipbook key) would make them observe the
 // fixture instead of the texture. Section C round-trips it through the real
@@ -54,7 +55,8 @@ static bool Flat(const Track& track, float value)
 }
 
 // Everything but the per-kind profile is identical across kinds.
-static void CheckEmitter(const PS::Emitter& e, Kind kind, const std::string& texture, const char* label)
+static void CheckEmitter(const PS::Emitter& e, Kind kind, const std::string& texture, const char* label,
+                         float lift = 0)
 {
     const houdinifixture::Profile profile = houdinifixture::ProfileFor(kind);
     std::printf(" %s (%s)\n", label, houdinifixture::KindName(kind));
@@ -72,10 +74,11 @@ static void CheckEmitter(const PS::Emitter& e, Kind kind, const std::string& tex
     for (int group : { PS::GROUP_POSITION, PS::GROUP_SPEED })
     {
         const auto& g = e.groups[group];
-        still = still && g.type == PS::GT_EXACT && g.valX == 0 && g.valY == 0 && g.valZ == 0;
+        still = still && g.type == PS::GT_EXACT && g.valX == 0 && g.valY == 0 &&
+                g.valZ == (group == PS::GROUP_POSITION ? lift : 0);
     }
     CHECK(still && e.inwardSpeed == 0 && e.inwardAcceleration == 0 && !e.affectedByWind && !e.linkToSystem &&
-          e.emitFromMesh == PS::EMIT_DISABLE && e.groundBehavior == 0, "the particle sits motionless at the origin");
+          e.emitFromMesh == PS::EMIT_DISABLE && e.groundBehavior == 0, lift == 0 ? "the particle sits motionless at the origin" : "the particle sits motionless, lifted straight up");
     CHECK(e.randomColors[0] == 0 && e.randomColors[1] == 0 && e.randomColors[2] == 0 && e.randomColors[3] == 0 &&
           !e.doColorAddGrayscale && !e.isHeatParticle && !e.hasTail && !e.isWorldOriented && !e.noDepthTest &&
           !e.randomRotationDirection && e.randomRotationAverage == 0 && e.randomRotationVariance == 0,
@@ -183,6 +186,27 @@ int main()
         CHECK(loaded && loaded->getEmitters().size() == 1, "fixture reloads as one emitter");
         if (loaded && loaded->getEmitters().size() == 1)
             CheckEmitter(*loaded->getEmitters()[0], k, "PE_Gen_Fixture.dds", "reloaded");
+        DeleteFileW(path.c_str());
+    }
+
+    // The game spawns the click marker on the ground and draws it facing the
+    // camera, so the terrain hides whatever hangs below the spawn point. The
+    // review fixture lifts the particle by its own scale and changes nothing else.
+    std::printf("D. review fixture\n");
+    CHECK(houdinifixture::kReviewLift == 40.0f, "the lift is the particle's scale");
+    for (Kind k : { Kind::Puff, Kind::Ring, Kind::Fireball })
+    {
+        const std::wstring path = TempAlo(L"review.alo");
+        auto system = std::make_unique<PS>();
+        system->setName(DeriveParticleSystemName(path));
+        houdinifixture::Configure(system->addRootEmitter(), k, "pe_test.tga", houdinifixture::kReviewLift);
+        CheckEmitter(*system->getEmitters()[0], k, "pe_test.tga", "in memory", houdinifixture::kReviewLift);
+        std::string error;
+        const bool saved = SaveParticleSystem(system.get(), path, &error);
+        auto loaded = saved ? LoadParticleSystem(path, &error) : nullptr;
+        CHECK(loaded && loaded->getEmitters().size() == 1, "review fixture saves and reloads as one emitter");
+        if (loaded && loaded->getEmitters().size() == 1)
+            CheckEmitter(*loaded->getEmitters()[0], k, "pe_test.tga", "reloaded", houdinifixture::kReviewLift);
         DeleteFileW(path.c_str());
     }
 

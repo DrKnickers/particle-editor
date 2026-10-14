@@ -23,7 +23,11 @@
 //     root and passes editor validation (its flipbook plays, for the
 //     fireball), and the four seeds give four textures;
 //   - the puff and the fireball stay inside their edge masks, at their
-//     defaults and at the parameters that push them furthest out.
+//     defaults and at the parameters that push them furthest out;
+//   - a review kit staged from a final-tier ring holds the texture byte for
+//     byte, the lifted review fixture and the game's own PARTICLES.XML with
+//     only the click marker's lifetime changed; a second staging is refused,
+//     and --record writes the verdict.
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -35,10 +39,13 @@ import { sha256 } from "./cache.mjs";
 import { runHoiiotool } from "./generate.mjs";
 import { decodeTga } from "./images.mjs";
 import { PAD, atlasLayout, encodeArgs, packArgs, validateTexture } from "./profiles.mjs";
+import { MARKER, MARKER_FRAMES, REVIEW_LIFT, focRoot } from "./review-kit.mjs";
+import { readStockFile, resolveReplayGameRoots } from "../replay-proof.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const generateScript = join(here, "generate.mjs");
 const validateScript = join(here, "validate.mjs");
+const reviewScript = join(here, "review-kit.mjs");
 const system32 = win32.join(process.env.SystemRoot ?? "C:\\Windows", "System32");
 const GRID = 4, CELL = 32, FRAME = CELL - 2 * PAD;
 const GENERATORS = ["static-smoke-puff", "static-energy-ring", "ground-fireball-4x4"], EDGE_MAX = 8;
@@ -140,6 +147,13 @@ function validate(entry, out) {
   const r = spawnSync(process.execPath, [validateScript, "--entry", entry, "--out", out], { encoding: "utf8", windowsHide: true, timeout: 20 * 60000 });
   const line = (r.stdout ?? "").split(/\r?\n/).find((v) => v.startsWith("[houdini-validate] {"));
   try { return { code: r.status, record: line ? JSON.parse(line.slice(19)) : null }; } catch { return { code: r.status, record: null }; }
+}
+
+// review-kit.mjs, as the owner runs it.
+function reviewKit(args) {
+  const r = spawnSync(process.execPath, [reviewScript, ...args], { encoding: "utf8", windowsHide: true, timeout: 5 * 60000 });
+  const line = (r.stdout ?? "").split(/\r?\n/).find((v) => v.startsWith("[houdini-review] {"));
+  try { return { code: r.status, record: line ? JSON.parse(line.slice(17)) : null }; } catch { return { code: r.status, record: null }; }
 }
 
 // Each profile through the real hoiiotool on a synthetic 1x1 layout: a frame
@@ -292,6 +306,35 @@ try {
     if (check(made.code === 0, `${generator} at ${JSON.stringify(params)} generates (exit ${made.code}${made.record?.error ? `: ${made.record.error}` : ""})`)) {
       const edge = maskEdge(made.record.entry);
       check(edge <= EDGE_MAX, `${generator} at ${JSON.stringify(params)} stays inside its edge mask (${edge}; at most ${EDGE_MAX})`);
+    }
+  }
+
+  // 8. The review kit, from a final-tier ring (the cheapest final tier).
+  const kitRoot = join(base, "kit");
+  const ring = await generate(kitRoot, 1, { generator: "static-energy-ring", tier: "final" });
+  if (check(ring.code === 0, `the ring generates at the final tier (exit ${ring.code}${ring.record?.error ? `: ${ring.record.error}` : ""})`)) {
+    const staged = reviewKit(["--entry", ring.record.entry]);
+    const { kit, texture } = staged.record ?? {};
+    if (check(staged.code === 0 && staged.record?.ok === true && staged.record.kind === "ring",
+      `the review kit stages (exit ${staged.code}${staged.record?.error ? `: ${staged.record.error}` : ""})`)) {
+      const file = (...parts) => join(kit, "Data", ...parts);
+      check(kit === join(kitRoot, "review", `static-energy-ring-${texture.slice(-12, -4)}`), "the kit is staged under <root>\\review\\<id>-<hash8>");
+      check(sha256(readFileSync(file("Art", "Textures", texture))) === ring.record.contentHash, "the kit holds the texture byte for byte");
+      const review = JSON.parse(readFileSync(join(kit, "review.json"), "utf8"));
+      check(review.fixture?.lift === REVIEW_LIFT && review.fixture?.kind === "ring" && existsSync(file("Art", "Models", MARKER)),
+        `the kit's ${MARKER} is the ring fixture, lifted ${REVIEW_LIFT}`);
+      const stock = readStockFile([focRoot(resolveReplayGameRoots({}))], "XML\\PARTICLES.XML").toString("latin1");
+      const xml = readFileSync(file("XML", "PARTICLES.XML")).toString("latin1");
+      const at = stock.indexOf('<Particle Name="GUI_Move_Command_Particle">');
+      const frames = stock.indexOf("<Particle_Lifetime_Frames>", at);
+      const close = stock.indexOf("</Particle_Lifetime_Frames>", frames);
+      check(at >= 0 && xml === `${stock.slice(0, frames)}<Particle_Lifetime_Frames>${MARKER_FRAMES}${stock.slice(close)}`,
+        `the kit's PARTICLES.XML is the game's own, with only the click marker living ${MARKER_FRAMES} frames`);
+      const again = reviewKit(["--entry", ring.record.entry]);
+      check(again.code === 2, `staging the same kit again is refused (exit ${again.code})`);
+      const recorded = reviewKit(["--record", kit, "--status", "passed", "--notes", "houdini lane"]);
+      check(recorded.code === 0 && JSON.parse(readFileSync(join(kit, "review.json"), "utf8")).gameVerification?.status === "passed",
+        `--record writes the verdict into review.json (exit ${recorded.code})`);
     }
   }
 } finally {

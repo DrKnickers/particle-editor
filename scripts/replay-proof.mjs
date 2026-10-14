@@ -69,8 +69,13 @@ export function findMegAsset(metadata, asset, archiveSize) {
 }
 
 export function readStockAsset(roots, filename) {
+  return readStockFile(roots, `Art\\Models\\${filename}`);
+}
+
+// A file under Data\ (`folder\name`): loose in a root first, then in its MEGs.
+export function readStockFile(roots, relative) {
   for (const root of roots) {
-    const path = join(root, "Data", "Art", "Models", filename);
+    const path = join(root, "Data", ...relative.split("\\"));
     if (existsSync(path)) return readFileSync(path);
   }
   for (const root of roots) {
@@ -86,14 +91,14 @@ export function readStockAsset(roots, filename) {
           if (!n) break;
           got += n;
         }
-        const entry = findMegAsset(metadata.subarray(0, got), `DATA\\ART\\MODELS\\${filename}`, size);
+        const entry = findMegAsset(metadata.subarray(0, got), `DATA\\${relative}`, size);
         if (!entry) continue;
-        if (!entry.size || entry.size > 64 * 1024 * 1024) throw new Error(`stock effect exceeds the proof asset bound: ${filename}`);
+        if (!entry.size || entry.size > 64 * 1024 * 1024) throw new Error(`stock file exceeds the proof asset bound: ${relative}`);
         const bytes = Buffer.alloc(entry.size);
         let copied = 0;
         while (copied < bytes.length) {
           const n = readSync(fd, bytes, copied, bytes.length - copied, entry.start + copied);
-          if (!n) throw new Error(`short stock asset read: ${filename}`);
+          if (!n) throw new Error(`short stock asset read: ${relative}`);
           copied += n;
         }
         return bytes;
