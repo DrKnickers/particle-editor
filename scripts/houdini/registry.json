@@ -15,6 +15,61 @@
         "validate": { "cell": 64, "timeoutMin": 5, "maxStageMiB": 64 },
         "final": { "cell": 128, "timeoutMin": 5, "maxStageMiB": 128 }
       }
+    },
+    "static-smoke-puff": {
+      "version": 1,
+      "builder": "generators/static_smoke_puff.py",
+      "builderSha256": "3f943f0d05b443a4df79380483440ae0662036aad5915c487506c164cb4afc4f",
+      "renderer": "mantra",
+      "blend": "transparent",
+      "grid": 1,
+      "params": {
+        "density": { "type": "float", "min": 0.5, "max": 3.0, "default": 1.5 },
+        "billow": { "type": "float", "min": 0.0, "max": 1.0, "default": 0.6 },
+        "brightness": { "type": "float", "min": 0.3, "max": 1.0, "default": 0.7 }
+      },
+      "tiers": {
+        "preview": { "cell": 128, "timeoutMin": 5, "maxStageMiB": 128 },
+        "validate": { "cell": 256, "timeoutMin": 10, "maxStageMiB": 256 },
+        "final": { "cell": 512, "timeoutMin": 20, "maxStageMiB": 512 }
+      }
+    },
+    "static-energy-ring": {
+      "version": 1,
+      "builder": "generators/static_energy_ring.py",
+      "builderSha256": "6fcef937d9be8cce98ad07e8db800cfe8cebf8911a869ac6f5fc8b71674714c0",
+      "renderer": "cop",
+      "blend": "additive",
+      "grid": 1,
+      "params": {
+        "radius": { "type": "float", "min": 0.35, "max": 0.8, "default": 0.62 },
+        "thickness": { "type": "float", "min": 0.02, "max": 0.15, "default": 0.05 },
+        "turbulence": { "type": "float", "min": 0.0, "max": 1.0, "default": 0.6 },
+        "palette": { "type": "enum", "values": ["blue", "green", "orange", "purple"], "default": "blue" }
+      },
+      "tiers": {
+        "preview": { "cell": 128, "timeoutMin": 5, "maxStageMiB": 128 },
+        "validate": { "cell": 256, "timeoutMin": 5, "maxStageMiB": 256 },
+        "final": { "cell": 512, "timeoutMin": 10, "maxStageMiB": 512 }
+      }
+    },
+    "ground-fireball-4x4": {
+      "version": 1,
+      "builder": "generators/ground_fireball_4x4.py",
+      "builderSha256": "758a826fe7aae3887b9d0729e2f1f21139c3c121a3fc8896be340eefbab76acb",
+      "renderer": "mantra",
+      "blend": "additive",
+      "grid": 4,
+      "params": {
+        "temperature": { "type": "float", "min": 0.5, "max": 2.0, "default": 1.0 },
+        "turbulence": { "type": "float", "min": 0.0, "max": 1.0, "default": 0.4 },
+        "palette": { "type": "enum", "values": ["orange", "blue", "green"], "default": "orange" }
+      },
+      "tiers": {
+        "preview": { "cell": 64, "timeoutMin": 15, "maxStageMiB": 256 },
+        "validate": { "cell": 128, "timeoutMin": 20, "maxStageMiB": 512 },
+        "final": { "cell": 256, "timeoutMin": 30, "maxStageMiB": 1024 }
+      }
     }
   }
 }

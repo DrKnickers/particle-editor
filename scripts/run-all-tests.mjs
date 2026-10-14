@@ -39,8 +39,9 @@
 // Opt-in lanes run only when named with --lane, and --list marks them:
 //   houdini           debug-atlas through the pinned Houdini build, the Job
 //                     Object launcher and the machine lock, plus kill and
-//                     lock-busy runs, the profile encodes, and the editor
-//                     validation through the Release build
+//                     lock-busy runs, the profile encodes, the editor
+//                     validation through the Release build, and the three
+//                     generators over four seeds each
 //                     (scripts/houdini/lane.mjs; dev box only).
 //                     Its unit tests run in the default `scripts` lane.
 //

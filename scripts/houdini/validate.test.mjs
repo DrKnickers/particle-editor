@@ -1,5 +1,6 @@
 // [houdini] Editor validation's checks, on records shaped like real ones:
-// the capture's attestation, the editor's texture log and the 0..15 oracle.
+// the capture's attestation, the editor's texture log, the flipbook playing
+// and the 0..15 oracle.
 // The editor itself runs in the `houdini` lane.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -7,7 +8,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ROOT_MARKER } from "./generate.mjs";
-import { NORMAL_TEXTURE, TICKS_PER_CELL, checkAttestation, checkTextureLog, kindFor, observationSpec, parseArgs, readOrder, validate } from "./validate.mjs";
+import { NORMAL_TEXTURE, TICKS_PER_CELL, checkAttestation, checkPlays, checkTextureLog, kindFor, observationSpec, parseArgs, readCells, readOrder, validate } from "./validate.mjs";
 
 const NAME = "pe_gen_debug-atlas_568d7942.tga", SHA = "568d7942".padEnd(64, "a"), ROOT = "C:\\gen\\out";
 const capture = ({ resolved = [NAME, NORMAL_TEXTURE], unresolved = [], winner = { kind: "loose", path: `${ROOT}\\Data\\Art\\Textures\\${NAME}` }, sha = SHA } = {}) => ({
@@ -93,6 +94,20 @@ test("the order oracle reads 0..15 and catches a flip, a transposition and an of
   assert.match(readOrder((tick) => frame(Math.floor(tick / 15), { blue: 60 })).errors[0], /no cell/);
 });
 
+test("a flipbook plays when its cells differ at the view's centre", () => {
+  const ticks = [];
+  const cells = readCells((tick) => { ticks.push(tick); return frame(Math.floor(tick / TICKS_PER_CELL)); });
+  assert.deepEqual(ticks, [...Array(16).keys()].map((k) => 15 * k + 7), "each cell is read mid-way");
+  assert.deepEqual(cells[0], [0, 0, 128], "less the background");
+  assert.deepEqual(checkPlays(cells), []);
+  // Any order plays; one cell held, or nothing shown, does not.
+  assert.deepEqual(checkPlays(readCells(cellAt((k) => 15 - k))), []);
+  assert.match(checkPlays(readCells(cellAt(() => 5))).join(), /does not play/);
+  assert.match(checkPlays(readCells(() => frame(null))).join(), /spread 0\.0/);
+  // A flicker below the control margin is not playback.
+  assert.match(checkPlays(readCells((tick) => frame(0, { red: Math.floor(tick / TICKS_PER_CELL) }))).join(), /spread 15\.0/);
+});
+
 test("parseArgs needs --entry and --out, once each", () => {
   const args = parseArgs(["--entry", "C:\\gen\\cache\\k", "--out", "C:\\v"]);
   assert.deepEqual(Object.keys(args).sort(), ["entry", "out"]);
@@ -104,10 +119,10 @@ test("only a cache entry under its own key, in a root the wrapper made, is valid
   const base = mkdtempSync(join(tmpdir(), "pe-houdini-validate-"));
   t.after(() => rmSync(base, { recursive: true, force: true }));
   const key = "a".repeat(64);
-  const entry = (root, folder) => {
+  const entry = (root, folder, generatorId = "debug-atlas") => {
     const dir = join(base, root, "cache", folder);
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "provenance.json"), JSON.stringify({ cacheKey: key, texture: { name: NAME, grid: 4, blend: "additive", size: 128 } }));
+    writeFileSync(join(dir, "provenance.json"), JSON.stringify({ cacheKey: key, generatorId, texture: { name: NAME, grid: 4, blend: "additive", size: 128 } }));
     return dir;
   };
   const refuses = (dir, pattern) => assert.rejects(validate({ entry: dir, out: join(base, "out") }, { observeRun: () => assert.fail("must not observe") }),
@@ -117,6 +132,13 @@ test("only a cache entry under its own key, in a root the wrapper made, is valid
   const misplaced = entry("marked", "b".repeat(64));
   writeFileSync(join(base, "marked", ROOT_MARKER), "x");
   await refuses(misplaced, /not a cache entry in a generated root/);
+  // The checks depend on the generator, so one missing, or not the texture's, is refused.
+  for (const [root, generatorId] of [["unnamed", null], ["misnamed", "ground-fireball-4x4"], ["prefix", "debug"]]) {
+    const dir = entry(root, key, generatorId);
+    writeFileSync(join(base, root, ROOT_MARKER), "x");
+    await assert.rejects(validate({ entry: dir, out: join(base, "out") }), (error) => error.exitCode === 4 && /names no generator/.test(error.message));
+  }
   // Under its key in a marked root, it gets as far as re-hashing the entry.
-  await assert.rejects(validate({ entry: entry("marked", key), out: join(base, "out") }), (error) => error.exitCode === 4);
+  await assert.rejects(validate({ entry: entry("marked", key), out: join(base, "out") }),
+    (error) => error.exitCode === 4 && !/names no generator/.test(error.message));
 });

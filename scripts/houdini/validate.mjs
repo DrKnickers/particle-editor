@@ -11,8 +11,10 @@
 //             editor shows its placeholder, and the view differs.
 // The content-addressed name and the explicit layer stack mean no other file
 // can satisfy the check. A 4x4 atlas is observed through the fireball
-// fixture, and the colour at the view's centre must step through the cells
-// in order (the debug-atlas oracle: red = i % 4, green = i / 4, blue 0.5).
+// fixture, and the colour at the view's centre must change from cell to cell
+// (the editor plays the flipbook, not one cell). Over debug-atlas it must
+// step through the cells in order (its oracle: red = i % 4, green = i / 4,
+// blue 0.5).
 //
 // The editor's log of each run is kept beside its bundle as <run>.editor-log.txt.
 // Prints one `[houdini-validate]` JSON line. Exit 0 valid, 2 bad input,
@@ -79,6 +81,22 @@ export function checkTextureLog(stdout, { name, size }) {
 const centre = (image) => meanRgb(image, (image.width - BOX) >> 1, (image.height - BOX) >> 1, BOX, BOX);
 const corner = (image) => meanRgb(image, CORNER, CORNER, CORNER, CORNER);
 
+// The view centre's colour at the middle of each cell's 15 ticks, less the
+// background. `frameAt(tick)` returns a decoded playback frame.
+export function readCells(frameAt, grid = 4) {
+  return Array.from({ length: grid * grid }, (_, k) => {
+    const image = frameAt(TICKS_PER_CELL * k + (TICKS_PER_CELL >> 1)), background = corner(image);
+    return centre(image).map((v, c) => v - background[c]);
+  });
+}
+
+// A flipbook plays when its cells don't all look alike at the view's centre.
+export function checkPlays(cells) {
+  let spread = 0;
+  for (const a of cells) for (const b of cells) spread = Math.max(spread, ...a.map((v, c) => Math.abs(v - b[c])));
+  return spread >= CONTROL_DELTA ? [] : [`the cells all look alike at the view's centre (spread ${spread.toFixed(1)}): the flipbook does not play`];
+}
+
 // The 0..15 oracle, read at the middle of each cell's 15 ticks.
 // `frameAt(tick)` returns a decoded playback frame.
 export function readOrder(frameAt, grid = 4) {
@@ -130,6 +148,11 @@ export async function validate({ entry, out, exe = join(repoRoot, "x64", "Releas
   const root = resolve(entry, "..", "..");
   if (basename(entry) !== provenance.cacheKey || basename(dirname(entry)) !== "cache" || !io.existsSync(join(root, ROOT_MARKER)))
     throw fail(`not a cache entry in a generated root: ${entry}`, 2);
+  // Which checks run depends on the generator, so an entry that doesn't name
+  // the one its texture is named for is refused, not validated with fewer.
+  const generator = provenance.generatorId;
+  if (typeof generator !== "string" || typeof name !== "string" || !name.startsWith(`pe_gen_${generator}_`))
+    throw fail(`the entry's provenance names no generator matching its texture (${generator}, ${name})`, 4);
   verifyEntry(entry, provenance.cacheKey, grid * grid, io);
   const kind = kindFor({ blend, grid });
   Object.assign(record, { texture: name, kind, contentHash: provenance.contentHash });
@@ -167,9 +190,13 @@ export async function validate({ entry, out, exe = join(repoRoot, "x64", "Releas
   const difference = Math.max(...shown.map((v, c) => Math.abs(v - placeholder[c])));
   if (difference < CONTROL_DELTA) errors.push(`the control run looks the same as the layered one (centre differs by ${difference.toFixed(1)})`);
   if (kind === "fireball") {
-    const order = readOrder(playbackFrame(runs.layered.bundle, runs.layered.capture, io), grid);
-    record.sequence = order.sequence;
-    errors.push(...order.errors.map((error) => `order: ${error}`));
+    const frameAt = playbackFrame(runs.layered.bundle, runs.layered.capture, io);
+    errors.push(...checkPlays(readCells(frameAt, grid)).map((error) => `layered: ${error}`));
+    if (generator === "debug-atlas") {
+      const order = readOrder(frameAt, grid);
+      record.sequence = order.sequence;
+      errors.push(...order.errors.map((error) => `order: ${error}`));
+    }
   }
   Object.assign(record, errors.length ? { exitCode: 4, error: errors.join("; ") } : { ok: true, exitCode: 0 });
   return record;

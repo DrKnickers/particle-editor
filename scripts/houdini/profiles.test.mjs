@@ -112,6 +112,12 @@ test("each validator fails on its own damage", () => {
     for (let i = 0; i < p.length; i += 4) p.fill(p[i + 3] ? 255 : 9, i, i + 3);
   }) }).join(), /dark fringe/);
   assert.deepEqual(check(transparent, "transparent", { rgba: damaged(transparent, (p) => { tinted(12)(p); unfilled(p); }) }), [], "a near-black sprite");
+  // Faint texels store colour to 255 / alpha: a grey-60 sprite's alpha-2 edge
+  // reads 127. That noise beside a correct fill is not a fringe.
+  assert.deepEqual(check(transparent, "transparent", { rgba: damaged(transparent, (p) => {
+    tinted(60)(p);
+    for (let i = 0; i < p.length; i += 4) if (p[i + 3] > 0 && p[i + 3] < 16) { p[i + 3] = 2; p.fill(127, i, i + 3); }
+  }) }), [], "quantisation noise at the faint edge");
   assert.match(check(transparent, "transparent", { rgba: damaged(transparent, (p) => {
     for (let y = 96; y < 128; y++) for (let x = 96; x < 128; x++) p[texel(transparent, x, y) + 3] = 0;
   }) }).join(), /cells 15 are empty/);

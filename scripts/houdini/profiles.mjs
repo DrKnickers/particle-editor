@@ -29,7 +29,10 @@ export const MAX_TEXTURE_BYTES = 64 * 1024 * 1024;   // src/common/ResourceLimit
 // An alpha-0 texel beside coverage is a dark fringe when its colour is under
 // FRINGE_RATIO of its covered neighbours' (alpha-weighted) colour, unless that
 // colour is itself near black (FRINGE_FLOOR), where a fringe can't show.
-const FRINGE_RATIO = 0.5, FRINGE_FLOOR = 16;
+// Only neighbours at FRINGE_MIN_ALPHA or more count: the file stores colour to
+// one premultiplied step, 255 / alpha, so a faint texel's colour is noise (at
+// alpha 2 a grey of 60 reads 127), and filtering takes almost nothing from it.
+const FRINGE_RATIO = 0.5, FRINGE_FLOOR = 16, FRINGE_MIN_ALPHA = 16;
 // 0.51 / 255: the least alpha that rounds to 1 in the 8-bit file, with margin.
 const COVERED = "0.002";
 
@@ -145,7 +148,7 @@ export function validateTexture(image, bytes, { blend, layout }) {
           const nx = x + dx, ny = y + dy;
           if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
           const n = at(nx, ny), a = px[n + 3];
-          if (!a) continue;
+          if (a < FRINGE_MIN_ALPHA) continue;
           weight += a; for (let c = 0; c < 3; c++) sum[c] += px[n + c] * a;
         }
         const around = weight ? Math.max(...sum.map((v) => v / weight)) : 0;

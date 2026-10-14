@@ -17,9 +17,15 @@
 //   - a run while the machine lock is held exits 7;
 //   - killing hython mid-run exits 8, with no stage and no cache entry left;
 //   - killing the wrapper alone (no tree kill) still ends hython, and the next
-//     run sweeps the abandoned stage.
+//     run sweeps the abandoned stage;
+//   - each of the three generators, at the validate tier over four seeds,
+//     passes its profile, re-runs as a hit, reproduces byte for byte in a new
+//     root and passes editor validation (its flipbook plays, for the
+//     fireball), and the four seeds give four textures;
+//   - the puff and the fireball stay inside their edge masks, at their
+//     defaults and at the parameters that push them furthest out.
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -35,6 +41,14 @@ const generateScript = join(here, "generate.mjs");
 const validateScript = join(here, "validate.mjs");
 const system32 = win32.join(process.env.SystemRoot ?? "C:\\Windows", "System32");
 const GRID = 4, CELL = 32, FRAME = CELL - 2 * PAD;
+const GENERATORS = ["static-smoke-puff", "static-energy-ring", "ground-fireball-4x4"], EDGE_MAX = 8;
+// The generators whose frames end in a square edge mask, each with the
+// parameters that push its effect furthest out. (The ring's window is round,
+// so it can't show the frame's square.)
+const MASKED = {
+  "static-smoke-puff": { density: 3, billow: 1, brightness: 1 },
+  "ground-fireball-4x4": { temperature: 2, turbulence: 1, palette: "orange" },
+};
 const failures = [];
 const check = (ok, what) => {
   console.log(`[houdini-lane] ${ok ? "PASS" : "FAIL"} ${what}`);
@@ -49,9 +63,9 @@ async function until(condition, ms) {
 }
 
 // Starts generate.mjs; `onLaunched(hythonPid, wrapper)` fires when hython runs.
-function generate(root, seed, onLaunched = null) {
-  const wrapper = spawn(process.execPath, [generateScript, "--generator", "debug-atlas", "--seed", String(seed),
-    "--tier", "preview", "--out", root], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+function generate(root, seed, { generator = "debug-atlas", tier = "preview", params = null, onLaunched = null, minutes = 10 } = {}) {
+  const wrapper = spawn(process.execPath, [generateScript, "--generator", generator, "--seed", String(seed),
+    "--tier", tier, "--out", root, ...(params ? ["--params", params] : [])], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
   let stdout = "", stderr = "", hython = null;
   wrapper.stdout.on("data", (chunk) => { stdout += chunk; });
   wrapper.stderr.on("data", (chunk) => {
@@ -60,7 +74,7 @@ function generate(root, seed, onLaunched = null) {
     if (m && hython === null) { hython = Number(m[1]); onLaunched?.(hython, wrapper); }
   });
   // A wrapper that never exits must not hang the gate: kill it, and say so.
-  const timer = setTimeout(() => { stderr += "\n[houdini-lane] wrapper timed out; killed"; taskkill(wrapper.pid); }, 10 * 60000);
+  const timer = setTimeout(() => { stderr += "\n[houdini-lane] wrapper timed out; killed"; taskkill(wrapper.pid); }, minutes * 60000);
   return new Promise((done) => wrapper.once("close", (code) => {
     clearTimeout(timer);
     const line = stdout.split(/\r?\n/).find((v) => v.startsWith("[houdini-gen] {"));
@@ -97,6 +111,28 @@ function decodeTexture(path) {
     if (wrong) errors.push(`cell ${cell.index}: ${wrong} texels wrong, first ${first}`);
   }
   return errors;
+}
+
+// The brightest texel (RGB if additive, alpha if transparent) on the square
+// where a builder's edge mask reaches 1: ceil(frame / 20) texels in from each
+// side of every frame. The mask fades what lies outside it, so the outermost
+// texels are black by construction and prove nothing; an effect that reaches
+// this square would have the mask cut it into the frame's shape.
+function maskEdge(entry) {
+  const { texture } = JSON.parse(readFileSync(join(entry, "provenance.json"), "utf8"));
+  const image = decodeTga(readFileSync(join(entry, texture.name))), layout = atlasLayout(texture.grid, texture.cell);
+  const last = layout.frame - 1, inset = Math.ceil(layout.frame / 20);
+  let worst = 0;
+  for (const cell of layout.cells) {
+    for (let v = inset; v <= last - inset; v++) {
+      for (let u = inset; u <= last - inset; u++) {
+        if (Math.min(u, v, last - u, last - v) !== inset) continue;
+        const o = ((cell.frameY + v) * image.width + cell.frameX + u) * 4;
+        worst = Math.max(worst, texture.blend === "additive" ? Math.max(...image.rgba.subarray(o, o + 3)) : image.rgba[o + 3]);
+      }
+    }
+  }
+  return worst;
 }
 
 // validate.mjs as the editor-validation step runs it.
@@ -206,19 +242,58 @@ try {
 
   // 4. Kill hython mid-run.
   const before = cached(root).length;
-  const killed = await generate(root, 9, (pid) => taskkill(pid));
+  const killed = await generate(root, 9, { onLaunched: (pid) => taskkill(pid) });
   check(killed.code === 8, `killing hython exits 8 (exit ${killed.code}${killed.record?.error ? `: ${killed.record.error}` : ""})`);
   check(killed.hython !== null && !alive(killed.hython), "hython is gone");
   check(staged(root).length === 0 && cached(root).length === before, "no stage and no cache entry are left");
 
   // 5. Kill the wrapper alone: the launcher sees its stdin close and kills the job.
-  const orphan = await generate(root, 10, (_pid, wrapper) => taskkill(wrapper.pid));
+  const orphan = await generate(root, 10, { onLaunched: (_pid, wrapper) => taskkill(wrapper.pid) });
   check(orphan.record === null, "the killed wrapper printed no result");
   check(orphan.hython !== null && await until(() => !alive(orphan.hython), 20000), "hython died with its wrapper");
   check(staged(root).length === 1 && cached(root).length === before, "the dead run left only its stage");
   const after = await generate(root, 10);
   check(after.code === 0 && after.record?.hit === false, `the next run succeeds (exit ${after.code})`);
   check(staged(root).length === 0, "and sweeps the abandoned stage");
+
+  // 6. The generators, four seeds each at the validate tier: each passes its
+  // profile, re-runs as a hit, reproduces byte for byte in a new root and
+  // passes editor validation, and the seeds give four different textures.
+  for (const generator of GENERATORS) {
+    const hashes = new Set();
+    for (const seed of [1, 2, 3, 4]) {
+      const run = (where) => generate(join(base, where), seed, { generator, tier: "validate", minutes: 60 });
+      const what = `${generator} seed ${seed}`, made = await run("seeds");
+      if (!check(made.code === 0 && made.record?.hit === false, `${what} generates (exit ${made.code}${made.record?.error ? `: ${made.record.error}` : ""})`)) continue;
+      hashes.add(made.record.contentHash);
+      if (MASKED[generator]) {
+        const edge = maskEdge(made.record.entry);
+        check(edge <= EDGE_MAX, `${what}: the effect stays inside its edge mask (${edge}; at most ${EDGE_MAX})`);
+      }
+      const again = await run("seeds");
+      check(again.code === 0 && again.record?.hit === true && again.record.cacheKey === made.record.cacheKey && again.hython === null,
+        `${what}: an identical re-run is a cache hit`);
+      const elsewhere = await run("seeds-elsewhere");
+      check(elsewhere.code === 0 && elsewhere.record?.hit === false && elsewhere.record.contentHash === made.record.contentHash,
+        `${what}: a new root reproduces the texture byte for byte (${elsewhere.record?.contentHash ?? `exit ${elsewhere.code}`})`);
+      const validated = validate(made.record.entry, join(base, "validate-seeds", `${generator}-${seed}`));
+      check(validated.code === 0 && validated.record?.ok === true,
+        `${what}: the editor validates it (exit ${validated.code}${validated.record?.error ? `: ${validated.record.error}` : ""})`);
+    }
+    check(hashes.size === 4, `${generator}: four seeds give four textures (${hashes.size})`);
+  }
+
+  // 7. The parameters that push a masked effect furthest out still keep it
+  // inside its edge mask.
+  for (const [generator, params] of Object.entries(MASKED)) {
+    const file = join(base, `${generator}-extreme.json`);
+    writeFileSync(file, JSON.stringify(params));
+    const made = await generate(join(base, "extremes"), 1, { generator, params: file, minutes: 60 });
+    if (check(made.code === 0, `${generator} at ${JSON.stringify(params)} generates (exit ${made.code}${made.record?.error ? `: ${made.record.error}` : ""})`)) {
+      const edge = maskEdge(made.record.entry);
+      check(edge <= EDGE_MAX, `${generator} at ${JSON.stringify(params)} stays inside its edge mask (${edge}; at most ${EDGE_MAX})`);
+    }
+  }
 } finally {
   rmSync(base, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
 }
