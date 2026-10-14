@@ -75,6 +75,15 @@ for name, change in [("hash", {"builderSha256": "0" * 64}), ("dotdot", {"builder
                      ("drive", {"builder": "generators/D:evil.py"}), ("outside", {"builder": "hython/run_generator.py"})]:
     value = dict(entry); value.update(change)
     results["builder_" + name] = outcome(lambda value=value: rg.load_builder(value))
+shared = tempfile.mkdtemp()
+module = b"def burst():\n    return 3\n"
+open(os.path.join(shared, "sim.py"), "wb").write(module)
+results["modulesNone"] = outcome(lambda: rg.load_modules(entry, shared))
+results["modulesGood"] = outcome(lambda: rg.load_modules({"modules": {"sim": rg.sha256(module)}}, shared)["sim"]["burst"]())
+for name, modules in [("hash", {"sim": "0" * 64}), ("dotdot", {"../sim": rg.sha256(module)}),
+                      ("missing", {"other": rg.sha256(module)}), ("list", ["sim"])]:
+    results["module_" + name] = outcome(lambda modules=modules: rg.load_modules({"modules": modules}, shared))
+shutil.rmtree(shared)
 work = tempfile.mkdtemp()
 os.makedirs(os.path.join(work, "frames"))
 names = ["frames/frame_%04d.exr" % (i + 1) for i in range(4)]
@@ -118,6 +127,8 @@ test("run_generator's checks accept the shipped job and reject every malformed o
     param_string: /not a number/, param_intFraction: /not an integer/, param_enum: /not one of its values/,
     param_missing: /palette is missing/, param_extra: /unknown parameters: other/,
     builder_hash: /pinned hash/, builder_dotdot: /malformed/, builder_drive: /malformed/, builder_outside: /malformed/,
+    module_hash: /module sim does not match its pinned hash/, module_dotdot: /module name is malformed/,
+    module_missing: /module other is not in generators/, module_list: /modules is not an object/,
     manifestMissing: /frame is missing: frames\/frame_0004.exr/, manifestCount: /3 frames, not 4/,
     manifestName: /malformed/, manifestType: /0 frames, not 4/,
   };
@@ -127,6 +138,7 @@ test("run_generator's checks accept the shipped job and reject every malformed o
   }
   assert.deepEqual(r.paramsGood, ["ok", { count: 4, heat: 1.0, palette: "blue" }]);
   assert.deepEqual(r.builderGood, ["ok", true]);
+  assert.deepEqual([r.modulesNone, r.modulesGood], [["ok", {}], ["ok", 3]]);
   assert.equal(r.manifestGood[0], "ok");
   assert.deepEqual(r.manifestGood[1].frames.map((f) => [f.index, f.name]),
     [0, 1, 2, 3].map((i) => [i, `frames/frame_000${i + 1}.exr`]));

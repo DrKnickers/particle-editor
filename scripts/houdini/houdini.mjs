@@ -27,17 +27,33 @@ export const PINNED = {
   husk: { path: bin("husk.exe"), sha256: "a2a09b5601b70cb6a0bebd1396e454c4ae5a0657dce6ea3f0d0333d9d309afcb" },
 };
 
+// DDS entries are compressed by the DirectX SDK's texconv, the SDK the build
+// already needs for d3dx9. The compression runs in d3dx9_43.dll, which
+// texconv loads from System32 (the SDK's bin folder has none); it is the
+// same file as libs/redist/d3dx9_43.dll. Both are pinned, so a changed
+// encoder is caught, and texconv's hash is part of a DDS entry's cache key.
+export const TEXCONV_BUILD = "DirectX SDK (June 2010)";
+export const DXSDK = "C:\\Program Files (x86)\\Microsoft DirectX SDK (June 2010)";
+export const TEXCONV = {
+  texconv: { path: win32.join(DXSDK, "Utilities", "bin", "x64", "texconv.exe"),
+    sha256: "0121bcf916a91a3267fc16af09f4932da2f2cb5165fad4d47821551732d18a21" },
+  d3dx9: { path: "C:\\Windows\\System32\\d3dx9_43.dll",
+    sha256: "84b900dbd7fa978d6e0caee26fc54f2f61d92c9c75d10b35f00e3e82cd1d67b4" },
+};
+
 const fail = (message, exitCode = 1) => Object.assign(new Error(message), { exitCode });
 
-export function verifyPinned({ io = fs, pins = PINNED } = {}) {
+export function verifyPinned({ io = fs, pins = PINNED, build = `Houdini ${HOUDINI_BUILD}` } = {}) {
   for (const [name, pin] of Object.entries(pins)) {
     let bytes;
     try { bytes = io.readFileSync(pin.path); }
-    catch { throw fail(`Houdini ${HOUDINI_BUILD} ${name} is missing: ${pin.path}`); }
+    catch { throw fail(`${build} ${name} is missing: ${pin.path}`); }
     const actual = createHash("sha256").update(bytes).digest("hex");
-    if (actual !== pin.sha256) throw fail(`${name} differs from the pinned Houdini ${HOUDINI_BUILD} build`);
+    if (actual !== pin.sha256) throw fail(`${name} differs from the pinned ${build} build`);
   }
 }
+
+export const verifyTexconv = ({ io = fs } = {}) => verifyPinned({ io, pins: TEXCONV, build: TEXCONV_BUILD });
 
 // `stage` is the run's working folder; everything Houdini writes lands there.
 export function childEnvironment(stage, { inherit = process.env, threads = THREADS } = {}) {

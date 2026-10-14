@@ -2,8 +2,8 @@
 // spec §21.6).
 //
 // The key hashes everything that can change an output: the whole registry
-// entry, every file under scripts/houdini/, the inputs, the pinned build and
-// the thread count. A cache entry is trusted only after its files hash to
+// entry, every file under scripts/houdini/, the inputs, the pinned build, the
+// thread count and, for a DDS entry, the pinned texconv and d3dx9. A cache entry is trusted only after its files hash to
 // what its provenance says, on every hit.
 //
 // Provenance is deterministic: no times, hosts, users, absolute paths or
@@ -46,8 +46,8 @@ export function treeHashes(dir, io = fs) {
   return out;
 }
 
-export function cacheKey({ id, entry, tree, params, seed, tier, build, hoiiotool, threads }) {
-  return sha256(canonical({ schemaVersion: 1, id, entry, tree, params, seed, tier, build, hoiiotool, threads }));
+export function cacheKey({ id, entry, tree, params, seed, tier, build, hoiiotool, threads, texconv = null }) {
+  return sha256(canonical({ schemaVersion: 1, id, entry, tree, params, seed, tier, build, hoiiotool, threads, texconv }));
 }
 
 export function dirBytes(dir, io = fs) {
@@ -88,12 +88,14 @@ export function checkManifest(text, count, dir, io = fs) {
 
 // Spec §21.6. "contentHash" is the texture's SHA-256, the identity its name
 // carries; "usedBy" starts empty and validation starts "not-run".
-export function buildProvenance({ id, entry, key, params, seed, tier, build, hoiiotool, threads, manifestSha256, texture }) {
+export function buildProvenance({ id, entry, key, params, seed, tier, build, hoiiotool, threads, manifestSha256, texture,
+  texconv = null }) {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     generatorId: id,
     generatorVersion: entry.version,
     hdaVersion: entry.builderSha256,
+    modules: entry.modules ?? {},
     seed,
     parameters: params,
     outputProfile: texture.profile,
@@ -101,8 +103,9 @@ export function buildProvenance({ id, entry, key, params, seed, tier, build, hoi
     particleEditorValidation: "not-run",
     gameVerification: "not-run",
     usedBy: [],
-    texture: { name: texture.name, blend: entry.blend, grid: entry.grid, cell: texture.cell, pad: texture.pad,
-      size: texture.size, bytes: texture.bytes },
+    texture: { name: texture.name, format: entry.format ?? "tga", blend: entry.blend, grid: entry.grid, cell: texture.cell,
+      pad: texture.pad, size: texture.size, bytes: texture.bytes },
+    cellSeconds: entry.cellSeconds ?? null,
     framesManifestSha256: manifestSha256,
     cacheKey: key,
     tier,
@@ -110,11 +113,12 @@ export function buildProvenance({ id, entry, key, params, seed, tier, build, hoi
     threads,
     houdiniBuild: build,
     hoiiotool,
+    texconv,
   };
 }
 
 export const serialise = (value) => `${JSON.stringify(value, null, 2)}\n`;
-export const TEXTURE_NAME = /^pe_gen_[a-z0-9-]{1,40}_[0-9a-f]{8}\.tga$/;
+export const TEXTURE_NAME = /^pe_gen_[a-z0-9-]{1,40}_[0-9a-f]{8}\.(tga|dds)$/;
 
 // A cache hit is re-hashed before it is trusted; a bad entry is reported, not used.
 export function verifyEntry(dir, key, count, io = fs) {

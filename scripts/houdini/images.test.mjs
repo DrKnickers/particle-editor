@@ -1,9 +1,10 @@
-// [houdini] The TGA and PNG decoders the validators trust: round trips,
-// row order, every PNG filter, and what they refuse.
+// [houdini] The TGA, PNG and DDS decoders the validators trust: round trips,
+// row order, every PNG filter, every DXT block mode, and what they refuse.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { deflateSync } from "node:zlib";
-import { decodePng, decodeTga, encodeTga, meanRgb } from "./images.mjs";
+import { decodeDds, decodePng, decodeTga, encodeTga, meanRgb } from "./images.mjs";
+import { encodeDds } from "./test-atlas.mjs";
 
 const W = 5, H = 4;
 const RGBA = Buffer.from(Array.from({ length: W * H * 4 }, (_, i) => (i * 37 + 11) & 0xff));
@@ -90,4 +91,78 @@ test("meanRgb averages a box", () => {
   const image = { width: 2, height: 2, rgba: Buffer.from([10, 20, 30, 255, 30, 40, 50, 255, 0, 0, 0, 255, 100, 100, 100, 255]) };
   assert.deepEqual(meanRgb(image, 0, 0, 2, 1), [20, 30, 40]);
   assert.deepEqual(meanRgb(image, 0, 0, 2, 2), [35, 40, 45]);
+});
+
+// A DDS from hand-built blocks, so the decoder is checked against the format,
+// not against the test encoder.
+function dds(width, height, fourCC, blocks, { mips = 1, flags = 4 } = {}) {
+  const header = Buffer.alloc(128);
+  header.write("DDS ", 0, "latin1"); header.writeUInt32LE(124, 4);
+  header.writeUInt32LE(height, 12); header.writeUInt32LE(width, 16); header.writeUInt32LE(mips, 28);
+  header.writeUInt32LE(flags, 80); header.write(fourCC, 84, "latin1");
+  return Buffer.concat([header, ...blocks]);
+}
+const colourBlock = (c0, c1, indexOf) => {
+  const b = Buffer.alloc(8);
+  b.writeUInt16LE(c0, 0); b.writeUInt16LE(c1, 2);
+  b.writeUInt32LE(Array.from({ length: 16 }, (_, t) => indexOf(t) << (2 * t)).reduce((a, v) => (a | v) >>> 0, 0), 4);
+  return b;
+};
+const alphaBlock = (a0, a1, indexOf) => {
+  const b = Buffer.alloc(8);
+  b[0] = a0; b[1] = a1;
+  let bits = 0n;
+  for (let t = 0; t < 16; t++) bits |= BigInt(indexOf(t)) << BigInt(3 * t);
+  for (let i = 0; i < 6; i++) b[2 + i] = Number((bits >> BigInt(8 * i)) & 0xffn);
+  return b;
+};
+const RED = 0xf800, BLUE = 0x001f, GREEN = 0x07e0;
+const row = (image, y) => Array.from({ length: image.width }, (_, x) => [...image.rgba.subarray((y * image.width + x) * 4, (y * image.width + x) * 4 + 4)]);
+
+test("DDS: DXT1 in four-colour and three-colour mode, block by block", () => {
+  // Block 0: red over blue, four colours, texel t takes index t % 4. Block 1: red under blue,
+  // three colours and transparent black. Block 2: one green (equal ends).
+  const image = decodeDds(dds(12, 4, "DXT1", [colourBlock(RED, BLUE, (t) => t & 3), colourBlock(BLUE, RED, (t) => t & 3),
+    colourBlock(GREEN, GREEN, () => 0)]));
+  assert.deepEqual([image.width, image.height, image.mipCount, image.fourCC], [12, 4, 1, "DXT1"]);
+  const want = [[255, 0, 0, 255], [0, 0, 255, 255], [170, 0, 85, 255], [85, 0, 170, 255],
+    [0, 0, 255, 255], [255, 0, 0, 255], [128, 0, 128, 255], [0, 0, 0, 0], ...Array(4).fill([0, 255, 0, 255])];
+  for (let y = 0; y < 4; y++) assert.deepEqual(row(image, y), want, `row ${y}`);
+});
+
+test("DDS: DXT5 alpha in eight-level and six-level mode; its colour is always four-colour", () => {
+  const image = decodeDds(dds(8, 4, "DXT5", [
+    alphaBlock(255, 0, (t) => t & 7), colourBlock(BLUE, RED, (t) => t & 3),
+    alphaBlock(0, 255, (t) => t & 7), colourBlock(RED, RED, () => 0)]));
+  const eight = [255, 0, 219, 182, 146, 109, 73, 36], six = [0, 255, 51, 102, 153, 204, 0, 255];
+  const colours = [[0, 0, 255], [255, 0, 0], [85, 0, 170], [170, 0, 85]];
+  for (let y = 0; y < 4; y++) {
+    assert.deepEqual(row(image, y).slice(0, 4), [0, 1, 2, 3].map((x) => [...colours[x], eight[(y * 4 + x) & 7]]), `row ${y}`);
+    assert.deepEqual(row(image, y).slice(4), [0, 1, 2, 3].map((x) => [255, 0, 0, six[(y * 4 + x) & 7]]), `row ${y}`);
+  }
+});
+
+test("DDS: a level smaller than a block, and every mip level's blocks, are accounted for", () => {
+  // 2x2: one block, of which only the top-left 2x2 is the image. Two mips: 2x2 and 1x1, a block each.
+  const image = decodeDds(dds(2, 2, "DXT1", [colourBlock(RED, BLUE, (t) => t & 3), colourBlock(RED, BLUE, () => 0)], { mips: 2 }));
+  assert.deepEqual([row(image, 0), row(image, 1)], [[[255, 0, 0, 255], [0, 0, 255, 255]], [[255, 0, 0, 255], [0, 0, 255, 255]]]);
+  assert.throws(() => decodeDds(dds(2, 2, "DXT1", [colourBlock(RED, BLUE, () => 0)], { mips: 2 })), /not the 144 its header says/);
+  assert.throws(() => decodeDds(Buffer.concat([dds(4, 4, "DXT1", [colourBlock(RED, BLUE, () => 0)]), Buffer.alloc(1)])),
+    /137 bytes, not the 136/);
+});
+
+test("DDS: another format reports its header and no pixels; a non-DDS is refused", () => {
+  assert.deepEqual(decodeDds(dds(4, 4, "DXT3", [Buffer.alloc(16)])), { width: 4, height: 4, mipCount: 1, fourCC: "DXT3", rgba: null });
+  assert.equal(decodeDds(dds(4, 4, "DXT1", [Buffer.alloc(8)], { flags: 0x40 })).fourCC, null, "no FourCC flag: uncompressed");
+  assert.throws(() => decodeDds(encodeTga(W, H, RGBA)), /not a DDS/);
+  assert.throws(() => decodeDds(dds(4, 4, "DXT1", []).subarray(0, 100)), /not a DDS/);
+});
+
+test("DDS: the test encoder's output decodes close to its source", () => {
+  const rgba = Buffer.from(Array.from({ length: 16 * 8 * 4 }, (_, i) => ((i & 3) === 3 ? (i >> 2) * 2 : (i * 7) & 0xff)));
+  for (const fourCC of ["DXT1", "DXT5"]) {
+    const image = decodeDds(encodeDds(16, 8, rgba, fourCC));
+    assert.deepEqual([image.width, image.height, image.mipCount], [16, 8, 5]);
+    if (fourCC === "DXT5") for (let i = 3; i < rgba.length; i += 4) assert.ok(Math.abs(image.rgba[i] - rgba[i]) <= 19, `alpha at ${i}`);
+  }
 });

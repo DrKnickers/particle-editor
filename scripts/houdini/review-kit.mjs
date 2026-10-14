@@ -7,7 +7,8 @@
 // player right-clicks a move order. The kit replaces it with the editor's
 // review fixture for the texture's shape (one motionless particle at scale 40,
 // white tint, lifted 40 units so the terrain doesn't hide its lower half), and
-// lets the marker live 150 frames instead of 30, so a 4 s flipbook plays out.
+// lets the marker live long enough for the fixture to play out: 150 frames
+// instead of 30 for a 4 s flipbook, and as much longer as a longer one needs.
 // It is staged under <root>\review\<id>-<hash8>\:
 //   Data\Art\Textures\<texture>     the entry's texture, byte for byte
 //   Data\Art\Models\P_MOUSE_CLICK.ALO
@@ -27,14 +28,17 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { readStockFile, resolveReplayGameRoots } from "../replay-proof.mjs";
 import { fail } from "./rules.mjs";
 import { sha256 } from "./cache.mjs";
-import { kindFor, openEntry } from "./validate.mjs";
+import { kindFor, lifetimeTicks, openEntry } from "./validate.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 // src/effect/HoudiniValidationFixture.h: kReviewLift.
 export const REVIEW_LIFT = 40;
 export const MARKER = "P_MOUSE_CLICK.ALO";
-// Observed in game: 150 frames held the 4 s fireball to its last cell.
+// Observed in game: 150 frames held the 4 s fireball to its last cell. A
+// longer fixture gets as many more, in proportion.
 export const MARKER_FRAMES = 150;
+const MARKER_SECONDS = 4;
+export const markerFrames = (kind) => Math.max(MARKER_FRAMES, Math.ceil(MARKER_FRAMES * lifetimeTicks(kind) / 60 / MARKER_SECONDS));
 export const STATUSES = ["passed", "failed"];
 const MAX_NOTES = 2000;
 
@@ -61,7 +65,7 @@ export function parseArgs(argv) {
 
 // The game's PARTICLES.XML with only the click marker's lifetime changed. The
 // marker must be the model the kit replaces, or the kit would show nothing.
-export function patchParticlesXml(bytes) {
+export function patchParticlesXml(bytes, lifetimeFrames = MARKER_FRAMES) {
   const xml = bytes.toString("latin1");
   const blocks = [...xml.matchAll(/<Particle\s+Name="GUI_Move_Command_Particle"\s*>[\s\S]*?<\/Particle>/g)];
   if (blocks.length !== 1) throw fail(`PARTICLES.XML has ${blocks.length} GUI_Move_Command_Particle entries, not one`, 1);
@@ -70,7 +74,7 @@ export function patchParticlesXml(bytes) {
   if (model?.[1].toUpperCase() !== MARKER) throw fail(`GUI_Move_Command_Particle shows ${model?.[1] ?? "no land model"}, not ${MARKER}`, 1);
   const frames = [...block[0].matchAll(/<Particle_Lifetime_Frames>\s*\d+\s*<\/Particle_Lifetime_Frames>/g)];
   if (frames.length !== 1) throw fail("GUI_Move_Command_Particle has no single Particle_Lifetime_Frames", 1);
-  const patched = block[0].replace(frames[0][0], `<Particle_Lifetime_Frames>${MARKER_FRAMES}</Particle_Lifetime_Frames>`);
+  const patched = block[0].replace(frames[0][0], `<Particle_Lifetime_Frames>${lifetimeFrames}</Particle_Lifetime_Frames>`);
   return Buffer.from(xml.slice(0, block.index) + patched + xml.slice(block.index + block[0].length), "latin1");
 }
 
@@ -94,8 +98,12 @@ export function checklist({ kit, game, provenance, kind, lifetime }) {
     "",
     "1. Set the window size in the game's registry profile,",
     "   `HKCU\\Software\\Petroglyph\\StarWars FOC\\Profiles\\<profile>\\Player`, values",
-    "   `WindowWidth` and `WindowHeight`. The game ignores `-W`/`-H`. Note the old values and",
-    "   put them back afterwards.",
+    "   `WindowWidth` and `WindowHeight`. The game ignores `-W`/`-H`. In the same key, set",
+    "   `WidescreenAspectRatio` to the window's width over its height: the game builds its 3D view",
+    "   at that aspect and stretches it to the window, so any other value draws every sprite",
+    "   stretched. It is a DWORD holding the float's bits; in PowerShell, for a 1280 x 720 window,",
+    "   `[BitConverter]::ToInt32([BitConverter]::GetBytes([single](1280 / 720)), 0)`. Note the old",
+    "   values and put them back afterwards.",
     "2. Start the game windowed, with this kit as its mod:",
     "",
     "   ```text",
@@ -135,14 +143,14 @@ export function stage({ entry, exe = join(repoRoot, "x64", "Release", "ParticleE
 } = {}) {
   const { provenance, root, published } = open(entry, io);
   const { name, grid, blend } = provenance.texture;
-  const kind = kindFor({ blend, grid });
+  const kind = kindFor({ blend, grid }), lifetimeFrames = markerFrames(kind);
   const hash8 = name.slice(-12, -4);
   const kit = join(root, "review", `${provenance.generatorId}-${hash8}`);
   if (provenance.tier !== "final") throw fail(`the review kit shows a final-tier texture; this entry is ${provenance.tier}`, 2);
   const game = focRoot(roots());
   const xml = stockFile([game], "XML\\PARTICLES.XML");
   if (!xml) throw fail(`no PARTICLES.XML in the game data at ${game}`, 1);
-  const patched = patchParticlesXml(xml);
+  const patched = patchParticlesXml(xml, lifetimeFrames);
 
   io.mkdirSync(dirname(kit), { recursive: true });
   try { io.mkdirSync(kit); }
@@ -159,7 +167,7 @@ export function stage({ entry, exe = join(repoRoot, "x64", "Release", "ParticleE
       schemaVersion: 1, generatorId: provenance.generatorId, generatorVersion: provenance.generatorVersion,
       seed: provenance.seed, parameters: provenance.parameters, tier: provenance.tier, cacheKey: provenance.cacheKey,
       contentHash: provenance.contentHash, texture: name, fixture: { kind, lifetime: shown.lifetime, lift: shown.lift },
-      markerFrames: MARKER_FRAMES, gameVerification: "not-run",
+      markerFrames: lifetimeFrames, gameVerification: "not-run",
     };
     io.writeFileSync(join(kit, "review.json"), `${JSON.stringify(review, null, 2)}\n`);
     io.writeFileSync(join(kit, "REVIEW.md"), checklist({ kit, game, provenance, kind, lifetime: shown.lifetime }));
@@ -175,7 +183,7 @@ export function recordVerdict({ record: kit, status, notes }, { io = fs, today =
   let review;
   try { review = JSON.parse(io.readFileSync(join(kit, "review.json"), "utf8")); }
   catch { throw fail(`not a review kit: ${kit}`, 2); }
-  if (review?.schemaVersion !== 1 || typeof review.texture !== "string" || !/^[a-z0-9_-]+\.tga$/.test(review.texture))
+  if (review?.schemaVersion !== 1 || typeof review.texture !== "string" || !/^[a-z0-9_-]+\.(tga|dds)$/.test(review.texture))
     throw fail(`not a review kit: ${kit}`, 2);
   let texture;
   try { texture = io.readFileSync(join(kit, "Data", "Art", "Textures", review.texture)); }

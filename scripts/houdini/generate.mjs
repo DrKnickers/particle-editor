@@ -7,7 +7,8 @@
 // miss hython runs run_generator.py inside a Job Object with an allowlisted
 // environment and the stage as its working folder. The frames are checked
 // against hython's manifest, packed and encoded by the entry's profile
-// (profiles.mjs), and the texture is validated. Provenance is written last,
+// (profiles.mjs), compressed to a DDS by texconv when the entry's format asks,
+// and the texture is validated. Provenance is written last,
 // and the result is renamed into <root>\cache\<key>\ in one step. The texture
 // is then published to <root>\Data\Art\Textures\ under its content-addressed
 // name, so the root works as a content layer. Every run prints one
@@ -28,10 +29,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolveReplayGameRoots } from "../replay-proof.mjs";
 import { checkParams, checkRoot, checkTier, defaultParams, fail, lookup, parseRegistry, parseSeed } from "./rules.mjs";
 import { buildProvenance, cacheKey, canonical, checkManifest, dirBytes, evict, serialise, sha256, treeHashes, verifyEntry } from "./cache.mjs";
-import { HOIIOTOOL_VERSION, HOUDINI_BUILD, PINNED, THREADS, childEnvironment, verifyPinned } from "./houdini.mjs";
+import { HOIIOTOOL_VERSION, HOUDINI_BUILD, PINNED, TEXCONV, THREADS, childEnvironment, verifyPinned, verifyTexconv } from "./houdini.mjs";
 import { acquireLock, runContained } from "./contain.mjs";
-import { decodeTga } from "./images.mjs";
-import { atlasLayout, checkFrames, encodeArgs, packArgs, parseFrameStats, profileName, statsArgs, textureName, validateTexture } from "./profiles.mjs";
+import { decodeDds, decodeTga } from "./images.mjs";
+import { atlasLayout, checkFrames, encodeArgs, packArgs, parseFrameStats, profileName, statsArgs, texconvArgs, textureName, validateDds,
+  validateTexture } from "./profiles.mjs";
 
 export const HOUDINI_DIR = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(HOUDINI_DIR, "..", "..");
@@ -113,6 +115,14 @@ export function runHoiiotool(args, { cwd, env, timeoutMs }) {
     timedOut: r.error?.code === "ETIMEDOUT" };
 }
 
+// texconv likewise, from the SDK's pinned path.
+export function runTexconv(args, { cwd, env, timeoutMs }) {
+  const r = spawnSync(TEXCONV.texconv.path, args, { cwd, env, timeout: timeoutMs, windowsHide: true, encoding: "utf8",
+    maxBuffer: MiB });
+  return { code: r.error ? null : r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "", error: r.error?.message ?? null,
+    timedOut: r.error?.code === "ETIMEDOUT" };
+}
+
 // Copy the texture out under its content-addressed name. The name says what
 // the bytes are, so a same-named file with other bytes is a torn or altered
 // copy (or, at 32 bits of hash, a vanishingly rare collision between two of
@@ -136,7 +146,8 @@ function publish(root, entryDir, name, temporary, io) {
 
 export async function generate(args, {
   io = fs, env = process.env, gameRoots = resolveReplayGameRoots, repos = repoRoots, lock = acquireLock,
-  run = runContained, tool = runHoiiotool, verify = verifyPinned, now = () => Date.now(), clock = () => new Date().toISOString(),
+  run = runContained, tool = runHoiiotool, verify = verifyPinned, compress = runTexconv, verifyCompressor = verifyTexconv,
+  now = () => Date.now(), clock = () => new Date().toISOString(),
   random = () => randomBytes(4).toString("hex"), log = (text) => process.stderr.write(`${text}\n`),
   sleep = (ms) => new Promise((done) => setTimeout(done, ms)), staleWaitMs = 15000,
   houdiniDir = HOUDINI_DIR, cacheMaxMiB = CACHE_MAX_MIB, hython = PINNED.hython.path,
@@ -171,8 +182,10 @@ export async function generate(args, {
       throw fail(`${entry.builder} does not match its pinned builderSha256`, 1);
 
     // 2. Key.
+    const format = entry.format ?? "tga";
+    const texconv = format === "tga" ? null : { texconv: TEXCONV.texconv.sha256, d3dx9: TEXCONV.d3dx9.sha256 };
     const key = cacheKey({ id: args.generator, entry, tree: treeHashes(houdiniDir, io), params, seed, tier,
-      build: HOUDINI_BUILD, hoiiotool: HOIIOTOOL_VERSION, threads: THREADS });
+      build: HOUDINI_BUILD, hoiiotool: HOIIOTOOL_VERSION, threads: THREADS, texconv });
     Object.assign(record, { cacheKey: key, paramsSha256: sha256(canonical(params)) });
     const settings = entry.tiers[tier], count = entry.grid * entry.grid;
     claimRoot(root, io);
@@ -220,6 +233,7 @@ export async function generate(args, {
 
       // 4-5. Pinned binaries, then an exclusive stage.
       verify();
+      if (texconv) verifyCompressor();
       io.mkdirSync(staging, { recursive: true });
       stage = join(staging, `${key.slice(0, 16)}-${random()}`);
       io.mkdirSync(stage);
@@ -258,28 +272,37 @@ export async function generate(args, {
       const profileStarted = now(), deadline = hythonStarted + settings.timeoutMin * 60000;
       const layout = atlasLayout(entry.grid, settings.cell);
       const frames = manifest.frames.map((frame) => frame.name);
-      const hoiiotool = (toolArgs, what) => {
-        const late = () => fail(`the ${tier} deadline of ${settings.timeoutMin} min passed while hoiiotool ran; it was killed`, 5);
+      const step = (runner, label) => (toolArgs, what) => {
+        const late = () => fail(`the ${tier} deadline of ${settings.timeoutMin} min passed while ${label} ran; it was killed`, 5);
         if (deadline - now() <= 0) throw late();
-        const r = tool(toolArgs, { cwd: work, env: childEnvironment(work, { inherit: env }), timeoutMs: deadline - now() });
+        const r = runner(toolArgs, { cwd: work, env: childEnvironment(work, { inherit: env }), timeoutMs: deadline - now() });
         if (r.timedOut) throw late();
         if (r.code !== 0) {
-          if (r.stderr || r.stdout) log(`[houdini-gen] hoiiotool output (printed, not stored):\n${tail(r.stderr || r.stdout, 2048)}`);
-          throw fail(`hoiiotool could not ${what} (${r.code === null ? "it did not start" : `exit ${r.code}`})`, 4);
+          if (r.stderr || r.stdout) log(`[houdini-gen] ${label} output (printed, not stored):\n${tail(r.stderr || r.stdout, 2048)}`);
+          throw fail(`${label} could not ${what} (${r.code === null ? "it did not start" : `exit ${r.code}`})`, 4);
         }
         return r.stdout;
       };
+      const hoiiotool = step(tool, "hoiiotool");
       const frameErrors = checkFrames(parseFrameStats(hoiiotool(statsArgs(frames), "read the frames")), layout);
       if (frameErrors.length) throw fail(`the frames failed the profile: ${frameErrors.join("; ")}`, 4);
       hoiiotool(packArgs(frames, layout, "packed.exr"), "pack the frames");
       hoiiotool(encodeArgs(entry.blend, "packed.exr", "texture.tga"), "encode the texture");
+      // texconv exits 0 when it can't write, so the file is the evidence.
+      if (texconv) {
+        step(compress, "texconv")(texconvArgs(format, "texture.tga"), `write ${format.toUpperCase()}`);
+        if (!io.existsSync(join(work, "texture.dds"))) throw fail(`texconv wrote no ${format.toUpperCase()} file`, 4);
+      }
       timings.profileMs = now() - profileStarted;
 
-      // 8. The validators.
-      const textureBytes = io.readFileSync(join(work, "texture.tga"));
-      const textureErrors = validateTexture(decodeTga(textureBytes), textureBytes.length, { blend: entry.blend, layout });
+      // 8. The validators: the TGA, then the DDS held to it.
+      const tgaBytes = io.readFileSync(join(work, "texture.tga")), tga = decodeTga(tgaBytes);
+      const textureErrors = validateTexture(tga, texconv ? null : tgaBytes.length, { blend: entry.blend, layout });
+      const file = texconv ? "texture.dds" : "texture.tga", textureBytes = texconv ? io.readFileSync(join(work, file)) : tgaBytes;
+      if (texconv && !textureErrors.length)
+        textureErrors.push(...validateDds(decodeDds(textureBytes), tga, textureBytes.length, { format, blend: entry.blend, layout }));
       if (textureErrors.length) throw fail(`the texture failed the ${profileName(entry.blend, entry.grid)} profile: ${textureErrors.join("; ")}`, 4);
-      const texture = { name: textureName(args.generator, sha256(textureBytes)), sha256: sha256(textureBytes),
+      const texture = { name: textureName(args.generator, sha256(textureBytes), format), sha256: sha256(textureBytes),
         profile: profileName(entry.blend, entry.grid), cell: layout.cell, pad: layout.pad, size: layout.size, bytes: textureBytes.length };
 
       // 9-10. Provenance last, then one rename caches the entry and the texture is published.
@@ -287,9 +310,10 @@ export async function generate(args, {
       io.mkdirSync(promote);
       io.renameSync(join(work, "frames"), join(promote, "frames"));
       io.writeFileSync(join(promote, "frames.manifest.json"), manifestText);
-      io.renameSync(join(work, "texture.tga"), join(promote, texture.name));
+      io.renameSync(join(work, file), join(promote, texture.name));
       io.writeFileSync(join(promote, "provenance.json"), serialise(buildProvenance({ id: args.generator, entry, key, params,
-        seed, tier, build: HOUDINI_BUILD, hoiiotool: HOIIOTOOL_VERSION, threads: THREADS, manifestSha256: sha256(manifestText), texture })));
+        seed, tier, build: HOUDINI_BUILD, hoiiotool: HOIIOTOOL_VERSION, threads: THREADS, manifestSha256: sha256(manifestText), texture,
+        texconv })));
       io.mkdirSync(cacheDir, { recursive: true });
       io.renameSync(promote, entryDir);
       const published = publish(root, entryDir, texture.name, join(staging, `${key.slice(0, 16)}-${random()}`), io);

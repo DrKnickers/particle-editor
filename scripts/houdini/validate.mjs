@@ -6,15 +6,16 @@
 // emitter naming the texture), then observes it twice:
 //   layered - contentLayers = [the generated root], with ALO_SHADER_DIAG=1:
 //             the capture resolves the name to the published file, by hash,
-//             and the editor's log loads it as a 32-bit texture (fmt=21);
+//             and the editor's log loads it in its own format (32-bit for a
+//             TGA, fmt=21; DXT1 or DXT5 for a DDS);
 //   control - contentLayers = []: the same name resolves to nothing, so the
 //             editor shows its placeholder, and the view differs.
 // The content-addressed name and the explicit layer stack mean no other file
-// can satisfy the check. A 4x4 atlas is observed through the fireball
-// fixture, and the colour at the view's centre must change from cell to cell
-// (the editor plays the flipbook, not one cell). Over debug-atlas it must
-// step through the cells in order (its oracle: red = i % 4, green = i / 4,
-// blue 0.5).
+// can satisfy the check. A flipbook is observed through the fixture for its
+// shape (KINDS), and the colour at the view's centre must change from cell
+// to cell (the editor plays the flipbook, not one cell). Over the debug atlas
+// it must step through the cells in order (its oracle: red = i % 4,
+// green = i / 4, blue 0.5).
 //
 // The editor's log of each run is kept beside its bundle as <run>.editor-log.txt.
 // Prints one `[houdini-validate]` JSON line. Exit 0 valid, 2 bad input,
@@ -29,22 +30,38 @@ import { fail } from "./rules.mjs";
 import { sha256, verifyEntry } from "./cache.mjs";
 import { ROOT_MARKER } from "./generate.mjs";
 import { decodePng, meanRgb } from "./images.mjs";
+import { D3D_FORMAT } from "./profiles.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 // The emitter's default normal texture: a fixture can't record "none" (PR 2a delta 6).
 export const NORMAL_TEXTURE = "p_particle_depth_master.tga";
-// src/effect/HoudiniValidationFixture.h: the fireball holds each cell 15 ticks of the 60 Hz clock.
-export const TICKS_PER_CELL = 15;
+// src/effect/HoudiniValidationFixture.h: each fixture's shape, and how many
+// ticks of the 60 Hz clock it holds each cell (a single texture's whole life).
+export const KINDS = {
+  puff: { grid: 1, blend: "transparent", ticksPerCell: 120 },
+  ring: { grid: 1, blend: "additive", ticksPerCell: 120 },
+  fireball: { grid: 4, blend: "additive", ticksPerCell: 15 },
+  smoke4: { grid: 4, blend: "transparent", ticksPerCell: 15 },
+  smoke8: { grid: 8, blend: "transparent", ticksPerCell: 6 },
+};
+// The 4x4 fixtures' hold, which the oracle reads by default.
+export const TICKS_PER_CELL = KINDS.fireball.ticksPerCell;
+// The generators whose frames are the 0..15 colour oracle (debug_atlas.py).
+export const ORACLES = ["debug-atlas", "debug-atlas-dds"];
 const BOX = 32, CORNER = 8, BLUE = 128, BLUE_SLACK = 16, LEVEL_SLACK = 0.25, CONTROL_DELTA = 24;
+const MIN_FRAMES = 300, TAIL_FRAMES = 60;
 
 export function kindFor({ blend, grid }) {
-  if (grid === 4 && blend === "additive") return "fireball";
-  if (grid === 1) return blend === "additive" ? "ring" : "puff";
-  throw fail(`no validation fixture shows a ${grid}x${grid} ${blend} texture`, 2);
+  const kind = Object.keys(KINDS).find((name) => KINDS[name].grid === grid && KINDS[name].blend === blend);
+  if (!kind) throw fail(`no validation fixture shows a ${grid}x${grid} ${blend} texture`, 2);
+  return kind;
 }
 
-export const observationSpec = (layers, aloPath) => ({
-  schemaVersion: 2, contentLayers: layers, scenario: { aloPath, maxFrames: 300 },
+// The fixture's whole life in ticks, and an observation long enough to see it end.
+export const lifetimeTicks = (kind) => KINDS[kind].grid ** 2 * KINDS[kind].ticksPerCell;
+export const observationSpec = (layers, aloPath, kind = "fireball") => ({
+  schemaVersion: 2, contentLayers: layers,
+  scenario: { aloPath, maxFrames: Math.max(MIN_FRAMES, lifetimeTicks(kind) + TAIL_FRAMES) },
   lifecycle: { type: "oneshot" }, output: { strideInterval: 30, playbackStride: 1 },
 });
 
@@ -69,23 +86,24 @@ export function checkAttestation(capture, { name, sha, root, layered }) {
   return errors;
 }
 
-// ALO_SHADER_DIAG: the request for the name, then its decode as A8R8G8B8 (21).
-export function checkTextureLog(stdout, { name, size }) {
+// ALO_SHADER_DIAG: the request for the name, then its decode in the file's
+// own format: A8R8G8B8 (21) for a TGA, the DXT FourCC for a DDS.
+export function checkTextureLog(stdout, { name, size, format = "tga" }) {
   const lines = stdout.split(/\r?\n/).filter((line) => line.startsWith("[tex-gate]"));
   const at = lines.indexOf(`[tex-gate] getTexture(${name})`);
   if (at < 0) return [`the editor never requested ${name}`];
-  const next = lines[at + 1] ?? "";
-  return next === `[tex-gate] loaded ${size}x${size} fmt=21` ? [] : [`${name} loaded as "${next}", not ${size}x${size} fmt=21`];
+  const next = lines[at + 1] ?? "", want = `${size}x${size} fmt=${D3D_FORMAT[format]}`;
+  return next === `[tex-gate] loaded ${want}` ? [] : [`${name} loaded as "${next}", not ${want}`];
 }
 
 const centre = (image) => meanRgb(image, (image.width - BOX) >> 1, (image.height - BOX) >> 1, BOX, BOX);
 const corner = (image) => meanRgb(image, CORNER, CORNER, CORNER, CORNER);
 
-// The view centre's colour at the middle of each cell's 15 ticks, less the
+// The view centre's colour at the middle of each cell's ticks, less the
 // background. `frameAt(tick)` returns a decoded playback frame.
-export function readCells(frameAt, grid = 4) {
+export function readCells(frameAt, grid = 4, ticks = TICKS_PER_CELL) {
   return Array.from({ length: grid * grid }, (_, k) => {
-    const image = frameAt(TICKS_PER_CELL * k + (TICKS_PER_CELL >> 1)), background = corner(image);
+    const image = frameAt(ticks * k + (ticks >> 1)), background = corner(image);
     return centre(image).map((v, c) => v - background[c]);
   });
 }
@@ -97,12 +115,12 @@ export function checkPlays(cells) {
   return spread >= CONTROL_DELTA ? [] : [`the cells all look alike at the view's centre (spread ${spread.toFixed(1)}): the flipbook does not play`];
 }
 
-// The 0..15 oracle, read at the middle of each cell's 15 ticks.
+// The 0..15 oracle, read at the middle of each cell's ticks.
 // `frameAt(tick)` returns a decoded playback frame.
-export function readOrder(frameAt, grid = 4) {
+export function readOrder(frameAt, grid = 4, ticks = TICKS_PER_CELL) {
   const step = 255 / (grid - 1), sequence = [], errors = [];
   for (let k = 0; k < grid * grid; k++) {
-    const image = frameAt(TICKS_PER_CELL * k + (TICKS_PER_CELL >> 1));
+    const image = frameAt(ticks * k + (ticks >> 1));
     const background = corner(image), delta = centre(image).map((v, c) => v - background[c]);
     const [r, g] = [delta[0] / step, delta[1] / step];
     const level = [Math.round(r), Math.round(g)];
@@ -165,9 +183,9 @@ export async function validate({ entry, out, exe = join(repoRoot, "x64", "Releas
 } = {}) {
   const record = { ok: false, exitCode: 4, entry };
   const { provenance, root } = openEntry(entry, io);
-  const { name, grid, blend, size } = provenance.texture;
+  const { name, grid, blend, size, format = "tga" } = provenance.texture;
   const generator = provenance.generatorId;
-  const kind = kindFor({ blend, grid });
+  const kind = kindFor({ blend, grid }), ticks = KINDS[kind].ticksPerCell;
   Object.assign(record, { texture: name, kind, contentHash: provenance.contentHash });
   if (io.existsSync(out) && io.readdirSync(out).length) throw fail(`--out must be absent or empty: ${out}`, 2);
   io.mkdirSync(out, { recursive: true });
@@ -179,7 +197,7 @@ export async function validate({ entry, out, exe = join(repoRoot, "x64", "Releas
   const errors = [], runs = {};
   for (const [label, layers] of [["layered", [root]], ["control", []]]) {
     const spec = join(out, `${label}.json`), bundle = join(out, label);
-    io.writeFileSync(spec, `${JSON.stringify(observationSpec(layers, alo), null, 2)}\n`);
+    io.writeFileSync(spec, `${JSON.stringify(observationSpec(layers, alo, kind), null, 2)}\n`);
     let stdout = "";
     // Only the editor gets the diagnostic switch; observe's ffmpeg runs as usual.
     const run = (bin, args, options) => (bin !== exe ? spawnWithDeadline(bin, args, options)
@@ -192,17 +210,17 @@ export async function validate({ entry, out, exe = join(repoRoot, "x64", "Releas
     errors.push(...checkAttestation(capture, { name, sha: provenance.contentHash, root, layered: label === "layered" })
       .map((error) => `${label}: ${error}`));
   }
-  errors.push(...checkTextureLog(runs.layered.stdout, { name, size }).map((error) => `layered: ${error}`));
+  errors.push(...checkTextureLog(runs.layered.stdout, { name, size, format }).map((error) => `layered: ${error}`));
   // The placeholder must look different from the texture at the view's centre.
-  const tick = TICKS_PER_CELL >> 1;
+  const tick = ticks >> 1;
   const [shown, placeholder] = ["layered", "control"].map((label) => centre(playbackFrame(runs[label].bundle, runs[label].capture, io)(tick)));
   const difference = Math.max(...shown.map((v, c) => Math.abs(v - placeholder[c])));
   if (difference < CONTROL_DELTA) errors.push(`the control run looks the same as the layered one (centre differs by ${difference.toFixed(1)})`);
-  if (kind === "fireball") {
+  if (grid > 1) {
     const frameAt = playbackFrame(runs.layered.bundle, runs.layered.capture, io);
-    errors.push(...checkPlays(readCells(frameAt, grid)).map((error) => `layered: ${error}`));
-    if (generator === "debug-atlas") {
-      const order = readOrder(frameAt, grid);
+    errors.push(...checkPlays(readCells(frameAt, grid, ticks)).map((error) => `layered: ${error}`));
+    if (ORACLES.includes(generator)) {
+      const order = readOrder(frameAt, grid, ticks);
       record.sequence = order.sequence;
       errors.push(...order.errors.map((error) => `order: ${error}`));
     }

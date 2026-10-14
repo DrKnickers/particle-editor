@@ -5,7 +5,8 @@
 # on stdin. Nothing here trusts that job: the registry file must hash to the
 # value Node saw, every field is checked again, and the builder must sit
 # inside generators/, hash to its pinned value, and run from the same bytes
-# that were hashed (no window between check and use).
+# that were hashed (no window between check and use). So must each shared
+# module the entry pins; the builder gets them as ctx["modules"].
 #
 # The checks import nothing from Houdini, so a plain Python runs them in the
 # unit tests (job-rules.test.mjs); `hou` is imported in main() only. Keep this
@@ -28,6 +29,7 @@ HOUDINI_DIR = os.path.dirname(HERE)
 GENERATORS_DIR = os.path.join(HOUDINI_DIR, "generators")
 REGISTRY_PATH = os.path.join(HOUDINI_DIR, "registry.json")
 FRAME_NAME = re.compile(r"^frames/frame_[0-9]{4}\.exr$")
+MODULE = re.compile(r"^[a-z0-9_]{1,64}$")
 # The guard band profiles.mjs leaves round every frame (its PAD).
 PAD = 2
 
@@ -123,6 +125,24 @@ def load_builder(entry, generators_dir=GENERATORS_DIR):
     return namespace
 
 
+def load_modules(entry, generators_dir=GENERATORS_DIR):
+    """Read each shared module once, confine and hash it; return its namespace by name."""
+    modules = entry.get("modules", {})
+    require(isinstance(modules, dict), "modules is not an object")
+    loaded = {}
+    for name in sorted(modules):
+        require(isinstance(name, str) and MODULE.match(name) is not None, "module name is malformed")
+        path = os.path.join(generators_dir, name + ".py")
+        require(inside(generators_dir, path) and os.path.isfile(path), "module %s is not in generators/" % name)
+        with open(path, "rb") as handle:
+            data = handle.read()
+        require(sha256(data) == modules[name], "module %s does not match its pinned hash" % name)
+        namespace = {"__name__": "pe_module_" + name}
+        exec(compile(data, "generators/%s.py" % name, "exec"), namespace)
+        loaded[name] = namespace
+    return loaded
+
+
 def frame_manifest(names, count, workdir):
     """Check the builder's frame list and hash each frame."""
     require(isinstance(names, list) and len(names) == count, "builder returned %d frames, not %d" % (len(names or []), count))
@@ -154,6 +174,7 @@ def main():
     # Only the pin checks are rejections; an error the builder raises while
     # loading is a generator failure (exit 1).
     try:
+        modules = load_modules(entry)
         builder = load_builder(entry)
     except Rejected as error:
         reject(error)
@@ -162,9 +183,11 @@ def main():
     grid = entry["grid"]
     tier = dict(entry["tiers"][job["tier"]])
     # Frames are rendered at `frame` texels a side; the packer insets each one
-    # by `pad` inside its `cell`.
+    # by `pad` inside its `cell`. `cellSeconds`, when the entry has it, is the
+    # simulation time each cell shows.
     ctx = {"params": job["params"], "seed": job["seed"], "tier": tier, "tierName": job["tier"],
-           "grid": grid, "pad": PAD, "frame": tier["cell"] - 2 * PAD, "threads": job["threads"]}
+           "grid": grid, "pad": PAD, "frame": tier["cell"] - 2 * PAD, "threads": job["threads"],
+           "modules": modules, "cellSeconds": entry.get("cellSeconds")}
     workdir = os.getcwd()
     names = builder["generate"](hou, ctx)
     manifest = frame_manifest(names, grid * grid, workdir)

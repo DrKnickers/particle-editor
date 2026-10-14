@@ -508,7 +508,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 					std::any_of(argv[i + 2].begin(), argv[i + 2].end(), [](wchar_t c) { return c > 0x7F; }) ||
 					!houdinifixture::IsTextureName(WideToAnsi(argv[i + 2])))
 				{
-					fwprintf(stderr, L"%ls requires <puff|ring|fireball> <texture.tga|.dds> <out.alo>\n", argv[i].c_str());
+					fwprintf(stderr, L"%ls requires <puff|ring|fireball|smoke4|smoke8> <texture.tga|.dds> <out.alo>\n", argv[i].c_str());
 					return 2;
 				}
 				genHoudiniFixtureKind = argv[i + 1];

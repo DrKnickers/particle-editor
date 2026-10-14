@@ -13,7 +13,7 @@
 // tests/test_houdini_validation_fixture.cpp can pin it.
 namespace houdinifixture {
 
-enum class Kind { Puff, Ring, Fireball };
+enum class Kind { Puff, Ring, Fireball, Smoke4, Smoke8 };
 
 struct Profile
 {
@@ -27,23 +27,36 @@ inline bool ParseKind(const std::wstring& text, Kind& kind)
     if (text == L"puff")     { kind = Kind::Puff;     return true; }
     if (text == L"ring")     { kind = Kind::Ring;     return true; }
     if (text == L"fireball") { kind = Kind::Fireball; return true; }
+    if (text == L"smoke4")   { kind = Kind::Smoke4;   return true; }
+    if (text == L"smoke8")   { kind = Kind::Smoke8;   return true; }
     return false;
 }
 
 inline const char* KindName(Kind kind)
 {
-    return kind == Kind::Puff ? "puff" : kind == Kind::Ring ? "ring" : "fireball";
+    switch (kind)
+    {
+    case Kind::Puff:   return "puff";
+    case Kind::Ring:   return "ring";
+    case Kind::Smoke4: return "smoke4";
+    case Kind::Smoke8: return "smoke8";
+    default:           return "fireball";
+    }
 }
 
-// Puff is smoke (straight alpha); ring and fireball are emissive. The fireball
-// is a 4x4 flipbook held 0.25 s a cell: 15 frames of the 60 Hz clock each.
+// Puff and the smoke flipbooks are smoke (straight alpha); ring and fireball
+// are emissive. The 4x4 flipbooks hold each cell 0.25 s, 15 frames of the
+// 60 Hz clock; the 8x8 smoke holds each 0.1 s, 6 frames, so its 64 cells
+// play in 6.4 s.
 inline Profile ProfileFor(Kind kind)
 {
     switch (kind)
     {
-    case Kind::Puff: return { ParticleSystem::BLEND_TRANSPARENT, 1, 2.0f };
-    case Kind::Ring: return { ParticleSystem::BLEND_ADDITIVE, 1, 2.0f };
-    default:         return { ParticleSystem::BLEND_ADDITIVE, 16, 4.0f };
+    case Kind::Puff:   return { ParticleSystem::BLEND_TRANSPARENT, 1, 2.0f };
+    case Kind::Ring:   return { ParticleSystem::BLEND_ADDITIVE, 1, 2.0f };
+    case Kind::Smoke4: return { ParticleSystem::BLEND_TRANSPARENT, 16, 4.0f };
+    case Kind::Smoke8: return { ParticleSystem::BLEND_TRANSPARENT, 64, 6.4f };
+    default:           return { ParticleSystem::BLEND_ADDITIVE, 16, 4.0f };
     }
 }
 

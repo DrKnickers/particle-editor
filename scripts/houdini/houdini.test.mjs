@@ -2,10 +2,10 @@
 // are the pinned constants (plan §5 "Spawn environment").
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, win32 } from "node:path";
-import { HFS, HOUDINI_BUILD, PINNED, THREADS, childEnvironment, verifyPinned } from "./houdini.mjs";
+import { DXSDK, HFS, HOUDINI_BUILD, PINNED, TEXCONV, THREADS, childEnvironment, verifyPinned, verifyTexconv } from "./houdini.mjs";
 import { sha256 } from "./cache.mjs";
 
 const STAGE = "C:\\gen\\.staging\\k-1\\work";
@@ -40,6 +40,19 @@ test("the binaries are constants under the pinned build", () => {
     assert.equal(win32.dirname(pin.path), win32.join(HFS, "bin"), name);
     assert.match(pin.sha256, /^[0-9a-f]{64}$/, name);
   }
+});
+
+test("texconv and the d3dx9 it loads are constants: the SDK's x64 tool and System32's runtime", () => {
+  assert.equal(TEXCONV.texconv.path, win32.join(DXSDK, "Utilities", "bin", "x64", "texconv.exe"));
+  assert.ok(DXSDK.endsWith("Microsoft DirectX SDK (June 2010)"));
+  assert.equal(win32.basename(TEXCONV.d3dx9.path).toLowerCase(), "d3dx9_43.dll");
+  for (const pin of Object.values(TEXCONV)) assert.match(pin.sha256, /^[0-9a-f]{64}$/);
+  // The pinned d3dx9 is the copy the release ships beside the exe.
+  const redist = new URL("../../libs/redist/d3dx9_43.dll", import.meta.url);
+  if (existsSync(redist)) assert.equal(sha256(readFileSync(redist)), TEXCONV.d3dx9.sha256);
+  // A missing SDK names the SDK, not Houdini.
+  assert.throws(() => verifyTexconv({ io: { readFileSync: () => { throw new Error("ENOENT"); } } }),
+    /DirectX SDK \(June 2010\) texconv is missing/);
 });
 
 test("verifyPinned refuses a missing or altered binary", (t) => {

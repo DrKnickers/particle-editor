@@ -7,10 +7,12 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HOUDINI_DIR, generate, hythonFailure, parseArgs } from "./generate.mjs";
-import { PINNED } from "./houdini.mjs";
+import { PINNED, TEXCONV } from "./houdini.mjs";
 import { ROOT_MARKER } from "./generate.mjs";
 import { sha256 } from "./cache.mjs";
-import { frameStatsText, syntheticAtlas } from "./test-atlas.mjs";
+import { decodeTga } from "./images.mjs";
+import { texconvArgs } from "./profiles.mjs";
+import { encodeDds, frameStatsText, syntheticAtlas } from "./test-atlas.mjs";
 
 const windows = { skip: process.platform !== "win32" && "generated roots are Windows drive paths" };
 const ARGS = { generator: "debug-atlas", seed: "7", tier: "preview" };
@@ -43,10 +45,24 @@ function fakeTool(calls, { stats = frameStatsText(16, 28), texture = ATLAS.tga()
   };
 }
 
+// texconv: the DDS of whatever TGA hoiiotool left, or `dds(tga)` instead;
+// `write: false` is texconv exiting 0 without writing, as it does.
+function fakeCompress(calls, { code = 0, write = true, dds = null } = {}) {
+  return (args, options) => {
+    calls.compress.push({ args, options });
+    if (code !== 0) return { code, stdout: "", stderr: "texconv: failed", error: null };
+    if (write) {
+      const tga = readFileSync(join(options.cwd, args.at(-1))), image = decodeTga(tga);
+      writeFileSync(join(options.cwd, "texture.dds"), dds ? dds(image) : encodeDds(image.width, image.height, image.rgba, args[2]));
+    }
+    return { code: 0, stdout: "writing .\\texture.dds", stderr: "", error: null };
+  };
+}
+
 function harness(t, overrides = {}) {
   const root = join(mkdtempSync(join(tmpdir(), "pe-houdini-gen-")), "generated");
   t.after(() => rmSync(join(root, ".."), { recursive: true, force: true }));
-  const calls = { run: [], tool: [], lock: 0, released: 0, verify: 0, logs: [] };
+  const calls = { run: [], tool: [], compress: [], lock: 0, released: 0, verify: 0, verifyCompressor: 0, logs: [] };
   const behave = overrides.behave ?? ((s) => { writeOutput(s.cwd); writeFileSync(s.stdout, '[houdini-run] {"ok": true, "frames": 16}\n'); return { outcome: "exited", code: 0, pid: 42 }; });
   const seams = {
     gameRoots: () => [], repos: () => [join(HOUDINI_DIR, "..", "..")], staleWaitMs: 0,
@@ -54,6 +70,7 @@ function harness(t, overrides = {}) {
     lock: async () => { calls.lock++; return overrides.busy ? null : { release: async () => { calls.released++; } }; },
     run: async (s, options) => { calls.run.push({ s, options }); options.onLaunched(42); return behave(s, options); },
     tool: fakeTool(calls, overrides.tool),
+    compress: fakeCompress(calls, overrides.compress), verifyCompressor: () => { calls.verifyCompressor++; },
     log: (text) => calls.logs.push(text), clock: () => "2026-10-13T00:00:00.000Z",
     ...overrides.seams,
   };
@@ -100,7 +117,9 @@ test("a miss runs hython contained, promotes the checked entry, and the next run
   const provenance = JSON.parse(readFileSync(join(entry, "provenance.json"), "utf8"));
   assert.equal(provenance.contentHash, sha256(textureBytes));
   assert.equal(provenance.framesManifestSha256, sha256(readFileSync(join(entry, "frames.manifest.json"))));
-  assert.deepEqual(provenance.texture, { name, blend: "additive", grid: 4, cell: 32, pad: 2, size: 128, bytes: textureBytes.length });
+  assert.deepEqual(provenance.texture, { name, format: "tga", blend: "additive", grid: 4, cell: 32, pad: 2, size: 128,
+    bytes: textureBytes.length });
+  assert.equal(provenance.texconv, null);
   // Published where a content layer keeps textures, byte for byte.
   const published = join(h.root, "Data", "Art", "Textures", name);
   assert.equal(first.published, published);
@@ -108,6 +127,7 @@ test("a miss runs hython contained, promotes the checked entry, and the next run
   assert.deepEqual(readdirSync(join(h.root, "Data", "Art", "Textures")), [name]);
   assert.deepEqual(readdirSync(join(h.root, ".staging")), [], "the stage was removed");
   assert.deepEqual([h.calls.lock, h.calls.released, h.calls.verify], [1, 1, 1]);
+  assert.deepEqual([h.calls.compress.length, h.calls.verifyCompressor], [0, 0], "a TGA entry never runs texconv");
   assert.deepEqual(h.calls.logs, ["[houdini-gen] launched 42"]);
 
   // A hit republishes a missing texture without running anything.
@@ -292,6 +312,55 @@ test("the profile step fails closed: bad frames, a hoiiotool failure, a texture 
     assert.ok(!existsSync(join(h.root, "cache", result.cacheKey)));
     assert.ok(!existsSync(join(h.root, "Data")), "nothing was published");
     assert.deepEqual(readdirSync(join(h.root, ".staging")), []);
+  }
+});
+
+test("a DDS entry: texconv in the stage, the DDS validated, cached, published and named for its bytes", windows, async (t) => {
+  const h = harness(t);
+  const first = await h.run({ generator: "debug-atlas-dds" });
+  assert.equal(first.exitCode, 0, first.error);
+  assert.equal(h.calls.verifyCompressor, 1);
+  assert.equal(h.calls.compress.length, 1);
+  const { args, options } = h.calls.compress[0];
+  assert.deepEqual(args, texconvArgs("dxt5", "texture.tga"));
+  assert.equal(options.cwd, h.calls.run[0].s.cwd);
+  assert.deepEqual(Object.keys(options.env).sort(), Object.keys(h.calls.run[0].s.env).sort());
+  const dds = encodeDds(128, 128, ATLAS.rgba, "DXT5"), name = `pe_gen_debug-atlas-dds_${sha256(dds).slice(0, 8)}.dds`;
+  assert.deepEqual([first.texture, first.contentHash], [name, sha256(dds)]);
+  const entry = join(h.root, "cache", first.cacheKey);
+  assert.deepEqual(readdirSync(entry).sort(), ["frames", "frames.manifest.json", name, "provenance.json", "published"]);
+  const provenance = JSON.parse(readFileSync(join(entry, "provenance.json"), "utf8"));
+  assert.deepEqual(provenance.texture, { name, format: "dxt5", blend: "additive", grid: 4, cell: 32, pad: 2, size: 128,
+    bytes: dds.length });
+  assert.deepEqual(provenance.texconv, { texconv: TEXCONV.texconv.sha256, d3dx9: TEXCONV.d3dx9.sha256 });
+  assert.deepEqual(readFileSync(join(h.root, "Data", "Art", "Textures", name)), dds);
+  // A hit runs neither hython nor texconv.
+  const second = await h.run({ generator: "debug-atlas-dds" });
+  assert.deepEqual([second.exitCode, second.hit, second.texture], [0, true, name]);
+  assert.deepEqual([h.calls.run.length, h.calls.compress.length], [1, 1]);
+  // The TGA entry with the same builder is another key.
+  assert.notEqual((await h.run()).cacheKey, first.cacheKey);
+});
+
+test("the DDS step fails closed: an unpinned texconv, no file, a failed run, a DDS off its TGA", windows, async (t) => {
+  const pinFailure = harness(t, { seams: { verifyCompressor: () => { throw Object.assign(new Error("texconv differs from the pinned DirectX SDK (June 2010) build"), { exitCode: 1 }); } } });
+  const unpinned = await pinFailure.run({ generator: "debug-atlas-dds" });
+  assert.deepEqual([unpinned.exitCode, pinFailure.calls.run.length], [1, 0]);
+  assert.match(unpinned.error, /texconv differs from the pinned/);
+  for (const [compress, pattern] of [
+    [{ write: false }, /^texconv wrote no DXT5 file$/],
+    [{ code: 1 }, /^texconv could not write DXT5 \(exit 1\)$/],
+    [{ dds: (image) => encodeDds(image.width, image.height, image.rgba, "DXT1") }, /not a DXT5 DDS \(it is DXT1\)/],
+    [{ dds: (image) => encodeDds(image.width, image.height, image.rgba, "DXT5", { mips: 1 }) }, /1 mip levels, not the full chain of 8/],
+    [{ dds: (image) => encodeDds(image.width, image.height, Buffer.alloc(image.rgba.length, 255), "DXT5") }, /colour differs from the TGA/],
+  ]) {
+    const h = harness(t, { compress });
+    const result = await h.run({ generator: "debug-atlas-dds" });
+    assert.equal(result.exitCode, 4, `${pattern}: ${result.error}`);
+    assert.match(result.error, pattern);
+    if (compress.code) assert.match(h.calls.logs.join("\n"), /texconv output \(printed, not stored\):\ntexconv: failed/);
+    assert.ok(!existsSync(join(h.root, "cache", result.cacheKey)));
+    assert.ok(!existsSync(join(h.root, "Data")), "nothing was published");
   }
 });
 

@@ -42,6 +42,10 @@ test("every component changes the cache key", () => {
     build: { build: "20.0.1" },
     hoiiotool: { hoiiotool: "OpenImageIO 2.4" },
     threads: { threads: 8 },
+    "the DDS encoder": { texconv: { texconv: "t".repeat(64), d3dx9: "d".repeat(64) } },
+    "the format": { entry: { ...ENTRY, format: "dxt5" } },
+    "a shared module": { entry: { ...ENTRY, modules: { sim: "e".repeat(64) } } },
+    "the cell times": { entry: { ...ENTRY, cellSeconds: [0, 0.1, 0.2, 0.3] } },
     "a tree file": { tree: { ...BASE.tree, "a.py": "3".repeat(64) } },
     "a new tree file": { tree: { ...BASE.tree, "b.py": "1".repeat(64) } },
     "the entry version": { entry: { ...ENTRY, version: 2 } },
@@ -120,8 +124,16 @@ test("provenance carries every spec §21.6 field and nothing about the machine",
   // The content hash is the texture's, and its name carries the hash's prefix.
   assert.equal(record.contentHash, TEXTURE.sha256);
   assert.equal(record.outputProfile, "eaw-flipbook");
-  assert.deepEqual(record.texture, { name: TEXTURE.name, blend: "additive", grid: 2, cell: 32, pad: 2, size: 64, bytes: 16402 });
+  assert.deepEqual(record.texture, { name: TEXTURE.name, format: "tga", blend: "additive", grid: 2, cell: 32, pad: 2, size: 64,
+    bytes: 16402 });
+  assert.deepEqual([record.schemaVersion, record.modules, record.cellSeconds, record.texconv], [3, {}, null, null]);
   assert.equal(record.framesManifestSha256, "m".repeat(64));
+  // A DDS entry records its format, its shared modules, its cell times and the encoder.
+  const texconv = { texconv: "t".repeat(64), d3dx9: "d".repeat(64) };
+  const dds = provenance({ entry: { ...ENTRY, format: "dxt5", modules: { sim: "e".repeat(64) }, cellSeconds: [0, 0.1, 0.2, 0.3] },
+    texconv });
+  assert.deepEqual([dds.texture.format, dds.modules, dds.cellSeconds, dds.texconv],
+    ["dxt5", { sim: "e".repeat(64) }, [0, 0.1, 0.2, 0.3], texconv]);
   const text = serialise(record);
   assert.doesNotMatch(text, /licen[cs]e|host|user|time|date|[A-Za-z]:\\|\/Users\//i);
   assert.equal(serialise(provenance()), text, "provenance is deterministic");
@@ -201,11 +213,15 @@ test("eviction never counts or removes what the wrapper did not name", (t) => {
   assert.ok(existsSync(join(foreign, "big")) && existsSync(join(unproven, "data")) && existsSync(join(target, "keep-me")));
 });
 
-test("the registry pins each builder to its exact bytes", () => {
+test("the registry pins each builder and shared module to its exact bytes", () => {
   const registry = JSON.parse(readFileSync(new URL("./registry.json", import.meta.url), "utf8"));
   for (const [id, entry] of Object.entries(registry.generators)) {
-    const bytes = readFileSync(new URL(`./${entry.builder}`, import.meta.url));
-    assert.equal(sha256(bytes), entry.builderSha256, `${id}: re-pin builderSha256 after editing ${entry.builder}`);
-    assert.ok(!bytes.includes(13), `${id}: ${entry.builder} must be LF-only (see .gitattributes)`);
+    const pins = [[entry.builder, entry.builderSha256],
+      ...Object.entries(entry.modules ?? {}).map(([name, hash]) => [`generators/${name}.py`, hash])];
+    for (const [file, hash] of pins) {
+      const bytes = readFileSync(new URL(`./${file}`, import.meta.url));
+      assert.equal(sha256(bytes), hash, `${id}: re-pin ${file} after editing it`);
+      assert.ok(!bytes.includes(13), `${id}: ${file} must be LF-only (see .gitattributes)`);
+    }
   }
 });

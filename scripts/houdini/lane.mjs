@@ -10,6 +10,11 @@
 //   - the editor loads it from the root alone, and plays the cells 0..15 in
 //     order (validate.mjs, through the Release build);
 //   - the same inputs in a new root give the same texture bytes;
+//   - debug-atlas-dds, the same frames compressed by texconv: a DXT5 DDS with
+//     a full mip chain, held to the TGA that passed the oracle (so its cells,
+//     frames and orientation marks are where they were); the editor loads it
+//     as DXT5 and plays its cells 0..15 in order; a new root reproduces it
+//     byte for byte;
 //   - each profile's encode, through the real hoiiotool, passes its
 //     validators, keeps colour where alpha is partial, and a broken input
 //     fails them;
@@ -37,8 +42,8 @@ import { HFS } from "./houdini.mjs";
 import { acquireLock } from "./contain.mjs";
 import { sha256 } from "./cache.mjs";
 import { runHoiiotool } from "./generate.mjs";
-import { decodeTga } from "./images.mjs";
-import { PAD, atlasLayout, encodeArgs, packArgs, validateTexture } from "./profiles.mjs";
+import { decodeDds, decodeTga } from "./images.mjs";
+import { PAD, atlasLayout, encodeArgs, packArgs, validateDds, validateTexture } from "./profiles.mjs";
 import { MARKER, MARKER_FRAMES, REVIEW_LIFT, focRoot } from "./review-kit.mjs";
 import { readStockFile, resolveReplayGameRoots } from "../replay-proof.mjs";
 
@@ -238,6 +243,26 @@ try {
     const elsewhere = await generate(join(base, "elsewhere"), 7);
     check(elsewhere.code === 0 && elsewhere.record?.hit === false && elsewhere.record.contentHash === contentHash,
       `a new root reproduces the texture byte for byte (${elsewhere.record?.contentHash ?? `exit ${elsewhere.code}`})`);
+
+    // The same frames as a DDS, held to the TGA the oracle just passed: within
+    // DXT5's bounds, a flipped sheet, a moved cell or a turned orientation mark
+    // would not be.
+    const dds = await generate(root, 7, { generator: "debug-atlas-dds" });
+    if (check(dds.code === 0 && dds.record?.hit === false && /^pe_gen_debug-atlas-dds_[0-9a-f]{8}\.dds$/.test(dds.record.texture ?? ""),
+      `debug-atlas-dds generates a DDS (exit ${dds.code}${dds.record?.error ? `: ${dds.record.error}` : `, ${dds.record?.texture}`})`)) {
+      const bytes = readFileSync(dds.record.published), image = decodeDds(bytes);
+      const ddsErrors = validateDds(image, decodeTga(readFileSync(published)), bytes.length,
+        { format: "dxt5", blend: "additive", layout: atlasLayout(GRID, CELL) });
+      check(ddsErrors.length === 0 && image.mipCount === Math.log2(GRID * CELL) + 1,
+        `the DDS is the oracle's texture in DXT5 with a full mip chain${ddsErrors.length ? `: ${ddsErrors.join("; ")}` : ""}`);
+      const ddsValidated = validate(dds.record.entry, join(base, "validate-dds"));
+      check(ddsValidated.code === 0 && ddsValidated.record?.ok === true &&
+        JSON.stringify(ddsValidated.record.sequence) === JSON.stringify([...Array(16).keys()]),
+        `the editor loads the DDS as DXT5 and plays its cells 0..15 in order (exit ${ddsValidated.code}${ddsValidated.record?.error ? `: ${ddsValidated.record.error}` : ""}, ${JSON.stringify(ddsValidated.record?.sequence ?? null)})`);
+      const ddsElsewhere = await generate(join(base, "elsewhere"), 7, { generator: "debug-atlas-dds" });
+      check(ddsElsewhere.code === 0 && ddsElsewhere.record?.hit === false && ddsElsewhere.record.contentHash === dds.record.contentHash,
+        `texconv reproduces the DDS byte for byte in a new root (${ddsElsewhere.record?.contentHash ?? `exit ${ddsElsewhere.code}`})`);
+    }
   }
   profileEncodes(join(base, "profiles"));
 

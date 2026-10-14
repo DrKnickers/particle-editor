@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sha256 } from "./cache.mjs";
-import { MARKER, MARKER_FRAMES, REVIEW_LIFT, checklist, focRoot, parseArgs, patchParticlesXml, recordVerdict, stage } from "./review-kit.mjs";
+import { MARKER, MARKER_FRAMES, REVIEW_LIFT, checklist, focRoot, markerFrames, parseArgs, patchParticlesXml, recordVerdict, stage } from "./review-kit.mjs";
 
 const XML = Buffer.from([
   '<?xml version="1.0"?>', "<Particles>",
@@ -133,6 +133,12 @@ test("--record writes the verdict against the bytes the kit still holds", (t) =>
   assert.throws(() => recordVerdict({ record: empty, status: "passed", notes: "x" }), (error) => error.exitCode === 2);
   writeFileSync(join(empty, "review.json"), JSON.stringify({ schemaVersion: 1, texture: "..\\..\\x.tga" }));
   assert.throws(() => recordVerdict({ record: empty, status: "passed", notes: "x" }), (error) => error.exitCode === 2);
+  // A DDS kit records the same way.
+  const dds = join(h.root, "dds"), bytes = Buffer.from("dds bytes"), name = `pe_gen_smoke_${sha256(bytes).slice(0, 8)}.dds`;
+  mkdirSync(join(dds, "Data", "Art", "Textures"), { recursive: true });
+  writeFileSync(join(dds, "Data", "Art", "Textures", name), bytes);
+  writeFileSync(join(dds, "review.json"), JSON.stringify({ schemaVersion: 1, texture: name, contentHash: sha256(bytes) }));
+  assert.equal(recordVerdict({ record: dds, status: "passed", notes: "x" }, { today: () => "2026-10-14" }).texture, name);
 });
 
 test("the checklist names the kit, the lifetime and what to look for", () => {
@@ -140,6 +146,13 @@ test("the checklist names the kit, the lifetime and what to look for", () => {
   assert.match(text, /^# In-game review: static-energy-ring\r\n/);
   assert.match(text, /"swfoc\.exe" LANGUAGE=ENGLISH -WINDOWED Modpath=C:\\gen\\review\\k/);
   assert.match(text, /for 2 s each time a move order is given/);
-  for (const item of ["black or white box", "dark fringe", "frames in order", "blooms", "zoomed out", "Keep the game in front"])
+  for (const item of ["black or white box", "dark fringe", "frames in order", "blooms", "zoomed out", "Keep the game in front",
+    "WidescreenAspectRatio", "[single](1280 / 720)"])
     assert.ok(text.includes(item), item);
+});
+
+test("the marker lives long enough for every fixture: 150 frames for 4 s, in proportion beyond", () => {
+  assert.deepEqual(["puff", "ring", "fireball", "smoke4", "smoke8"].map(markerFrames), [150, 150, 150, 150, 240]);
+  assert.equal(patchParticlesXml(XML, 240).toString("latin1"),
+    XML.toString("latin1").replace("<Particle_Lifetime_Frames>30", "<Particle_Lifetime_Frames>240"));
 });

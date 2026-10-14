@@ -6,13 +6,15 @@
 // or enum members; nothing a caller types reaches a Houdini string parameter.
 import * as fs from "node:fs";
 import { win32 } from "node:path";
-import { BLENDS } from "./profiles.mjs";
+import { BLENDS, FORMATS } from "./profiles.mjs";
 
 export const ID = /^[a-z0-9-]{1,64}$/;
 export const TIERS = ["preview", "validate", "final"];
 export const RENDERERS = ["cop", "mantra", "karma"];
 export const MAX_SEED = 2 ** 31 - 1;
 const BUILDER = /^generators\/[a-z0-9_]{1,64}\.py$/;
+const MODULE = /^[a-z0-9_]{1,64}$/;
+const OPTIONAL = ["testOnly", "format", "modules", "cellSeconds"];
 const HEX64 = /^[0-9a-f]{64}$/;
 // Drive-rooted, and no character Houdini, HScript, cmd or hoiiotool expands:
 // no backtick, $, %, braces, #, quotes or wildcards.
@@ -54,7 +56,7 @@ function checkEntry(id, entry) {
   // pe_gen_<id>_<8 hex>.tga must fit the editor fixture's 64-byte texture names.
   check(id.length <= 40, `${what} id is longer than 40 characters`);
   const keys = ["version", "builder", "builderSha256", "renderer", "blend", "grid", "params", "tiers"];
-  exactKeys(entry, Object.hasOwn(entry ?? {}, "testOnly") ? [...keys, "testOnly"] : keys, what);
+  exactKeys(entry, [...keys, ...OPTIONAL.filter((key) => Object.hasOwn(entry ?? {}, key))], what);
   check(integer(entry.version, 1, 1e6), `${what} version is not a positive integer`);
   check(typeof entry.builder === "string" && BUILDER.test(entry.builder), `${what} builder path is malformed`);
   check(typeof entry.builderSha256 === "string" && HEX64.test(entry.builderSha256), `${what} builderSha256 is malformed`);
@@ -62,6 +64,24 @@ function checkEntry(id, entry) {
   check(BLENDS.includes(entry.blend), `${what} blend is not one of ${BLENDS.join(", ")}`);
   check([1, 2, 4, 8].includes(entry.grid), `${what} grid is not 1, 2, 4 or 8`);
   check(entry.testOnly === undefined || typeof entry.testOnly === "boolean", `${what} testOnly is not a boolean`);
+  // format: what is published (profiles.mjs). DXT1 keeps one bit of alpha.
+  check(entry.format === undefined || FORMATS.includes(entry.format), `${what} format is not one of ${FORMATS.join(", ")}`);
+  check(entry.format !== "dxt1" || entry.blend === "additive", `${what} is DXT1 but not additive; DXT1 drops the colour under alpha`);
+  // modules: builder files other builders share, each pinned like a builder.
+  if (entry.modules !== undefined) {
+    check(isObject(entry.modules) && Object.keys(entry.modules).length > 0, `${what} modules is not a non-empty object`);
+    for (const [name, hash] of Object.entries(entry.modules)) {
+      check(MODULE.test(name) && `generators/${name}.py` !== entry.builder, `${what} module name is malformed: ${name}`);
+      check(typeof hash === "string" && HEX64.test(hash), `${what} module ${name} hash is malformed`);
+    }
+  }
+  // cellSeconds: the simulation time, in seconds, each cell shows.
+  if (entry.cellSeconds !== undefined) {
+    const times = entry.cellSeconds;
+    check(Array.isArray(times) && times.length === entry.grid * entry.grid, `${what} cellSeconds does not list one time per cell`);
+    check(times.every((v, i) => Number.isFinite(v) && v >= 0 && v <= 600 && (i === 0 || v > times[i - 1])),
+      `${what} cellSeconds is not increasing seconds from 0 to 600`);
+  }
   check(isObject(entry.params), `${what} params is not an object`);
   for (const [name, rule] of Object.entries(entry.params)) {
     check(/^[a-z][a-zA-Z0-9]{0,31}$/.test(name), `${what} parameter name is malformed: ${name}`);

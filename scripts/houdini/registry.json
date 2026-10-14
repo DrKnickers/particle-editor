@@ -16,6 +16,22 @@
         "final": { "cell": 128, "timeoutMin": 5, "maxStageMiB": 128 }
       }
     },
+    "debug-atlas-dds": {
+      "version": 1,
+      "testOnly": true,
+      "builder": "generators/debug_atlas.py",
+      "builderSha256": "b7e2c1abdd96294635101d26a7c0dcdb9dd0de9a6cad981a408f4549c494d11f",
+      "renderer": "cop",
+      "blend": "additive",
+      "format": "dxt5",
+      "grid": 4,
+      "params": {},
+      "tiers": {
+        "preview": { "cell": 32, "timeoutMin": 5, "maxStageMiB": 64 },
+        "validate": { "cell": 64, "timeoutMin": 5, "maxStageMiB": 64 },
+        "final": { "cell": 128, "timeoutMin": 5, "maxStageMiB": 128 }
+      }
+    },
     "static-smoke-puff": {
       "version": 1,
       "builder": "generators/static_smoke_puff.py",

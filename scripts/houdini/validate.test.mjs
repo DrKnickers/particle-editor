@@ -8,7 +8,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ROOT_MARKER } from "./generate.mjs";
-import { NORMAL_TEXTURE, TICKS_PER_CELL, checkAttestation, checkPlays, checkTextureLog, kindFor, observationSpec, parseArgs, readCells, readOrder, validate } from "./validate.mjs";
+import { KINDS, NORMAL_TEXTURE, TICKS_PER_CELL, checkAttestation, checkPlays, checkTextureLog, kindFor, lifetimeTicks, observationSpec,
+  parseArgs, readCells, readOrder, validate } from "./validate.mjs";
 
 const NAME = "pe_gen_debug-atlas_568d7942.tga", SHA = "568d7942".padEnd(64, "a"), ROOT = "C:\\gen\\out";
 const capture = ({ resolved = [NAME, NORMAL_TEXTURE], unresolved = [], winner = { kind: "loose", path: `${ROOT}\\Data\\Art\\Textures\\${NAME}` }, sha = SHA } = {}) => ({
@@ -18,17 +19,20 @@ const capture = ({ resolved = [NAME, NORMAL_TEXTURE], unresolved = [], winner = 
 const layered = { name: NAME, sha: SHA, root: ROOT, layered: true }, control = { ...layered, layered: false };
 
 test("each texture shape has its fixture", () => {
-  assert.deepEqual([kindFor({ blend: "additive", grid: 4 }), kindFor({ blend: "additive", grid: 1 }), kindFor({ blend: "transparent", grid: 1 })],
-    ["fireball", "ring", "puff"]);
-  for (const shape of [{ blend: "transparent", grid: 4 }, { blend: "additive", grid: 2 }])
+  assert.deepEqual([{ blend: "additive", grid: 4 }, { blend: "additive", grid: 1 }, { blend: "transparent", grid: 1 },
+    { blend: "transparent", grid: 4 }, { blend: "transparent", grid: 8 }].map(kindFor), ["fireball", "ring", "puff", "smoke4", "smoke8"]);
+  for (const shape of [{ blend: "additive", grid: 8 }, { blend: "additive", grid: 2 }, { blend: "multiply", grid: 1 }])
     assert.throws(() => kindFor(shape), (error) => error.exitCode === 2);
+  // src/effect/HoudiniValidationFixture.h: 2 s single textures, 4 s 4x4 flipbooks, a 6.4 s 8x8 one.
+  assert.deepEqual(Object.keys(KINDS).map((kind) => lifetimeTicks(kind) / 60), [2, 2, 4, 4, 6.4]);
+  assert.equal(TICKS_PER_CELL, 15);
 });
 
-test("the observation spec adds exactly the given layers", () => {
+test("the observation spec adds exactly the given layers, and outlasts the fixture", () => {
   assert.deepEqual(observationSpec([ROOT], "C:\\v\\fixture.alo"), { schemaVersion: 2, contentLayers: [ROOT],
     scenario: { aloPath: "C:\\v\\fixture.alo", maxFrames: 300 }, lifecycle: { type: "oneshot" }, output: { strideInterval: 30, playbackStride: 1 } });
-  // A 4 s fireball at 60 Hz fits the frame budget.
-  assert.ok(TICKS_PER_CELL * 16 <= 300);
+  for (const kind of Object.keys(KINDS)) assert.ok(observationSpec([], "f.alo", kind).scenario.maxFrames >= lifetimeTicks(kind) + 60, kind);
+  assert.equal(observationSpec([], "f.alo", "smoke8").scenario.maxFrames, 444);
 });
 
 test("attestation: the layered run resolves the name to the published file, by hash", () => {
@@ -51,7 +55,7 @@ test("attestation: the control run leaves the name unresolved", () => {
   assert.match(checkAttestation(capture({ resolved: [NORMAL_TEXTURE], unresolved: [] }), control).join(), /still resolved/);
 });
 
-test("the editor's log must request the name, then decode it as A8R8G8B8", () => {
+test("the editor's log must request the name, then decode it in the file's format", () => {
   const log = (loaded) => ["[shader-gate] something", "[tex-gate] getTexture(p_particle_depth_master.tga)",
     "[tex-gate] loaded 512x512 fmt=894720068", `[tex-gate] getTexture(${NAME})`, loaded, `[tex-gate] getTexture(${NAME})`].join("\r\n");
   assert.deepEqual(checkTextureLog(log("[tex-gate] loaded 128x128 fmt=21"), { name: NAME, size: 128 }), []);
@@ -60,6 +64,11 @@ test("the editor's log must request the name, then decode it as A8R8G8B8", () =>
   // The placeholder path logs no load at all.
   assert.match(checkTextureLog(log("[tex-gate] getTexture(other.tga)"), { name: NAME, size: 128 }).join(), /loaded as "\[tex-gate\] getTexture/);
   assert.match(checkTextureLog("[tex-gate] getTexture(other.tga)", { name: NAME, size: 128 }).join(), /never requested/);
+  // A DDS loads as its DXT format, which D3D reports by FourCC.
+  assert.deepEqual(checkTextureLog(log("[tex-gate] loaded 128x128 fmt=894720068"), { name: NAME, size: 128, format: "dxt5" }), []);
+  assert.deepEqual(checkTextureLog(log("[tex-gate] loaded 128x128 fmt=827611204"), { name: NAME, size: 128, format: "dxt1" }), []);
+  assert.match(checkTextureLog(log("[tex-gate] loaded 128x128 fmt=21"), { name: NAME, size: 128, format: "dxt5" }).join(),
+    /not 128x128 fmt=894720068/);
 });
 
 // A playback frame: a dark blue background, the particle's colour added over a centre square.
@@ -99,6 +108,10 @@ test("a flipbook plays when its cells differ at the view's centre", () => {
   const cells = readCells((tick) => { ticks.push(tick); return frame(Math.floor(tick / TICKS_PER_CELL)); });
   assert.deepEqual(ticks, [...Array(16).keys()].map((k) => 15 * k + 7), "each cell is read mid-way");
   assert.deepEqual(cells[0], [0, 0, 128], "less the background");
+  // An 8x8 sheet held 6 ticks a cell is read at 3, 9, 15, ...
+  const eight = [];
+  readCells((tick) => { eight.push(tick); return frame(0); }, 8, KINDS.smoke8.ticksPerCell);
+  assert.deepEqual(eight, [...Array(64).keys()].map((k) => 6 * k + 3));
   assert.deepEqual(checkPlays(cells), []);
   // Any order plays; one cell held, or nothing shown, does not.
   assert.deepEqual(checkPlays(readCells(cellAt((k) => 15 - k))), []);

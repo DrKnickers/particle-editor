@@ -4,10 +4,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { decodeTga, encodeTga } from "./images.mjs";
+import { decodeDds, decodeTga, encodeTga } from "./images.mjs";
 import { MAX_TEXTURE_BYTES, PAD, atlasLayout, checkFrames, encodeArgs, packArgs, parseFrameStats, profileName,
-  statsArgs, textureName, validateTexture } from "./profiles.mjs";
-import { frameStatsText, syntheticAtlas } from "./test-atlas.mjs";
+  statsArgs, texconvArgs, textureName, validateDds, validateTexture } from "./profiles.mjs";
+import { encodeDds, frameStatsText, syntheticAtlas } from "./test-atlas.mjs";
 
 const check = (atlas, blend, { bytes, rgba = atlas.rgba } = {}) => {
   const tga = encodeTga(atlas.layout.size, atlas.layout.size, rgba);
@@ -28,6 +28,8 @@ test("the layout insets every frame by the guard band, left to right, top to bot
 test("profile and texture names", () => {
   assert.deepEqual([profileName("additive", 4), profileName("transparent", 2), profileName("additive", 1), profileName("transparent", 1)],
     ["eaw-flipbook", "eaw-flipbook", "eaw-additive", "eaw-transparent"]);
+  assert.equal(textureName("puff", "0123abcd".padEnd(64, "e"), "dxt5"), "pe_gen_puff_0123abcd.dds");
+  assert.equal(textureName("puff", "0123abcd".padEnd(64, "e"), "tga"), "pe_gen_puff_0123abcd.tga");
   assert.equal(textureName("debug-atlas", "0123abcd".padEnd(64, "f")), "pe_gen_debug-atlas_0123abcd.tga");
   assert.ok(textureName("a".repeat(40), "0".repeat(64)).length <= 64, "the longest id still fits the editor's 64-byte names");
 });
@@ -132,6 +134,47 @@ test("each validator fails on its own damage", () => {
   assert.match(validateTexture(decodeTga(noAlpha), noAlpha.length, { blend: "additive", layout: additive.layout })[0], /0 alpha bits/);
   const rle = Buffer.from(additive.tga()); rle[2] = 10;
   assert.match(validateTexture(decodeTga(rle), rle.length, { blend: "additive", layout: additive.layout })[0], /type 10/);
+});
+
+test("texconv writes a full mip chain, unfiltered and undithered, beside the source", () => {
+  assert.deepEqual(texconvArgs("dxt5", "texture.tga"),
+    ["-nologo", "-f", "DXT5", "-m", "0", "-if", "NONE", "-mf", "BOX", "-ft", "DDS", "-o", ".", "texture.tga"]);
+  assert.equal(texconvArgs("dxt1", "texture.tga")[2], "DXT1");
+  assert.throws(() => texconvArgs("tga", "texture.tga"), (error) => error.exitCode === 1 && /does not write tga/.test(error.message));
+});
+
+test("a DDS is held to the TGA it was made from", () => {
+  const checkDds = (atlas, { blend, format, dds, bytes } = {}) => {
+    const file = dds ?? encodeDds(atlas.layout.size, atlas.layout.size, atlas.rgba, format.toUpperCase());
+    return validateDds(decodeDds(file), decodeTga(atlas.tga()), bytes ?? file.length, { format, blend, layout: atlas.layout });
+  };
+  const additive = syntheticAtlas({ grid: 4, cell: 32 }), transparent = syntheticAtlas({ grid: 4, cell: 32, blend: "transparent" });
+  const size = additive.layout.size;
+  assert.deepEqual(checkDds(additive, { blend: "additive", format: "dxt1" }), []);
+  assert.deepEqual(checkDds(additive, { blend: "additive", format: "dxt5" }), []);
+  assert.deepEqual(checkDds(transparent, { blend: "transparent", format: "dxt5" }), []);
+  // The header: format, size, mips, the byte limit.
+  assert.match(checkDds(additive, { blend: "additive", format: "dxt5", dds: encodeDds(size, size, additive.rgba, "DXT1") })[0],
+    /not a DXT5 DDS \(it is DXT1\)/);
+  assert.match(checkDds(additive, { blend: "additive", format: "dxt1", dds: encodeDds(64, 64, additive.rgba, "DXT1") }).join(),
+    /64x64, not 128x128/);
+  assert.match(checkDds(additive, { blend: "additive", format: "dxt1", dds: encodeDds(size, size, additive.rgba, "DXT1", { mips: 1 }) }).join(),
+    /1 mip levels, not the full chain of 8/);
+  assert.match(checkDds(additive, { blend: "additive", format: "dxt1", bytes: MAX_TEXTURE_BYTES + 1 }).join(), /over the editor's 64 MiB limit/);
+  assert.match(checkDds(transparent, { blend: "transparent", format: "dxt1" }).join(), /DXT1 drops the colour under alpha/);
+  // The pixels: a flipped sheet, colour far off, alpha far off, alpha lost in DXT1.
+  const flipped = Buffer.alloc(size * size * 4);
+  for (let y = 0; y < size; y++) additive.rgba.copy(flipped, (size - 1 - y) * size * 4, y * size * 4, (y + 1) * size * 4);
+  assert.match(checkDds(additive, { blend: "additive", format: "dxt5", dds: encodeDds(size, size, flipped, "DXT5") }).join(),
+    /colour differs from the TGA by an RMSE/);
+  const faded = Buffer.from(transparent.rgba);
+  for (let i = 3; i < faded.length; i += 4) faded[i] = Math.round(faded[i] * 0.8);
+  assert.match(checkDds(transparent, { blend: "transparent", format: "dxt5", dds: encodeDds(size, size, faded, "DXT5") }).join(),
+    /alpha differs from the TGA by up to \d+, over 20/);
+  const holed = Buffer.from(additive.rgba);
+  holed[(10 * size + 10) * 4 + 3] = 0;
+  assert.match(checkDds(additive, { blend: "additive", format: "dxt1", dds: encodeDds(size, size, holed, "DXT1") }).join(),
+    /texels lost their alpha in DXT1/);
 });
 
 test("run_generator.py tells builders the same guard band the packer leaves", () => {

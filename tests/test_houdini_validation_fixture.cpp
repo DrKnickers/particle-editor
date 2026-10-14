@@ -17,6 +17,7 @@
 #include <cmath>
 #include <iterator>
 #include <cstdio>
+#include <cstring>
 #include <memory>
 #include <string>
 
@@ -33,6 +34,8 @@ static int g_failed = 0;
 using PS = ParticleSystem;
 using Track = PS::Emitter::Track;
 using houdinifixture::Kind;
+
+static const Kind kKinds[] = { Kind::Puff, Kind::Ring, Kind::Fireball, Kind::Smoke4, Kind::Smoke8 };
 
 // The value a STEP track holds at relTime (percent of life), as
 // EmitterInstance computes it: the cursor starts on the first key and passes a
@@ -97,7 +100,7 @@ static void CheckEmitter(const PS::Emitter& e, Kind kind, const std::string& tex
     CHECK(index.interpolation == Track::IT_STEP && index.keys.size() == profile.textureSize + 1,
           "index is a STEP track with one key per frame plus a closing key");
     // Every tick of the 60 Hz clock across the life shows the frame for its
-    // slice: tick f is in cell f / ticksPerCell (15 for the fireball).
+    // slice: tick f is in cell f / ticksPerCell (15 for 4x4, 6 for 8x8).
     const float frames = static_cast<float>(profile.textureSize);
     const int ticks = static_cast<int>(profile.lifetime * 60.0f + 0.5f);
     const int ticksPerCell = ticks / static_cast<int>(profile.textureSize);
@@ -140,8 +143,15 @@ int main()
     Kind kind = Kind::Puff;
     CHECK(houdinifixture::ParseKind(L"puff", kind) && kind == Kind::Puff &&
           houdinifixture::ParseKind(L"ring", kind) && kind == Kind::Ring &&
-          houdinifixture::ParseKind(L"fireball", kind) && kind == Kind::Fireball, "the three kinds parse");
-    for (const wchar_t* bad : { L"", L"Puff", L"puff ", L"weather", L"fire-ball" })
+          houdinifixture::ParseKind(L"fireball", kind) && kind == Kind::Fireball &&
+          houdinifixture::ParseKind(L"smoke4", kind) && kind == Kind::Smoke4 &&
+          houdinifixture::ParseKind(L"smoke8", kind) && kind == Kind::Smoke8, "the five kinds parse");
+    bool named = true;
+    for (Kind k : kKinds)
+        named = named && houdinifixture::ParseKind(std::wstring(houdinifixture::KindName(k), houdinifixture::KindName(k) +
+            std::strlen(houdinifixture::KindName(k))), kind) && kind == k;
+    CHECK(named, "every kind's name parses back to it");
+    for (const wchar_t* bad : { L"", L"Puff", L"puff ", L"weather", L"fire-ball", L"smoke", L"smoke2" })
     {
         kind = Kind::Ring;
         CHECK(!houdinifixture::ParseKind(bad, kind) && kind == Kind::Ring, "an unknown kind is refused untouched");
@@ -154,7 +164,15 @@ int main()
           houdinifixture::ProfileFor(Kind::Ring).textureSize == 1 &&
           houdinifixture::ProfileFor(Kind::Fireball).textureSize == 16 &&
           houdinifixture::ProfileFor(Kind::Fireball).lifetime / 16 == 0.25f,
-          "only the fireball is a flipbook: 16 frames (4x4), 0.25 s each");
+          "the fireball is an additive flipbook: 16 frames (4x4), 0.25 s each");
+    CHECK(houdinifixture::ProfileFor(Kind::Smoke4).blendMode == PS::BLEND_TRANSPARENT &&
+          houdinifixture::ProfileFor(Kind::Smoke4).textureSize == 16 &&
+          houdinifixture::ProfileFor(Kind::Smoke4).lifetime / 16 == 0.25f,
+          "smoke4 is an alpha-blended flipbook: 16 frames (4x4), 0.25 s each");
+    CHECK(houdinifixture::ProfileFor(Kind::Smoke8).blendMode == PS::BLEND_TRANSPARENT &&
+          houdinifixture::ProfileFor(Kind::Smoke8).textureSize == 64 &&
+          static_cast<int>(houdinifixture::ProfileFor(Kind::Smoke8).lifetime * 60.0f + 0.5f) == 64 * 6,
+          "smoke8 is an alpha-blended flipbook: 64 frames (8x8), 6 ticks of 60 Hz each");
     for (const char* good : { "pe_puff.tga", "A.TGA", "x-1_y.2.dds", "abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghij.tga" })
         CHECK(houdinifixture::IsTextureName(good), "a bare .tga/.dds name is accepted");
     for (const char* bad : { "", ".tga", "a.png", "a.tga ", "dir\\a.tga", "dir/a.tga", "C:a.tga", "..\\a.tga",
@@ -163,7 +181,7 @@ int main()
         CHECK(!houdinifixture::IsTextureName(bad), "anything but a bare short .tga/.dds name is refused");
 
     std::printf("B. configured emitter\n");
-    for (Kind k : { Kind::Puff, Kind::Ring, Kind::Fireball })
+    for (Kind k : kKinds)
     {
         PS system;
         auto* e = system.addRootEmitter();
@@ -172,9 +190,10 @@ int main()
     }
 
     std::printf("C. save and reload\n");
-    for (Kind k : { Kind::Puff, Kind::Ring, Kind::Fireball })
+    for (Kind k : kKinds)
     {
-        const std::wstring path = TempAlo((std::wstring(k == Kind::Puff ? L"puff" : k == Kind::Ring ? L"ring" : L"fireball") + L".alo").c_str());
+        const std::string kindName = houdinifixture::KindName(k);
+        const std::wstring path = TempAlo((std::wstring(kindName.begin(), kindName.end()) + L".alo").c_str());
         CHECK(!path.empty(), "temp path resolves");
         auto system = std::make_unique<PS>();
         system->setName(DeriveParticleSystemName(path));
@@ -194,7 +213,7 @@ int main()
     // review fixture lifts the particle by its own scale and changes nothing else.
     std::printf("D. review fixture\n");
     CHECK(houdinifixture::kReviewLift == 40.0f, "the lift is the particle's scale");
-    for (Kind k : { Kind::Puff, Kind::Ring, Kind::Fireball })
+    for (Kind k : kKinds)
     {
         const std::wstring path = TempAlo(L"review.alo");
         auto system = std::make_unique<PS>();

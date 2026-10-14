@@ -23,8 +23,21 @@
 //                 premultiplied colour instead of the fill.
 // Every call runs with --evaloff --wildcardoff, and the TGA is written with
 // its attributes erased and no compression, so equal pixels give equal bytes.
+//
+// Format. An entry publishes the TGA, or (format dxt1 or dxt5) a DDS that the
+// SDK's texconv compresses from it, with a full mip chain as the stock sheets
+// carry. The TGA is validated either way, since its guard bands are exact; the
+// DDS is then held to the TGA. DXT1 keeps one bit of alpha and drops the
+// colour under it, so it is for additive (opaque) textures only.
 export const PAD = 2;
 export const BLENDS = ["additive", "transparent"];
+export const FORMATS = ["tga", "dxt1", "dxt5"];
+// The D3DFORMAT the editor reports for each, as its log prints it.
+export const D3D_FORMAT = { tga: 21, dxt1: 0x31545844, dxt5: 0x35545844 };
+// texconv against the source TGA: colour within an RMSE of DDS_RMSE levels a
+// channel (measured: under 2.2 on smooth content), DXT5 alpha within DDS_ALPHA
+// (its 8-level blocks miss by at most 255/14 on a full-range block).
+const DDS_RMSE = 8, DDS_ALPHA = 20;
 export const MAX_TEXTURE_BYTES = 64 * 1024 * 1024;   // src/common/ResourceLimits.h
 // An alpha-0 texel beside coverage is a dark fringe when its colour is under
 // FRINGE_RATIO of its covered neighbours' (alpha-weighted) colour, unless that
@@ -40,8 +53,9 @@ const fail = (message, exitCode = 4) => Object.assign(new Error(message), { exit
 
 export const profileName = (blend, grid) => (grid > 1 ? "eaw-flipbook" : `eaw-${blend}`);
 
-// Names are content-addressed: equal pixels, equal name; never two files for one name.
-export const textureName = (id, textureSha256) => `pe_gen_${id}_${textureSha256.slice(0, 8)}.tga`;
+// Names are content-addressed: equal bytes, equal name; never two files for one name.
+export const textureName = (id, textureSha256, format = "tga") =>
+  `pe_gen_${id}_${textureSha256.slice(0, 8)}.${format === "tga" ? "tga" : "dds"}`;
 
 export function atlasLayout(grid, cell, pad = PAD) {
   const frame = cell - 2 * pad;
@@ -78,6 +92,13 @@ export function encodeArgs(blend, packed, out) {
     "--ch", "R,G,B", packed, "--ch", "A", ...coverage, "--mul", "--chappend", ...WRITE, out];
 }
 
+// texconv writes <input's basename>.dds into the working folder. It exits 0
+// even when it can't write, so the caller checks the file is there.
+export function texconvArgs(format, input) {
+  if (format !== "dxt1" && format !== "dxt5") throw fail(`texconv does not write ${format}`, 1);
+  return ["-nologo", "-f", format.toUpperCase(), "-m", "0", "-if", "NONE", "-mf", "BOX", "-ft", "DDS", "-o", ".", input];
+}
+
 // One `hoiiotool --stats` over every frame: size, channels and non-finite counts.
 export const statsArgs = (frames) => [...SAFE, "--stats", ...frames];
 export function parseFrameStats(stdout) {
@@ -102,7 +123,9 @@ export function checkFrames(stats, layout) {
   return errors;
 }
 
-// The validators (§3.5) over the written texture. `image` is decodeTga()'s result.
+// The validators (§3.5) over the written texture. `image` is decodeTga()'s
+// result; `bytes` is its file size, or null when a DDS made from it is
+// published instead (validateDds holds that one to the limit).
 export function validateTexture(image, bytes, { blend, layout }) {
   const errors = [];
   const { size, cell, pad, grid } = layout;
@@ -110,7 +133,7 @@ export function validateTexture(image, bytes, { blend, layout }) {
     return [`texture is not an uncompressed 32-bit TGA with 8 alpha bits (type ${image.type}, ${image.bpp} bpp, ${image.alphaBits} alpha bits)`];
   if (image.width !== size || image.height !== size) errors.push(`texture is ${image.width}x${image.height}, not ${size}x${size}`);
   if (size & (size - 1)) errors.push(`texture side ${size} is not a power of two`);
-  if (bytes > MAX_TEXTURE_BYTES) errors.push(`texture is ${bytes} bytes, over the editor's 64 MiB limit`);
+  if (bytes !== null && bytes > MAX_TEXTURE_BYTES) errors.push(`texture is ${bytes} bytes, over the editor's 64 MiB limit`);
   if (errors.length) return errors;
 
   const at = (x, y) => (y * size + x) * 4;
@@ -157,5 +180,32 @@ export function validateTexture(image, bytes, { blend, layout }) {
     }
     if (fringe) errors.push(`${fringe} transparent texels beside coverage are much darker than it: a dark fringe under filtering`);
   }
+  return errors;
+}
+
+// The DDS against the TGA it was made from. `dds` is decodeDds()'s result,
+// `source` decodeTga()'s; `bytes` is the DDS file's size.
+export function validateDds(dds, source, bytes, { format, blend, layout }) {
+  const { size } = layout, levels = Math.log2(size) + 1;
+  const fourCC = format.toUpperCase();
+  if (dds.fourCC !== fourCC || !dds.rgba) return [`texture is not a ${fourCC} DDS (it is ${dds.fourCC ?? "uncompressed"})`];
+  const errors = [];
+  if (dds.width !== size || dds.height !== size) errors.push(`texture is ${dds.width}x${dds.height}, not ${size}x${size}`);
+  if (dds.mipCount !== levels) errors.push(`texture has ${dds.mipCount} mip levels, not the full chain of ${levels}`);
+  if (bytes > MAX_TEXTURE_BYTES) errors.push(`texture is ${bytes} bytes, over the editor's 64 MiB limit`);
+  if (format === "dxt1" && blend !== "additive") errors.push("DXT1 drops the colour under alpha; it is for additive textures only");
+  if (errors.length) return errors;
+  const squared = [0, 0, 0];
+  let alphaWorst = 0, transparent = 0;
+  for (let i = 0; i < size * size * 4; i += 4) {
+    for (let c = 0; c < 3; c++) squared[c] += (dds.rgba[i + c] - source.rgba[i + c]) ** 2;
+    alphaWorst = Math.max(alphaWorst, Math.abs(dds.rgba[i + 3] - source.rgba[i + 3]));
+    if (dds.rgba[i + 3] !== 255) transparent++;
+  }
+  const rmse = squared.map((v) => Math.sqrt(v / (size * size)));
+  if (rmse.some((v) => v > DDS_RMSE))
+    errors.push(`the DDS colour differs from the TGA by an RMSE of ${rmse.map((v) => v.toFixed(1)).join(", ")}, over ${DDS_RMSE}`);
+  if (format === "dxt1" ? transparent > 0 : alphaWorst > DDS_ALPHA)
+    errors.push(format === "dxt1" ? `${transparent} texels lost their alpha in DXT1` : `the DDS alpha differs from the TGA by up to ${alphaWorst}, over ${DDS_ALPHA}`);
   return errors;
 }

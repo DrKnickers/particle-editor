@@ -1,7 +1,7 @@
-// [houdini] The two image formats the validators read, decoded in Node so
-// every check is exact and runs without Houdini: the uncompressed 32-bit TGA
-// the profile step writes, and the 8-bit PNG frames an observation captures.
-// Pixels come back as top-down RGBA bytes.
+// [houdini] The image formats the validators read, decoded in Node so every
+// check is exact and runs without Houdini: the uncompressed 32-bit TGA the
+// profile step writes, the DXT1/DXT5 DDS texconv makes from it, and the 8-bit
+// PNG frames an observation captures. Pixels come back as top-down RGBA bytes.
 import { inflateSync } from "node:zlib";
 
 const fail = (message, exitCode = 4) => Object.assign(new Error(message), { exitCode });
@@ -38,7 +38,53 @@ export function encodeTga(width, height, rgba, { alphaBits = 8 } = {}) {
   return out;
 }
 
-const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+// DXT1 or DXT5 DDS, as texconv writes it: the header, and mip 0 decoded.
+// Every level's blocks must be present. DXT5's colour block is always in
+// four-colour mode; DXT1's three-colour mode has transparent black.
+const DDS_MAGIC = 0x20534444, DXT_BYTES = { DXT1: 8, DXT5: 16 };
+export function ddsLevelBytes(width, height, fourCC) {
+  return Math.max(1, Math.ceil(width / 4)) * Math.max(1, Math.ceil(height / 4)) * DXT_BYTES[fourCC];
+}
+
+export function decodeDds(bytes) {
+  if (bytes.length < 128 || bytes.readUInt32LE(0) !== DDS_MAGIC || bytes.readUInt32LE(4) !== 124) throw fail("texture is not a DDS");
+  const height = bytes.readUInt32LE(12), width = bytes.readUInt32LE(16), mipCount = Math.max(1, bytes.readUInt32LE(28));
+  const fourCC = bytes.readUInt32LE(80) & 4 ? bytes.toString("latin1", 84, 88) : null;
+  const header = { width, height, mipCount, fourCC };
+  if (!Object.hasOwn(DXT_BYTES, fourCC ?? "")) return { ...header, rgba: null };
+  let size = 0;
+  for (let level = 0; level < mipCount; level++) size += ddsLevelBytes(Math.max(1, width >> level), Math.max(1, height >> level), fourCC);
+  if (bytes.length !== 128 + size) throw fail(`texture is ${bytes.length} bytes, not the ${128 + size} its header says`);
+  const rgba = Buffer.alloc(width * height * 4), across = Math.ceil(width / 4);
+  const block = DXT_BYTES[fourCC];
+  for (let b = 0; b * block < ddsLevelBytes(width, height, fourCC); b++) {
+    const at = 128 + b * block, bx = (b % across) * 4, by = Math.floor(b / across) * 4;
+    const colourAt = fourCC === "DXT5" ? at + 8 : at;
+    const c = [bytes.readUInt16LE(colourAt), bytes.readUInt16LE(colourAt + 2)];
+    const ends = c.map((v) => [((v >> 11) & 31) * 255 / 31, ((v >> 5) & 63) * 255 / 63, (v & 31) * 255 / 31]);
+    const four = fourCC === "DXT5" || c[0] > c[1];
+    const mix = (p, q, wp, wq) => ends[0].map((_, k) => (ends[p][k] * wp + ends[q][k] * wq) / (wp + wq));
+    const palette = four ? [ends[0], ends[1], mix(0, 1, 2, 1), mix(0, 1, 1, 2)] : [ends[0], ends[1], mix(0, 1, 1, 1), [0, 0, 0]];
+    const indices = bytes.readUInt32LE(colourAt + 4);
+    let alphas = null, alphaBits = 0n;
+    if (fourCC === "DXT5") {
+      const a0 = bytes[at], a1 = bytes[at + 1];
+      alphas = a0 > a1 ? [a0, a1, ...[1, 2, 3, 4, 5, 6].map((i) => ((7 - i) * a0 + i * a1) / 7)]
+        : [a0, a1, ...[1, 2, 3, 4].map((i) => ((5 - i) * a0 + i * a1) / 5), 0, 255];
+      for (let i = 5; i >= 0; i--) alphaBits = (alphaBits << 8n) | BigInt(bytes[at + 2 + i]);
+    }
+    for (let t = 0; t < 16; t++) {
+      const x = bx + (t & 3), y = by + (t >> 2);
+      if (x >= width || y >= height) continue;
+      const index = (indices >>> (2 * t)) & 3, o = (y * width + x) * 4;
+      for (let k = 0; k < 3; k++) rgba[o + k] = Math.round(palette[index][k]);
+      rgba[o + 3] = alphas ? Math.round(alphas[Number((alphaBits >> BigInt(3 * t)) & 7n)]) : !four && index === 3 ? 0 : 255;
+    }
+  }
+  return { ...header, rgba };
+}
+
+const PNG_SIGNATURE =Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 // 8-bit greyscale, RGB or RGBA, non-interlaced: what the observation writes.
 export function decodePng(bytes) {
