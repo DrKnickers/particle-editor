@@ -32,6 +32,7 @@ import { buildProvenance, cacheKey, canonical, checkManifest, dirBytes, evict, s
 import { HOIIOTOOL_VERSION, HOUDINI_BUILD, PINNED, TEXCONV, THREADS, childEnvironment, verifyPinned, verifyTexconv } from "./houdini.mjs";
 import { acquireLock, runContained } from "./contain.mjs";
 import { decodeDds, decodeTga } from "./images.mjs";
+import { cellSteps } from "./cell-steps.mjs";
 import { atlasLayout, checkFrames, encodeArgs, packArgs, parseFrameStats, profileName, statsArgs, texconvArgs, textureName, validateDds,
   validateTexture } from "./profiles.mjs";
 
@@ -313,7 +314,8 @@ export async function generate(args, {
       io.renameSync(join(work, file), join(promote, texture.name));
       io.writeFileSync(join(promote, "provenance.json"), serialise(buildProvenance({ id: args.generator, entry, key, params,
         seed, tier, build: HOUDINI_BUILD, hoiiotool: HOIIOTOOL_VERSION, threads: THREADS, manifestSha256: sha256(manifestText), texture,
-        texconv })));
+        texconv, cellSpan: manifest.cellSpan ?? null,
+        cellSteps: entry.grid > 1 ? cellSteps(tga, { grid: entry.grid, blend: entry.blend, pad: layout.pad }) : null })));
       io.mkdirSync(cacheDir, { recursive: true });
       io.renameSync(promote, entryDir);
       const published = publish(root, entryDir, texture.name, join(staging, `${key.slice(0, 16)}-${random()}`), io);

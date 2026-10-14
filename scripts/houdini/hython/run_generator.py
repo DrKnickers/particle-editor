@@ -143,9 +143,22 @@ def load_modules(entry, generators_dir=GENERATORS_DIR):
     return loaded
 
 
-def frame_manifest(names, count, workdir):
-    """Check the builder's frame list and hash each frame."""
+def frame_manifest(result, count, workdir):
+    """Check what the builder returned and hash each frame.
+
+    A builder returns its frame names in index order, or {"frames": names,
+    "cellSpan": spans}: the span, in sim units, each frame was framed to.
+    """
+    names, spans = result, None
+    if isinstance(result, dict):
+        require(set(result) <= {"frames", "cellSpan"} and "frames" in result,
+                "builder returned fields other than frames and cellSpan: %s" % ", ".join(sorted(map(str, result))))
+        names, spans = result["frames"], result.get("cellSpan")
     require(isinstance(names, list) and len(names) == count, "builder returned %d frames, not %d" % (len(names or []), count))
+    if spans is not None:
+        require(isinstance(spans, list) and len(spans) == count, "builder returned a cellSpan without one span per frame")
+        require(all(not isinstance(v, bool) and isinstance(v, (int, float)) and math.isfinite(v) and v > 0 for v in spans),
+                "builder returned a cellSpan that is not all positive finite numbers")
     frames = []
     for index, name in enumerate(names):
         require(isinstance(name, str) and FRAME_NAME.match(name) is not None, "frame name is malformed: %r" % (name,))
@@ -153,7 +166,10 @@ def frame_manifest(names, count, workdir):
         require(inside(workdir, path) and os.path.isfile(path), "frame is missing: %s" % name)
         with open(path, "rb") as handle:
             frames.append({"index": index, "name": name, "sha256": sha256(handle.read())})
-    return {"schemaVersion": 1, "frames": frames}
+    manifest = {"schemaVersion": 1, "frames": frames}
+    if spans is not None:
+        manifest["cellSpan"] = [float(v) for v in spans]
+    return manifest
 
 
 def reject(error):
@@ -189,8 +205,7 @@ def main():
            "grid": grid, "pad": PAD, "frame": tier["cell"] - 2 * PAD, "threads": job["threads"],
            "modules": modules, "cellSeconds": entry.get("cellSeconds")}
     workdir = os.getcwd()
-    names = builder["generate"](hou, ctx)
-    manifest = frame_manifest(names, grid * grid, workdir)
+    manifest = frame_manifest(builder["generate"](hou, ctx), grid * grid, workdir)
     with open(os.path.join(workdir, "frames.manifest.json"), "w", encoding="utf-8", newline="\n") as handle:
         json.dump(manifest, handle, indent=2, sort_keys=True)
         handle.write("\n")

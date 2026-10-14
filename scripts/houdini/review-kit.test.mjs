@@ -152,7 +152,7 @@ test("the checklist names the kit, the lifetime and what to look for", () => {
 });
 
 test("the marker lives long enough for every fixture: 150 frames for 4 s, in proportion beyond", () => {
-  assert.deepEqual(["puff", "ring", "fireball", "smoke4", "smoke8"].map(markerFrames), [150, 150, 150, 150, 240]);
+  assert.deepEqual(["puff", "ring", "fireball", "smoke4", "smoke8", "fireball8"].map(markerFrames), [150, 150, 150, 150, 240, 240]);
   assert.equal(patchParticlesXml(XML, 240).toString("latin1"),
     XML.toString("latin1").replace("<Particle_Lifetime_Frames>30", "<Particle_Lifetime_Frames>240"));
 });

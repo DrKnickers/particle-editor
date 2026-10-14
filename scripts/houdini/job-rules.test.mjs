@@ -95,6 +95,13 @@ results["manifestGood"] = outcome(lambda: rg.frame_manifest(names, 4, work))
 results["manifestCount"] = outcome(lambda: rg.frame_manifest(names[:3], 4, work))
 results["manifestName"] = outcome(lambda: rg.frame_manifest(names[:3] + ["frames/../x.exr"], 4, work))
 results["manifestType"] = outcome(lambda: rg.frame_manifest(None, 4, work))
+results["spansGood"] = outcome(lambda: rg.frame_manifest({"frames": names, "cellSpan": [1, 1.5, 2.25, 3]}, 4, work))
+results["spansNone"] = outcome(lambda: rg.frame_manifest({"frames": names}, 4, work))
+for name, value in [("extra", {"frames": names, "cellSpan": [1] * 4, "x": 1}), ("noFrames", {"cellSpan": [1] * 4}),
+                    ("short", {"frames": names, "cellSpan": [1] * 3}), ("zero", {"frames": names, "cellSpan": [1, 1, 0, 1]}),
+                    ("inf", {"frames": names, "cellSpan": [1, 1, math.inf, 1]}), ("bool", {"frames": names, "cellSpan": [1, True, 1, 1]}),
+                    ("text", {"frames": names, "cellSpan": "1111"})]:
+    results["spans_" + name] = outcome(lambda value=value: rg.frame_manifest(value, 4, work))
 shutil.rmtree(work)
 # The builder regex keeps every name inside generators/; inside() is the
 # second wall, against a link or junction that leads out of it.
@@ -131,6 +138,9 @@ test("run_generator's checks accept the shipped job and reject every malformed o
     module_missing: /module other is not in generators/, module_list: /modules is not an object/,
     manifestMissing: /frame is missing: frames\/frame_0004.exr/, manifestCount: /3 frames, not 4/,
     manifestName: /malformed/, manifestType: /0 frames, not 4/,
+    spans_extra: /fields other than frames and cellSpan/, spans_noFrames: /fields other than frames/,
+    spans_short: /one span per frame/, spans_zero: /positive finite/, spans_inf: /positive finite/, spans_bool: /positive finite/,
+    spans_text: /one span per frame/,
   };
   for (const [name, pattern] of Object.entries(rejected)) {
     assert.equal(r[name]?.[0], "rejected", `${name} was not rejected: ${JSON.stringify(r[name])}`);
@@ -143,6 +153,10 @@ test("run_generator's checks accept the shipped job and reject every malformed o
   assert.deepEqual(r.manifestGood[1].frames.map((f) => [f.index, f.name]),
     [0, 1, 2, 3].map((i) => [i, `frames/frame_000${i + 1}.exr`]));
   assert.equal(r.manifestGood[1].frames[2].sha256, sha256(Buffer.from("frame 2")));
+  assert.equal(r.manifestGood[1].cellSpan, undefined, "a frame list alone records no spans");
+  assert.deepEqual(r.spansGood[1].cellSpan, [1, 1.5, 2.25, 3]);
+  assert.deepEqual(r.spansGood[1].frames, r.manifestGood[1].frames);
+  assert.deepEqual([r.spansNone[0], r.spansNone[1].cellSpan], ["ok", undefined]);
   if (process.platform === "win32") {
     assert.deepEqual([r.insideDirect, r.insideJunction, r.insideBase], [true, false, false],
       "inside() must follow a junction out of generators/");

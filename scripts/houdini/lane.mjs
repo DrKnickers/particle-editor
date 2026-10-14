@@ -10,6 +10,9 @@
 //   - the editor loads it from the root alone, and plays the cells 0..15 in
 //     order (validate.mjs, through the Release build);
 //   - the same inputs in a new root give the same texture bytes;
+//   - its provenance records the oracle's cell steps (red up 85 along a row,
+//     down 255 with green up 85 at a row's end), and cell-steps.mjs measures
+//     the game's own fire sheet, P_PARTICLE_EXPLOSION1, the stock baseline;
 //   - debug-atlas-dds, the same frames compressed by texconv: a DXT5 DDS with
 //     a full mip chain, held to the TGA that passed the oracle (so its cells,
 //     frames and orientation marks are where they were); the editor loads it
@@ -51,6 +54,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const generateScript = join(here, "generate.mjs");
 const validateScript = join(here, "validate.mjs");
 const reviewScript = join(here, "review-kit.mjs");
+const cellStepsScript = join(here, "cell-steps.mjs");
 const system32 = win32.join(process.env.SystemRoot ?? "C:\\Windows", "System32");
 const GRID = 4, CELL = 32, FRAME = CELL - 2 * PAD;
 const GENERATORS = ["static-smoke-puff", "static-energy-ring", "ground-fireball-4x4"], EDGE_MAX = 8;
@@ -238,6 +242,18 @@ try {
       `the editor validates it (exit ${validated.code}${validated.record?.error ? `: ${validated.record.error}` : ""})`);
     check(JSON.stringify(validated.record?.sequence) === JSON.stringify([...Array(16).keys()]),
       `the fireball fixture plays the cells 0..15 in order (${JSON.stringify(validated.record?.sequence ?? null)})`);
+
+    // The cell steps the oracle predicts, recorded in provenance; then the stock baseline.
+    const along = Math.round(8500 / 3) / 100, wrap = Math.round(34000 / 3) / 100;
+    const steps = JSON.parse(readFileSync(join(first.record.entry, "provenance.json"), "utf8")).cellSteps?.steps ?? [];
+    check(JSON.stringify(steps) === JSON.stringify([...Array(15).keys()].map((k) => (k % 4 === 3 ? wrap : along))),
+      `provenance records the oracle's cell steps (${JSON.stringify(steps)})`);
+    const stock = spawnSync(process.execPath, [cellStepsScript, "--stock", "ART\\TEXTURES\\P_PARTICLE_EXPLOSION1.DDS", "--grid", "4",
+      "--blend", "additive"], { encoding: "utf8", windowsHide: true, timeout: 60000 });
+    let baseline = null;
+    try { baseline = JSON.parse((stock.stdout ?? "").split(/\r?\n/).find((v) => v.startsWith("[houdini-cell-steps] {")).slice(21)); } catch { /* below */ }
+    check(stock.status === 0 && baseline?.ok === true && baseline.steps.length === 15 && baseline.mean > 0,
+      `cell-steps.mjs measures the stock fire sheet (mean ${baseline?.mean ?? "?"}, largest ${baseline?.max ?? "?"})`);
 
     // The same inputs elsewhere: the same bytes.
     const elsewhere = await generate(join(base, "elsewhere"), 7);

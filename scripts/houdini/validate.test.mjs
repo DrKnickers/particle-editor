@@ -20,11 +20,12 @@ const layered = { name: NAME, sha: SHA, root: ROOT, layered: true }, control = {
 
 test("each texture shape has its fixture", () => {
   assert.deepEqual([{ blend: "additive", grid: 4 }, { blend: "additive", grid: 1 }, { blend: "transparent", grid: 1 },
-    { blend: "transparent", grid: 4 }, { blend: "transparent", grid: 8 }].map(kindFor), ["fireball", "ring", "puff", "smoke4", "smoke8"]);
-  for (const shape of [{ blend: "additive", grid: 8 }, { blend: "additive", grid: 2 }, { blend: "multiply", grid: 1 }])
+    { blend: "transparent", grid: 4 }, { blend: "transparent", grid: 8 }, { blend: "additive", grid: 8 }].map(kindFor),
+  ["fireball", "ring", "puff", "smoke4", "smoke8", "fireball8"]);
+  for (const shape of [{ blend: "transparent", grid: 2 }, { blend: "additive", grid: 2 }, { blend: "multiply", grid: 1 }])
     assert.throws(() => kindFor(shape), (error) => error.exitCode === 2);
-  // src/effect/HoudiniValidationFixture.h: 2 s single textures, 4 s 4x4 flipbooks, a 6.4 s 8x8 one.
-  assert.deepEqual(Object.keys(KINDS).map((kind) => lifetimeTicks(kind) / 60), [2, 2, 4, 4, 6.4]);
+  // src/effect/HoudiniValidationFixture.h: 2 s single textures, 4 s 4x4 flipbooks, 6.4 s 8x8 ones.
+  assert.deepEqual(Object.keys(KINDS).map((kind) => lifetimeTicks(kind) / 60), [2, 2, 4, 4, 6.4, 6.4]);
   assert.equal(TICKS_PER_CELL, 15);
 });
 

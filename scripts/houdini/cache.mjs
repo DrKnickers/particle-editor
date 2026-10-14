@@ -66,7 +66,8 @@ export function dirBytes(dir, io = fs) {
 }
 
 // What hython reported, checked again by Node: exactly grid*grid frames,
-// in order, each present and matching its hash.
+// in order, each present and matching its hash, and, if the builder framed
+// each one itself, one positive span per frame.
 export function checkManifest(text, count, dir, io = fs) {
   let manifest;
   try { manifest = JSON.parse(text); } catch { throw fail("frames.manifest.json is not JSON", 4); }
@@ -81,6 +82,9 @@ export function checkManifest(text, count, dir, io = fs) {
     catch { throw fail(`frame ${index} is missing`, 4); }
     if (sha256(bytes) !== frame.sha256) throw fail(`frame ${index} differs from the manifest`, 4);
   });
+  if (Object.hasOwn(manifest, "cellSpan") && !(Array.isArray(manifest.cellSpan) && manifest.cellSpan.length === count &&
+      manifest.cellSpan.every((v) => typeof v === "number" && Number.isFinite(v) && v > 0)))
+    throw fail(`frame manifest's cellSpan is not one positive span per frame`, 4);
   const extra = io.readdirSync(join(dir, "frames")).filter((name) => !frames.some((f) => f.name === `frames/${name}`));
   if (extra.length) throw fail(`frames/ holds unlisted files: ${extra.join(", ")}`, 4);
   return manifest;
@@ -89,7 +93,7 @@ export function checkManifest(text, count, dir, io = fs) {
 // Spec §21.6. "contentHash" is the texture's SHA-256, the identity its name
 // carries; "usedBy" starts empty and validation starts "not-run".
 export function buildProvenance({ id, entry, key, params, seed, tier, build, hoiiotool, threads, manifestSha256, texture,
-  texconv = null }) {
+  texconv = null, cellSpan = null, cellSteps = null }) {
   return {
     schemaVersion: 3,
     generatorId: id,
@@ -106,6 +110,8 @@ export function buildProvenance({ id, entry, key, params, seed, tier, build, hoi
     texture: { name: texture.name, format: entry.format ?? "tga", blend: entry.blend, grid: entry.grid, cell: texture.cell,
       pad: texture.pad, size: texture.size, bytes: texture.bytes },
     cellSeconds: entry.cellSeconds ?? null,
+    cellSpan,
+    cellSteps,
     framesManifestSha256: manifestSha256,
     cacheKey: key,
     tier,

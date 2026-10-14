@@ -103,6 +103,12 @@ test("the manifest must list exactly grid*grid present, unaltered frames in orde
   assert.throws(() => checkManifest(text, 4, dir), /unlisted files: extra.exr/);
   const missing = scratch(t);
   assert.throws(() => checkManifest(writeFrames(missing, 4, { skip: 3 }), 4, missing), /frame 3 is missing/);
+  // A builder that framed each frame itself reports one positive span per frame.
+  const framed = scratch(t), plain = writeFrames(framed, 4);
+  const spanned = (cellSpan) => JSON.stringify({ ...JSON.parse(plain), cellSpan });
+  assert.deepEqual(checkManifest(spanned([1, 2, 3, 4]), 4, framed).cellSpan, [1, 2, 3, 4]);
+  for (const bad of [[1, 2, 3], [1, 2, 0, 4], [1, 2, -3, 4], [1, "2", 3, 4], null])
+    assert.throws(() => checkManifest(spanned(bad), 4, framed), /cellSpan is not one positive span per frame/, JSON.stringify(bad));
 });
 
 const TEXTURE = { name: "pe_gen_thing_0123abcd.tga", sha256: `0123abcd${"e".repeat(56)}`, profile: "eaw-flipbook",
@@ -127,6 +133,9 @@ test("provenance carries every spec §21.6 field and nothing about the machine",
   assert.deepEqual(record.texture, { name: TEXTURE.name, format: "tga", blend: "additive", grid: 2, cell: 32, pad: 2, size: 64,
     bytes: 16402 });
   assert.deepEqual([record.schemaVersion, record.modules, record.cellSeconds, record.texconv], [3, {}, null, null]);
+  assert.deepEqual([record.cellSpan, record.cellSteps], [null, null]);
+  const measured = provenance({ cellSpan: [1, 2, 3, 4], cellSteps: { mean: 5, max: 9, steps: [1, 5, 9] } });
+  assert.deepEqual([measured.cellSpan, measured.cellSteps], [[1, 2, 3, 4], { mean: 5, max: 9, steps: [1, 5, 9] }]);
   assert.equal(record.framesManifestSha256, "m".repeat(64));
   // A DDS entry records its format, its shared modules, its cell times and the encoder.
   const texconv = { texconv: "t".repeat(64), d3dx9: "d".repeat(64) };

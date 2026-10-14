@@ -13,7 +13,7 @@
 // tests/test_houdini_validation_fixture.cpp can pin it.
 namespace houdinifixture {
 
-enum class Kind { Puff, Ring, Fireball, Smoke4, Smoke8 };
+enum class Kind { Puff, Ring, Fireball, Smoke4, Smoke8, Fireball8 };
 
 struct Profile
 {
@@ -29,6 +29,7 @@ inline bool ParseKind(const std::wstring& text, Kind& kind)
     if (text == L"fireball") { kind = Kind::Fireball; return true; }
     if (text == L"smoke4")   { kind = Kind::Smoke4;   return true; }
     if (text == L"smoke8")   { kind = Kind::Smoke8;   return true; }
+    if (text == L"fireball8") { kind = Kind::Fireball8; return true; }
     return false;
 }
 
@@ -40,14 +41,15 @@ inline const char* KindName(Kind kind)
     case Kind::Ring:   return "ring";
     case Kind::Smoke4: return "smoke4";
     case Kind::Smoke8: return "smoke8";
+    case Kind::Fireball8: return "fireball8";
     default:           return "fireball";
     }
 }
 
-// Puff and the smoke flipbooks are smoke (straight alpha); ring and fireball
-// are emissive. The 4x4 flipbooks hold each cell 0.25 s, 15 frames of the
-// 60 Hz clock; the 8x8 smoke holds each 0.1 s, 6 frames, so its 64 cells
-// play in 6.4 s.
+// Puff and the smoke flipbooks are smoke (straight alpha); ring and the
+// fireballs are emissive. The 4x4 flipbooks hold each cell 0.25 s, 15 frames
+// of the 60 Hz clock; the 8x8 ones hold each 0.1 s, 6 frames, so their 64
+// cells play in 6.4 s.
 inline Profile ProfileFor(Kind kind)
 {
     switch (kind)
@@ -56,6 +58,7 @@ inline Profile ProfileFor(Kind kind)
     case Kind::Ring:   return { ParticleSystem::BLEND_ADDITIVE, 1, 2.0f };
     case Kind::Smoke4: return { ParticleSystem::BLEND_TRANSPARENT, 16, 4.0f };
     case Kind::Smoke8: return { ParticleSystem::BLEND_TRANSPARENT, 64, 6.4f };
+    case Kind::Fireball8: return { ParticleSystem::BLEND_ADDITIVE, 64, 6.4f };
     default:           return { ParticleSystem::BLEND_ADDITIVE, 16, 4.0f };
     }
 }

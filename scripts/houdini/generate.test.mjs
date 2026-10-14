@@ -120,6 +120,9 @@ test("a miss runs hython contained, promotes the checked entry, and the next run
   assert.deepEqual(provenance.texture, { name, format: "tga", blend: "additive", grid: 4, cell: 32, pad: 2, size: 128,
     bytes: textureBytes.length });
   assert.equal(provenance.texconv, null);
+  // The cell steps of the synthetic atlas: red +12 and green -8 a cell, blue still: 20/3 levels.
+  assert.deepEqual([provenance.cellSteps.steps.length, provenance.cellSteps.mean, provenance.cellSteps.max], [15, 6.67, 6.67]);
+  assert.equal(provenance.cellSpan, null, "a builder that returns names alone records no spans");
   // Published where a content layer keeps textures, byte for byte.
   const published = join(h.root, "Data", "Art", "Textures", name);
   assert.equal(first.published, published);

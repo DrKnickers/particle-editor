@@ -35,7 +35,7 @@ using PS = ParticleSystem;
 using Track = PS::Emitter::Track;
 using houdinifixture::Kind;
 
-static const Kind kKinds[] = { Kind::Puff, Kind::Ring, Kind::Fireball, Kind::Smoke4, Kind::Smoke8 };
+static const Kind kKinds[] = { Kind::Puff, Kind::Ring, Kind::Fireball, Kind::Smoke4, Kind::Smoke8, Kind::Fireball8 };
 
 // The value a STEP track holds at relTime (percent of life), as
 // EmitterInstance computes it: the cursor starts on the first key and passes a
@@ -145,13 +145,14 @@ int main()
           houdinifixture::ParseKind(L"ring", kind) && kind == Kind::Ring &&
           houdinifixture::ParseKind(L"fireball", kind) && kind == Kind::Fireball &&
           houdinifixture::ParseKind(L"smoke4", kind) && kind == Kind::Smoke4 &&
-          houdinifixture::ParseKind(L"smoke8", kind) && kind == Kind::Smoke8, "the five kinds parse");
+          houdinifixture::ParseKind(L"smoke8", kind) && kind == Kind::Smoke8 &&
+          houdinifixture::ParseKind(L"fireball8", kind) && kind == Kind::Fireball8, "the six kinds parse");
     bool named = true;
     for (Kind k : kKinds)
         named = named && houdinifixture::ParseKind(std::wstring(houdinifixture::KindName(k), houdinifixture::KindName(k) +
             std::strlen(houdinifixture::KindName(k))), kind) && kind == k;
     CHECK(named, "every kind's name parses back to it");
-    for (const wchar_t* bad : { L"", L"Puff", L"puff ", L"weather", L"fire-ball", L"smoke", L"smoke2" })
+    for (const wchar_t* bad : { L"", L"Puff", L"puff ", L"weather", L"fire-ball", L"smoke", L"smoke2", L"fireball16" })
     {
         kind = Kind::Ring;
         CHECK(!houdinifixture::ParseKind(bad, kind) && kind == Kind::Ring, "an unknown kind is refused untouched");
@@ -173,6 +174,10 @@ int main()
           houdinifixture::ProfileFor(Kind::Smoke8).textureSize == 64 &&
           static_cast<int>(houdinifixture::ProfileFor(Kind::Smoke8).lifetime * 60.0f + 0.5f) == 64 * 6,
           "smoke8 is an alpha-blended flipbook: 64 frames (8x8), 6 ticks of 60 Hz each");
+    CHECK(houdinifixture::ProfileFor(Kind::Fireball8).blendMode == PS::BLEND_ADDITIVE &&
+          houdinifixture::ProfileFor(Kind::Fireball8).textureSize == 64 &&
+          houdinifixture::ProfileFor(Kind::Fireball8).lifetime == houdinifixture::ProfileFor(Kind::Smoke8).lifetime,
+          "fireball8 is an additive flipbook timed as smoke8");
     for (const char* good : { "pe_puff.tga", "A.TGA", "x-1_y.2.dds", "abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghij.tga" })
         CHECK(houdinifixture::IsTextureName(good), "a bare .tga/.dds name is accepted");
     for (const char* bad : { "", ".tga", "a.png", "a.tga ", "dir\\a.tga", "dir/a.tga", "C:a.tga", "..\\a.tga",

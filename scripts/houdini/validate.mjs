@@ -43,6 +43,7 @@ export const KINDS = {
   fireball: { grid: 4, blend: "additive", ticksPerCell: 15 },
   smoke4: { grid: 4, blend: "transparent", ticksPerCell: 15 },
   smoke8: { grid: 8, blend: "transparent", ticksPerCell: 6 },
+  fireball8: { grid: 8, blend: "additive", ticksPerCell: 6 },
 };
 // The 4x4 fixtures' hold, which the oracle reads by default.
 export const TICKS_PER_CELL = KINDS.fireball.ticksPerCell;
