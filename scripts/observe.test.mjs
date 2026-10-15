@@ -79,6 +79,31 @@ test("capture checker accepts native fields and dense playback map without inven
   assert.deepEqual(checked.errors, []);
   assert.equal(Object.keys(checked.pngHashes).length, capture.frames.length + capture.playback.length);
 });
+
+const CAMERA = { position: [0, -500, 250], target: [0, 0, 0], up: [0, 0, 1] };
+for (const [name, camera] of [
+  ["null", null], ["array", []], ["missing field", { position: CAMERA.position, target: CAMERA.target }],
+  ["unknown field", { ...CAMERA, zoom: 2 }], ["short vector", { ...CAMERA, position: [0, -500] }],
+  ["long vector", { ...CAMERA, target: [0, 0, 0, 0] }], ["non-number", { ...CAMERA, position: [0, "-500", 250] }],
+  ["null component", { ...CAMERA, target: [null, 0, 0] }], ["float overflow", { ...CAMERA, position: [0, -1e100, 250] }],
+  ["equal position and target", { ...CAMERA, position: CAMERA.target }], ["zero up", { ...CAMERA, up: [0, 0, 0] }],
+  ["parallel up", { ...CAMERA, up: [0, 500, -250] }], ["antiparallel up", { ...CAMERA, up: [0, -500, 250] }],
+  ["direction rounded to zero", { ...CAMERA, position: [0, 0, 0], target: [1e-100, 0, 0] }],
+  ["component past the bound", { ...CAMERA, position: [0, -2e6, 250] }],
+  ["too close", { ...CAMERA, position: [0, 0, 0.005] }], ["vanishing up", { ...CAMERA, up: [0, 0, 1e-7] }],
+  ["nearly parallel up", { ...CAMERA, up: [0, 500, -250.01] }],
+]) test(`capture checker rejects camera ${name}`, (t) => {
+  const dir = temporary(t); fixture(dir);
+  mutateCapture(dir, (c) => { c.spec.camera = camera; c.profile.camera = camera; });
+  assert.match(checkCapture(dir).errors.join("; "), /invalid capture spec camera/);
+});
+for (const [name, camera] of [["missing", undefined], ["golden", { ...CAMERA, position: [0, -250, 125] }]]) {
+  test(`capture checker rejects a ${name} profile camera when the spec names one`, (t) => {
+    const dir = temporary(t); fixture(dir);
+    mutateCapture(dir, (c) => { c.spec.camera = CAMERA; c.profile.camera = camera; });
+    assert.match(checkCapture(dir).errors.join("; "), /profile camera differs/);
+  });
+}
 for (const [name, mutation, expected] of [
   ["signature", (dir, c) => { const bytes = fs.readFileSync(join(dir, c.frames[0].png)); bytes[0] ^= 1; fs.writeFileSync(join(dir, c.frames[0].png), bytes); }, /signature/],
   ["hash", (dir) => mutateCapture(dir, (c) => { c.frames[0].sha256 = "0".repeat(64); }), /hash/],
@@ -422,6 +447,39 @@ test("observe repeat runs into siblings and verifies both final bundles", async 
   assert.deepEqual(compareRepeat(directory, directory + "-repeat"), []);
 });
 
+for (const schemaVersion of [1, 2]) {
+  test(`observe accepts a camera in schema ${schemaVersion} and round trips it through assembly and repeat`, async (t) => {
+    const root = temporary(t), specPath = join(root, "spec.json"), directory = join(root, "run"), calls = [];
+    const template = join(root, "template"), capture = fixture(template, { finalFrame: 0 });
+    const spec = { ...capture.spec, schemaVersion, camera: { ...CAMERA, position: [0.1, -500, 250] },
+      ...(schemaVersion === 2 ? { contentLayers: [] } : {}) };
+    fs.writeFileSync(specPath, json(spec), "utf8");
+    const run = async (exe, args) => {
+      assert.equal(exe, "test-exe"); assert.equal(args[0], "--observe");
+      const requested = JSON.parse(fs.readFileSync(args[1], "utf8")); calls.push(requested);
+      fs.cpSync(template, args[2], { recursive: true });
+      mutateCapture(args[2], (c) => {
+        c.spec = requested;
+        c.spec.camera = Object.fromEntries(Object.entries(requested.camera).map(([key, value]) => [key, value.map(Math.fround)]));
+        c.profile.camera = structuredClone(c.spec.camera);
+      });
+      return { code: 0 };
+    };
+    await observe(specPath, directory, { repeat: true, exe: "test-exe", run });
+    assert.equal(calls.length, 2);
+    for (const out of [directory, directory + "-repeat"]) {
+      const checked = checkCapture(out, { spec, assembledPngs: ["filmstrip.png"] });
+      assert.deepEqual(checked.errors, []);
+      assert.deepEqual(checked.capture.spec.camera, { ...CAMERA, position: [Math.fround(0.1), -500, 250] });
+      assert.deepEqual(checked.capture.profile.camera, checked.capture.spec.camera);
+      const changed = { ...spec, camera: CAMERA };
+      assert.match(checkCapture(out, { spec: changed, assembledPngs: ["filmstrip.png"] }).errors.join(), /differs from requested spec/);
+      assert.ok(fs.existsSync(join(out, "manifest.json")));
+    }
+    assert.deepEqual(compareRepeat(directory, directory + "-repeat"), []);
+  });
+}
+
 test("ffmpeg absent gives a visible lane SKIP only with allow-missing, otherwise FAIL", () => {
   const run = (allowed) => runObserveLane({ desktop: () => ({ ok: true }), exists: () => true, gameRoots: () => ["game"],
     probe: () => ({ status: null, error: new Error("ENOENT") }), runObserve: () => assert.fail("must not run"),
@@ -484,8 +542,8 @@ test("manifest publication is the last write, using a checked temporary marker t
   assert.ok(!fs.existsSync(join(dir, "manifest.json.tmp")));
 });
 
-test("all seventeen lane rows are pinned, and a null pin still fails until measured", () => {
-  const cases = observationCases(); assert.equal(cases.length, 17);
+test("all eighteen lane rows are pinned, and a null pin still fails until measured", () => {
+  const cases = observationCases(); assert.equal(cases.length, 20);
   assert.deepEqual(cases.map((v) => v.name), Object.keys(PINNED));
   for (const [name, row] of Object.entries(PINNED)) {
     assert.ok(Object.values(row).every((v) => v !== null), `${name} has an unmeasured pin`);
@@ -498,6 +556,42 @@ test("all seventeen lane rows are pinned, and a null pin still fails until measu
   assert.equal(cases.find((v) => v.name === "guard-short-hard").spec.scenario.estimatedParticlesPerInstance, 2048);
   assert.equal(cases.find((v) => v.name === "child-starve").spec.scenario.overloadGuardLimit, 1000);
   assert.equal(cases.find((v) => v.name === "sparse-playback").spec.output.maxBytes, 200 * 1024 * 1024);
+});
+
+test("pulled-back lane case uses the singleton fixture and checks both camera records even when measuring", () => {
+  const cases = observationCases(), definition = cases.find((v) => v.name === "pulled-back-camera");
+  assert.equal(definition.spec.scenario.aloPath, cases[0].spec.scenario.aloPath);
+  assert.deepEqual(definition.spec.camera, { position: [0, -500, 250], target: [0, 0, 0], up: [0, 0, 1] });
+  assert.equal(Object.hasOwn(cases[0].spec, "camera"), false);
+  const capture = { spec: definition.spec, profile: { camera: structuredClone(definition.spec.camera) },
+    lifecycle: { status: "capped", finalFrame: 300,
+      limits: { runtimeGuard: { total: 0 }, hardGuard: { total: 0 }, indexCap: { total: 0 } } } };
+  const values = measuredValues(definition.name, capture, []);
+  assert.deepEqual(checkCase(definition.name, values), []);
+  for (const field of ["specCamera", "profileCamera"]) {
+    const wrong = { ...values, [field]: { ...definition.spec.camera, position: [0, -250, 125] } };
+    assert.match(checkCase(definition.name, wrong, { measure: true }).join(), /spec and profile must record/);
+  }
+});
+
+test("rotated and weather camera cases use their fixtures and check both camera records", () => {
+  const cases = observationCases(), byName = (name) => cases.find((v) => v.name === name);
+  const rotated = { position: [300, -300, 200], target: [0, 0, 20], up: [0, 0, 1] };
+  assert.equal(byName("rotated-camera").spec.scenario.aloPath, cases[0].spec.scenario.aloPath);
+  assert.equal(byName("weather-camera").spec.scenario.aloPath, byName("replay-weather").spec.scenario.aloPath);
+  assert.deepEqual(byName("weather-camera").spec.lifecycle, byName("replay-weather").spec.lifecycle);
+  for (const name of ["rotated-camera", "weather-camera"]) {
+    const definition = byName(name);
+    assert.deepEqual(definition.spec.camera, rotated);
+    const capture = { spec: definition.spec, profile: { camera: structuredClone(rotated) },
+      lifecycle: { status: "capped", finalFrame: 300,
+        limits: { runtimeGuard: { total: 0 }, hardGuard: { total: 0 }, indexCap: { total: 0 } } } };
+    const values = measuredValues(name, capture, []);
+    assert.deepEqual(checkCase(name, values), []);
+    const wrong = { ...values, profileCamera: { ...rotated, position: [0, -500, 250] } };
+    assert.match(checkCase(name, wrong, { measure: true }).join(), /spec and profile must record/);
+  }
+  assert.equal(Object.hasOwn(byName("replay-weather").spec, "camera"), false);
 });
 
 test("late flash measures the first increase after zero and pins onset, final and last-active", () => {

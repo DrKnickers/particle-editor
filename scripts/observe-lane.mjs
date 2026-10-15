@@ -9,10 +9,21 @@ import { scenarioFor, resolveReplayGameRoots, TEXTURES, validateGeneratedFixture
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const scratch = join(repoRoot, "tests/.tmp/observe");
+const PULLED_BACK_CAMERA = { position: [0, -500, 250], target: [0, 0, 0], up: [0, 0, 1] };
+// Off the golden axis: screen-facing billboards and weather placement both follow the camera.
+const ROTATED_CAMERA = { position: [300, -300, 200], target: [0, 0, 20], up: [0, 0, 1] };
+const CAMERA_CASES = { "pulled-back-camera": PULLED_BACK_CAMERA, "rotated-camera": ROTATED_CAMERA,
+  "weather-camera": ROTATED_CAMERA };
 export const PINNED = {
   "singleton-emitter": { status: "capped", finalFrame: 300, runtimeGuard: 0, hardGuard: 0, indexCap: 0 },
+  "pulled-back-camera": { status: "capped", finalFrame: 300, runtimeGuard: 0, hardGuard: 0, indexCap: 0,
+    specCamera: PULLED_BACK_CAMERA, profileCamera: PULLED_BACK_CAMERA },
+  "rotated-camera": { status: "capped", finalFrame: 300, runtimeGuard: 0, hardGuard: 0, indexCap: 0,
+    specCamera: ROTATED_CAMERA, profileCamera: ROTATED_CAMERA },
   "bump-cutout": { status: "capped", finalFrame: 300, runtimeGuard: 0, hardGuard: 0, indexCap: 0, firstActive: 30 },
   "replay-weather": { status: "capped", finalFrame: 300, runtimeGuard: 0, hardGuard: 0, indexCap: 0 },
+  "weather-camera": { status: "capped", finalFrame: 300, runtimeGuard: 0, hardGuard: 0, indexCap: 0,
+    specCamera: ROTATED_CAMERA, profileCamera: ROTATED_CAMERA },
   "replay-guard": { status: "capped", finalFrame: 300, runtimeGuard: 1, hardGuard: 0, indexCap: 0 },
   "guard-short-runtime": { status: "spawn-limited", finalFrame: 44, runtimeGuard: 1, hardGuard: 0, indexCap: 0 },
   "guard-short-hard": { status: "spawn-limited", finalFrame: 14, runtimeGuard: 0, hardGuard: 1, indexCap: 0, hardFirstFrame: 0 },
@@ -58,13 +69,18 @@ export function observationCases(fixtureDirectory = join(scratch, "fixtures")) {
     scenario: { ...scenarioFor({ file }), ...changes.scenario },
     lifecycle: { type: "oneshot", quietTailFrames: 15, ...changes.lifecycle },
     output: { strideInterval: 15, playbackStride: 0, maxBytes: 200 * 1024 * 1024, ...changes.output },
+    ...(changes.camera ? { camera: changes.camera } : {}),
   } });
   const generated = (kind) => join(fixtureDirectory, `${kind}.alo`);
   const runtime = { overloadGuardLimit: 1000 };
   return [
     make("singleton-emitter", "singleton-emitter.alo"),
+    make("pulled-back-camera", "singleton-emitter.alo", { camera: PULLED_BACK_CAMERA }),
+    make("rotated-camera", "singleton-emitter.alo", { camera: ROTATED_CAMERA }),
     make("bump-cutout", "bump-asteroids.alo"),
     make("replay-weather", generated("weather"), { lifecycle: { type: "continuous", warmupFrames: 60, reviewFrames: 240 } }),
+    make("weather-camera", generated("weather"), { lifecycle: { type: "continuous", warmupFrames: 60, reviewFrames: 240 },
+      camera: ROTATED_CAMERA }),
     make("replay-guard", generated("guard"), { scenario: runtime }),
     make("guard-short-runtime", generated("guard-short"), { scenario: runtime }),
     make("guard-short-hard", generated("guard-short"), { scenario: { ...runtime, estimatedParticlesPerInstance: 2048 } }),
@@ -115,6 +131,10 @@ export function measuredValues(name, capture, samples, manifest) {
   const life = capture.lifecycle;
   const values = { status: life.status, finalFrame: life.finalFrame,
     runtimeGuard: life.limits.runtimeGuard.total, hardGuard: life.limits.hardGuard.total, indexCap: life.limits.indexCap.total };
+  if (CAMERA_CASES[name]) {
+    values.specCamera = capture.spec?.camera ?? null;
+    values.profileCamera = capture.profile?.camera ?? null;
+  }
   if (["bump-cutout", "late-flash"].includes(name)) values.firstActive = life.firstActive;
   if (["death-child", "late-flash"].includes(name)) values.lastActive = life.lastActive;
   if (name === "late-flash") values.flashOnset = samples.find((v, i) => i > 0 && v.particles > samples[i - 1].particles)?.frame ?? null;
@@ -142,10 +162,12 @@ export function measuredValues(name, capture, samples, manifest) {
 export function checkCase(name, values, { pins = PINNED, measure = false } = {}) {
   const errors = [];
   const require = (ok, message) => { if (!ok) errors.push(`${name}: ${message}`); };
-  const expectedStatus = ["replay-weather", "replay-guard"].includes(name) ? "capped"
+  const expectedStatus = ["replay-weather", "weather-camera", "replay-guard"].includes(name) ? "capped"
     : ["death-child", "late-flash", "wide", "missing-texture"].includes(name) ? "natural-end"
-    : ["singleton-emitter", "bump-cutout", "sparse-playback", "quota-guard", "quota-telemetry"].includes(name) ? null : "spawn-limited";
+    : ["singleton-emitter", "pulled-back-camera", "rotated-camera", "bump-cutout", "sparse-playback", "quota-guard", "quota-telemetry"].includes(name) ? null : "spawn-limited";
   if (expectedStatus) require(values.status === expectedStatus, `expected ${expectedStatus}, got ${values.status}`);
+  if (CAMERA_CASES[name]) require(isDeepStrictEqual(values.specCamera, CAMERA_CASES[name]) &&
+    isDeepStrictEqual(values.profileCamera, CAMERA_CASES[name]), "spec and profile must record the case's camera");
   const runtimeCases = ["replay-guard", "guard-short-runtime", "child-starve", "budget-bailout", "budget-bailout-skip"];
   if (runtimeCases.includes(name)) require(values.runtimeGuard > 0 && values.hardGuard === 0 && values.indexCap === 0, "expected runtime-only refusals");
   if (name === "guard-short-hard") require(values.hardGuard > 0 && values.hardFirstFrame === 0 && values.runtimeGuard === 0 && values.indexCap === 0, "expected frame-0 hard-only refusal");

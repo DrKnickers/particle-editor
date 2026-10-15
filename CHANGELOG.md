@@ -10,6 +10,7 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ### Added
 
+- An observation spec can name its own camera (`position`, `target`, `up`), so `node scripts/observe.mjs` can pull back and show a whole large effect; without one, observations keep the fixed golden camera
 - `scripts/vfx-build/explosion.mjs` writes a layered ground explosion as a `--tool build` spec from generated flipbooks and the game's own emitters, and `clone.mjs` turns any inspected emitter into the build edits that remake it
 - `scripts/vfx-build/`: `tracks.mjs` writes the index and scale tracks that play a generated flipbook one cell per 60 fps game frame, and `pair-check.mjs` checks that an explosion's early smoke, fire and late smoke stay together: no per-particle randoms, the same motion, scale and cell on every frame
 - `ParticleEditor.exe --tool build <spec.json> --out <candidate.alo> --report <report.json>` makes a new particle file from a JSON list of emitters and their edits, verified before it is written; `--tool patch` and `build` can also unlock a colour channel or lock it to an earlier one

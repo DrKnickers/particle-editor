@@ -12,7 +12,9 @@ bool KnownField(const std::string& key, const std::string& level)
 {
     if (level == "observation")
         return key == "schemaVersion" || key == "scenario" || key == "contentLayers" || key == "lifecycle" ||
-            key == "output";
+            key == "output" || key == "camera";
+    if (level == "camera")
+        return key == "position" || key == "target" || key == "up";
     if (level == "lifecycle")
         return key == "type" || key == "quietTailFrames" || key == "warmupFrames" || key == "reviewFrames";
     return key == "strideInterval" || key == "playbackStride" || key == "maxBytes";
@@ -28,6 +30,24 @@ void CheckFields(const json& object, const std::string& level)
     Require(object.is_object(), level, "must be a JSON object");
     for (auto it = object.begin(); it != object.end(); ++it)
         Require(KnownField(it.key(), level), level + "." + it.key(), "is not a supported observation field");
+}
+
+void ReadCameraVector(const json& camera, const char* field, std::array<float, 3>& value)
+{
+    const std::string name = std::string("camera.") + field;
+    Require(camera.contains(field), name, "is required");
+    const json& input = camera.at(field);
+    Require(input.is_array() && input.size() == 3, name, "must be an array of three numbers");
+    for (size_t i = 0; i < 3; ++i)
+    {
+        const std::string component = name + "[" + std::to_string(i) + "]";
+        Require(input[i].is_number(), component, "must be a number");
+        const double number = input[i].get<double>();
+        Require(std::isfinite(number), component, "must be finite");
+        Require(number >= -(std::numeric_limits<float>::max)() &&
+                number <= (std::numeric_limits<float>::max)(), component, "is out of range");
+        value[i] = static_cast<float>(number);
+    }
 }
 
 template<class T>
@@ -77,6 +97,15 @@ std::string host::ParseObservationSpec(const std::string& text, ObservationSpec&
                 parsed.contentLayers.push_back(layers[i].get<std::string>());
             }
             parsed.hasContentLayers = true;
+        }
+        if (object.contains("camera"))
+        {
+            const json& camera = object.at("camera");
+            CheckFields(camera, "camera");
+            ReadCameraVector(camera, "position", parsed.camera.position);
+            ReadCameraVector(camera, "target", parsed.camera.target);
+            ReadCameraVector(camera, "up", parsed.camera.up);
+            parsed.hasCamera = true;
         }
         if (object.contains("lifecycle"))
         {
@@ -133,5 +162,8 @@ std::string host::SerializeObservationSpec(const ObservationSpec& spec)
         } }
     };
     if (spec.hasContentLayers) object["contentLayers"] = spec.contentLayers;
+    if (spec.hasCamera) object["camera"] = {
+        { "position", spec.camera.position }, { "target", spec.camera.target }, { "up", spec.camera.up }
+    };
     return object.dump();
 }

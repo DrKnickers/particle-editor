@@ -2,6 +2,8 @@
 #define OBSERVATION_SPEC_H
 
 #include "PreviewScenario.h"
+#include <array>
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -15,6 +17,13 @@ struct ObservationSpec
     // would otherwise use and is never persisted. Present and empty = unmodded.
     bool hasContentLayers = false;
     std::vector<std::string> contentLayers;
+    bool hasCamera = false;
+    struct Camera
+    {
+        std::array<float, 3> position = { 0, -250, 125 };
+        std::array<float, 3> target = { 0, 0, 0 };
+        std::array<float, 3> up = { 0, 0, 1 };
+    } camera;
     struct Lifecycle
     {
         enum class Type { Oneshot, Continuous };
@@ -89,6 +98,39 @@ inline std::string ValidateObservationContentLayers(const ObservationSpec& spec)
     return "";
 }
 
+// The engine builds its view in floats, so a camera must stay well inside
+// float range and clear of a degenerate basis: bounded components, a real
+// distance, an up of real length, and an up at least ~0.06 degrees off the view.
+inline std::string ValidateObservationCamera(const ObservationSpec& spec)
+{
+    if (!spec.hasCamera) return "";
+    const double kLimit = 1.0e6, kMinDistance = 0.01, kMinUp = 1.0e-6, kMinSine = 1.0e-3;
+    const auto& camera = spec.camera;
+    for (size_t i = 0; i < 3; ++i)
+    {
+        if (!std::isfinite(camera.position[i])) return "camera.position must be finite";
+        if (!std::isfinite(camera.target[i])) return "camera.target must be finite";
+        if (!std::isfinite(camera.up[i])) return "camera.up must be finite";
+        if (std::fabs(camera.position[i]) > kLimit) return "camera.position must be within 1000000 of the origin";
+        if (std::fabs(camera.target[i]) > kLimit) return "camera.target must be within 1000000 of the origin";
+        if (std::fabs(camera.up[i]) > kLimit) return "camera.up must be within 1000000 of the origin";
+    }
+    double d[3], u[3];
+    for (size_t i = 0; i < 3; ++i)
+    {
+        d[i] = static_cast<double>(camera.target[i]) - camera.position[i];
+        u[i] = camera.up[i];
+    }
+    const double distance = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    const double upLength = std::sqrt(u[0] * u[0] + u[1] * u[1] + u[2] * u[2]);
+    if (distance < kMinDistance) return "camera.position and camera.target must differ by at least 0.01";
+    if (upLength < kMinUp) return "camera.up must have nonzero length";
+    const double cx = d[1] * u[2] - d[2] * u[1], cy = d[2] * u[0] - d[0] * u[2], cz = d[0] * u[1] - d[1] * u[0];
+    if (std::sqrt(cx * cx + cy * cy + cz * cz) < kMinSine * distance * upLength)
+        return "camera.up must not be parallel to the view direction";
+    return "";
+}
+
 inline std::string ValidateObservationSpec(const ObservationSpec& spec)
 {
     const std::string problem = ValidatePreviewScenario(spec.scenario);
@@ -96,6 +138,8 @@ inline std::string ValidateObservationSpec(const ObservationSpec& spec)
     if (spec.schemaVersion != 1 && spec.schemaVersion != 2) return "schemaVersion must be 1 or 2";
     const std::string layersProblem = ValidateObservationContentLayers(spec);
     if (!layersProblem.empty()) return layersProblem;
+    const std::string cameraProblem = ValidateObservationCamera(spec);
+    if (!cameraProblem.empty()) return cameraProblem;
     if (spec.scenario.maxFrames > 3600) return "scenario.maxFrames must be within [1, 3600]";
     if (spec.lifecycle.type != ObservationSpec::Lifecycle::Type::Oneshot &&
         spec.lifecycle.type != ObservationSpec::Lifecycle::Type::Continuous)

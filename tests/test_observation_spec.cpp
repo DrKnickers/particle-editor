@@ -26,6 +26,11 @@ static bool SameBits(T a, T b)
 
 static bool SameSpec(const ObservationSpec& a, const ObservationSpec& b)
 {
+    if (a.hasCamera != b.hasCamera) return false;
+    for (size_t i = 0; i < 3; ++i)
+        if (!SameBits(a.camera.position[i], b.camera.position[i]) ||
+            !SameBits(a.camera.target[i], b.camera.target[i]) ||
+            !SameBits(a.camera.up[i], b.camera.up[i])) return false;
     const PreviewScenario& x = a.scenario;
     const PreviewScenario& y = b.scenario;
     return a.schemaVersion == b.schemaVersion && x.schemaVersion == y.schemaVersion &&
@@ -282,6 +287,105 @@ int main()
     RejectsJson(input2.dump(), parsed, "contentLayers requires schemaVersion 2");
     input2 = layeredJson; input2.erase("contentLayers");
     RejectsJson(input2.dump(), parsed, "schemaVersion 2 requires contentLayers");
+
+    CHECK(defaultJson.count("camera") == 0, "absent camera serializes without a camera key");
+    ObservationSpec withCamera = defaults;
+    withCamera.hasCamera = true;
+    withCamera.camera.position = { 0.1f, -500, 250 };
+    withCamera.camera.target = { -0.0f, 0, 0 };
+    withCamera.camera.up = { 0, 0, 2 };
+    for (int schema : { 1, 2 })
+    {
+        withCamera.schemaVersion = schema;
+        withCamera.hasContentLayers = schema == 2;
+        const json cameraJson = json::parse(host::SerializeObservationSpec(withCamera));
+        CHECK(cameraJson["camera"].size() == 3 && cameraJson["camera"]["position"].size() == 3,
+              "camera serializes all three vectors");
+        CHECK(host::ParseObservationSpec(cameraJson.dump(), parsed).empty() && SameSpec(withCamera, parsed),
+              "camera round trips in either schema with float bits intact");
+        ObservationSpec again;
+        CHECK(host::ParseObservationSpec(host::SerializeObservationSpec(parsed), again).empty() &&
+              SameSpec(parsed, again), "parsed camera serializes and parses again unchanged");
+    }
+    const json cameraJson = json::parse(host::SerializeObservationSpec(withCamera));
+    input = cameraJson; input.erase("contentLayers");
+    RejectsJson(input.dump(), parsed, "schemaVersion 2 requires contentLayers");
+    input = cameraJson; input["schemaVersion"] = 1;
+    RejectsJson(input.dump(), parsed, "contentLayers requires schemaVersion 2");
+    for (const char* field : { "position", "target", "up" })
+    {
+        input = cameraJson; input["camera"].erase(field);
+        RejectsJson(input.dump(), parsed, (std::string("camera.") + field).c_str());
+        for (const json& wrong : { json(nullptr), json(true), json(1), json("vector"), json::object(),
+                                   json::array(), json::array({ 0, 1 }), json::array({ 0, 1, 2, 3 }) })
+        {
+            input = cameraJson; input["camera"][field] = wrong;
+            RejectsJson(input.dump(), parsed, (std::string("camera.") + field).c_str());
+        }
+        for (size_t i = 0; i < 3; ++i)
+        {
+            for (const json& wrong : { json(nullptr), json(true), json("1"), json::object(), json::array() })
+            {
+                input = cameraJson; input["camera"][field][i] = wrong;
+                RejectsJson(input.dump(), parsed, (std::string("camera.") + field).c_str());
+            }
+            input = cameraJson; input["camera"][field][i] = 1e100;
+            RejectsJson(input.dump(), parsed, "out of range");
+            for (float bad : { std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity(),
+                               std::numeric_limits<float>::quiet_NaN() })
+            {
+                spec = withCamera;
+                auto& vector = std::strcmp(field, "position") == 0 ? spec.camera.position :
+                    std::strcmp(field, "target") == 0 ? spec.camera.target : spec.camera.up;
+                vector[i] = bad;
+                Rejects(spec, (std::string("camera.") + field).c_str());
+            }
+        }
+    }
+    input = cameraJson; input["camera"]["zoom"] = 2;
+    RejectsJson(input.dump(), parsed, "camera.zoom");
+    for (const json& wrong : { json(nullptr), json(true), json(1), json("camera"), json::array() })
+    {
+        input = cameraJson; input["camera"] = wrong;
+        RejectsJson(input.dump(), parsed, "camera must be a JSON object");
+    }
+    input = cameraJson; input["camera"]["position"] = input["camera"]["target"];
+    RejectsJson(input.dump(), parsed, "must differ by at least 0.01");
+    input = cameraJson; input["camera"]["up"] = { 0, 0, 0 };
+    RejectsJson(input.dump(), parsed, "nonzero length");
+    for (int sign : { -1, 1 })
+    {
+        input = cameraJson; input["camera"]["position"] = { 0, -500, 250 };
+        input["camera"]["up"] = { 0, 500 * sign, -250 * sign };
+        RejectsJson(input.dump(), parsed, "parallel");
+    }
+    // The engine works in floats: huge or vanishing cameras are refused, not passed on.
+    spec = withCamera;
+    const float largest = (std::numeric_limits<float>::max)();
+    spec.camera.position = { largest, 0, 0 }; spec.camera.target = { -largest, 0, 0 };
+    spec.camera.up = { 0, 1, 0 };
+    Rejects(spec, "camera.position must be within");
+    spec = withCamera; spec.camera.target = { 0, 0, 2.0e6f }; Rejects(spec, "camera.target must be within");
+    spec = withCamera; spec.camera.up = { 0, 0, 2.0e6f }; Rejects(spec, "camera.up must be within");
+    spec = withCamera;
+    spec.camera.position = { 1.0e6f, -1.0e6f, 1.0e6f }; spec.camera.target = { -1.0e6f, 1.0e6f, -1.0e6f };
+    CHECK(ValidateObservationSpec(spec).empty(), "the largest allowed camera validates");
+    spec = withCamera;
+    const float smallest = (std::numeric_limits<float>::denorm_min)();
+    spec.camera.position = { 0, 0, 0 }; spec.camera.target = { smallest, 0, 0 };
+    spec.camera.up = { 0, 1, 0 };
+    Rejects(spec, "at least 0.01");
+    spec.camera.target = { 0.02f, 0, 0 }; spec.camera.up = { 0, smallest, 0 };
+    Rejects(spec, "nonzero length");
+    // Nearly parallel is as degenerate as parallel; a modest tilt is fine.
+    spec = withCamera;
+    spec.camera.position = { 0, -500, 250 }; spec.camera.target = { 0, 0, 0 };
+    spec.camera.up = { 0, 500, -250.01f };
+    Rejects(spec, "parallel");
+    spec.camera.position = { 300, -300, 200 }; spec.camera.up = { 0, 0, 1 };
+    CHECK(ValidateObservationSpec(spec).empty(), "a rotated camera validates");
+    CHECK(host::ParseObservationSpec(defaultJson.dump(), parsed).empty() && !parsed.hasCamera,
+          "parsing a spec without a camera clears the previous camera");
 
     spec = defaults; spec.output.maxBytes = 0;
     bool threw = false;

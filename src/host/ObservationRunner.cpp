@@ -328,7 +328,20 @@ struct ObservationRunner::Impl
             if (context.failed()) return false;
             frame = 0;
             context.inForce = value;
-            return pin(value) || Fail(9, "pinSettings", "fixed profile or scenario settings failed");
+            bool pinned = pin(value);
+            if (pinned && spec.hasCamera)
+            {
+                // The golden pin restores its camera on every replay reset.
+                Engine::Camera camera;
+                camera.Position = D3DXVECTOR3(spec.camera.position[0], spec.camera.position[1], spec.camera.position[2]);
+                camera.Target = D3DXVECTOR3(spec.camera.target[0], spec.camera.target[1], spec.camera.target[2]);
+                camera.Up = D3DXVECTOR3(spec.camera.up[0], spec.camera.up[1], spec.camera.up[2]);
+                deps.engine->SetCamera(camera);
+                const auto& applied = deps.engine->GetCamera();
+                pinned = !deps.engine->DeviceCallsBlocked() && applied.Position == camera.Position &&
+                    applied.Target == camera.Target && applied.Up == camera.Up;
+            }
+            return pinned || Fail(9, "pinSettings", "fixed profile or scenario settings failed");
         };
         const auto clear = hooks.clearInstances;
         hooks.clearInstances = [this, clear]()

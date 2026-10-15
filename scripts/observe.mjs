@@ -141,6 +141,24 @@ function checkRender(render, require) {
     ["HWVP", "SOFTWARE_VP"].includes(render.vertexProcessing), "invalid render profile");
 }
 
+function floatCamera(camera) {
+  return Object.fromEntries(Object.entries(camera).map(([key, value]) => [key, value.map(Math.fround)]));
+}
+
+// The native validator's rules (ObservationSpec.h): bounded components, a real
+// distance and up, and an up clear of the view direction.
+function validCamera(camera) {
+  const keys = ["position", "target", "up"];
+  if (!camera || typeof camera !== "object" || Array.isArray(camera) || Object.keys(camera).length !== 3 ||
+      !keys.every((key) => Array.isArray(camera[key]) && camera[key].length === 3 &&
+        camera[key].every((v) => Number.isFinite(v) && Math.abs(Math.fround(v)) <= 1e6))) return false;
+  const { position, target, up } = floatCamera(camera);
+  const d = target.map((v, i) => v - position[i]);
+  const length = (v) => Math.hypot(...v);
+  const cross = [d[1] * up[2] - d[2] * up[1], d[2] * up[0] - d[0] * up[2], d[0] * up[1] - d[1] * up[0]];
+  return length(d) >= 0.01 && length(up) >= 1e-6 && length(cross) >= 1e-3 * length(d) * length(up);
+}
+
 export function checkCapture(directory, { io = fs, spec, assembledPngs = [] } = {}) {
   const errors = [];
   const pngHashes = {};
@@ -178,6 +196,10 @@ export function checkCapture(directory, { io = fs, spec, assembledPngs = [] } = 
     require(capture.profile && typeof capture.profile === "object" && !Array.isArray(capture.profile) &&
       Array.isArray(capture.geometry?.crop) && capture.geometry.crop.length === 4 && capture.geometry.crop.every(Number.isInteger) &&
       capture.geometry.crop[2] > 0 && capture.geometry.crop[3] > 0 && Array.isArray(capture.preparation), "invalid geometry / profile / preparation");
+    if (capture.spec?.camera !== undefined) {
+      require(validCamera(capture.spec.camera), "invalid capture spec camera");
+      require(isDeepStrictEqual(capture.profile?.camera, capture.spec.camera), "profile camera differs from the spec camera");
+    }
     require(Array.isArray(capture.frames) && Array.isArray(capture.stride) && Array.isArray(capture.playback), "capture frame arrays missing");
     require(Number.isInteger(capture.lifecycle?.finalFrame) && capture.lifecycle.finalFrame >= 0 &&
       Array.isArray(capture.lifecycle.reviewWindow) && capture.lifecycle.reviewWindow.length === 2 &&
@@ -198,7 +220,11 @@ export function checkCapture(directory, { io = fs, spec, assembledPngs = [] } = 
         ? Object.entries(expected).every(([key, value]) => supplied(actual?.[key], value))
         : isDeepStrictEqual(actual, expected);
     }
-    if (spec) require(supplied(capture.spec, spec), "capture spec differs from requested spec");
+    if (spec) {
+      // Native stores camera components as floats, including in the recorded spec.
+      const requested = validCamera(spec.camera) ? { ...spec, camera: floatCamera(spec.camera) } : spec;
+      require(supplied(capture.spec, requested), "capture spec differs from requested spec");
+    }
     const seen = new Set(), selected = new Map();
     function image(name, hash) {
       require(!seen.has(name), `duplicate PNG: ${name}`);
