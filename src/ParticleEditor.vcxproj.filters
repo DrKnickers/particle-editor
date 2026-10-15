@@ -228,6 +228,12 @@
     <ClInclude Include="host\ContentStack.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="host\ToolBuild.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\ToolOps.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
     <ClInclude Include="host\ToolPatch.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
@@ -678,6 +684,12 @@
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\ToolIO.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\ToolBuild.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\ToolOps.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\ToolPatch.cpp">

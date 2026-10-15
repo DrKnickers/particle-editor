@@ -20,7 +20,7 @@
 //   playwright-native all registered specs vs the real app over CDP (pnpm test:native)
 //   msbuild-release   x64 Release (drive-smoke hard-requires the Release exe)
 //   tool-smoke        the window-free --tool verbs end to end on the Release exe:
-//                     inspect, validate, patch (scripts/tool-smoke.mjs; headless),
+//                     inspect, validate, patch, build (scripts/tool-smoke.mjs; headless),
 //                     then the same through the MCP adapter (scripts/mcp-adapter/smoke.mjs)
 //   render-goldens    deterministic --capture scenes vs checked-in goldens
 //                     (ffmpeg SSIM ≥ 0.9995 — see scripts/render-goldens.mjs)

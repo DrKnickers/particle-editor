@@ -19,7 +19,8 @@
 //   replaceTrack     track, keys ([[time, value], ...], endpoints at 0 and 100)
 //   setTrackKey      track, time, value, optional newTime (moves an interior key)
 //   addTrackKey      track, time, value
-// The four track ops take an optional `dependents`: the colour channels
+//   setTrackLock     track, optional lockTo (an earlier colour channel; absent unlocks)
+// The four key and interpolation ops take an optional `dependents`: the colour channels
 // locked to `track`, which the edit changes too. It is required, and must
 // list them exactly, when there are any.
 //

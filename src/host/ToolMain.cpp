@@ -10,6 +10,7 @@
 #include <vector>
 #include <crtdbg.h>
 #include "ToolMain.h"
+#include "ToolBuild.h"
 #include "ToolIndex.h"
 #include "ToolIO.h"
 #include "ToolPatch.h"
@@ -30,6 +31,7 @@ const wchar_t* kUsage =
     L"       ParticleEditor.exe --tool validate <in.alo> --out <report.json>\n"
     L"       ParticleEditor.exe --tool patch    <in.alo> <patch.json> --out <candidate.alo> --report <report.json>\n"
     L"       ParticleEditor.exe --tool reorder  <in.alo> <reorder.json> --out <candidate.alo> --report <report.json>\n"
+    L"       ParticleEditor.exe --tool build    <spec.json> --out <candidate.alo> --report <report.json>\n"
     L"       ParticleEditor.exe --tool index    --out <records.json> [--layer <dir>]... <game-root>...\n";
 
 std::vector<std::wstring> CommandLineArgs()
@@ -235,6 +237,42 @@ int RequestVerb(const char* verb, RequestRunner runner, const std::wstring& inpu
     return code;
 }
 
+// --tool build <spec.json> --out <candidate.alo> --report <report.json>: the
+// three paths must name three different files. The report is written for
+// every outcome once they do.
+int BuildVerb(const std::wstring& specPath, const std::wstring& output, const std::wstring& reportPath)
+{
+    const std::wstring* paths[] = {&specPath, &output, &reportPath};
+    for (int i = 0; i < 3; i++)
+        for (int j = i + 1; j < 3; j++)
+            if (SameFile(*paths[i], *paths[j]))
+            {
+                fwprintf(stderr, L"[tool] %ls and %ls name the same file\n", paths[i]->c_str(), paths[j]->c_str());
+                return kExitUsage;
+            }
+    nlohmann::json report;
+    int code = kExitOk;
+    std::string spec, error;
+    if (!ReadFileBytes(specPath, &spec, &error))
+    {
+        code = kExitUsage;
+        report = {{"schema", 1}, {"verb", "build"}, {"outcome", "refused"}, {"exitCode", code},
+                  {"refusal", {{"category", "spec-malformed"}, {"reason", "the spec could not be read: " + error}, {"emitter", nullptr}, {"op", nullptr}}}};
+    }
+    else
+        code = RunBuild(spec, output, BuildHooks(), &report);
+    if (!WriteFileAtomically(reportPath, report.dump(2, ' ', false, nlohmann::json::error_handler_t::replace) + "\n"))
+    {
+        fwprintf(stderr, L"[tool] cannot write %ls (error %lu)\n", reportPath.c_str(), GetLastError());
+        return kExitIo;
+    }
+    fprintf(stderr, "[tool] verb=build exit=%d", code);
+    if (report.contains("refusal")) fprintf(stderr, " %s: %s", report["refusal"]["category"].get<std::string>().c_str(),
+                                            report["refusal"]["reason"].get<std::string>().c_str());
+    fprintf(stderr, "\n");
+    return code;
+}
+
 // --tool index --out <records.json> [--layer <dir>]... <game-root>...
 int Index(const std::vector<std::wstring>& args)
 {
@@ -295,6 +333,9 @@ int Run(const std::vector<std::wstring>& args)
     if (args[2] == L"reorder" && args.size() == 9 && args[5] == L"--out" && args[7] == L"--report" && !args[3].empty() &&
         !args[4].empty() && !args[6].empty() && !args[8].empty())
         return RequestVerb("reorder", RunReorderVerb, args[3], args[4], args[6], args[8]);
+    if (args[2] == L"build" && args.size() == 8 && args[4] == L"--out" && args[6] == L"--report" && !args[3].empty() &&
+        !args[5].empty() && !args[7].empty())
+        return BuildVerb(args[3], args[5], args[7]);
     if (args[2] == L"index" && args.size() >= 6 && args[3] == L"--out" && !args[4].empty())
         return Index(args);
     fwprintf(stderr, L"[tool] unrecognised arguments\n%ls", kUsage);

@@ -1,8 +1,8 @@
 // [tool-smoke] Drives the built exe's window-free --tool verbs end to end, the
 // way an agent or a script would: inspect, validate, then patch, on the guide's
-// shipped example effect. The C++ tests cover each verb's edge cases
+// shipped example effect, and build, from a two-emitter spec. The C++ tests cover each verb's edge cases
 // (tests/test_tool_cli.cpp, tests/test_tool_patch.cpp); this lane proves the
-// three chain together from Node against the exe the gate just built.
+// verbs chain together from Node against the exe the gate just built.
 //
 //   node scripts/tool-smoke.mjs [--exe <ParticleEditor.exe>]
 //
@@ -106,6 +106,24 @@ export function smoke(exe, dir, say = console.log) {
   check(patch(rootRequest("0".repeat(64), "Fire", edit), "stale.alo", "stale.json") === 4 && !existsSync(at("stale.alo")),
         "a stale hash is refused (exit 4) and nothing is written");
   check(readFileSync(source).equals(bytes), "the source is unchanged");
+
+  say("build");
+  const spec = { schema: 1, emitters: [
+    { name: "Smoke", mutations: [{ op: "setProperty", field: "lifetime", value: 2 }, { op: "setTrackLock", track: 3 },
+      { op: "replaceTrack", track: 3, keys: [[0, 0], [20, 1], [100, 0]] }] },
+    { name: "Fire", mutations: [{ op: "setBlendMode", value: 1 }] }] };
+  writeFileSync(at("spec.json"), JSON.stringify(spec));
+  check(runTool(exe, ["build", at("spec.json"), "--out", at("p_built.alo"), "--report", at("built.json")]).code === 0, "exits 0");
+  const built = json("built.json");
+  check(built?.outcome === "ok" && built?.candidateHash === sha256(readFileSync(at("p_built.alo"))) &&
+        ["1", "2", "3", "4", "5"].every((k) => built?.checks?.[k] === true), "the report says ok, hashes the file, and every check passed");
+  check(runTool(exe, ["validate", at("p_built.alo"), "--out", at("built.validate.json")]).code === 0 &&
+        json("built.validate.json")?.valid === true && json("built.validate.json")?.canonical === true, "the built file is valid and canonical");
+  check(runTool(exe, ["inspect", at("p_built.alo"), "--out", at("built.inspect.json")]).code === 0, "the built file inspects");
+  const doc = json("built.inspect.json");
+  check(doc?.name === "p_built" && doc?.emitters?.map((e) => e.name).join() === "Smoke,Fire" && doc.emitters[0].lifetime === 2 &&
+        doc.emitters[0].tracks[3].source === 3 && doc.emitters[1].blendMode === 1,
+        "it holds the spec's emitters, in order, with their edits and the file's internal name");
   return failures;
 }
 

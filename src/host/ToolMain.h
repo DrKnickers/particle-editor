@@ -9,6 +9,7 @@
 //   --tool validate <in.alo> --out <report.json>
 //   --tool patch    <in.alo> <patch.json> --out <candidate.alo> --report <report.json>
 //   --tool reorder  <in.alo> <reorder.json> --out <candidate.alo> --report <report.json>
+//   --tool build    <spec.json> --out <candidate.alo> --report <report.json>
 //   --tool index    --out <records.json> [--layer <dir>]... <game-root>...
 //
 // `validate` always writes its report. It exits 0 when the source loads
@@ -19,7 +20,9 @@
 // `patch` (ToolPatch.h) writes its report for every outcome once its four
 // paths are distinct; --out is replaced only by a verified candidate. `reorder`
 // (ToolReorder.h) takes the same four paths and moves one root emitter; it
-// authors the defect benchmark's draw-order cases.
+// authors the defect benchmark's draw-order cases. `build` (ToolBuild.h) makes
+// a new system from a spec, verified the same way, with its three paths
+// distinct.
 //
 // `index` (ToolIndex.h) lists every particle system the content stack reaches
 // (the game roots, as --observe takes them, under the mod layers, highest

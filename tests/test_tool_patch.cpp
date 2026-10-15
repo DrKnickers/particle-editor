@@ -283,6 +283,18 @@ static void TestLocks()
     checkRun(r.code == 0 && sparks && sparks->tracks[1] == &sparks->trackContents[0] && sparks->tracks[0]->keys.begin()->value == 0 &&
           r.report["ops"][0]["footprint"].size() == 4,
           "with its dependents named, the source edit lands and the locks persist; all four tracks are in the footprint", r);
+
+    Result u = Run(Request("Smoke", {Op("setTrackLock", {{"track", 3}})}, "Sparks", "lifeChild"));
+    out = LoadOut();
+    sparks = Named(out.get(), "Sparks");
+    checkRun(u.code == 0 && sparks && sparks->tracks[3] == &sparks->trackContents[3] && sparks->tracks[2] == &sparks->trackContents[0] &&
+             u.report["ops"][0]["footprint"] == json::array({"emitters[1].tracks[3]"}),
+             "setTrackLock without lockTo unlocks one channel; the others stay locked", u);
+    u = Run(Request("Smoke", {Op("setTrackLock", {{"track", 2}, {"lockTo", 1}})}));
+    out = LoadOut();
+    const Emitter* smoke = Named(out.get(), "Smoke");
+    checkRun(u.code == 0 && smoke && smoke->tracks[2] == &smoke->trackContents[1], "setTrackLock locks to an earlier channel", u);
+    Refused(Request("Smoke", {Op("setTrackLock", {{"track", 1}, {"lockTo", 3}})}), 5, "rule", "a lock to a later channel");
 }
 
 static void TestDecision7()

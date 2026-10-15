@@ -39,12 +39,14 @@ scripts and agents can work on effects directly. It needs no game install.
 ParticleEditor.exe --tool inspect  <in.alo> --out <inspect.json>
 ParticleEditor.exe --tool validate <in.alo> --out <report.json>
 ParticleEditor.exe --tool patch    <in.alo> <request.json> --out <candidate.alo> --report <report.json>
+ParticleEditor.exe --tool build    <spec.json> --out <candidate.alo> --report <report.json>
 ```
 
 `inspect` writes every value the file saves as JSON, with `sourceDocumentHash` (the
 SHA-256 of the input). `validate` reports whether the file loads exactly as written.
 `patch` applies a request's edits to one emitter, which it selects by that hash and the
-emitter's name. It writes the candidate only after verifying it, and never overwrites the
+emitter's name. `build` makes a new file from a spec of emitters and the same edits.
+Both write the candidate only after verifying it, and never overwrite the
 input. The exit code says what happened: 0 ok, 2 usage, 3 invalid source, 4 the selector
 did not match, 5 an edit was refused, 6 a verification failed, 13 a file could not be
 written.

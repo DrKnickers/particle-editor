@@ -201,6 +201,8 @@
     <ClInclude Include="host\ToolIndex.h" />
     <ClInclude Include="host\ToolIO.h" />
     <ClInclude Include="host\ToolMain.h" />
+    <ClInclude Include="host\ToolBuild.h" />
+    <ClInclude Include="host\ToolOps.h" />
     <ClInclude Include="host\ToolPatch.h" />
     <ClInclude Include="host\ToolReorder.h" />
     <ClInclude Include="host\ToolSelector.h" />
@@ -319,6 +321,8 @@
     <ClCompile Include="host\ToolIndex.cpp" />
     <ClCompile Include="host\ToolIO.cpp" />
     <ClCompile Include="host\ToolMain.cpp" />
+    <ClCompile Include="host\ToolBuild.cpp" />
+    <ClCompile Include="host\ToolOps.cpp" />
     <ClCompile Include="host\ToolPatch.cpp" />
     <ClCompile Include="host\ToolReorder.cpp" />
     <ClCompile Include="host\PreviewScenarioJson.cpp" />

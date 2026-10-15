@@ -1,5 +1,5 @@
 // `ParticleEditor.exe --tool` end to end: inspect (Phase 4B PR 1), validate
-// (PR 2) and patch (PR 3). Drives the built exe (NEEDS_EXE:
+// (PR 2), patch (PR 3) and build. Drives the built exe (NEEDS_EXE:
 // run-native-unit-tests passes its path as argv[1]) on fixtures this test
 // writes, and checks exit codes, the output, the path-alias refusals and that
 // nothing else is left on disk. Every run has a deadline: a tool run that
@@ -342,6 +342,48 @@ static void TestPatch(const std::string& goodHash)
     DeleteFileW(P(L"x.alo").c_str());   // that run committed its candidate before the report failed
 }
 
+static int Build(const wchar_t* spec, const wchar_t* out, const wchar_t* report)
+{
+    return Run({L"--tool", L"build", P(spec), L"--out", P(out), L"--report", P(report)});
+}
+
+static void TestBuild()
+{
+    printf("build\n");
+    const nlohmann::json spec = {{"schema", 1}, {"emitters", nlohmann::json::array({
+        {{"name", "Smoke"}, {"mutations", nlohmann::json::array({{{"op", "setProperty"}, {"field", "lifetime"}, {"value", 2.5}}})},
+         {"lifeChild", {{"name", "Trail"}, {"mutations", nlohmann::json::array()}}}},
+        {{"name", "Fire"}, {"mutations", nlohmann::json::array({{{"op", "setBlendMode"}, {"value", 1}}})}}})}};
+    WriteAll(P(L"spec.json"), spec.dump());
+    check(Build(L"spec.json", L"P_Built.alo", L"built.report.json") == 0, "a build exits 0");
+    const nlohmann::json r = ReadJson(P(L"built.report.json"));
+    const std::string built = ReadAll(P(L"P_Built.alo"));
+    checkReport(r.is_object() && r["outcome"] == "ok" && r["verb"] == "build" && r["candidateHash"] == Sha256Hex(built) &&
+                r["emitters"][0]["ops"][0]["fields"][0]["persisted"] == 2.5, "the report gives the outcome, the persisted value and the hash", r);
+    {
+        MemoryFile file;
+        file.write(built.data(), static_cast<unsigned long>(built.size()));
+        file.seek(0);
+        bool ok = false;
+        try
+        {
+            ParticleSystem loaded(&file);
+            ok = loaded.getName() == "p_built" && loaded.getEmitters().size() == 3 && loaded.getEmitter(0).lifetime == 2.5f &&
+                 loaded.getEmitter(1).parent == &loaded.getEmitter(0) && loaded.getEmitter(2).blendMode == 1;
+        }
+        catch (...) {}
+        check(ok, "the built file loads with its tree, its edits and the --out file's internal name");
+    }
+    WriteAll(P(L"badspec.json"), "{\"schema\": 1}");
+    check(Build(L"badspec.json", L"x.alo", L"badspec.report.json") == 2 &&
+          ReadJson(P(L"badspec.report.json"))["refusal"]["category"] == "spec-malformed", "a malformed spec exits 2 with a report");
+    check(Build(L"absent.json", L"x.alo", L"absentspec.report.json") == 2, "a missing spec exits 2");
+    check(Build(L"spec.json", L"spec.json", L"alias.report.json") == 2 && Build(L"spec.json", L"x.alo", L"x.alo") == 2 &&
+          Build(L"spec.json", L"x.alo", L"spec.json") == 2, "any two of the three paths naming one file exits 2");
+    check(Run({L"--tool", L"build", P(L"spec.json"), L"--out", P(L"x.alo")}) == 2, "build without --report exits 2");
+    check(!Exists(P(L"x.alo")) && !Exists(P(L"alias.report.json")), "no refused build wrote a candidate");
+}
+
 int main(int argc, char** argv)
 {
     printf("test_tool_cli\n");
@@ -433,6 +475,7 @@ int main(int argc, char** argv)
 
     TestValidate(goodHash);
     TestPatch(goodHash);
+    TestBuild();
 
     printf("nothing else on disk\n");
     std::set<std::wstring> expected = before;
@@ -443,7 +486,8 @@ int main(int argc, char** argv)
                                 L"cand.report.json", L"zero.json", L"zero.alo", L"zero.report.json", L"stale.json",
                                 L"stale.report.json", L"rule.json", L"rule.report.json", L"broken.json",
                                 L"broken.report.json", L"absent.report.json", L"garbage.patch.json", L"nodir.report.json",
-                                L"adir.report.json", L"readonly.alo", L"readonly.report.json"})
+                                L"adir.report.json", L"readonly.alo", L"readonly.report.json", L"spec.json", L"P_Built.alo",
+                                L"built.report.json", L"badspec.json", L"badspec.report.json", L"absentspec.report.json"})
         expected.insert(name);
     const std::set<std::wstring> after = Listing();
     check(after == expected, "only the expected outputs exist (no temp files)");
