@@ -1,7 +1,8 @@
 // [tool-smoke] Drives the built exe's window-free --tool verbs end to end, the
 // way an agent or a script would: inspect, validate, then patch, on the guide's
-// shipped example effect, and build, from a two-emitter spec and from a
-// smoke-and-fire triplet that the pair check then passes (and fails, broken). The C++ tests cover each verb's edge cases
+// shipped example effect, and build, from a two-emitter spec, from a
+// smoke-and-fire triplet that the pair check then passes (and fails, broken),
+// and from the example effect cloned emitter by emitter. The C++ tests cover each verb's edge cases
 // (tests/test_tool_cli.cpp, tests/test_tool_patch.cpp); this lane proves the
 // verbs chain together from Node against the exe the gate just built.
 //
@@ -18,6 +19,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import { FPS, flipbookOps, handOffSamples } from "./vfx-build/tracks.mjs";
 import { checkPairs } from "./vfx-build/pair-check.mjs";
+import { cloneOps } from "./vfx-build/clone.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const FIXTURE = join(repoRoot, "site", "guide", "downloads", "P_EXPLOSION_EXAMPLE.ALO");
@@ -154,6 +156,30 @@ export function smoke(exe, dir, say = console.log) {
   const broken = pairs(triplet([{ op: "setProperty", field: "randomScalePerc", value: 0.2 }]), "broken");
   check(broken?.ok === false && broken.triplets[0].violations.some((v) => v.rule === "randoms"),
         "a fire that rolls its own scale breaks it, and the check names the rule");
+
+  say("clone the example effect by ops");
+  // Every emitter's fields, as build ops on a new emitter, then built and
+  // inspected again: equal but for what the build owns (names, tree, link
+  // groups) and the lifetime group, which a save derives. -0 reads back as 0.
+  const NEW_EMITTER = JSON.parse(readFileSync(join(repoRoot, "scripts", "vfx-build", "fixtures", "new-emitter.json"), "utf8"));
+  const zero = (v) => JSON.parse(JSON.stringify(v, (k, x) => (Object.is(x, -0) ? 0 : x)));
+  const example = zero(json("inspect.json")?.emitters ?? []);
+  const cloneName = (e) => `C${e.index}_${e.name.replace(/[^A-Za-z0-9_]/g, "_")}`;
+  writeFileSync(at("clone.json"), JSON.stringify({ schema: 1,
+    emitters: example.map((e) => ({ name: cloneName(e), mutations: cloneOps(e, NEW_EMITTER) })) }));
+  const cloned = runTool(exe, ["build", at("clone.json"), "--out", at("p_clone.alo"), "--report", at("clone.report.json")]).code === 0 &&
+    runTool(exe, ["inspect", at("p_clone.alo"), "--out", at("clone.inspect.json")]).code === 0;
+  const twins = zero(json("clone.inspect.json")?.emitters ?? []);
+  const OWNED = new Set(["name", "index", "parent", "linkGroup", "spawnDuringLife", "spawnOnDeath"]);
+  const differ = example.flatMap((e) => {
+    const twin = twins.find((x) => x.name === cloneName(e));
+    if (!twin) return [`${e.name}: missing`];
+    const fields = Object.keys(e).filter((k) => !OWNED.has(k) && k !== "groups" && !isDeepStrictEqual(e[k], twin[k]));
+    if (!isDeepStrictEqual([e.groups[0], e.groups[2]], [twin.groups[0], twin.groups[2]])) fields.push("groups");
+    return fields.map((k) => `${e.name}.${k}`);
+  });
+  check(cloned && example.length > 0 && twins.length === example.length && differ.length === 0,
+        `a clone built from cloneOps matches all ${example.length} emitters${differ.length ? ` (differ: ${differ.join(", ")})` : ""}`);
   return failures;
 }
 
