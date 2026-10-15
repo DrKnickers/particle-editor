@@ -1,6 +1,7 @@
 // [tool-smoke] Drives the built exe's window-free --tool verbs end to end, the
 // way an agent or a script would: inspect, validate, then patch, on the guide's
-// shipped example effect, and build, from a two-emitter spec. The C++ tests cover each verb's edge cases
+// shipped example effect, and build, from a two-emitter spec and from a
+// smoke-and-fire triplet that the pair check then passes (and fails, broken). The C++ tests cover each verb's edge cases
 // (tests/test_tool_cli.cpp, tests/test_tool_patch.cpp); this lane proves the
 // verbs chain together from Node against the exe the gate just built.
 //
@@ -15,6 +16,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
+import { FPS, flipbookOps, handOffSamples } from "./vfx-build/tracks.mjs";
+import { checkPairs } from "./vfx-build/pair-check.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const FIXTURE = join(repoRoot, "site", "guide", "downloads", "P_EXPLOSION_EXAMPLE.ALO");
@@ -124,6 +127,33 @@ export function smoke(exe, dir, say = console.log) {
   check(doc?.name === "p_built" && doc?.emitters?.map((e) => e.name).join() === "Smoke,Fire" && doc.emitters[0].lifetime === 2 &&
         doc.emitters[0].tracks[3].source === 3 && doc.emitters[1].blendMode === 1,
         "it holds the spec's emitters, in order, with their edits and the file's internal name");
+
+  say("build a triplet, then the pair check");
+  // A 4x4 triplet: early smoke and fire one cell a game frame, the late smoke
+  // from 0.3 s to 1.05 s; spans grow with the sim.
+  const earlySeconds = Array.from({ length: 16 }, (_, k) => k / FPS);
+  const lateSeconds = Array.from({ length: 16 }, (_, k) => (18 + 3 * k) / FPS);
+  const span = (s) => 1 + s;
+  const earlySamples = earlySeconds.map((s) => [s, span(s)]);
+  const early = { cellSeconds: earlySeconds, samples: earlySamples, lifetime: 16 / FPS, size: 20, cells: 16 };
+  const late = { cellSeconds: [0, ...lateSeconds.slice(1)], lifetime: 1.2,
+                 samples: handOffSamples(earlySamples, 16 / FPS, lateSeconds.map((s) => [s, span(s)])), size: 20, cells: 16 };
+  const inherit = { op: "setProperty", field: "parentLinkStrength", value: 1 };
+  const triplet = (fireExtra) => ({ schema: 1, emitters: [
+    { name: "T1_SMOKE_EARLY", mutations: [inherit, ...flipbookOps(early)] },
+    { name: "T1_FIRE", mutations: [inherit, ...flipbookOps(early), { op: "setBlendMode", value: 1 }, ...fireExtra] },
+    { name: "T1_SMOKE_LATE", mutations: [inherit, ...flipbookOps(late)] }] });
+  const pairs = (spec, name) => {
+    writeFileSync(at(`${name}.json`), JSON.stringify(spec));
+    const code = runTool(exe, ["build", at(`${name}.json`), "--out", at(`${name}.alo`), "--report", at(`${name}.report.json`)]).code;
+    if (code !== 0 || runTool(exe, ["inspect", at(`${name}.alo`), "--out", at(`${name}.inspect.json`)]).code !== 0) return null;
+    return checkPairs(json(`${name}.inspect.json`));
+  };
+  const matched = pairs(triplet([]), "triplet");
+  check(matched?.ok === true && matched.triplets.length === 1, "a triplet built from the track helpers holds the pair rule");
+  const broken = pairs(triplet([{ op: "setProperty", field: "randomScalePerc", value: 0.2 }]), "broken");
+  check(broken?.ok === false && broken.triplets[0].violations.some((v) => v.rule === "randoms"),
+        "a fire that rolls its own scale breaks it, and the check names the rule");
   return failures;
 }
 

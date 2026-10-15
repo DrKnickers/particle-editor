@@ -1,0 +1,230 @@
+{
+  "acceleration": [
+    0,
+    0,
+    0
+  ],
+  "affectedByWind": false,
+  "blendMode": 1,
+  "bounciness": 0.20000000298023224,
+  "burstDelay": 1,
+  "colorTexture": "p_particle_master.tga",
+  "doColorAddGrayscale": false,
+  "emitFromMesh": 0,
+  "emitFromMeshOffset": 0.5,
+  "freezeTime": 0,
+  "gravity": 0,
+  "groundBehavior": 0,
+  "groups": [
+    {
+      "cylinderEdge": 0,
+      "cylinderHeight": 0,
+      "cylinderRadius": 0,
+      "maxX": 0,
+      "maxY": 0,
+      "maxZ": 0,
+      "minX": 0,
+      "minY": 0,
+      "minZ": 0,
+      "sideLength": 0,
+      "sphereEdge": 0,
+      "sphereRadius": 0,
+      "type": 0,
+      "valX": 0,
+      "valY": 0,
+      "valZ": 0
+    },
+    {
+      "cylinderEdge": 0,
+      "cylinderHeight": 0,
+      "cylinderRadius": 0,
+      "maxX": 0,
+      "maxY": 1,
+      "maxZ": 0,
+      "minX": 0,
+      "minY": 1,
+      "minZ": 0,
+      "sideLength": 0,
+      "sphereEdge": 0,
+      "sphereRadius": 0,
+      "type": 1,
+      "valX": 0,
+      "valY": 0,
+      "valZ": 0
+    },
+    {
+      "cylinderEdge": 0,
+      "cylinderHeight": 0,
+      "cylinderRadius": 0,
+      "maxX": 0,
+      "maxY": 0,
+      "maxZ": 0,
+      "minX": 0,
+      "minY": 0,
+      "minZ": 0,
+      "sideLength": 0,
+      "sphereEdge": 0,
+      "sphereRadius": 0,
+      "type": 0,
+      "valX": 0,
+      "valY": 0,
+      "valZ": 0
+    }
+  ],
+  "hasTail": false,
+  "index": 0,
+  "initialDelay": 0,
+  "inwardAcceleration": 0,
+  "inwardSpeed": 0,
+  "isHeatParticle": false,
+  "isWeatherParticle": false,
+  "isWorldOriented": false,
+  "lifetime": 1,
+  "linkGroup": 0,
+  "linkToSystem": false,
+  "nBursts": 0,
+  "nParticlesPerBurst": 1,
+  "nParticlesPerSecond": 1,
+  "nTriangles": 2,
+  "name": "New",
+  "noDepthTest": false,
+  "normalTexture": "p_particle_depth_master.tga",
+  "objectSpaceAcceleration": false,
+  "parent": null,
+  "parentLinkStrength": 0,
+  "randomColors": [
+    0,
+    0,
+    0,
+    0
+  ],
+  "randomLifetimePerc": 0,
+  "randomRotation": false,
+  "randomRotationAverage": 0,
+  "randomRotationDirection": false,
+  "randomRotationVariance": 0,
+  "randomScalePerc": 0,
+  "skipTime": 0,
+  "spawnDuringLife": null,
+  "spawnOnDeath": null,
+  "tailSize": 50,
+  "textureSize": 64,
+  "tracks": [
+    {
+      "explicitUnlock": false,
+      "interpolation": 0,
+      "keys": [
+        [
+          0,
+          1
+        ],
+        [
+          100,
+          1
+        ]
+      ],
+      "source": 0
+    },
+    {
+      "explicitUnlock": false,
+      "interpolation": 0,
+      "keys": [
+        [
+          0,
+          1
+        ],
+        [
+          100,
+          1
+        ]
+      ],
+      "source": 0
+    },
+    {
+      "explicitUnlock": false,
+      "interpolation": 0,
+      "keys": [
+        [
+          0,
+          1
+        ],
+        [
+          100,
+          1
+        ]
+      ],
+      "source": 0
+    },
+    {
+      "explicitUnlock": false,
+      "interpolation": 0,
+      "keys": [
+        [
+          0,
+          1
+        ],
+        [
+          100,
+          1
+        ]
+      ],
+      "source": 0
+    },
+    {
+      "explicitUnlock": false,
+      "interpolation": 0,
+      "keys": [
+        [
+          0,
+          20
+        ],
+        [
+          100,
+          20
+        ]
+      ],
+      "source": 4
+    },
+    {
+      "explicitUnlock": false,
+      "interpolation": 2,
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          100,
+          0
+        ]
+      ],
+      "source": 5
+    },
+    {
+      "explicitUnlock": false,
+      "interpolation": 0,
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          100,
+          0
+        ]
+      ],
+      "source": 6
+    }
+  ],
+  "unknown06": 0,
+  "unknown11": null,
+  "unknown15": true,
+  "unknown2b": false,
+  "unknown3f": 50,
+  "unknown44": false,
+  "unknown49": 0,
+  "useBursts": false,
+  "weatherCubeDistance": 0,
+  "weatherCubeSize": 500,
+  "weatherFadeoutDistance": 100
+}
