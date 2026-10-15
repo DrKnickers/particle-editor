@@ -110,10 +110,16 @@ export function readCells(frameAt, grid = 4, ticks = TICKS_PER_CELL) {
 }
 
 // A flipbook plays when its cells don't all look alike at the view's centre.
+// The fixture's particle is flat over its life (colour, scale and rotation
+// held), so a flipbook stuck on one cell renders the same frame every tick:
+// a spread of 0. PLAYS_DELTA sits about halfway to the dimmest real sheet
+// measured, the explosion's late smoke (dark soot thinning on the view's dark
+// background, spread 23).
+const PLAYS_DELTA = 12;
 export function checkPlays(cells) {
   let spread = 0;
   for (const a of cells) for (const b of cells) spread = Math.max(spread, ...a.map((v, c) => Math.abs(v - b[c])));
-  return spread >= CONTROL_DELTA ? [] : [`the cells all look alike at the view's centre (spread ${spread.toFixed(1)}): the flipbook does not play`];
+  return spread >= PLAYS_DELTA ? [] : [`the cells all look alike at the view's centre (spread ${spread.toFixed(1)}): the flipbook does not play`];
 }
 
 // The 0..15 oracle, read at the middle of each cell's ticks.

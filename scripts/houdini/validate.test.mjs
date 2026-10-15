@@ -118,8 +118,10 @@ test("a flipbook plays when its cells differ at the view's centre", () => {
   assert.deepEqual(checkPlays(readCells(cellAt((k) => 15 - k))), []);
   assert.match(checkPlays(readCells(cellAt(() => 5))).join(), /does not play/);
   assert.match(checkPlays(readCells(() => frame(null))).join(), /spread 0\.0/);
-  // A flicker below the control margin is not playback.
-  assert.match(checkPlays(readCells((tick) => frame(0, { red: Math.floor(tick / TICKS_PER_CELL) }))).join(), /spread 15\.0/);
+  // A drift under 12 levels is not playback; at 12 or more it is.
+  const drift = (top) => readCells((tick) => frame(0, { red: Math.min(top, Math.floor(tick / TICKS_PER_CELL)) }));
+  assert.match(checkPlays(drift(11)).join(), /spread 11\.0/);
+  assert.deepEqual(checkPlays(drift(12)), []);
 });
 
 test("parseArgs needs --entry and --out, once each", () => {

@@ -29,15 +29,17 @@ export const BINS = 64;
 const COVERED = 4;
 const round = (value) => Math.round(value * 100) / 100;
 
-// `image` is a decoded TGA or DDS (top-down RGBA bytes).
-export function cellSteps(image, { grid, blend, pad = 0 }) {
+// Each cell's frame averaged into bins x bins (4 channels a bin: RGB, or
+// premultiplied RGB, then alpha). `image` is a decoded TGA or DDS (top-down
+// RGBA bytes).
+export function binCells(image, { grid, blend, pad = 0 }) {
   if (![2, 4, 8, 16].includes(grid)) throw fail(`a flipbook grid is 2, 4, 8 or 16, not ${grid}`, 2);
   if (blend !== "additive" && blend !== "transparent") throw fail(`unknown blend ${blend}`, 2);
   if (image.width !== image.height || image.width % grid) throw fail(`a ${image.width}x${image.height} texture is no ${grid}x${grid} atlas`, 2);
   const cell = image.width / grid, frame = cell - 2 * pad, bins = Math.min(BINS, frame);
   if (frame < 1) throw fail(`a ${cell}-texel cell has no frame inside a ${pad}-texel guard band`, 2);
-  const additive = blend === "additive", channels = additive ? 3 : 4;
-  const binned = Array.from({ length: grid * grid }, (_, index) => {
+  const additive = blend === "additive";
+  const cells = Array.from({ length: grid * grid }, (_, index) => {
     const sum = new Float64Array(bins * bins * 4), count = new Float64Array(bins * bins);
     const x0 = (index % grid) * cell + pad, y0 = Math.floor(index / grid) * cell + pad;
     for (let v = 0; v < frame; v++) {
@@ -52,7 +54,17 @@ export function cellSteps(image, { grid, blend, pad = 0 }) {
     for (let b = 0; b < bins * bins; b++) for (let c = 0; c < 4; c++) sum[b * 4 + c] /= count[b];
     return sum;
   });
-  const covered = (bin, b) => (additive ? Math.max(bin[b * 4], bin[b * 4 + 1], bin[b * 4 + 2]) : bin[b * 4 + 3]) >= COVERED;
+  return { cells, bins };
+}
+
+// How far each cell's bin is from being empty: brightest RGB (additive) or alpha.
+export const coverage = (cell, b, blend) =>
+  blend === "additive" ? Math.max(cell[b * 4], cell[b * 4 + 1], cell[b * 4 + 2]) : cell[b * 4 + 3];
+
+export function cellSteps(image, { grid, blend, pad = 0 }) {
+  const { cells: binned, bins } = binCells(image, { grid, blend, pad });
+  const channels = blend === "additive" ? 3 : 4;
+  const covered = (bin, b) => coverage(bin, b, blend) >= COVERED;
   const steps = [];
   for (let k = 0; k + 1 < binned.length; k++) {
     const [p, q] = [binned[k], binned[k + 1]];

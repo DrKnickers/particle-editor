@@ -35,9 +35,14 @@ export const FORMATS = ["tga", "dxt1", "dxt5"];
 // The D3DFORMAT the editor reports for each, as its log prints it.
 export const D3D_FORMAT = { tga: 21, dxt1: 0x31545844, dxt5: 0x35545844 };
 // texconv against the source TGA: colour within an RMSE of DDS_RMSE levels a
-// channel (measured: under 2.2 on smooth content), DXT5 alpha within DDS_ALPHA
-// (its 8-level blocks miss by at most 255/14 on a full-range block).
-const DDS_RMSE = 8, DDS_ALPHA = 20;
+// channel (measured: under 2.2 on smooth content); DXT5 alpha within an RMSE
+// of DDS_ALPHA_RMSE, and no texel off by more than DDS_ALPHA. An 8-level alpha
+// block misses by half a step, 255/14 on a full-range block, when its endpoints
+// are the block's extremes; texconv fits them to the squared error instead, and
+// on a generated smoke sheet a hard 0-to-228 edge inside one block missed by 21.
+// That sheet's alpha RMSE was 2.3. A wrong alpha (inverted, faded, misplaced)
+// moves most texels by tens of levels, which the RMSE catches.
+const DDS_RMSE = 8, DDS_ALPHA_RMSE = 4, DDS_ALPHA = 32;
 export const MAX_TEXTURE_BYTES = 64 * 1024 * 1024;   // src/common/ResourceLimits.h
 // An alpha-0 texel beside coverage is a dark fringe when its colour is under
 // FRINGE_RATIO of its covered neighbours' (alpha-weighted) colour, unless that
@@ -45,7 +50,13 @@ export const MAX_TEXTURE_BYTES = 64 * 1024 * 1024;   // src/common/ResourceLimit
 // Only neighbours at FRINGE_MIN_ALPHA or more count: the file stores colour to
 // one premultiplied step, 255 / alpha, so a faint texel's colour is noise (at
 // alpha 2 a grey of 60 reads 127), and filtering takes almost nothing from it.
-const FRINGE_RATIO = 0.5, FRINGE_FLOOR = 16, FRINGE_MIN_ALPHA = 16;
+// And it is a fringe only when it darkens the filtered edge visibly: by at
+// least FRINGE_VISIBLE levels, the shortfall times the brightest-weighted
+// neighbour's opacity. A lit smoke sheet's thin rim (grey 70-90 at alpha
+// 16-18, brighter than the interior the fill comes from) fell short by 40 to
+// 47 levels at an opacity that passes on 2.5 to 3.1 of them; an unfilled
+// edge passes on tens.
+const FRINGE_RATIO = 0.5, FRINGE_FLOOR = 16, FRINGE_MIN_ALPHA = 16, FRINGE_VISIBLE = 4;
 // 0.51 / 255: the least alpha that rounds to 1 in the 8-bit file, with margin.
 const COVERED = "0.002";
 
@@ -165,17 +176,18 @@ export function validateTexture(image, bytes, { blend, layout }) {
       for (let x = 0; x < size; x++) {
         const o = at(x, y);
         if (px[o + 3] !== 0) continue;
-        let weight = 0;
+        let weight = 0, densest = 0;
         const sum = [0, 0, 0];
         for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
           const nx = x + dx, ny = y + dy;
           if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
           const n = at(nx, ny), a = px[n + 3];
           if (a < FRINGE_MIN_ALPHA) continue;
-          weight += a; for (let c = 0; c < 3; c++) sum[c] += px[n + c] * a;
+          weight += a; densest = Math.max(densest, a);
+          for (let c = 0; c < 3; c++) sum[c] += px[n + c] * a;
         }
-        const around = weight ? Math.max(...sum.map((v) => v / weight)) : 0;
-        if (around > FRINGE_FLOOR && Math.max(px[o], px[o + 1], px[o + 2]) < around * FRINGE_RATIO) fringe++;
+        const around = weight ? Math.max(...sum.map((v) => v / weight)) : 0, own = Math.max(px[o], px[o + 1], px[o + 2]);
+        if (around > FRINGE_FLOOR && own < around * FRINGE_RATIO && (around - own) * densest / 255 >= FRINGE_VISIBLE) fringe++;
       }
     }
     if (fringe) errors.push(`${fringe} transparent texels beside coverage are much darker than it: a dark fringe under filtering`);
@@ -196,16 +208,24 @@ export function validateDds(dds, source, bytes, { format, blend, layout }) {
   if (format === "dxt1" && blend !== "additive") errors.push("DXT1 drops the colour under alpha; it is for additive textures only");
   if (errors.length) return errors;
   const squared = [0, 0, 0];
-  let alphaWorst = 0, transparent = 0;
+  let alphaWorst = 0, alphaSquared = 0, transparent = 0;
   for (let i = 0; i < size * size * 4; i += 4) {
     for (let c = 0; c < 3; c++) squared[c] += (dds.rgba[i + c] - source.rgba[i + c]) ** 2;
-    alphaWorst = Math.max(alphaWorst, Math.abs(dds.rgba[i + 3] - source.rgba[i + 3]));
+    const alphaError = Math.abs(dds.rgba[i + 3] - source.rgba[i + 3]);
+    alphaWorst = Math.max(alphaWorst, alphaError);
+    alphaSquared += alphaError ** 2;
     if (dds.rgba[i + 3] !== 255) transparent++;
   }
   const rmse = squared.map((v) => Math.sqrt(v / (size * size)));
   if (rmse.some((v) => v > DDS_RMSE))
     errors.push(`the DDS colour differs from the TGA by an RMSE of ${rmse.map((v) => v.toFixed(1)).join(", ")}, over ${DDS_RMSE}`);
-  if (format === "dxt1" ? transparent > 0 : alphaWorst > DDS_ALPHA)
-    errors.push(format === "dxt1" ? `${transparent} texels lost their alpha in DXT1` : `the DDS alpha differs from the TGA by up to ${alphaWorst}, over ${DDS_ALPHA}`);
+  const alphaRmse = Math.sqrt(alphaSquared / (size * size));
+  if (format === "dxt1") {
+    if (transparent > 0) errors.push(`${transparent} texels lost their alpha in DXT1`);
+  } else {
+    if (alphaRmse > DDS_ALPHA_RMSE)
+      errors.push(`the DDS alpha differs from the TGA by an RMSE of ${alphaRmse.toFixed(1)}, over ${DDS_ALPHA_RMSE}`);
+    if (alphaWorst > DDS_ALPHA) errors.push(`a DDS alpha texel differs from the TGA by ${alphaWorst}, over ${DDS_ALPHA}`);
+  }
   return errors;
 }

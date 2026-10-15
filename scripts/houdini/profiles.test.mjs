@@ -167,10 +167,16 @@ test("a DDS is held to the TGA it was made from", () => {
   for (let y = 0; y < size; y++) additive.rgba.copy(flipped, (size - 1 - y) * size * 4, y * size * 4, (y + 1) * size * 4);
   assert.match(checkDds(additive, { blend: "additive", format: "dxt5", dds: encodeDds(size, size, flipped, "DXT5") }).join(),
     /colour differs from the TGA by an RMSE/);
+  // Alpha: a broad shift fails the RMSE with no texel far off; one texel far off fails alone.
   const faded = Buffer.from(transparent.rgba);
-  for (let i = 3; i < faded.length; i += 4) faded[i] = Math.round(faded[i] * 0.8);
-  assert.match(checkDds(transparent, { blend: "transparent", format: "dxt5", dds: encodeDds(size, size, faded, "DXT5") }).join(),
-    /alpha differs from the TGA by up to \d+, over 20/);
+  for (let i = 3; i < faded.length; i += 4) faded[i] = Math.max(0, faded[i] - 10);
+  const fadedErrors = checkDds(transparent, { blend: "transparent", format: "dxt5", dds: encodeDds(size, size, faded, "DXT5") });
+  assert.match(fadedErrors.join(), /alpha differs from the TGA by an RMSE of [\d.]+, over 4/);
+  assert.doesNotMatch(fadedErrors.join(), /alpha texel/);
+  const speck = Buffer.from(transparent.rgba);
+  speck[(40 * size + 40) * 4 + 3] = speck[(40 * size + 40) * 4 + 3] > 127 ? 0 : 255;
+  assert.deepEqual(checkDds(transparent, { blend: "transparent", format: "dxt5", dds: encodeDds(size, size, speck, "DXT5") }),
+    [`a DDS alpha texel differs from the TGA by ${Math.abs(speck[(40 * size + 40) * 4 + 3] - transparent.rgba[(40 * size + 40) * 4 + 3])}, over 32`]);
   const holed = Buffer.from(additive.rgba);
   holed[(10 * size + 10) * 4 + 3] = 0;
   assert.match(checkDds(additive, { blend: "additive", format: "dxt1", dds: encodeDds(size, size, holed, "DXT1") }).join(),
