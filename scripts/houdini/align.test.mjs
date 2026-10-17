@@ -25,7 +25,7 @@ function entry(root, name, { blend, cellSeconds, cellSpan, texture, ...rest }) {
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, `${name}.tga`), texture);
   writeFileSync(join(dir, "provenance.json"), JSON.stringify({
-    seed: 3, parameters: { blast: 2, turbulence: 0.6 }, tier: "preview", threads: 4, houdiniBuild: "19.5.435",
+    seed: 3, parameters: { expansion: 30, turbulence: 0.6 }, tier: "preview", threads: 4, houdiniBuild: "19.5.435",
     modules: { explosion_sim: "a".repeat(64) }, cellSeconds, cellSpan,
     texture: { name: `${name}.tga`, format: "tga", blend, grid: GRID, cell: CELL, pad: PAD, size: SIZE }, ...rest,
   }));
@@ -56,9 +56,17 @@ test("a triplet from one sim, matched and nested, is aligned", (t) => {
 
 test("a different seed, parameter or module is not one simulation", (t) => {
   assert.deepEqual(failed(align(triplet(t, { fire: { seed: 4 } }))), ["one simulation: the same seed"]);
-  assert.deepEqual(failed(align(triplet(t, { late: { parameters: { blast: 3, turbulence: 0.6 } } }))), ["one simulation: the same parameters"]);
+  assert.deepEqual(failed(align(triplet(t, { late: { parameters: { expansion: 20, turbulence: 0.6 } } }))), ["one simulation: the same parameters"]);
   const other = align(triplet(t, { fire: { modules: { explosion_sim: "b".repeat(64) } } }));
-  assert.deepEqual([failed(other), other.exitCode], [["one simulation: the same modules"], 3]);
+  assert.deepEqual([failed(other), other.exitCode], [["one simulation: the same simulation module"], 3]);
+});
+
+test("a sheet's own render module beside the shared sim is still one simulation", (t) => {
+  // The fire pins explosion_fire_render as well as the sim; the smoke pins the sim only.
+  const record = align(triplet(t, { fire: { modules: { explosion_sim: "a".repeat(64), explosion_fire_render: "c".repeat(64) } } }));
+  assert.deepEqual(failed(record), []);
+  const missing = align(triplet(t, { late: { modules: {} } }));
+  assert.deepEqual(failed(missing), ["one simulation: the same simulation module"]);
 });
 
 test("the early smoke and the fire must share every cell's time and span", (t) => {

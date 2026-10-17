@@ -167,6 +167,20 @@ test("a DDS is held to the TGA it was made from", () => {
   for (let y = 0; y < size; y++) additive.rgba.copy(flipped, (size - 1 - y) * size * 4, y * size * 4, (y + 1) * size * 4);
   assert.match(checkDds(additive, { blend: "additive", format: "dxt5", dds: encodeDds(size, size, flipped, "DXT5") }).join(),
     /colour differs from the TGA by an RMSE/);
+  // A transparent sheet's colour counts as far as its alpha shows it: wrong under faint
+  // texels it passes, wrong under coverage it fails, and so does a flipped sheet.
+  const recoloured = (keep) => {
+    const out = Buffer.from(transparent.rgba);
+    for (let i = 0; i < out.length; i += 4) if (!keep(out[i + 3])) for (let c = 0; c < 3; c++) out[i + c] = 255 - out[i + c];
+    return encodeDds(size, size, out, "DXT5");
+  };
+  assert.deepEqual(checkDds(transparent, { blend: "transparent", format: "dxt5", dds: recoloured((a) => a >= 8) }), []);
+  assert.match(checkDds(transparent, { blend: "transparent", format: "dxt5", dds: recoloured((a) => a < 128) }).join(),
+    /colour differs from the TGA by an RMSE of [\d., ]+ where its alpha shows it, over 4/);
+  const flippedSmoke = Buffer.alloc(size * size * 4);
+  for (let y = 0; y < size; y++) transparent.rgba.copy(flippedSmoke, (size - 1 - y) * size * 4, y * size * 4, (y + 1) * size * 4);
+  assert.match(checkDds(transparent, { blend: "transparent", format: "dxt5", dds: encodeDds(size, size, flippedSmoke, "DXT5") }).join(),
+    /colour differs from the TGA by an RMSE/);
   // Alpha: a broad shift fails the RMSE with no texel far off; one texel far off fails alone.
   const faded = Buffer.from(transparent.rgba);
   for (let i = 3; i < faded.length; i += 4) faded[i] = Math.max(0, faded[i] - 10);

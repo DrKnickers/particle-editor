@@ -109,14 +109,16 @@ export function handOffSamples(earlySamples, earlyLifetime, lateSamples) {
 
 // The `--tool build` ops that play a flipbook entry: its index track, and the
 // scale track from `samples` (spans in sim units) times `size` (world units
-// a sim unit). `textureSize` is the cell count.
-export function flipbookOps({ cellSeconds, samples, lifetime, size, cells }) {
+// a sim unit). `textureSize` is the cell count. `cellSeconds` may cover only the
+// cells from `first` on (their times from that cell's), to skip a sheet's start.
+export function flipbookOps({ cellSeconds, samples, lifetime, size, cells, first = 0 }) {
   if (!(size > 0)) fail("flipbookOps needs a positive size");
+  if (first + cellSeconds.length !== cells) fail("flipbookOps' cells from `first` must run to the sheet's last");
   return [
     { op: "setProperty", field: "lifetime", value: lifetime },
     { op: "setProperty", field: "textureSize", value: cells },
     { op: "setInterpolation", track: INDEX, interpolation: "step" },
-    { op: "replaceTrack", track: INDEX, keys: indexKeys(cellSeconds, lifetime) },
+    { op: "replaceTrack", track: INDEX, keys: indexKeys(cellSeconds, lifetime).map(([t, k]) => [t, k + first]) },
     { op: "replaceTrack", track: SCALE, keys: linearKeys(samples.map(([s, span]) => [s, span * size]), lifetime) },
   ];
 }

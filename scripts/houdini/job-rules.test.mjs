@@ -6,14 +6,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sha256 } from "./cache.mjs";
+import { readRegistry } from "./rules.mjs";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const runGenerator = join(here, "hython", "run_generator.py");
-const registryBytes = readFileSync(join(here, "registry.json"));
 
 function python() {
   if (process.platform === "win32") {
@@ -163,10 +163,47 @@ test("run_generator's checks accept the shipped job and reject every malformed o
   }
 });
 
+// The private registry beside the main one: the merged generators, the digest (which must
+// equal Node's readRegistry), and an id in both files refused.
+const PRIVATE_DRIVER = String.raw`
+import importlib.util, json, sys
+spec = importlib.util.spec_from_file_location("run_generator", sys.argv[1])
+rg = importlib.util.module_from_spec(spec); spec.loader.exec_module(rg)
+C = {"separators": (",", ":")}
+main = json.dumps({"schemaVersion": 1, "generators": {"thing": {"grid": 4}}}, **C).encode()
+extra = json.dumps({"schemaVersion": 1, "generators": {"other": {"grid": 2}}}, **C).encode()
+twice = json.dumps({"schemaVersion": 1, "generators": {"thing": {"grid": 2}}}).encode()
+def outcome(fn):
+    try:
+        return ["ok", fn()]
+    except rg.Rejected as error:
+        return ["rejected", str(error)]
+real_main, real_extra = rg.read_registry_files(rg.HOUDINI_DIR)
+print(json.dumps({
+    "alone": [sorted(rg.merge_registry(main, None)), rg.registry_digest(main, None)],
+    "both": [sorted(rg.merge_registry(main, extra)), rg.registry_digest(main, extra)],
+    "twice": outcome(lambda: rg.merge_registry(main, twice)),
+    "real": rg.registry_digest(real_main, real_extra),
+}))
+`;
+
+test("run_generator merges the private registry and agrees with Node on its digest", () => {
+  const result = run(["-c", PRIVATE_DRIVER, runGenerator]);
+  assert.equal(result.status, 0, result.stderr);
+  const r = JSON.parse(result.stdout);
+  const main = Buffer.from(JSON.stringify({ schemaVersion: 1, generators: { thing: { grid: 4 } } }));
+  const extra = Buffer.from(JSON.stringify({ schemaVersion: 1, generators: { other: { grid: 2 } } }));
+  assert.deepEqual(r.alone, [["thing"], sha256(main)]);
+  assert.deepEqual(r.both, [["other", "thing"], sha256(sha256(main) + sha256(extra))]);
+  assert.equal(r.twice[0], "rejected");
+  assert.match(r.twice[1], /both registry files: thing/);
+  assert.equal(r.real, readRegistry(here).digest, "Python and Node must agree on the shipped registry's digest");
+});
+
 test("a rejected job exits 2 before Houdini is imported", () => {
   // Plain Python has no `hou`: reaching the import would fail with exit 1.
   const job = { schemaVersion: 1, id: "debug-atlas", params: {}, seed: -1, tier: "preview", threads: 4,
-    registrySha256: sha256(registryBytes) };
+    registrySha256: readRegistry(here).digest };
   const result = run([runGenerator], JSON.stringify(job));
   assert.equal(result.status, 2, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout.replace(/^\[houdini-run\] /, "")), { ok: false, rejected: "seed is out of range" });

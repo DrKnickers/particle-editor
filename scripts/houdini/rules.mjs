@@ -5,7 +5,8 @@
 // unknown ids rather than inherited members. Parameters are bounded numbers
 // or enum members; nothing a caller types reaches a Houdini string parameter.
 import * as fs from "node:fs";
-import { win32 } from "node:path";
+import { createHash } from "node:crypto";
+import { join, win32 } from "node:path";
 import { BLENDS, FORMATS } from "./profiles.mjs";
 
 export const ID = /^[a-z0-9-]{1,64}$/;
@@ -108,6 +109,23 @@ export function parseRegistry(bytes) {
     for (const [id, entry] of Object.entries(registry.generators)) checkEntry(id, entry);
   } catch (error) { error.exitCode = 1; throw error; }
   return registry;
+}
+
+// The registry is registry.json and, when present, registry-private.json beside it (entries
+// kept off the public mirror). An id may live in one file only. The digest is the main file's
+// hash alone, or the hash of both files' hashes; run_generator.registry_digest matches it.
+const hex = (data) => createHash("sha256").update(data).digest("hex");
+export const PRIVATE_REGISTRY = "registry-private.json";
+
+export function readRegistry(dir, io = fs) {
+  const main = io.readFileSync(join(dir, "registry.json")), registry = parseRegistry(main);
+  let extra = null;
+  try { extra = io.readFileSync(join(dir, PRIVATE_REGISTRY)); } catch (error) { if (error.code !== "ENOENT") throw error; }
+  if (extra === null) return { registry, digest: hex(main) };
+  const more = parseRegistry(extra).generators;
+  const twice = Object.keys(more).filter((id) => Object.hasOwn(registry.generators, id));
+  if (twice.length) throw fail(`generators in both registry files: ${twice.join(", ")}`, 1);
+  return { registry: { ...registry, generators: { ...registry.generators, ...more } }, digest: hex(hex(main) + hex(extra)) };
 }
 
 export function lookup(registry, id) {

@@ -2,11 +2,12 @@
 // (plan §5 "Cache key", "Provenance", "Quotas").
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildProvenance, cacheKey, canonical, checkManifest, evict, sha256, treeHashes, verifyEntry, serialise } from "./cache.mjs";
+import { readRegistry } from "./rules.mjs";
 
 const scratch = (t) => {
   const dir = mkdtempSync(join(tmpdir(), "pe-houdini-cache-"));
@@ -222,8 +223,50 @@ test("eviction never counts or removes what the wrapper did not name", (t) => {
   assert.ok(existsSync(join(foreign, "big")) && existsSync(join(unproven, "data")) && existsSync(join(target, "keep-me")));
 });
 
+test("the explosion generators live in the private registry, off the public mirror", () => {
+  const main = JSON.parse(readFileSync(new URL("./registry.json", import.meta.url), "utf8"));
+  assert.deepEqual(Object.keys(main.generators).filter((id) => id.startsWith("explosion-")), []);
+});
+
+// tasks/ never publishes, so the manifest marks the private checkout. On the public mirror there
+// is nothing to guard and the test is not registered: a skip there would count against the
+// scripts lane's skip budget.
+const manifest = new URL("../../tasks/public-manifest.txt", import.meta.url);
+if (existsSync(manifest)) test("no explosion file and no file the private registry pins reaches the public mirror", () => {
+  // sync-public.ps1's rules: a path publishes if an [include] pattern matches it and no [exclude]
+  // one does; a pattern is a folder prefix (dir/), a suffix (*.ext) or an exact path.
+  const lines = readFileSync(manifest, "utf8").split(/\r?\n/).map((line) => line.trim());
+  const section = (name) => {
+    const at = lines.indexOf(name);
+    assert.ok(at >= 0, `the manifest has no ${name} section`);
+    const rest = lines.slice(at + 1), end = rest.findIndex((line) => /^\[.*\]$/.test(line));
+    return (end < 0 ? rest : rest.slice(0, end)).filter((line) => line && !line.startsWith("#"));
+  };
+  const include = section("[include]"), exclude = section("[exclude]");
+  const matches = (path, p) => p.endsWith("/") ? path.startsWith(p)
+    : p.startsWith("*.") ? path.endsWith(p.slice(1)) : path.toLowerCase() === p.toLowerCase();
+  const excluded = (path) => exclude.some((p) => matches(path, p));
+  const published = (path) => include.some((p) => matches(path, p)) && !excluded(path);
+  const pins = (entry) => [`scripts/houdini/${entry.builder}`,
+    ...Object.keys(entry.modules ?? {}).map((name) => `scripts/houdini/generators/${name}.py`)];
+
+  const extra = new URL("./registry-private.json", import.meta.url);
+  assert.ok(existsSync(extra), "registry-private.json is missing on the private checkout");
+  // Every explosion source by its name, registered or not, and all the private registry pins.
+  const scripts = fileURLToPath(new URL("../", import.meta.url));
+  const named = readdirSync(scripts, { recursive: true }).map((file) => `scripts/${file.replaceAll("\\", "/")}`)
+    .filter((file) => basename(file).startsWith("explosion"));
+  const secret = new Set(["scripts/houdini/registry-private.json", ...named,
+    ...Object.values(JSON.parse(readFileSync(extra, "utf8")).generators).flatMap(pins)]);
+  assert.deepEqual([...secret].filter((file) => !excluded(file)).sort(), []);
+  // And the mirror's own registry pins nothing it lacks.
+  const main = JSON.parse(readFileSync(new URL("./registry.json", import.meta.url), "utf8"));
+  assert.deepEqual(Object.values(main.generators).flatMap(pins).filter((file) => !published(file)).sort(), []);
+});
+
 test("the registry pins each builder and shared module to its exact bytes", () => {
-  const registry = JSON.parse(readFileSync(new URL("./registry.json", import.meta.url), "utf8"));
+  // registry-private.json is absent on the public mirror; readRegistry merges it when present.
+  const { registry } = readRegistry(fileURLToPath(new URL(".", import.meta.url)));
   for (const [id, entry] of Object.entries(registry.generators)) {
     const pins = [[entry.builder, entry.builderSha256],
       ...Object.entries(entry.modules ?? {}).map(([name, hash]) => [`generators/${name}.py`, hash])];

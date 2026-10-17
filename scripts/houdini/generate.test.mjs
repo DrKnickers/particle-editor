@@ -10,6 +10,7 @@ import { HOUDINI_DIR, generate, hythonFailure, parseArgs } from "./generate.mjs"
 import { PINNED, TEXCONV } from "./houdini.mjs";
 import { ROOT_MARKER } from "./generate.mjs";
 import { sha256 } from "./cache.mjs";
+import { readRegistry } from "./rules.mjs";
 import { decodeTga } from "./images.mjs";
 import { texconvArgs } from "./profiles.mjs";
 import { encodeDds, frameStatsText, syntheticAtlas } from "./test-atlas.mjs";
@@ -97,7 +98,7 @@ test("a miss runs hython contained, promotes the checked entry, and the next run
   assert.equal(options.timeoutMs, 5 * 60000);
   const job = JSON.parse(s.input);
   assert.deepEqual(Object.keys(job).sort(), ["id", "params", "registrySha256", "schemaVersion", "seed", "threads", "tier"]);
-  assert.equal(job.registrySha256, sha256(readFileSync(join(HOUDINI_DIR, "registry.json"))));
+  assert.equal(job.registrySha256, readRegistry(HOUDINI_DIR).digest);
   assert.deepEqual([job.id, job.seed, job.tier, job.threads], ["debug-atlas", 7, "preview", 4]);
 
   // hoiiotool: stats, pack, encode, each in the stage with the allowlisted environment.
@@ -442,6 +443,23 @@ test("a builder that no longer matches its pin fails before any spawn", windows,
   assert.equal(result.exitCode, 1);
   assert.match(result.error, /does not match its pinned builderSha256/);
   assert.equal(h.calls.lock, 0);
+});
+
+test("a generator in the private registry runs, and the job carries both files' digest", windows, async (t) => {
+  const copy = mkdtempSync(join(tmpdir(), "pe-houdini-private-"));
+  t.after(() => rmSync(copy, { recursive: true, force: true }));
+  cpSync(HOUDINI_DIR, copy, { recursive: true });
+  rmSync(join(copy, "registry-private.json"), { force: true });
+  const main = readFileSync(join(copy, "registry.json"));
+  const extra = Buffer.from(JSON.stringify({ schemaVersion: 1,
+    generators: { "private-atlas": JSON.parse(main).generators["debug-atlas"] } }));
+  writeFileSync(join(copy, "registry-private.json"), extra);
+  const h = harness(t, { seams: { houdiniDir: copy } });
+  const result = await h.run({ generator: "private-atlas" });
+  assert.equal(result.exitCode, 0, result.error);
+  const job = JSON.parse(h.calls.run[0].s.input);
+  assert.equal(job.id, "private-atlas");
+  assert.equal(job.registrySha256, sha256(sha256(main) + sha256(extra)));
 });
 
 test("hythonFailure never repeats licence text", () => {

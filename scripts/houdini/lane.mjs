@@ -39,7 +39,8 @@
 //   - the layered explosion's sheets, as 2x2 test-only probes (the triplet and
 //     the puff): each records spans that never shrink and its cell steps,
 //     align.mjs finds the triplet and refuses an early sheet standing in for
-//     the late one, and a new root reproduces the fire byte for byte.
+//     the late one, and a new root reproduces the fire byte for byte (only
+//     where registry-private.json is present: the public mirror has no such sheets).
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -393,9 +394,13 @@ try {
 
   // 9. The layered explosion's sheets, as 2x2 probes: the real builders and
   // sims on four cells each, so the lane stays short. The puff is its own sim,
-  // outside the triplet.
+  // outside the triplet. They live in the private registry, absent on the public mirror.
   const probe = {};
-  for (const role of ["early", "late", "fire", "puff"]) {
+  const privateSheets = existsSync(join(here, "registry-private.json"));
+  // tasks/ never publishes, so the manifest marks the private checkout, where the probes must run.
+  if (existsSync(join(here, "..", "..", "tasks", "public-manifest.txt"))) check(privateSheets, "the private checkout has registry-private.json");
+  else if (!privateSheets) console.log("[houdini-lane] no registry-private.json: the explosion probes are skipped");
+  for (const role of privateSheets ? ["early", "late", "fire", "puff"] : []) {
     const generator = `explosion-probe-${role}`;
     const made = await generate(join(base, "explosion"), 1, { generator, minutes: 30 });
     if (!check(made.code === 0, `${generator} generates (exit ${made.code}${made.record?.error ? `: ${made.record.error}` : ""})`)) continue;

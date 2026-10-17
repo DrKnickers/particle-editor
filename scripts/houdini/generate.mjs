@@ -27,7 +27,7 @@ import { randomBytes } from "node:crypto";
 import { dirname, join, resolve, win32 } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolveReplayGameRoots } from "../replay-proof.mjs";
-import { checkParams, checkRoot, checkTier, defaultParams, fail, lookup, parseRegistry, parseSeed } from "./rules.mjs";
+import { checkParams, checkRoot, checkTier, defaultParams, fail, lookup, parseSeed, readRegistry } from "./rules.mjs";
 import { buildProvenance, cacheKey, canonical, checkManifest, dirBytes, evict, serialise, sha256, treeHashes, verifyEntry } from "./cache.mjs";
 import { HOIIOTOOL_VERSION, HOUDINI_BUILD, PINNED, TEXCONV, THREADS, childEnvironment, verifyPinned, verifyTexconv } from "./houdini.mjs";
 import { acquireLock, runContained } from "./contain.mjs";
@@ -159,8 +159,7 @@ export async function generate(args, {
   let auditRoot = null;
   try {
     // 1. Inputs.
-    const registryBytes = io.readFileSync(join(houdiniDir, "registry.json"));
-    const registry = parseRegistry(registryBytes);
+    const { registry, digest: registryDigest } = readRegistry(houdiniDir, io);
     const entry = lookup(registry, args.generator);
     Object.assign(record, { id: args.generator, version: entry.version, renderer: entry.renderer });
     const tier = checkTier(args.tier), seed = parseSeed(args.seed);
@@ -242,7 +241,7 @@ export async function generate(args, {
       io.mkdirSync(work);
 
       // 6. hython, contained.
-      const job = { schemaVersion: 1, id: args.generator, params, seed, tier, threads: THREADS, registrySha256: sha256(registryBytes) };
+      const job = { schemaVersion: 1, id: args.generator, params, seed, tier, threads: THREADS, registrySha256: registryDigest };
       const out = join(stage, "hython.stdout.txt"), err = join(stage, "hython.stderr.txt");
       const hythonStarted = now();
       const result = await run({ exe: hython, args: [RUN_GENERATOR], cwd: work, env: childEnvironment(work, { inherit: env }),

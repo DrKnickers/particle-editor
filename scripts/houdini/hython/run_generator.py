@@ -28,6 +28,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 HOUDINI_DIR = os.path.dirname(HERE)
 GENERATORS_DIR = os.path.join(HOUDINI_DIR, "generators")
 REGISTRY_PATH = os.path.join(HOUDINI_DIR, "registry.json")
+# Entries kept off the public mirror, beside the main registry (rules.mjs readRegistry).
+PRIVATE_REGISTRY = "registry-private.json"
 FRAME_NAME = re.compile(r"^frames/frame_[0-9]{4}\.exr$")
 MODULE = re.compile(r"^[a-z0-9_]{1,64}$")
 # The guard band profiles.mjs leaves round every frame (its PAD).
@@ -88,15 +90,46 @@ def inside(base, path):
     return os.path.commonpath([base, path]) == base and path != base
 
 
-def check_job(job, registry_bytes):
+def read_registry_files(houdini_dir):
+    """The main registry's bytes, and the private one's or None when it is absent."""
+    with open(os.path.join(houdini_dir, "registry.json"), "rb") as handle:
+        main = handle.read()
+    try:
+        with open(os.path.join(houdini_dir, PRIVATE_REGISTRY), "rb") as handle:
+            extra = handle.read()
+    except FileNotFoundError:
+        extra = None
+    return main, extra
+
+
+def registry_digest(main_bytes, private_bytes):
+    """The main file's hash alone, or the hash of both files' hashes (as readRegistry)."""
+    if private_bytes is None:
+        return sha256(main_bytes)
+    return sha256((sha256(main_bytes) + sha256(private_bytes)).encode("ascii"))
+
+
+def merge_registry(main_bytes, private_bytes):
+    """Both files' generators in one dict; an id may live in one file only."""
+    generators = {}
+    for data in (main_bytes, private_bytes):
+        if data is None:
+            continue
+        more = json.loads(data.decode("utf-8")).get("generators")
+        require(isinstance(more, dict), "registry has no generators")
+        twice = sorted(set(generators) & set(more))
+        require(not twice, "generators in both registry files: %s" % ", ".join(twice))
+        generators.update(more)
+    return generators
+
+
+def check_job(job, registry_bytes, private_bytes=None):
     """Validate a job against the registry bytes; return (entry, checked job)."""
     exact_keys(job, ("schemaVersion", "id", "params", "seed", "tier", "threads", "registrySha256"), "job")
     require(job["schemaVersion"] == SCHEMA_VERSION, "unsupported job schema")
-    require(isinstance(job["registrySha256"], str) and job["registrySha256"] == sha256(registry_bytes),
+    require(isinstance(job["registrySha256"], str) and job["registrySha256"] == registry_digest(registry_bytes, private_bytes),
             "the registry changed since the job was checked")
-    registry = json.loads(registry_bytes.decode("utf-8"))
-    generators = registry.get("generators")
-    require(isinstance(generators, dict), "registry has no generators")
+    generators = merge_registry(registry_bytes, private_bytes)
     require(isinstance(job["id"], str) and ID.match(job["id"]) is not None, "generator id is malformed")
     require(job["id"] in generators, "unknown generator")
     entry = generators[job["id"]]
@@ -182,9 +215,8 @@ def main():
     raw = sys.stdin.buffer.read(MAX_JOB_BYTES + 1)
     try:
         require(len(raw) <= MAX_JOB_BYTES, "job is too large")
-        with open(REGISTRY_PATH, "rb") as handle:
-            registry_bytes = handle.read()
-        entry, job = check_job(json.loads(raw.decode("utf-8")), registry_bytes)
+        registry_bytes, private_bytes = read_registry_files(HOUDINI_DIR)
+        entry, job = check_job(json.loads(raw.decode("utf-8")), registry_bytes, private_bytes)
     except (Rejected, ValueError) as error:
         reject(error)
     # Only the pin checks are rejections; an error the builder raises while

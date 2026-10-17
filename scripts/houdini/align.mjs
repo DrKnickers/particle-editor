@@ -71,8 +71,11 @@ export function align(args, { io = fs } = {}) {
   const checks = [];
   const check = (name, ok, detail = undefined) => checks.push({ name, ok: Boolean(ok), ...(detail === undefined ? {} : { detail }) });
 
-  for (const field of ["seed", "parameters", "tier", "threads", "houdiniBuild", "modules"])
+  for (const field of ["seed", "parameters", "tier", "threads", "houdiniBuild"])
     check(`one simulation: the same ${field}`, same(p.early[field], p.late[field]) && same(p.early[field], p.fire[field]));
+  // The sim is the shared module; a sheet may pin its own render module beside it.
+  const sim = (role) => p[role].modules?.explosion_sim;
+  check("one simulation: the same simulation module", sim("early") !== undefined && sim("early") === sim("late") && sim("early") === sim("fire"));
   check("the early smoke and the fire show the same sim time in every cell", same(p.early.cellSeconds, p.fire.cellSeconds));
   check("the early smoke and the fire are framed to the same span in every cell", same(p.early.cellSpan, p.fire.cellSpan));
   check("the late smoke's cells follow the early smoke's", p.late.cellSeconds[0] > p.early.cellSeconds.at(-1));

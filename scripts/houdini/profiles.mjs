@@ -35,14 +35,19 @@ export const FORMATS = ["tga", "dxt1", "dxt5"];
 // The D3DFORMAT the editor reports for each, as its log prints it.
 export const D3D_FORMAT = { tga: 21, dxt1: 0x31545844, dxt5: 0x35545844 };
 // texconv against the source TGA: colour within an RMSE of DDS_RMSE levels a
-// channel (measured: under 2.2 on smooth content); DXT5 alpha within an RMSE
+// channel (measured: under 2.2 on smooth content). A transparent texture's
+// colour shows only as much as its alpha, so its error is weighted by the TGA's
+// alpha, as the blend applies it, and held to DDS_SEEN_RMSE: the final-tier
+// trail smoke's raw RMSE was 8.5, nearly all of it in texels under alpha 32
+// (18 there, 2.6 at 32 or more), and weighted it was 1.0; bilinear-filtered
+// and blended, 0.8. DXT5 alpha within an RMSE
 // of DDS_ALPHA_RMSE, and no texel off by more than DDS_ALPHA. An 8-level alpha
 // block misses by half a step, 255/14 on a full-range block, when its endpoints
 // are the block's extremes; texconv fits them to the squared error instead, and
 // on a generated smoke sheet a hard 0-to-228 edge inside one block missed by 21.
 // That sheet's alpha RMSE was 2.3. A wrong alpha (inverted, faded, misplaced)
 // moves most texels by tens of levels, which the RMSE catches.
-const DDS_RMSE = 8, DDS_ALPHA_RMSE = 4, DDS_ALPHA = 32;
+const DDS_RMSE = 8, DDS_SEEN_RMSE = 4, DDS_ALPHA_RMSE = 4, DDS_ALPHA = 32;
 export const MAX_TEXTURE_BYTES = 64 * 1024 * 1024;   // src/common/ResourceLimits.h
 // An alpha-0 texel beside coverage is a dark fringe when its colour is under
 // FRINGE_RATIO of its covered neighbours' (alpha-weighted) colour, unless that
@@ -207,18 +212,20 @@ export function validateDds(dds, source, bytes, { format, blend, layout }) {
   if (bytes > MAX_TEXTURE_BYTES) errors.push(`texture is ${bytes} bytes, over the editor's 64 MiB limit`);
   if (format === "dxt1" && blend !== "additive") errors.push("DXT1 drops the colour under alpha; it is for additive textures only");
   if (errors.length) return errors;
-  const squared = [0, 0, 0];
+  const squared = [0, 0, 0], seen = blend === "transparent";
   let alphaWorst = 0, alphaSquared = 0, transparent = 0;
   for (let i = 0; i < size * size * 4; i += 4) {
-    for (let c = 0; c < 3; c++) squared[c] += (dds.rgba[i + c] - source.rgba[i + c]) ** 2;
+    const weight = seen ? source.rgba[i + 3] / 255 : 1;
+    for (let c = 0; c < 3; c++) squared[c] += ((dds.rgba[i + c] - source.rgba[i + c]) * weight) ** 2;
     const alphaError = Math.abs(dds.rgba[i + 3] - source.rgba[i + 3]);
     alphaWorst = Math.max(alphaWorst, alphaError);
     alphaSquared += alphaError ** 2;
     if (dds.rgba[i + 3] !== 255) transparent++;
   }
-  const rmse = squared.map((v) => Math.sqrt(v / (size * size)));
-  if (rmse.some((v) => v > DDS_RMSE))
-    errors.push(`the DDS colour differs from the TGA by an RMSE of ${rmse.map((v) => v.toFixed(1)).join(", ")}, over ${DDS_RMSE}`);
+  const rmse = squared.map((v) => Math.sqrt(v / (size * size))), limit = seen ? DDS_SEEN_RMSE : DDS_RMSE;
+  if (rmse.some((v) => v > limit))
+    errors.push(`the DDS colour differs from the TGA by an RMSE of ${rmse.map((v) => v.toFixed(1)).join(", ")}` +
+      `${seen ? " where its alpha shows it" : ""}, over ${limit}`);
   const alphaRmse = Math.sqrt(alphaSquared / (size * size));
   if (format === "dxt1") {
     if (transparent > 0) errors.push(`${transparent} texels lost their alpha in DXT1`);

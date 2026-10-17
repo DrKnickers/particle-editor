@@ -4,7 +4,7 @@
 //
 // A layered explosion draws its core as triplets of root emitters rendered
 // from one simulation: <T>_SMOKE_EARLY, <T>_FIRE and <T>_SMOKE_LATE (the late
-// smoke is optional). Every emitter rolls its own randoms per particle
+// smoke is optional), and optionally <T>_HOT, a white-hot overlay of the fire. Every emitter rolls its own randoms per particle
 // (src/simulation/EmitterInstance.cpp, GenerateRandomProperty and
 // ResetParticle), so the members line up only when nothing is rolled and
 // everything that moves or sizes a particle is the same:
@@ -15,11 +15,11 @@
 //     emitters, the same atlas;
 //   - the same scale and rotation-speed values at every 60 fps game frame
 //     both live through, with the smoke not rotating (its light is baked);
-//   - early smoke and fire showing the same cell on every game frame, for the
-//     same lifetime;
+//   - early smoke, fire and overlay showing the same cell on every game frame,
+//     for the same lifetime;
 //   - each member's cells playing forward and ending on the atlas's last
 //     cell, never past it;
-//   - the fire drawn after its early smoke.
+//   - the fire drawn after its early smoke, and the overlay after the fire.
 // The design: tasks/2026-10-14-layered-explosion-design.md, "The pair rule".
 //
 // Prints one `[pair-check]` JSON line. Exit 0 every triplet holds (or there
@@ -33,7 +33,7 @@ import { isDeepStrictEqual } from "node:util";
 import { INDEX, ROTATION, SCALE, at, frameAges } from "./tracks.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-export const ROLES = { early: "_SMOKE_EARLY", fire: "_FIRE", late: "_SMOKE_LATE" };
+export const ROLES = { early: "_SMOKE_EARLY", fire: "_FIRE", hot: "_HOT", late: "_SMOKE_LATE" };
 // Float32 tracks compare to a millionth of their size.
 const close = (a, b) => Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(a), Math.abs(b));
 
@@ -124,14 +124,18 @@ export function checkTriplet(t, members) {
       broke("index", `${name(role)}'s index passes its ${e.textureSize} cells; the engine wraps it`);
     else if (last !== e.textureSize - 1) broke("index", `${name(role)}'s index ends on cell ${last}, not its last, ${e.textureSize - 1}`);
   }
-  if (fire) {
-    if (fire.emitter.lifetime !== early.emitter.lifetime)
-      broke("lifetime", `${name("fire")} lives ${fire.emitter.lifetime} s, ${name("early")} ${early.emitter.lifetime} s`);
-    const bad = frameAges(early.emitter.lifetime).find((a) => cell(fire.emitter, a) !== cell(early.emitter, a));
+  // The fire, and its white-hot overlay, play the early smoke's cells over its life, after it.
+  for (const role of ["fire", "hot"]) {
+    const m = members[role];
+    if (!m) continue;
+    if (m.emitter.lifetime !== early.emitter.lifetime)
+      broke("lifetime", `${name(role)} lives ${m.emitter.lifetime} s, ${name("early")} ${early.emitter.lifetime} s`);
+    const bad = frameAges(early.emitter.lifetime).find((a) => cell(m.emitter, a) !== cell(early.emitter, a));
     if (bad !== undefined)
-      broke("cells", `at ${bad.toFixed(4)} s ${name("fire")} shows cell ${cell(fire.emitter, bad)}, ${name("early")} cell ${cell(early.emitter, bad)}`);
-    if (fire.position < early.position) broke("order", `${name("fire")} draws before ${name("early")}; the fire goes after its smoke`);
+      broke("cells", `at ${bad.toFixed(4)} s ${name(role)} shows cell ${cell(m.emitter, bad)}, ${name("early")} cell ${cell(early.emitter, bad)}`);
+    if (m.position < early.position) broke("order", `${name(role)} draws before ${name("early")}; the fire goes after its smoke`);
   }
+  if (fire && members.hot && members.hot.position < fire.position) broke("order", `${name("hot")} draws before ${name("fire")}`);
   return out;
 }
 
