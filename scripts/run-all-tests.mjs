@@ -406,7 +406,7 @@ function newestSourceMtime() {
 // web/apps/editor/dist into the exe, so if web source is newer than dist the
 // embedded bundle is stale — an msbuild lane run in isolation (--lane, which does
 // NOT auto-add web-build) would otherwise rebuild the exe around old UI and pass.
-function newestWebSourceMtime() {
+function newestWebSourceMtime(editor = editorDir, root = repoRoot) {
   let newest = 0;
   // Every file, ANY extension: an imported image/font under src/ or a static file
   // under public/ is a bundle input just like a .tsx, so an extension filter would
@@ -425,17 +425,25 @@ function newestWebSourceMtime() {
       }
     }
   };
-  walkAll(join(editorDir, "src"));                       // components + imported static assets
-  walkAll(join(editorDir, "public"));                    // files copied verbatim into dist (e.g. the font)
-  walkAll(join(repoRoot, "web", "packages"));            // workspace pkgs the bundle imports (e.g. bridge-schema)
+  walkAll(join(editor, "src"));                          // components + imported static assets
+  walkAll(join(editor, "public"));                       // files copied verbatim into dist (e.g. the font)
+  walkAll(join(root, "web", "packages"));                // workspace pkgs the bundle imports (e.g. bridge-schema)
   for (const f of ["index.html", "vite.config.ts", "package.json", "app-version.ts",
                    "tsconfig.json", "tsconfig.app.json", "tailwind.config.ts", "postcss.config.js"]) {
-    try { newest = Math.max(newest, statSync(join(editorDir, f)).mtimeMs); } catch { /* absent */ }
+    try { newest = Math.max(newest, statSync(join(editor, f)).mtimeMs); } catch { /* absent */ }
   }
   // Cross-language input: web/apps/editor/app-version.ts derives PE_VERSION_STR from
   // the C++ header, so a version bump changes the bundle.
-  try { newest = Math.max(newest, statSync(join(repoRoot, "src", "version.h")).mtimeMs); } catch { /* absent */ }
+  try { newest = Math.max(newest, statSync(join(root, "src", "version.h")).mtimeMs); } catch { /* absent */ }
   return newest;
+}
+
+// The scripts lane scans the built bundle, so dist must be newer than the bundle's own
+// inputs. Not the C++ sources: the C++ build writes src/generated/EmbeddedWebAssets.rc
+// FROM dist, so after any MSBuild that file is newer than dist and a fresh bundle read
+// as stale.
+export function scriptsDistStaleNote(distPath = distIndex, { editor = editorDir, root = repoRoot } = {}) {
+  return staleBinaryNote(distPath, "scripts", newestWebSourceMtime(editor, root));
 }
 
 // Assert a build lane's binary exists and is not stale relative to its sources.
@@ -705,7 +713,7 @@ const LANES = [
       // dev-only test seam could pass against yesterday's dist. The lane
       // declares deps on web-build, but `--lane scripts` on its own bypasses
       // that.
-      const staleDist = staleBinaryNote(distIndex, "scripts", newestSourceMtime());
+      const staleDist = scriptsDistStaleNote();
       if (staleDist) return fail(staleDist);
 
       // Tee + count: several script tests self-skip when FFmpeg is absent, and

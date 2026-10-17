@@ -4,12 +4,12 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, utimesSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, utimesSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
-  staleBinaryNote, parseSkippedCount, recordSmokeVerdict, PNG_SIGNATURE,
+  staleBinaryNote, scriptsDistStaleNote, parseSkippedCount, recordSmokeVerdict, PNG_SIGNATURE,
   skipBudgetVerdict, SKIP_BUDGET,
 } from "./run-all-tests.mjs";
 import { selfSkipVerdict } from "./run-native-unit-tests.mjs";
@@ -31,6 +31,33 @@ test("staleBinaryNote flags an exe older than its sources (the stubbed-MSBuild f
     assert.match(note, /OLDER than the newest source/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the scripts lane judges dist by the web sources, not the .rc the C++ build writes from it", () => {
+  // After any MSBuild, src/generated/EmbeddedWebAssets.rc (generated FROM dist) is newer
+  // than dist, and `--lane scripts` refused a fresh bundle as a stale binary.
+  const root = mkdtempSync(join(tmpdir(), "gate-dist-"));
+  try {
+    const editor = join(root, "web", "apps", "editor");
+    mkdirSync(join(editor, "src"), { recursive: true });
+    mkdirSync(join(editor, "dist"));
+    mkdirSync(join(root, "src", "generated"), { recursive: true });
+    const at = (path, secondsAgo) => {
+      writeFileSync(path, "x");
+      const seconds = Date.now() / 1000 - secondsAgo;
+      utimesSync(path, seconds, seconds);
+    };
+    const source = join(editor, "src", "App.tsx"), dist = join(editor, "dist", "index.html");
+    at(source, 300);
+    at(dist, 200);
+    at(join(root, "src", "generated", "EmbeddedWebAssets.rc"), 100);
+    assert.equal(scriptsDistStaleNote(dist, { editor, root }), null);
+    // A web edit after the build still makes the bundle stale.
+    at(source, 50);
+    assert.match(scriptsDistStaleNote(dist, { editor, root }) ?? "", /stale binary/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });
 
