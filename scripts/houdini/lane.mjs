@@ -40,13 +40,16 @@
 //     the puff): each records spans that never shrink and its cell steps,
 //     align.mjs finds the triplet and refuses an early sheet standing in for
 //     the late one, and a new root reproduces the fire byte for byte (only
-//     where registry-private.json is present: the public mirror has no such sheets).
+//     where registry-private.json is present: the public mirror has no such sheets);
+//   - the ground-hit generators' real VEX, through the pinned hython: the
+//     impact fire and the dirt checks in explosion.test.mjs, which the scripts
+//     lane leaves undefined without PE_HYTHON (also private-only).
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
-import { HFS } from "./houdini.mjs";
+import { HFS, PINNED } from "./houdini.mjs";
 import { acquireLock } from "./contain.mjs";
 import { sha256 } from "./cache.mjs";
 import { runHoiiotool } from "./generate.mjs";
@@ -419,6 +422,16 @@ try {
     const elsewhere = await generate(join(base, "explosion-elsewhere"), 1, { generator: "explosion-probe-fire", minutes: 30 });
     check(elsewhere.code === 0 && elsewhere.record?.contentHash === probe.fire.contentHash,
       `explosion-probe-fire: a new root reproduces the texture byte for byte (${elsewhere.record?.contentHash ?? `exit ${elsewhere.code}`})`);
+  }
+
+  // 10. The ground-hit generators' real VEX. The scripts lane allows no skips,
+  // so these checks exist only with PE_HYTHON; here they must run and pass by name.
+  if (privateSheets) {
+    const vex = spawnSync(process.execPath, ["--test", "--test-reporter=tap", "--test-name-pattern=^real (impact|dirt) VEX",
+      join(here, "explosion.test.mjs")], { env: { ...process.env, PE_HYTHON: PINNED.hython.path }, encoding: "utf8", windowsHide: true, maxBuffer: 1 << 26 });
+    for (const name of ["real impact VEX", "real dirt VEX"]) {
+      check(vex.status === 0 && new RegExp(`^ok \\d+ - ${name} `, "m").test(vex.stdout), `explosion.test.mjs: ${name} passes through the pinned hython (exit ${vex.status})`);
+    }
   }
 } finally {
   rmSync(base, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
