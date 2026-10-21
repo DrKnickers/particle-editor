@@ -6,7 +6,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sha256 } from "./cache.mjs";
@@ -24,8 +25,8 @@ function python() {
   }
   return process.env.PE_PYTHON ?? "/usr/bin/python3";
 }
-const run = (args, input = "") => {
-  const result = spawnSync(python(), ["-B", "-I", ...args], { input, encoding: "utf8", windowsHide: true, timeout: 60000 });
+const run = (args, input = "", cwd = undefined) => {
+  const result = spawnSync(python(), ["-B", "-I", ...args], { input, cwd, encoding: "utf8", windowsHide: true, timeout: 60000 });
   assert.equal(result.error, undefined);
   return result;
 };
@@ -35,7 +36,9 @@ const DRIVER = String.raw`
 import importlib.util, json, math, os, shutil, sys, tempfile
 spec = importlib.util.spec_from_file_location("run_generator", sys.argv[1])
 rg = importlib.util.module_from_spec(spec); spec.loader.exec_module(rg)
-registry = open(rg.REGISTRY_PATH, "rb").read()
+HOUDINI = sys.argv[2]
+GENERATORS = os.path.join(HOUDINI, "generators")
+registry = open(os.path.join(HOUDINI, "registry.json"), "rb").read()
 good = {"schemaVersion": 1, "id": "debug-atlas", "params": {}, "seed": 7, "tier": "preview", "threads": 4,
         "registrySha256": rg.sha256(registry)}
 SCHEMA = {"heat": {"type": "float", "min": 0.5, "max": 2.0, "default": 1.0},
@@ -70,11 +73,11 @@ for name, change in [("inf", {"heat": math.inf}), ("nan", {"heat": math.nan}), (
     else: params.update(change)
     results["param_" + name] = outcome(lambda params=params: rg.check_params(params, SCHEMA))
 entry = json.loads(registry)["generators"]["debug-atlas"]
-results["builderGood"] = outcome(lambda: callable(rg.load_builder(entry)["generate"]))
+results["builderGood"] = outcome(lambda: callable(rg.load_builder(entry, GENERATORS)["generate"]))
 for name, change in [("hash", {"builderSha256": "0" * 64}), ("dotdot", {"builder": "generators/../registry.py"}),
                      ("drive", {"builder": "generators/D:evil.py"}), ("outside", {"builder": "hython/run_generator.py"})]:
     value = dict(entry); value.update(change)
-    results["builder_" + name] = outcome(lambda value=value: rg.load_builder(value))
+    results["builder_" + name] = outcome(lambda value=value: rg.load_builder(value, GENERATORS))
 shared = tempfile.mkdtemp()
 module = b"def burst():\n    return 3\n"
 open(os.path.join(shared, "sim.py"), "wb").write(module)
@@ -120,7 +123,7 @@ print(json.dumps(results))
 `;
 
 test("run_generator's checks accept the shipped job and reject every malformed one", () => {
-  const result = run(["-c", DRIVER, runGenerator]);
+  const result = run(["-c", DRIVER, runGenerator, here]);
   assert.equal(result.status, 0, result.stderr);
   const r = JSON.parse(result.stdout);
   assert.deepEqual(r.good, ["ok", { id: "debug-atlas", params: {}, seed: 7, tier: "preview", threads: 4 }]);
@@ -178,7 +181,7 @@ def outcome(fn):
         return ["ok", fn()]
     except rg.Rejected as error:
         return ["rejected", str(error)]
-real_main, real_extra = rg.read_registry_files(rg.HOUDINI_DIR)
+real_main, real_extra = rg.read_registry_files(sys.argv[2])
 print(json.dumps({
     "alone": [sorted(rg.merge_registry(main, None)), rg.registry_digest(main, None)],
     "both": [sorted(rg.merge_registry(main, extra)), rg.registry_digest(main, extra)],
@@ -188,7 +191,7 @@ print(json.dumps({
 `;
 
 test("run_generator merges the private registry and agrees with Node on its digest", () => {
-  const result = run(["-c", PRIVATE_DRIVER, runGenerator]);
+  const result = run(["-c", PRIVATE_DRIVER, runGenerator, here]);
   assert.equal(result.status, 0, result.stderr);
   const r = JSON.parse(result.stdout);
   const main = Buffer.from(JSON.stringify({ schemaVersion: 1, generators: { thing: { grid: 4 } } }));
@@ -200,17 +203,45 @@ test("run_generator merges the private registry and agrees with Node on its dige
   assert.equal(r.real, readRegistry(here).digest, "Python and Node must agree on the shipped registry's digest");
 });
 
-test("a rejected job exits 2 before Houdini is imported", () => {
+// A stage as generate.mjs leaves it: hython's working folder, and beside it the
+// snapshot of the registry it checked (<stage>\src). `registry` replaces the copy.
+function stage(t, registry = null) {
+  const dir = mkdtempSync(join(tmpdir(), "pe-houdini-stage-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  mkdirSync(join(dir, "work"));
+  mkdirSync(join(dir, "src"));
+  if (registry) writeFileSync(join(dir, "src", "registry.json"), registry);
+  else for (const name of ["registry.json", "registry-private.json"])
+    if (existsSync(join(here, name))) copyFileSync(join(here, name), join(dir, "src", name));
+  return join(dir, "work");
+}
+
+test("a rejected job exits 2 before Houdini is imported", (t) => {
   // Plain Python has no `hou`: reaching the import would fail with exit 1.
   const job = { schemaVersion: 1, id: "debug-atlas", params: {}, seed: -1, tier: "preview", threads: 4,
     registrySha256: readRegistry(here).digest };
-  const result = run([runGenerator], JSON.stringify(job));
+  const work = stage(t);
+  const result = run([runGenerator], JSON.stringify(job), work);
   assert.equal(result.status, 2, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout.replace(/^\[houdini-run\] /, "")), { ok: false, rejected: "seed is out of range" });
-  const large = run([runGenerator], " ".repeat(65537));
+  const large = run([runGenerator], " ".repeat(65537), work);
   assert.equal(large.status, 2);
   assert.match(large.stdout, /job is too large/);
-  const garbage = run([runGenerator], "not json");
+  const garbage = run([runGenerator], "not json", work);
   assert.equal(garbage.status, 2);
   assert.match(garbage.stdout, /"ok": false/);
+});
+
+test("run_generator reads the stage's snapshot, never the registry beside itself", (t) => {
+  const empty = Buffer.from(JSON.stringify({ schemaVersion: 1, generators: {} }));
+  const job = { schemaVersion: 1, id: "debug-atlas", params: {}, seed: 7, tier: "preview", threads: 4, registrySha256: sha256(empty) };
+  const unknown = run([runGenerator], JSON.stringify(job), stage(t, empty));
+  assert.equal(unknown.status, 2, unknown.stderr);
+  assert.match(unknown.stdout, /unknown generator/);
+  const bare = mkdtempSync(join(tmpdir(), "pe-houdini-bare-"));
+  t.after(() => rmSync(bare, { recursive: true, force: true }));
+  mkdirSync(join(bare, "work"));
+  const none = run([runGenerator], JSON.stringify({ ...job, registrySha256: readRegistry(here).digest }), join(bare, "work"));
+  assert.equal(none.status, 2, none.stderr);
+  assert.match(none.stdout, /no source snapshot/);
 });

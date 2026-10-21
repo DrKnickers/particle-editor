@@ -469,9 +469,81 @@ test("hythonFailure never repeats licence text", () => {
   assert.equal(hythonFailure(2, "garbage", "").exitCode, 8, "exit 2 without a report is not a rejection");
 });
 
+// Another repository's generators root: debug_atlas.py and its entry, copied verbatim.
+function otherRoot(t) {
+  const root = mkdtempSync(join(tmpdir(), "pe-houdini-other-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, "generators"));
+  cpSync(join(HOUDINI_DIR, "generators", "debug_atlas.py"), join(root, "generators", "debug_atlas.py"));
+  const entry = JSON.parse(readFileSync(join(HOUDINI_DIR, "registry.json"))).generators["debug-atlas"];
+  writeFileSync(join(root, "registry.json"), JSON.stringify({ schemaVersion: 1, generators: { "debug-atlas": entry } }));
+  return root;
+}
+// What hython would find in <stage>\src when the fake run starts.
+const snapshotOf = (s) => {
+  const src = join(s.cwd, "..", "src");
+  return Object.fromEntries(readdirSync(src, { recursive: true }).filter((name) => !fs.statSync(join(src, name)).isDirectory())
+    .map((name) => [name.replaceAll("\\", "/"), readFileSync(join(src, name))]));
+};
+
+test("hython runs from a snapshot of exactly the files Node checked, beside its working folder", windows, async (t) => {
+  let seen = null;
+  const h = harness(t, { behave: (s) => { seen = snapshotOf(s); writeOutput(s.cwd); return { outcome: "exited", code: 0, pid: 42 }; } });
+  assert.equal((await h.run()).exitCode, 0);
+  const expected = { "registry.json": readFileSync(join(HOUDINI_DIR, "registry.json")),
+    "generators/debug_atlas.py": readFileSync(join(HOUDINI_DIR, "generators", "debug_atlas.py")) };
+  if (existsSync(join(HOUDINI_DIR, "registry-private.json")))
+    expected["registry-private.json"] = readFileSync(join(HOUDINI_DIR, "registry-private.json"));
+  assert.deepEqual(seen, expected);
+});
+
+test("--generators-root runs another root's generator under the same key as the same bytes here", windows, async (t) => {
+  const root = otherRoot(t);
+  let seen = null;
+  const h = harness(t, { behave: (s) => { seen = snapshotOf(s); writeOutput(s.cwd); return { outcome: "exited", code: 0, pid: 42 }; } });
+  const other = await h.run({ generatorsRoot: root });
+  assert.equal(other.exitCode, 0, other.error);
+  assert.deepEqual(Object.keys(seen).sort(), ["generators/debug_atlas.py", "registry.json"]);
+  assert.deepEqual(seen["registry.json"], readFileSync(join(root, "registry.json")));
+  assert.equal(JSON.parse(h.calls.run[0].s.input).registrySha256, sha256(readFileSync(join(root, "registry.json"))));
+  const home = await harness(t).run();
+  assert.equal(other.cacheKey, home.cacheKey, "the key holds the pinned bytes, not the root's path");
+});
+
+test("a file changed after Node read it never reaches hython", windows, async (t) => {
+  const root = otherRoot(t), builder = join(root, "generators", "debug_atlas.py");
+  const checked = readFileSync(builder);
+  const io = { ...fs, readFileSync: (path, ...rest) => {
+    const bytes = fs.readFileSync(path, ...rest);
+    if (String(path).toLowerCase() === builder.toLowerCase()) fs.writeFileSync(builder, "import os\nos.system('calc')\n");
+    return bytes;
+  } };
+  let seen = null;
+  const h = harness(t, { seams: { io }, behave: (s) => { seen = snapshotOf(s); writeOutput(s.cwd); return { outcome: "exited", code: 0, pid: 42 }; } });
+  assert.equal((await h.run({ generatorsRoot: root })).exitCode, 0);
+  assert.deepEqual(seen["generators/debug_atlas.py"], checked);
+});
+
+test("--out and the generators root may not sit inside each other", windows, async (t) => {
+  const root = otherRoot(t);
+  for (const out of [join(root, "out"), join(root, "..")]) {
+    const h = harness(t);
+    const result = await h.run({ generatorsRoot: root, out });
+    assert.equal(result.exitCode, 2, out);
+    assert.match(result.error, /generators root/);
+    assert.equal(h.calls.lock, 0);
+  }
+  const h = harness(t);
+  const relative = await h.run({ generatorsRoot: "houdini" });
+  assert.equal(relative.exitCode, 2);
+  assert.match(relative.error, /--generators-root must be an absolute drive path/);
+});
+
 test("parseArgs needs --generator, --seed and --tier, once each", () => {
   assert.deepEqual(parseArgs(["--generator", "debug-atlas", "--seed", "7", "--tier", "preview", "--out", "C:\\gen"]),
     { generator: "debug-atlas", seed: "7", tier: "preview", out: "C:\\gen" });
+  assert.deepEqual(parseArgs(["--generator", "a", "--seed", "1", "--tier", "final", "--generators-root", "C:\\fe\\houdini"]),
+    { generator: "a", seed: "1", tier: "final", generatorsRoot: "C:\\fe\\houdini" });
   for (const argv of [[], ["--generator", "a", "--seed", "1"], ["--generator", "a", "--seed", "1", "--tier", "preview", "--seed", "2"],
     ["--generator", "a", "--seed", "1", "--tier", "preview", "--exe", "x"], ["--generator"],
     ["__proto__", "x", "--generator", "a", "--seed", "1", "--tier", "preview"], ["constructor", "x"]])

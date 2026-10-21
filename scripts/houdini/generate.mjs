@@ -1,7 +1,12 @@
 // [houdini] Run one registered generator (plan §3.1).
 //
 //   node scripts/houdini/generate.mjs --generator debug-atlas --seed 7 --tier preview
-//        [--params p.json] [--out <root>]
+//        [--params p.json] [--out <root>] [--generators-root <root>]
+//
+// The generator comes from a generators root (source.mjs): this folder, or
+// another repository's named by --generators-root. Its files are read and
+// checked against their pins once, here, and hython runs a snapshot of exactly
+// those bytes from the stage.
 //
 // Inputs are checked, the cache is consulted under the machine lock, and on a
 // miss hython runs run_generator.py inside a Job Object with an allowlisted
@@ -27,7 +32,8 @@ import { randomBytes } from "node:crypto";
 import { dirname, join, resolve, win32 } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolveReplayGameRoots } from "../replay-proof.mjs";
-import { checkParams, checkRoot, checkTier, defaultParams, fail, lookup, parseSeed, readRegistry } from "./rules.mjs";
+import { checkParams, checkRoot, checkTier, defaultParams, fail, parseSeed } from "./rules.mjs";
+import { readSource } from "./source.mjs";
 import { buildProvenance, cacheKey, canonical, checkManifest, dirBytes, evict, serialise, sha256, treeHashes, verifyEntry } from "./cache.mjs";
 import { HOIIOTOOL_VERSION, HOUDINI_BUILD, PINNED, TEXCONV, THREADS, childEnvironment, verifyPinned, verifyTexconv } from "./houdini.mjs";
 import { acquireLock, runContained } from "./contain.mjs";
@@ -47,7 +53,8 @@ const MAX_PARAMS_BYTES = 65536;
 const LICENCE = /licen[cs]e/i;
 
 export function parseArgs(argv) {
-  const flags = { "--generator": "generator", "--seed": "seed", "--tier": "tier", "--params": "params", "--out": "out" };
+  const flags = { "--generator": "generator", "--seed": "seed", "--tier": "tier", "--params": "params", "--out": "out",
+    "--generators-root": "generatorsRoot" };
   const args = {};
   for (let i = 0; i < argv.length; i++) {
     const name = Object.hasOwn(flags, argv[i]) ? flags[argv[i]] : null;
@@ -70,6 +77,12 @@ export function repoRoots() {
     { encoding: "utf8", windowsHide: true, timeout: 10000 });
   if (r.status === 0 && r.stdout.trim()) roots.push(dirname(resolve(r.stdout.trim())));
   return roots;
+}
+
+// The repository a generators root sits in, if any: --out may not be inside it.
+export function repositoryOf(dir) {
+  const r = spawnSync("git", ["-C", dir, "rev-parse", "--show-toplevel"], { encoding: "utf8", windowsHide: true, timeout: 10000 });
+  return r.status === 0 && r.stdout.trim() ? [resolve(r.stdout.trim())] : [];
 }
 
 const tail = (text, bytes = 2048) => (text.length > bytes ? `...${text.slice(-bytes)}` : text).trim();
@@ -146,7 +159,7 @@ function publish(root, entryDir, name, temporary, io) {
 }
 
 export async function generate(args, {
-  io = fs, env = process.env, gameRoots = resolveReplayGameRoots, repos = repoRoots, lock = acquireLock,
+  io = fs, env = process.env, gameRoots = resolveReplayGameRoots, repos = repoRoots, sourceRepo = repositoryOf, lock = acquireLock,
   run = runContained, tool = runHoiiotool, verify = verifyPinned, compress = runTexconv, verifyCompressor = verifyTexconv,
   now = () => Date.now(), clock = () => new Date().toISOString(),
   random = () => randomBytes(4).toString("hex"), log = (text) => process.stderr.write(`${text}\n`),
@@ -159,8 +172,8 @@ export async function generate(args, {
   let auditRoot = null;
   try {
     // 1. Inputs.
-    const { registry, digest: registryDigest } = readRegistry(houdiniDir, io);
-    const entry = lookup(registry, args.generator);
+    const source = readSource(args.generatorsRoot ?? houdiniDir, args.generator, io, env);
+    const { entry, digest: registryDigest } = source;
     Object.assign(record, { id: args.generator, version: entry.version, renderer: entry.renderer });
     const tier = checkTier(args.tier), seed = parseSeed(args.seed);
     let params = defaultParams(entry.params);
@@ -176,10 +189,8 @@ export async function generate(args, {
     const games = gameRoots();
     const root = checkRoot(args.out ?? defaultRoot(env), {
       repoRoot: repos(), env, io, gameRoots: [...games, ...games.map((game) => dirname(game))],
+      sourceRoots: [source.root, ...sourceRepo(source.root)],
     });
-    // Node checks the builder too, so a drifted pin fails before any spawn.
-    if (sha256(io.readFileSync(join(houdiniDir, ...entry.builder.split("/")))) !== entry.builderSha256)
-      throw fail(`${entry.builder} does not match its pinned builderSha256`, 1);
 
     // 2. Key.
     const format = entry.format ?? "tga";
@@ -239,6 +250,11 @@ export async function generate(args, {
       io.mkdirSync(stage);
       const work = join(stage, "work");
       io.mkdirSync(work);
+      // hython reads the generator from here, not from the root: the bytes Node checked.
+      const src = join(stage, "src");
+      io.mkdirSync(join(src, "generators"), { recursive: true });
+      for (const [name, bytes] of Object.entries({ ...source.registryFiles, ...source.files }))
+        io.writeFileSync(join(src, ...name.split("/")), bytes, { flag: "wx" });
 
       // 6. hython, contained.
       const job = { schemaVersion: 1, id: args.generator, params, seed, tier, threads: THREADS, registrySha256: registryDigest };

@@ -59,7 +59,8 @@ function checkEntry(id, entry) {
   const keys = ["version", "builder", "builderSha256", "renderer", "blend", "grid", "params", "tiers"];
   exactKeys(entry, [...keys, ...OPTIONAL.filter((key) => Object.hasOwn(entry ?? {}, key))], what);
   check(integer(entry.version, 1, 1e6), `${what} version is not a positive integer`);
-  check(typeof entry.builder === "string" && BUILDER.test(entry.builder), `${what} builder path is malformed`);
+  check(typeof entry.builder === "string" && BUILDER.test(entry.builder) && !DEVICE.test(entry.builder.slice(11)),
+    `${what} builder path is malformed`);
   check(typeof entry.builderSha256 === "string" && HEX64.test(entry.builderSha256), `${what} builderSha256 is malformed`);
   check(RENDERERS.includes(entry.renderer), `${what} renderer is unknown`);
   check(BLENDS.includes(entry.blend), `${what} blend is not one of ${BLENDS.join(", ")}`);
@@ -72,7 +73,8 @@ function checkEntry(id, entry) {
   if (entry.modules !== undefined) {
     check(isObject(entry.modules) && Object.keys(entry.modules).length > 0, `${what} modules is not a non-empty object`);
     for (const [name, hash] of Object.entries(entry.modules)) {
-      check(MODULE.test(name) && `generators/${name}.py` !== entry.builder, `${what} module name is malformed: ${name}`);
+      check(MODULE.test(name) && !DEVICE.test(name) && `generators/${name}.py` !== entry.builder,
+        `${what} module name is malformed: ${name}`);
       check(typeof hash === "string" && HEX64.test(hash), `${what} module ${name} hash is malformed`);
     }
   }
@@ -118,9 +120,14 @@ const hex = (data) => createHash("sha256").update(data).digest("hex");
 export const PRIVATE_REGISTRY = "registry-private.json";
 
 export function readRegistry(dir, io = fs) {
-  const main = io.readFileSync(join(dir, "registry.json")), registry = parseRegistry(main);
   let extra = null;
   try { extra = io.readFileSync(join(dir, PRIVATE_REGISTRY)); } catch (error) { if (error.code !== "ENOENT") throw error; }
+  return registryFrom(io.readFileSync(join(dir, "registry.json")), extra);
+}
+
+// The registry from the two files' bytes (`extra` null when there is no private file).
+export function registryFrom(main, extra) {
+  const registry = parseRegistry(main);
   if (extra === null) return { registry, digest: hex(main) };
   const more = parseRegistry(extra).generators;
   const twice = Object.keys(more).filter((id) => Object.hasOwn(registry.generators, id));
@@ -186,44 +193,67 @@ const listOrEmpty = (io, path) => { try { return io.readdirSync(path).map((name)
 const looksLikeGame = (io, at) => listOrEmpty(io, at).some((name) => GAME_EXES.includes(name)) ||
   listOrEmpty(io, win32.join(at, "Data")).some((name) => name.endsWith(".meg"));
 
-// The generated root: absolute, plain characters, outside the repo, every game
-// install, Steam's folders and OneDrive, and reached through no link, junction
-// or other reparse point (decision 5, §24.1). It may not exist yet.
-// `repoRoot` may list several roots: a worktree and the checkout it belongs to.
-export function checkRoot(root, { repoRoot, gameRoots = [], env = process.env, io = fs } = {}) {
-  check(typeof root === "string" && /^[A-Za-z]:[\\/]/.test(root), `--out must be an absolute drive path: ${JSON.stringify(root)}`);
+// A root path (`what` names it in messages): absolute, plain characters, outside
+// Steam's folders and OneDrive, and every existing ancestor a plain folder
+// whose real path is itself. Returns the path and its deepest existing part.
+function plainRoot(root, what, { env, io }) {
+  check(typeof root === "string" && /^[A-Za-z]:[\\/]/.test(root), `${what} must be an absolute drive path: ${JSON.stringify(root)}`);
   const path = win32.resolve(root).replace(/\\+$/, "");
-  check(ROOT.test(path), `--out may hold only letters, digits, space and _ . ( ) - : ${path}`);
+  check(ROOT.test(path), `${what} may hold only letters, digits, space and _ . ( ) - : ${path}`);
   check(path.split("\\").slice(1).every((part) => part && !/[. ]$/.test(part) && !DEVICE.test(part)),
-    `--out has a reserved or trailing-dot name: ${path}`);
-  const forbidden = [
-    ...[].concat(repoRoot ?? []).map((repo) => ["the repository", repo]),
-    ...gameRoots.map((game) => ["a game install", game]),
-    ...["OneDrive", "OneDriveConsumer", "OneDriveCommercial"].map((name) => ["OneDrive", env[name]]),
-  ];
-  check(!path.split("\\").some((part) => /^onedrive\b/i.test(part)), `--out is inside OneDrive: ${path}`);
-  check(!path.split("\\").some((part) => /^steamapps$/i.test(part)), `--out is inside a game install (steamapps): ${path}`);
-  // Every existing ancestor must be a plain folder whose real path is itself.
+    `${what} has a reserved or trailing-dot name: ${path}`);
+  check(!path.split("\\").some((part) => /^onedrive\b/i.test(part)), `${what} is inside OneDrive: ${path}`);
+  check(!path.split("\\").some((part) => /^steamapps$/i.test(part)), `${what} is inside a game install (steamapps): ${path}`);
   let existing = null;
   for (let at = path; ; at = win32.dirname(at)) {
     const stat = lstatOrNull(io, at);
     if (stat) {
       existing ??= at;
-      check(!stat.isSymbolicLink(), `--out runs through a link or junction: ${at}`);
-      check(stat.isDirectory(), `--out runs through a file: ${at}`);
-      check(!looksLikeGame(io, at), `--out is inside a game install or mod folder: ${at}`);
+      check(!stat.isSymbolicLink(), `${what} runs through a link or junction: ${at}`);
+      check(stat.isDirectory(), `${what} runs through a file: ${at}`);
+      check(!looksLikeGame(io, at), `${what} is inside a game install or mod folder: ${at}`);
     }
     if (win32.dirname(at) === at) break;
   }
-  check(existing, `--out is on no existing drive: ${path}`);
+  check(existing, `${what} is on no existing drive: ${path}`);
   const real = io.realpathSync.native(existing);
-  check(real.toLowerCase() === existing.toLowerCase(), `--out runs through a reparse point: ${existing} is ${real}`);
-  for (const [what, base] of forbidden) {
+  check(real.toLowerCase() === existing.toLowerCase(), `${what} runs through a reparse point: ${existing} is ${real}`);
+  outside(path, what, ["OneDrive", "OneDriveConsumer", "OneDriveCommercial"].map((name) => ["OneDrive", env[name]]), io);
+  return { path, existing };
+}
+
+// `path` may not be inside any [label, base], as written or as its real path.
+function outside(path, what, bases, io) {
+  for (const [label, base] of bases) {
     if (!base) continue;
     const resolved = win32.resolve(base);
     let baseReal = resolved;
     try { baseReal = io.realpathSync.native(resolved); } catch { /* not there: compare as written */ }
-    check(!within(resolved, path) && !within(baseReal, path), `--out is inside ${what}: ${path}`);
+    check(!within(resolved, path) && !within(baseReal, path), `${what} is inside ${label}: ${path}`);
   }
+}
+
+// The generated root: a plain root (decision 5, §24.1) outside the repo and
+// every game install. It may not exist yet. `repoRoot` may list several roots:
+// a worktree and the checkout it belongs to. `sourceRoots` are the generators
+// root and its repository, already real paths: --out may sit neither inside one
+// nor around one.
+export function checkRoot(root, { repoRoot, gameRoots = [], sourceRoots = [], env = process.env, io = fs } = {}) {
+  const { path } = plainRoot(root, "--out", { env, io });
+  outside(path, "--out", [
+    ...[].concat(repoRoot ?? []).map((repo) => ["the repository", repo]),
+    ...gameRoots.map((game) => ["a game install", game]),
+    ...sourceRoots.map((source) => ["the generators root", source]),
+  ], io);
+  for (const source of sourceRoots) check(!within(path, win32.resolve(source)), `--out holds the generators root: ${path}`);
+  return path;
+}
+
+// A generators root (--generators-root): a plain root that already exists as
+// a folder. Choosing one runs its Python; these checks catch a mistaken path,
+// not a hostile author (docs/HOUDINI_GENERATORS.md).
+export function checkSourceRoot(root, { env = process.env, io = fs } = {}) {
+  const { path, existing } = plainRoot(root, "--generators-root", { env, io });
+  check(existing === path, `--generators-root is not a folder: ${path}`);
   return path;
 }

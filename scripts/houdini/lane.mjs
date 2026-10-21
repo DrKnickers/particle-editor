@@ -9,7 +9,9 @@
 //   - the texture passed its profile and was published under its name;
 //   - the editor loads it from the root alone, and plays the cells 0..15 in
 //     order (validate.mjs, through the Release build);
-//   - the same inputs in a new root give the same texture bytes;
+//   - the same inputs in a new root give the same texture bytes, and so does
+//     a copy of the generator in another generators root (--generators-root),
+//     under the same cache key;
 //   - its provenance records the oracle's cell steps (red up 85 along a row,
 //     down 255 with green up 85 at a row's end), and cell-steps.mjs measures
 //     the game's own fire sheet, P_PARTICLE_EXPLOSION1, the stock baseline;
@@ -88,9 +90,11 @@ async function until(condition, ms) {
 }
 
 // Starts generate.mjs; `onLaunched(hythonPid, wrapper)` fires when hython runs.
-function generate(root, seed, { generator = "debug-atlas", tier = "preview", params = null, onLaunched = null, minutes = 10 } = {}) {
+function generate(root, seed, { generator = "debug-atlas", tier = "preview", params = null, onLaunched = null, minutes = 10,
+  generatorsRoot = null } = {}) {
   const wrapper = spawn(process.execPath, [generateScript, "--generator", generator, "--seed", String(seed),
-    "--tier", tier, "--out", root, ...(params ? ["--params", params] : [])], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+    "--tier", tier, "--out", root, ...(params ? ["--params", params] : []), ...(generatorsRoot ? ["--generators-root", generatorsRoot] : [])],
+  { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
   let stdout = "", stderr = "", hython = null;
   wrapper.stdout.on("data", (chunk) => { stdout += chunk; });
   wrapper.stderr.on("data", (chunk) => {
@@ -276,6 +280,18 @@ try {
     check(elsewhere.code === 0 && elsewhere.record?.hit === false && elsewhere.record.contentHash === contentHash,
       `a new root reproduces the texture byte for byte (${elsewhere.record?.contentHash ?? `exit ${elsewhere.code}`})`);
 
+    // The same generator from another repository's generators root: a copy of
+    // its builder and entry. It renders afresh, under the same key, to the same bytes.
+    const other = join(base, "other-generators");
+    mkdirSync(join(other, "generators"), { recursive: true });
+    writeFileSync(join(other, "generators", "debug_atlas.py"), readFileSync(join(here, "generators", "debug_atlas.py")));
+    const entry = JSON.parse(readFileSync(join(here, "registry.json"), "utf8")).generators["debug-atlas"];
+    writeFileSync(join(other, "registry.json"), JSON.stringify({ schemaVersion: 1, generators: { "debug-atlas": entry } }));
+    const fromOther = await generate(join(base, "other-out"), 7, { generatorsRoot: other });
+    check(fromOther.code === 0 && fromOther.record?.hit === false && fromOther.record.cacheKey === first.record.cacheKey &&
+      fromOther.record.contentHash === contentHash,
+      `--generators-root renders the same generator under the same key, byte for byte (${fromOther.record?.contentHash ?? `exit ${fromOther.code}${fromOther.record?.error ? `: ${fromOther.record.error}` : ""}`})`);
+
     // The same frames as a DDS, held to the TGA the oracle just passed: within
     // DXT5's bounds, a flipped sheet, a moved cell or a turned orientation mark
     // would not be.
@@ -420,7 +436,7 @@ try {
     check(swapped.code === 3 && (swapped.record?.checks ?? []).some((c) => !c.ok && /follow/.test(c.name)),
       `align.mjs refuses the early sheet standing in for the late one (exit ${swapped.code})`);
     const elsewhere = await generate(join(base, "explosion-elsewhere"), 1, { generator: "explosion-probe-fire", minutes: 30 });
-    check(elsewhere.code === 0 && elsewhere.record?.contentHash === probe.fire.contentHash,
+    check(elsewhere.code === 0 && elsewhere.record?.hit === false && elsewhere.record.contentHash === probe.fire.contentHash,
       `explosion-probe-fire: a new root reproduces the texture byte for byte (${elsewhere.record?.contentHash ?? `exit ${elsewhere.code}`})`);
   }
 

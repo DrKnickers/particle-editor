@@ -2,11 +2,16 @@
 #
 # generate.mjs launches `hython run_generator.py` inside a kill-on-close Job
 # Object with the working directory set to the stage, and sends one JSON job
-# on stdin. Nothing here trusts that job: the registry file must hash to the
-# value Node saw, every field is checked again, and the builder must sit
-# inside generators/, hash to its pinned value, and run from the same bytes
-# that were hashed (no window between check and use). So must each shared
-# module the entry pins; the builder gets them as ctx["modules"].
+# on stdin. The generator comes from the stage too: Node reads the registry,
+# the builder and its modules from the generators root once, checks them, and
+# writes exactly those bytes to <stage>\src beside this run's working folder
+# (<stage>\work). Nothing here reads beside this file.
+#
+# Nothing here trusts that job: the registry file must hash to the value Node
+# saw, every field is checked again, and the builder must sit inside
+# generators/, hash to its pinned value, and run from the same bytes that were
+# hashed (no window between check and use). So must each shared module the
+# entry pins; the builder gets them as ctx["modules"].
 #
 # The checks import nothing from Houdini, so a plain Python runs them in the
 # unit tests (job-rules.test.mjs); `hou` is imported in main() only. Keep this
@@ -24,10 +29,6 @@ SEED = re.compile(r"^[0-9]{1,10}$")
 TIERS = ("preview", "validate", "final")
 MAX_SEED = 2 ** 31 - 1
 MAX_JOB_BYTES = 65536
-HERE = os.path.dirname(os.path.abspath(__file__))
-HOUDINI_DIR = os.path.dirname(HERE)
-GENERATORS_DIR = os.path.join(HOUDINI_DIR, "generators")
-REGISTRY_PATH = os.path.join(HOUDINI_DIR, "registry.json")
 # Entries kept off the public mirror, beside the main registry (rules.mjs readRegistry).
 PRIVATE_REGISTRY = "registry-private.json"
 FRAME_NAME = re.compile(r"^frames/frame_[0-9]{4}\.exr$")
@@ -142,7 +143,7 @@ def check_job(job, registry_bytes, private_bytes=None):
     return entry, {"id": job["id"], "params": params, "seed": seed, "tier": job["tier"], "threads": threads}
 
 
-def load_builder(entry, generators_dir=GENERATORS_DIR):
+def load_builder(entry, generators_dir):
     """Read the builder once, confine and hash it, and return its namespace."""
     relative = entry["builder"]
     require(isinstance(relative, str) and re.match(r"^generators/[a-z0-9_]{1,64}\.py$", relative) is not None,
@@ -158,7 +159,7 @@ def load_builder(entry, generators_dir=GENERATORS_DIR):
     return namespace
 
 
-def load_modules(entry, generators_dir=GENERATORS_DIR):
+def load_modules(entry, generators_dir):
     """Read each shared module once, confine and hash it; return its namespace by name."""
     modules = entry.get("modules", {})
     require(isinstance(modules, dict), "modules is not an object")
@@ -213,17 +214,22 @@ def reject(error):
 
 def main():
     raw = sys.stdin.buffer.read(MAX_JOB_BYTES + 1)
+    source = os.path.join(os.path.dirname(os.getcwd()), "src")
+    generators = os.path.join(source, "generators")
     try:
         require(len(raw) <= MAX_JOB_BYTES, "job is too large")
-        registry_bytes, private_bytes = read_registry_files(HOUDINI_DIR)
+        try:
+            registry_bytes, private_bytes = read_registry_files(source)
+        except OSError:
+            raise Rejected("the stage has no source snapshot")
         entry, job = check_job(json.loads(raw.decode("utf-8")), registry_bytes, private_bytes)
     except (Rejected, ValueError) as error:
         reject(error)
     # Only the pin checks are rejections; an error the builder raises while
     # loading is a generator failure (exit 1).
     try:
-        modules = load_modules(entry)
-        builder = load_builder(entry)
+        modules = load_modules(entry, generators)
+        builder = load_builder(entry, generators)
     except Rejected as error:
         reject(error)
     import hou  # noqa: E402 -- only inside hython

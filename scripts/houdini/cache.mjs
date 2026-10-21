@@ -2,9 +2,12 @@
 // spec §21.6).
 //
 // The key hashes everything that can change an output: the whole registry
-// entry, every file under scripts/houdini/, the inputs, the pinned build, the
-// thread count and, for a DDS entry, the pinned texconv and d3dx9. A cache entry is trusted only after its files hash to
-// what its provenance says, on every hit.
+// entry (which pins the builder and its modules by hash), every file of the
+// wrapper under scripts/houdini/, the inputs, the pinned build, the thread
+// count and, for a DDS entry, the pinned texconv and d3dx9. The generators
+// root's path is not in it: the same entry and bytes from another root share
+// the key. A cache entry is trusted only after its files hash to what its
+// provenance says, on every hit.
 //
 // Provenance is deterministic: no times, hosts, users, absolute paths or
 // licence data. Those that matter (times) go to the audit log instead.
