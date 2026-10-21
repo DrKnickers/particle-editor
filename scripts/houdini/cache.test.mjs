@@ -223,7 +223,8 @@ test("eviction never counts or removes what the wrapper did not name", (t) => {
   assert.ok(existsSync(join(foreign, "big")) && existsSync(join(unproven, "data")) && existsSync(join(target, "keep-me")));
 });
 
-test("the explosion generators live in the private registry, off the public mirror", () => {
+// The explosion generators live in FoC Explosions' own generators root (--generators-root), never here.
+test("no explosion generator is registered here", () => {
   const main = JSON.parse(readFileSync(new URL("./registry.json", import.meta.url), "utf8"));
   assert.deepEqual(Object.keys(main.generators).filter((id) => id.startsWith("explosion-")), []);
 });
@@ -232,7 +233,7 @@ test("the explosion generators live in the private registry, off the public mirr
 // is nothing to guard and the test is not registered: a skip there would count against the
 // scripts lane's skip budget.
 const manifest = new URL("../../tasks/public-manifest.txt", import.meta.url);
-if (existsSync(manifest)) test("no explosion file and no file the private registry pins reaches the public mirror", () => {
+if (existsSync(manifest)) test("no explosion file and no file a private registry pins reaches the public mirror", () => {
   // sync-public.ps1's rules: a path publishes if an [include] pattern matches it and no [exclude]
   // one does; a pattern is a folder prefix (dir/), a suffix (*.ext) or an exact path.
   const lines = readFileSync(manifest, "utf8").split(/\r?\n/).map((line) => line.trim());
@@ -250,14 +251,14 @@ if (existsSync(manifest)) test("no explosion file and no file the private regist
   const pins = (entry) => [`scripts/houdini/${entry.builder}`,
     ...Object.keys(entry.modules ?? {}).map((name) => `scripts/houdini/generators/${name}.py`)];
 
+  // Every explosion source by its name, registered or not, and anything a private registry pins
+  // (there is none since the explosion generators moved out; the overlay stays supported).
   const extra = new URL("./registry-private.json", import.meta.url);
-  assert.ok(existsSync(extra), "registry-private.json is missing on the private checkout");
-  // Every explosion source by its name, registered or not, and all the private registry pins.
   const scripts = fileURLToPath(new URL("../", import.meta.url));
   const named = readdirSync(scripts, { recursive: true }).map((file) => `scripts/${file.replaceAll("\\", "/")}`)
     .filter((file) => basename(file).startsWith("explosion"));
   const secret = new Set(["scripts/houdini/registry-private.json", ...named,
-    ...Object.values(JSON.parse(readFileSync(extra, "utf8")).generators).flatMap(pins)]);
+    ...(existsSync(extra) ? Object.values(JSON.parse(readFileSync(extra, "utf8")).generators).flatMap(pins) : [])]);
   assert.deepEqual([...secret].filter((file) => !excluded(file)).sort(), []);
   // And the mirror's own registry pins nothing it lacks.
   const main = JSON.parse(readFileSync(new URL("./registry.json", import.meta.url), "utf8"));

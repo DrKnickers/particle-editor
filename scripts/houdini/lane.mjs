@@ -37,21 +37,13 @@
 //   - a review kit staged from a final-tier ring holds the texture byte for
 //     byte, the lifted review fixture and the game's own PARTICLES.XML with
 //     only the click marker's lifetime changed; a second staging is refused,
-//     and --record writes the verdict;
-//   - the layered explosion's sheets, as 2x2 test-only probes (the triplet and
-//     the puff): each records spans that never shrink and its cell steps,
-//     align.mjs finds the triplet and refuses an early sheet standing in for
-//     the late one, and a new root reproduces the fire byte for byte (only
-//     where registry-private.json is present: the public mirror has no such sheets);
-//   - the ground-hit generators' real VEX, through the pinned hython: the
-//     impact fire and the dirt checks in explosion.test.mjs, which the scripts
-//     lane leaves undefined without PE_HYTHON (also private-only).
+//     and --record writes the verdict.
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
-import { HFS, PINNED } from "./houdini.mjs";
+import { HFS } from "./houdini.mjs";
 import { acquireLock } from "./contain.mjs";
 import { sha256 } from "./cache.mjs";
 import { runHoiiotool } from "./generate.mjs";
@@ -65,7 +57,6 @@ const generateScript = join(here, "generate.mjs");
 const validateScript = join(here, "validate.mjs");
 const reviewScript = join(here, "review-kit.mjs");
 const cellStepsScript = join(here, "cell-steps.mjs");
-const alignScript = join(here, "align.mjs");
 const system32 = win32.join(process.env.SystemRoot ?? "C:\\Windows", "System32");
 const GRID = 4, CELL = 32, FRAME = CELL - 2 * PAD;
 const GENERATORS = ["static-smoke-puff", "static-energy-ring", "ground-fireball-4x4"], EDGE_MAX = 8;
@@ -169,13 +160,6 @@ function validate(entry, out) {
   const r = spawnSync(process.execPath, [validateScript, "--entry", entry, "--out", out], { encoding: "utf8", windowsHide: true, timeout: 20 * 60000 });
   const line = (r.stdout ?? "").split(/\r?\n/).find((v) => v.startsWith("[houdini-validate] {"));
   try { return { code: r.status, record: line ? JSON.parse(line.slice(19)) : null }; } catch { return { code: r.status, record: null }; }
-}
-
-// align.mjs on three cache entries.
-function align(args) {
-  const r = spawnSync(process.execPath, [alignScript, ...args], { encoding: "utf8", windowsHide: true, timeout: 5 * 60000 });
-  const line = (r.stdout ?? "").split(/\r?\n/).find((v) => v.startsWith("[houdini-align] {"));
-  try { return { code: r.status, record: line ? JSON.parse(line.slice(16)) : null }; } catch { return { code: r.status, record: null }; }
 }
 
 // review-kit.mjs, as the owner runs it.
@@ -408,45 +392,6 @@ try {
       const recorded = reviewKit(["--record", kit, "--status", "passed", "--notes", "houdini lane"]);
       check(recorded.code === 0 && JSON.parse(readFileSync(join(kit, "review.json"), "utf8")).gameVerification?.status === "passed",
         `--record writes the verdict into review.json (exit ${recorded.code})`);
-    }
-  }
-
-  // 9. The layered explosion's sheets, as 2x2 probes: the real builders and
-  // sims on four cells each, so the lane stays short. The puff is its own sim,
-  // outside the triplet. They live in the private registry, absent on the public mirror.
-  const probe = {};
-  const privateSheets = existsSync(join(here, "registry-private.json"));
-  // tasks/ never publishes, so the manifest marks the private checkout, where the probes must run.
-  if (existsSync(join(here, "..", "..", "tasks", "public-manifest.txt"))) check(privateSheets, "the private checkout has registry-private.json");
-  else if (!privateSheets) console.log("[houdini-lane] no registry-private.json: the explosion probes are skipped");
-  for (const role of privateSheets ? ["early", "late", "fire", "puff"] : []) {
-    const generator = `explosion-probe-${role}`;
-    const made = await generate(join(base, "explosion"), 1, { generator, minutes: 30 });
-    if (!check(made.code === 0, `${generator} generates (exit ${made.code}${made.record?.error ? `: ${made.record.error}` : ""})`)) continue;
-    probe[role] = made.record;
-    const { cellSpan, cellSteps } = JSON.parse(readFileSync(join(made.record.entry, "provenance.json"), "utf8"));
-    check(Array.isArray(cellSpan) && cellSpan.length === 4 && cellSpan.every((v, i) => v > 0 && (i === 0 || v >= cellSpan[i - 1])) &&
-      cellSteps?.steps?.length === 3, `${generator} records spans that never shrink and its cell steps (${JSON.stringify(cellSpan)}; mean step ${cellSteps?.mean})`);
-  }
-  if (probe.early && probe.late && probe.fire) {
-    const aligned = align(["--early", probe.early.entry, "--late", probe.late.entry, "--fire", probe.fire.entry]);
-    const failed = (aligned.record?.checks ?? []).filter((c) => !c.ok).map((c) => c.name);
-    check(aligned.code === 0 && aligned.record?.ok === true, `align.mjs finds the three one triplet (exit ${aligned.code}${failed.length ? `; failed: ${failed.join("; ")}` : ""})`);
-    const swapped = align(["--early", probe.early.entry, "--late", probe.early.entry, "--fire", probe.fire.entry]);
-    check(swapped.code === 3 && (swapped.record?.checks ?? []).some((c) => !c.ok && /follow/.test(c.name)),
-      `align.mjs refuses the early sheet standing in for the late one (exit ${swapped.code})`);
-    const elsewhere = await generate(join(base, "explosion-elsewhere"), 1, { generator: "explosion-probe-fire", minutes: 30 });
-    check(elsewhere.code === 0 && elsewhere.record?.hit === false && elsewhere.record.contentHash === probe.fire.contentHash,
-      `explosion-probe-fire: a new root reproduces the texture byte for byte (${elsewhere.record?.contentHash ?? `exit ${elsewhere.code}`})`);
-  }
-
-  // 10. The ground-hit generators' real VEX. The scripts lane allows no skips,
-  // so these checks exist only with PE_HYTHON; here they must run and pass by name.
-  if (privateSheets) {
-    const vex = spawnSync(process.execPath, ["--test", "--test-reporter=tap", "--test-name-pattern=^real (impact|dirt) VEX",
-      join(here, "explosion.test.mjs")], { env: { ...process.env, PE_HYTHON: PINNED.hython.path }, encoding: "utf8", windowsHide: true, maxBuffer: 1 << 26 });
-    for (const name of ["real impact VEX", "real dirt VEX"]) {
-      check(vex.status === 0 && new RegExp(`^ok \\d+ - ${name} `, "m").test(vex.stdout), `explosion.test.mjs: ${name} passes through the pinned hython (exit ${vex.status})`);
     }
   }
 } finally {
