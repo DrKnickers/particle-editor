@@ -1,9 +1,9 @@
 #ifndef TOOL_MAIN_H
 #define TOOL_MAIN_H
 
-// `ParticleEditor.exe --tool <verb> ...`: the window-free authoring tool
-// (tasks/2026-10-07-phase4b-tool-verbs-plan.md). It runs before any window,
-// D3D, WebView2 or game-data work and returns the process exit code.
+// `ParticleEditor.exe --tool <verb> ...`: the window-free authoring tool. It
+// runs before any window, D3D, WebView2 or game-data work and returns the
+// process exit code.
 //
 //   --tool inspect  <in.alo> --out <inspect.json>
 //   --tool validate <in.alo> --out <report.json>

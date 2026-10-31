@@ -251,7 +251,7 @@ export function checkRoot(root, { repoRoot, gameRoots = [], sourceRoots = [], en
 
 // A generators root (--generators-root): a plain root that already exists as
 // a folder. Choosing one runs its Python; these checks catch a mistaken path,
-// not a hostile author (docs/HOUDINI_GENERATORS.md).
+// not a hostile author.
 export function checkSourceRoot(root, { env = process.env, io = fs } = {}) {
   const { path, existing } = plainRoot(root, "--generators-root", { env, io });
   check(existing === path, `--generators-root is not a folder: ${path}`);

@@ -10,8 +10,8 @@
 //     [--exe path] [--game-root path ...]
 //
 // The loop never writes the source: it works on a copy inside a fresh task
-// root, and every step leaves its artifact there (docs/VFX_LOOP.md). It decides
-// nothing about taste. What it ends with is evidence for a human.
+// root, and every step leaves its artifact there. It decides nothing about
+// taste. What it ends with is evidence for a human.
 import * as fs from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, win32 } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";

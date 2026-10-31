@@ -2,7 +2,7 @@
 #define TOOL_PATCH_H
 
 // `--tool patch`: apply a request's mutations to one emitter and write a
-// verified candidate .alo (tasks/2026-10-07-phase4b-tool-verbs-plan.md §3.5).
+// verified candidate .alo.
 //
 // The request (UTF-8 JSON, at most 16 MiB and 256 mutations):
 //

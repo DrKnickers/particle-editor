@@ -10,7 +10,7 @@ export function scriptTestFiles(root = repoRoot) {
   const dirs = [
     "web/apps/editor/scripts/lib", "scripts/lib", "scripts/clip-encode",
     "scripts/clip-verify", "scripts/clip-author", "scripts",
-    "scripts/vfx-benchmark", "scripts/vfx-loop", "scripts/vfx-index",
+    "scripts/vfx-loop", "scripts/vfx-index",
     "scripts/vfx-build", "scripts/mcp-adapter", "scripts/houdini",
     "scripts/wiki-media/__tests__",
   ];

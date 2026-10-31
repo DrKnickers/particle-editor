@@ -1,7 +1,7 @@
 // Member coverage for `--tool inspect` (benchmark plan section 3.2, check 2).
 // The data members declared in ParticleSystem::Emitter (a class), Emitter::Group
 // and LinkExemptFlags, minus the documented non-persisted ones, must equal the
-// mapped set in fixtures/persisted-members.json. A new member -- padding or
+// mapped set in tests/fixtures/persisted-members.json. A new member -- padding or
 // not -- fails here until it is dumped and mapped (test_particle_system_json
 // then checks the mapped key appears in a real dump).
 import { test } from "node:test";
@@ -11,8 +11,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const repoRoot = join(here, "..", "..");
-const table = JSON.parse(readFileSync(join(here, "fixtures", "persisted-members.json"), "utf8"));
+const repoRoot = join(here, "..");
+const table = JSON.parse(readFileSync(join(repoRoot, "tests", "fixtures", "persisted-members.json"), "utf8"));
 const particleHeader = readFileSync(join(repoRoot, "src", "effect", "ParticleSystem.h"), "utf8");
 const linkHeader = readFileSync(join(repoRoot, "src", "effect", "LinkGroup.h"), "utf8");
 

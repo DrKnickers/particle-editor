@@ -2,7 +2,7 @@
   "_readme": [
     "Every persisted data member of ParticleSystem::Emitter, Emitter::Group and LinkExemptFlags,",
     "mapped to the --tool inspect JSON key that carries it (src/effect/ParticleSystemJson.h).",
-    "members.test.mjs checks: declared data members minus nonPersisted == the mapped set.",
+    "scripts/persisted-members.test.mjs checks: declared data members minus nonPersisted == the mapped set.",
     "test_particle_system_json checks every mapped key appears in a real dump.",
     "trackContents and tracks both feed the per-track `tracks` entries; has11 decides whether",
     "unknown11 is null. parent is a runtime pointer; the dump derives its `parent` from the",

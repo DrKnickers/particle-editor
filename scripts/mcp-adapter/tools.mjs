@@ -16,7 +16,7 @@ export const SEARCH_SCRIPT = join(repoRoot, "scripts", "vfx-index", "search.mjs"
 const MAX_RESULT = 32 << 20;
 const MINUTE = 60_000;
 
-// What each exit code means, as docs/CAPTURE_MODES.md and docs/VFX_INDEX.md give them.
+// What each exit code means.
 const TOOL_EXITS = { 2: "usage, an alias, or a malformed request", 3: "the source did not load exactly as written",
   4: "the selector did not match (a stale hash, no match, an expected mismatch)", 5: "a rule refused an edit",
   6: "a verification check failed", 13: "a file could not be written", 14: "internal error" };
@@ -33,19 +33,19 @@ export const DEFINITIONS = [
     description: "Whether an .alo loads exactly as written, with every repair the loader would make, `canonical`, and advisories. Runs `ParticleEditor.exe --tool validate`; an invalid file is a normal result (exit 3), not a tool error.",
     inputSchema: { type: "object", properties: { source: path("The .alo to check") }, required: ["source"], additionalProperties: false } },
   { name: "particle_patch", title: "Patch one emitter",
-    description: "Applies a patch request's edits to one emitter and writes a verified candidate, never touching the source. The request is the strict JSON docs/CAPTURE_MODES.md documents: { schema: 1, selector: { sourceDocumentHash, rolePath, expected }, mutations: [...] }. Returns the patch report. Runs `ParticleEditor.exe --tool patch`.",
+    description: "Applies a patch request's edits to one emitter and writes a verified candidate, never touching the source. The request is strict JSON: { schema: 1, selector: { sourceDocumentHash, rolePath, expected }, mutations: [...] }. Returns the patch report. Runs `ParticleEditor.exe --tool patch`.",
     inputSchema: { type: "object", properties: { source: path("The .alo to patch"),
       request: { type: "object", description: "The patch request" },
       candidate: path("Where to write the candidate .alo (a new or plain file, never the source)") },
     required: ["source", "request", "candidate"], additionalProperties: false } },
   { name: "particle_observe", title: "Observe an effect",
-    description: "Replays one instance of an .alo under the fixed golden profile and writes an observation bundle: stride frames, a filmstrip, optional playback, capture.json and manifest.json (docs/OBSERVATION_BUNDLE.md). Returns manifest.json. Needs the game data the server was started with. Takes minutes; calls run one at a time.",
+    description: "Replays one instance of an .alo under the fixed golden profile and writes an observation bundle: stride frames, a filmstrip, optional playback, capture.json and manifest.json. Returns manifest.json. Needs the game data the server was started with. Takes minutes; calls run one at a time.",
     inputSchema: { type: "object", properties: { source: path("The .alo to observe"),
       spec: { type: "object", description: "The observation spec (schema 1) without scenario.aloPath, which is set from `source`" },
       outDir: path("A new or empty folder for the bundle") },
     required: ["source", "spec", "outDir"], additionalProperties: false } },
   { name: "particle_asset_search", title: "Search existing textures and recipes",
-    description: "Ranks the textures a catalog's effects use, and registered recipes, by filename, emitter, effect, blend mode and observed use (docs/VFX_INDEX.md). At least one facet is required. Runs `scripts/vfx-index/search.mjs --json`.",
+    description: "Ranks the textures a catalog's effects use, and registered recipes, by filename, emitter, effect, blend mode and observed use. At least one facet is required. Runs `scripts/vfx-index/search.mjs --json`.",
     inputSchema: { type: "object", properties: { catalog: path("A catalog.json from scripts/vfx-index/build.mjs"),
       recipes: path("A recipe registry (optional)"), filename: text("File name: exact stem, prefix, then substring"),
       emitter: text("Emitter name contains"), effect: text("Effect file name contains"),

@@ -1,4 +1,4 @@
-// Builds nothing. report.json v1 is documented in docs/REPLAY_PROOF_REPORT.md.
+// Builds nothing.
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync, unlinkSync, openSync, closeSync, readSync, fstatSync } from "node:fs";
 import { dirname, join, resolve, basename } from "node:path";

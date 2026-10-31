@@ -13,10 +13,9 @@
 //
 // The dump describes the LOADED state: values the loader normalises (for
 // example randomRotationVariance, clamped into [0, 1]) appear normalised.
-// Every member listed here is mirrored in
-// scripts/vfx-benchmark/fixtures/persisted-members.json, which
-// members.test.mjs checks against the declarations in ParticleSystem.h and
-// LinkGroup.h.
+// Every member listed here is mirrored in tests/fixtures/persisted-members.json,
+// which scripts/persisted-members.test.mjs checks against the declarations in
+// ParticleSystem.h and LinkGroup.h.
 
 #include <cmath>
 #include <cstdint>
@@ -140,8 +139,8 @@ inline json EmitterJson(const ParticleSystem::Emitter& e, json parent)
     };
 }
 
-// Every LinkExemptFlags member, by name. members.test.mjs keeps this in step
-// with LinkGroup.h through persisted-members.json.
+// Every LinkExemptFlags member, by name. persisted-members.test.mjs keeps this
+// in step with LinkGroup.h through persisted-members.json.
 struct ExemptMember { const char* name; bool LinkExemptFlags::* member; };
 inline const ExemptMember* ExemptMembers(size_t* count)
 {

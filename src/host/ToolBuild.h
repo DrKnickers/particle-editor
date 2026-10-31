@@ -2,7 +2,7 @@
 #define TOOL_BUILD_H
 
 // `--tool build`: a new particle system from a spec, written as a verified
-// .alo (tasks/todo.md, the layered explosion's step 3).
+// .alo.
 //
 // The spec (UTF-8 JSON, at most 16 MiB, 64 entries and 256 mutations an
 // emitter):

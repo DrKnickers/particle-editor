@@ -2,9 +2,8 @@
 #define TOOL_REORDER_H
 
 // `--tool reorder`: move one root emitter (with its subtree) to another root
-// position and write the saved result. It authors the defect benchmark's
-// draw-order cases (docs/VFX_BENCHMARK.md); it is not a `--tool patch` op,
-// whose vocabulary leaves structural edits out.
+// position and write the saved result. It is not a `--tool patch` op, whose
+// vocabulary leaves structural edits out.
 //
 // The request (UTF-8 JSON):
 //

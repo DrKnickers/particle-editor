@@ -20,7 +20,6 @@
 //   - each member's cells playing forward and ending on the atlas's last
 //     cell, never past it;
 //   - the fire drawn after its early smoke, and the overlay after the fire.
-// The design: tasks/2026-10-14-layered-explosion-design.md, "The pair rule".
 //
 // Prints one `[pair-check]` JSON line. Exit 0 every triplet holds (or there
 // are none), 5 a rule is broken, 2 usage, 3 the effect could not be inspected.

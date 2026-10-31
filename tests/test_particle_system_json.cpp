@@ -1,5 +1,4 @@
-// `--tool inspect` completeness (Phase 4B PR 1; tasks/2026-10-07-phase4b-tool-verbs-plan.md,
-// benchmark plan section 3.2). The member enumeration in ParticleSystemJson.h
+// `--tool inspect` completeness. The member enumeration in ParticleSystemJson.h
 // is maintained by hand; these checks catch a drift mechanically:
 //
 //   A. leaveParticles: a file without chunk 0x0002 loads (and re-saves) true;
@@ -9,7 +8,7 @@
 //      fields that carry it, and every mapped path must occur. Catches a new
 //      chunk.
 //   C. Member tables: every member persisted-members.json maps appears in the
-//      dump, and the sizeof guards. (members.test.mjs checks the same table
+//      dump, and the sizeof guards. (persisted-members.test.mjs checks the same table
 //      against the header declarations, which catches a new member.)
 //   D. Projection: for every persisted item, a mutation's in-memory dump run
 //      through ProjectPersisted equals the dump of the saved-and-reloaded
@@ -308,7 +307,7 @@ static void TestMemberTables()
     particle_json::ExemptMembers(&exemptCount);
     check(sizeof(LinkExemptFlags) == exemptCount, "every LinkExemptFlags byte is a named member in the dump");
 
-    std::ifstream in(RepoRoot() + "/scripts/vfx-benchmark/fixtures/persisted-members.json");
+    std::ifstream in(RepoRoot() + "/tests/fixtures/persisted-members.json");
     check(in.good(), "persisted-members.json is readable");
     if (!in.good()) return;
     const json table = json::parse(in);

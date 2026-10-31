@@ -64,11 +64,11 @@ $p = Start-Process ParticleEditor.exe -ArgumentList '--tool','validate','fx.alo'
 $p.ExitCode
 ```
 
-The request format, every edit and the report are documented in
-[docs/CAPTURE_MODES.md](docs/CAPTURE_MODES.md#window-free-cli----tool-inspect----tool-validate----tool-patch).
+The request format, every edit and the report are documented at the top of
+[src/host/ToolPatch.h](src/host/ToolPatch.h).
 
 The same tools, plus effect observation and texture search, are available to an MCP client such as
-Claude Desktop through a local adapter; see [docs/MCP_ADAPTER.md](docs/MCP_ADAPTER.md).
+Claude Desktop through a local adapter in [scripts/mcp-adapter/](scripts/mcp-adapter/).
 
 ## Learning it
 
