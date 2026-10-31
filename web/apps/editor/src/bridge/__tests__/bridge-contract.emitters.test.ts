@@ -5,6 +5,7 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { MockBridge } from "../mock";
+import { makeMockBridgeWithListener } from "@/test/mock-bridge";
 import {
   useMockEmitterTree,
   useMockEngineState,
@@ -37,9 +38,8 @@ describe("MockBridge contract — emitters/*", () => {
 
   // ─── emitter tree + selection ──────────────────
   it("emitters/select updates snapshot.selectedEmitterId and fires emitters/selected", async () => {
-    const b = new MockBridge();
     let lastEvent: { id: number | null } | null = null;
-    const off = b.on("emitters/selected", (e) => { lastEvent = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("emitters/selected", (e) => { lastEvent = e.payload; });
 
     // Initial snapshot: the default root emitter (id 0) is selected on boot
     // (legacy parity — see makeDefaultEngineState in mock-state).
@@ -64,9 +64,8 @@ describe("MockBridge contract — emitters/*", () => {
 
   // ─── emitter mutations + dialogs ─────
   it("emitters/duplicate clones the emitter as a new root and returns ok:true + newId", async () => {
-    const b = new MockBridge();
     let lastTree: EmitterTreeDto | null = null;
-    const off = b.on("emitters/tree/changed", (e) => { lastTree = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("emitters/tree/changed", (e) => { lastTree = e.payload; });
 
     const r = await b.request({ kind: "emitters/duplicate", params: { id: 0 } });
     if (!r.ok) throw new Error("expected ok:true");
@@ -102,9 +101,8 @@ describe("MockBridge contract — emitters/*", () => {
   });
 
   it("emitters/rename updates the node name in the tree", async () => {
-    const b = new MockBridge();
     let lastTree: EmitterTreeDto | null = null;
-    const off = b.on("emitters/tree/changed", (e) => { lastTree = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("emitters/tree/changed", (e) => { lastTree = e.payload; });
 
     await b.request({
       kind: "emitters/rename",
@@ -160,9 +158,8 @@ describe("MockBridge contract — emitters/*", () => {
   // ─── add-child + move + link-group membership ─
 
   it("emitters/add-lifetime-child adds a lifetime child under the parent and returns its newId", async () => {
-    const b = new MockBridge();
     let lastTree: EmitterTreeDto | null = null;
-    const off = b.on("emitters/tree/changed", (e) => { lastTree = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("emitters/tree/changed", (e) => { lastTree = e.payload; });
     // Flash (id=5) starts as a leaf — no children. Adding a lifetime
     // child should succeed and produce a child with role: "lifetime".
     const r = await b.request({
@@ -179,9 +176,8 @@ describe("MockBridge contract — emitters/*", () => {
   });
 
   it("emitters/add-root appends a new empty root emitter and returns its newId", async () => {
-    const b = new MockBridge();
     let lastTree: EmitterTreeDto | null = null;
-    const off = b.on("emitters/tree/changed", (e) => { lastTree = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("emitters/tree/changed", (e) => { lastTree = e.payload; });
     const before = await b.request({ kind: "emitters/list", params: {} });
     const rootCountBefore = before.root.children.length;
     const r = await b.request({ kind: "emitters/add-root", params: {} });
@@ -199,9 +195,8 @@ describe("MockBridge contract — emitters/*", () => {
   });
 
   it("emitters/add-death-child adds a death child under the parent and returns its newId", async () => {
-    const b = new MockBridge();
     let lastTree: EmitterTreeDto | null = null;
-    const off = b.on("emitters/tree/changed", (e) => { lastTree = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("emitters/tree/changed", (e) => { lastTree = e.payload; });
     // Sparks (id=3) has one lifetime child but no death child. Add a
     // death child and verify role + position (death child renders
     // after lifetime).
@@ -219,9 +214,8 @@ describe("MockBridge contract — emitters/*", () => {
   });
 
   it("emitters/move swaps adjacent roots", async () => {
-    const b = new MockBridge();
     let lastTree: EmitterTreeDto | null = null;
-    const off = b.on("emitters/tree/changed", (e) => { lastTree = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("emitters/tree/changed", (e) => { lastTree = e.payload; });
     // Fixture roots in order: Smoke(0), Sparks(3), Flash(5). Move
     // Sparks (middle) up — should swap with Smoke.
     await b.request({
@@ -235,9 +229,8 @@ describe("MockBridge contract — emitters/*", () => {
   });
 
   it("emitters/set-visible flips a single emitter's visible flag", async () => {
-    const b = new MockBridge();
     let lastTree: EmitterTreeDto | null = null;
-    const off = b.on("emitters/tree/changed", (e) => { lastTree = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("emitters/tree/changed", (e) => { lastTree = e.payload; });
     await b.request({
       kind: "emitters/set-visible",
       params: { id: 0, visible: false },
@@ -252,9 +245,8 @@ describe("MockBridge contract — emitters/*", () => {
   });
 
   it("emitters/set-all-visible recurses through the tree", async () => {
-    const b = new MockBridge();
     let lastTree: EmitterTreeDto | null = null;
-    const off = b.on("emitters/tree/changed", (e) => { lastTree = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("emitters/tree/changed", (e) => { lastTree = e.payload; });
     await b.request({
       kind: "emitters/set-all-visible",
       params: { visible: false },
@@ -279,9 +271,8 @@ describe("MockBridge contract — emitters/*", () => {
   // ─── drag/drop reorder + reparent ────────────
 
   it("emitters/drop { mode: 'reorder' } reorders the fixture roots", async () => {
-    const b = new MockBridge();
     let lastTree: EmitterTreeDto | null = null;
-    const off = b.on("emitters/tree/changed", (e) => { lastTree = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("emitters/tree/changed", (e) => { lastTree = e.payload; });
     // Fixture roots: Smoke(0), Sparks(3), Flash(5). Drop Smoke at
     // gap 3 (after Flash) → expected post-order [Sparks, Flash, Smoke].
     const r = await b.request({
@@ -296,9 +287,8 @@ describe("MockBridge contract — emitters/*", () => {
   });
 
   it("emitters/drop { mode: 'reparent' } reparents under the target in the named slot", async () => {
-    const b = new MockBridge();
     let lastTree: EmitterTreeDto | null = null;
-    const off = b.on("emitters/tree/changed", (e) => { lastTree = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("emitters/tree/changed", (e) => { lastTree = e.payload; });
     // Fixture: Flash (id=5) is an unlinked leaf with NO children;
     // Sparks (id=3) is a root with only a lifetime child. Reparent
     // Flash under Sparks in the death slot — Sparks should gain Flash
@@ -323,9 +313,8 @@ describe("MockBridge contract — emitters/*", () => {
   // ─── clipboard (copy / cut / paste) ───────────
 
   it("emitters/copy stashes the named subtrees and emits no tree change", async () => {
-    const b = new MockBridge();
     let lastTree: EmitterTreeDto | null = null;
-    const off = b.on("emitters/tree/changed", (e) => { lastTree = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("emitters/tree/changed", (e) => { lastTree = e.payload; });
     // Copy Smoke (id=0) — should NOT emit tree/changed (read-only op).
     const r = await b.request({ kind: "emitters/copy", params: { ids: [0] } });
     expect(r).toEqual({});
@@ -351,9 +340,8 @@ describe("MockBridge contract — emitters/*", () => {
   });
 
   it("emitters/cut serialises + deletes + a follow-up paste restores the subtree as a new root", async () => {
-    const b = new MockBridge();
     let lastTree: EmitterTreeDto | null = null;
-    const off = b.on("emitters/tree/changed", (e) => { lastTree = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("emitters/tree/changed", (e) => { lastTree = e.payload; });
     // Cut Sparks (id=3) — has a lifetime child (id=4). After cut, the
     // root list should be [Smoke, Flash] (Sparks gone), with the
     // clipboard holding the Sparks subtree.
@@ -378,9 +366,8 @@ describe("MockBridge contract — emitters/*", () => {
   });
 
   it("emitters/paste with afterId splices the pasted roots after the named root", async () => {
-    const b = new MockBridge();
     let lastTree: EmitterTreeDto | null = null;
-    const off = b.on("emitters/tree/changed", (e) => { lastTree = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("emitters/tree/changed", (e) => { lastTree = e.payload; });
     // Copy Flash (id=5), then paste with afterId=0 (Smoke). Expected
     // root order after paste: [Smoke, Flash-copy, Sparks, Flash].
     await b.request({ kind: "emitters/copy", params: { ids: [5] } });
@@ -690,9 +677,8 @@ describe("emitter tree spawn params", () => {
   });
 
   it("a set-properties spawn patch is reflected in the next tree/changed payload", async () => {
-    const b = new MockBridge();
     const events: EmitterTreeDto[] = [];
-    const off = b.on("emitters/tree/changed", (e) => { events.push(e.payload); });
+    const { b, off } = makeMockBridgeWithListener("emitters/tree/changed", (e) => { events.push(e.payload); });
     await b.request({
       kind: "emitters/set-properties",
       params: { id: 0, patch: { nParticlesPerSecond: 4242 } },

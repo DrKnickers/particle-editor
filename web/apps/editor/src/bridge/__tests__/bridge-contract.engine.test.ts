@@ -5,6 +5,7 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { MockBridge } from "../mock";
+import { makeMockBridgeWithListener } from "@/test/mock-bridge";
 import {
   useMockEngineState,
 } from "../mock-state";
@@ -18,9 +19,8 @@ beforeEach(resetMockState);
 
 describe("MockBridge contract — engine/* and settings/*", () => {
   it("engine/set/ground-z patches state and fires state/changed", async () => {
-    const b = new MockBridge();
     let last: EngineStateDto | null = null;
-    const off = b.on("engine/state/changed", (e) => { last = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("engine/state/changed", (e) => { last = e.payload; });
 
     await b.request({ kind: "engine/set/ground-z", params: { z: 12.5 } });
 
@@ -236,9 +236,8 @@ describe("MockBridge contract — engine/* and settings/*", () => {
 
   // game-dome environment: setter mutates the snapshot and emits state.
   it("engine/set/skydome-environment patches context + the two Names and fires state/changed", async () => {
-    const b = new MockBridge();
     let last: EngineStateDto | null = null;
-    const off = b.on("engine/state/changed", (e) => { last = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("engine/state/changed", (e) => { last = e.payload; });
     await b.request({
       kind: "engine/set/skydome-environment",
       params: { context: "land", primaryName: "Day_Blue_Sky", secondaryName: "Planet_Rings00" },
@@ -271,9 +270,8 @@ describe("MockBridge contract — engine/* and settings/*", () => {
   // reference object + unit grid: setters mutate the snapshot + fire
   // state/changed; the skinned canned Name drives the "skinned" status.
   it("engine/set/reference-object patches name + status and fires state/changed", async () => {
-    const b = new MockBridge();
     let last: EngineStateDto | null = null;
-    const off = b.on("engine/state/changed", (e) => { last = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("engine/state/changed", (e) => { last = e.payload; });
     await b.request({ kind: "engine/set/reference-object", params: { name: "AT_AT_Walker" } });
     expect(last).not.toBeNull();
     expect(last!.referenceObjectName).toBe("AT_AT_Walker");
@@ -325,9 +323,8 @@ describe("MockBridge contract — engine/* and settings/*", () => {
   });
 
   it("engine/action/rescale-system round-trips with empty body and fires state/changed", async () => {
-    const b = new MockBridge();
     let count = 0;
-    const off = b.on("engine/state/changed", () => { count++; });
+    const { b, off } = makeMockBridgeWithListener("engine/state/changed", () => { count++; });
     const r = await b.request({
       kind: "engine/action/rescale-system",
       params: { durationScalePercent: 150, sizeScalePercent: 200 },
@@ -338,9 +335,8 @@ describe("MockBridge contract — engine/* and settings/*", () => {
   });
 
   it("engine/action/clear fires state/changed without mutating fields", async () => {
-    const b = new MockBridge();
     let count = 0;
-    const off = b.on("engine/state/changed", () => { count++; });
+    const { b, off } = makeMockBridgeWithListener("engine/state/changed", () => { count++; });
     await b.request({ kind: "engine/action/clear", params: {} });
     expect(count).toBe(1);
     off();
@@ -406,9 +402,8 @@ describe("MockBridge contract — engine/* and settings/*", () => {
   });
 
   it("engine/action/rescale-emitter round-trips with empty body and fires state/changed", async () => {
-    const b = new MockBridge();
     let stateChanges = 0;
-    const off = b.on("engine/state/changed", () => { stateChanges += 1; });
+    const { b, off } = makeMockBridgeWithListener("engine/state/changed", () => { stateChanges += 1; });
 
     const r = await b.request({
       kind: "engine/action/rescale-emitter",

@@ -5,6 +5,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { MockBridge } from "../mock";
+import { makeMockBridgeWithListener } from "@/test/mock-bridge";
 import type {
   Event,
 } from "@particle-editor/bridge-schema";
@@ -122,9 +123,8 @@ describe("MockBridge contract — spawner/*, textures/*, subscriptions", () => {
   // ─── host-state plumbing: MockBridge mirrors the native spawner
   // state-change contract so browser-mode tests cannot bless a divergence.
   it("spawner/stop disables the seeded config, broadcasts it, and resets the active count", async () => {
-    const b = new MockBridge();
     let lastCount: number | null = null;
-    const off = b.on("spawner/active-count", (e) => { lastCount = e.payload.count; });
+    const { b, off } = makeMockBridgeWithListener("spawner/active-count", (e) => { lastCount = e.payload.count; });
     let lastState: { spawner?: unknown } | null = null;
     const offState = b.on("engine/state/changed", (e) => { lastState = e.payload; });
     const initial = await b.request({ kind: "engine/state/snapshot", params: {} });
@@ -153,9 +153,8 @@ describe("MockBridge contract — spawner/*, textures/*, subscriptions", () => {
   });
 
   it("on() returns a working unsubscribe", async () => {
-    const b = new MockBridge();
     const seen: Event[] = [];
-    const off = b.on("engine/state/changed", (e) => { seen.push(e); });
+    const { b, off } = makeMockBridgeWithListener("engine/state/changed", (e) => { seen.push(e); });
     await b.request({ kind: "engine/set/ground-z", params: { z: 1 } });
     off();
     await b.request({ kind: "engine/set/ground-z", params: { z: 2 } });

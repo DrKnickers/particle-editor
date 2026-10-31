@@ -5,6 +5,7 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { MockBridge } from "../mock";
+import { makeMockBridgeWithListener } from "@/test/mock-bridge";
 import {
   useMockLinkGroupConflicts,
 } from "../mock-state";
@@ -31,9 +32,8 @@ describe("MockBridge contract — linkGroups/*", () => {
   });
 
   it("linkGroups/set-membership applies groupId to each id; -1 + single id auto-demotes to 0 (path 3); null clears", async () => {
-    const b = new MockBridge();
     let lastTree: EmitterTreeDto | null = null;
-    const off = b.on("emitters/tree/changed", (e) => { lastTree = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("emitters/tree/changed", (e) => { lastTree = e.payload; });
 
     // Fixture: Smoke (id=0) + Sparks (id=3) share linkGroup=1.
     // Flash (id=5) is unlinked. Add Flash to a new group via the
@@ -81,9 +81,8 @@ describe("MockBridge contract — linkGroups/*", () => {
   // guard against over-eager demotion and an undo round-trip.
 
   it("path 1: leaving a 2-member group demotes BOTH members to 0", async () => {
-    const b = new MockBridge();
     let lastTree: EmitterTreeDto | null = null;
-    const off = b.on("emitters/tree/changed", (e) => { lastTree = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("emitters/tree/changed", (e) => { lastTree = e.payload; });
 
     // Fixture: Smoke (id=0) + Sparks (id=3) share linkGroup=1. Leave
     // Smoke via groupId=null — Sparks is now alone in group 1, so
@@ -101,9 +100,8 @@ describe("MockBridge contract — linkGroups/*", () => {
   });
 
   it("path 1b: joining a different group that shrinks the previous group demotes the lone survivor", async () => {
-    const b = new MockBridge();
     let lastTree: EmitterTreeDto | null = null;
-    const off = b.on("emitters/tree/changed", (e) => { lastTree = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("emitters/tree/changed", (e) => { lastTree = e.payload; });
 
     // Fixture: Smoke (id=0) + Sparks (id=3) share linkGroup=1. Flash
     // (id=5) is unlinked. Move Smoke into a 2-member-with-Flash group
@@ -129,9 +127,8 @@ describe("MockBridge contract — linkGroups/*", () => {
   });
 
   it("path 2: deleting one member of a 2-member group demotes the survivor", async () => {
-    const b = new MockBridge();
     let lastTree: EmitterTreeDto | null = null;
-    const off = b.on("emitters/tree/changed", (e) => { lastTree = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("emitters/tree/changed", (e) => { lastTree = e.payload; });
 
     // Fixture: Smoke (id=0) + Sparks (id=3) share linkGroup=1.
     // Delete Smoke; Sparks is now alone in group 1 → demoted.
@@ -146,9 +143,8 @@ describe("MockBridge contract — linkGroups/*", () => {
   });
 
   it("regression guard: deleting from a 3-member group keeps the remaining 2 in their group", async () => {
-    const b = new MockBridge();
     let lastTree: EmitterTreeDto | null = null;
-    const off = b.on("emitters/tree/changed", (e) => { lastTree = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("emitters/tree/changed", (e) => { lastTree = e.payload; });
 
     // Build a 3-member group first: Smoke + Sparks + Flash all in
     // group 9. (Smoke + Sparks were already in group 1 — overwrite.)
@@ -171,9 +167,8 @@ describe("MockBridge contract — linkGroups/*", () => {
   });
 
   it("idempotence: a no-op dispatch on an already-enforced tree changes nothing", async () => {
-    const b = new MockBridge();
     let lastTree: EmitterTreeDto | null = null;
-    const off = b.on("emitters/tree/changed", (e) => { lastTree = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("emitters/tree/changed", (e) => { lastTree = e.payload; });
 
     // First dispatch: assign [Smoke, Sparks] to group 7 (already
     // sharing group 1, but explicit reassignment is fine — both end

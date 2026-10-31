@@ -31,6 +31,9 @@ async function until(condition, ms = 15000) {
   for (const started = Date.now(); Date.now() - started < ms; await sleep(100)) if (condition()) return true;
   return false;
 }
+// Windows can release a killed process's handles a moment after it exits. A true
+// survivor holds the file for the whole ping, so this still fails on one.
+const released = (path) => until(() => deletable(path), 5000);
 // Start the cmd -> ping tree; resolves once ping holds `held.txt`.
 const HOLD = "ping -n 120 127.0.0.1 > held.txt";
 async function whenHeld(dir) {
@@ -68,7 +71,7 @@ test("a deadline kills the whole tree, grandchild included", windows, async (t) 
   const held = await whenHeld(dir);
   const result = await running;
   assert.equal(result.outcome, "deadline");
-  assert.ok(deletable(held), "a process in the tree survived the deadline");
+  assert.ok(await released(held), "a process in the tree survived the deadline");
 });
 
 test("a watch that returns a reason (the stage quota) kills the tree", windows, async (t) => {
@@ -84,7 +87,7 @@ test("a watch that returns a reason (the stage quota) kills the tree", windows, 
   });
   assert.equal(result.outcome, "stopped");
   assert.equal(result.detail, "stage exceeded 1 MiB");
-  assert.ok(held && deletable(held), "a process in the tree survived the stop");
+  assert.ok(held && await released(held), "a process in the tree survived the stop");
 });
 
 test("killing the launcher alone (no /T) still kills the tree", windows, async (t) => {

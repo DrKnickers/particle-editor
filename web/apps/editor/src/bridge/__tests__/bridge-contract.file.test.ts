@@ -5,6 +5,7 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { MockBridge } from "../mock";
+import { makeMockBridgeWithListener } from "@/test/mock-bridge";
 import { resetMockState } from "@/test/mock-state";
 
 // Reset the shared mock stores between tests so state mutations don't leak.
@@ -88,9 +89,8 @@ describe("MockBridge contract — file/*, recent/*, mods/*", () => {
   });
 
   it("recent/changed event fires when file/save adds a new path", async () => {
-    const b = new MockBridge();
     let last: { paths: string[] } | null = null;
-    const off = b.on("recent/changed", (e) => { last = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("recent/changed", (e) => { last = e.payload; });
 
     await b.request({ kind: "file/save", params: { path: "C:/foo/bar.alo" } });
 

@@ -36,16 +36,29 @@ const SINGLE_TRACK_CHANNEL = {
 } satisfies ChannelDef;
 const SINGLE_TRACK_VISIBLE = { red: true };
 
+function renderSingleTrack(
+  track: TrackDto,
+  props: Partial<React.ComponentProps<typeof CurveEditor>> = {},
+) {
+  return render(
+    <CurveEditor
+      tracks={[track]}
+      channels={[SINGLE_TRACK_CHANNEL]}
+      visibleChannels={SINGLE_TRACK_VISIBLE}
+      valueRange={{ min: 0, max: 1 }}
+      {...props}
+    />,
+  );
+}
+
+function stubCanvasBounds(element: Element) {
+  element.getBoundingClientRect = () =>
+    ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+}
+
 describe("CurveEditor", () => {
   it("renders a <polyline> and N <circle> elements for an N-key track", () => {
-    const { container } = render(
-      <CurveEditor
-        tracks={[fixtureTrack(5)]}
-        channels={[SINGLE_TRACK_CHANNEL]}
-        visibleChannels={SINGLE_TRACK_VISIBLE}
-        valueRange={{ min: 0, max: 1 }}
-      />,
-    );
+    const { container } = renderSingleTrack(fixtureTrack(5));
     const polyline = container.querySelector("polyline");
     expect(polyline).not.toBeNull();
     // polyline points string should have 5 comma-separated pairs.
@@ -57,28 +70,14 @@ describe("CurveEditor", () => {
   });
 
   it("suppresses the <polyline> when the track has fewer than 2 keys", () => {
-    const { container } = render(
-      <CurveEditor
-        tracks={[fixtureTrack(1)]}
-        channels={[SINGLE_TRACK_CHANNEL]}
-        visibleChannels={SINGLE_TRACK_VISIBLE}
-        valueRange={{ min: 0, max: 1 }}
-      />,
-    );
+    const { container } = renderSingleTrack(fixtureTrack(1));
     expect(container.querySelector("polyline")).toBeNull();
     // A single-key track still shows its one circle.
     expect(container.querySelectorAll("circle")).toHaveLength(1);
   });
 
   it("renders the grid (≥10 vertical + ≥10 horizontal lines) + axes", () => {
-    const { container } = render(
-      <CurveEditor
-        tracks={[fixtureTrack(3)]}
-        channels={[SINGLE_TRACK_CHANNEL]}
-        visibleChannels={SINGLE_TRACK_VISIBLE}
-        valueRange={{ min: 0, max: 1 }}
-      />,
-    );
+    const { container } = renderSingleTrack(fixtureTrack(3));
     // Grid + axes use <line> elements. 11 vertical + 11 horizontal +
     // 2 axes = 24.
     const lines = container.querySelectorAll("line");
@@ -90,16 +89,7 @@ describe("CurveEditor", () => {
   it("clicking a key fires onKeyClick + the selected key renders with focus marker treatment", () => {
     const track = fixtureTrack(3); // times 0, 50, 100
     const onKeyClick = vi.fn();
-    const { container, rerender } = render(
-      <CurveEditor
-        tracks={[track]}
-        channels={[SINGLE_TRACK_CHANNEL]}
-        visibleChannels={SINGLE_TRACK_VISIBLE}
-        focusChannel="red"
-        valueRange={{ min: 0, max: 1 }}
-        onKeyClick={onKeyClick}
-      />,
-    );
+    const { container, rerender } = renderSingleTrack(track, { focusChannel: "red", onKeyClick });
     const circles = container.querySelectorAll("[data-testid='curve-key']");
     expect(circles).toHaveLength(3);
     // Click the middle key (time=50).
@@ -177,26 +167,13 @@ describe("CurveEditor", () => {
     const track = fixtureTrack(3);            // times 0, 50, 100; values 0.1, 0.9, 0.1
     const onDragEnd = vi.fn();
     const onKeyClick = vi.fn();
-    const { container } = render(
-      <CurveEditor
-        tracks={[track]}
-        channels={[SINGLE_TRACK_CHANNEL]}
-        visibleChannels={SINGLE_TRACK_VISIBLE}
-        focusChannel="red"
-        valueRange={{ min: 0, max: 1 }}
-        width={600}
-        height={300}
-        onKeyClick={onKeyClick}
-        onKeyDragEnd={onDragEnd}
-      />,
-    );
+    const { container } = renderSingleTrack(track, { focusChannel: "red", width: 600, height: 300, onKeyClick, onKeyDragEnd: onDragEnd });
     const svg = container.querySelector(
       "[data-testid='curve-editor-svg']",
     ) as SVGSVGElement;
     // jsdom returns 0×0 for getBoundingClientRect; stub it so the
     // viewBox <-> client-coord mapping has a valid scale.
-    svg.getBoundingClientRect = () =>
-      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+    stubCanvasBounds(svg);
 
     const circles = container.querySelectorAll("[data-testid='curve-key']");
     const middle = circles[1]! as SVGCircleElement;
@@ -228,22 +205,9 @@ describe("CurveEditor", () => {
     const track = fixtureTrack(3);
     const onDragEnd = vi.fn();
     const onKeyClick = vi.fn();
-    const { container } = render(
-      <CurveEditor
-        tracks={[track]}
-        channels={[SINGLE_TRACK_CHANNEL]}
-        visibleChannels={SINGLE_TRACK_VISIBLE}
-        focusChannel="red"
-        valueRange={{ min: 0, max: 1 }}
-        width={600}
-        height={300}
-        onKeyClick={onKeyClick}
-        onKeyDragEnd={onDragEnd}
-      />,
-    );
+    const { container } = renderSingleTrack(track, { focusChannel: "red", width: 600, height: 300, onKeyClick, onKeyDragEnd: onDragEnd });
     const svg = container.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
-    svg.getBoundingClientRect = () =>
-      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+    stubCanvasBounds(svg);
     const middle = container.querySelectorAll("[data-testid='curve-key']")[1]!;
     // Pointer down + up at the same coords (no movement past slop).
     fireEvent.pointerDown(middle, { pointerId: 3, button: 0, clientX: 300, clientY: 30 });
@@ -255,14 +219,7 @@ describe("CurveEditor", () => {
 
   it("single-element multi-track render without focus stays view-only", () => {
     const track = fixtureTrack(3);
-    const { container } = render(
-      <CurveEditor
-        tracks={[track]}
-        channels={[SINGLE_TRACK_CHANNEL]}
-        visibleChannels={SINGLE_TRACK_VISIBLE}
-        valueRange={{ min: 0, max: 1 }}
-      />,
-    );
+    const { container } = renderSingleTrack(track);
     const layer = container.querySelector('[data-channel-id="red"][data-focus="false"]');
     expect(layer).not.toBeNull();
     const circles = layer!.querySelectorAll("circle");
@@ -291,8 +248,7 @@ describe("CurveEditor", () => {
     const svg = container.querySelector(
       "[data-testid='curve-editor-svg']",
     ) as SVGSVGElement;
-    svg.getBoundingClientRect = () =>
-      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+    stubCanvasBounds(svg);
     const backdrop = container.querySelector(
       "[data-testid='curve-canvas-backdrop']",
     ) as SVGRectElement;
@@ -328,13 +284,11 @@ describe("CurveEditor", () => {
     const svg = result.container.querySelector(
       "[data-testid='curve-editor-svg']",
     ) as SVGSVGElement;
-    svg.getBoundingClientRect = () =>
-      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+    stubCanvasBounds(svg);
     const backdrop = result.container.querySelector(
       "[data-testid='curve-canvas-backdrop']",
     ) as SVGRectElement;
-    backdrop.getBoundingClientRect = () =>
-      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+    stubCanvasBounds(backdrop);
     return { ...result, svg, backdrop };
   }
 
@@ -449,14 +403,7 @@ describe("CurveEditor", () => {
 
   it("smooth interpolation renders a <path> with cubic-Bezier (C) commands; step renders a staircase polyline", () => {
     // Smooth.
-    const { container: smoothContainer } = render(
-      <CurveEditor
-        tracks={[fixtureTrack(3, "smooth")]}
-        channels={[SINGLE_TRACK_CHANNEL]}
-        visibleChannels={SINGLE_TRACK_VISIBLE}
-        valueRange={{ min: 0, max: 1 }}
-      />,
-    );
+    const { container: smoothContainer } = renderSingleTrack(fixtureTrack(3, "smooth"));
     const path = smoothContainer.querySelector("path") as SVGPathElement | null;
     expect(path).not.toBeNull();
     const d = path!.getAttribute("d") ?? "";
@@ -470,14 +417,7 @@ describe("CurveEditor", () => {
 
     // Step. The staircase polyline expands to 1 + 2*(N-1) points
     // (start key + 2 per segment).
-    const { container: stepContainer } = render(
-      <CurveEditor
-        tracks={[fixtureTrack(3, "step")]}
-        channels={[SINGLE_TRACK_CHANNEL]}
-        visibleChannels={SINGLE_TRACK_VISIBLE}
-        valueRange={{ min: 0, max: 1 }}
-      />,
-    );
+    const { container: stepContainer } = renderSingleTrack(fixtureTrack(3, "step"));
     const stepPoly = stepContainer.querySelector(
       "polyline",
     ) as SVGPolylineElement | null;
@@ -534,8 +474,7 @@ function renderGutterMarquee(
   const svg = result.container.querySelector(
     "[data-testid='curve-editor-svg']",
   ) as SVGSVGElement;
-  svg.getBoundingClientRect = () =>
-    ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+  stubCanvasBounds(svg);
   return { ...result, svg, ref };
 }
 
@@ -633,14 +572,12 @@ function renderLockFixture(
   const svg = result.container.querySelector(
     "[data-testid='curve-editor-svg']",
   ) as SVGSVGElement;
-  svg.getBoundingClientRect = () =>
-    ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+  stubCanvasBounds(svg);
   const backdrop = result.container.querySelector(
     "[data-testid='curve-canvas-backdrop']",
   ) as SVGRectElement;
   if (backdrop) {
-    backdrop.getBoundingClientRect = () =>
-      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+    stubCanvasBounds(backdrop);
   }
   return { ...result, svg, backdrop };
 }
@@ -1399,8 +1336,7 @@ describe("curve morph (structural changes)", () => {
       />,
     );
     const svg = container.querySelector('[data-testid="curve-editor-svg"]') as SVGSVGElement;
-    svg.getBoundingClientRect = () =>
-      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+    stubCanvasBounds(svg);
     const greenLayer = () => container.querySelector('[data-testid="curve-layer-green"]') as SVGGElement;
     const before = Number(greenLayer().getAttribute("data-render-count"));
     expect(before).toBeGreaterThan(0);
@@ -1443,8 +1379,7 @@ describe("curve morph (structural changes)", () => {
 
     // Stub getBoundingClientRect so eventToViewBox gets a valid scale.
     const svg = container.querySelector('[data-testid="curve-editor-svg"]') as SVGSVGElement;
-    svg.getBoundingClientRect = () =>
-      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+    stubCanvasBounds(svg);
 
     // Find the hit-pad for the t=50 key on the red (focus) channel.
     // data-key-time="50" on the focus channel's <circle>.
@@ -1546,8 +1481,7 @@ describe("CurveEditor — group-drag fires onGroupDragMove (live-spinner fix)", 
     );
 
     const svg = container.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
-    svg.getBoundingClientRect = () =>
-      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+    stubCanvasBounds(svg);
 
     // Grab the t=25 key circle on the focus channel.
     // t=25 → x = 25/100 * 600 = 150; v=0.25 → y = 300 - (0.25 * 300) = 225.
@@ -1592,8 +1526,7 @@ describe("CurveEditor — group-drag fires onGroupDragMove (live-spinner fix)", 
     );
 
     const svg = container.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
-    svg.getBoundingClientRect = () =>
-      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+    stubCanvasBounds(svg);
 
     const pad = container.querySelector(
       '[data-testid="curve-key"][data-key-time="25"][data-channel-id="red"]',
@@ -1776,8 +1709,7 @@ function renderSnap(
   const svg = result.container.querySelector(
     "[data-testid='curve-editor-svg']",
   ) as SVGSVGElement;
-  svg.getBoundingClientRect = () =>
-    ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+  stubCanvasBounds(svg);
   return { ...result, svg };
 }
 
@@ -1890,8 +1822,7 @@ function renderGroupSnap(
     />,
   );
   const svg = container.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
-  svg.getBoundingClientRect = () =>
-    ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+  stubCanvasBounds(svg);
   return { container, svg };
 }
 
@@ -1968,8 +1899,7 @@ function renderInsertSnap(
     />,
   );
   const svg = container.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
-  svg.getBoundingClientRect = () =>
-    ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+  stubCanvasBounds(svg);
   const backdrop = container.querySelector("[data-testid='curve-canvas-backdrop']")!;
   return { container, backdrop };
 }
@@ -2049,8 +1979,7 @@ describe("CurveEditor — group drag bounds against unselected keys (#619)", () 
       />,
     );
     const svg = container.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
-    svg.getBoundingClientRect = () =>
-      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+    stubCanvasBounds(svg);
     const anchor = container.querySelector(
       '[data-testid="curve-key"][data-key-time="25"][data-channel-id="red"]',
     )!;
@@ -2087,8 +2016,7 @@ describe("CurveEditor — group drag bounds against unselected keys (#619)", () 
       />,
     );
     const svg = container.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
-    svg.getBoundingClientRect = () =>
-      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+    stubCanvasBounds(svg);
     const anchor = container.querySelector(
       '[data-testid="curve-key"][data-key-time="25"][data-channel-id="red"]',
     )!;

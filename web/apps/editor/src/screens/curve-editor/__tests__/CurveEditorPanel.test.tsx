@@ -97,6 +97,12 @@ function makeStubBridge(initialSelectedId: number | null, tracks?: TrackDto[]) {
   return { bridge };
 }
 
+function renderPanel(initialSelectedId: number | null, tracks?: TrackDto[]) {
+  const { bridge } = makeStubBridge(initialSelectedId, tracks);
+  const view = render(<CurveEditorPanel bridge={bridge} />);
+  return { bridge, ...view };
+}
+
 /** Enable + focus a channel by clicking its row. Used by specs that
  *  exercise channels not visible/focused by default (Scale, Alpha,
  *  Rotation, Index — the panel's defaults boot with only R/G/B
@@ -116,8 +122,7 @@ describe("CurveEditorPanel", () => {
   });
 
   it("renders the .panel chrome + 7 channel rows regardless of selection", async () => {
-    const { bridge } = makeStubBridge(null);
-    render(<CurveEditorPanel bridge={bridge} />);
+    renderPanel(null);
     expect(screen.getByTestId("curve-editor-panel")).toBeInTheDocument();
     // All 7 channel checkboxes are present.
     for (const c of CHANNELS) {
@@ -129,8 +134,7 @@ describe("CurveEditorPanel", () => {
   });
 
   it("R / G / B default ON; Scale / Alpha / Rotation / Index default OFF", () => {
-    const { bridge } = makeStubBridge(null);
-    render(<CurveEditorPanel bridge={bridge} />);
+    renderPanel(null);
     for (const id of ["red", "green", "blue"]) {
       const cb = screen.getByTestId(
         `curve-channel-checkbox-${id}`,
@@ -146,8 +150,7 @@ describe("CurveEditorPanel", () => {
   });
 
   it("renders the placeholder when no emitter is selected", async () => {
-    const { bridge } = makeStubBridge(null);
-    render(<CurveEditorPanel bridge={bridge} />);
+    renderPanel(null);
     await waitFor(() => {
       expect(screen.getByTestId("curve-editor-placeholder")).toBeInTheDocument();
     });
@@ -156,8 +159,7 @@ describe("CurveEditorPanel", () => {
   });
 
   it("mounts the multi-channel SVG with one <g> per visible channel when an emitter is selected", async () => {
-    const { bridge } = makeStubBridge(0);
-    render(<CurveEditorPanel bridge={bridge} />);
+    renderPanel(0);
     // Snapshot resolves, then get-tracks; wait for layers (which only
     // appear after both promises have settled).
     await waitFor(() => {
@@ -176,8 +178,7 @@ describe("CurveEditorPanel", () => {
   });
 
   it("toggling a channel checkbox adds/removes its SVG layer", async () => {
-    const { bridge } = makeStubBridge(0);
-    render(<CurveEditorPanel bridge={bridge} />);
+    renderPanel(0);
     // Wait for the get-tracks promise to settle so layers render.
     await waitFor(() => {
       expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
@@ -210,8 +211,7 @@ describe("CurveEditorPanel", () => {
   });
 
   it("enabling Scale via its checkbox hides every other channel (scale-exclusive)", async () => {
-    const { bridge } = makeStubBridge(0);
-    render(<CurveEditorPanel bridge={bridge} />);
+    renderPanel(0);
     await waitFor(() => {
       expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
     });
@@ -242,8 +242,7 @@ describe("CurveEditorPanel", () => {
   });
 
   it("enabling Scale via row click also hides every other channel", () => {
-    const { bridge } = makeStubBridge(0);
-    render(<CurveEditorPanel bridge={bridge} />);
+    renderPanel(0);
     fireEvent.click(screen.getByTestId("curve-channel-row-scale"));
     expect(
       (screen.getByTestId("curve-channel-checkbox-scale") as HTMLInputElement).checked,
@@ -260,8 +259,7 @@ describe("CurveEditorPanel", () => {
   });
 
   it("clicking a non-Scale row while Scale is visible hides Scale (exits solo)", async () => {
-    const { bridge } = makeStubBridge(0);
-    render(<CurveEditorPanel bridge={bridge} />);
+    renderPanel(0);
     await waitFor(() => {
       expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
     });
@@ -285,8 +283,7 @@ describe("CurveEditorPanel", () => {
   });
 
   it("enabling other channels via CHECKBOX while Scale is on does NOT auto-hide Scale", async () => {
-    const { bridge } = makeStubBridge(0);
-    render(<CurveEditorPanel bridge={bridge} />);
+    renderPanel(0);
     await waitFor(() => {
       expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
     });
@@ -307,8 +304,7 @@ describe("CurveEditorPanel", () => {
 
   // Index is exclusive too — enabling it hides every other channel.
   it("enabling Index via its checkbox hides every other channel (index-exclusive)", async () => {
-    const { bridge } = makeStubBridge(0);
-    render(<CurveEditorPanel bridge={bridge} />);
+    renderPanel(0);
     await waitFor(() => {
       expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
     });
@@ -329,8 +325,7 @@ describe("CurveEditorPanel", () => {
   // The two exclusive channels replace each other — clicking Index
   // while Scale is solo turns Scale off and Index on.
   it("clicking Index while Scale is solo swaps solo to Index", () => {
-    const { bridge } = makeStubBridge(0);
-    render(<CurveEditorPanel bridge={bridge} />);
+    renderPanel(0);
     fireEvent.click(screen.getByTestId("curve-channel-row-scale"));
     expect(
       (screen.getByTestId("curve-channel-checkbox-scale") as HTMLInputElement).checked,
@@ -349,8 +344,7 @@ describe("CurveEditorPanel", () => {
 
   // Selecting a non-exclusive curve exits Index solo.
   it("clicking a non-Index row while Index is solo exits solo", async () => {
-    const { bridge } = makeStubBridge(0);
-    render(<CurveEditorPanel bridge={bridge} />);
+    renderPanel(0);
     await waitFor(() => {
       expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
     });
@@ -369,8 +363,7 @@ describe("CurveEditorPanel", () => {
 
   // Rotation is exclusive too (matches Index/Scale).
   it("enabling Rotation via its checkbox hides every other channel (rotation-exclusive)", async () => {
-    const { bridge } = makeStubBridge(0);
-    render(<CurveEditorPanel bridge={bridge} />);
+    renderPanel(0);
     await waitFor(() => {
       expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
     });
@@ -389,8 +382,7 @@ describe("CurveEditorPanel", () => {
   });
 
   it("clicking Rotation while Index is solo swaps solo to Rotation", () => {
-    const { bridge } = makeStubBridge(0);
-    render(<CurveEditorPanel bridge={bridge} />);
+    renderPanel(0);
     fireEvent.click(screen.getByTestId("curve-channel-row-index"));
     expect(
       (screen.getByTestId("curve-channel-checkbox-index") as HTMLInputElement).checked,
@@ -408,8 +400,7 @@ describe("CurveEditorPanel", () => {
   });
 
   it("clicking a non-Rotation row while Rotation is solo exits solo", async () => {
-    const { bridge } = makeStubBridge(0);
-    render(<CurveEditorPanel bridge={bridge} />);
+    renderPanel(0);
     await waitFor(() => {
       expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
     });
@@ -430,8 +421,7 @@ describe("CurveEditorPanel", () => {
 
   describe("focus channel", () => {
     it("defaults the focus channel to 'red' (the first visible)", () => {
-      const { bridge } = makeStubBridge(null);
-      render(<CurveEditorPanel bridge={bridge} />);
+      renderPanel(null);
       const panel = screen.getByTestId("curve-editor-panel");
       expect(panel.dataset.focusChannel).toBe("red");
       const redRow = screen.getByTestId("curve-channel-row-red");
@@ -439,8 +429,7 @@ describe("CurveEditorPanel", () => {
     });
 
     it("clicking a different channel row moves focus + does not toggle visibility off", () => {
-      const { bridge } = makeStubBridge(null);
-      render(<CurveEditorPanel bridge={bridge} />);
+      renderPanel(null);
       // Focus starts on red. Click Green row.
       fireEvent.click(screen.getByTestId("curve-channel-row-green"));
       const panel = screen.getByTestId("curve-editor-panel");
@@ -463,8 +452,7 @@ describe("CurveEditorPanel", () => {
       });
 
       try {
-        const { bridge } = makeStubBridge(null);
-        render(<CurveEditorPanel bridge={bridge} />);
+        renderPanel(null);
         scrollIntoView.mockClear();
 
         fireEvent.click(screen.getByTestId("curve-channel-row-scale"));
@@ -507,8 +495,7 @@ describe("CurveEditorPanel", () => {
       });
 
       try {
-        const { bridge } = makeStubBridge(null);
-        render(<CurveEditorPanel bridge={bridge} />);
+        renderPanel(null);
         scrollIntoView.mockClear();
 
         act(() => {
@@ -537,8 +524,7 @@ describe("CurveEditorPanel", () => {
     });
 
     it("clicking a HIDDEN channel row turns it ON and sets focus", () => {
-      const { bridge } = makeStubBridge(null);
-      render(<CurveEditorPanel bridge={bridge} />);
+      renderPanel(null);
       // Index defaults OFF.
       const indexCb = screen.getByTestId(
         "curve-channel-checkbox-index",
@@ -553,8 +539,7 @@ describe("CurveEditorPanel", () => {
     });
 
     it("clicking the checkbox itself toggles visibility WITHOUT changing focus", () => {
-      const { bridge } = makeStubBridge(null);
-      render(<CurveEditorPanel bridge={bridge} />);
+      renderPanel(null);
       const panel = screen.getByTestId("curve-editor-panel");
       expect(panel.dataset.focusChannel).toBe("red");
       // Click the Green checkbox — should toggle visibility off without
@@ -569,8 +554,7 @@ describe("CurveEditorPanel", () => {
     });
 
     it("only the focus layer carries data-focus='true'; the others carry data-focus='false'", async () => {
-      const { bridge } = makeStubBridge(0);
-      render(<CurveEditorPanel bridge={bridge} />);
+      renderPanel(0);
       await waitFor(() => {
         expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
       });
@@ -581,8 +565,7 @@ describe("CurveEditorPanel", () => {
     });
 
     it("only the focus channel's keys render as interactive curve-key circles", async () => {
-      const { bridge } = makeStubBridge(0);
-      render(<CurveEditorPanel bridge={bridge} />);
+      renderPanel(0);
       await waitFor(() => {
         expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
       });
@@ -596,8 +579,7 @@ describe("CurveEditorPanel", () => {
     });
 
     it("hiding the focus channel via its checkbox auto-moves focus to the next visible channel", () => {
-      const { bridge } = makeStubBridge(null);
-      render(<CurveEditorPanel bridge={bridge} />);
+      renderPanel(null);
       const panel = screen.getByTestId("curve-editor-panel");
       // Focus starts on red. Hide red via its checkbox.
       const redCb = screen.getByTestId(
@@ -610,8 +592,7 @@ describe("CurveEditorPanel", () => {
     });
 
     it("focus change clears the selected-keys set", async () => {
-      const { bridge } = makeStubBridge(0);
-      render(<CurveEditorPanel bridge={bridge} />);
+      renderPanel(0);
       await waitFor(() => {
         expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
       });
@@ -631,8 +612,7 @@ describe("CurveEditorPanel", () => {
 
   describe("edit toolbar", () => {
     it("renders the Select / Insert mode toggle defaulting to Select", () => {
-      const { bridge } = makeStubBridge(null);
-      render(<CurveEditorPanel bridge={bridge} />);
+      renderPanel(null);
       const panel = screen.getByTestId("curve-editor-panel");
       expect(panel.dataset.mode).toBe("select");
       expect(
@@ -644,8 +624,7 @@ describe("CurveEditorPanel", () => {
     });
 
     it("clicking Insert flips the mode to insert", () => {
-      const { bridge } = makeStubBridge(null);
-      render(<CurveEditorPanel bridge={bridge} />);
+      renderPanel(null);
       fireEvent.click(screen.getByTestId("ce-tool-insert"));
       const panel = screen.getByTestId("curve-editor-panel");
       expect(panel.dataset.mode).toBe("insert");
@@ -655,8 +634,7 @@ describe("CurveEditorPanel", () => {
     });
 
     it("clicking the Smooth interpolation toggle fires set-track-interpolation for the focus channel's track", async () => {
-      const { bridge } = makeStubBridge(0);
-      render(<CurveEditorPanel bridge={bridge} />);
+      const { bridge } = renderPanel(0);
       await waitFor(() => {
         expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
       });
@@ -717,15 +695,13 @@ describe("CurveEditorPanel", () => {
     it("Lock-to combo trigger is disabled when the focus track only has 'None' (Red)", () => {
       // Red is the default focus and its Lock-to table is just
       // ["None"] (you can't lock the first channel to anything).
-      const { bridge } = makeStubBridge(0);
-      render(<CurveEditorPanel bridge={bridge} />);
+      renderPanel(0);
       const trigger = screen.getByTestId("ce-lock-to-trigger") as HTMLButtonElement;
       expect(trigger).toBeDisabled();
     });
 
     it("Lock-to combo trigger enables after switching focus to Alpha (4 options)", async () => {
-      const { bridge } = makeStubBridge(0);
-      render(<CurveEditorPanel bridge={bridge} />);
+      renderPanel(0);
       await waitFor(() => {
         expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
       });
@@ -975,8 +951,7 @@ describe("CurveEditorPanel", () => {
   // ── Insert mode → add-track-key ──────────────────────────────────
 
   it("Insert mode + canvas pointer-down fires add-track-key", async () => {
-    const { bridge } = makeStubBridge(0);
-    render(<CurveEditorPanel bridge={bridge} />);
+    const { bridge } = renderPanel(0);
     await waitFor(() => {
       expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
     });
@@ -2646,8 +2621,7 @@ describe("CurveEditorPanel — snap-to-grid toggle (#618)", () => {
   });
 
   it("defaults OFF and renders in the toolbar", () => {
-    const { bridge } = makeStubBridge(null);
-    render(<CurveEditorPanel bridge={bridge} />);
+    renderPanel(null);
     const toggle = screen.getByTestId("curve-snap-toggle");
     expect(toggle).toBeInTheDocument();
     expect(toggle.getAttribute("aria-pressed")).toBe("false");
@@ -2656,8 +2630,7 @@ describe("CurveEditorPanel — snap-to-grid toggle (#618)", () => {
   });
 
   it("flips on/off and persists each state to localStorage", () => {
-    const { bridge } = makeStubBridge(null);
-    render(<CurveEditorPanel bridge={bridge} />);
+    renderPanel(null);
     const toggle = screen.getByTestId("curve-snap-toggle");
 
     fireEvent.click(toggle);
@@ -2671,8 +2644,7 @@ describe("CurveEditorPanel — snap-to-grid toggle (#618)", () => {
 
   it("reads the persisted preference back on mount", () => {
     localStorage.setItem("curveEditor.snapToGrid", "1");
-    const { bridge } = makeStubBridge(null);
-    render(<CurveEditorPanel bridge={bridge} />);
+    renderPanel(null);
     expect(screen.getByTestId("curve-snap-toggle").getAttribute("aria-pressed")).toBe("true");
   });
 
@@ -2683,8 +2655,7 @@ describe("CurveEditorPanel — snap-to-grid toggle (#618)", () => {
         ? { ...t, keys: [{ time: 0, value: 0.5 }, { time: 50, value: 0.5 }, { time: 100, value: 0.5 }] }
         : t,
     );
-    const { bridge } = makeStubBridge(0, tracks);
-    render(<CurveEditorPanel bridge={bridge} />);
+    const { bridge } = renderPanel(0, tracks);
     const svg = (await screen.findByTestId("curve-editor-svg")) as unknown as SVGSVGElement;
     svg.getBoundingClientRect = () =>
       ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
@@ -2730,8 +2701,7 @@ describe("CurveEditorPanel — time-spinner scrub tracks the moving key (#614)",
           ? { ...t, keys: [{ time: 0, value: 0.5 }, { time: 25, value: 0.5 }, { time: 100, value: 0.5 }] }
           : t,
       );
-      const { bridge } = makeStubBridge(0, tracks);
-      render(<CurveEditorPanel bridge={bridge} />);
+      const { bridge } = renderPanel(0, tracks);
       await screen.findByTestId("curve-editor-svg");
 
       // Select the interior key at t=25. findAll (not getAll): the SVG mounts
@@ -3140,8 +3110,7 @@ describe("CurveEditorPanel — key context menu", () => {
 describe("CurveEditorPanel — channel row keyboard", () => {
   it("Space on a focused visibility checkbox toggles it without moving the focus channel", async () => {
     const user = userEvent.setup();
-    const { bridge } = makeStubBridge(null);
-    render(<CurveEditorPanel bridge={bridge} />);
+    renderPanel(null);
     const panel = screen.getByTestId("curve-editor-panel");
     const greenCb = screen.getByRole("checkbox", { name: "Toggle Green curve" });
     expect(greenCb).toBeChecked();
@@ -3153,8 +3122,7 @@ describe("CurveEditorPanel — channel row keyboard", () => {
 
   it("Enter on a channel's Edit button makes it the focus channel (aria-pressed follows)", async () => {
     const user = userEvent.setup();
-    const { bridge } = makeStubBridge(null);
-    render(<CurveEditorPanel bridge={bridge} />);
+    renderPanel(null);
     const panel = screen.getByTestId("curve-editor-panel");
     const red = screen.getByRole("button", { name: "Edit Red curve" });
     const green = screen.getByRole("button", { name: "Edit Green curve" });
