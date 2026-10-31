@@ -1,7 +1,3 @@
-- status
-- contentinfo:
-  - status
-  - text: PAUSED
 - dialog "Rescale Particle System":
   - heading "Rescale Particle System" [level=2]
   - button "Close"

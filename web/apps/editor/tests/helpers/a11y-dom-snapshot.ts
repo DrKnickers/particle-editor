@@ -27,7 +27,7 @@
 // (written before the API change) assumed the old JSON shape; the
 // pivot to YAML strings is documented in the commit message.
 
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 // Exit/morph animations must finish before a snapshot, or the capture races
 // them and records a dying layer. Radix exits are 110ms and the curve morph is
@@ -72,7 +72,7 @@ async function settleBeforeSnapshot(
   }
 }
 
-export async function captureDomA11y(page: Page): Promise<string> {
+export async function captureDomA11y(page: Page, scope?: Locator): Promise<string> {
   // Tooltip + menu/popover exit-animation settle. Keyboard-focus surfaces open
   // a Radix tooltip on the focused control (instant, deterministic); the
   // PREVIOUS tab stop's tooltip, and any menu a surface was opened via (the
@@ -100,7 +100,7 @@ export async function captureDomA11y(page: Page): Promise<string> {
     () => !document.querySelector('[data-testid="curve-morph-overlay"]'),
     "a curve morph overlay",
   );
-  // ariaSnapshot on body captures the whole document tree. Returns canonical
-  // YAML (newline-terminated, deterministic key order).
-  return page.locator("body").ariaSnapshot();
+  // Default to the whole shell for baseline callers; surface captures pass
+  // their own root. Settling remains page-wide to include portalled exits.
+  return (scope ?? page.locator("body")).ariaSnapshot();
 }

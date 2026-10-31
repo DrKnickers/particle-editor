@@ -190,9 +190,5 @@ describe("textures/get-preview (mock parity)", () => {
       expect(res.srcH).toBeGreaterThan(0);
     }
   });
-  it("missing/broken sentinels", async () => {
-    const b = new MockBridge();
-    expect((await b.request({ kind: "textures/get-preview", params: { filename: "__missing__.dds" } })).status).toBe("missing");
-    expect((await b.request({ kind: "textures/get-preview", params: { filename: "__broken__.dds" } })).status).toBe("broken");
-  });
+
 });

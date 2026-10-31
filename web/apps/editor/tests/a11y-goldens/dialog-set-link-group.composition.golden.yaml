@@ -1,7 +1,3 @@
-- status
-- contentinfo:
-  - status
-  - text: PAUSED
 - dialog "Set Link Group":
   - heading "Set Link Group" [level=2]
   - button "Close"

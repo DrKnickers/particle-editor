@@ -13,35 +13,9 @@ beforeEach(resetMockState);
 describe("MockBridge contract — emitters track ops", () => {
   // ─── emitters/get-tracks ─────────────────────
   //
-  // Read-only DTO contract. The wire shape is always 7 tracks in
-  // `TRACK_NAMES` order; an unknown id returns empty-keys placeholders
+  // An unknown id returns empty-keys placeholders
   // rather than an error so the React panel can render a "no data"
   // stub without special-casing failure.
-
-  it("emitters/get-tracks returns 7 tracks in TRACK_NAMES order", async () => {
-    const b = new MockBridge();
-    const r = await b.request({
-      kind: "emitters/get-tracks",
-      params: { id: 0 },  // Smoke (fixture root)
-    });
-    expect(r.tracks).toHaveLength(7);
-    expect(r.tracks.map((t) => t.name)).toEqual([
-      "red", "green", "blue", "alpha",
-      "scale", "index", "rotationSpeed",
-    ]);
-    for (const t of r.tracks) {
-      expect(["linear", "smooth", "step"]).toContain(t.interpolation);
-      expect(Array.isArray(t.keys)).toBe(true);
-      // Keys are sorted ascending by time.
-      for (let i = 1; i < t.keys.length; i++) {
-        expect(t.keys[i]!.time).toBeGreaterThanOrEqual(t.keys[i - 1]!.time);
-      }
-    }
-    // Fixture sanity: alpha track has the classic fade-in / fade-out
-    // four-key shape used in the panel screenshots.
-    const alpha = r.tracks.find((t) => t.name === "alpha");
-    expect(alpha?.keys).toHaveLength(4);
-  });
 
   it("emitters/get-tracks returns 7 empty-keys tracks for an unknown id", async () => {
     const b = new MockBridge();

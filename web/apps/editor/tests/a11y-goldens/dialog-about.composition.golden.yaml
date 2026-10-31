@@ -1,7 +1,3 @@
-- status
-- contentinfo:
-  - status
-  - text: PAUSED
 - dialog "About Particle Editor":
   - heading "About Particle Editor" [level=2]
   - button "Close"

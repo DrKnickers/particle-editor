@@ -90,6 +90,8 @@ test.describe("a11y/uia-composition-reachable [composition]", () => {
     // Depth 20 (matching the HWND lane). Composition mode actually
     // has the React tree deep enough that 12 wasn't reaching the
     // menubar — empirically determined during verification.
+    // This file's single shell baseline needs the host root: its assertions
+    // span native wrappers and React descendants, outside a DOM-only scope.
     const tree = await captureUIA(hostHwnd, "composition-backbone-check", { depth: 20 });
 
     // (1) Root is AloHostMain. Defensive sanity — confirms we captured

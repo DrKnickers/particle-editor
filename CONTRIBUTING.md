@@ -161,7 +161,7 @@ Guide links use the guide builder's own check.
 The editor is a C++ host **plus** a React/WebView2 UI, and the C++ build **embeds** the UI — so the two builds run **in order: web first, then C++.**
 
 1. **Web UI bundle (first)** — `cd web && pnpm install`, then `pnpm --filter ./apps/editor build` → produces `web/apps/editor/dist`.
-2. **C++ host** — Visual Studio 2022 (Platform Toolset v143), x64, DirectX SDK June 2010 (for `d3dx9.h` / `d3dx9_43.lib`). Build the **`.sln`** (`msbuild ParticleEditor.sln /p:Configuration=Release /p:Platform=x64`), not the bare `src\ParticleEditor.vcxproj` (which links `src\x64\<Config>\ParticleEditor.exe` instead of the `x64\<Config>\` exe the tests launch). First time in a fresh worktree, restore NuGet once: `msbuild ParticleEditor.sln /t:Restore /p:RestorePackagesConfig=true` (the restore is order-independent; only the Build needs `dist`). The build compiles `web/apps/editor/dist` into the exe as RCDATA (`scripts/embed-web-dist.mjs`), so the editor ships as a **single self-contained exe** with no separate `web/` folder; `src/host/HostWindow.cpp` serves it on the `app.local` virtual origin via a `WebResourceRequested` handler.
+2. **C++ host** — Visual Studio 2022 (Platform Toolset v143), x64, DirectX SDK June 2010 (for `d3dx9.h` / `d3dx9_43.lib`). Newer Visual Studio releases may bump the toolset when they open the solution; revert that before committing. Build the **`.sln`** (`msbuild ParticleEditor.sln /p:Configuration=Release /p:Platform=x64`), not the bare `src\ParticleEditor.vcxproj` (which links `src\x64\<Config>\ParticleEditor.exe` instead of the `x64\<Config>\` exe the tests launch). First time in a fresh worktree, restore NuGet once: `msbuild ParticleEditor.sln /t:Restore /p:RestorePackagesConfig=true` (the restore is order-independent; only the Build needs `dist`). The build compiles `web/apps/editor/dist` into the exe as RCDATA (`scripts/embed-web-dist.mjs`), so the editor ships as a **single self-contained exe** with no separate `web/` folder; `src/host/HostWindow.cpp` serves it on the `app.local` virtual origin via a `WebResourceRequested` handler.
 
 **Symptom of skipping step 1:** the C++ Build fails at the `GenerateEmbeddedWebAssets` step with `web\apps\editor\dist\index.html not found — build the editor web bundle first`. (Before the bundle was embedded, this instead surfaced at runtime as `ERR_NAME_NOT_RESOLVED` for `app.local`.) Drive the UI with the **Release** x64 build — Debug's attached console freezes the GUI.
 
@@ -171,13 +171,23 @@ See [`README.md`](README.md) for runtime details.
 
 ## Running the tests — one command
 
+Use `node scripts/run-all-tests.mjs --changed` to select lanes from changes since
+the merge-base with `origin/master`, plus staged, unstaged and untracked files.
+`--changed=<ref>` chooses another base. It unions with `--lane` and `--tier`, adds
+dependencies and fresh builds, and prints each lane's reason; add `--list` to
+preview. Documentation alone runs no lanes; unmatched paths select the full
+default gate and are named in the output. Git errors fail clearly. This mode
+cannot combine with `--skip-build`.
+
 ```
 node scripts/run-all-tests.mjs
 ```
 
 That is the whole verification recipe: it runs every automated layer in dependency order — web typecheck, Vitest, the web bundle build, script tests, mock-browser Playwright, static-site Playwright, all standalone C++ unit tests (`tests/test_*.cpp`, built in parallel from `tests/native-tests.json`), both MSBuild configs, the native Playwright suite against the real `ParticleEditor.exe`, the window-free `--tool` verbs end to end on the Release exe (`scripts/tool-smoke.mjs`), render-golden image comparisons (`scripts/render-goldens.mjs`; bless intentional rendering changes with `--update`), the `--record` frame smoke, and the `--drive` pixel smoke with its assertion scenarios — and exits nonzero if anything fails, with a per-lane summary. Expect the full run to take minutes (it rebuilds everything on purpose; a green gate on stale binaries is worse than a slow one).
 
-Useful flags: `--list` (lane names), `--lane vitest,cpp-unit` (subset), `--allow-missing drive-smoke` (downgrade a missing prereq to a visible SKIP on machines without the game install), `--skip-build` (unsafe, for iterating). Individual lanes remain available directly: `pnpm --filter ./apps/editor test` / `test:web` / `test:native`, and `node scripts/run-native-unit-tests.mjs --filter <name>` for a single C++ test.
+Useful flags: `--list` (lane names and tier groups), `--tier edit` (named group; repeatable and combines with `--lane`), `--lane vitest,cpp-unit` (subset), `--allow-missing drive-smoke` (downgrade a missing prereq to a visible SKIP on machines without the game install), `--skip-build` (unsafe, for iterating). With no selection, the full gate still runs, including `public-history` with its pinned Python interpreter. Individual lanes remain available directly: `pnpm --filter ./apps/editor test` / `test:web` / `test:native` / `test:public-history`, and `node scripts/run-native-unit-tests.mjs --filter <name>` for a single C++ test. The profiler diagnostic is opt-in via `pnpm --filter ./apps/editor test:profiler-audit`.
+
+Tiers: `edit` (lint, web units/build, scripts, C++ units), `publication` (maintainer-only release checks), `render` (Release build and render goldens), `site` (mock web and static site), `media` (record/drive/replay/observe/VFX loop), and `native` (both builds, needs-exe units, native Playwright, tool smoke). Build tiers include `web-build` for the embedded UI; `media` also includes Debug because replay and observe require both builds. `--list` prints each tier's exact lane list.
 
 **Not on Windows, or no game install?** The web half runs anywhere Node 22+ and pnpm 10+ do (see `web/package.json`); the public CI runs these on Ubuntu. From `web/`:
 

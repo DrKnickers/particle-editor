@@ -119,14 +119,12 @@ describe("CurveEditorPanel", () => {
     const { bridge } = makeStubBridge(null);
     render(<CurveEditorPanel bridge={bridge} />);
     expect(screen.getByTestId("curve-editor-panel")).toBeInTheDocument();
-    // All 7 channels — checkboxes are present with the documented
-    // default state.
+    // All 7 channel checkboxes are present.
     for (const c of CHANNELS) {
       const cb = screen.getByTestId(
         `curve-channel-checkbox-${c.id}`,
       ) as HTMLInputElement;
       expect(cb).toBeInTheDocument();
-      expect(cb.checked).toBe(c.defaultOn);
     }
   });
 

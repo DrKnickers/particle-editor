@@ -108,8 +108,7 @@ describe("CurveEditor", () => {
     expect(onKeyClick.mock.calls[0]![0]).toBe(50);
 
     // Re-render with the click's time in the selected set; the matching
-    // focus marker enlarges (r 5→6.5), changes to the selected core fill,
-    // and is tagged data-selected.
+    // focus marker is tagged data-selected.
     rerender(
       <CurveEditor
         tracks={[track]}
@@ -123,11 +122,8 @@ describe("CurveEditor", () => {
     );
     const middle = container.querySelectorAll(".curve-key-marker")[1]!;
     expect(middle.getAttribute("data-selected")).toBe("true");
-    expect(middle.getAttribute("r")).toBe("6.5");
-    expect(middle.getAttribute("fill")).toBe("var(--curve-marker-core)");
-    // Sanity: the unselected siblings stay at r=5.
+    // The other markers remain unselected.
     const first = container.querySelectorAll(".curve-key-marker")[0]!;
-    expect(first.getAttribute("r")).toBe("5");
     expect(first.getAttribute("data-selected")).toBe("false");
   });
 

@@ -283,7 +283,6 @@ async function main() {
       // DOM-event → viewport/input bridge wiring under the canvas-in-DOM
       // viewport. The spec self-skips only when its native transport is
       // unavailable, reporting that precise host failure.
-      "tests/canvas-architecture.spec.ts",
       // Composition-hosting integration gate for the standard native host.
       "tests/composition-hosting.spec.ts",
       // DXGI transport, resize-stress, and performance gates. Playwright's

@@ -793,7 +793,10 @@ int main()
     // presentation result, nor that Reset drops every owning emitter reference
     // before calling IDirect3DDevice9::Reset. Pin those call sites and the
     // release/reset/reacquire order because the native unit builder deliberately
-    // does not link the D3D engine or host translation units.
+    // does not link the D3D engine or host translation units. Keep bindings
+    // for internal release/reacquire order, HRESULT provenance, reentrancy,
+    // terminal cleanup and unexposed D3D doors: the native bridge cannot
+    // observe those details or force every device failure without new seams.
     std::printf("=== production device-reset binding ===\n");
     {
         const std::filesystem::path repoRoot = std::filesystem::current_path();
@@ -1637,11 +1640,8 @@ int main()
                    productionBoundReplay.Take(productionNextTrack), true);
         ExpectInt("production-bound next replay keeps exact new track",
                   productionNextTrack, 29);
-        ExpectBool("authored-only door never schedules a texture reload",
-                   !Contains(changeBody,
-                             "m_textureReloadRequestGeneration") &&
-                   !Contains(changeBody, "ReloadTextures("),
-                   true);
+        // Authored-only requests leave the real reload queue and completion
+        // count unchanged in d3d9ex.spec.ts, both held and healthy.
 
         const size_t textureReplayBegin =
             engineSource.find("bool Engine::ReplayPendingTextureReload()");

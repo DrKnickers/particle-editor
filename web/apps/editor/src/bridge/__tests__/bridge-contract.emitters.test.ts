@@ -22,13 +22,11 @@ import { resetMockState } from "@/test/mock-state";
 // Reset the shared mock stores between tests so state mutations don't leak.
 beforeEach(resetMockState);
 
-describe("MockBridge contract — emitters/*", () => {
-  it("types emitters/import-from-file like the native success payload", () => {
-    type ImportFromFileRequest = Extract<Request, { kind: "emitters/import-from-file" }>;
-    const response = { ok: true, imported: 1 } satisfies ResponseFor<ImportFromFileRequest>;
-    expect(response).toEqual({ ok: true, imported: 1 });
-  });
+// Compile-time native success payload check; contract-drift covers wire shapes.
+type ImportFromFileRequest = Extract<Request, { kind: "emitters/import-from-file" }>;
+({ ok: true, imported: 1 } satisfies ResponseFor<ImportFromFileRequest>);
 
+describe("MockBridge contract — emitters/*", () => {
   it("rejects unimplemented emitters/* requests (mutations) as not implemented", async () => {
     const b = new MockBridge();
     // emitters/import-from-file has a native handler (and the emitter-import
@@ -37,51 +35,7 @@ describe("MockBridge contract — emitters/*", () => {
       .rejects.toThrow(/not implemented/);
   });
 
-  it("emitters/preview-from-file returns a mock tree for any path", async () => {
-    const b = new MockBridge();
-    const r = await b.request({
-      kind: "emitters/preview-from-file",
-      params: { path: "/anywhere/foo.alo" },
-    });
-    expect(r.ok).toBe(true);
-    if (r.ok) {
-      expect(r.tree).toBeDefined();
-      expect(r.tree.children.length).toBeGreaterThanOrEqual(3);
-      // Names from the mock tree.
-      const names = r.tree.children.map((c) => c.name);
-      expect(names).toEqual(expect.arrayContaining(["Smoke", "Sparks", "Flash"]));
-    }
-  });
-
   // ─── emitter tree + selection ──────────────────
-  it("emitters/list returns the fixture tree with the synthetic root + populated real roots", async () => {
-    const b = new MockBridge();
-    const tree = await b.request({ kind: "emitters/list", params: {} });
-    // Synthetic root has id=-1 and is the only level the rest descends from.
-    expect(tree.root.id).toBe(-1);
-    expect(tree.root.role).toBe("root");
-    // Three real roots from the fixture.
-    expect(tree.root.children).toHaveLength(3);
-    const names = tree.root.children.map((c) => c.name);
-    expect(names).toEqual(["Smoke", "Sparks", "Flash"]);
-    // Smoke has one lifetime child + one death child.
-    const smoke = tree.root.children[0];
-    expect(smoke.linkGroup).toBe(1);
-    expect(smoke.children).toHaveLength(2);
-    expect(smoke.children[0].role).toBe("lifetime");
-    expect(smoke.children[1].role).toBe("death");
-    // Sparks has just a lifetime child.
-    const sparks = tree.root.children[1];
-    expect(sparks.children).toHaveLength(1);
-    expect(sparks.children[0].role).toBe("lifetime");
-    // Flash is a bare leaf with no link group.
-    const flash = tree.root.children[2];
-    expect(flash.children).toHaveLength(0);
-    expect(flash.linkGroup).toBe(0);
-    // All emitters in the fixture are visible.
-    expect(smoke.visible).toBe(true);
-  });
-
   it("emitters/select updates snapshot.selectedEmitterId and fires emitters/selected", async () => {
     const b = new MockBridge();
     let lastEvent: { id: number | null } | null = null;
@@ -438,42 +392,6 @@ describe("MockBridge contract — emitters/*", () => {
   });
 
   // ─── emitters/get-properties + set-properties
-
-  it("emitters/get-properties returns a full EmitterPropertiesDto with Basic/Appearance/Physics fields", async () => {
-    const b = new MockBridge();
-    const r = await b.request({
-      kind: "emitters/get-properties",
-      params: { id: 0 },
-    });
-    expect(r).toHaveProperty("properties");
-    const p = r.properties;
-    // Basic fields
-    expect(p).toHaveProperty("name");
-    expect(p).toHaveProperty("lifetime");
-    expect(p).toHaveProperty("useBursts");
-    expect(p).toHaveProperty("nParticlesPerSecond");
-    expect(p).toHaveProperty("randomRotation");
-    expect(p).toHaveProperty("parentLinkStrength");
-    expect(p).toHaveProperty("index");
-    // Appearance fields
-    expect(p).toHaveProperty("colorTexture");
-    expect(p).toHaveProperty("blendMode");
-    expect(p).toHaveProperty("hasTail");
-    expect(p).toHaveProperty("randomColors");
-    expect(p.randomColors).toHaveLength(4);
-    // Physics fields
-    expect(p).toHaveProperty("acceleration");
-    expect(p.acceleration).toHaveLength(3);
-    expect(p).toHaveProperty("gravity");
-    expect(p).toHaveProperty("groundBehavior");
-    expect(p).toHaveProperty("weatherCubeSize");
-    // Groups
-    expect(p).toHaveProperty("groups");
-    expect(p.groups).toHaveLength(3);
-    expect(p.groups[0]).toHaveProperty("type");
-    expect(p.groups[0]).toHaveProperty("min");
-    expect(p.groups[0].min).toHaveLength(3);
-  });
 
   it("emitters/set-properties applies a partial patch that is observable via get-properties", async () => {
     const b = new MockBridge();

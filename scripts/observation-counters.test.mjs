@@ -1,5 +1,8 @@
 // Refusal events belong to cause sites; the suppression latch also handles
 // already-counted refusals, so counting it would double-count or misattribute.
+// Catch-up and index-cap accounting run against the real engine in the observe
+// lane: budget-bailout, budget-bailout-skip and index-cap pin exact totals and
+// lifecycle endpoints. Keep source checks only for unobserved ordering/state.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -30,7 +33,6 @@ const header = source("rendering/engine.h");
 const engine = source("rendering/engine.cpp");
 const emitter = source("simulation/EmitterInstance.cpp");
 const counter = /m_(?:runtimeGuard|hardGuard|indexCap)Refusals/;
-const increment = /(?:\+\+\s*m_(?:runtimeGuard|hardGuard|indexCap)Refusals|m_(?:runtimeGuard|hardGuard|indexCap)Refusals\s*\+\+|Note(?:RuntimeGuard|IndexCap)RefusalForObservation\s*\()/;
 
 test("runtime counters increment only after budget admission has failed", () => {
   const spawn = block(header, /\bbool\s+TryConsumeSpawnBudget\s*\(\s*\)/);
@@ -39,16 +41,15 @@ test("runtime counters increment only after budget admission has failed", () => 
   assert.match(instance, /^\s*if\s*\(\s*!m_overloadGuardEnabled\s*\)\s*return\s+true\s*;\s*if\s*\(\s*m_numEmitters\s*<\s*m_maxPreviewInstances\s*\)\s*return\s+true\s*;\s*\+\+\s*m_runtimeGuardRefusals\s*;\s*m_overloadThisFrame\s*=\s*true\s*;\s*return\s+false\s*;\s*$/);
 });
 
-test("both exhausted-budget catch-up bailouts count before suppression", () => {
+test("both exhausted-budget catch-up bailouts retain suppression and stop iterating", () => {
+  // Observation totals cover counting, but do not expose the overload latch.
   const sites = [...emitter.matchAll(/if\s*\(\s*m_engine\s*\.\s*SpawnBudgetExhausted\s*\(\s*\)\s*\)/g)];
   assert.equal(sites.length, 2, "spawn-round and skip-time bailout sites");
   for (const site of sites) {
     const refusal = block(emitter.slice(site.index), /^if\s*\(\s*m_engine\s*\.\s*SpawnBudgetExhausted\s*\(\s*\)\s*\)/);
-    assert.match(refusal, /^\s*m_engine\s*\.\s*NoteRuntimeGuardRefusalForObservation\s*\(\s*\)\s*;\s*m_engine\s*\.\s*NoteSpawnSuppressed\s*\(\s*\)\s*;/);
+    assert.match(refusal, /m_engine\s*\.\s*NoteSpawnSuppressed\s*\(\s*\)\s*;/);
     assert.match(refusal, /\bbreak\s*;\s*$/);
-    assert.equal((refusal.match(/NoteRuntimeGuardRefusalForObservation/g) ?? []).length, 1);
   }
-  assert.equal((emitter.match(/NoteRuntimeGuardRefusalForObservation\s*\(/g) ?? []).length, 2);
 });
 
 test("hard counters sit inside the spawn-time and edit-time estimate refusals", () => {
@@ -63,22 +64,21 @@ test("hard counters sit inside the spawn-time and edit-time estimate refusals", 
   assert.equal((engine.match(/\+\+\s*m_hardGuardRefusals/g) ?? []).length, 2);
 });
 
-test("index cap counts independently of the runtime guard before freeing the refused slot", () => {
+test("index cap frees the refused slot before returning", () => {
   const spawn = block(emitter, /EmitterInstance::SpawnParticle\s*\([^)]*\)/);
   const refusal = block(spawn, /if\s*\(\s*particle\s*\.\s*m_index\s*>\s*kMaxParticleIndex\s*\)/);
-  assert.match(refusal, /^\s*m_engine\s*\.\s*NoteIndexCapRefusalForObservation\s*\(\s*\)\s*;/);
+  // The observe lane checks index-only counting with the guard disabled;
+  // telemetry cannot prove that the rejected allocation was freed here.
   assert.match(refusal, /FreeParticle\s*\(\s*particle\s*\)\s*;\s*return\s+false\s*;\s*$/);
   assert.doesNotMatch(refusal, /\bif\s*\(/);
-  assert.equal((emitter.match(/NoteIndexCapRefusalForObservation\s*\(/g) ?? []).length, 1);
 });
 
-test("suppression aggregation and the line after each call carry no increment", () => {
+test("suppression aggregation preserves the overload latch", () => {
   const suppression = block(header, /\bvoid\s+NoteSpawnSuppressed\s*\(\s*\)/);
   assert.match(suppression, /^\s*m_overloadThisFrame\s*=\s*true\s*;\s*$/);
   assert.doesNotMatch(suppression, counter);
-  const calls = [...emitter.matchAll(/m_engine\s*\.\s*NoteSpawnSuppressed\s*\(\s*\)\s*;([^\r\n]*)(?:\r?\n([^\r\n]*))?/g)];
-  assert.equal(calls.length, 3);
-  for (const call of calls) assert.doesNotMatch(call[1] + "\n" + (call[2] ?? ""), increment);
+  // Exact native refusal totals catch double-counting at the call sites;
+  // the overload latch itself is not present in observation telemetry.
 });
 
 test("observation hooks are increment-only and Clear preserves lifetime counters", () => {

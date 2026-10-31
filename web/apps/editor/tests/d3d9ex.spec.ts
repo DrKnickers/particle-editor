@@ -255,6 +255,11 @@ test("blocked full texture reload replays once without duplicating authored work
       await authoredChange(17);
       const controlHeld = await debug("query");
       const controlAfter = await debug("release");
+      const controlSettled = await debug("release");
+
+      const healthyBase = await debug("query");
+      await authoredChange(17);
+      const healthyAfter = await debug("query");
 
       const reloadBase = await debug("query");
       await debug("arm");
@@ -269,6 +274,9 @@ test("blocked full texture reload replays once without duplicating authored work
         controlBase,
         controlHeld,
         controlAfter,
+        controlSettled,
+        healthyBase,
+        healthyAfter,
         reloadBase,
         reloadHeld,
         reloadAfter,
@@ -293,6 +301,14 @@ test("blocked full texture reload replays once without duplicating authored work
       result.controlBase.authoredApplyCount,
   ).toBe(1);
   expect(result.controlAfter.frameReady).toBe(true);
+  expect(result.controlHeld.frameReady).toBe(false);
+  expect(result.controlSettled.pending).toBe(false);
+  expect(result.controlSettled.reloadCount - result.controlBase.reloadCount).toBe(0);
+  expect(result.controlSettled.authoredApplyCount - result.controlBase.authoredApplyCount).toBe(1);
+  expect(result.healthyAfter.pending).toBe(false);
+  expect(result.healthyAfter.reloadCount - result.healthyBase.reloadCount).toBe(0);
+  expect(result.healthyAfter.authoredApplyCount - result.healthyBase.authoredApplyCount).toBe(1);
+  expect(result.healthyAfter.frameReady).toBe(true);
 
   expect(result.reloadHeld.pending).toBe(true);
   expect(result.reloadHeld.reloadCount - result.reloadBase.reloadCount).toBe(0);

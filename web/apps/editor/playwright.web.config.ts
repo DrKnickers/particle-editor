@@ -17,6 +17,7 @@ const PORT = Number(process.env.WEB_PORT ?? 5174);
 
 export default defineConfig({
   testDir: "./tests-web",
+  testIgnore: ["**/profiler-audit.spec.ts"],
   fullyParallel: true,
   workers: process.env.CI ? 1 : undefined,
   reporter: "list",

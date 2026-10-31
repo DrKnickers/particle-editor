@@ -51,7 +51,7 @@ test.describe("a11y/curve-spinner [composition]", () => {
     test(`${surface.id} [composition]`, async () => {
       try {
         await surface.setup(page);
-        const snap = await captureDomA11y(page);
+        const snap = await captureDomA11y(page, surface.scope(page));
         expect(snap).toMatchJSONGolden(
           `a11y-goldens/${surface.id}.composition.golden.yaml`
         );

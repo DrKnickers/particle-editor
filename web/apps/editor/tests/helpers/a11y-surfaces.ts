@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 // Each surface is a "drive the app to this state" recipe used by the
 // composition DOM-snapshot specs (captures via
@@ -7,6 +7,7 @@ import type { Page } from "@playwright/test";
 // + their <id>.golden.json goldens were removed.)
 export type SurfaceCapture = {
   id: string;
+  scope: (page: Page) => Locator;
   setup: (page: Page) => Promise<void>;
   teardown: (page: Page) => Promise<void>;
 };
@@ -88,6 +89,7 @@ export async function seedCanonicalUiState(page: Page): Promise<void> {
 export const CHROME_SURFACES: SurfaceCapture[] = [
   {
     id: "menubar-closed",
+    scope: (page) => page.locator("body"), // sole chrome shell baseline
     setup: async (page) => {
       await page.locator('[data-testid="app-shell"]').focus();
     },
@@ -95,6 +97,7 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
   },
   {
     id: "menubar-file-open",
+    scope: (page) => page.getByRole("menu"),
     setup: async (page) => {
       await page.locator('button:has-text("File")').click();
       await page.waitForSelector('[role="menu"]');
@@ -103,6 +106,7 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
   },
   {
     id: "menubar-edit-open",
+    scope: (page) => page.getByRole("menu"),
     setup: async (page) => {
       await page.locator('button:has-text("Edit")').click();
       await page.waitForSelector('[role="menu"]');
@@ -111,6 +115,7 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
   },
   {
     id: "menubar-emitters-open",
+    scope: (page) => page.getByRole("menu"),
     setup: async (page) => {
       await page.locator('button:has-text("Emitters")').click();
       await page.waitForSelector('[role="menu"]');
@@ -126,6 +131,7 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
   // covered functionally by menu-bar.spec.ts instead.
   {
     id: "menubar-view-open",
+    scope: (page) => page.getByRole("menu"),
     setup: async (page) => {
       await page.locator('button:has-text("View")').click();
       await page.waitForSelector('[role="menu"]');
@@ -134,6 +140,7 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
   },
   {
     id: "menubar-help-open",
+    scope: (page) => page.getByRole("menu"),
     setup: async (page) => {
       await page.locator('button:has-text("Help")').click();
       await page.waitForSelector('[role="menu"]');
@@ -142,6 +149,7 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
   },
   {
     id: "toolbar",
+    scope: (page) => page.getByTestId("toolbar"),
     setup: async (page) => {
       await page.locator('[data-testid="toolbar"]').focus();
     },
@@ -149,6 +157,7 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
   },
   {
     id: "emitter-tree",
+    scope: (page) => page.getByTestId("emitter-tree"),
     setup: async (page) => {
       // Assumes fixture has at least one root emitter loaded.
       await page.locator('[data-testid="emitter-tree"]').focus();
@@ -157,6 +166,7 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
   },
   {
     id: "property-tabs-basic",
+    scope: (page) => page.getByTestId("emitter-property-tabs"),
     setup: async (page) => {
       await page.locator('[role="tab"]:has-text("Basic")').click();
     },
@@ -164,6 +174,7 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
   },
   {
     id: "property-tabs-appearance",
+    scope: (page) => page.getByTestId("emitter-property-tabs"),
     setup: async (page) => {
       await page.locator('[role="tab"]:has-text("Appearance")').click();
     },
@@ -171,6 +182,7 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
   },
   {
     id: "property-tabs-physics",
+    scope: (page) => page.getByTestId("emitter-property-tabs"),
     setup: async (page) => {
       await page.locator('[role="tab"]:has-text("Physics")').click();
     },
@@ -215,6 +227,7 @@ export const DIALOG_SURFACES: SurfaceCapture[] = [
   // ── Menu-triggered Modal dialogs ─────────────────────────────────
   {
     id: "dialog-keyboard-shortcuts",
+    scope: (page) => page.getByRole("dialog"),
     setup: async (page) => {
       await page.locator('button:has-text("Help")').click();
       await page.locator('[data-testid="menu-help-shortcuts"]').click();
@@ -224,6 +237,7 @@ export const DIALOG_SURFACES: SurfaceCapture[] = [
   },
   {
     id: "dialog-about",
+    scope: (page) => page.getByRole("dialog"),
     setup: async (page) => {
       await page.locator('button:has-text("Help")').click();
       await page.locator('[role="menuitem"]:has-text("About")').click();
@@ -233,6 +247,7 @@ export const DIALOG_SURFACES: SurfaceCapture[] = [
   },
   {
     id: "dialog-rescale-system",
+    scope: (page) => page.getByRole("dialog"),
     setup: async (page) => {
       await page.locator('button:has-text("Edit")').click();
       await page.locator('[role="menuitem"]:has-text("Rescale")').click();
@@ -242,6 +257,7 @@ export const DIALOG_SURFACES: SurfaceCapture[] = [
   },
   {
     id: "dialog-reset-view-settings",
+    scope: (page) => page.getByRole("dialog"),
     setup: async (page) => {
       await page.locator('button:has-text("View")').click();
       await page.locator('[role="menuitem"]:has-text("Reset View Settings")').click();
@@ -251,6 +267,7 @@ export const DIALOG_SURFACES: SurfaceCapture[] = [
   },
   {
     id: "dialog-import-emitters",
+    scope: (page) => page.getByRole("dialog"),
     setup: async (page) => {
       // Modal opens with body in its "no file picked" state — the
       // Browse… button is the only enabled control. We capture this
@@ -266,6 +283,7 @@ export const DIALOG_SURFACES: SurfaceCapture[] = [
   // ── Menu-triggered ToolPanel dialogs (role="dialog" container) ───
   {
     id: "dialog-lighting",
+    scope: (page) => page.getByRole("dialog", { name: "Lighting", exact: true }),
     setup: async (page) => {
       await page.locator('button:has-text("View")').click();
       await page.locator('[role="menuitem"]:has-text("Lighting")').click();
@@ -290,6 +308,7 @@ export const DIALOG_SURFACES: SurfaceCapture[] = [
     // route, which renders it with a FIXED both-tiers orphan + FIXED nowMs —
     // deterministic age text for the golden.
     id: "dialog-autosave-recovery",
+    scope: (page) => page.getByRole("dialog"),
     setup: async (page) => {
       await page.evaluate(() => {
         const base = window.location.href.split("?")[0];
@@ -314,6 +333,7 @@ export const DIALOG_SURFACES: SurfaceCapture[] = [
   // openDialog(<kind>, emitterId).
   {
     id: "dialog-increment-index",
+    scope: (page) => page.getByRole("dialog"),
     setup: async (page) => {
       const firstRow = page
         .locator('[data-testid="emitter-tree"] [role="treeitem"]')
@@ -326,6 +346,7 @@ export const DIALOG_SURFACES: SurfaceCapture[] = [
   },
   {
     id: "dialog-rescale-emitter",
+    scope: (page) => page.getByRole("dialog"),
     setup: async (page) => {
       const firstRow = page
         .locator('[data-testid="emitter-tree"] [role="treeitem"]')
@@ -338,6 +359,7 @@ export const DIALOG_SURFACES: SurfaceCapture[] = [
   },
   {
     id: "dialog-set-link-group",
+    scope: (page) => page.getByRole("dialog"),
     setup: async (page) => {
       const firstRow = page
         .locator('[data-testid="emitter-tree"] [role="treeitem"]')
@@ -366,6 +388,7 @@ export const DIALOG_SURFACES: SurfaceCapture[] = [
 export const KEYBOARD_SURFACES: SurfaceCapture[] = [
   {
     id: "kbd-tab-cycle-stop-1",
+    scope: (page) => page.locator("body"), // sole keyboard shell baseline
     setup: async (page) => {
       await page.locator('[data-testid="app-shell"]').focus();
       await page.keyboard.press("Tab");
@@ -374,6 +397,7 @@ export const KEYBOARD_SURFACES: SurfaceCapture[] = [
   },
   {
     id: "kbd-tab-cycle-stop-2",
+    scope: (page) => page.locator(":focus"),
     setup: async (page) => {
       await page.locator('[data-testid="app-shell"]').focus();
       await page.keyboard.press("Tab");
@@ -383,6 +407,7 @@ export const KEYBOARD_SURFACES: SurfaceCapture[] = [
   },
   {
     id: "kbd-emitter-rename-mode",
+    scope: (page) => page.getByTestId("emitter-tree"),
     setup: async (page) => {
       await page.locator('[data-testid="emitter-tree"] [role="treeitem"]').first().click();
       await page.keyboard.press("F2");
@@ -391,6 +416,7 @@ export const KEYBOARD_SURFACES: SurfaceCapture[] = [
   },
   {
     id: "kbd-arrow-tree-expanded",
+    scope: (page) => page.getByTestId("emitter-tree"),
     setup: async (page) => {
       await page.locator('[data-testid="emitter-tree"] [role="treeitem"]').first().focus();
       await page.keyboard.press("ArrowRight");
@@ -432,6 +458,7 @@ export const KEYBOARD_SURFACES: SurfaceCapture[] = [
 export const CUSTOM_PRIMITIVE_SURFACES: SurfaceCapture[] = [
   {
     id: "curve-editor-focused",
+    scope: (page) => page.getByTestId("curve-editor-panel").locator(".curve-canvas-wrap"),
     setup: async (page) => {
       // Select the first emitter explicitly — file/open in beforeEach does
       // NOT reset m_selectedEmitterId in BridgeDispatcher, so selection
@@ -446,6 +473,7 @@ export const CUSTOM_PRIMITIVE_SURFACES: SurfaceCapture[] = [
   },
   {
     id: "spinner-focused",
+    scope: (page) => page.getByTestId("spinner-particles-per-second"),
     setup: async (page) => {
       // Same selection-state reason as curve-editor-focused above.
       await page.locator('[data-testid="emitter-tree"] [role="treeitem"]').first().click();

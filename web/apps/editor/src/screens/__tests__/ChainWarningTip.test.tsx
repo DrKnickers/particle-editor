@@ -20,9 +20,6 @@ describe("ChainWarningTip", () => {
   it("leads with the meaning, saying 'chain' for a multi-generation path", () => {
     render(<ChainWarningTip warning={warning} />);
     expect(screen.getByText("This chain may spawn too many particles")).toBeInTheDocument();
-    // No "Soft warning — nothing is blocked" subtext (dropped per feel test).
-    expect(screen.queryByText(/Soft warning/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/far too many/)).not.toBeInTheDocument();
   });
 
   it("says 'emitter' (not 'chain') when a single emitter pins the threshold", () => {

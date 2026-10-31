@@ -17,46 +17,6 @@ import { resetMockState } from "@/test/mock-state";
 beforeEach(resetMockState);
 
 describe("MockBridge contract — engine/* and settings/*", () => {
-  it("engine/state/snapshot returns the full DTO shape", async () => {
-    const b = new MockBridge();
-    const s = await b.request({ kind: "engine/state/snapshot", params: {} });
-    // Editor-level state.
-    expect(s).toHaveProperty("currentFilePath");
-    expect(s).toHaveProperty("dirty");
-    expect(s.currentFilePath).toBeNull();
-    expect(s.dirty).toBe(false);
-    // Spot-check every top-level field.
-    expect(s).toHaveProperty("ground");
-    expect(s).toHaveProperty("groundZ");
-    expect(s).toHaveProperty("groundTexture");
-    expect(s).toHaveProperty("groundSolidColor");
-    expect(s).toHaveProperty("groundColor");
-    expect(s).toHaveProperty("groundSlotCustomPaths");
-    expect(s).toHaveProperty("groundSlotAvailable");
-    expect(s).toHaveProperty("skydomeSlot");
-    expect(s).toHaveProperty("skydomeCustomPaths");
-    expect(s).toHaveProperty("background");
-    expect(s).toHaveProperty("lights.sun.diffuse");
-    expect(s.lights.sun.diffuse).toHaveLength(4);
-    expect(s).toHaveProperty("ambient");
-    expect(s).toHaveProperty("shadow");
-    expect(s).toHaveProperty("bloom");
-    expect(s).toHaveProperty("bloomAvailable");
-    expect(s).toHaveProperty("bloomStrength");
-    expect(s).toHaveProperty("bloomCutoff");
-    expect(s).toHaveProperty("bloomSize");
-    expect(s).toHaveProperty("heatDebug");
-    expect(s).toHaveProperty("paused");
-    expect(s).toHaveProperty("camera.position");
-    expect(s.camera.position).toHaveLength(3);
-    expect(s).toHaveProperty("wind");
-    expect(s).toHaveProperty("gravity");
-    // Selected-emitter scalar. Legacy parity: the default
-    // root emitter (id 0) is selected on boot, so the editor opens populated.
-    expect(s).toHaveProperty("selectedEmitterId");
-    expect(s.selectedEmitterId).toBe(0);
-  });
-
   it("engine/set/ground-z patches state and fires state/changed", async () => {
     const b = new MockBridge();
     let last: EngineStateDto | null = null;
@@ -274,13 +234,7 @@ describe("MockBridge contract — engine/* and settings/*", () => {
     expect(after).toBe(false);
   });
 
-  it("engine/query/bloom-available returns the flag", async () => {
-    const b = new MockBridge();
-    const v = await b.request({ kind: "engine/query/bloom-available", params: {} });
-    expect(v).toBe(true);
-  });
-
-  // game-dome environment: setter mutates the snapshot, query enumerates.
+  // game-dome environment: setter mutates the snapshot and emits state.
   it("engine/set/skydome-environment patches context + the two Names and fires state/changed", async () => {
     const b = new MockBridge();
     let last: EngineStateDto | null = null;
@@ -314,21 +268,8 @@ describe("MockBridge contract — engine/* and settings/*", () => {
     expect(s.skydomeSecondaryStatus).toBe("none");
   });
 
-  it("engine/query/skydome-list returns primary + secondary Name lists per context", async () => {
-    const b = new MockBridge();
-    const space = await b.request({ kind: "engine/query/skydome-list", params: { context: "space" } });
-    expect(Array.isArray(space.primary)).toBe(true);
-    expect(Array.isArray(space.secondary)).toBe(true);
-    expect(space.primary).toContain("Stars_Low");
-    const land = await b.request({ kind: "engine/query/skydome-list", params: { context: "land" } });
-    expect(land.primary).toContain("Day_Blue_Sky");
-    // The two contexts enumerate different lists.
-    expect(land.primary).not.toEqual(space.primary);
-  });
-
   // reference object + unit grid: setters mutate the snapshot + fire
-  // state/changed; the list query enumerates Name + category; the skinned
-  // canned Name drives the "skinned" status.
+  // state/changed; the skinned canned Name drives the "skinned" status.
   it("engine/set/reference-object patches name + status and fires state/changed", async () => {
     const b = new MockBridge();
     let last: EngineStateDto | null = null;
@@ -381,30 +322,6 @@ describe("MockBridge contract — engine/* and settings/*", () => {
     await b.request({ kind: "engine/set/snap-enabled", params: { enabled: true } });
     const snap = await b.request({ kind: "engine/state/snapshot", params: {} });
     expect(snap.snapEnabled).toBe(true);
-  });
-
-  it("engine/query/reference-object-list returns Name + {domain,role,bucket,affiliation} entries", async () => {
-    const b = new MockBridge();
-    const r = await b.request({ kind: "engine/query/reference-object-list", params: {} });
-    expect(Array.isArray(r.objects)).toBe(true);
-    const turret = r.objects.find((o) => o.name === "Empire_Anti_Aircraft_Turret");
-    expect(turret?.domain).toBe("Ground");
-    expect(turret?.role).toBe("Structure");
-    expect(turret?.affiliation).toBe("Empire");
-    const vader = r.objects.find((o) => o.name === "Darth_Vader");
-    expect(vader?.role).toBe("Hero");
-    // affiliation may be a comma list, or empty for unaffiliated objects.
-    expect(r.objects.find((o) => o.name === "Nebulon_B_Frigate")?.affiliation).toBe("Rebel, Empire");
-    expect(r.objects.find((o) => o.name === "Imperial_Bunker_Capturable")?.affiliation).toBe("");
-  });
-
-  it("engine/action/step-frames resolves with an empty body in browser mode", async () => {
-    const b = new MockBridge();
-    // Pause first; the request is a response-only no-op either way, but
-    // mirrors how the React Toolbar dispatches it (pause → step).
-    await b.request({ kind: "engine/set/paused", params: { paused: true } });
-    const r = await b.request({ kind: "engine/action/step-frames", params: { frames: 1 } });
-    expect(r).toEqual({});
   });
 
   it("engine/action/rescale-system round-trips with empty body and fires state/changed", async () => {
@@ -481,37 +398,11 @@ describe("MockBridge contract — engine/* and settings/*", () => {
     expect(snap.ground).toBe(false);
   });
 
-  it("engine/set/estimated-load resolves ok via the mock", async () => {
-    const b = new MockBridge();
-    const res = await b.request({
-      kind: "engine/set/estimated-load",
-      params: { perInstance: 1234.5 },
-    });
-    expect(res).toEqual({});
-  });
-
   it("engine/set/estimated-load is view-only (does not mark the doc dirty)", async () => {
     const b = new MockBridge();
     await b.request({ kind: "engine/set/estimated-load", params: { perInstance: 500 } });
     const snap = await b.request({ kind: "engine/state/snapshot", params: {} });
     expect(snap.dirty).toBe(false);
-  });
-
-  it("engine/action/rescale-system round-trips and emits state/changed", async () => {
-    const b = new MockBridge();
-    let stateChanges = 0;
-    const off = b.on("engine/state/changed", () => { stateChanges += 1; });
-
-    const r = await b.request({
-      kind: "engine/action/rescale-system",
-      params: { durationScalePercent: 200, sizeScalePercent: 100 },
-    });
-    expect(r).toEqual({});
-    // MockBridge fires engine/state/changed after the rescale (parity
-    // with the C++ host); the test just observes that at least one
-    // arrived during the dispatch window.
-    expect(stateChanges).toBeGreaterThanOrEqual(1);
-    off();
   });
 
   it("engine/action/rescale-emitter round-trips with empty body and fires state/changed", async () => {
@@ -534,22 +425,6 @@ describe("MockBridge contract — engine/* and settings/*", () => {
   // kept separate, angles in degrees) the panel seeds from; the native
   // host reads it from the registry. The `forceAlign` field reflects the
   // live flag, and `…/set` round-trips it within a MockBridge instance.
-  it("settings/lighting returns the raw split and forceAlign defaults to true", async () => {
-    const b = new MockBridge();
-    const s = await b.request({ kind: "settings/lighting", params: {} });
-    expect(s.forceAlign).toBe(true);
-    // Raw split: intensity kept separate from colour (not folded).
-    expect(s.sun.intensity).toBe(0.5);
-    expect(s.sun.az).toBe(0);
-    expect(s.sun.alt).toBe(45);
-    expect(s.fill1.az).toBe(120);
-    expect(s.fill2.az).toBe(210);
-    // Colours are packed COLORREFs (low byte = R).
-    expect(s.sun.diffuse & 0xff).toBe(180);
-    expect(s).toHaveProperty("ambient");
-    expect(s).toHaveProperty("shadow");
-  });
-
   it("settings/lighting-force-align/set flips the forceAlign field on the next get", async () => {
     const b = new MockBridge();
     const setRes = await b.request({

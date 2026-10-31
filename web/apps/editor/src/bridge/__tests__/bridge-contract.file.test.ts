@@ -103,16 +103,6 @@ describe("MockBridge contract — file/*, recent/*, mods/*", () => {
     off();
   });
 
-  // file/open is no longer a hard reject. The native handler
-  // shows GetOpenFileNameW; the mock resolves with the schema's
-  // cancellation shape so the React handler's request chain aborts
-  // cleanly in browser mode without surfacing a raw rejection.
-  it("resolves file/open with ok:false in browser mode", async () => {
-    const b = new MockBridge();
-    const r = await b.request({ kind: "file/open", params: {} } as any);
-    expect(r).toEqual({ ok: false, error: "browser-mode" });
-  });
-
   it("file/open of an .alo over unsaved work is refused until the discard is confirmed", async () => {
     const b = new MockBridge();
     await b.request({ kind: "engine/set/ground-z", params: { z: 3 } });   // dirty

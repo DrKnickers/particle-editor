@@ -1,7 +1,3 @@
-- status
-- contentinfo:
-  - status
-  - text: PAUSED
 - dialog "Rescale Emitter":
   - heading "Rescale Emitter" [level=2]
   - button "Close"

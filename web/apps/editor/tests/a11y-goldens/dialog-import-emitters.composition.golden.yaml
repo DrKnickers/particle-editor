@@ -1,7 +1,3 @@
-- status
-- contentinfo:
-  - status
-  - text: PAUSED
 - dialog "Import Emitters":
   - heading "Import Emitters" [level=2]
   - button "Close"

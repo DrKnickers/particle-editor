@@ -10,6 +10,7 @@
 //                     must ADVANCE — vite exit 0 alone doesn't prove output)
 //   scripts           node --test script libs — MUST follow web-build: the
 //                     no-test-seam-in-prod guard silently self-skips without dist/
+//   publication       maintainer-only release-safety tests (pinned Python; absent on the mirror)
 //   playwright-web    mock-browser Playwright lane (own Vite server)
 //   site              landing + guide static-site Playwright (own node server;
 //                     global-setup renders placeholder media — warns if FFmpeg absent)
@@ -47,8 +48,8 @@
 //
 // Missing prereqs are FAILURES with actionable messages by default; silent skips
 // are the enemy of a gate. `--allow-missing <lane>` downgrades that lane's missing
-// prereq to a visible SKIP. A lane failure SKIPs lanes that depend on it (visible,
-// counted as blocked, overall run still fails).
+// prereq to a visible SKIP. A lane failure or skip SKIPs lanes that depend on it
+// (visible, counted as blocked; a failure still fails the overall run).
 //
 // Skipped TESTS *inside* an exit-0 lane are held to the declared SKIP_BUDGET
 // below — same principle one level down, and the same --allow-missing hatch.
@@ -60,6 +61,8 @@
 //
 // Flags:
 //   --lane <a,b,…>        run only these lanes (deps NOT auto-added)
+//   --tier <name>         run a named lane group (repeatable; see --list)
+//   --changed[=<ref>]     select from changed files (default: origin/master), with deps
 //   --allow-missing <a,b> downgrade missing-prereq FAIL to SKIP for these lanes
 //   --skip-build          skip web-build/msbuild lanes + native unit rebuilds
 //                         (UNSAFE: asserts current artifacts are fresh)
@@ -97,23 +100,40 @@ const splitList = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
 
 export function parseArgs(argv) {
   const lane = [];
+  const tier = [];
   const allowMissing = [];
   const unknown = [];
-  let skipBuild = false, list = false, help = false;
+  let skipBuild = false, list = false, help = false, changed = null;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     // --lane / --allow-missing each consume the next token (a value or comma
     // list) and are repeatable; consuming it here also keeps that value out of
     // `unknown`.
     if (a === "--lane") { if (argv[i + 1] !== undefined) lane.push(...splitList(argv[++i])); continue; }
+    if (a === "--tier") { if (argv[i + 1] !== undefined) tier.push(...splitList(argv[++i])); else unknown.push(a); continue; }
     if (a === "--allow-missing") { if (argv[i + 1] !== undefined) allowMissing.push(...splitList(argv[++i])); continue; }
     if (a === "--skip-build") { skipBuild = true; continue; }
+    if (a === "--changed") { changed = "origin/master"; continue; }
+    if (a.startsWith("--changed=")) { if (a.slice(10)) changed = a.slice(10); else unknown.push(a); continue; }
     if (a === "--list") { list = true; continue; }
     if (a === "--help" || a === "-h") { help = true; continue; }
     unknown.push(a);
   }
-  return { lane, allowMissing, skipBuild, list, help, unknown };
+  return { lane, tier, allowMissing, skipBuild, list, help, changed, unknown };
 }
+
+// Build tiers include web-build because the native executable embeds its output.
+// Media also needs Debug: replay-proof and observe exercise both builds.
+export const PUBLICATION_SUITE = "public-history.test.mjs";
+
+export const TIERS = {
+  edit: ["lint", "vitest", "web-build", "scripts", "cpp-unit"],
+  publication: ["publication"],
+  render: ["web-build", "msbuild-release", "render-goldens"],
+  site: ["playwright-web", "site"],
+  media: ["web-build", "msbuild-debug", "msbuild-release", "record-smoke", "drive-smoke", "replay-proof", "observe", "vfx-loop"],
+  native: ["web-build", "msbuild-debug", "cpp-unit-exe", "playwright-native", "msbuild-release", "tool-smoke"],
+};
 
 export function usage() {
   return [
@@ -123,10 +143,15 @@ export function usage() {
     "",
     "Flags:",
     "  --lane <a,b,…>         run only these lanes (repeatable; deps NOT auto-added)",
+    "  --tier <name>          run a named lane group (repeatable; combines with --lane)",
+    "  --changed[=<ref>]      union changed-file lanes with --lane/--tier, adding dependencies",
+    "                         (default ref: origin/master; includes local and untracked files)",
+    "                         documentation only: no tests; unknown paths: full default gate",
+    "                         cannot combine with --skip-build; --list previews the selection",
     "  --allow-missing <a,b>  downgrade a lane's missing-prereq FAIL — or an",
     "                         over-budget internal-skip FAIL — to a visible SKIP",
     "  --skip-build           skip build lanes + native rebuilds (UNSAFE: assumes fresh artifacts)",
-    "  --list                 print the lane names and exit (opt-in lanes are marked;",
+    "  --list                 print lanes and tiers and exit (opt-in lanes are marked;",
     "                         they run only when named with --lane)",
     "  --help, -h             print this help and exit",
     "",
@@ -136,10 +161,8 @@ export function usage() {
 
 const argv = process.argv.slice(2);
 const ARGS = parseArgs(argv);
-const ONLY = ARGS.lane;
 const ALLOW_MISSING = new Set(ARGS.allowMissing);
 const SKIP_BUILD = ARGS.skipBuild;
-const LIST = ARGS.list;
 
 // A gate run must never reuse a Playwright webServer someone else started. Both
 // Playwright configs default `reuseExistingServer` to !CI, and this gate
@@ -207,7 +230,7 @@ function runExe(cmd, args, cwd = repoRoot) {
 // "0 passed, 1 skipped" demonstrated.
 function runCmdLineTee(commandLine, cwd) {
   const { cmd, args, opts } = shellSpawnSpec(commandLine);
-  const r = spawnSync(cmd, args, { cwd, encoding: "utf8", ...opts });
+  const r = spawnSync(cmd, args, { cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, ...opts });
   const out = `${r.stdout || ""}${r.stderr || ""}`;
   if (out) process.stdout.write(out);
   return { code: spawnExitCode(r, commandLine), out };
@@ -268,6 +291,7 @@ export function recordSmokeVerdict({ error, signal, status, stderr, frames, maxB
 // tail happens to read "  1 skipped\n  196 passed (114.5s)" — which a \s form
 // reads as "skipped 196". The gate caught exactly that.
 export function parseSkippedCount(out) {
+  out = out.replace(/\x1b\[[0-9;]*m/g, "");
   let n = 0;
   // \b before the count: a test title like "checker rejects E11 skipped" must
   // not read as 11 skipped tests.
@@ -298,6 +322,9 @@ export function parseSkippedCount(out) {
 // impossible on some machine, and write the reason: the reason is the part that
 // gets checked.
 export const SKIP_BUDGET = {
+  // Publication keeps the default zero budget: this Windows host supports
+  // Python file/directory symlinks and has at least four logical CPUs, so none
+  // of the suite's runtime capability gates legitimately skip here.
   // Seven scripts-lane tests self-skip on the public mirror: four inspect the
   // PRIVATE clip-source data (tasks/wiki-media manifest + timelines) and three
   // pre-existing ones lint unpublished timeline fixtures. (The guide build used
@@ -345,6 +372,11 @@ function withSkipBudget(lane, innerSkipped) {
   if (!v.ok) return fail(v.note);
   if (innerSkipped === 0 && !v.note) return pass;
   return { ...pass, innerSkipped, ...(v.note ? { note: v.note } : {}) };
+}
+
+export function runReportedLane(lane, command, failure, run = runCmdLineTee) {
+  const r = run(command, editorDir);
+  return r.code === 0 ? withSkipBudget(lane, parseSkippedCount(r.out)) : fail(failure);
 }
 
 function psCapture(command) {
@@ -686,7 +718,7 @@ const LANES = [
   },
   {
     name: "vitest",
-    run: () => (runCmdLine("pnpm run test", editorDir) === 0 ? pass : fail("vitest run")),
+    run: () => runReportedLane("vitest", "pnpm run test", "vitest run"),
   },
   {
     name: "web-build",
@@ -728,8 +760,19 @@ const LANES = [
     },
   },
   {
+    name: "publication",
+    // The test wrapper validates the pinned interpreter and runtime itself. The
+    // suite is maintainer-only, so the public mirror has nothing to run.
+    run: () => {
+      const suite = join(repoRoot, "scripts", PUBLICATION_SUITE);
+      return existsSync(suite)
+        ? runReportedLane("publication", `node --test "${suite}"`, "publication tests")
+        : skip("maintainer-only suite is not on the public mirror");
+    },
+  },
+  {
     name: "playwright-web",
-    run: () => (runCmdLine("pnpm run test:web", editorDir) === 0 ? pass : fail("mock-browser Playwright")),
+    run: () => runReportedLane("playwright-web", "pnpm run test:web", "mock-browser Playwright"),
   },
   {
     name: "site",
@@ -753,9 +796,7 @@ const LANES = [
         "install ffmpeg so global-setup can render the placeholder media",
       );
       if (p) return p;
-      return runCmdLine("pnpm run test:site", editorDir) === 0
-        ? pass
-        : fail("landing + guide Playwright");
+      return runReportedLane("site", "pnpm run test:site", "landing + guide Playwright");
     },
   },
   {
@@ -981,12 +1022,12 @@ const LANES = [
   },
   {
     name: "replay-proof",
-    deps: ["msbuild-release", "web-build"],
+    deps: ["msbuild-release", "web-build", "msbuild-debug"],
     run: () => runReplayProofLane(),
   },
   {
     name: "observe",
-    deps: ["msbuild-release", "web-build"],
+    deps: ["msbuild-release", "web-build", "msbuild-debug"],
     run: () => runObserveLane(),
   },
   {
@@ -997,6 +1038,7 @@ const LANES = [
   {
     name: "houdini",
     optIn: true,
+    deps: ["msbuild-release"],
     run: () => runHoudiniLane(),
   },
 ];
@@ -1004,6 +1046,102 @@ const LANES = [
 // An opt-in lane runs only when named; with no --lane the default gate skips it.
 export function selectLanes(only, lanes = LANES) {
   return only.length > 0 ? lanes.filter((l) => only.includes(l.name)) : lanes.filter((l) => !l.optIn);
+}
+
+// NUL-delimited names preserve spaces, newlines and non-ASCII filenames. Disable
+// rename detection so both the old and new paths participate in lane selection.
+export function changedPaths(base = "origin/master", cwd = repoRoot, run = spawnSync) {
+  const git = (args) => {
+    const r = run("git", args, { cwd, encoding: "utf8", shell: false, maxBuffer: 64 * 1024 * 1024 });
+    if (r.error || r.status !== 0) {
+      throw new Error(`--changed: git ${args[0]} failed (base ${base}): ${r.error?.message || r.stderr?.trim() || `exit ${r.status}`}`);
+    }
+    return r.stdout;
+  };
+  const mergeBase = git(["merge-base", "--", "HEAD", base]).trim();
+  if (!mergeBase) throw new Error(`--changed: no merge-base for ${base} and HEAD`);
+  const names = [
+    git(["diff", "--name-only", "--no-renames", "-z", mergeBase, "HEAD", "--"]),
+    git(["diff", "--name-only", "--no-renames", "-z", "--cached", "HEAD", "--"]),
+    git(["diff", "--name-only", "--no-renames", "-z", "--"]),
+    git(["ls-files", "--others", "--exclude-standard", "-z"]),
+  ];
+  return [...new Set(names.flatMap((s) => s.split("\0").filter(Boolean)))];
+}
+
+// Pure selection, including reasons and transitive prerequisites in gate order.
+// Private publication paths are assembled so this file also ships on the mirror.
+export function lanesForChanges(paths, extra = []) {
+  const reasons = new Map();
+  const add = (names, why) => {
+    for (const name of names) {
+      if (!reasons.has(name)) reasons.set(name, new Set());
+      reasons.get(name).add(why);
+    }
+  };
+  const under = (p, root) => p === root || p.startsWith(root + "/");
+  const publication = [
+    ["tools", "public_history"], ["tests", "public_history"],
+    ["tasks", "public-history-rebuild"], ["tasks", "public-manifest.txt"],
+    ["scripts", "sync-public.ps1"],
+  ].map((parts) => parts.join("/"));
+  // Timelines and fixtures here are linted by the scripts lane.
+  const scriptData = [["tasks", "wiki-media"], ["tasks", "clips"], [".claude", "skills"]]
+    .map((parts) => parts.join("/"));
+  for (const raw of paths) {
+    const p = raw.replaceAll("\\", "/").replace(/^\.\//, "");
+    let names;
+    if (publication.some((root) => under(p, root)) || p.startsWith(["scripts", "public-history"].join("/"))) names = TIERS.publication;
+    else if (scriptData.some((root) => under(p, root))) names = ["scripts"];
+    // Only prose is exempt: non-Markdown files under tasks/ can be lane drivers,
+    // so they fall through to the full gate.
+    else if (/^[^/]+\.md$/i.test(p) || under(p, "docs") ||
+      (/\.md$/i.test(p) && ["tasks", ".claude"].some((root) => under(p, root)))) names = [];
+    else if (/(^|\/)(package\.json|[^/]*lock[^/]*\.(yaml|json)|[^/]+\.lock|pnpm-workspace\.yaml)$/.test(p) ||
+      /\.(sln|vcxproj|props|filters|targets)$/.test(p) ||
+      (under(p, "web") && /(^|\/)(tsconfig[^/]*\.json|[^/]+\.config\.[^/]+|\.nvmrc|\.npmrc|\.prettierrc[^/]*)$/.test(p))) names = selectLanes([]).map((l) => l.name);
+    else if (under(p, "web/apps/editor/src")) names = /(^|\/)__tests__(\/|$)|\.test\./.test(p)
+      ? ["lint", "vitest", "scripts"]
+      : ["lint", "vitest", "web-build", "scripts", "playwright-web", ...TIERS.native];
+    else if (under(p, "web/packages")) names = ["lint", "vitest", "web-build", "scripts", "playwright-web", ...TIERS.native];
+    else if (under(p, "web/apps/editor/tests")) names = ["lint", ...TIERS.native];
+    else if (under(p, "web/apps/editor/tests-web")) names = ["lint", "playwright-web"];
+    else if (under(p, "web/apps/editor/tests-site") || under(p, "site")) names = ["lint", "site", "scripts", "web-build"];
+    else if (under(p, "src")) names = [...TIERS.edit, ...TIERS.native, ...TIERS.render, ...TIERS.media];
+    else if (under(p, "tests/goldens/render")) names = TIERS.render;
+    else if (/^tests\/test_[^/]+\.cpp$/.test(p) || p === "tests/native-tests.json") names = ["cpp-unit"];
+    else if (under(p, "scripts")) {
+      names = ["scripts"];
+      const drivers = {
+        "run-native-unit-tests": ["cpp-unit", "cpp-unit-exe"], "render-goldens": TIERS.render,
+        "tool-smoke": ["tool-smoke"], "mcp-adapter": ["tool-smoke"],
+        "replay-proof": ["replay-proof"], "observe": ["observe"], "observe-lane": ["observe"],
+        "vfx-loop": ["vfx-loop"], "build-guide": ["site"], "embed-web-dist": TIERS.native,
+      };
+      const driver = p.split("/")[1].replace(/\.(test\.)?mjs$/, "");
+      names.push(...(Object.hasOwn(drivers, driver) ? drivers[driver] : []));
+    }
+    if (names === undefined) add(selectLanes([]).map((l) => l.name), `unmatched path (full default gate): ${raw}`);
+    else add(names, raw);
+  }
+  add(extra, "explicit --lane/--tier");
+  const visit = (name) => {
+    for (const dep of LANES.find((l) => l.name === name)?.deps || []) {
+      const seen = reasons.has(dep);
+      add([dep], `required by ${name}`);
+      if (!seen) visit(dep);
+    }
+  };
+  for (const name of [...reasons.keys()]) visit(name);
+  const lanes = LANES.filter((l) => reasons.has(l.name)).map((l) => l.name);
+  return { lanes, reasons: Object.fromEntries(lanes.map((name) => [name, [...reasons.get(name)]])) };
+}
+
+// --skip-build skips build lanes on purpose and asserts their artifacts are fresh,
+// so only then does a skipped dependency leave its dependents free to run.
+export function blockedDependency(lane, results, skipBuild = false) {
+  return (lane.deps || []).map((d) => results.find((r) => r.name === d))
+    .find((r) => r && (r.status === "FAIL" || (r.status === "SKIP" && !skipBuild)));
 }
 
 // ---------------------------------------------------------------------------
@@ -1037,7 +1175,10 @@ function acquireLock() {
   }
 }
 
-function main() {
+export function main(args = ARGS, readChanges = changedPaths) {
+  const ARGS = args;
+  const ONLY = [...ARGS.lane, ...ARGS.tier.flatMap((t) => Object.hasOwn(TIERS, t) ? TIERS[t] : [])];
+  const LIST = ARGS.list;
   if (ARGS.help) {
     console.log(usage());
     return 0;
@@ -1049,28 +1190,46 @@ function main() {
     console.log(usage());
     return 1;
   }
-  const lanes = selectLanes(ONLY);
-  if (LIST) {
-    for (const l of ONLY.length > 0 ? lanes : LANES) console.log(l.optIn ? `${l.name} (opt-in)` : l.name);
-    return 0;
+  const unknownTiers = ARGS.tier.filter((t) => !Object.hasOwn(TIERS, t));
+  if (unknownTiers.length > 0) {
+    log(`unknown tier(s): ${unknownTiers.join(", ")} (use --list)`);
+    return 1;
   }
   const unknown = ONLY.filter((n) => !LANES.some((l) => l.name === n));
   if (unknown.length > 0) {
     log(`unknown lane(s): ${unknown.join(", ")} (use --list)`);
     return 1;
   }
+  let lanes = selectLanes(ONLY);
+  if (ARGS.changed !== null) {
+    if (ARGS.skipBuild) { log("--changed cannot combine with --skip-build: fresh builds are required."); return 1; }
+    let selected;
+    try { selected = lanesForChanges(readChanges(ARGS.changed), ONLY); }
+    catch (err) { log(err.message); return 1; }
+    log(`--changed (base ${ARGS.changed}): ${selected.lanes.join(", ") || "nothing needs testing"}`);
+    for (const name of selected.lanes) log(`${name}: ${selected.reasons[name].join("; ")}`);
+    lanes = LANES.filter((l) => selected.lanes.includes(l.name));
+    if (lanes.length === 0) return 0;
+  }
+  if (LIST) {
+    for (const l of ONLY.length > 0 || ARGS.changed !== null ? lanes : LANES) console.log(l.optIn ? `${l.name} (opt-in)` : l.name);
+    if (ONLY.length === 0 && ARGS.changed === null) {
+      console.log("\nTiers (--tier <name>):");
+      for (const [name, names] of Object.entries(TIERS)) console.log(`  ${name}: ${names.join(",")}`);
+      console.log("\n--changed[=<ref>] selects changed-file lanes and dependencies (default: origin/master); combines with --lane/--tier.");
+    }
+    return 0;
+  }
   if (!acquireLock()) return 1;
 
   const results = [];
   try {
     for (const lane of lanes) {
-      const blockedBy = (lane.deps || []).find(
-        (d) => results.some((r) => r.name === d && r.status === "FAIL"),
-      );
+      const blockedBy = blockedDependency(lane, results, SKIP_BUILD);
       const started = Date.now();
       let res;
       if (blockedBy) {
-        res = skip(`blocked: ${blockedBy} failed`);
+        res = skip(`blocked: ${blockedBy.name} ${blockedBy.status === "FAIL" ? "failed" : "skipped"}`);
         log(`${lane.name}: SKIP (${res.note})`);
       } else {
         log(`=== ${lane.name} ===`);

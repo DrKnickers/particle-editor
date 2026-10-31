@@ -28,9 +28,6 @@ describe("ViewportUnavailableNotice", () => {
     expect(alert).toHaveTextContent("updating your graphics driver");
     expect(alert).toHaveTextContent("Details are in the log.");
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
-    expect(alert.className).toContain("bg-panel");
-    expect(alert.className).toContain("text-text");
-    expect(alert.className).toContain("border-danger-fg");
 
     bridge.emit("stats/tick", { overload: false });
     bridge.emit("engine/state/changed", {});

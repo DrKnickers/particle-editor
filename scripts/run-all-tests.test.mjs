@@ -10,21 +10,227 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { mkdirSync, mkdtempSync, openSync, closeSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, openSync, closeSync, readFileSync, rmSync, writeFileSync, renameSync } from "node:fs";
 
 import { parseArgs, usage, shellSpawnSpec, spawnExitCode, parseSkippedCount, prereq, runReplayProofLane, runObserveLane, runToolSmokeLane, runVfxLoopLane, runHoudiniLane, selectLanes } from "./run-all-tests.mjs";
+import { TIERS, blockedDependency, runReportedLane, changedPaths, lanesForChanges, main } from "./run-all-tests.mjs";
+import { scriptTestFiles } from "./run-script-tests.mjs";
 
 const scriptPath = join(dirname(fileURLToPath(import.meta.url)), "run-all-tests.mjs");
 
+test("--changed parses an optional equals ref and rejects an empty ref", () => {
+  assert.equal(parseArgs(["--changed"]).changed, "origin/master");
+  assert.equal(parseArgs(["--changed=topic"]).changed, "topic");
+  assert.deepEqual(parseArgs(["--changed="]).unknown, ["--changed="]);
+  assert.deepEqual(parseArgs(["--changed", "topic"]).unknown, ["topic"]);
+  assert.ok(usage().includes("--changed[=<ref>]"));
+  assert.match(usage(), /origin\/master/);
+});
+
+const ordered = (...names) => selectLanes([...new Set(names.flat())]).map((l) => l.name);
+const scriptLanes = ["web-build", "scripts"];
+const fullGate = selectLanes([]).map((l) => l.name);
+for (const [paths, expected] of [
+  [[], []],
+  [["README.md", "CHANGELOG.md", "AGENTS.md", "docs/nested/a.md", "tasks/plan.md", ".claude/agents/a.md"], []],
+  [["web/apps/editor/src/App.tsx"], ordered("lint", "vitest", scriptLanes, "playwright-web", TIERS.native)],
+  [["web/apps/editor/src/config.ts"], ordered("lint", "vitest", scriptLanes, "playwright-web", TIERS.native)],
+  [["web/packages/bridge-schema/src/index.ts"], ordered("lint", "vitest", scriptLanes, "playwright-web", TIERS.native)],
+  [["web/apps/editor/src/lib/__tests__/fixture.ts", "web/apps/editor/src/App.test.tsx"], ordered("lint", "vitest", scriptLanes)],
+  [["web/apps/editor/tests/render-loop.spec.ts"], ordered("lint", TIERS.native)],
+  [["web/apps/editor/tests/a11y-goldens/dialog.golden.yaml"], ordered("lint", TIERS.native)],
+  [["web/apps/editor/tests-web/app.spec.ts"], ["lint", "playwright-web"]],
+  [["web/apps/editor/tests-site/guide.spec.ts", "site/index.html"], ordered("lint", "site", scriptLanes)],
+  [["tests/goldens/render/scene.png"], TIERS.render],
+  [["src/rendering/Engine.cpp"], ordered(TIERS.edit, TIERS.native, TIERS.render, TIERS.media)],
+  [["src/host/HostWindow.cpp"], ordered(TIERS.edit, TIERS.native, TIERS.render, TIERS.media)],
+  [["tests/test_policy.cpp", "tests/native-tests.json"], ["cpp-unit"]],
+  [["scripts/run-all-tests.mjs"], scriptLanes],
+  [["scripts/other.test.mjs"], scriptLanes],
+  [["scripts/render-goldens.mjs"], ordered(scriptLanes, TIERS.render)],
+  [["scripts/run-native-unit-tests.mjs"], ordered(scriptLanes, "cpp-unit", "msbuild-debug", "cpp-unit-exe")],
+  [["scripts/tool-smoke.mjs", "scripts/mcp-adapter/smoke.mjs"], ordered(scriptLanes, "msbuild-release", "tool-smoke")],
+  [["scripts/replay-proof.mjs"], ordered(scriptLanes, "msbuild-debug", "msbuild-release", "replay-proof")],
+  [["scripts/observe-lane.mjs"], ordered(scriptLanes, "msbuild-debug", "msbuild-release", "observe")],
+  [["scripts/vfx-loop/lane.mjs"], ordered(scriptLanes, "msbuild-release", "vfx-loop")],
+  [["scripts/build-guide.mjs"], ordered(scriptLanes, "site")],
+  [["scripts/embed-web-dist.mjs"], ordered(scriptLanes, TIERS.native)],
+  [["./web\\apps\\editor\\tests-web\\spaces é.spec.ts"], ["lint", "playwright-web"]],
+]) test(`lanesForChanges: ${paths.join(", ") || "no changes"}`, () => {
+  assert.deepEqual(lanesForChanges(paths).lanes, expected);
+});
+
+for (const p of [
+  "web/pnpm-lock.yaml", "web/package.json", "package-lock.json", "yarn.lock", "web/pnpm-workspace.yaml",
+  "ParticleEditor.sln", "src/ParticleEditor.vcxproj", "src/ParticleEditor.vcxproj.filters", "Directory.Build.props",
+  "web/apps/editor/vite.config.ts", "web/apps/editor/tsconfig.e2e.json", "web/.nvmrc",
+]) test(`build/config change selects the full default gate: ${p}`, () => {
+  assert.deepEqual(lanesForChanges([p]).lanes, fullGate);
+});
+
+test("publication paths take priority over docs and scripts, without requiring a private tree", () => {
+  for (const parts of [
+    ["tools", "public_history", "tool.py"], ["tests", "public_history", "test.py"],
+    ["tasks", "public-history-rebuild", "notes.md"], ["tasks", "public-manifest.txt"],
+    ["scripts", "public-history.py"], ["scripts", "public-history.test.mjs"], ["scripts", "sync-public.ps1"],
+  ]) assert.deepEqual(lanesForChanges([parts.join("/")]).lanes, ["publication"]);
+});
+
+test("unmatched paths name the fallback and select the full default gate", () => {
+  for (const p of ["unknown/file.bin", "web/apps/editor/src-other/file.ts", "tests/test_other.txt", "docs-extra/file"]) {
+    const selected = lanesForChanges([p]);
+    assert.deepEqual(selected.lanes, fullGate);
+    assert.ok(selected.reasons.lint.some((why) => why.includes(p) && why.includes("unmatched")));
+    assert.ok(!selected.lanes.includes("houdini"));
+  }
+});
+
+test("changed selection unions explicit lanes/tiers and recursively adds dependencies in gate order", () => {
+  const selected = lanesForChanges(["README.md"], [...TIERS.site, "observe", "houdini"]);
+  assert.deepEqual(selected.lanes, ordered("web-build", TIERS.site, "msbuild-debug", "msbuild-release", "observe", "houdini"));
+  assert.ok(selected.reasons["msbuild-release"].includes("required by observe"));
+  assert.ok(selected.reasons.observe.includes("explicit --lane/--tier"));
+  assert.deepEqual(lanesForChanges([], ["houdini"]).lanes, ["web-build", "msbuild-release", "houdini"]);
+  assert.deepEqual(lanesForChanges(["web/apps/editor/src/App.test.tsx", "web/apps/editor/src/App.tsx"]).lanes,
+    ordered("lint", "vitest", scriptLanes, "playwright-web", TIERS.native));
+  const all = lanesForChanges(["unknown"]);
+  for (const lane of selectLanes(all.lanes)) {
+    for (const dep of lane.deps || []) assert.ok(all.lanes.includes(dep), `${lane.name} needs ${dep}`);
+  }
+  assert.deepEqual(lanesForChanges(["scripts/run-all-tests.mjs", "scripts/run-all-tests.mjs"]).reasons.scripts,
+    ["scripts/run-all-tests.mjs"]);
+});
+
+test("changed CLI prints reasons, unions tiers/lanes, exits on docs, and rejects stale builds or Git failure", () => {
+  const output = [];
+  const original = console.log;
+  console.log = (s) => output.push(s);
+  try {
+    assert.equal(main(parseArgs(["--changed"]), () => ["README.md"]), 0);
+    assert.match(output.join("\n"), /nothing needs testing/);
+    output.length = 0;
+    assert.equal(main(parseArgs(["--changed", "--tier", "site", "--lane", "tool-smoke", "--list"]), () => []), 0);
+    assert.deepEqual(output.filter((line) => !line.startsWith("[gate]")),
+      ["web-build", "playwright-web", "site", "msbuild-release", "tool-smoke"]);
+    output.length = 0;
+    assert.equal(main(parseArgs(["--changed=topic", "--tier", "site", "--lane", "tool-smoke", "--list"]),
+      (base) => { assert.equal(base, "topic"); return ["unknown/file"]; }), 0);
+    assert.match(output.join("\n"), /unmatched path.*unknown\/file/);
+    assert.match(output.join("\n"), /required by tool-smoke/);
+    output.length = 0;
+    assert.equal(main(parseArgs(["--changed", "--skip-build"]), () => assert.fail("must not query git")), 1);
+    assert.match(output.join("\n"), /fresh builds/);
+    output.length = 0;
+    assert.equal(main(parseArgs(["--changed"]), () => { throw new Error("missing base ref"); }), 1);
+    assert.match(output.join("\n"), /missing base ref/);
+  } finally { console.log = original; }
+});
+
+test("changedPaths fails closed on any Git failure or missing merge-base", () => {
+  for (let failAt = 0; failAt < 5; failAt++) {
+    let calls = 0;
+    assert.throws(() => changedPaths("missing-ref", ".", () => calls++ === failAt
+      ? { status: 128, stderr: "bad revision" } : { status: 0, stdout: "base\0" }), /--changed: git .*failed.*missing-ref.*bad revision/);
+  }
+  assert.throws(() => changedPaths("base", ".", () => ({ error: new Error("ENOENT") })), /ENOENT/);
+  assert.throws(() => changedPaths("base", ".", () => ({ status: 0, stdout: "" })), /no merge-base/);
+});
+
+test("changedPaths preserves NUL-delimited names and queries each change source without a shell", () => {
+  const calls = [];
+  const output = ["abc123\n", "committed\0space é\nname\0", "staged\0committed\0", "unstaged\0", "untracked\0"];
+  assert.deepEqual(changedPaths("topic", "scratch", (cmd, args, opts) => {
+    assert.equal(cmd, "git");
+    assert.equal(opts.cwd, "scratch");
+    assert.equal(opts.shell, false);
+    calls.push(args);
+    return { status: 0, stdout: output[calls.length - 1] };
+  }), ["committed", "space é\nname", "staged", "unstaged", "untracked"]);
+  assert.deepEqual(calls, [
+    ["merge-base", "--", "HEAD", "topic"],
+    ["diff", "--name-only", "--no-renames", "-z", "abc123", "HEAD", "--"],
+    ["diff", "--name-only", "--no-renames", "-z", "--cached", "HEAD", "--"],
+    ["diff", "--name-only", "--no-renames", "-z", "--"],
+    ["ls-files", "--others", "--exclude-standard", "-z"],
+  ]);
+});
+
+test("changedPaths collects branch, staged, unstaged, untracked and rename paths from the merge-base", () => {
+  const scratch = join(dirname(scriptPath), "..", "tests", ".tmp");
+  mkdirSync(scratch, { recursive: true });
+  const cwd = mkdtempSync(join(scratch, "gate-changes-"));
+  const run = (cmd, args, opts) => {
+    const out = join(cwd, "stdout"), err = join(cwd, "stderr");
+    const stdout = openSync(out, "w"), stderr = openSync(err, "w");
+    let r;
+    try { r = spawnSync(cmd, args, { ...opts, stdio: ["ignore", stdout, stderr], windowsHide: true }); }
+    finally { closeSync(stdout); closeSync(stderr); }
+    try { return { ...r, stdout: readFileSync(out, "utf8"), stderr: readFileSync(err, "utf8") }; }
+    finally { rmSync(out); rmSync(err); }
+  };
+  const git = (...args) => {
+    const r = run("git", args, { cwd, encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr || r.error?.message);
+    return r.stdout.trim();
+  };
+  const write = (p, text = p) => writeFileSync(join(cwd, p), text, "utf8");
+  const untracked = process.platform === "win32" ? "untracked é name" : "untracked é\nname";
+  try {
+    git("init");
+    git("config", "user.name", "Gate Test");
+    git("config", "user.email", "gate@example.invalid");
+    for (const p of ["staged", "unstaged", "renamed", "deleted"]) write(p);
+    write(".gitignore", "ignored\nstdout\nstderr\n");
+    git("add", "."); git("commit", "-m", "base");
+    const base = git("rev-parse", "HEAD");
+    git("branch", "comparison");
+    write("branch"); git("add", "."); git("commit", "-m", "branch change");
+    const head = git("rev-parse", "HEAD");
+    git("checkout", "comparison");
+    write("base-only"); git("add", "."); git("commit", "-m", "comparison change");
+    git("checkout", "--detach", head);
+    write("staged", "new"); git("add", "staged");
+    write("unstaged", "new");
+    renameSync(join(cwd, "renamed"), join(cwd, "renamed new")); git("add", "-A");
+    // Leave a separate unstaged edit after staging the rename.
+    write("unstaged", "newer");
+    rmSync(join(cwd, "deleted"));
+    write(untracked); write("ignored");
+    const expected = ["branch", "staged", "unstaged", "renamed", "renamed new", "deleted", untracked].sort();
+    assert.deepEqual(changedPaths("comparison", cwd, run).sort(), expected);
+    assert.deepEqual(changedPaths(base, cwd, run).sort(), expected);
+    assert.throws(() => changedPaths("missing-ref", cwd, run), /--changed: git merge-base failed/);
+  } finally { rmSync(cwd, { recursive: true, force: true }); }
+});
+
 test("parseArgs: no args → everything empty/false, nothing unknown", () => {
   assert.deepEqual(parseArgs([]), {
-    lane: [], allowMissing: [], skipBuild: false, list: false, help: false, unknown: [],
+    lane: [], tier: [], allowMissing: [], skipBuild: false, list: false, help: false, changed: null, unknown: [],
   });
 });
 
 test("parseArgs: --help and -h both set help", () => {
   assert.equal(parseArgs(["--help"]).help, true);
   assert.equal(parseArgs(["-h"]).help, true);
+});
+
+test("blockedDependency: --skip-build leaves skipped build lanes non-blocking", () => {
+  const lane = { deps: ["msbuild-release"] };
+  const skipped = { name: "msbuild-release", status: "SKIP", note: "--skip-build" };
+  assert.equal(blockedDependency(lane, [skipped], true), undefined);
+  assert.equal(blockedDependency(lane, [skipped], false), skipped);
+  const failed = { name: "msbuild-release", status: "FAIL" };
+  assert.equal(blockedDependency(lane, [failed], true), failed);
+});
+
+test("lanesForChanges: lane data and drivers outside scripts are not treated as prose", () => {
+  const scriptsLanes = lanesForChanges(["scripts/x.test.mjs"]).lanes;
+  for (const parts of [["tasks", "wiki-media", "a.json"], ["tasks", "clips", "a.md"], [".claude", "skills", "a", "t.json"]]) {
+    assert.deepEqual(lanesForChanges([parts.join("/")]).lanes, scriptsLanes);
+  }
+  const driver = lanesForChanges([["tasks", "drive-smoke.ps1"].join("/")]).lanes;
+  assert.ok(driver.includes("drive-smoke"));
+  assert.ok(driver.includes("cpp-unit"));
 });
 
 test("parseArgs: --list and --skip-build set their flags", () => {
@@ -62,7 +268,7 @@ test("parseArgs: a trailing --lane with no value is tolerated (no crash, no lane
 
 test("usage: names every flag and the invocation", () => {
   const u = usage();
-  for (const needle of ["Usage:", "--lane", "--allow-missing", "--skip-build", "--list", "--help"]) {
+  for (const needle of ["Usage:", "--lane", "--tier", "--allow-missing", "--skip-build", "--list", "--help"]) {
     assert.ok(u.includes(needle), `usage() should mention ${needle}`);
   }
 });
@@ -104,6 +310,106 @@ test("--list exits 0 and prints lane names", () => {
   assert.equal(r.status, 0);
   assert.match(r.stdout, /^lint$/m);
 });
+
+test("parseArgs: tiers take repeatable comma lists and combine with lanes", () => {
+  const r = parseArgs(["--tier", "edit,publication", "--tier", "site", "--lane", "render-goldens"]);
+  assert.deepEqual(r.tier, ["edit", "publication", "site"]);
+  assert.deepEqual(r.lane, ["render-goldens"]);
+  assert.deepEqual(parseArgs(["--tier"]).unknown, ["--tier"]);
+});
+
+test("tiers contain the requested lanes and their build prerequisites", () => {
+  assert.deepEqual(TIERS, {
+    edit: ["lint", "vitest", "web-build", "scripts", "cpp-unit"],
+    publication: ["publication"],
+    render: ["web-build", "msbuild-release", "render-goldens"],
+    site: ["playwright-web", "site"],
+    media: ["web-build", "msbuild-debug", "msbuild-release", "record-smoke", "drive-smoke", "replay-proof", "observe", "vfx-loop"],
+    native: ["web-build", "msbuild-debug", "cpp-unit-exe", "playwright-native", "msbuild-release", "tool-smoke"],
+  });
+  for (const [tier, names] of Object.entries(TIERS)) {
+    const lanes = selectLanes(names);
+    assert.deepEqual(lanes.map((l) => l.name), names, tier);
+    for (const lane of lanes) {
+      for (const dep of lane.deps || []) assert.ok(names.includes(dep), `${tier}: ${lane.name} needs ${dep}`);
+    }
+    const r = runScript("--tier", tier, "--list");
+    assert.equal(r.status, 0);
+    assert.deepEqual(r.stdout.trim().split(/\r?\n/), names);
+  }
+});
+
+test("--list describes tiers, while combined selection deduplicates in gate order", () => {
+  const listing = runScript("--list");
+  for (const tier of Object.keys(TIERS)) assert.ok(listing.stdout.includes(`  ${tier}: `));
+  const r = runScript("--tier", "publication,site", "--lane", "site", "--list");
+  assert.equal(r.status, 0);
+  assert.deepEqual(r.stdout.trim().split(/\r?\n/), ["publication", "playwright-web", "site"]);
+});
+
+test("unknown tiers and lanes fail before running, including with --list", () => {
+  for (const flag of ["--tier", "--lane"]) {
+    for (const tail of [[], ["--list"]]) {
+      const r = runScript(flag, "no-such-group", ...tail);
+      assert.equal(r.status, 1);
+      assert.match(r.stdout, /unknown (tier|lane)\(s\): no-such-group/);
+      assert.doesNotMatch(r.stdout + r.stderr, /=== \w/);
+    }
+  }
+  assert.equal(runScript("--tier", "toString", "--list").status, 1);
+});
+
+test("the publication lane stays in the full gate and runs separately from scripts", () => {
+  assert.ok(selectLanes([]).some((l) => l.name === "publication"));
+  const files = scriptTestFiles();
+  assert.ok(files.length > 50);
+  assert.ok(!files.some((p) => p.endsWith("public-history.test.mjs")));
+  assert.ok(files.some((p) => p.endsWith("run-all-tests.test.mjs")));
+  const pkg = JSON.parse(readFileSync(join(dirname(scriptPath), "..", "web", "apps", "editor", "package.json"), "utf8"));
+  assert.equal(pkg.scripts["test:scripts"], "node ../../../scripts/run-script-tests.mjs");
+  assert.equal(pkg.scripts["test:public-history"], undefined);
+});
+
+test("FAIL and SKIP dependencies block consumers; omitted dependencies do not", () => {
+  const release = { name: "msbuild-release", deps: ["web-build"] };
+  const render = selectLanes(["render-goldens"])[0];
+  for (const status of ["FAIL", "SKIP"]) {
+    const result = { name: "msbuild-release", status };
+    assert.equal(blockedDependency(render, [result]), result);
+  }
+  const webSkip = { name: "web-build", status: "SKIP" };
+  assert.equal(blockedDependency(release, [webSkip]), webSkip);
+  assert.equal(blockedDependency(render, [webSkip, { name: "msbuild-release", status: "SKIP", note: "blocked: web-build skipped" }]).name, "msbuild-release");
+  assert.equal(blockedDependency(render, []), undefined);
+  assert.equal(blockedDependency(render, [{ name: "msbuild-release", status: "PASS" }]), undefined);
+  assert.equal(blockedDependency({ name: "lint" }, [webSkip]), undefined);
+});
+
+test("Vitest and Playwright summaries expose skips without counting passed tests", () => {
+  assert.equal(parseSkippedCount(" Test Files  1 skipped (1)\n      Tests  12 skipped (12)"), 12);
+  assert.equal(parseSkippedCount("      Tests  42 passed | 2 skipped (44)"), 2);
+  assert.equal(parseSkippedCount("      Tests  \x1b[32m42 passed\x1b[39m | \x1b[33m2 skipped\x1b[39m (44)"), 2);
+  assert.equal(parseSkippedCount("  2 skipped\n  42 passed (2.3s)"), 2);
+});
+
+test("publication: Python skips survive node:test's zero-skip wrapper summary", () => {
+  assert.equal(parseSkippedCount("# [publication] 3 skipped Python tests\n# skipped 0"), 3);
+  const run = (out) => runReportedLane("publication", "runner", "runner failed", () => ({ code: 0, out }));
+  assert.equal(run("# [publication] 0 skipped Python tests\n# skipped 0").status, "PASS");
+  assert.equal(run("# [publication] 3 skipped Python tests\n# skipped 0").status, "FAIL");
+  assert.equal(run("# [publication] 4 skipped Python tests\n# skipped 0").status, "FAIL");
+});
+
+for (const lane of ["vitest", "playwright-web", "site"]) {
+  test(`${lane}: zero skips passes, unbudgeted skips and runner failures fail`, () => {
+    const run = (code, out) => runReportedLane(lane, "runner", "runner failed", () => ({ code, out }));
+    assert.equal(run(0, "42 passed").status, "PASS");
+    const skipped = run(0, "42 passed | 2 skipped");
+    assert.equal(skipped.status, "FAIL");
+    assert.match(skipped.note, /2 skipped test\(s\), budget 0/);
+    assert.equal(run(1, "42 passed").status, "FAIL");
+  });
+}
 
 // ---- spawn portability: cmd.exe only where it exists ----
 
@@ -345,7 +651,7 @@ test("vfx-loop passes only by running, and a failed run cannot skip", () => {
 test("houdini is the opt-in lane: --list marks it, and only --lane selects it", () => {
   const r = runScript("--list");
   assert.equal(r.status, 0);
-  assert.match(r.stdout, /vfx-loop\r?\nhoudini \(opt-in\)\r?\n$/);
+  assert.match(r.stdout, /vfx-loop\r?\nhoudini \(opt-in\)\r?\n/);
   assert.equal(r.stdout.match(/opt-in/g).length, 1, "houdini is the only opt-in lane");
   const names = (only) => selectLanes(only).map((l) => l.name);
   assert.ok(!names([]).includes("houdini"), "the default gate never runs houdini");

@@ -140,27 +140,8 @@ int main()
     CHECK(!host::ShouldReadCaptureRegistryOverrides(true),
           "golden capture skips capture-only registry overrides");
 
-    // --- 3. CLI PRODUCTION BINDING. The validator must directly guard the
-    // rejection block and receive all five real parsed values.
-    {
-        const std::string source = ReadSource(
-            std::filesystem::current_path() / "src" / "main.cpp");
-        const std::string compact = WithoutWhitespace(source);
-        const std::string call = "IsGoldenProfileRequestValid(";
-        const std::string block = ControlledBlock(source, call);
-
-        CHECK(!source.empty(), "main.cpp production source is readable");
-        CHECK(CountOccurrences(source, call) == 1,
-              "main.cpp calls the golden request validator exactly once");
-        CHECK(compact.find(
-                  "if(!host::IsGoldenProfileRequestValid("
-                  "captureGoldenProfile,!captureAlo.empty(),"
-                  "!capturePng.empty(),!captureRef.empty(),"
-                  "captureSkydome)){") != std::string::npos,
-              "CLI validator receives the five real parsed capture values");
-        CHECK(block.find("return 2;") != std::string::npos,
-              "invalid golden request exits through the CLI error path");
-    }
+    // --- 3. CLI rejection is exercised against the Release executable by
+    // scripts/tool-smoke.mjs, including each invalid parsed capture value.
 
     // --- 4. HOST PRODUCTION BINDING. The predicate must directly contain the
     // extracted reader + applier, not sit unused nearby; cross-file checks pin

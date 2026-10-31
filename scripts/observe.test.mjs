@@ -646,6 +646,25 @@ test("lane checks exact counters and independent semantic assertions even with m
   assert.match(checkCase("death-child", { ...values, status: "natural-end", lastActive: 58 }, { measure: true }).join(), /frame 59/);
 });
 
+test("native catch-up and index fixtures reject missing, duplicate and misattributed refusals", () => {
+  for (const [name, counter, total] of [
+    ["budget-bailout", "runtimeGuard", 31],
+    ["budget-bailout-skip", "runtimeGuard", 32],
+    ["index-cap", "indexCap", 1],
+  ]) {
+    const values = { ...PINNED[name] };
+    assert.equal(values[counter], total);
+    assert.deepEqual(checkCase(name, values), []);
+    for (const wrong of [0, total + 1]) {
+      assert.match(checkCase(name, { ...values, [counter]: wrong }).join(), new RegExp(counter + " differs"));
+    }
+    for (const other of ["runtimeGuard", "hardGuard", "indexCap"].filter((key) => key !== counter)) {
+      assert.match(checkCase(name, { ...values, [other]: 1 }).join(), /only refusals/);
+    }
+    assert.match(checkCase(name, { ...values, finalFrame: values.finalFrame + 1 }).join(), /finalFrame differs/);
+  }
+});
+
 test("fixture generator lazily accepts an injected attestation contract for all nine kinds", async (t) => {
   const dir = temporary(t), calls = [], validated = [];
   const kinds = ["late-flash", "guard-short", "death-child", "child-starve", "budget-bailout", "budget-bailout-skip", "index-cap", "wide",

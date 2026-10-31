@@ -33,6 +33,33 @@ export function runTool(exe, args) {
   return { code: r.error || r.signal ? -1 : r.status, stderr: `${r.stderr ?? ""}${r.error ? r.error.message : ""}` };
 }
 
+// Invalid capture requests must fail during CLI validation, before opening a
+// window or reading game data. Keep this in the Release-exe smoke lane.
+export function captureProfileSmoke(exe, dir, say = console.log) {
+  const failures = [];
+  const alo = join(dir, "input.alo");
+  const png = join(dir, "capture.png");
+  const capture = ["--capture", alo, png];
+  const cases = [
+    ["missing capture", ["--skydome", "1"]],
+    ["reference input", [...capture, "--capture-ref", alo, png, "--skydome", "1"]],
+    ["default skydome", capture],
+    ["skydome off", [...capture, "--skydome", "0"]],
+    ["non-canonical skydome", [...capture, "--skydome", "2"]],
+  ];
+  for (const [name, args] of cases) {
+    const result = spawnSync(exe, ["--golden-profile", ...args], {
+      encoding: "utf8", windowsHide: true, timeout: 10000,
+    });
+    const ok = !result.error && !result.signal && result.status === 2 &&
+      result.stderr.includes("--golden-profile requires --capture <alo> <png> --skydome 1 and cannot be used with --capture-ref") &&
+      !existsSync(png);
+    say(`  ${ok ? "ok:  " : "FAIL:"} golden profile rejects ${name} before startup`);
+    if (!ok) failures.push(`golden profile: ${name} (${result.error?.message ?? result.stderr})`);
+  }
+  return failures;
+}
+
 // A patch request for the root emitter `name`, selected by the source's hash.
 export function rootRequest(hash, name, mutations) {
   return { schema: 1, selector: { sourceDocumentHash: hash, rolePath: [{ role: "root", name }], expected: { name } }, mutations };
@@ -53,7 +80,7 @@ export function outside(doc, paths) {
 }
 
 export function smoke(exe, dir, say = console.log) {
-  const failures = [];
+  const failures = captureProfileSmoke(exe, dir, say);
   const check = (ok, what) => { say(`  ${ok ? "ok:  " : "FAIL:"} ${what}`); if (!ok) failures.push(what); };
   const json = (name) => { try { return JSON.parse(readFileSync(join(dir, name), "utf8")); } catch { return null; } };
   const at = (name) => join(dir, name);

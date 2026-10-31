@@ -17,18 +17,6 @@ import { resetMockState } from "@/test/mock-state";
 beforeEach(resetMockState);
 
 describe("MockBridge contract — linkGroups/*", () => {
-  it("linkGroups/list-exempt-fields returns the v1 default exempt set for an unknown group", async () => {
-    const b = new MockBridge();
-    const r = await b.request({
-      kind: "linkGroups/list-exempt-fields",
-      params: { groupId: 1 },
-    });
-    // Defaults: colorTexture + normalTexture + trackIndex.
-    expect(r.fields).toEqual(expect.arrayContaining([
-      "colorTexture", "normalTexture", "trackIndex",
-    ]));
-  });
-
   it("linkGroups/set-exempt-fields replaces the per-group set", async () => {
     const b = new MockBridge();
     await b.request({
