@@ -41,10 +41,38 @@ static IFile* FindInMegaFiles(const vector<MegaFile*>& megafiles, const string& 
 	return NULL;
 }
 
-// Open each archive <root>\Data\MegaFiles.xml lists, in list order, appending to
-// `megafiles`. A listed archive that will not open is skipped. Throws
-// FileNotFoundException when there is no MegaFiles.xml, and BadFileException or a
-// parse error when it is not a <Mega_Files> list.
+// Open the archive at `filename` onto `megafiles`, or skip it when it will not open.
+static void OpenMegaFile(const wstring& filename, vector<MegaFile*>& megafiles)
+{
+	try
+	{
+		// Hold the creation reference in a local and drop it after
+		// handing the file to MegaFile (which takes its own AddRef).
+		// The old new-inside-new form leaked that reference on every
+		// path — permanently pinning the Win32 HANDLE when a
+		// malformed MEG made the MegaFile constructor throw.
+		PhysicalFile* file = new PhysicalFile(filename);   // rc=1
+		try
+		{
+			megafiles.push_back(new MegaFile(file, filename));   // rc=2
+		}
+		catch (...)
+		{
+			file->Release();
+			throw;
+		}
+		file->Release();   // rc=1, now owned by the MegaFile
+	}
+	catch (IOException)
+	{
+	}
+}
+
+// Open each archive <root>\Data\MegaFiles.xml lists, appending them to `megafiles`
+// in search order: the engine mounts each listed archive at the front, so the
+// later-listed one wins a shared path. A listed archive that will not open is
+// skipped. Throws FileNotFoundException when there is no MegaFiles.xml, and
+// BadFileException or a parse error when it is not a <Mega_Files> list.
 static void OpenMegaFiles(const wstring& root, vector<MegaFile*>& megafiles)
 {
 	XMLTree xml;
@@ -67,7 +95,7 @@ static void OpenMegaFiles(const wstring& root, vector<MegaFile*>& megafiles)
 	}
 
 	// Create a file index from all mega files
-	for (unsigned int i = 0; i < xmlRoot->getNumChildren(); i++)
+	for (unsigned int i = xmlRoot->getNumChildren(); i-- > 0; )
 	{
 		const XMLNode* child = xmlRoot->getChild(i);
 		if (child->getName() != L"File")
@@ -78,31 +106,14 @@ static void OpenMegaFiles(const wstring& root, vector<MegaFile*>& megafiles)
 			continue;
 		}
 
-		wstring filename = root + child->getData();
-		try
-		{
-			// Hold the creation reference in a local and drop it after
-			// handing the file to MegaFile (which takes its own AddRef).
-			// The old new-inside-new form leaked that reference on every
-			// path — permanently pinning the Win32 HANDLE when a
-			// malformed MEG made the MegaFile constructor throw.
-			PhysicalFile* file = new PhysicalFile(filename);   // rc=1
-			try
-			{
-				megafiles.push_back(new MegaFile(file, filename));   // rc=2
-			}
-			catch (...)
-			{
-				file->Release();
-				throw;
-			}
-			file->Release();   // rc=1, now owned by the MegaFile
-		}
-		catch (IOException)
-		{
-		}
+		OpenMegaFile(root + child->getData(), megafiles);
 	}
 }
+
+// The game's patch archives, highest first. MegaFiles.xml does not list them, yet
+// the engine mounts them above every listed archive (in-game: 64Patch > Patch2 >
+// Patch > Config, and Patch2 > Maps).
+static const wchar_t* const kPatchMegaFiles[] = { L"Data\\64Patch.meg", L"Data\\Patch2.meg", L"Data\\Patch.meg" };
 
 static void CloseMegaFiles(vector<MegaFile*>& megafiles)
 {
@@ -184,12 +195,14 @@ IFile* FileManager::getFileWithWinner(const string& path, AssetWinner* winner)
 
 FileManager::FileManager(const vector<wstring>& basepaths)
 {
+	// Each base path in order (FoC above base EaW): its patch archives, then its list.
 	this->basepaths = basepaths;
 	for (vector<wstring>::const_iterator path = basepaths.begin(); path != basepaths.end(); path++)
 	{
+		vector<MegaFile*> listed;
 		try
 		{
-			OpenMegaFiles(*path, megafiles);
+			OpenMegaFiles(*path, listed);
 		}
 		catch (FileNotFoundException)
 		{
@@ -197,9 +210,13 @@ FileManager::FileManager(const vector<wstring>& basepaths)
 		}
 		catch (...)
 		{
+			CloseMegaFiles(listed);
 			CloseMegaFiles(megafiles);
 			throw;
 		}
+		for (const wchar_t* patch : kPatchMegaFiles)
+			OpenMegaFile(*path + patch, megafiles);
+		megafiles.insert(megafiles.end(), listed.begin(), listed.end());
 	}
 
 	if (megafiles.empty())
@@ -302,8 +319,7 @@ void FileManager::SetLayers(const vector<wstring>& absoluteLayers)
 
 // A mod that packages its assets (a total conversion) lists its own archives in
 // <root>\Data\MegaFiles.xml, each path relative to that root. A higher root's
-// archives are searched first, and within one list the later-listed archive wins,
-// as the engine mounts each at the front. A root that is also a base path is
+// archives are searched first, each list in OpenMegaFiles' order. A root that is also a base path is
 // skipped: the constructor already opened its list. A missing or malformed list
 // only leaves that root without archives.
 void FileManager::OpenModMegaFiles()
@@ -327,7 +343,7 @@ void FileManager::OpenModMegaFiles()
 		{
 			CloseMegaFiles(listed);
 		}
-		modMegafiles.insert(modMegafiles.end(), listed.rbegin(), listed.rend());
+		modMegafiles.insert(modMegafiles.end(), listed.begin(), listed.end());
 	}
 }
 

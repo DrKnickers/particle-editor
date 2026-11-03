@@ -395,6 +395,45 @@ int main()
         CHECK(read("MOD_ONLY.TGA") == "<none>" && read("MEG_ONLY.TGA") == "GOOD-meg",
               "clearing the layers drops the mod archives");
     }
+    {
+        // The base game's archive order: per base path, its unlisted patch archives
+        // (64Patch > Patch2 > Patch) above its MegaFiles.xml list (later-listed wins);
+        // the first base path's archives above the second's.
+        const std::wstring foc = g_root + L"Foc\\", eaw = g_root + L"Eaw\\";
+        for (const std::wstring& dir : { foc, foc + L"Data", eaw, eaw + L"Data" })
+            CreateDirectoryW(dir.c_str(), NULL);
+        const std::string list = "<?xml version=\"1.0\"?>\n<Mega_Files>\n<File>Data\\First.meg</File>\n<File>Data\\Second.meg</File>\n</Mega_Files>\n";
+        WriteBytes(foc + L"Data\\MegaFiles.xml", list);
+        WriteBytes(eaw + L"Data\\MegaFiles.xml", list);
+        auto meg = [](const std::wstring& path, std::vector<std::pair<std::string, std::string>> members) {
+            std::vector<MegEntry> entries;
+            for (auto& m : members) entries.push_back({ "DATA\\" + m.first, m.second });
+            WriteMeg(path, entries);
+        };
+        meg(foc + L"Data\\First.meg",   { { "LISTED", "foc-first" }, { "PATCHED", "foc-first" }, { "UNDER", "foc-first" } });
+        meg(foc + L"Data\\Second.meg",  { { "LISTED", "foc-second" }, { "PATCHED", "foc-second" } });
+        meg(foc + L"Data\\Patch.meg",   { { "PATCHED", "foc-patch" }, { "PATCH_ORDER", "foc-patch" } });
+        meg(foc + L"Data\\Patch2.meg",  { { "PATCH_ORDER", "foc-patch2" }, { "PATCH2_ONLY", "foc-patch2" } });
+        meg(foc + L"Data\\64Patch.meg", { { "PATCH2_ONLY", "foc-64patch" } });
+        meg(eaw + L"Data\\Second.meg",  { { "UNDER", "eaw-second" }, { "EAW_ONLY", "eaw-second" } });
+        meg(eaw + L"Data\\Patch.meg",   { { "UNDER", "eaw-patch" } });
+
+        FileManager base({ foc, eaw });
+        auto read = [&](const char* name) -> std::string {
+            IFile* file = base.getFile(std::string("Data\\") + name);
+            if (file == NULL) return "<none>";
+            std::string bytes(file->size(), '\0');
+            if (!bytes.empty()) file->read(&bytes[0], (unsigned long)bytes.size());
+            file->Release();
+            return bytes;
+        };
+        CHECK(read("LISTED") == "foc-second", "a later-listed base archive beats an earlier-listed one");
+        CHECK(read("PATCHED") == "foc-patch", "Patch.meg, though unlisted, beats every listed archive");
+        CHECK(read("PATCH_ORDER") == "foc-patch2", "Patch2.meg beats Patch.meg");
+        CHECK(read("PATCH2_ONLY") == "foc-64patch", "64Patch.meg beats Patch2.meg");
+        CHECK(read("UNDER") == "foc-first", "the first base path's archives beat the second's patch archives");
+        CHECK(read("EAW_ONLY") == "eaw-second", "the second base path's archives still resolve");
+    }
 
     SetCurrentDirectoryW(temp);
     std::printf("%s\n", g_failed ? "=== FAILED ===" : "=== ALL PASS ===");

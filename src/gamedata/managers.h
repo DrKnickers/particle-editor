@@ -159,6 +159,8 @@ public:
 class FileManager : public IFileManager
 {
 	std::vector<std::wstring> basepaths;
+	// The base game's archives in search order: per base path, its patch archives
+	// then its MegaFiles.xml list, later-listed first.
 	std::vector<MegaFile*>    megafiles;
 	std::wstring              modpath;     // the active mod root (or empty = Unmodded)
 	// Ordered stack of selected submod folder names under `modpath` (e.g.
