@@ -30,6 +30,7 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ### Fixed
 
+- Dragging a window edge to resize the editor keeps up with the pointer instead of lagging
 - The editor loads the game's patch archives (`Patch.meg`, `Patch2.meg`, `64Patch.meg`) above its listed archives, as the game does, so reference models get the patched shadow and heat shaders and the patched textures and models are used instead of the original copies
 - Each launch starts its particles from a fresh random seed again, so the first effect you preview no longer looks identical every session
 - Edit → Paste and the emitter tree's Paste / Paste As items stay enabled after the editor reloads its interface (crash recovery or the error screen's Reload) while emitters are still on the clipboard

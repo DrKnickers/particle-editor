@@ -1181,7 +1181,10 @@ int main()
                       releaseSharedHandleBegin - refreshSharedHandleBegin)
                 : std::string();
         const size_t presentCall = compositeFrameBody.find(
-            "m_impl->engineSwapChain->Present1(0, 0, &pp)");
+            "m_impl->engineSwapChain->Present1(0, presentFlags, &pp)");
+        const size_t presentSkipped = compositeFrameBody.find(
+            "if (hr == DXGI_ERROR_WAS_STILL_DRAWING) return ComposedFrameResult::NoFrame();",
+            presentCall);
         const size_t presentFailure = compositeFrameBody.find(
             "if (FAILED(hr))", presentCall);
         const size_t presentFailureReturn = compositeFrameBody.find(
@@ -1210,6 +1213,15 @@ int main()
                    CountOccurrences(
                        compositeFrameBody,
                        "return ComposedFrameResult::PresentResult(hr);") == 2,
+                   true);
+        // A drag-time DO_NOT_WAIT present that finds no free buffer is a
+        // skipped frame (Continue), never a Present1 failure (Retry).
+        ExpectBool("a busy no-wait Present1 skips the frame before the failure path",
+                   Contains(compositeFrameBody,
+                            "m_impl->presentWithoutWait ? DXGI_PRESENT_DO_NOT_WAIT : 0") &&
+                   presentSkipped != std::string::npos &&
+                   presentFailure != std::string::npos &&
+                   presentSkipped < presentFailure,
                    true);
         ExpectBool("successful Present1 returns its exact typed production result",
                    presentSuccessReturn != std::string::npos &&

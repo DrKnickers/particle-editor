@@ -242,6 +242,7 @@
     <ClInclude Include="host\StartupCallbackAdapter.h" />
     <ClInclude Include="host\StartupCallbackGuard.h" />
     <ClInclude Include="host\WebMessageIngressPolicy.h" />
+    <ClInclude Include="host\ResizeSlackPolicy.h" />
     <ClInclude Include="host\WebViewCrashPolicy.h" />
     <ClInclude Include="host\WebViewModalPolicy.h" />
     <ClInclude Include="host\WebViewOriginPolicy.h" />

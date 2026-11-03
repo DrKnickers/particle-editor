@@ -480,6 +480,9 @@
     <ClInclude Include="host\WebMessageIngressPolicy.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="host\ResizeSlackPolicy.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
     <ClInclude Include="host\WebViewCrashPolicy.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>

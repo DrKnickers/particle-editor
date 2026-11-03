@@ -169,6 +169,8 @@ struct Compositor::Impl
     int  pendingY          = 0;
     int  pendingW          = 0;
     int  pendingH          = 0;
+    // [resize-perf] SetPresentWithoutWait: skip, don't block, on a full queue.
+    bool presentWithoutWait = false;
 
     // 1 Hz throttled diagnostics for
     // [COMP-engine-frame] + [COMP-engine-handle-hash]. Per-frame
@@ -1173,7 +1175,11 @@ ComposedFrameResult Compositor::CompositeEngineFrame(
     // 0.30 ms total transport at 3440x1440 — Present is essentially
     // free, the spin in WaitEndFrameQuery dominates.
     DXGI_PRESENT_PARAMETERS pp = {};
-    HRESULT hr = m_impl->engineSwapChain->Present1(0, 0, &pp);
+    const UINT presentFlags = m_impl->presentWithoutWait ? DXGI_PRESENT_DO_NOT_WAIT : 0;
+    HRESULT hr = m_impl->engineSwapChain->Present1(0, presentFlags, &pp);
+    // No buffer free mid-drag: drop this frame; the next tick presents, and
+    // the pending transform waits for those pixels.
+    if (hr == DXGI_ERROR_WAS_STILL_DRAWING) return ComposedFrameResult::NoFrame();
     if (FAILED(hr))
     {
         m_impl->LogLine("[COMP-engine-fail] Present1 hr=" + FormatHresult(hr));
@@ -1251,6 +1257,11 @@ ComposedFrameResult Compositor::CompositeEngineFrame(
     }
 
     return ComposedFrameResult::PresentResult(hr);
+}
+
+void Compositor::SetPresentWithoutWait(bool on) noexcept
+{
+    m_impl->presentWithoutWait = on;
 }
 
 HRESULT Compositor::RefreshEngineSharedHandle(HANDLE sharedTexture,

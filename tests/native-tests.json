@@ -340,6 +340,7 @@
     },
     "test_viewport_unavailable_policy": {},
     "test_webmessage_ingress_policy": {},
+    "test_resize_slack_policy": {},
     "test_webview_crash_policy": {},
     "test_webview_modal_policy": {
       "uses": ["dxsdk"],

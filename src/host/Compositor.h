@@ -236,6 +236,13 @@ public:
     ComposedFrameResult CompositeEngineFrame(
         HANDLE currentSharedHandle) noexcept;
 
+    // [resize-perf] While set, CompositeEngineFrame presents with
+    // DXGI_PRESENT_DO_NOT_WAIT and skips the frame (NoFrame, pending
+    // transform kept) when no swapchain buffer is free, instead of blocking
+    // the window-drag tick until DWM releases one (#866). The host sets it
+    // for a sizemove gesture only and clears it before the settle render.
+    void SetPresentWithoutWait(bool on) noexcept;
+
     // Drop the D3D11 alias of the engine-owned D3D9 shared texture before a
     // full device-loss reset. The engine visual and swapchain stay attached;
     // the first successfully rendered post-reset frame lazily re-opens the new

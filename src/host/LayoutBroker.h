@@ -193,7 +193,21 @@ public:
     // WM_EXITSIZEMOVE and the quiescence-timer fallback.
     void SettleDeferredReset();
 
+    // [resize-perf] Bracket a modal sizemove gesture (#866). While it runs,
+    // the popup, whose client size is the engine's back buffer, grows in
+    // kResizeSlackPx steps and never shrinks, so most ticks keep the render
+    // target and skip the reset. The scene still renders into its scene-rect
+    // sub-region of that target and the DComp clip shows only that region, so
+    // the pixels are unchanged. EndResizeSlack returns the popup to its exact
+    // size; the caller's SettleDeferredReset then performs the one reset.
+    void BeginResizeSlack() { m_resizeSlack = true; }
+    void EndResizeSlack();
+
 private:
+    // The popup size for viewport size (w, h): the same, or under resize
+    // slack the current popup grown in kResizeSlackPx steps to cover it.
+    void PopupSize(int w, int h, int& pw, int& ph) const;
+
     // Re-emit the cached scene rect to the AlphaCompositor (snapshot crop,
     // popup-client coords) and the DComp Compositor + Engine (render
     // transform, main-client coords). Called after Apply / PredictAndApply /
@@ -252,6 +266,12 @@ private:
     // the engine's presentation parameters.
     int     m_resetW = 0;
     int     m_resetH = 0;
+
+    // [resize-perf] The size last given to the popup (0 = none yet or
+    // collapsed), which is m_lastW/H except under resize slack.
+    int     m_popupW = 0;
+    int     m_popupH = 0;
+    bool    m_resizeSlack = false;
 
     // In-flight dock-slide interpolation. `active` is false when idle.
     // Rects are MAIN-HWND-CLIENT device px (held as float so the per-frame lerp

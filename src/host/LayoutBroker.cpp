@@ -4,6 +4,7 @@
 #include "rendering/engine.h"
 #include "AlphaCompositor.h"
 #include "Compositor.h"
+#include "ResizeSlackPolicy.h"
 
 #include <cmath>
 
@@ -131,11 +132,15 @@ void LayoutBroker::Apply(int x, int y, int w, int h)
         m_lastY = y;
         m_lastW = 0;
         m_lastH = 0;
+        m_popupW = 0;
+        m_popupH = 0;
         ReemitSceneRect();
         return;
     }
 
-    SetWindowPos(m_viewport, nullptr, screenPt.x, screenPt.y, w, h,
+    int pw, ph;
+    PopupSize(w, h, pw, ph);
+    SetWindowPos(m_viewport, nullptr, screenPt.x, screenPt.y, pw, ph,
                  SWP_NOACTIVATE | SWP_NOZORDER);
     InvalidateRect(m_viewport, nullptr, FALSE);
 
@@ -147,11 +152,11 @@ void LayoutBroker::Apply(int x, int y, int w, int h)
     // Reset the D3D9 swap chain so its backbuffer matches the new HWND
     // client size. [resize-perf] Cheap ResetEx path with
     // full-Reset fallback, shared via ResetEngineForResize.
-    if (m_engine && (w != m_lastW || h != m_lastH))
+    if (m_engine && (pw != m_popupW || ph != m_popupH))
     {
-        m_lastW = w;
-        m_lastH = h;
-        ResetEngineForResize(w, h);
+        m_popupW = pw;
+        m_popupH = ph;
+        ResetEngineForResize(pw, ph);
     }
 
     m_lastX = x;
@@ -206,7 +211,9 @@ void LayoutBroker::PredictAndApply()
     POINT screenPt = { newX, newY };
     ClientToScreen(owner, &screenPt);
 
-    SetWindowPos(m_viewport, nullptr, screenPt.x, screenPt.y, newW, newH,
+    int pw, ph;
+    PopupSize(newW, newH, pw, ph);
+    SetWindowPos(m_viewport, nullptr, screenPt.x, screenPt.y, pw, ph,
                  SWP_NOACTIVATE | SWP_NOZORDER);
 
     const bool sizeChanged = (newW != m_lastW || newH != m_lastH);
@@ -227,10 +234,13 @@ void LayoutBroker::PredictAndApply()
     // ~20 ms re-decoding textures ResetEx lets us keep). The scene
     // therefore renders at the CORRECT size on every sizemove tick: no
     // deferred-settle snap, no stale-size band. Full Reset() remains the
-    // fallback inside the helper.
-    if (m_engine && sizeChanged)
+    // fallback inside the helper. Under resize slack most ticks leave the
+    // popup size, and so the engine target, unchanged.
+    if (m_engine && (pw != m_popupW || ph != m_popupH))
     {
-        ResetEngineForResize(newW, newH);
+        m_popupW = pw;
+        m_popupH = ph;
+        ResetEngineForResize(pw, ph);
     }
 
     ReemitSceneRect();
@@ -294,9 +304,27 @@ void LayoutBroker::SettleDeferredReset()
 {
     if (!m_engine || !m_viewport) return;
     if (m_lastW <= 0 || m_lastH <= 0) return;          // collapsed popup
-    if (m_lastW == m_resetW && m_lastH == m_resetH) return;  // per-tick resets all succeeded
+    int pw, ph;
+    PopupSize(m_lastW, m_lastH, pw, ph);
+    if (pw == m_resetW && ph == m_resetH) return;      // per-tick resets all succeeded
 
-    ResetEngineForResize(m_lastW, m_lastH);
+    ResetEngineForResize(pw, ph);
+}
+
+void LayoutBroker::EndResizeSlack()
+{
+    if (!m_resizeSlack) return;
+    m_resizeSlack = false;
+    if (!m_viewport || m_lastW <= 0 || m_lastH <= 0) return;
+    m_popupW = m_lastW;
+    m_popupH = m_lastH;
+    RefreshScreenPosition();   // back to the exact size; SettleDeferredReset resets to it
+}
+
+void LayoutBroker::PopupSize(int w, int h, int& pw, int& ph) const
+{
+    pw = m_resizeSlack ? resizeslack::Cover(w, m_popupW) : w;
+    ph = m_resizeSlack ? resizeslack::Cover(h, m_popupH) : h;
 }
 
 void LayoutBroker::ApplyFullClient()
@@ -319,7 +347,8 @@ void LayoutBroker::RefreshScreenPosition()
     HWND owner = GetWindow(m_viewport, GW_OWNER);
     POINT screenPt = { m_lastX, m_lastY };
     if (owner) ClientToScreen(owner, &screenPt);
-    SetWindowPos(m_viewport, nullptr, screenPt.x, screenPt.y, m_lastW, m_lastH,
+    SetWindowPos(m_viewport, nullptr, screenPt.x, screenPt.y,
+                 m_popupW > 0 ? m_popupW : m_lastW, m_popupH > 0 ? m_popupH : m_lastH,
                  SWP_NOACTIVATE | SWP_NOZORDER);
 
     // Popup origin in main-client coords hasn't changed (m_lastX/Y

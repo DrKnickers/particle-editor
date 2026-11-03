@@ -1553,19 +1553,24 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     // per-tick engine reset.)
 
     // [resize-perf] Modal sizemove bracket. m_inSizeMove
-    // gates the WM_ERASEBKGND suppression below; per-tick engine resets
-    // now run unconditionally on the cheap ResetEx path (LayoutBroker::
-    // ResetEngineForResize), so EXITSIZEMOVE's settle is a no-op safety
-    // net that only acts if a mid-gesture reset FAILED. Both fall
-    // through to DefWindowProc, which runs its own modal-loop
-    // bookkeeping on these messages.
+    // gates the WM_ERASEBKGND suppression below. The gesture also brackets
+    // two per-tick savings (#866): the layout's resize slack, so most ticks
+    // keep the engine target and skip the reset, and presenting without
+    // waiting, so a tick never blocks on a full swapchain queue. EXITSIZEMOVE
+    // ends both, then its settle resets once to the exact size and renders a
+    // frame that waits to present. Both fall through to DefWindowProc, which
+    // runs its own modal-loop bookkeeping on these messages.
     case WM_ENTERSIZEMOVE:
         m_inSizeMove = true;
+        layout.BeginResizeSlack();
+        if (m_compositor) m_compositor->SetPresentWithoutWait(true);
         break;
 
     case WM_EXITSIZEMOVE:
         m_inSizeMove = false;
         KillTimer(hwnd, kResizeSettleTimerId);
+        layout.EndResizeSlack();
+        if (m_compositor) m_compositor->SetPresentWithoutWait(false);
         SettleResize("exitsizemove");
         break;
 
@@ -1898,6 +1903,11 @@ LRESULT HostWindowImpl::OnMainTimer(HWND hwnd, WPARAM wp)
         else if (wp == kResizeSettleTimerId)
         {
             KillTimer(hwnd, kResizeSettleTimerId);
+            if (!m_inSizeMove)
+            {
+                layout.EndResizeSlack();
+                if (m_compositor) m_compositor->SetPresentWithoutWait(false);
+            }
             SettleResize(m_inSizeMove ? "quiescence-pause" : "quiescence");
         }
         // Crash recovery: a Reload() the page never answered (WebViewCrashPolicy.h).
