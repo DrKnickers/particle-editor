@@ -816,6 +816,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
                                 {"domain", ObjDomainName(r.domain)},
                                 {"role",   ObjRoleName(r.role)},
                                 {"bucket", ObjBucketName(r.bucket)},
+                                {"dualEnv", r.dualEnv},              // a projectile lists under Ground AND Space
                                 {"affiliation", r.affiliation} });   // picker faction filter
         // While the catalog builds off the UI thread, `objs` is empty and
         // `building` is true -> the picker shows "Loading objects…" and re-queries when

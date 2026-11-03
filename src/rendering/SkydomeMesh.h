@@ -82,7 +82,7 @@ public:
     // Decode + transcode the `.alo` at `aloPath` (resolved via `fm`). CPU only:
     // touches no device. Replaces any prior contents (Clear() first). Returns
     // false (mesh left empty) on a FileManager miss, a parse failure, or zero
-    // renderable sub-meshes. A 0x10005 (legacy-vertex) sub-mesh is dropped here.
+    // renderable sub-meshes.
     // The dome's authored UVs are uploaded verbatim (faithful to the asset; any
     // closure-meridian seam the asset bakes is rendered as the game shows it).
     bool Load(IFileManager& fm, const std::string& aloPath);

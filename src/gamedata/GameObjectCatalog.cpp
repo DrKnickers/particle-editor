@@ -16,6 +16,7 @@
 #include <cstdio>     // also: #ifndef NDEBUG diagnostics for silently-dropped (unparseable) files
 #include <cstdlib>
 #include <cmath>
+#include <cstdint>
 #include <map>
 #include <set>
 #include <string>
@@ -671,6 +672,35 @@ namespace
         for (const std::string& fn : files)
             parseHardpointFile(fm, fn, out);
     }
+
+    // False when the model has no top-level mesh chunk (0x0400) -- nothing the reference
+    // renderer could draw. Two shapes reach it among stock projectiles: a particle-system
+    // .alo (root 0x0900), and a skeleton whose bones only carry particle proxies (0x0200 +
+    // 0x0600, no mesh). Walks the top-level chunk headers only (8 bytes each). A missing,
+    // short, or malformed file counts as "has a mesh", so the on-select probe still reports
+    // it as missing / failed instead of it vanishing here.
+    bool ModelHasMesh(IFileManager& fm, const std::string& modelPath)
+    {
+        if (!IsSafeRelativeAssetName(modelPath)) return true;
+        IFile* f = fm.getFile(std::string("Data\\Art\\Models\\") + modelPath);
+        if (f == nullptr) return true;
+        const unsigned long size = f->size();
+        unsigned long pos = 0;
+        bool hasMesh = false, walked = true;
+        for (int chunks = 0; pos < size; ++chunks)
+        {
+            uint32_t hdr[2] = {};
+            if (chunks == 64 || size - pos < sizeof hdr) { walked = false; break; }
+            f->seek(pos);
+            if (f->read(hdr, sizeof hdr) != sizeof hdr) { walked = false; break; }
+            if (hdr[0] == 0x0400) { hasMesh = true; break; }
+            const unsigned long body = hdr[1] & 0x7FFFFFFF;   // high bit = container flag
+            if (body > size - pos - sizeof hdr) { walked = false; break; }
+            pos += sizeof hdr + body;
+        }
+        f->Release();
+        return hasMesh || !walked;
+    }
 }
 
 // Parses the object XMLs across threads (each file is independent), keeping
@@ -805,7 +835,13 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out)
         ref.role        = cl.role;
         ref.bucket      = cl.bucket;
         ref.conflict    = cl.conflict;
+        ref.dualEnv     = rm.dualEnv;
         ref.affiliation = prof.affiliation;   // surfaced as the picker's faction filter
+        // A projectile whose model has no mesh (a particle system, or a skeleton of particle
+        // proxies) has nothing the reference renderer can draw -> leave it out. Projectiles
+        // only: the rest of the build stays XML-only (see the header).
+        if (ref.role == ObjRole::Projectile && !ModelHasMesh(fm, rm.path))
+            ref.role = ObjRole::Excluded;
         // <Scale_Factor> render multiplier: inherit up the Variant_Of chain
         // (first-non-empty), then guard-parse -- reject empty / non-finite / non-positive
         // (a 0 or negative scale yields a singular world matrix -> un-pickable object;
@@ -904,7 +940,8 @@ namespace
     // + a few behavior tokens. Substring match on the lower-cased tag.
     // NOTE: "prop" and "template" were removed from this denylist -- they are now
     // KEPT as their own picker sections, routed to ObjRole::Prop / ObjRole::Template
-    // in ClassifyObject BEFORE this deny check runs (see step 1 there).
+    // in ClassifyObject BEFORE this deny check runs (see step 1 there). "projectile"
+    // stays listed but never fires here: step 0b routes projectiles to their own role first.
     bool isExcludedTag(const std::string& tl)
     {
         static const char* kDeny[] = {
@@ -941,6 +978,14 @@ namespace
         for (const std::string& t : b)
             if (t == "SKY_DOME" || t == "PLANET" || t == "PARTICLE" || t == "PROJECTILE" || t == "MARKER")
                 return true;
+        return false;
+    }
+    // A <Projectile> object (stock FoC: Projectiles.xml + the Nightsister file), or any object
+    // carrying the PROJECTILE behavior under another tag.
+    bool isProjectile(const std::string& tl, const std::vector<std::string>& b)
+    {
+        if (tl.find("projectile") != std::string::npos) return true;
+        for (const std::string& t : b) if (t == "PROJECTILE") return true;
         return false;
     }
 
@@ -1041,8 +1086,37 @@ Classification ClassifyObject(const ObjectProfile& p)
     //    non-unit signal but real units carry it in EaW -- capitals resolve their mesh via
     //    Galactic_Model_Name (Star_Destroyer); real buildable structures set Is_Dummy=Yes
     //    (E_Gravity_Well_Station); a story unit can set In_Background=Yes (Eclipse SSD).
-    if (p.modelField == ModelFieldKind::None ||
-        isExcludedName(nl) || hasExcludeBehavior(p.behaviorTokens))
+    if (p.modelField == ModelFieldKind::None || isExcludedName(nl))
+    {
+        c.role = ObjRole::Excluded;
+        return c;
+    }
+
+    // 0b. PROJECTILES -- previously dropped by tag + the PROJECTILE behavior, now KEPT as their
+    //     own picker section (#951), so an effect can be authored against the shot it rides on.
+    //     Checked before the behavior drop below, which would otherwise catch them. Domain comes
+    //     from the model field like a unit's; a projectile with both a Land and a Space model
+    //     is flagged dualEnv and the picker lists it under both. A projectile whose model has
+    //     no mesh is dropped later by the catalog build (it reads the file).
+    if (isProjectile(tl, p.behaviorTokens))
+    {
+        switch (p.modelField)
+        {
+            case ModelFieldKind::Land:  c.domain = ObjDomain::Ground; break;
+            case ModelFieldKind::Space: c.domain = ObjDomain::Space;  break;
+            default:
+            {
+                const ObjDomain md = maskDomain(p.maskTokens);
+                c.domain = (md != ObjDomain::Unknown) ? md : ObjDomain::Ground;
+                break;
+            }
+        }
+        c.role     = ObjRole::Projectile;
+        c.bucket   = ObjBucket::Other;   // sub-grouped by domain in the picker; bucket is unused
+        c.conflict = p.dualEnv;
+        return c;
+    }
+    if (hasExcludeBehavior(p.behaviorTokens))
     {
         c.role = ObjRole::Excluded;
         return c;
@@ -1115,7 +1189,8 @@ const char* ObjRoleName(ObjRole r)
 {
     switch (r) { case ObjRole::Unit: return "Unit"; case ObjRole::Structure: return "Structure";
                  case ObjRole::Hero: return "Hero"; case ObjRole::Prop: return "Prop";
-                 case ObjRole::Template: return "Template"; default: return "Excluded"; }
+                 case ObjRole::Template: return "Template"; case ObjRole::Projectile: return "Projectile";
+                 default: return "Excluded"; }
 }
 const char* ObjBucketName(ObjBucket b)
 {

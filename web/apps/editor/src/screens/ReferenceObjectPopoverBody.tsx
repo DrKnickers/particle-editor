@@ -8,13 +8,14 @@
 // select and reports `referenceObjectStatus` so the picker can warn when an
 // object is skinned (a v1 deferral) or fails to load.
 //
-// The list shows only FIELDABLE units + structures + all heroes
-// (filtered engine-side), and is built off the UI thread; while it builds the
-// query returns `building:true` and the picker shows "Loading objects…". A
-// search box narrows the list. The objects are presented as a COLLAPSIBLE TREE
-// with top-level **Heroes / Ground / Space** sections, each Ground/Space
-// section sub-grouped into bucket disclosures (Infantry, Vehicles, …, Fighters,
-// Capitals, …). Searching force-expands so matches are always visible.
+// The list shows only FIELDABLE units + structures, plus all heroes, props,
+// templates and mesh projectiles (filtered engine-side), and is built off the UI
+// thread; while it builds the query returns `building:true` and the picker shows
+// "Loading objects…". A search box narrows the list. The objects are presented as a
+// COLLAPSIBLE TREE with top-level **Heroes / Ground / Space** sections, each
+// Ground/Space section sub-grouped into bucket disclosures (Infantry, Vehicles, …,
+// Fighters, Capitals, …), then flat Props / Templates and a Projectiles section
+// grouped Ground / Space. Searching force-expands so matches are always visible.
 //
 // The transform is six `Spinner`s (position X/Y/Z + rotation yaw/pitch/roll in
 // degrees) → `engine/set/reference-object-transform`.
@@ -60,23 +61,32 @@ const BUCKET_LABEL: Record<ReferenceObjectBucket, string> = {
   Hero: "Heroes", Other: "Other", None: "Other",
 };
 
-type BucketGroup = { key: string; label: string; items: string[] };
+// ariaLabel: the Projectiles groups read "Ground"/"Space" on screen, but need a name
+// distinct from the top-level Ground/Space sections.
+type BucketGroup = { key: string; label: string; ariaLabel?: string; items: string[] };
 type Section = {
-  key: string;       // "Heroes" | "Ground" | "Space"
+  key: string;       // "Heroes" | "Ground" | "Space" | "Props" | "Templates" | "Projectiles"
   label: string;
   total: number;
   flat: string[];    // Heroes: the names directly (no bucket sub-headers)
-  buckets: BucketGroup[]; // Ground/Space: bucket sub-groups
+  buckets: BucketGroup[]; // Ground/Space: bucket sub-groups; Projectiles: Ground/Space groups
 };
 
-// Build the Heroes / Ground / Space / Props / Templates sections from the
+// Build the Heroes / Ground / Space / Props / Templates / Projectiles sections from the
 // (search-filtered) entries. Heroes, Props, and Templates each go to their own flat
 // top-level section (no bucket sub-headers) regardless of domain; Units/Structures group
-// by domain then bucket in the fixed bucket order.
+// by domain then bucket in the fixed bucket order. Projectiles group by domain only, and a
+// dual-model projectile lists under both Ground and Space.
+// A leaf's roving-tabindex key, qualified by its parent group: a dual-model projectile
+// shows the same name under two groups, and each row needs its own key.
+const leafKey = (n: string, parentKey?: string) => (parentKey ? `leaf:${parentKey}|${n}` : `leaf:${n}`);
+
 function buildSections(objects: ReferenceObjectEntry[], matches: (n: string) => boolean): Section[] {
   const heroes: string[] = [];
   const props: string[] = [];
   const templates: string[] = [];
+  const projGround: string[] = [];
+  const projSpace: string[] = [];
   const ground = new Map<ReferenceObjectBucket, string[]>();
   const space = new Map<ReferenceObjectBucket, string[]>();
   const push = (m: Map<ReferenceObjectBucket, string[]>, b: ReferenceObjectBucket, n: string) => {
@@ -90,6 +100,10 @@ function buildSections(objects: ReferenceObjectEntry[], matches: (n: string) => 
     if (o.role === "Hero") heroes.push(o.name);
     else if (o.role === "Prop") props.push(o.name);
     else if (o.role === "Template") templates.push(o.name);
+    else if (o.role === "Projectile") {
+      if (o.dualEnv || o.domain !== "Space") projGround.push(o.name);
+      if (o.dualEnv || o.domain === "Space") projSpace.push(o.name);
+    }
     else if (o.domain === "Space") push(space, o.bucket, o.name);
     else push(ground, o.bucket, o.name); // Ground + Unknown fall here
   }
@@ -108,9 +122,15 @@ function buildSections(objects: ReferenceObjectEntry[], matches: (n: string) => 
   const s = bucketGroups(space, SPACE_BUCKETS);
   if (s.length)
     sections.push({ key: "Space", label: "Space", total: s.reduce((a, b) => a + b.items.length, 0), flat: [], buckets: s });
-  // Props + Templates last: scenery / base objects, less often the primary reference.
+  // Props + Templates + Projectiles last: less often the primary reference.
   if (props.length) sections.push(flatSection("Props", "Props", props));
   if (templates.length) sections.push(flatSection("Templates", "Templates", templates));
+  const p: BucketGroup[] = [
+    { key: "Ground", label: "Ground", ariaLabel: "Ground projectiles", items: projGround.sort() },
+    { key: "Space", label: "Space", ariaLabel: "Space projectiles", items: projSpace.sort() },
+  ].filter((b) => b.items.length > 0);
+  if (p.length)
+    sections.push({ key: "Projectiles", label: "Projectiles", total: p.reduce((a, b) => a + b.items.length, 0), flat: [], buckets: p });
   return sections;
 }
 /**
@@ -286,7 +306,7 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
     | { key: string; kind: "exp"; collapseKey: string; expanded: boolean; parentKey?: string };
   const rows = useMemo<Row[]>(() => {
     const out: Row[] = [{ key: "none", kind: "leaf", name: NONE }];
-    if (name !== NONE && !known) out.push({ key: `leaf:${name}`, kind: "leaf", name });
+    if (name !== NONE && !known) out.push({ key: leafKey(name), kind: "leaf", name });
     for (const sec of sections) {
       const secKey = `sec:${sec.key}`;
       const openSec = isOpen(secKey);
@@ -294,13 +314,13 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
       if (!openSec) continue;
       if (sec.buckets.length === 0) {
         // Flat section (Heroes / Props / Templates): leaves directly under the section.
-        for (const n of sec.flat) out.push({ key: `leaf:${n}`, kind: "leaf", name: n, parentKey: secKey });
+        for (const n of sec.flat) out.push({ key: leafKey(n, secKey), kind: "leaf", name: n, parentKey: secKey });
       } else {
         for (const b of sec.buckets) {
           const bk = `buc:${sec.key}/${b.key}`;
           const openBuc = isOpen(bk);
           out.push({ key: bk, kind: "exp", collapseKey: bk, expanded: openBuc, parentKey: secKey });
-          if (openBuc) for (const n of b.items) out.push({ key: `leaf:${n}`, kind: "leaf", name: n, parentKey: bk });
+          if (openBuc) for (const n of b.items) out.push({ key: leafKey(n, bk), kind: "leaf", name: n, parentKey: bk });
         }
       }
     }
@@ -310,8 +330,8 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
   // Keep the active (tabbable) row valid as the visible set changes (search / collapse).
   useEffect(() => {
     if (rows.some((r) => r.key === activeKey)) return;
-    const selKey = name !== NONE ? `leaf:${name}` : "none";
-    setActiveKey(rows.some((r) => r.key === selKey) ? selKey : (rows[0]?.key ?? "none"));
+    const selRow = name !== NONE ? rows.find((r) => r.kind === "leaf" && r.name === name) : undefined;
+    setActiveKey(selRow?.key ?? rows[0]?.key ?? "none");
   }, [rows, activeKey, name]);
 
   // Force-open the ancestor groups of the active selection so a
@@ -328,7 +348,9 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
         ? ["sec:Props"]
         : obj.role === "Template"
           ? ["sec:Templates"]
-          : [`sec:${domainKey}`, `buc:${domainKey}/${obj.bucket === "None" ? "Other" : obj.bucket}`];
+          : obj.role === "Projectile"
+            ? ["sec:Projectiles", ...(obj.dualEnv ? ["Ground", "Space"] : [domainKey]).map((d) => `buc:Projectiles/${d}`)]
+            : [`sec:${domainKey}`, `buc:${domainKey}/${obj.bucket === "None" ? "Other" : obj.bucket}`];
     setCollapsed((prev) => {
       if (!keys.some((k) => prev.has(k))) return prev;
       const next = new Set(prev);
@@ -422,9 +444,9 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
 
   // ── tree (role="tree") renderers ──────────────────────────────────
   // A selectable leaf (an object name).
-  const itemRow = (n: string) => {
+  const itemRow = (n: string, parentKey?: string) => {
     const selected = n === name;
-    const rowKey = `leaf:${n}`;
+    const rowKey = leafKey(n, parentKey);
     return (
       <div
         key={n}
@@ -572,7 +594,7 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
                   >
                     {labelRow(sec.label, sec.total, openSec, false)}
                     {openSec && sec.buckets.length === 0 && (
-                      <div role="group" className="flex flex-col pl-3">{sec.flat.map(itemRow)}</div>
+                      <div role="group" className="flex flex-col pl-3">{sec.flat.map((n) => itemRow(n, secKey))}</div>
                     )}
                     {openSec && sec.buckets.length > 0 && (
                       <div role="group" className="flex flex-col">
@@ -583,7 +605,7 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
                             <div
                               key={bk}
                               role="treeitem"
-                              aria-label={b.label}
+                              aria-label={b.ariaLabel ?? b.label}
                               aria-expanded={openBuc}
                               ref={setRowRef(bk)}
                               tabIndex={activeKey === bk ? 0 : -1}
@@ -593,7 +615,7 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
                             >
                               {labelRow(b.label, b.items.length, openBuc, true)}
                               {openBuc && (
-                                <div role="group" className="flex flex-col pl-6">{b.items.map(itemRow)}</div>
+                                <div role="group" className="flex flex-col pl-6">{b.items.map((n) => itemRow(n, bk))}</div>
                               )}
                             </div>
                           );

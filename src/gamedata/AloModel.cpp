@@ -42,7 +42,7 @@ size_t AloSubMeshConstructionCountForTesting()
 //       0x10001 sizes                  (data; u32 vertexCount, u32 faceCount, ...)
 //       0x10002 vertex format name     (string)
 //       0x10007 vertex data (rev 2)    (data; 144 B / vertex)
-//       0x10005 vertex data (legacy)   (data; out of scope -> sub-mesh skipped)
+//       0x10005 vertex data (legacy)   (data; 128 B / vertex, widened to the 144 B layout)
 //       0x10004 index data             (data; u16 triangle list)
 namespace
 {
@@ -62,6 +62,11 @@ namespace
     const ChunkType CHUNK_VERTEX_OLD    = 0x10005;
     const ChunkType CHUNK_VERTEX_NEW    = 0x10007;
     const ChunkType CHUNK_INDICES       = 0x10004;
+
+    // Legacy 0x10005 record (alo-viewer Models.cpp ReadSubMesh, `OldVertex`): the 144 B
+    // layout's fields through color (bytes 0..95), then boneIdx[4] + weights[4] with no
+    // 16-byte reserved block between. Stock laser bolts (W_LASER_*.ALO) still use it.
+    const long kAloLegacyVertexStride = 128;
 
     // Skeleton + connections (decoded for rigid multi-part placement).
     const ChunkType CHUNK_SKELETON      = 0x200;    // container
@@ -222,7 +227,6 @@ namespace
     void ReadGeometry(ChunkReader& r, AloSubMesh& sm)
     {
         VerifyContainer(r);
-        bool sawOldVertex = false;
         ChunkType t;
         while ((t = r.next()) != -1)
         {
@@ -253,10 +257,24 @@ namespace
                     break;
                 }
                 case CHUNK_VERTEX_OLD:
-                    // Legacy 128-byte vertex: out of scope. Leave rawVertexBytes
-                    // empty (consumer skips this sub-mesh); next() skips the data.
-                    sawOldVertex = true;
+                {
+                    // Same bounds as CHUNK_VERTEX_NEW, at the legacy stride; then widen each
+                    // record so every consumer sees one 144 B layout.
+                    const long sz = r.size();
+                    Verify(sm.vertexCount > 0 && sm.vertexCount <= kAloMaxVertices);
+                    Verify((unsigned long long)sz == (unsigned long long)sm.vertexCount * kAloLegacyVertexStride);
+                    std::vector<unsigned char> legacy((size_t)sz);
+                    r.read(legacy.data(), sz);
+                    sm.rawVertexBytes.assign((size_t)sm.vertexCount * kAloVertexStride, 0);
+                    for (size_t i = 0; i < sm.vertexCount; ++i)
+                    {
+                        const unsigned char* src = &legacy[i * kAloLegacyVertexStride];
+                        unsigned char*       dst = &sm.rawVertexBytes[i * kAloVertexStride];
+                        memcpy(dst,       src,      96);   // pos .. color
+                        memcpy(dst + 112, src + 96, 32);   // boneIdx[4] + weights[4]; reserved@96 stays 0
+                    }
                     break;
+                }
                 case CHUNK_INDICES:
                 {
                     const long sz = r.size();
@@ -298,9 +316,8 @@ namespace
                    != (unsigned long long)sm.primitiveCount * 3 * kIndexSize)
             throw BadFileException();
 
-        // A modern sub-mesh must have produced a vertex blob; the only
-        // legitimate empty case is the legacy 0x10005 path.
-        if (sm.rawVertexBytes.empty() && !sawOldVertex)
+        // Every sub-mesh must have produced a vertex blob (0x10007, or 0x10005 widened).
+        if (sm.rawVertexBytes.empty())
             throw BadFileException();
     }
 

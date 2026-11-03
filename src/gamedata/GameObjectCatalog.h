@@ -22,7 +22,10 @@
 // "Scout_Trooper" object rides a rigid speeder bike), and decoding every model
 // up front (thousands of files) would freeze startup -- so the catalog build is
 // XML-only and ProbeModelSkinned() is a lazy, caller-cached per-model check run
-// only when an object is actually selected.
+// only when an object is actually selected. The one exception is projectiles: a
+// few dozen of them name a mesh-less .alo (a particle system, or a skeleton of
+// particle proxies), and the build walks the top-level chunk headers of each
+// projectile's model to leave those out.
 
 #include <string>
 #include <vector>
@@ -38,17 +41,17 @@ class IFileManager;
 //              the one signal present across every mod (CategoryMask is absent in base
 //              FoC and in some mods). Corroborated by CategoryMask/behavior; disagreement or a
 //              dual-env (Land+Space) object sets `conflict`.
-//   role    -- Excluded / Unit / Structure / Hero / Prop / Template. Excluded = a
-//              renderable object that is NOT selectable (skydome/planet backdrop, marker,
-//              particle, projectile, death-clone, dummy, formation wrapper). Prop and
-//              Template used to be Excluded too, but are now KEPT as their own picker
-//              sections (by request): model-bearing scenery/base objects that a player
+//   role    -- Excluded / Unit / Structure / Hero / Prop / Template / Projectile.
+//              Excluded = a renderable object that is NOT selectable (skydome/planet
+//              backdrop, marker, particle, death-clone, dummy, formation wrapper). Prop,
+//              Template and Projectile used to be Excluded too, but are now KEPT as their
+//              own picker sections (by request): model-bearing objects that a player
 //              never builds, so they bypass the fieldable gate like heroes do. The picker
 //              keeps role != Excluded.
 //   bucket  -- the fine sub-group for the future collapsible sections.
 enum class ModelFieldKind { None, Land, Space, Galactic, Generic };
 enum class ObjDomain      { Unknown, Ground, Space };
-enum class ObjRole        { Excluded, Unit, Structure, Hero, Prop, Template };
+enum class ObjRole        { Excluded, Unit, Structure, Hero, Prop, Template, Projectile };
 enum class ObjBucket {
     None,
     Infantry, Vehicle, Air,                                   // ground units
@@ -125,6 +128,7 @@ struct GameObjectRef
     ObjRole   role        = ObjRole::Excluded;
     ObjBucket bucket      = ObjBucket::None;
     bool      conflict    = false;
+    bool      dualEnv     = false;        // has both a Land and a Space model (a projectile lists under both)
     bool      fieldable   = false;        // player can build/spawn it -> hard picker keep-gate
     unsigned  fieldSource = FS_None;      // FieldSource bits explaining why (diagnostics)
     std::string affiliation;              // <Affiliation> (raw, may be a comma list) -> picker faction filter
@@ -144,12 +148,13 @@ struct GameObjectRef
 inline bool IsPickerListed(const GameObjectRef& r)
 {
     if (r.role == ObjRole::Excluded) return false;
-    // Heroes, props, and templates are exempt from the fieldable gate: heroes are
-    // often granted by script (invisible to the static graph), and props/templates
-    // are scenery/base objects a player never builds -- gating them on fieldable
-    // would hide every one. Their model-field presence (ClassifyObject step 0) plus
-    // the lazy on-select renderable probe keep the "renderable only" contract.
-    if (r.role == ObjRole::Hero || r.role == ObjRole::Prop || r.role == ObjRole::Template)
+    // Heroes, props, templates, and projectiles are exempt from the fieldable gate:
+    // heroes are often granted by script (invisible to the static graph), and the
+    // rest are scenery/base objects/shots a player never builds -- gating them on
+    // fieldable would hide every one. Their model-field presence (ClassifyObject
+    // step 0) plus the lazy on-select renderable probe keep the "renderable only" contract.
+    if (r.role == ObjRole::Hero || r.role == ObjRole::Prop || r.role == ObjRole::Template ||
+        r.role == ObjRole::Projectile)
         return true;
     return r.fieldable;
 }

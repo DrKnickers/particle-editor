@@ -10,6 +10,7 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ### Added
 
+- The reference-object picker lists projectiles in their own section, grouped Ground and Space, so an effect can be lined up against the shot it rides on; a projectile with both a land and a space model appears in both groups, and projectiles drawn only by particle effects are left out
 - The editor finds assets a mod packages in its own `.meg` archives (listed in the mod's `Data\MegaFiles.xml`), as total conversions do, ranking them below the mod's loose files and above the base game's files
 - An observation spec can name its own camera (`position`, `target`, `up`), so `node scripts/observe.mjs` can pull back and show a whole large effect; without one, observations keep the fixed golden camera
 - `scripts/vfx-build/clone.mjs` turns any inspected emitter into the `--tool build` edits that remake it
@@ -30,6 +31,7 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ### Fixed
 
+- Reference models that use the older vertex layout, such as the game's laser bolts, now draw instead of being reported as skinned
 - Dragging a window edge to resize the editor keeps up with the pointer instead of lagging
 - The editor loads the game's patch archives (`Patch.meg`, `Patch2.meg`, `64Patch.meg`) above its listed archives, as the game does, so reference models get the patched shadow and heat shaders and the patched textures and models are used instead of the original copies
 - Each launch starts its particles from a fresh random seed again, so the first effect you preview no longer looks identical every session

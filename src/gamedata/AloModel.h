@@ -43,8 +43,8 @@ struct AloShaderParam
 // One renderable sub-mesh: a named game shader, its material params, and the
 // raw on-disk geometry blobs (kept verbatim -- 144-byte MASTER_VERTEX stride
 // and 16-bit triangle-list indices -- so transcode / GPU upload is a separate
-// consumer step). A sub-mesh that used the legacy 0x10005 vertex chunk is left
-// with empty rawVertexBytes (out-of-scope convert path; consumer skips it).
+// consumer step). A sub-mesh that used the legacy 0x10005 vertex chunk (128-byte
+// records) arrives widened to the same 144-byte layout.
 struct AloSubMesh
 {
 #ifdef ALO_MODEL_TEST_PROBES

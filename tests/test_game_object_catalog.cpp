@@ -767,8 +767,29 @@ int main(int argc, char** argv)
               "LowOrbit backdrop tag -> Excluded");
         CHECK(ClassifyObject(P("Planet", ModelFieldKind::Galactic)).role == ObjRole::Excluded,
               "Planet (galactic model) -> Excluded");
-        CHECK(ClassifyObject(P("Projectile", ModelFieldKind::Generic)).role == ObjRole::Excluded,
-              "Projectile -> Excluded");
+        // PROJECTILES (#951): kept as their own role, domain from the model field.
+        {
+            Classification land = ClassifyObject(P("Projectile", ModelFieldKind::Land));
+            CHECK(land.role == ObjRole::Projectile && land.domain == ObjDomain::Ground && !land.conflict,
+                  "Projectile + Land model -> Projectile, Ground");
+            Classification space = ClassifyObject(P("Projectile", ModelFieldKind::Space));
+            CHECK(space.role == ObjRole::Projectile && space.domain == ObjDomain::Space,
+                  "Projectile + Space model -> Projectile, Space");
+            ObjectProfile dual = P("Projectile", ModelFieldKind::Land); dual.dualEnv = true;
+            CHECK(ClassifyObject(dual).role == ObjRole::Projectile && ClassifyObject(dual).conflict,
+                  "dual-model projectile -> Projectile, flagged dualEnv/conflict");
+            // The PROJECTILE behavior alone routes it too, ahead of the behavior drop.
+            ObjectProfile beh = P("SpaceUnit", ModelFieldKind::Space); beh.behaviorTokens = {"PROJECTILE"};
+            CHECK(ClassifyObject(beh).role == ObjRole::Projectile, "PROJECTILE behavior -> Projectile");
+            // Still renderable-only and still name-junk filtered.
+            CHECK(ClassifyObject(P("Projectile", ModelFieldKind::None)).role == ObjRole::Excluded,
+                  "projectile with no model -> Excluded");
+            ObjectProfile dbg = P("Projectile", ModelFieldKind::Space); dbg.name = "Proj_Debug_Laser";
+            CHECK(ClassifyObject(dbg).role == ObjRole::Excluded, "name junk outranks the projectile role");
+            GameObjectRef pj; pj.role = ObjRole::Projectile; pj.fieldable = false;
+            CHECK(IsPickerListed(pj), "non-fieldable Projectile IS picker-listed");
+            CHECK(std::strcmp(ObjRoleName(ObjRole::Projectile), "Projectile") == 0, "role name 'Projectile'");
+        }
         CHECK(ClassifyObject(P("Squadron", ModelFieldKind::None)).role == ObjRole::Excluded,
               "no model (Squadron wrapper) -> Excluded");
 
@@ -953,6 +974,64 @@ int main(int argc, char** argv)
         // Company_Units member expansion (ground twin of Squadron_Units).
         const GameObjectRef* im = find(fc, "Inf_Member");
         CHECK(im && im->fieldable && IsPickerListed(*im), "Company_Units member of a buildable company -> fieldable + listed");
+    }
+
+    // ---- projectiles: catalog build drops particle-system models ----
+    std::printf("[projectile]\n");
+    {
+        MockFM pfm;
+        pfm.files["Data\\XML\\GameObjectFiles.xml"] =
+            "<Game_Object_Files><File>Projectiles.xml</File></Game_Object_Files>";
+        pfm.files["Data\\XML\\Projectiles.xml"] =
+            "<Projectiles>"
+            "  <Projectile Name=\"Proj_Ship_Laser\"><Space_Model_Name>W_Laser.ALO</Space_Model_Name></Projectile>"
+            "  <Projectile Name=\"Proj_Ship_Laser_Red\"><Variant_Of_Existing_Type>Proj_Ship_Laser</Variant_Of_Existing_Type></Projectile>"
+            "  <Projectile Name=\"Proj_Both\"><Land_Model_Name>W_Both.ALO</Land_Model_Name>"
+            "    <Space_Model_Name>W_Both.ALO</Space_Model_Name></Projectile>"
+            "  <Projectile Name=\"Proj_Ground_Flame\"><Land_Model_Name>P_Flame.ALO</Land_Model_Name></Projectile>"  // particle model
+            "  <Projectile Name=\"Proj_Ship_Glow\"><Space_Model_Name>P_Glow.ALO</Space_Model_Name></Projectile>"    // proxy-only skeleton
+            "  <Projectile Name=\"Proj_Ground_Lost\"><Land_Model_Name>W_Lost.ALO</Land_Model_Name></Projectile>"   // model absent
+            "  <Projectile Name=\"Proj_Ground_Torn\"><Land_Model_Name>W_Torn.ALO</Land_Model_Name></Projectile>"   // truncated header
+            "  <Projectile Name=\"Proj_No_Model\"><Projectile_Damage>5</Projectile_Damage></Projectile>"
+            "</Projectiles>";
+        // Top-level chunk headers only: {u32 id, u32 size | 0x80000000 container flag}.
+        auto chunk = [](uint32_t id, const std::string& body, bool container) {
+            const uint32_t sz = (uint32_t)body.size() | (container ? 0x80000000u : 0u);
+            std::string h(8, '\0');
+            std::memcpy(&h[0], &id, 4);
+            std::memcpy(&h[4], &sz, 4);
+            return h + body;
+        };
+        const std::string skeleton = chunk(0x0200, std::string(12, '\x01'), true);
+        pfm.files["Data\\Art\\Models\\W_Laser.ALO"] = skeleton + chunk(0x0400, std::string(20, '\x02'), true);
+        pfm.files["Data\\Art\\Models\\W_Both.ALO"]  = skeleton + chunk(0x0400, "", true);
+        pfm.files["Data\\Art\\Models\\P_Flame.ALO"] = chunk(0x0900, std::string(16, '\x03'), true);
+        pfm.files["Data\\Art\\Models\\P_Glow.ALO"]  = skeleton + chunk(0x0600, std::string(8, '\x04'), true);
+        pfm.files["Data\\Art\\Models\\W_Torn.ALO"]  = std::string("\x00\x02\x00\x00", 4);   // shorter than a header
+
+        GameObjectCatalog pc;
+        CHECK(BuildGameObjectCatalog(pfm, pc), "projectile catalog builds");
+        const GameObjectRef* laser = find(pc, "Proj_Ship_Laser");
+        CHECK(laser && laser->role == ObjRole::Projectile && laser->domain == ObjDomain::Space && !laser->dualEnv,
+              "mesh projectile -> Projectile, Space");
+        CHECK(laser && IsPickerListed(*laser), "mesh projectile is picker-listed");
+        const GameObjectRef* red = find(pc, "Proj_Ship_Laser_Red");
+        CHECK(red && red->role == ObjRole::Projectile && red->modelPath == "W_Laser.ALO",
+              "variant projectile inherits its parent's model");
+        const GameObjectRef* both = find(pc, "Proj_Both");
+        CHECK(both && both->role == ObjRole::Projectile && both->dualEnv, "Land+Space projectile -> dualEnv");
+        const GameObjectRef* flame = find(pc, "Proj_Ground_Flame");
+        CHECK(flame && flame->role == ObjRole::Excluded && !IsPickerListed(*flame),
+              "particle-model projectile -> Excluded");
+        const GameObjectRef* glow = find(pc, "Proj_Ship_Glow");
+        CHECK(glow && glow->role == ObjRole::Excluded, "skeleton of particle proxies, no mesh -> Excluded");
+        const GameObjectRef* lost = find(pc, "Proj_Ground_Lost");
+        CHECK(lost && lost->role == ObjRole::Projectile,
+              "missing model stays listed (the on-select probe reports it)");
+        const GameObjectRef* torn = find(pc, "Proj_Ground_Torn");
+        CHECK(torn && torn->role == ObjRole::Projectile,
+              "unreadable header stays listed (the on-select probe reports it)");
+        CHECK(find(pc, "Proj_No_Model") == nullptr, "projectile without a model is not in the catalog");
     }
 
     // ---- aggregate fieldable-token processing budget --------------

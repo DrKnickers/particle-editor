@@ -239,10 +239,11 @@ export type EmitterTreeNode = {
 // `domain` = which top-level section (Heroes go under their own section regardless of
 // domain; everything else by Ground/Space). `bucket` = the sub-group within a domain.
 export type ReferenceObjectDomain = "Ground" | "Space" | "Unknown";
-// "Prop" / "Template" are model-bearing scenery / base objects the picker now surfaces
-// as their own top-level sections (they used to be Excluded). Never fieldable, so the
-// engine exempts them from the build/spawn gate. "Excluded" objects are never emitted.
-export type ReferenceObjectRole = "Unit" | "Structure" | "Hero" | "Prop" | "Template" | "Excluded";
+// "Prop" / "Template" / "Projectile" are model-bearing scenery / base objects / shots the
+// picker surfaces as their own top-level sections (they used to be Excluded). Never
+// fieldable, so the engine exempts them from the build/spawn gate. "Excluded" objects are
+// never emitted.
+export type ReferenceObjectRole = "Unit" | "Structure" | "Hero" | "Prop" | "Template" | "Projectile" | "Excluded";
 export type ReferenceObjectBucket =
   | "Infantry" | "Vehicle" | "Air"                                           // ground units
   | "Fighter" | "Bomber" | "Corvette" | "Frigate" | "Capital" | "Transport"  // space units
@@ -252,6 +253,9 @@ export type ReferenceObjectEntry = {
   domain: ReferenceObjectDomain;
   role: ReferenceObjectRole;
   bucket: ReferenceObjectBucket;
+  // Has both a Land and a Space model. A dual projectile lists under both of the
+  // Projectiles section's Ground and Space groups.
+  dualEnv?: boolean;
   // Raw <Affiliation> (may be a comma list, e.g. "Rebel, Trade_Federation", or empty).
   // Drives the picker's faction filter chips; the picker tokenises it on commas.
   affiliation: string;

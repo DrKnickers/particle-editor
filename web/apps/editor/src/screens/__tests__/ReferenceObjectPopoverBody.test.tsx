@@ -46,8 +46,8 @@ describe("ReferenceObjectPopoverBody — selection + status", () => {
       expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument();
     });
     // Top-level sections render as disclosure headers (default expanded).
-    expect(screen.getByRole("treeitem", { name: /Ground/ })).toBeInTheDocument();
-    expect(screen.getByRole("treeitem", { name: /Space/ })).toBeInTheDocument();
+    expect(screen.getByRole("treeitem", { name: "Ground" })).toBeInTheDocument();
+    expect(screen.getByRole("treeitem", { name: "Space" })).toBeInTheDocument();
     expect(screen.getByRole("treeitem", { name: /Heroes/ })).toBeInTheDocument();
     // A space capital and a hero land in their sections.
     expect(within(tree).getByRole("treeitem", { name: "Star_Destroyer" })).toBeInTheDocument();
@@ -114,17 +114,17 @@ describe("ReferenceObjectPopoverBody — selection + status", () => {
     await screen.findByRole("tree", { name: "Reference object" });
     await waitFor(() => expect(screen.getByRole("treeitem", { name: "Star_Destroyer" })).toBeInTheDocument());
 
-    const spaceHeader = screen.getByRole("treeitem", { name: /Space/ });
+    const spaceHeader = screen.getByRole("treeitem", { name: "Space" });
     expect(spaceHeader).toHaveAttribute("aria-expanded", "true");
     fireEvent.click(spaceHeader); // collapse
     await waitFor(() =>
       expect(screen.queryByRole("treeitem", { name: "Star_Destroyer" })).not.toBeInTheDocument()
     );
-    expect(screen.getByRole("treeitem", { name: /Space/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("treeitem", { name: "Space" })).toHaveAttribute("aria-expanded", "false");
     // Ground items are unaffected.
     expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("treeitem", { name: /Space/ })); // expand again
+    fireEvent.click(screen.getByRole("treeitem", { name: "Space" })); // expand again
     expect(await screen.findByRole("treeitem", { name: "Star_Destroyer" })).toBeInTheDocument();
   });
 
@@ -160,7 +160,7 @@ describe("ReferenceObjectPopoverBody — selection + status", () => {
       await waitFor(() =>
         expect(screen.queryByRole("treeitem", { name: "Star_Destroyer" })).not.toBeInTheDocument(),
       );
-      expect(screen.getByRole("treeitem", { name: /Space/ })).toHaveAttribute("aria-expanded", "false");
+      expect(screen.getByRole("treeitem", { name: "Space" })).toHaveAttribute("aria-expanded", "false");
       // A non-collapsed section's items stay visible.
       expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument();
     } finally {
@@ -645,6 +645,45 @@ describe("ReferenceObjectPopoverBody — props + templates", () => {
     // Toggling off restores the full list.
     fireEvent.click(chip);
     expect(await screen.findByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument();
+  });
+
+  it("renders a Projectiles section grouped Ground / Space, listing a dual-model shot in both", async () => {
+    const bridge = await ready();
+    const section = screen.getByRole("treeitem", { name: "Projectiles" });
+    const ground = within(section).getByRole("treeitem", { name: "Ground projectiles" });
+    const space = within(section).getByRole("treeitem", { name: "Space projectiles" });
+    expect(within(ground).getByRole("treeitem", { name: "Proj_Ground_Blaster_Red" })).toBeInTheDocument();
+    expect(within(space).getByRole("treeitem", { name: "Proj_Ship_Turbolaser_Green" })).toBeInTheDocument();
+    expect(within(space).queryByRole("treeitem", { name: "Proj_Ground_Blaster_Red" })).not.toBeInTheDocument();
+    // The dual-model torpedo appears once under each group.
+    expect(within(ground).getByRole("treeitem", { name: "Proj_Proton_Torpedo" })).toBeInTheDocument();
+    expect(within(space).getByRole("treeitem", { name: "Proj_Proton_Torpedo" })).toBeInTheDocument();
+
+    // Selecting either copy selects the object and marks both rows selected.
+    fireEvent.click(within(space).getByRole("treeitem", { name: "Proj_Proton_Torpedo" }));
+    await waitFor(async () => {
+      const snap = await bridge.request({ kind: "engine/state/snapshot", params: {} });
+      expect(snap.referenceObjectName).toBe("Proj_Proton_Torpedo");
+    });
+    await waitFor(() =>
+      expect(within(section).getAllByRole("treeitem", { name: "Proj_Proton_Torpedo", selected: true })).toHaveLength(2)
+    );
+  });
+
+  it("keyboard navigation steps through both copies of a dual-model projectile", async () => {
+    await ready();
+    const section = screen.getByRole("treeitem", { name: "Projectiles" });
+    const ground = within(section).getByRole("treeitem", { name: "Ground projectiles" });
+    const space = within(section).getByRole("treeitem", { name: "Space projectiles" });
+    const groundCopy = within(ground).getByRole("treeitem", { name: "Proj_Proton_Torpedo" });
+    const spaceCopy = within(space).getByRole("treeitem", { name: "Proj_Proton_Torpedo" });
+    // Each copy is its own row: focus moves from one to the next group's header and on.
+    fireEvent.click(groundCopy);
+    await waitFor(() => expect(groundCopy).toHaveAttribute("tabindex", "0"));
+    fireEvent.keyDown(groundCopy, { key: "ArrowDown" });
+    await waitFor(() => expect(space).toHaveAttribute("tabindex", "0"));
+    expect(groundCopy).toHaveAttribute("tabindex", "-1");
+    expect(spaceCopy).toHaveAttribute("tabindex", "-1");
   });
 
   it("ANDs 'Props only' with the faction filter", async () => {

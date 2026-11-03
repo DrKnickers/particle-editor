@@ -453,6 +453,10 @@ export function dispatchEngine(this: MockDispatchHost, req: EngineRequest): unkn
           { name: "Asteroid_Field_Prop", domain: "Space", role: "Prop", bucket: "Other", affiliation: "" },
           { name: "Rebel_Crate_Prop", domain: "Ground", role: "Prop", bucket: "Other", affiliation: "Rebel" },
           { name: "Generic_Frigate_Template", domain: "Space", role: "Template", bucket: "Other", affiliation: "" },
+          // Projectiles: one section sub-grouped Ground / Space; a dual-model shot lists in both.
+          { name: "Proj_Ground_Blaster_Red", domain: "Ground", role: "Projectile", bucket: "Other", affiliation: "" },
+          { name: "Proj_Ship_Turbolaser_Green", domain: "Space", role: "Projectile", bucket: "Other", affiliation: "" },
+          { name: "Proj_Proton_Torpedo", domain: "Ground", role: "Projectile", bucket: "Other", dualEnv: true, affiliation: "" },
         ],
       };
 

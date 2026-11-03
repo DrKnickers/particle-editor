@@ -3,7 +3,7 @@
 // Builds synthetic .alo byte streams in memory (via the documented chunk wire
 // format) and feeds them through LoadAloModel -- no game assets are committed
 // or required. Covers happy paths, multi-submesh / multi-mesh, tolerant
-// skipping of non-mesh root chunks, the legacy 0x10005 skip, and the malformed
+// skipping of non-mesh root chunks, the legacy 0x10005 widening, and the malformed
 // cases the parser must reject. Standalone console exe; see
 // the test_alo_model entry in tests/native-tests.json.
 
@@ -616,19 +616,46 @@ int main(int argc, char** argv) {
         CHECK(!AloIsNonVisibleShader("MeshShield.fx"),      "shield is visible (transparent)");
     }
 
-    // ---- Legacy 0x10005 vertex chunk: submesh skipped (empty verts) --------
+    // ---- Legacy 0x10005 vertex chunk: 128 B records widened to 144 B ------
     std::printf("[old-vertex]\n");
     {
         std::vector<Bytes> geoKids;
         geoKids.push_back(countsChunk(4, 2));
         Bytes f; cstr(f, "alD3dVertNU2C"); geoKids.push_back(leaf(0x10002, f));
-        Bytes old; old.resize(4 * 128, 0); geoKids.push_back(leaf(0x10005, old));  // legacy 128B
+        // Byte j of legacy record i = (i * 128 + j) & 0xFF, so every source byte is traceable.
+        Bytes old; old.resize(4 * 128);
+        for (size_t k = 0; k < old.size(); ++k) old[k] = (unsigned char)(k & 0xFF);
+        geoKids.push_back(leaf(0x10005, old));
         geoKids.push_back(leaf(0x10004, indexBlob(2)));
         Bytes geo = container(0x10000, geoKids);
-        Bytes file = assemble({ mesh("old", { { material("Skydome.fx", {}), geo } }) });
+        Bytes file = assemble({ mesh("old", { { material("MeshAdditive.fx", {}), geo } }) });
         AloModel m = parseBytes(file);
         CHECK(m.meshes.size() == 1 && m.meshes[0].subMeshes.size() == 1, "old-vertex submesh present");
-        CHECK(m.meshes[0].subMeshes[0].rawVertexBytes.empty(), "old-vertex leaves rawVertexBytes empty (skipped)");
+        const std::vector<unsigned char>& v = m.meshes[0].subMeshes[0].rawVertexBytes;
+        CHECK(v.size() == 4 * (size_t)kAloVertexStride, "old-vertex widened to 4 x 144 B");
+        bool layoutOk = v.size() == 4 * (size_t)kAloVertexStride;
+        for (size_t i = 0; layoutOk && i < 4; ++i)
+            for (size_t j = 0; j < 144; ++j)
+            {
+                const unsigned char want =
+                    j < 96  ? old[i * 128 + j] :          // pos .. color
+                    j < 112 ? 0 :                         // reserved block
+                              old[i * 128 + j - 16];      // boneIdx + weights
+                if (v[i * 144 + j] != want) { layoutOk = false; break; }
+            }
+        CHECK(layoutOk, "old-vertex fields land at the 144 B offsets (reserved@96 zeroed)");
+    }
+    {
+        // A legacy chunk whose size isn't vertexCount * 128 is malformed, like the 144 B path.
+        std::vector<Bytes> geoKids;
+        geoKids.push_back(countsChunk(4, 2));
+        Bytes f; cstr(f, "alD3dVertNU2"); geoKids.push_back(leaf(0x10002, f));
+        Bytes old; old.resize(3 * 128, 0); geoKids.push_back(leaf(0x10005, old));   // claims 4, gives 3
+        geoKids.push_back(leaf(0x10004, indexBlob(2)));
+        Bytes file = assemble({ mesh("old", { { material("MeshAdditive.fx", {}), container(0x10000, geoKids) } }) });
+        bool threw = false;
+        try { parseBytes(file); } catch (BadFileException&) { threw = true; } catch (...) {}
+        CHECK(threw, "legacy stride mismatch -> BadFileException");
     }
 
     // ---- Malformed: stride mismatch -> BadFileException --------------------

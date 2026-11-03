@@ -212,8 +212,8 @@ bool SkydomeMesh::Load(IFileManager& fm, const std::string& aloPath)
     computeBoneObjectMatrices(model.bones, boneObj);
 
     // Flatten every sub-mesh of every 0x400 mesh into the GPU list, transcoding
-    // the raw 144B vertices into the compact runtime layout. A 0x10005 (legacy)
-    // sub-mesh has empty rawVertexBytes (AloModel drops it) -> skip it here.
+    // the raw 144B vertices into the compact runtime layout (AloModel has already
+    // widened any legacy 0x10005 sub-mesh to that layout).
     for (size_t meshIdx = 0; meshIdx < model.meshes.size(); ++meshIdx)
     {
         const AloMesh& mesh = model.meshes[meshIdx];
