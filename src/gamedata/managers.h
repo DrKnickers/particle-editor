@@ -171,10 +171,19 @@ class FileManager : public IFileManager
 	// BuildModContentRoots. Rebuilt by SetModPath/SetSubmods; searched before the base
 	// paths. First match wins (the engine replaces a file by precedence, never merges).
 	std::vector<std::wstring> modContentRoots;
+	// The archives each content root's own Data\MegaFiles.xml lists, in search order:
+	// by root precedence, and within one root later-listed first (the engine's order).
+	// Searched after the mod loose files and before the base game's. modMegaRoots is
+	// the root list they were opened for, so an unchanged stack reopens nothing.
+	std::vector<MegaFile*>    modMegafiles;
+	std::vector<std::wstring> modMegaRoots;
 
 	// Populate modContentRoots from `modpath`: the root + each selected submod
 	// (in order, those with a Data\Art tree) - the core folder is one of them when selected.
 	void BuildModContentRoots();
+
+	// Reopen modMegafiles for the current modContentRoots.
+	void OpenModMegaFiles();
 
 public:
 	IFile* getFile(const std::string& path);

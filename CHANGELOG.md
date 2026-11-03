@@ -10,6 +10,7 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ### Added
 
+- The editor finds assets a mod packages in its own `.meg` archives (listed in the mod's `Data\MegaFiles.xml`), as total conversions do, ranking them below the mod's loose files and above the base game's files
 - An observation spec can name its own camera (`position`, `target`, `up`), so `node scripts/observe.mjs` can pull back and show a whole large effect; without one, observations keep the fixed golden camera
 - `scripts/vfx-build/clone.mjs` turns any inspected emitter into the `--tool build` edits that remake it
 - `scripts/vfx-build/`: `tracks.mjs` writes the index and scale tracks that play a generated flipbook one cell per 60 fps game frame, and `pair-check.mjs` checks that emitters drawn from one simulation stay together: no per-particle randoms, the same motion, scale and cell on every frame

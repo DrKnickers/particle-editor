@@ -332,6 +332,69 @@ int main()
               "a short read marks the ledger unverifiable and is not recorded as an attempt");
         SAFE_RELEASE(f);
     }
+    {
+        // A mod's own Data\MegaFiles.xml: its archives sit below the mod's loose
+        // files and above the base game's loose files and archives.
+        const std::wstring mod = g_root + L"Mod\\", sub = g_root + L"Mod\\Sub\\", broken = g_root + L"Broken\\";
+        for (const std::wstring& dir : { mod, mod + L"Data", mod + L"Data\\Art", mod + L"Data\\Art\\Textures",
+                                         sub, sub + L"Data", broken, broken + L"Data" })
+            CreateDirectoryW(dir.c_str(), NULL);
+        WriteBytes(mod + L"Data\\MegaFiles.xml", "<?xml version=\"1.0\"?>\n<Mega_Files>\n<Info Name=\"Mod\"/>\n"
+                   "<File>Data\\A.meg</File>\n<File>Data\\Missing.meg</File>\n<File>Data\\B.meg</File>\n</Mega_Files>\n");
+        std::vector<MegEntry> a = {
+            { "DATA\\ART\\TEXTURES\\MOD_ONLY.TGA", "mod-a" },
+            { "DATA\\ART\\TEXTURES\\MEG_ONLY.TGA", "mod-over-base-meg" },
+            { "DATA\\ART\\TEXTURES\\LOOSE.TGA", "mod-over-base-loose" },
+            { "DATA\\ART\\TEXTURES\\SHADOWED.TGA", "mod-meg" },
+            { "DATA\\ART\\TEXTURES\\BOTH.TGA", "first-listed" },
+            { "DATA\\ART\\TEXTURES\\LAYERED.TGA", "lower-layer" },
+        };
+        std::vector<MegEntry> b = { { "DATA\\ART\\TEXTURES\\BOTH.TGA", "later-listed" } };
+        WriteMeg(mod + L"Data\\A.meg", a);
+        WriteMeg(mod + L"Data\\B.meg", b);
+        WriteBytes(mod + L"Data\\Art\\Textures\\SHADOWED.TGA", "mod-loose");
+        WriteBytes(sub + L"Data\\MegaFiles.xml", "<?xml version=\"1.0\"?>\n<Mega_Files>\n<File>Data\\Sub.meg</File>\n</Mega_Files>\n");
+        std::vector<MegEntry> s = { { "DATA\\ART\\TEXTURES\\LAYERED.TGA", "higher-layer" } };
+        WriteMeg(sub + L"Data\\Sub.meg", s);
+        WriteBytes(broken + L"Data\\MegaFiles.xml", "<Not_Mega_Files/>");
+
+        // The bytes the lookup resolves, and the archive or loose path that won.
+        auto read = [&](const char* name, std::string* won = NULL) -> std::string {
+            AssetWinner winner;
+            IFile* file = files.getFileWithWinner(std::string("Data\\Art\\Textures\\") + name, &winner);
+            if (file == NULL) return "<none>";
+            std::string bytes(file->size(), '\0');
+            if (!bytes.empty()) file->read(&bytes[0], (unsigned long)bytes.size());
+            file->Release();
+            if (won) *won = winner.path;
+            return bytes;
+        };
+
+        CHECK(read("MOD_ONLY.TGA") == "<none>", "a mod archive is not searched before a mod is active");
+        files.SetLayers({ mod });
+        std::string won;
+        CHECK(read("MOD_ONLY.TGA", &won) == "mod-a" && won == Utf8(mod + L"Data\\A.meg"),
+              "an asset only in a mod archive resolves, naming that archive");
+        CHECK(read("MEG_ONLY.TGA") == "mod-over-base-meg", "a mod archive beats a base archive");
+        CHECK(read("LOOSE.TGA") == "mod-over-base-loose", "a mod archive beats a base loose file");
+        CHECK(read("SHADOWED.TGA") == "mod-loose", "a mod loose file beats the mod's archive");
+        CHECK(read("BOTH.TGA") == "later-listed", "within one list the later-listed archive wins");
+        CHECK(read("LAYERED.TGA") == "lower-layer", "the lower layer's archive resolves on its own");
+        const auto listed = files.listFiles("Data\\Art\\Textures\\", ".TGA");
+        CHECK(std::count(listed.begin(), listed.end(), "DATA\\ART\\TEXTURES\\MOD_ONLY.TGA") == 1,
+              "listFiles names a file only in a mod archive");
+
+        files.SetLayers({ sub, mod });
+        CHECK(read("LAYERED.TGA") == "higher-layer" && read("MOD_ONLY.TGA") == "mod-a",
+              "a higher layer's archive beats a lower layer's, and the lower's still resolve");
+        files.SetLayers({ broken, mod });
+        CHECK(read("MOD_ONLY.TGA") == "mod-a", "a malformed MegaFiles.xml in one layer leaves the others working");
+        files.SetLayers({ g_root });
+        CHECK(read("MEG_ONLY.TGA") == "GOOD-meg", "a base path used as a layer still resolves from the base archives");
+        files.SetLayers({});
+        CHECK(read("MOD_ONLY.TGA") == "<none>" && read("MEG_ONLY.TGA") == "GOOD-meg",
+              "clearing the layers drops the mod archives");
+    }
 
     SetCurrentDirectoryW(temp);
     std::printf("%s\n", g_failed ? "=== FAILED ===" : "=== ALL PASS ===");

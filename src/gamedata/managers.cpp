@@ -17,6 +17,102 @@ using namespace std;
 //
 // FileManager class
 //
+
+// The first archive in `megafiles` holding `path`, naming it in `winner`.
+static IFile* FindInMegaFiles(const vector<MegaFile*>& megafiles, const string& path, AssetWinner* winner)
+{
+	for (vector<MegaFile*>::const_iterator i = megafiles.begin(); i != megafiles.end(); i++)
+	{
+		MegaFile::Member member;
+		IFile* file = (*i)->getFile( path, &member );
+		if (file != NULL)
+		{
+			if (winner != NULL)
+			{
+				winner->kind   = AssetWinner::Kind::Archive;
+				winner->path   = AssetPathUtf8((*i)->getPath());
+				winner->member = member.name;
+				winner->start  = member.start;
+				winner->size   = member.size;
+			}
+			return file;
+		}
+	}
+	return NULL;
+}
+
+// Open each archive <root>\Data\MegaFiles.xml lists, in list order, appending to
+// `megafiles`. A listed archive that will not open is skipped. Throws
+// FileNotFoundException when there is no MegaFiles.xml, and BadFileException or a
+// parse error when it is not a <Mega_Files> list.
+static void OpenMegaFiles(const wstring& root, vector<MegaFile*>& megafiles)
+{
+	XMLTree xml;
+	PhysicalFile* file = new PhysicalFile( root + L"Data\\MegaFiles.xml" );
+	try
+	{
+		xml.parse( file );
+	}
+	catch (...)
+	{
+		file->Release();
+		throw;
+	}
+	file->Release();
+
+	const XMLNode* xmlRoot = xml.getRoot();
+	if (xmlRoot->getName() != L"Mega_Files")
+	{
+		throw BadFileException();
+	}
+
+	// Create a file index from all mega files
+	for (unsigned int i = 0; i < xmlRoot->getNumChildren(); i++)
+	{
+		const XMLNode* child = xmlRoot->getChild(i);
+		if (child->getName() != L"File")
+		{
+			// Tolerate non-<File> children (e.g. <Info Name=.../> in mod MegaFiles.xml):
+			// skip them instead of throwing (the ctor's catch(...) would rethrow ->
+			// std::terminate, crashing the editor on a standard-format mod).
+			continue;
+		}
+
+		wstring filename = root + child->getData();
+		try
+		{
+			// Hold the creation reference in a local and drop it after
+			// handing the file to MegaFile (which takes its own AddRef).
+			// The old new-inside-new form leaked that reference on every
+			// path — permanently pinning the Win32 HANDLE when a
+			// malformed MEG made the MegaFile constructor throw.
+			PhysicalFile* file = new PhysicalFile(filename);   // rc=1
+			try
+			{
+				megafiles.push_back(new MegaFile(file, filename));   // rc=2
+			}
+			catch (...)
+			{
+				file->Release();
+				throw;
+			}
+			file->Release();   // rc=1, now owned by the MegaFile
+		}
+		catch (IOException)
+		{
+		}
+	}
+}
+
+static void CloseMegaFiles(vector<MegaFile*>& megafiles)
+{
+	for (vector<MegaFile*>::iterator i = megafiles.begin(); i != megafiles.end(); i++)
+	{
+		delete *i;
+	}
+	megafiles.clear();
+}
+
 IFile* FileManager::getFile(const string& path)
 {
 	return getFileWithWinner(path, NULL);
@@ -47,6 +143,16 @@ IFile* FileManager::getFileWithWinner(const string& path, AssetWinner* winner)
 		}
 	}
 
+	// Then the mod's own archives: below its loose files, above the base game's.
+	try
+	{
+		IFile* file = FindInMegaFiles(modMegafiles, path, winner);
+		if (file != NULL) return file;
+	}
+	catch (IOException&)
+	{
+	}
+
 	// First see if we can open it physically
 	for (vector<wstring>::const_iterator base = basepaths.begin(); base != basepaths.end(); base++)
 	{
@@ -66,23 +172,8 @@ IFile* FileManager::getFileWithWinner(const string& path, AssetWinner* winner)
 	// Search in the index
 	try
 	{
-		for (vector<MegaFile*>::iterator i = megafiles.begin(); i != megafiles.end(); i++)
-		{
-			MegaFile::Member member;
-			IFile* file = (*i)->getFile( path, &member );
-			if (file != NULL)
-			{
-				if (winner != NULL)
-				{
-					winner->kind   = AssetWinner::Kind::Archive;
-					winner->path   = AssetPathUtf8((*i)->getPath());
-					winner->member = member.name;
-					winner->start  = member.start;
-					winner->size   = member.size;
-				}
-				return file;
-			}
-		}
+		IFile* file = FindInMegaFiles(megafiles, path, winner);
+		if (file != NULL) return file;
 	}
 	catch (IOException&)
 	{
@@ -93,58 +184,12 @@ IFile* FileManager::getFileWithWinner(const string& path, AssetWinner* winner)
 
 FileManager::FileManager(const vector<wstring>& basepaths)
 {
-	XMLTree xml;
 	this->basepaths = basepaths;
 	for (vector<wstring>::const_iterator path = basepaths.begin(); path != basepaths.end(); path++)
 	{
 		try
 		{
-			PhysicalFile* file = new PhysicalFile( *path + L"Data\\MegaFiles.xml" );
-			xml.parse( file );
-			file->Release();
-
-			const XMLNode* root = xml.getRoot();
-			if (root->getName() != L"Mega_Files")
-			{
-				throw BadFileException();
-			}
-
-			// Create a file index from all mega files
-			for (unsigned int i = 0; i < root->getNumChildren(); i++)
-			{
-				const XMLNode* child = root->getChild(i);
-				if (child->getName() != L"File")
-				{
-					// Tolerate non-<File> children (e.g. <Info Name=.../> in mod MegaFiles.xml):
-					// skip them instead of throwing (the ctor's catch(...) would rethrow ->
-					// std::terminate, crashing the editor on a standard-format mod).
-					continue;
-				}
-		
-				wstring filename = *path + child->getData();
-				try
-				{
-					// Hold the creation reference in a local and drop it after
-					// handing the file to MegaFile (which takes its own AddRef).
-					// The old new-inside-new form leaked that reference on every
-					// path — permanently pinning the Win32 HANDLE when a
-					// malformed MEG made the MegaFile constructor throw.
-					PhysicalFile* file = new PhysicalFile(filename);   // rc=1
-					try
-					{
-						megafiles.push_back(new MegaFile(file, filename));   // rc=2
-					}
-					catch (...)
-					{
-						file->Release();
-						throw;
-					}
-					file->Release();   // rc=1, now owned by the MegaFile
-				}
-				catch (IOException)
-				{
-				}
-			}
+			OpenMegaFiles(*path, megafiles);
 		}
 		catch (FileNotFoundException)
 		{
@@ -152,10 +197,7 @@ FileManager::FileManager(const vector<wstring>& basepaths)
 		}
 		catch (...)
 		{
-			for (vector<MegaFile*>::iterator i = megafiles.begin(); i != megafiles.end(); i++)
-			{
-				delete *i;
-			}
+			CloseMegaFiles(megafiles);
 			throw;
 		}
 	}
@@ -168,10 +210,8 @@ FileManager::FileManager(const vector<wstring>& basepaths)
 
 FileManager::~FileManager()
 {
-	for (vector<MegaFile*>::iterator i = megafiles.begin(); i != megafiles.end(); i++)
-	{
-		delete (*i);
-	}
+	CloseMegaFiles(modMegafiles);
+	CloseMegaFiles(megafiles);
 }
 
 void FileManager::SetModPath(const wstring& path)
@@ -215,7 +255,11 @@ void FileManager::SetSubmods(const vector<wstring>& names)
 void FileManager::BuildModContentRoots()
 {
 	modContentRoots.clear();
-	if (modpath.empty()) return;
+	if (modpath.empty())
+	{
+		OpenModMegaFiles();
+		return;
+	}
 
 	auto hasArtTree = [](const wstring& root) -> bool {
 		const DWORD attr = GetFileAttributesW((root + L"Data\\Art").c_str());
@@ -240,6 +284,7 @@ void FileManager::BuildModContentRoots()
 
 	// The mod root is the LOWEST-precedence mod layer (the game lists it last).
 	modContentRoots.push_back(modpath);
+	OpenModMegaFiles();
 }
 
 // Stack-aware content-root setter (see managers.h). Delegates the
@@ -252,6 +297,38 @@ void FileManager::SetLayers(const vector<wstring>& absoluteLayers)
 			const DWORD a = GetFileAttributesW(dir.c_str());
 			return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY) != 0;
 		});
+	OpenModMegaFiles();
+}
+
+// A mod that packages its assets (a total conversion) lists its own archives in
+// <root>\Data\MegaFiles.xml, each path relative to that root. A higher root's
+// archives are searched first, and within one list the later-listed archive wins,
+// as the engine mounts each at the front. A root that is also a base path is
+// skipped: the constructor already opened its list. A missing or malformed list
+// only leaves that root without archives.
+void FileManager::OpenModMegaFiles()
+{
+	if (modContentRoots == modMegaRoots) return;
+	CloseMegaFiles(modMegafiles);
+	modMegaRoots = modContentRoots;
+
+	for (const wstring& root : modContentRoots)
+	{
+		if (any_of(basepaths.begin(), basepaths.end(),
+			[&](const wstring& base) { return modlayers::LayerPathsEqual(base, root); }))
+			continue;
+
+		vector<MegaFile*> listed;
+		try
+		{
+			OpenMegaFiles(root, listed);
+		}
+		catch (...)
+		{
+			CloseMegaFiles(listed);
+		}
+		modMegafiles.insert(modMegafiles.end(), listed.rbegin(), listed.rend());
+	}
 }
 
 vector<string> FileManager::listFiles(const string& directory, const string& extension) const
@@ -287,6 +364,8 @@ vector<string> FileManager::listFiles(const string& directory, const string& ext
 		} while (FindNextFileW(search, &found));
 		FindClose(search);
 	}
+	for (const MegaFile* mega : modMegafiles)
+		for (const string& name : mega->getFilenames()) add(name);
 	for (const MegaFile* mega : megafiles)
 		for (const string& name : mega->getFilenames()) add(name);
 	return vector<string>(names.begin(), names.end());
