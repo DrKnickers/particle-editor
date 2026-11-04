@@ -112,6 +112,15 @@ struct HardPointDef
 };
 
 // One enumerated game object that resolved to a renderable model.
+// What a model .alo holds (projectiles only; see BuildGameObjectCatalog).
+enum class ModelContent
+{
+    Mesh,             // a 0x0400 mesh (may also carry particle proxies)
+    ParticleSystem,   // a particle-system .alo (root 0x0900)
+    ParticleProxies,  // a skeleton whose bones only carry particle proxies (0x0603)
+    Nothing,          // none of these: nothing to show
+};
+
 struct GameObjectRef
 {
     std::string        name;        // Name= attribute (in-game key; picker label)
@@ -146,6 +155,7 @@ struct GameObjectRef
     float       projectileSpeed    = 0.0f;
     float       projectileRange    = 50.0f;
     std::string projectileCategory;       // raw <Projectile_Category>, e.g. "Laser", "MISSILE"
+    ModelContent modelContent = ModelContent::Mesh;   // projectiles: how the model draws
 };
 
 // Picker keep-gate. Units/structures must be fieldable (a player can build/spawn

@@ -72,6 +72,21 @@ struct RefSubMeshGpu
     RefSubMeshGpu() { D3DXMatrixIdentity(&placement); }
 };
 
+// One particle proxy of a model: the particle-system `.alo` the game attaches at a
+// bone, and that bone's object-space position. Particles carry no orientation in
+// the preview, so the bone's rotation is not kept.
+struct ReferenceParticleProxy
+{
+    std::string aloPath;   // "Data\Art\Models\<proxy name>.alo"
+    D3DXVECTOR3 offset;    // object-space bone position
+};
+
+// The visible particle proxies of the model at `aloPath` (hidden proxies, which the
+// game shows only on events, are left out). Empty for a missing or unreadable model,
+// a model without proxies, or a proxy whose name isn't a safe asset path.
+std::vector<ReferenceParticleProxy> ReadReferenceParticleProxies(IFileManager& fm,
+                                                                 const std::string& aloPath);
+
 class ReferenceObjectMesh
 {
 public:

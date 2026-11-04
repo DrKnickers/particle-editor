@@ -110,11 +110,23 @@ struct AloConnection
     uint32_t boneIndex   = 0;
 };
 
+// One particle proxy (chunk 0x603): a particle-system .alo the engine attaches at a
+// bone. `name` is the bare stem of a model in Data\Art\Models (e.g. "p_protonshot").
+// Layout per alo-viewer Models.cpp: mini 5 name, 6 bone index, 7 isHidden (non-zero
+// = hidden), 8 altDecreaseStayHidden.
+struct AloProxy
+{
+    std::string name;
+    uint32_t    boneIndex = 0;
+    bool        hidden    = false;
+};
+
 struct AloModel
 {
     std::vector<AloMesh>       meshes;       // one per 0x400 chunk
     std::vector<AloBone>       bones;        // 0x202 under the 0x200 skeleton (empty if none)
     std::vector<AloConnection> connections;  // 0x602 under the 0x600 connections (empty if none)
+    std::vector<AloProxy>      proxies;      // 0x603 under the 0x600 connections (empty if none)
 };
 
 // On-disk vertex stride is a fixed 144-byte MASTER_VERTEX for EVERY vertex
@@ -166,12 +178,16 @@ AloRenderClass AloClassifyShader(const std::string& shaderName);
 // retains ownership; the parser AddRef/Releases the file internally). Returns
 // a model with one AloMesh per 0x400 chunk.
 //
+// `allowProxyOnly`: also accept a model with no mesh but at least one particle proxy
+// (a skeleton whose bones only carry particle effects, as some projectiles are).
+//
 // Throws (never returns partially built):
-//   WrongFileException -- no mesh (0x400) chunks present (not a model .alo)
+//   WrongFileException -- no mesh (0x400) chunks present (not a model .alo), and
+//                         no proxy either when allowProxyOnly
 //   BadFileException   -- malformed: nesting past ChunkReader's depth guard,
 //                         vertex stride != 144, count/payload mismatch,
 //                         vertexCount > 0xFFFF, or a bad/over-read string
 //   ReadException      -- truncated file
-AloModel LoadAloModel(IFile* file);
+AloModel LoadAloModel(IFile* file, bool allowProxyOnly = false);
 
 #endif

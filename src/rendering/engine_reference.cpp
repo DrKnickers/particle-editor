@@ -595,6 +595,7 @@ void Engine::ResetReferenceRenderState()
 {
     m_referenceObjectMesh.Clear();
     m_referenceAttachments.clear();
+    ClearReferenceParticles(/*keepSources=*/false);
     m_referenceScaleFactor  = 1.0f;
     m_referenceIsProjectile = false;
     m_referenceProjectile   = ReferenceProjectileInfo();
@@ -644,6 +645,7 @@ void Engine::ResolveDesiredReference()
 void Engine::RebuildReferenceObjectMesh()
 {
     m_referenceAttachments.clear();   // rebuilt below iff the unit mounts hardpoint models
+    ClearReferenceParticles(/*keepSources=*/false);   // reloaded below for a projectile
     // Reset the render scale at the TOP so every exit path (empty-name clear,
     // deferred catalog-not-built return, LoadFailed, successful resolve) leaves no
     // stale scale from a previously-selected object. (A mod/submod switch now clears via
@@ -741,6 +743,23 @@ void Engine::RebuildReferenceObjectMesh()
     for (const AttachReq& a : attach) hideBones.erase(lower(a.bone));
 
     const std::string aloPath = "Data\\Art\\Models\\" + modelPath;
+    // A projectile drawn only by particles: its model is a particle system, or a
+    // skeleton of particle proxies. There is no mesh to load; the particles are the
+    // object, so it shows when at least one of them loads.
+    if (selected && selected->role == ObjRole::Projectile &&
+        selected->modelContent != ModelContent::Mesh)
+    {
+        m_referenceObjectMesh.Clear();
+        LoadReferenceParticleSources(*selected, aloPath);
+        if (!m_referenceParticleSources.empty())
+            m_referenceObjectStatus = ReferenceObjectStatus::Ok;
+        else
+            m_referenceObjectStatus = (ProbeModelSkinned(m_fileManager, modelPath) == ModelProbeResult::NotFound)
+                ? ReferenceObjectStatus::ModelMissing
+                : ReferenceObjectStatus::LoadFailed;
+        return;
+    }
+
     if (m_referenceObjectMesh.Load(m_fileManager, aloPath, hideBones))
     {
         if (m_pDevice != NULL)
@@ -834,6 +853,8 @@ void Engine::RebuildReferenceObjectMesh()
             }
         }
 
+        // A mesh projectile can carry particle proxies too (a glow, an exhaust).
+        if (selected) LoadReferenceParticleSources(*selected, aloPath);
         m_referenceObjectStatus = ReferenceObjectStatus::Ok;
         return;
     }

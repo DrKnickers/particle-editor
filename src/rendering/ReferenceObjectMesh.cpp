@@ -389,6 +389,41 @@ bool ReferenceObjectMesh::Load(IFileManager& fm, const std::string& aloPath,
     return !m_subMeshes.empty();
 }
 
+std::vector<ReferenceParticleProxy> ReadReferenceParticleProxies(IFileManager& fm,
+                                                                 const std::string& aloPath)
+{
+    std::vector<ReferenceParticleProxy> proxies;
+    IFile* file = fm.getFile(aloPath);
+    if (!file) return proxies;
+
+    AloModel model;
+    bool ok = false;
+    try { model = LoadAloModel(file, /*allowProxyOnly=*/true); ok = true; }
+    catch (const wexception&) { ok = false; }
+    file->Release();
+    // Silent on purpose: the caller reports a reference with no loadable particles
+    // as missing or failed, and a mesh model has already shown its own load status.
+    if (!ok) return proxies;
+
+    std::vector<D3DXMATRIX> boneObj;
+    computeBoneObjectMatrices(model.bones, boneObj);
+    for (const AloProxy& p : model.proxies)
+    {
+        if (p.hidden) continue;
+        const std::string fileName = p.name + ".alo";
+        if (!IsSafeRelativeAssetName(fileName)) continue;
+        ReferenceParticleProxy rp;
+        rp.aloPath = "Data\\Art\\Models\\" + fileName;
+        // A bone index past the skeleton puts the effect at the model's origin rather
+        // than dropping it: the particles still show, just not on their bone.
+        rp.offset  = (p.boneIndex < boneObj.size())
+            ? D3DXVECTOR3(boneObj[p.boneIndex]._41, boneObj[p.boneIndex]._42, boneObj[p.boneIndex]._43)
+            : D3DXVECTOR3(0, 0, 0);
+        proxies.push_back(rp);
+    }
+    return proxies;
+}
+
 bool ReferenceObjectMesh::GetBoundingBox(D3DXVECTOR3& outMin, D3DXVECTOR3& outMax) const
 {
     if (!m_hasBounds) return false;

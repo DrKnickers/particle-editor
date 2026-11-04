@@ -245,16 +245,24 @@ static Bytes connections(const std::vector<Bytes>& objs) {
     for (const auto& o : objs) kids.push_back(o);
     return container(0x0600, kids);
 }
+// 0x603 particle proxy: name (5), bone index (6), hidden flag (7).
+static Bytes proxyObj(const std::string& name, uint32_t boneIdx, uint32_t hidden) {
+    Bytes p, v;
+    cstr(v, name);     mini(p, 5, v); v.clear();
+    u32le(v, boneIdx); mini(p, 6, v); v.clear();
+    u32le(v, hidden);  mini(p, 7, v);
+    return leaf(0x0603, p);
+}
 static Bytes assemble(const std::vector<Bytes>& roots) {
     Bytes b; for (const auto& r : roots) b.insert(b.end(), r.begin(), r.end()); return b;
 }
 
-static AloModel parseBytes(const Bytes& b) {
+static AloModel parseBytes(const Bytes& b, bool allowProxyOnly = false) {
     MemoryFile* mf = new MemoryFile();
     if (!b.empty()) mf->write(b.data(), (unsigned long)b.size());
     mf->seek(0);
     try {
-        AloModel m = LoadAloModel(mf);
+        AloModel m = LoadAloModel(mf, allowProxyOnly);
         mf->Release();
         return m;
     } catch (...) {
@@ -808,6 +816,41 @@ int main(int argc, char** argv) {
         CHECK(m.connections.size() == 1 && m.connections[0].objectIndex == 0, "connection objectIndex=0");
         CHECK(m.connections.size() == 1 && m.connections[0].boneIndex == 1, "connection boneIndex=1 (Base)");
         CHECK(m.meshes.size() == 1, "mesh still decoded alongside skeleton/connections");
+    }
+    std::printf("[proxies]\n");
+    {
+        float rootM[12] = { 1,0,0,0, 0,1,0,0, 0,0,1,0 };
+        Bytes skel = skeleton({ bone("Root", 0xFFFFFFFFu, 1, false, 0, rootM),
+                                bone("Glow", 0,           1, false, 0, rootM) });
+        Bytes conn = connections({ proxyObj("P_Proton_Glow", 1, 0), proxyObj("P_Hidden", 0, 1) });
+
+        // A proxy-only model (no meshes) is still not a model to the default loader.
+        bool wrong = false;
+        try { parseBytes(assemble({ skel, conn })); }
+        catch (WrongFileException&) { wrong = true; } catch (...) {}
+        CHECK(wrong, "proxy-only model -> WrongFileException by default");
+
+        // The reference-object path opts in and gets the proxies.
+        AloModel m;
+        bool threw = false;
+        try { m = parseBytes(assemble({ skel, conn }), /*allowProxyOnly=*/true); } catch (...) { threw = true; }
+        CHECK(!threw, "proxy-only model loads with allowProxyOnly");
+        CHECK(m.meshes.empty(), "proxy-only model has no meshes");
+        CHECK(m.proxies.size() == 2, "2 proxies decoded");
+        CHECK(m.proxies.size() == 2 && m.proxies[0].name == "P_Proton_Glow", "proxy0 name");
+        CHECK(m.proxies.size() == 2 && m.proxies[0].boneIndex == 1 && !m.proxies[0].hidden, "proxy0 bone=1, visible");
+        CHECK(m.proxies.size() == 2 && m.proxies[1].boneIndex == 0 && m.proxies[1].hidden, "proxy1 bone=0, hidden");
+
+        // allowProxyOnly does not rescue a model with neither meshes nor proxies.
+        wrong = false;
+        try { parseBytes(assemble({ skel, connectionsStub() }), true); }
+        catch (WrongFileException&) { wrong = true; } catch (...) {}
+        CHECK(wrong, "no meshes and no proxies -> WrongFileException even with allowProxyOnly");
+
+        // A mesh model keeps its proxies alongside its meshes.
+        AloModel withMesh = parseBytes(assemble({ skel,
+            mesh("hull", { { material("MeshGloss.fx", {}), geometry(4, 2, "alD3dVertNU2") } }), conn }));
+        CHECK(withMesh.meshes.size() == 1 && withMesh.proxies.size() == 2, "mesh model keeps its proxies");
     }
     std::printf("[tolerant]\n");
     {

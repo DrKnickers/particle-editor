@@ -527,6 +527,9 @@
     <ClCompile Include="rendering\engine_reference.cpp">
       <Filter>Source Files\rendering</Filter>
     </ClCompile>
+    <ClCompile Include="rendering\engine_reference_particles.cpp">
+      <Filter>Source Files\rendering</Filter>
+    </ClCompile>
     <ClCompile Include="rendering\engine_shadows.cpp">
       <Filter>Source Files\rendering</Filter>
     </ClCompile>

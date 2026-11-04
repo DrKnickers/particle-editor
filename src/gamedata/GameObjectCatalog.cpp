@@ -680,33 +680,64 @@ namespace
             parseHardpointFile(fm, fn, out);
     }
 
-    // False when the model has no top-level mesh chunk (0x0400) -- nothing the reference
-    // renderer could draw. Two shapes reach it among stock projectiles: a particle-system
-    // .alo (root 0x0900), and a skeleton whose bones only carry particle proxies (0x0200 +
-    // 0x0600, no mesh). Walks the top-level chunk headers only (8 bytes each). A missing,
-    // short, or malformed file counts as "has a mesh", so the on-select probe still reports
-    // it as missing / failed instead of it vanishing here.
-    bool ModelHasMesh(IFileManager& fm, const std::string& modelPath)
+    // Chunk ids and walk bounds for ClassifyModelContent. The caps stop a corrupt file
+    // from spinning the walk; stock models stay far below them.
+    constexpr uint32_t      kChunkMesh             = 0x0400;
+    constexpr uint32_t      kChunkConnections      = 0x0600;
+    constexpr uint32_t      kChunkConnProxy        = 0x0603;
+    constexpr uint32_t      kChunkParticleSystem   = 0x0900;
+    constexpr unsigned long kChunkHeaderBytes      = 8;     // u32 id + u32 size
+    constexpr int           kMaxTopLevelChunks     = 64;
+    constexpr int           kMaxConnectionChildren = 4096;
+
+    // What a model .alo holds, for deciding whether the reference renderer can show it.
+    // Stock projectiles come in three shapes: a mesh (0x0400), a particle-system .alo
+    // (root 0x0900), and a skeleton whose bones only carry particle proxies (0x0603 under
+    // the 0x0600 connections, no mesh). Walks chunk headers only (8 bytes each): the top
+    // level, and one level into 0x0600. A missing, short, or malformed file counts as a
+    // mesh, so the on-select probe still reports it as missing / failed instead of it
+    // vanishing here.
+    ModelContent ClassifyModelContent(IFileManager& fm, const std::string& modelPath)
     {
-        if (!IsSafeRelativeAssetName(modelPath)) return true;
+        if (!IsSafeRelativeAssetName(modelPath)) return ModelContent::Mesh;
         IFile* f = fm.getFile(std::string("Data\\Art\\Models\\") + modelPath);
-        if (f == nullptr) return true;
+        if (f == nullptr) return ModelContent::Mesh;
         const unsigned long size = f->size();
-        unsigned long pos = 0;
-        bool hasMesh = false, walked = true;
-        for (int chunks = 0; pos < size; ++chunks)
-        {
+        // Reads the header at `at`; false when it doesn't fit inside [at, end).
+        auto header = [&](unsigned long at, unsigned long end, uint32_t& id, unsigned long& body) {
             uint32_t hdr[2] = {};
-            if (chunks == 64 || size - pos < sizeof hdr) { walked = false; break; }
-            f->seek(pos);
-            if (f->read(hdr, sizeof hdr) != sizeof hdr) { walked = false; break; }
-            if (hdr[0] == 0x0400) { hasMesh = true; break; }
-            const unsigned long body = hdr[1] & 0x7FFFFFFF;   // high bit = container flag
-            if (body > size - pos - sizeof hdr) { walked = false; break; }
-            pos += sizeof hdr + body;
+            if (at > end || end - at < sizeof hdr) return false;
+            f->seek(at);
+            if (f->read(hdr, sizeof hdr) != sizeof hdr) return false;
+            id   = hdr[0];
+            body = hdr[1] & 0x7FFFFFFF;   // high bit = container flag
+            return body <= end - at - sizeof hdr;
+        };
+        ModelContent content = ModelContent::Nothing;
+        bool walked = true;
+        unsigned long pos = 0;
+        for (int chunks = 0; pos < size && content == ModelContent::Nothing; ++chunks)
+        {
+            uint32_t id; unsigned long body;
+            if (chunks == kMaxTopLevelChunks || !header(pos, size, id, body)) { walked = false; break; }
+            if (id == kChunkMesh) content = ModelContent::Mesh;
+            else if (id == kChunkParticleSystem && pos == 0) content = ModelContent::ParticleSystem;
+            else if (id == kChunkConnections)
+            {
+                const unsigned long end = pos + kChunkHeaderBytes + body;
+                unsigned long inner = pos + kChunkHeaderBytes;
+                for (int kids = 0; inner < end && kids < kMaxConnectionChildren; ++kids)
+                {
+                    uint32_t kid; unsigned long kidBody;
+                    if (!header(inner, end, kid, kidBody)) break;
+                    if (kid == kChunkConnProxy) { content = ModelContent::ParticleProxies; break; }
+                    inner += kChunkHeaderBytes + kidBody;
+                }
+            }
+            pos += kChunkHeaderBytes + body;
         }
         f->Release();
-        return hasMesh || !walked;
+        return walked ? content : ModelContent::Mesh;
     }
 }
 
@@ -844,11 +875,16 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out)
         ref.conflict    = cl.conflict;
         ref.dualEnv     = rm.dualEnv;
         ref.affiliation = prof.affiliation;   // surfaced as the picker's faction filter
-        // A projectile whose model has no mesh (a particle system, or a skeleton of particle
-        // proxies) has nothing the reference renderer can draw -> leave it out. Projectiles
-        // only: the rest of the build stays XML-only (see the header).
-        if (ref.role == ObjRole::Projectile && !ModelHasMesh(fm, rm.path))
-            ref.role = ObjRole::Excluded;
+        // A projectile's model may be a mesh, a particle system, or a skeleton of particle
+        // proxies; the reference renderer shows all three. One with none of them has
+        // nothing to show -> leave it out. Projectiles only: the rest of the build stays
+        // XML-only (see the header).
+        if (ref.role == ObjRole::Projectile)
+        {
+            ref.modelContent = ClassifyModelContent(fm, rm.path);
+            if (ref.modelContent == ModelContent::Nothing)
+                ref.role = ObjRole::Excluded;
+        }
         // <Scale_Factor> render multiplier: inherit up the Variant_Of chain
         // (first-non-empty), then guard-parse -- reject empty / non-finite / non-positive
         // (a 0 or negative scale yields a singular world matrix -> un-pickable object;

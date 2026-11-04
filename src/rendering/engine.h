@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <set>
 #include <utility>
 
 #include "gamedata/managers.h"
@@ -73,6 +74,13 @@ public:
 
 
     bool Detached() const { return m_parent == NULL; }
+
+    // Moves a free-standing anchor (one with no parent), e.g. the reference particles'.
+    void MoveTo(const D3DXVECTOR3& position, const D3DXVECTOR3& velocity = D3DXVECTOR3(0, 0, 0))
+    {
+        m_position = position;
+        m_velocity = velocity;
+    }
 
     virtual void Detach()
     {
@@ -1098,6 +1106,19 @@ private:
 	// transparent) -- each rigid sub-mesh placed by its bone, running its own game
 	// shader 1:1, blended per its phase/blend class. No-op when empty/unresolved.
 	void				RenderReferenceObject();
+	// Reference-object particles (engine_reference_particles.cpp): a projectile whose
+	// model is a particle system, or the particle proxies on a projectile's model. They
+	// run beside the edited effect, never as part of it: edits, the spawner cap and the
+	// observation tooling see only m_instances. Resting runs sit at the reference
+	// placement and restart when they finish; in match-projectile mode each live shot
+	// carries its own runs, which stop emitting when the shot ends.
+	void				LoadReferenceParticleSources(const GameObjectRef& ref, const std::string& aloPath);
+	void				ClearReferenceParticles(bool keepSources);
+	void				UpdateReferenceParticles(TimeF currentTime);
+	void				RenderReferenceParticles(IDirect3DDevice9* pDevice, bool heat);
+	bool				ReferenceParticlesHaveLiveHeat() const;
+	void				ReleaseReferenceParticleTextures();
+	void				ReacquireReferenceParticleTextures();
 	// One opaque or transparent pass of the reference object (unit + hardpoint
 	// attachments) placed at objectWorld. RenderReferenceObject calls it for the
 	// resting object and for each live projectile shot.
@@ -1145,6 +1166,25 @@ private:
 	// Particle management
     std::vector<std::unique_ptr<ParticleSystemInstance>> m_instances;
     ParticleSystemInstanceBorrowTable m_instanceBorrows;
+
+    // Reference-object particles (see LoadReferenceParticleSources). A source is one
+    // read-only particle system and where it sits on the model; a run is one live
+    // instance of a source. Runs are declared after sources so they die first.
+    struct ReferenceParticleSource
+    {
+        std::unique_ptr<ParticleSystem> system;
+        D3DXVECTOR3                     offset;   // object-space position on the model
+    };
+    struct ReferenceParticleRun
+    {
+        size_t                                  sourceIdx = 0;
+        std::unique_ptr<Object3D>               anchor;     // owned; the run follows it
+        std::unique_ptr<ParticleSystemInstance> instance;
+        ParticleSystemInstanceHandle            shot;       // empty = resting at the placement
+    };
+    std::vector<ReferenceParticleSource> m_referenceParticleSources;
+    std::vector<ReferenceParticleRun>    m_referenceParticleRuns;
+    std::set<std::uint64_t>              m_referenceShotTokens;   // shots that already carry runs
     int m_numParticles;
     int m_numEmitters;
 

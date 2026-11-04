@@ -261,6 +261,7 @@
     <ClCompile Include="rendering\engine_device.cpp" />
     <ClCompile Include="rendering\engine_environment.cpp" />
     <ClCompile Include="rendering\engine_reference.cpp" />
+    <ClCompile Include="rendering\engine_reference_particles.cpp" />
     <ClCompile Include="rendering\engine_shadows.cpp" />
     <ClCompile Include="rendering\engine_gizmo.cpp" />
     <ClCompile Include="rendering\engine_render.cpp" />

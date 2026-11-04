@@ -587,8 +587,10 @@ void Engine::Update()
         {
             m_numParticles += (*it)->Update(currentTime);
 
-            // Check if the instance is dead and nobody's referring to it anymore
-            if ((*it)->IsDead() && (*it)->Detached())
+            // Check if the instance is dead and nobody's referring to it anymore. A
+            // projectile shot stays until its flight ends even when the edited effect
+            // on it has finished: the shot (its model and particles) outlives a flash.
+            if ((*it)->IsDead() && (*it)->Detached() && !(*it)->IsProjectileShotLive())
             {
                 m_instanceBorrows.Unregister(
                     it->get(), (*it)->GetInstanceToken());
@@ -599,6 +601,7 @@ void Engine::Update()
                 ++it;
             }
         }
+        UpdateReferenceParticles(currentTime);
         m_lastUpdatedSimTime        = currentTime;
         m_lastUpdatedInstanceCount  = m_instances.size();
         ++m_completedFullUpdateCount;
@@ -889,6 +892,7 @@ bool Engine::Render()
     {
         instance->RenderNormal(m_pDevice);
 	}
+    RenderReferenceParticles(m_pDevice, /*heat=*/false);
     m_pDevice->SetSamplerState(0, D3DSAMP_MIPFILTER,     oldMip0);
     m_pDevice->SetSamplerState(1, D3DSAMP_MIPFILTER,     oldMip1);
     m_pDevice->SetSamplerState(0, D3DSAMP_MIPMAPLODBIAS, oldBias0);
@@ -1084,9 +1088,10 @@ bool Engine::Render()
 	// starts false and is re-armed false wherever the distort RT is
 	// (re)created (ResetParameters), so a fresh/reset RT always gets one
 	// explicit neutral clear before the skip may engage.
-	bool anyHeat = false;
+	bool anyHeat = ReferenceParticlesHaveLiveHeat();
 	for (auto& instance : m_instances)
 	{
+		if (anyHeat) break;
 		if (instance->HasLiveHeat()) { anyHeat = true; break; }
 	}
 	if (anyHeat || !m_distortRtNeutral)
@@ -1101,6 +1106,7 @@ bool Engine::Render()
 		{
 			instance->RenderHeat(m_pDevice);
 		}
+		RenderReferenceParticles(m_pDevice, /*heat=*/true);
 		// Heat drew → the RT holds distortion (re-clear next frame);
 		// nothing drew → it is freshly neutral and stays skippable.
 		m_distortRtNeutral = !anyHeat;

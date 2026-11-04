@@ -232,6 +232,9 @@ bool Engine::KillParticleSystem(ParticleSystemInstanceHandle handle)
 
 void Engine::Clear()
 {
+	// Reference particles live outside the document, but their counts share the
+	// totals reset below; their sources stay so resting runs restart next update.
+	ClearReferenceParticles(/*keepSources=*/true);
 	++m_particleSystemDocumentEpoch;
 	m_deferredParticleSystemChange.Reset();
     m_instanceBorrows.Clear();
@@ -379,6 +382,7 @@ void Engine::ReleaseInstanceTextures()
 	{
 		instance->ReleaseDeviceTextures();
 	}
+	ReleaseReferenceParticleTextures();
 }
 
 void Engine::ReacquireInstanceTextures()
@@ -387,6 +391,7 @@ void Engine::ReacquireInstanceTextures()
 	{
 		instance->ReacquireDeviceTextures(*this);
 	}
+	ReacquireReferenceParticleTextures();
 }
 
 void Engine::OnParticleSystemChanged(int track)

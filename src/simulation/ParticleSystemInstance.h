@@ -165,6 +165,9 @@ public:
 	void RemoveEmitter(EmitterInstance* instance);
 
     std::uint64_t GetInstanceToken() const { return m_instanceToken; }
+    // Live emitter instances, each counted once in Engine::m_numEmitters. A caller
+    // that destroys an instance outside Engine::Clear() releases them from that count.
+    size_t NumLiveEmitters() const { return m_emitters.size(); }
 
 	ParticleSystemInstance(Engine& engine, const ParticleSystem& system,
                            Object3D* parent, std::uint64_t instanceToken);

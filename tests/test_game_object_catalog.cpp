@@ -992,7 +992,8 @@ int main(int argc, char** argv)
             "  <Projectile Name=\"Proj_Both\"><Land_Model_Name>W_Both.ALO</Land_Model_Name><Max_Speed>-3</Max_Speed>"
             "    <Space_Model_Name>W_Both.ALO</Space_Model_Name></Projectile>"
             "  <Projectile Name=\"Proj_Ground_Flame\"><Land_Model_Name>P_Flame.ALO</Land_Model_Name></Projectile>"  // particle model
-            "  <Projectile Name=\"Proj_Ship_Glow\"><Space_Model_Name>P_Glow.ALO</Space_Model_Name></Projectile>"    // proxy-only skeleton
+            "  <Projectile Name=\"Proj_Ship_Glow\"><Space_Model_Name>P_Glow.ALO</Space_Model_Name></Projectile>"    // connections, no proxy
+            "  <Projectile Name=\"Proj_Ship_Proton\"><Space_Model_Name>P_Proton.ALO</Space_Model_Name></Projectile>"  // proxy-only skeleton
             "  <Projectile Name=\"Proj_Ground_Lost\"><Land_Model_Name>W_Lost.ALO</Land_Model_Name></Projectile>"   // model absent
             "  <Projectile Name=\"Proj_Ground_Torn\"><Land_Model_Name>W_Torn.ALO</Land_Model_Name></Projectile>"   // truncated header
             "  <Projectile Name=\"Proj_No_Model\"><Projectile_Damage>5</Projectile_Damage></Projectile>"
@@ -1010,6 +1011,9 @@ int main(int argc, char** argv)
         pfm.files["Data\\Art\\Models\\W_Both.ALO"]  = skeleton + chunk(0x0400, "", true);
         pfm.files["Data\\Art\\Models\\P_Flame.ALO"] = chunk(0x0900, std::string(16, '\x03'), true);
         pfm.files["Data\\Art\\Models\\P_Glow.ALO"]  = skeleton + chunk(0x0600, std::string(8, '\x04'), true);
+        pfm.files["Data\\Art\\Models\\P_Proton.ALO"] =
+            skeleton + chunk(0x0600, chunk(0x0601, std::string(4, '\x01'), false) +
+                                     chunk(0x0603, std::string(6, '\x05'), false), true);
         pfm.files["Data\\Art\\Models\\W_Torn.ALO"]  = std::string("\x00\x02\x00\x00", 4);   // shorter than a header
 
         GameObjectCatalog pc;
@@ -1029,11 +1033,17 @@ int main(int argc, char** argv)
               red->projectileCategory == "Laser", "variant overrides speed, inherits range and category");
         CHECK(both && both->projectileSpeed == 0.0f && both->projectileRange == 50.0f && both->projectileCategory.empty(),
               "negative speed -> 0 (can't fly); absent range -> the game's default 50");
+        CHECK(laser && laser->modelContent == ModelContent::Mesh, "mesh projectile -> Mesh content");
         const GameObjectRef* flame = find(pc, "Proj_Ground_Flame");
-        CHECK(flame && flame->role == ObjRole::Excluded && !IsPickerListed(*flame),
-              "particle-model projectile -> Excluded");
+        CHECK(flame && flame->role == ObjRole::Projectile && IsPickerListed(*flame) &&
+              flame->modelContent == ModelContent::ParticleSystem,
+              "particle-system model -> listed as a particle projectile");
+        const GameObjectRef* proton = find(pc, "Proj_Ship_Proton");
+        CHECK(proton && proton->role == ObjRole::Projectile && IsPickerListed(*proton) &&
+              proton->modelContent == ModelContent::ParticleProxies,
+              "skeleton carrying particle proxies -> listed as a particle projectile");
         const GameObjectRef* glow = find(pc, "Proj_Ship_Glow");
-        CHECK(glow && glow->role == ObjRole::Excluded, "skeleton of particle proxies, no mesh -> Excluded");
+        CHECK(glow && glow->role == ObjRole::Excluded, "skeleton with no mesh and no proxy -> Excluded");
         const GameObjectRef* lost = find(pc, "Proj_Ground_Lost");
         CHECK(lost && lost->role == ObjRole::Projectile,
               "missing model stays listed (the on-select probe reports it)");

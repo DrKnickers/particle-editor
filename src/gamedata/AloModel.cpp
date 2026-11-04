@@ -76,8 +76,9 @@ namespace
     const ChunkType CHUNK_BONE_DATA     = 0x205;    // data, 56 B (parentIndex, visible, matrix[12])
     const ChunkType CHUNK_BONE_DATA_BB  = 0x206;    // data, 60 B (+ billboardMode before the matrix)
     const ChunkType CHUNK_CONNECTIONS   = 0x600;    // container
-    //  0x601 counts (data) / 0x603 proxies / 0x604 dazzles -- skipped
+    //  0x601 counts (data) / 0x604 dazzles -- skipped
     const ChunkType CHUNK_CONN_OBJECT   = 0x602;    // data leaf, mini-chunks
+    const ChunkType CHUNK_CONN_PROXY    = 0x603;    // data leaf, mini-chunks
 
     // Bone-data leaf sizes (max2alamo alo_build.cpp: build_bone_data).
     const long kBoneData205Bytes = 56;   // parentIndex(4) + visible(4) + matrix(48)
@@ -93,6 +94,11 @@ namespace
     // 0x602 connection mini-chunk ids (alo_build.cpp build_connections).
     const ChunkType MINI_CONN_OBJECT = 2;   // u32 objectIndex
     const ChunkType MINI_CONN_BONE   = 3;   // u32 boneIndex
+
+    // 0x603 proxy mini-chunk ids (alo-viewer Models.cpp).
+    const ChunkType MINI_PROXY_NAME   = 5;   // string: particle .alo stem
+    const ChunkType MINI_PROXY_BONE   = 6;   // u32 boneIndex
+    const ChunkType MINI_PROXY_HIDDEN = 7;   // u32 isHidden (non-zero = hidden)
 
     const long kIndexSize = 2;  // uint16 triangle-list indices
 
@@ -435,10 +441,12 @@ namespace
     }
 
     // r is positioned inside a 0x600 connections container. Reads the 0x602
-    // object->bone entries; skips 0x601 counts + 0x603/0x604 proxies/dazzles.
+    // object->bone entries and the 0x603 particle proxies; skips 0x601 counts +
+    // 0x604 dazzles.
     // TOLERANT: a non-4-byte mini is skipped rather than throwing. A flood of
     // connection entries is rejected before growing the vector without bound.
-    void ReadConnections(ChunkReader& r, std::vector<AloConnection>& conns)
+    void ReadConnections(ChunkReader& r, std::vector<AloConnection>& conns,
+                         std::vector<AloProxy>& proxies)
     {
         VerifyContainer(r);
         ChunkType t;
@@ -460,16 +468,33 @@ namespace
                 }
                 conns.push_back(c);
             }
+            else if (t == CHUNK_CONN_PROXY)
+            {
+                Verify(proxies.size() < kMaxAloConnections);
+                VerifyDataLeaf(r);
+                AloProxy p;
+                ChunkType mt;
+                while ((mt = r.nextMini()) != -1)
+                {
+                    if (mt == MINI_PROXY_NAME)
+                        p.name = r.readString();
+                    else if (mt == MINI_PROXY_BONE && r.size() == (long)sizeof(uint32_t))
+                        p.boneIndex = readU32(r);
+                    else if (mt == MINI_PROXY_HIDDEN && r.size() == (long)sizeof(uint32_t))
+                        p.hidden = readU32(r) != 0;
+                }
+                if (!p.name.empty()) proxies.push_back(p);
+            }
             else if (r.size() < 0)
             {
                 r.skip();   // unknown container (defensive; proxies are data leaves)
             }
-            // 0x601 counts + 0x603/0x604 (data leaves) auto-skip.
+            // 0x601 counts + 0x604 (data leaves) auto-skip.
         }
     }
 }
 
-AloModel LoadAloModel(IFile* file)
+AloModel LoadAloModel(IFile* file, bool allowProxyOnly)
 {
     ChunkReader r(file);
     AloModel model;
@@ -495,7 +520,7 @@ AloModel LoadAloModel(IFile* file)
         }
         else if (t == CHUNK_CONNECTIONS)
         {
-            ReadConnections(r, model.connections); // object->bone bindings
+            ReadConnections(r, model.connections, model.proxies); // object->bone bindings + proxies
         }
         else if (r.size() < 0)
         {
@@ -505,7 +530,7 @@ AloModel LoadAloModel(IFile* file)
         // Any unexpected root DATA chunk is auto-skipped by the next next().
     }
 
-    if (model.meshes.empty())
+    if (model.meshes.empty() && !(allowProxyOnly && !model.proxies.empty()))
         throw WrongFileException();   // not a mesh-bearing .alo
 
     return model;
