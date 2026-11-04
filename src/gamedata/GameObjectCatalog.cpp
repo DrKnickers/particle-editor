@@ -130,6 +130,12 @@ namespace
         std::string    maxSpeedRaw;       // <Max_Speed>, world units per logic frame
         std::string    flightDistanceRaw; // <Projectile_Max_Flight_Distance>, world units
         std::string    categoryRaw;       // <Projectile_Category>
+        std::string    turnRateRaw;       // <Max_Rate_Of_Turn>, degrees per logic frame
+        std::string    bombFallAccelRaw;  // <Projectile_Bomb_Fall_Accel_Rate>
+        std::string    grenadeGravityRaw; // <Projectile_Grenade_Gravity>
+        std::string    grenadeLobModRaw;  // <Projectile_Grenade_Gravity_Lob_Mod>
+        std::string    grenadeSlowerRaw;  // <Projectile_Grenade_Can_Lob_Slower>
+        std::string    maxLifetimeRaw;    // <Projectile_Max_Lifetime>, seconds
         // fieldable reference-graph SOURCE lists (this object references others).
         std::string    costRaw;          // <Build_Cost_Credits> (fallback <Required_Star_Base_Level>) -> buildable
         std::string    buildMenuRaw;     // <Tactical_Buildable_Objects_Campaign/_Multiplayer> -> names it builds
@@ -289,6 +295,12 @@ namespace
                 re.maxSpeedRaw       = trim(WideToAnsi(childData(e, L"Max_Speed")));
                 re.flightDistanceRaw = trim(WideToAnsi(childData(e, L"Projectile_Max_Flight_Distance")));
                 re.categoryRaw       = trim(WideToAnsi(childData(e, L"Projectile_Category")));
+                re.turnRateRaw       = trim(WideToAnsi(childData(e, L"Max_Rate_Of_Turn")));
+                re.bombFallAccelRaw  = trim(WideToAnsi(childData(e, L"Projectile_Bomb_Fall_Accel_Rate")));
+                re.grenadeGravityRaw = trim(WideToAnsi(childData(e, L"Projectile_Grenade_Gravity")));
+                re.grenadeLobModRaw  = trim(WideToAnsi(childData(e, L"Projectile_Grenade_Gravity_Lob_Mod")));
+                re.grenadeSlowerRaw  = trim(WideToAnsi(childData(e, L"Projectile_Grenade_Can_Lob_Slower")));
+                re.maxLifetimeRaw    = trim(WideToAnsi(childData(e, L"Projectile_Max_Lifetime")));
                 // fieldable source lists.
                 re.costRaw        = trim(WideToAnsi(childData(e, L"Build_Cost_Credits")));
                 if (re.costRaw.empty())
@@ -401,6 +413,13 @@ namespace
             cur = asciiLower(it->second.variantOf);
         }
         return std::string();
+    }
+
+    // The engine's XML boolean: Yes / True / 1, any case; anything else is false.
+    bool IsGameTrue(const std::string& raw)
+    {
+        const std::string v = asciiLower(raw);
+        return v == "yes" || v == "true" || v == "1";
     }
 
     // Consume one fieldable-token work operation BEFORE its lookup/push/map
@@ -916,6 +935,19 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out)
                 if (std::isfinite(range) && range >= 0.0f) ref.projectileRange = range;
             }
             ref.projectileCategory = resolveRaw(kv.first, byName, &RawEntry::categoryRaw);
+
+            // Curved-path tags (#967). A missing or unusable value keeps 0, which flies
+            // that part of the path the way the game's zero default does.
+            auto nonNegative = [&](std::string RawEntry::* field) {
+                const float v = std::strtof(resolveRaw(kv.first, byName, field).c_str(), nullptr);
+                return (std::isfinite(v) && v > 0.0f) ? v : 0.0f;
+            };
+            ref.projectileTurnRate         = nonNegative(&RawEntry::turnRateRaw);
+            ref.projectileBombFallAccel    = nonNegative(&RawEntry::bombFallAccelRaw);
+            ref.projectileGrenadeGravity   = nonNegative(&RawEntry::grenadeGravityRaw);
+            ref.projectileGrenadeLobMod    = nonNegative(&RawEntry::grenadeLobModRaw);
+            ref.projectileMaxLifetimeSec   = nonNegative(&RawEntry::maxLifetimeRaw);
+            ref.projectileGrenadeLobSlower = IsGameTrue(resolveRaw(kv.first, byName, &RawEntry::grenadeSlowerRaw));
         }
         // ref.fieldable / fieldSource filled by the fieldable pass below.
         out.objects.push_back(ref);

@@ -429,6 +429,7 @@ private:
         cfg.squiggleAmplitude = SpawnerJsonToVec3(params.value("squiggleAmplitude", nlohmann::json::array()));
         cfg.squiggleFrequency = params.value("squiggleFrequency", 1.0f);
         cfg.matchProjectile   = params.value("matchProjectile", false);
+        cfg.targetPosition    = SpawnerJsonToVec3(params.value("targetPosition", nlohmann::json::array()));
         return cfg;
     }
 
@@ -454,6 +455,10 @@ private:
             {"squiggleAmplitude", vec3(m_spawnerConfig.squiggleAmplitude)},
             {"squiggleFrequency", m_spawnerConfig.squiggleFrequency},
             {"matchProjectile",   m_spawnerConfig.matchProjectile},
+            {"targetPosition",    vec3(m_spawnerConfig.targetPosition)},
+            // Host-computed, read-only: the game wouldn't fire the reference projectile
+            // at this target (a grenade out of lob range), so neither does the preview.
+            {"projectileOutOfReach", IsProjectileTargetOutOfReach(m_spawnerConfig, m_engine)},
         };
     }
 
@@ -462,7 +467,11 @@ private:
         m_spawnerConfig = SpawnerConfigFromJson(params);
         ClampSpawnerConfig(m_spawnerConfig);
         if (m_spawnerDriver) m_spawnerDriver->SetConfig(m_spawnerConfig);
-        if (m_engine) m_engine->SetReferenceShotMode(m_spawnerConfig.matchProjectile);
+        if (m_engine)
+        {
+            m_engine->SetReferenceShotMode(m_spawnerConfig.matchProjectile);
+            m_engine->SetReferenceShotTarget(m_spawnerConfig.targetPosition);
+        }
     }
 
     void ApplySpawnerStop()

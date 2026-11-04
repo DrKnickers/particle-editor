@@ -76,9 +76,9 @@ const MOCK_SKINNED_REFS = new Set<string>(["Stormtrooper_Squad"]);
 // <Max_Speed> / <Projectile_Max_Flight_Distance>): 30 x Max_Speed u/s, and
 // ceil(range / Max_Speed) logic frames of flight.
 const MOCK_PROJECTILE_FLIGHT: Record<string, ReferenceProjectileDto> = {
-  Proj_Ground_Blaster_Red:    { flyable: true, speed: 330, range: 500, flightSec: 46 / 30, category: "Laser", straightPath: true },
-  Proj_Ship_Turbolaser_Green: { flyable: true, speed: 600, range: 1500, flightSec: 75 / 30, category: "Laser", straightPath: true },
-  Proj_Proton_Torpedo:        { flyable: true, speed: 240, range: 2000, flightSec: 250 / 30, category: "MISSILE", straightPath: false },
+  Proj_Ground_Blaster_Red:    { flyable: true, speed: 330, range: 500, flightSec: 46 / 30, category: "Laser", pathEmulated: true, usesTarget: false },
+  Proj_Ship_Turbolaser_Green: { flyable: true, speed: 600, range: 1500, flightSec: 75 / 30, category: "Laser", pathEmulated: true, usesTarget: false },
+  Proj_Proton_Torpedo:        { flyable: true, speed: 240, range: 2000, flightSec: 250 / 30, category: "MISSILE", pathEmulated: true, usesTarget: true },
 };
 
 // Names that resolve in the catalog but whose model file is absent from the

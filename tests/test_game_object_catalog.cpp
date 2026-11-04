@@ -986,10 +986,17 @@ int main(int argc, char** argv)
             "<Projectiles>"
             "  <Projectile Name=\"Proj_Ship_Laser\"><Space_Model_Name>W_Laser.ALO</Space_Model_Name>"
             "    <Max_Speed> 11.0 </Max_Speed><Projectile_Max_Flight_Distance>500</Projectile_Max_Flight_Distance>"
-            "    <Projectile_Category>Laser</Projectile_Category></Projectile>"
+            "    <Projectile_Category>Laser</Projectile_Category><Max_Rate_Of_Turn>3.0</Max_Rate_Of_Turn>"
+            "    <Projectile_Bomb_Fall_Accel_Rate>0.2</Projectile_Bomb_Fall_Accel_Rate>"
+            "    <Projectile_Grenade_Gravity>0.7</Projectile_Grenade_Gravity>"
+            "    <Projectile_Grenade_Gravity_Lob_Mod>0.8</Projectile_Grenade_Gravity_Lob_Mod>"
+            "    <Projectile_Grenade_Can_Lob_Slower>Yes</Projectile_Grenade_Can_Lob_Slower>"
+            "    <Projectile_Max_Lifetime>900.0</Projectile_Max_Lifetime></Projectile>"
             "  <Projectile Name=\"Proj_Ship_Laser_Red\"><Variant_Of_Existing_Type>Proj_Ship_Laser</Variant_Of_Existing_Type>"
-            "    <Max_Speed>20</Max_Speed></Projectile>"
+            "    <Max_Speed>20</Max_Speed><Max_Rate_Of_Turn>5</Max_Rate_Of_Turn>"
+            "    <Projectile_Grenade_Can_Lob_Slower>no</Projectile_Grenade_Can_Lob_Slower></Projectile>"
             "  <Projectile Name=\"Proj_Both\"><Land_Model_Name>W_Both.ALO</Land_Model_Name><Max_Speed>-3</Max_Speed>"
+            "    <Max_Rate_Of_Turn>-2</Max_Rate_Of_Turn>"
             "    <Space_Model_Name>W_Both.ALO</Space_Model_Name></Projectile>"
             "  <Projectile Name=\"Proj_Ground_Flame\"><Land_Model_Name>P_Flame.ALO</Land_Model_Name></Projectile>"  // particle model
             "  <Projectile Name=\"Proj_Ship_Glow\"><Space_Model_Name>P_Glow.ALO</Space_Model_Name></Projectile>"    // connections, no proxy
@@ -1033,6 +1040,16 @@ int main(int argc, char** argv)
               red->projectileCategory == "Laser", "variant overrides speed, inherits range and category");
         CHECK(both && both->projectileSpeed == 0.0f && both->projectileRange == 50.0f && both->projectileCategory.empty(),
               "negative speed -> 0 (can't fly); absent range -> the game's default 50");
+        CHECK(laser && laser->projectileTurnRate == 3.0f && laser->projectileBombFallAccel == 0.2f &&
+              laser->projectileGrenadeGravity == 0.7f && laser->projectileGrenadeLobMod == 0.8f &&
+              laser->projectileGrenadeLobSlower && laser->projectileMaxLifetimeSec == 900.0f,
+              "curved-path tags parsed (turn rate, bomb fall, grenade gravity / lob mod / lob slower, lifetime)");
+        CHECK(red && red->projectileTurnRate == 5.0f && !red->projectileGrenadeLobSlower &&
+              red->projectileGrenadeGravity == 0.7f && red->projectileMaxLifetimeSec == 900.0f,
+              "variant overrides turn rate and lob-slower ('no'), inherits the rest");
+        CHECK(both && both->projectileTurnRate == 0.0f && both->projectileGrenadeGravity == 0.0f &&
+              !both->projectileGrenadeLobSlower,
+              "negative or absent curved-path tags -> 0 / false");
         CHECK(laser && laser->modelContent == ModelContent::Mesh, "mesh projectile -> Mesh content");
         const GameObjectRef* flame = find(pc, "Proj_Ground_Flame");
         CHECK(flame && flame->role == ObjRole::Projectile && IsPickerListed(*flame) &&

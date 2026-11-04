@@ -79,9 +79,22 @@ int ParticleSystemInstance::Update(TimeF currentTime)
             // each tick keeps emitted-particle inheritance correct
             // (EmitterInstance parentLinkStrength).
             float tau = (float)(currentTime - m_spawnTime);
-            SpawnerPathState st = { m_spawnPos, m_spawnVel, m_accel,
-                                    m_squiggleAmp, m_squiggleFreq, m_squigglePhase };
-            EvalSpawnerPath(st, tau, m_position, m_velocity);
+            if (!m_flightPath.empty())
+            {
+                // A curved shot (#967) follows its precomputed game path; its model
+                // faces the way that frame's step flew.
+                float pos[3], vel[3], facing[3];
+                SampleFlightPath(m_flightPath, tau, pos, vel, facing);
+                m_position      = D3DXVECTOR3(pos[0], pos[1], pos[2]);
+                m_velocity      = D3DXVECTOR3(vel[0], vel[1], vel[2]);
+                m_shotDirection = D3DXVECTOR3(facing[0], facing[1], facing[2]);
+            }
+            else
+            {
+                SpawnerPathState st = { m_spawnPos, m_spawnVel, m_accel,
+                                        m_squiggleAmp, m_squiggleFreq, m_squigglePhase };
+                EvalSpawnerPath(st, tau, m_position, m_velocity);
+            }
             m_lastUpdateTime = currentTime;
         }
 

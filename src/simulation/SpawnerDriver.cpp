@@ -51,6 +51,7 @@ void ClampSpawnerConfig(SpawnerConfig& cfg)
     cfg.maxLifetimeSec = Clamp(cfg.maxLifetimeSec, 0.0f, SpawnerDriver::MAX_LIFETIME_SEC);
     cfg.position       = ClampVec(cfg.position, SpawnerDriver::JITTER_MAX);
     cfg.velocity       = ClampVec(cfg.velocity, SpawnerDriver::JITTER_MAX);
+    cfg.targetPosition = ClampVec(cfg.targetPosition, SpawnerDriver::JITTER_MAX);
     cfg.jitterPosition = ClampVec(cfg.jitterPosition, SpawnerDriver::JITTER_MAX);
     cfg.acceleration      = ClampVec(cfg.acceleration,      SpawnerDriver::JITTER_MAX);
     cfg.squiggleAmplitude = ClampVec(cfg.squiggleAmplitude, SpawnerDriver::JITTER_MAX);
@@ -61,6 +62,118 @@ void ClampSpawnerConfig(SpawnerConfig& cfg)
         cfg.mode = SpawnerConfig::Mode::Auto;
     }
 }
+
+ProjectileFlightParams ReferenceFlightParams(const Engine::ReferenceProjectileInfo& proj, float groundZ)
+{
+    ProjectileFlightParams p;
+    p.speedPerFrame       = proj.speedPerFrame;
+    p.range               = proj.range;
+    p.turnRateDegPerFrame = proj.turnRateDegPerFrame;
+    p.bombFallAccel       = proj.bombFallAccel;
+    p.grenadeGravity      = proj.grenadeGravity;
+    p.grenadeLobMod       = proj.grenadeLobMod;
+    p.grenadeCanLobSlower = proj.grenadeCanLobSlower;
+    p.maxLifetimeSec      = proj.maxLifetimeSec;
+    p.groundZ             = groundZ;
+    p.clusterBomb         = IsClusterBombCategory(proj.category);
+    return p;
+}
+
+bool IsProjectileTargetOutOfReach(const SpawnerConfig& cfg, const Engine* engine)
+{
+    Engine::ReferenceProjectileInfo proj;
+    if (!cfg.matchProjectile || engine == NULL || !engine->GetReferenceProjectile(proj)) return false;
+    if (ProjectileFlightKindFor(proj.category) != ProjectileFlightKind::Grenade) return false;
+    const ProjectileFlightParams p = ReferenceFlightParams(proj, engine->GetGroundZ());
+    const float launch[3] = { cfg.position.x, cfg.position.y, cfg.position.z };
+    const float target[3] = { cfg.targetPosition.x, cfg.targetPosition.y, cfg.targetPosition.z };
+    float angleRad = 0.0f, speedPerFrame = 0.0f;
+    return p.speedPerFrame > 0.0f && !GameGrenadeLob(p, launch, target, angleRad, speedPerFrame);
+}
+
+namespace {
+
+// How one spawned instance moves: the authored motion, or the projectile's flight.
+struct ShotMotion
+{
+    bool                      fired            = true;    // false: the game wouldn't fire this shot
+    bool                      isProjectileShot = false;   // the projectile's flight replaced the authored motion
+    D3DXVECTOR3               velocity;
+    float                     maxLifetimeSec   = 0.0f;
+    D3DXVECTOR3               accel;
+    D3DXVECTOR3               squiggle;
+    std::vector<FlightSample> curvedPath;                 // empty for authored motion and straight shots
+};
+
+ShotMotion ComputeShotMotion(const SpawnerConfig& cfg, const D3DXVECTOR3& launchPos, const Engine& engine)
+{
+    ShotMotion motion;
+    motion.velocity       = cfg.velocity;
+    motion.maxLifetimeSec = cfg.maxLifetimeSec;
+    motion.accel          = cfg.acceleration;
+    motion.squiggle       = cfg.squiggleAmplitude;
+
+    Engine::ReferenceProjectileInfo proj;
+    if (!cfg.matchProjectile || !engine.GetReferenceProjectile(proj)) return motion;
+
+    const float aim[3] = { cfg.velocity.x, cfg.velocity.y, cfg.velocity.z };
+    const ProjectileFlightKind kind = ProjectileFlightKindFor(proj.category);
+    if (kind == ProjectileFlightKind::Direct)
+    {
+        ProjectileShot flight;
+        if (!ComputeProjectileShot(proj.speedPerFrame, proj.range, aim, flight)) return motion;
+        motion.velocity       = D3DXVECTOR3(flight.velocity[0], flight.velocity[1], flight.velocity[2]);
+        motion.maxLifetimeSec = flight.flightSec;
+    }
+    else
+    {
+        const float launch[3] = { launchPos.x, launchPos.y, launchPos.z };
+        const float target[3] = { cfg.targetPosition.x, cfg.targetPosition.y, cfg.targetPosition.z };
+        const ProjectileFlightParams params = ReferenceFlightParams(proj, engine.GetGroundZ());
+        if (!ComputeProjectileFlight(kind, params, launch, aim, target, motion.curvedPath))
+        {
+            // A grenade out of lob range: the game doesn't fire, so the preview doesn't either.
+            motion.fired = false;
+            return motion;
+        }
+        // The first step's velocity, so particles emitted before the path
+        // takes over inherit the shot's motion, not the aim's.
+        float startPos[3], startVel[3], startFacing[3];
+        SampleFlightPath(motion.curvedPath, 0.0f, startPos, startVel, startFacing);
+        motion.velocity       = D3DXVECTOR3(startVel[0], startVel[1], startVel[2]);
+        motion.maxLifetimeSec = FlightPathSeconds(motion.curvedPath);
+    }
+    motion.isProjectileShot = true;
+    motion.accel            = D3DXVECTOR3(0, 0, 0);
+    motion.squiggle         = D3DXVECTOR3(0, 0, 0);
+    return motion;
+}
+
+// Returns false when the preview's hard guard refused the spawn.
+bool SpawnShotInstance(const ParticleSystem& sys, Engine& engine, SpawnerAnchor& anchor,
+                       float squiggleFrequency, ShotMotion motion)
+{
+    anchor.SetVelocity(motion.velocity);   // no velocity jitter; path is shaped over lifetime instead
+    ParticleSystemInstance* inst = engine.SpawnParticleSystem(sys, &anchor);
+    if (inst == NULL) return false;
+
+    inst->MarkSpawnerOwned();
+    inst->SetMaxLifetime(motion.maxLifetimeSec);
+    inst->SetPathShape(motion.accel, motion.squiggle, squiggleFrequency, SpawnerRandom::SquigglePhase());
+    if (motion.isProjectileShot)
+    {
+        D3DXVECTOR3 dir;
+        D3DXVec3Normalize(&dir, &motion.velocity);
+        if (!motion.curvedPath.empty())
+            dir = D3DXVECTOR3(motion.curvedPath[0].facing[0], motion.curvedPath[0].facing[1], motion.curvedPath[0].facing[2]);
+        inst->MarkProjectileShot(dir);
+        if (!motion.curvedPath.empty()) inst->SetFlightPath(std::move(motion.curvedPath));
+    }
+    inst->Detach();   // freeze the stamped values; per-frame motion takes over from Update
+    return true;
+}
+
+} // namespace
 
 SpawnerDriver::SpawnerDriver()
     : m_phase(Phase::Waiting),
@@ -226,46 +339,10 @@ void SpawnerDriver::Tick(float dtSeconds, const ParticleSystem* sys, Engine* eng
             D3DXVECTOR3 pos = m_cfg.position + SpawnerRandom::Jitter(m_cfg.jitterPosition);
             anchor.SetPosition(pos);
 
-            // Match-projectile: the game's flight replaces the authored motion.
-            D3DXVECTOR3 velocity    = m_cfg.velocity;
-            float       maxLifetime = m_cfg.maxLifetimeSec;
-            D3DXVECTOR3 accel       = m_cfg.acceleration;
-            D3DXVECTOR3 squiggle    = m_cfg.squiggleAmplitude;
-            bool        shot        = false;
-            Engine::ReferenceProjectileInfo proj;
-            if (m_cfg.matchProjectile && engine->GetReferenceProjectile(proj))
-            {
-                const float aim[3] = { m_cfg.velocity.x, m_cfg.velocity.y, m_cfg.velocity.z };
-                ProjectileShot flight;
-                if (ComputeProjectileShot(proj.speedPerFrame, proj.range, aim, flight))
-                {
-                    velocity    = D3DXVECTOR3(flight.velocity[0], flight.velocity[1], flight.velocity[2]);
-                    maxLifetime = flight.flightSec;
-                    accel       = D3DXVECTOR3(0, 0, 0);
-                    squiggle    = D3DXVECTOR3(0, 0, 0);
-                    shot        = true;
-                }
-            }
-            anchor.SetVelocity(velocity);   // no velocity jitter; path is shaped over lifetime instead
-
-            ParticleSystemInstance* inst = engine->SpawnParticleSystem(*sys, &anchor);
-            if (inst != NULL)
-            {
-                inst->MarkSpawnerOwned();
-                inst->SetMaxLifetime(maxLifetime);
-                inst->SetPathShape(accel,
-                                   squiggle,
-                                   m_cfg.squiggleFrequency,
-                                   SpawnerRandom::SquigglePhase());
-                if (shot)
-                {
-                    D3DXVECTOR3 dir;
-                    D3DXVec3Normalize(&dir, &velocity);
-                    inst->MarkProjectileShot(dir);
-                }
-                inst->Detach();   // freeze the stamped values; per-frame motion takes over from Update
-            }
-            else
+            // A shot the game wouldn't fire spawns nothing (the pane says why);
+            // the burst still moves on to its next instance.
+            ShotMotion motion = ComputeShotMotion(m_cfg, pos, *engine);
+            if (motion.fired && !SpawnShotInstance(*sys, *engine, anchor, m_cfg.squiggleFrequency, std::move(motion)))
             {
                 // [hard-guard] SpawnParticleSystem returns NULL ONLY on a gate
                 // refusal (the estimate × placed-count would blow the cap, so

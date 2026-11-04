@@ -155,6 +155,13 @@ struct GameObjectRef
     float       projectileSpeed    = 0.0f;
     float       projectileRange    = 50.0f;
     std::string projectileCategory;       // raw <Projectile_Category>, e.g. "Laser", "MISSILE"
+    // Curved paths (simulation/ProjectileFlight.h); absent tags keep 0 / false.
+    float       projectileTurnRate          = 0.0f;    // <Max_Rate_Of_Turn>, degrees per logic frame
+    float       projectileBombFallAccel     = 0.0f;    // <Projectile_Bomb_Fall_Accel_Rate>
+    float       projectileGrenadeGravity    = 0.0f;    // <Projectile_Grenade_Gravity>
+    float       projectileGrenadeLobMod     = 0.0f;    // <Projectile_Grenade_Gravity_Lob_Mod>
+    bool        projectileGrenadeLobSlower  = false;   // <Projectile_Grenade_Can_Lob_Slower>
+    float       projectileMaxLifetimeSec    = 0.0f;    // <Projectile_Max_Lifetime>
     ModelContent modelContent = ModelContent::Mesh;   // projectiles: how the model draws
 };
 

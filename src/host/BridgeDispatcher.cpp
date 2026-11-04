@@ -21,6 +21,7 @@
 #include "HostMessages.h"   // WM_APP_QUIT_CONFIRMED
 #include "StringConv.h"   // host::Utf8ToWide / WideToUtf8 (consolidated)
 #include "simulation/ProjectileShot.h"   // referenceProjectile snapshot field
+#include "simulation/ProjectileFlight.h"  // IsProjectilePathEmulated
 #include "PerfTrace.h"
 #include "host/third_party/nlohmann/json.hpp"
 
@@ -332,7 +333,8 @@ static json ReferenceProjectileToJson(const Engine& engine)
                  {"range",        proj.range},           // world units
                  {"flightSec",    flight.flightSec},
                  {"category",     proj.category},
-                 {"straightPath", IsStraightPathProjectileCategory(proj.category)} };
+                 {"pathEmulated", IsProjectilePathEmulated(proj.category)},
+                 {"usesTarget",   ProjectileUsesTarget(proj.category)} };
 }
 
 // SkydomeSlotStatus -> wire string for the snapshot DTO. Mirrors

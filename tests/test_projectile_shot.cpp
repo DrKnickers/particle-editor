@@ -59,17 +59,6 @@ int main()
         CHECK(!ComputeProjectileShot(NAN, 100.0f, aim, s), "NaN speed can't fly");
     }
 
-    std::printf("[category]\n");
-    {
-        CHECK(IsStraightPathProjectileCategory("Laser"), "Laser flies straight");
-        CHECK(IsStraightPathProjectileCategory("DEFAULT"), "DEFAULT flies straight");
-        CHECK(IsStraightPathProjectileCategory(""), "no category flies straight");
-        CHECK(!IsStraightPathProjectileCategory("MISSILE"), "MISSILE is curved");
-        CHECK(!IsStraightPathProjectileCategory("MPTL_Rocket"), "MPTL_Rocket is curved");
-        CHECK(!IsStraightPathProjectileCategory("cluster_bomb"), "cluster_bomb is curved");
-        CHECK(!IsStraightPathProjectileCategory("GRENADE"), "GRENADE is curved");
-    }
-
     std::printf("[orientation]\n");
     {
         auto orthonormal = [](const float x[3], const float y[3], const float z[3]) {

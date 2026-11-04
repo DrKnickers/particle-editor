@@ -3,6 +3,7 @@
 //   "Unit grid" - Ground-plane grid drawing.
 //   "Cursor and handle picking" - Cursor rays and manipulation geometry.
 //   "Manipulator drawing" - Translation arrows and rotation rings.
+//   "Spawner target marker" - Where match-projectile shots aim.
 //   "Selection outline" - Dashed bounds and corner brackets.
 //   "Object picking and grid spacing" - Body selection and grid controls.
 //
@@ -742,6 +743,35 @@ void Engine::RenderReferenceManipulator()
                          camPos, ribHalf, ribOut, kOutlineRGB, /*depthTest=*/false, kGizmoAlpha);
 
     DrawWorldLines(m_pDevice, m_pDeclaration, v.data(), (int)(v.size() / 2), /*depthTest=*/false);
+}
+
+// ---------- Spawner target marker ----------
+// The point match-projectile shots aim at (#967): a missile homes on it, a grenade lobs
+// onto it. Three axis lines through it, sized like the gizmo so the cross keeps its
+// on-screen size at any distance, drawn on top so terrain or the effect can't hide it.
+void Engine::RenderSpawnerTargetMarker()
+{
+    if (!m_referenceShotMode || !m_referenceIsProjectile || !m_referenceObjectVisible) return;
+
+    constexpr float    kMarkerToGizmoRatio = 0.25f;   // a quarter of a gizmo handle
+    constexpr D3DCOLOR kMarkerColor        = D3DCOLOR_ARGB(255, 255, 196, 64);
+    const D3DXVECTOR3 eye = m_eye.Position;
+    D3DXVECTOR3 fwd = m_eye.Target - eye;
+    D3DXVec3Normalize(&fwd, &fwd);
+    const D3DXVECTOR3 toTarget = m_referenceShotTarget - eye;
+    const float halfLength = kMarkerToGizmoRatio *
+        GizmoHandleLengthWorld(D3DXVec3Dot(&toTarget, &fwd), m_sceneFovY, m_sceneViewportH,
+                               m_sceneViewportActive, D3DXVec3Length(&toTarget));
+
+    const D3DXVECTOR3 axes[3] = { D3DXVECTOR3(1, 0, 0), D3DXVECTOR3(0, 1, 0), D3DXVECTOR3(0, 0, 1) };
+    EmitterInstance::Vertex v[6] = {};
+    for (int i = 0; i < 3; i++)
+    {
+        v[2 * i].Position     = m_referenceShotTarget - axes[i] * halfLength;
+        v[2 * i + 1].Position = m_referenceShotTarget + axes[i] * halfLength;
+        v[2 * i].Color = v[2 * i + 1].Color = kMarkerColor;
+    }
+    DrawWorldLines(m_pDevice, m_pDeclaration, v, 3, /*depthTest=*/false);
 }
 
 // ---------- Selection outline ----------

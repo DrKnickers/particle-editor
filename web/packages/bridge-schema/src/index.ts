@@ -169,6 +169,14 @@ export type SpawnerParamsDto = {
    *  projectile model rides with it. No effect unless `referenceProjectile`
    *  is flyable. Absent = false. */
   matchProjectile?: boolean;
+  /** Where match-projectile shots aim (#967): a missile homes on it, a grenade
+   *  lobs onto it, a cluster bomb launches toward it. World units, clamped like
+   *  `position`. Absent = origin. */
+  targetPosition?: Vec3;
+  /** Host-computed and read-only (spawner/start ignores it): the game wouldn't
+   *  fire the reference projectile at `targetPosition` from `position` (a grenade
+   *  out of lob range), so the preview doesn't either. */
+  projectileOutOfReach?: boolean;
 };
 
 // ─── Emitter tree DTO ──
@@ -254,15 +262,17 @@ export type ReferenceObjectBucket =
   | "Infantry" | "Vehicle" | "Air"                                           // ground units
   | "Fighter" | "Bomber" | "Corvette" | "Frigate" | "Capital" | "Transport"  // space units
   | "Structure" | "Hero" | "Other" | "None";                                 // shared
-// How the game flies the selected reference projectile (simulation/ProjectileShot.h):
-// 30 x <Max_Speed> world units per second until it has flown <Projectile_Max_Flight_Distance>.
+// How the game flies the selected reference projectile (simulation/ProjectileShot.h and
+// ProjectileFlight.h): 30 x <Max_Speed> world units per second until it has flown
+// <Projectile_Max_Flight_Distance>, along its category's path.
 export type ReferenceProjectileDto = {
   flyable: boolean;      // false: <Max_Speed> absent or unusable, so it can't be matched
   speed: number;         // world units per second
   range: number;         // world units
   flightSec: number;     // seconds until the game destroys the shot
   category: string;      // raw <Projectile_Category>
-  straightPath: boolean; // false for missiles, rockets, bombs, grenades (the preview flies them straight)
+  pathEmulated: boolean; // false for rockets and the lightsaber throw (the preview flies them straight)
+  usesTarget: boolean;   // missiles, grenades and cluster bombs aim at the spawner's target
 };
 export type ReferenceObjectEntry = {
   name: string;

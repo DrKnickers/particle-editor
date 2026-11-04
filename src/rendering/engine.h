@@ -805,6 +805,13 @@ public:
 	    float       speedPerFrame = 0.0f;   // raw <Max_Speed>; 0 = can't be flown
 	    float       range         = 0.0f;   // <Projectile_Max_Flight_Distance>
 	    std::string category;               // raw <Projectile_Category>
+	    // Curved paths (simulation/ProjectileFlight.h); 0 / false when absent.
+	    float       turnRateDegPerFrame = 0.0f;   // <Max_Rate_Of_Turn>
+	    float       bombFallAccel       = 0.0f;   // <Projectile_Bomb_Fall_Accel_Rate>
+	    float       grenadeGravity      = 0.0f;   // <Projectile_Grenade_Gravity>
+	    float       grenadeLobMod       = 0.0f;   // <Projectile_Grenade_Gravity_Lob_Mod>
+	    bool        grenadeCanLobSlower = false;  // <Projectile_Grenade_Can_Lob_Slower>
+	    float       maxLifetimeSec      = 0.0f;   // <Projectile_Max_Lifetime>
 	};
 	bool GetReferenceProjectile(ReferenceProjectileInfo& out) const
 	     { if (!m_referenceIsProjectile) return false; out = m_referenceProjectile; return true; }
@@ -812,6 +819,9 @@ public:
 	// spawned shot instead of at its resting place. Set by the spawner bridge.
 	void SetReferenceShotMode(bool on) { m_referenceShotMode = on; }
 	bool GetReferenceShotMode() const  { return m_referenceShotMode; }
+	// Where match-projectile shots aim (#967); marked in the viewport while the shots
+	// fly like a projectile. Set by the spawner bridge with SetReferenceShotMode.
+	void SetReferenceShotTarget(const D3DXVECTOR3& target) { m_referenceShotTarget = target; }
 	// False while the model flies with the shots: nothing rests at the placement, so it
 	// draws no resting model, shadow, gizmo or selection box and can't be clicked.
 	bool ReferenceRestsInScene() const { return !(m_referenceShotMode && m_referenceIsProjectile); }
@@ -1137,6 +1147,9 @@ private:
 	// Draw the object's AABB as a depth-tested wireframe when selected -- the
 	// same box the click-pick (PickReferenceObject) hit-tests. No-op when unselected.
 	void				RenderReferenceSelectionBox();
+	// The spawner's shot target: a screen-sized 3-axis cross, on top, while shots fly
+	// like the reference projectile. Editor overlay (fixed-function lines).
+	void				RenderSpawnerTargetMarker();
 
 	// Unit grid: the engine's first line-list primitive. RenderUnitGrid
 	// draws axis-aligned world lines at m_gridSpacing over a fixed extent, co-planar
@@ -1434,6 +1447,7 @@ private:
 	bool                     m_referenceIsProjectile = false;
 	ReferenceProjectileInfo  m_referenceProjectile;
 	bool                     m_referenceShotMode = false;   // see SetReferenceShotMode
+	D3DXVECTOR3              m_referenceShotTarget = D3DXVECTOR3(0, 0, 0);   // see SetReferenceShotTarget
 	// Render-only "display" transform eased toward the committed transform above
 	// each frame so gizmo/object motion is smooth (incl. under snap). Committed values
 	// stay exact (undo / spinners / saved file). See Engine::EaseReferenceDisplay.

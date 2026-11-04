@@ -697,6 +697,12 @@ void Engine::RebuildReferenceObjectMesh()
                 m_referenceProjectile.speedPerFrame = r.projectileSpeed;
                 m_referenceProjectile.range         = r.projectileRange;
                 m_referenceProjectile.category      = r.projectileCategory;
+                m_referenceProjectile.turnRateDegPerFrame = r.projectileTurnRate;
+                m_referenceProjectile.bombFallAccel       = r.projectileBombFallAccel;
+                m_referenceProjectile.grenadeGravity      = r.projectileGrenadeGravity;
+                m_referenceProjectile.grenadeLobMod       = r.projectileGrenadeLobMod;
+                m_referenceProjectile.grenadeCanLobSlower = r.projectileGrenadeLobSlower;
+                m_referenceProjectile.maxLifetimeSec      = r.projectileMaxLifetimeSec;
             }
 #ifndef NDEBUG
             fprintf(stderr, "[refscale] '%s' Scale_Factor=%.3f\n", r.name.c_str(), r.scaleFactor);

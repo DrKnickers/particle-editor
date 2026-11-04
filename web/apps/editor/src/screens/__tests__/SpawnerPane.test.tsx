@@ -193,12 +193,16 @@ describe("SpawnerPane", () => {
 });
 
 describe("SpawnerPane — fly like the projectile", () => {
-  function bridgeWith(referenceProjectile: EngineStateDto["referenceProjectile"], matchProjectile = false) {
+  function bridgeWith(
+    referenceProjectile: EngineStateDto["referenceProjectile"],
+    matchProjectile = false,
+    projectileOutOfReach = false,
+  ) {
     const snapshot: EngineStateDto = {
       ...makeDefaultEngineState(),
       referenceObjectName: referenceProjectile ? "Proj_Laser" : "",
       referenceProjectile,
-      spawner: { ...makeDefaultSpawnerParams(), mode: "manual", matchProjectile },
+      spawner: { ...makeDefaultSpawnerParams(), mode: "manual", matchProjectile, projectileOutOfReach },
     };
     return {
       request: vi.fn().mockImplementation((req: { kind: string }) =>
@@ -206,7 +210,10 @@ describe("SpawnerPane — fly like the projectile", () => {
       on: vi.fn().mockReturnValue(() => {}),
     } as unknown as Bridge & { request: ReturnType<typeof vi.fn> };
   }
-  const laser = { flyable: true, speed: 330, range: 500, flightSec: 46 / 30, category: "Laser", straightPath: true };
+  const laser = {
+    flyable: true, speed: 330, range: 500, flightSec: 46 / 30, category: "Laser", pathEmulated: true, usesTarget: false,
+  };
+  const missile = { ...laser, category: "MISSILE", usesTarget: true };
 
   it("hides the section when the reference object is not a projectile", async () => {
     render(<SpawnerPane bridge={bridgeWith(null)} />);
@@ -234,10 +241,35 @@ describe("SpawnerPane — fly like the projectile", () => {
     expect(screen.getByLabelText("Velocity X").matches(":disabled")).toBe(false);
   });
 
-  it("flags curved categories and refuses a projectile with no speed", async () => {
+  it("shows and commits the target only for shots that aim at it, while matching", async () => {
+    const { unmount } = render(<SpawnerPane bridge={bridgeWith(laser, true)} />);
+    await screen.findByLabelText("Fly like the projectile");
+    expect(screen.queryByLabelText("Target X")).toBeNull();
+    unmount();
+
+    const bridge = bridgeWith(missile, true);
+    render(<SpawnerPane bridge={bridge} />);
+    const targetX = await screen.findByLabelText("Target X");
+    expect(screen.getByTestId("spawner-projectile-target").textContent).toContain("Missiles home on the target");
+    expect(screen.queryByTestId("spawner-projectile-curved")).toBeNull();
+    expect(screen.queryByTestId("spawner-projectile-out-of-reach")).toBeNull();
+    fireEvent.change(targetX, { target: { value: "300" } });
+    fireEvent.blur(targetX);
+    await waitFor(() => {
+      const starts = bridge.request.mock.calls.map((c) => c[0]).filter((r) => r.kind === "spawner/start");
+      expect(starts.at(-1)?.params.targetPosition).toEqual([300, 0, 0]);
+    });
+  });
+
+  it("warns when the game wouldn't fire at the target", async () => {
+    render(<SpawnerPane bridge={bridgeWith({ ...missile, category: "GRENADE" }, true, true)} />);
+    expect((await screen.findByTestId("spawner-projectile-out-of-reach")).textContent).toContain("out of lob range");
+  });
+
+  it("flags categories the preview still flies straight and refuses a projectile with no speed", async () => {
     const { unmount } = render(
-      <SpawnerPane bridge={bridgeWith({ ...laser, category: "MISSILE", straightPath: false })} />);
-    expect((await screen.findByTestId("spawner-projectile-curved")).textContent).toContain("MISSILE");
+      <SpawnerPane bridge={bridgeWith({ ...laser, category: "ROCKET", pathEmulated: false })} />);
+    expect((await screen.findByTestId("spawner-projectile-curved")).textContent).toContain("ROCKET");
     unmount();
     render(<SpawnerPane bridge={bridgeWith({ ...laser, flyable: false, speed: 0 }, true)} />);
     const box = (await screen.findByLabelText("Fly like the projectile")) as HTMLInputElement;

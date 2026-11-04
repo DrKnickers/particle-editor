@@ -2,6 +2,7 @@
 #define PARTICLESYSTEMINSTANCE_H
 
 #include "rendering/engine.h"
+#include "ProjectileFlight.h"
 #include <cstdint>
 #include <list>
 #include <memory>
@@ -45,6 +46,9 @@ class ParticleSystemInstance : public Object3D
     // facing m_shotDirection, until the game would destroy the shot (max lifetime).
     bool                     m_projectileShot  = false;
     D3DXVECTOR3              m_shotDirection   = D3DXVECTOR3(1, 0, 0);
+    // A curved shot's path, one sample per logic frame (ProjectileFlight.h). When set,
+    // it drives position, velocity and m_shotDirection instead of the shaped path.
+    std::vector<FlightSample> m_flightPath;
 
     // Path-shaping. Captured at the first-Update baseline /
     // SetPathShape; the instance position is then computed analytically
@@ -88,6 +92,12 @@ public:
     {
         m_projectileShot = true;
         m_shotDirection  = direction;
+    }
+    // Flies a curved shot along `path` (launch first) and caps its lifetime to it.
+    void SetFlightPath(std::vector<FlightSample> path)
+    {
+        m_flightPath  = std::move(path);
+        m_maxLifetime = FlightPathSeconds(m_flightPath);
     }
     bool IsProjectileShotLive() const          { return m_projectileShot && !m_lifetimeExpired; }
     const D3DXVECTOR3& GetShotDirection() const { return m_shotDirection; }

@@ -823,6 +823,7 @@ bool Engine::Render()
 	// Selection box (depth-tested, part of the scene) when the object is
 	// selected -- shows the clickable region. Drawn before the on-top gizmo.
 	RenderReferenceSelectionBox();
+	RenderSpawnerTargetMarker();
 
 	// Translate-manipulator axis handles over the placed object.
 	RenderReferenceManipulator();

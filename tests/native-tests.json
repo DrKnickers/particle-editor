@@ -75,6 +75,7 @@
       "release": true
     },
     "test_game_particle_step": {},
+    "test_projectile_flight": {},
     "test_projectile_shot": {},
     "test_bridge_spawner_state": {
       "sources": ["src/simulation/SpawnerDriver.cpp", "src/simulation/ParticleRandom.cpp"],

@@ -19,7 +19,8 @@
 //   9. Projectile — shown when the reference object is a projectile: "Fly
 //      like the projectile" (matchProjectile) takes the game's speed, range
 //      and flight time, so Velocity only aims and the lifetime and path
-//      sections stand down while it is on.
+//      sections stand down while it is on. Missiles, grenades and cluster
+//      bombs also aim at a Target point (marked in the viewport).
 //
 // State sync. The panel reads `snapshot.spawner` on mount and listens
 // to `engine/state/changed` for external mutations (devtools pokes,
@@ -195,6 +196,9 @@ export function SpawnerPane({ bridge }: Props) {
     commit(patchSpawner(config, "squiggleFrequency", v));
   const setMatchProjectile = (on: boolean) =>
     commit(patchSpawner(config, "matchProjectile", on));
+  const target = config.targetPosition ?? [0, 0, 0];
+  const setTargetAxis = (idx: 0 | 1 | 2, v: number) =>
+    commit(patchSpawner(config, "targetPosition", patchVec(target, idx, v)));
 
   const projectile = useEngineField(
     bridge,
@@ -326,10 +330,37 @@ export function SpawnerPane({ bridge }: Props) {
               ? `In game: ${Math.round(projectile.speed)} units/s for ${Math.round(projectile.range)} units (${projectile.flightSec.toFixed(2)} s). Velocity sets the direction.`
               : "This projectile has no usable Max_Speed, so it can't be matched."}
           </p>
-          {projectile.flyable && !projectile.straightPath && (
+          {projectile.flyable && !projectile.pathEmulated && (
             <p data-testid="spawner-projectile-curved" className="mt-1 text-2xs text-text-3">
               In game a {projectile.category} shot doesn't fly straight; the preview flies it straight.
             </p>
+          )}
+          {matching && projectile.usesTarget && (
+            <>
+              <ToolPanel.Row label="Target">
+                <div className="grid grid-cols-3 gap-1">
+                  {(["X", "Y", "Z"] as const).map((axis, idx) => (
+                    <div className="axis-cell" key={axis}>
+                      <span className="axis-lbl">{axis}</span>
+                      <Spinner
+                        value={target[idx]}
+                        onChange={(v) => setTargetAxis(idx as 0 | 1 | 2, v)}
+                        step={1}
+                        aria-label={`Target ${axis}`}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </ToolPanel.Row>
+              <p data-testid="spawner-projectile-target" className="mt-1 text-2xs text-text-3">
+                Missiles home on the target, grenades lob onto it, cluster bombs launch toward it.
+              </p>
+              {config.projectileOutOfReach === true && (
+                <p data-testid="spawner-projectile-out-of-reach" className="mt-1 text-2xs text-warning-fg">
+                  The target is out of lob range: the game wouldn&apos;t fire, so no shot spawns.
+                </p>
+              )}
+            </>
           )}
         </ToolPanel.Section>
       )}

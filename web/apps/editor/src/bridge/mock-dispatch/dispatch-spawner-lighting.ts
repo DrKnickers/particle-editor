@@ -22,7 +22,7 @@ type SpawnerLightingRequest = Extract<Request, { kind: SpawnerLightingKind }>;
 // Mirrors native ClampSpawnerConfig (src/simulation/SpawnerDriver.cpp): burstSize
 // 1..MAX_BURST_SIZE (10), spacingSec 0..MAX_SPACING_SEC (10), intervalSec
 // 0..MAX_INTERVAL_SEC (60), maxLifetimeSec 0..MAX_LIFETIME_SEC (600), every
-// position / velocity / jitterPosition / acceleration / squiggleAmplitude axis
+// position / velocity / jitterPosition / acceleration / squiggleAmplitude / targetPosition axis
 // +/-JITTER_MAX (10000), and squiggleFrequency 0..SQUIGGLE_FREQ_MAX (20).
 // Native code remains the source of truth.
 function clampSpawnerConfig(params: SpawnerParamsDto): SpawnerParamsDto {
@@ -44,6 +44,7 @@ function clampSpawnerConfig(params: SpawnerParamsDto): SpawnerParamsDto {
     squiggleAmplitude: vec3(params.squiggleAmplitude),
     squiggleFrequency: clamp(params.squiggleFrequency, 0, 20),
     matchProjectile: params.matchProjectile === true,
+    targetPosition: vec3(params.targetPosition ?? [0, 0, 0]),
   };
 }
 

@@ -2,6 +2,7 @@
 #define SPAWNER_DRIVER_H
 
 #include "rendering/engine.h"
+#include "ProjectileFlight.h"
 
 // Programmable particle spawner for the preview viewport. Replaces the
 // "hold Shift, click once" single-instance flow with a configurable
@@ -65,6 +66,9 @@ struct SpawnerConfig
     // `velocity` only aims the shot (+X when zero), and the projectile model rides along.
     // No effect when the reference object isn't a projectile with a usable <Max_Speed>.
     bool        matchProjectile   = false;
+    // Where match-projectile shots aim (#967): a missile homes on it, a grenade lobs onto
+    // it, a cluster bomb launches toward it. World units, clamped like `position`.
+    D3DXVECTOR3 targetPosition    = D3DXVECTOR3(0, 0, 0);
 };
 
 class SpawnerDriver
@@ -156,5 +160,12 @@ private:
 
 // Validate / clamp a config in place against the driver's hard caps.
 void ClampSpawnerConfig(SpawnerConfig& cfg);
+
+// The curved-path inputs for the reference projectile, on the preview's ground plane.
+ProjectileFlightParams ReferenceFlightParams(const Engine::ReferenceProjectileInfo& proj, float groundZ);
+
+// True when match-projectile mode can't fire the reference projectile at the target
+// from `cfg.position`: a grenade out of lob range (the game doesn't fire it either).
+bool IsProjectileTargetOutOfReach(const SpawnerConfig& cfg, const Engine* engine);
 
 #endif

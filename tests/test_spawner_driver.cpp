@@ -112,6 +112,7 @@ int main()
         c.acceleration      = D3DXVECTOR3( 10000.5f, -10000.5f, 1.0f);
         c.squiggleAmplitude = D3DXVECTOR3( 12345.0f,  0.0f,    -12345.0f);
         c.squiggleFrequency = 20.5f;
+        c.targetPosition    = D3DXVECTOR3(-30000.0f,  7.0f,     30000.0f);
         ClampSpawnerConfig(c);
 
         CHECK(c.burstSize == 1, "burstSize 0 clamps up to 1");
@@ -130,6 +131,8 @@ int main()
         CHECK(c.squiggleAmplitude.x == SpawnerDriver::JITTER_MAX
            && c.squiggleAmplitude.z == -SpawnerDriver::JITTER_MAX, "squiggle amplitude clamps per-axis");
         CHECK(c.squiggleFrequency == SpawnerDriver::SQUIGGLE_FREQ_MAX, "squiggle frequency clamps to max");
+        CHECK(c.targetPosition.x == -SpawnerDriver::JITTER_MAX && c.targetPosition.y == 7.0f
+           && c.targetPosition.z == SpawnerDriver::JITTER_MAX, "projectile target clamps per-axis like position");
     }
     {
         SpawnerConfig c;

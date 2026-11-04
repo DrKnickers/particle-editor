@@ -11,16 +11,14 @@
 //     so it lives ceil(range / Speed) frames (at least one).
 //   - Projectile acceleration per frame is 0 in this build: speed never changes.
 //
-// Missiles, rockets, bombs and grenades run other paths (homing, arcs) that read the
-// same Speed; the preview flies every shot straight and flags those categories.
+// Missiles, bombs and grenades run other paths (homing, falls, lobs) that read the
+// same Speed: see ProjectileFlight.h.
 //
 // Floats only and no engine includes, so the unit test can link it bare.
 
 #include "rendering/UnitConstants.h"
 
-#include <cctype>
 #include <cmath>
-#include <string>
 
 struct ProjectileShot
 {
@@ -55,18 +53,6 @@ inline bool ComputeProjectileShot(float speedPerFrame, float maxFlightDistance,
     float       frames = std::ceil(range / speedPerFrame);
     if (frames < 1.0f) frames = 1.0f;
     out.flightSec = frames / GAME_LOGIC_FPS;
-    return true;
-}
-
-// True for categories the game flies in a straight line. Missiles, rockets, bombs
-// and grenades (any category naming one, e.g. CLUSTER_BOMB, MPTL_Rocket) are not.
-inline bool IsStraightPathProjectileCategory(const std::string& category)
-{
-    std::string upper;
-    for (char c : category) upper += (char)std::toupper((unsigned char)c);
-    for (const char* curved : { "MISSILE", "ROCKET", "BOMB", "GRENADE" })
-        if (upper.find(curved) != std::string::npos)
-            return false;
     return true;
 }
 
