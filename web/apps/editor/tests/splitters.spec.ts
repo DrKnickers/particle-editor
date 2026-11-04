@@ -126,7 +126,7 @@ function dragSeparator(
 // flat 20% — this stays correct at any window size (wide → falls back to 20%).
 const LEFT_MIN_PX = 330;
 const SPAWNER_MIN_PX = 260;
-// Visible/​hit width of a `.ce-splitter` handle (components.css). The outer
+// Visible/hit width of a `.ce-splitter` handle (components.css). The outer
 // 3-col group has two of them (left|center, center|spawner); they're not
 // part of the panels' percentage budget.
 const SPLITTER_PX = 8;

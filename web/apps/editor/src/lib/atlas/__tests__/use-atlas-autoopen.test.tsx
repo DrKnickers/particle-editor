@@ -3,9 +3,9 @@ import { StrictMode, useEffect } from "react";
 import { renderHook, act, render } from "@testing-library/react";
 import { useAtlasAutoOpen } from "../use-atlas-autoopen";
 import { publishAtlasContext, __resetAtlasContext, type AtlasContext } from "../atlas-context";
-import { setDock, __resetRightDockForTests, useRightDockStoreForTests } from "../../right-dock";
+import { setDock, __resetRightDockForTests, getRightDockStoreForTests } from "../../right-dock";
 
-const dock = () => useRightDockStoreForTests().getState().dock;
+const dock = () => getRightDockStoreForTests().getState().dock;
 beforeEach(() => { localStorage.clear(); __resetRightDockForTests(); __resetAtlasContext(); setDock("lighting"); renders = 0; });
 
 // A render-counting host for the mount site — mirrors how CurveEditorPanel

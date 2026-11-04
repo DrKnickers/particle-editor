@@ -1,0 +1,13 @@
+# Prettier formats this workspace's JS and TS only. Data, docs, styles and markup stay
+# byte-stable, because drift checks, goldens and fixtures compare them as written.
+node_modules/
+dist/
+coverage/
+test-results/
+playwright-report/
+**/*.json
+**/*.md
+**/*.css
+**/*.html
+**/*.yaml
+**/*.yml

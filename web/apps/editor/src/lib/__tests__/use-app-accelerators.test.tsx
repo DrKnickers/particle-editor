@@ -5,7 +5,7 @@ import { useEmitterSelectionStore } from "../tree/emitter-selection";
 import { useFileStateStore } from "../file-state";
 import { RESET_CAMERA } from "../reset-camera";
 import { useTextureEpoch, __resetPreviewCache } from "../atlas/atlas-preview-cache";
-import { __resetRightDockForTests, useRightDockStoreForTests } from "../right-dock";
+import { __resetRightDockForTests, getRightDockStoreForTests } from "../right-dock";
 import { __resetStatusFeedbackForTests, useStatusFeedback } from "../status-feedback";
 
 // A minimal fake bridge: captures the `accelerator/pressed` +
@@ -263,7 +263,7 @@ describe("useAppAccelerators — uncovered dispatch + guard paths", () => {
   it("F7 toggles the spawner right-dock (no bridge dispatch)", () => {
     const b = makeFakeBridge();
     render(<Harness bridge={b} />);
-    const dock = useRightDockStoreForTests();
+    const dock = getRightDockStoreForTests();
     expect(dock.getState().dock).toBe("spawner"); // default
     b.request.mockClear();
     b.fire("F7");

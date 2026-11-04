@@ -55,15 +55,14 @@
 // hosting, and the cause should be understood before normalizing it
 // away.
 
-import { test, expect, type Page } from "./helpers/cdp";
+import { test, expect } from "./helpers/cdp";
 import { captureUIA, discoverHostHwnd } from "./helpers/uia";
 import type { UIANode } from "./helpers/a11y-normalizer";
 
-let page: Page;
 let hostHwnd: bigint;
 
-test.beforeAll(async ({ cdpPage }) => {
-  page = cdpPage;
+// Requesting the CDP page waits until the host is up before any test runs.
+test.beforeAll(async ({ cdpPage: _cdpPage }) => {
   hostHwnd = await discoverHostHwnd();
 });
 

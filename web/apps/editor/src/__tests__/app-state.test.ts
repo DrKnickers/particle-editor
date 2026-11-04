@@ -18,7 +18,7 @@ import { useFileStateStore } from "@/lib/file-state";
 import { useModalOpen } from "@/lib/modal-open";
 import { useModStack } from "@/lib/mod-stack";
 import { isRecording, markRecording } from "@/lib/record/record-mode";
-import { setDock, useRightDockStoreForTests } from "@/lib/right-dock";
+import { setDock, getRightDockStoreForTests } from "@/lib/right-dock";
 import { useStatusFeedback } from "@/lib/status-feedback";
 import { useTreeActionStore } from "@/lib/tree/tree-action";
 import { useTreeContextStore } from "@/lib/tree/tree-context";
@@ -65,7 +65,7 @@ describe("resetAppState", () => {
     expect(atlasPanelCache.gridW).toBeNull();
     expect(useModStack.getState().stack).toEqual([]);
     expect(isRecording()).toBe(false);
-    expect(useRightDockStoreForTests().getState().dock).toBe("spawner");
+    expect(getRightDockStoreForTests().getState().dock).toBe("spawner");
     expect(useStatusFeedback.getState().message).toBeNull();
   });
 });

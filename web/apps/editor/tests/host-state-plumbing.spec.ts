@@ -9,7 +9,6 @@
 // filenames per test run so parallel CI runs don't trample each other.
 
 import * as fs from "node:fs";
-import * as path from "node:path";
 import { test, expect, type Page } from "./helpers/cdp";
 
 // Page-side recorders this spec installs on window.

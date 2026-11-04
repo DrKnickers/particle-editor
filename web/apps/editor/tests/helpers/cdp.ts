@@ -25,6 +25,9 @@ type CdpFixtures = {
   cdpPage: Page;
 };
 
+// Playwright's extend<TestFixtures, WorkerFixtures> takes `{}` for "no test fixtures";
+// a narrower type such as Record<string, never> breaks its fixture inference.
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export const test = base.extend<{}, CdpFixtures>({
   cdpBrowser: [
     async ({}, use) => {

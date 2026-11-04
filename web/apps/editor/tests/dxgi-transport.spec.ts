@@ -39,7 +39,7 @@
 //     swapchain create, Present1 — all emit [COMP-engine-fail])
 // The native suite always exercises the composition transport.
 
-import { test, expect, type Page } from "./helpers/cdp";
+import { test, expect } from "./helpers/cdp";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -49,11 +49,8 @@ const HOST_LOG_PATH = process.env.LOCALAPPDATA
   ? join(process.env.LOCALAPPDATA, "AloParticleEditor", "host.log")
   : "";
 
-let page: Page;
-
-test.beforeAll(async ({ cdpPage }) => {
-  page = cdpPage;
-});
+// Requesting the CDP page waits until the host is up before any test runs.
+test.beforeAll(async ({ cdpPage: _cdpPage }) => {});
 
 test.beforeEach(({}, testInfo) => {
   if (!HOST_LOG_PATH) {

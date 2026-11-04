@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "lint": "tsc -b",
+    "lint": "tsc -b && pnpm -w run lint",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:web": "playwright test -c playwright.web.config.ts",

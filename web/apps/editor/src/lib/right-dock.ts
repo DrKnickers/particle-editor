@@ -91,6 +91,6 @@ export function __resetRightDockForTests(): void {
 
 /** Test-only: the raw Zustand store, for `getState()` assertions without
  *  mounting a component. */
-export function useRightDockStoreForTests() {
+export function getRightDockStoreForTests() {
   return useStore;
 }
