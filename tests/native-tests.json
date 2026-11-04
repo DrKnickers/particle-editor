@@ -74,6 +74,7 @@
     "test_bounce_catch_up": {
       "release": true
     },
+    "test_game_particle_step": {},
     "test_bridge_spawner_state": {
       "sources": ["src/simulation/SpawnerDriver.cpp", "src/simulation/ParticleRandom.cpp"],
       "includes": ["src/host"],

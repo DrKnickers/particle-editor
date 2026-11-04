@@ -31,6 +31,7 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ### Fixed
 
+- Accelerated particles in the preview follow the game's path: the game steps particle motion frame by frame, which carries a particle slightly further than the exact curve the preview drew, most visibly under strong acceleration
 - Reference models that use the older vertex layout, such as the game's laser bolts, now draw instead of being reported as skinned
 - Dragging a window edge to resize the editor keeps up with the pointer instead of lagging
 - The editor loads the game's patch archives (`Patch.meg`, `Patch2.meg`, `64Patch.meg`) above its listed archives, as the game does, so reference models get the patched shadow and heat shaders and the patched textures and models are used instead of the original copies

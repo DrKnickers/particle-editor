@@ -18,6 +18,12 @@
 // coordinates; it is applied only at reference-object render time (see
 // src/rendering/ReferenceObjectWorld.h / Engine::ReferenceObjectWorldFrom).
 //
-// A future time base (per-frame vs per-second tick rate, projectile
-// motion) will add its time constant alongside this one.
 constexpr float EDITOR_UNITS_PER_GAME_UNIT = 1.0f;
+
+// Time base. The game simulates in fixed logic frames, 30 per game second, in
+// every game mode (decompiled FrameSynchronizerClass::Init: LogicalFPS = 30).
+// Per-frame XML quantities convert with it: a projectile moves <Max_Speed>
+// world units each logic frame, so 30 x Max_Speed units/s. Particle fields in
+// the .alo are already per second (units/s, units/s^2, seconds) and need no
+// conversion; the game steps them once per rendered frame instead.
+constexpr float GAME_LOGIC_FPS = 30.0f;

@@ -149,6 +149,7 @@
     <ClInclude Include="gamedata\xml.h" />
     <ClInclude Include="gamedata\AssetPathSafety.h" />
     <ClInclude Include="simulation\BounceCatchUp.h" />
+    <ClInclude Include="simulation\GameParticleStep.h" />
     <ClInclude Include="effect\CloseDecision.h" />
     <ClInclude Include="rendering\DeferredParticleSystemChange.h" />
     <ClInclude Include="rendering\DeviceRecovery.h" />

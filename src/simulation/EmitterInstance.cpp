@@ -7,6 +7,7 @@
 #include "ParticleCompaction.h"
 #include "SpawnSchedule.h"   // ReconcileNextSpawnTime (rate-edit clamp)
 #include "BounceCatchUp.h"   // GROUND_BOUNCE catch-up loop
+#include "GameParticleStep.h"   // position matches the game's per-frame stepping
 #include "ParticleSystemInstance.h"
 #include "effect/ParticleAuthoring.h"   // AtlasGridSide
 using namespace std;
@@ -50,6 +51,7 @@ struct EmitterInstance::Particle : public Object3D
     D3DXVECTOR3 m_parentSpawnPosition;
 	D3DXVECTOR3 m_initialSpeed;
 	D3DXVECTOR3	m_acceleration;
+	D3DXVECTOR3 m_positionSpeedShift;   // 0.5 * a * game step; position only (GameParticleStep.h)
 	D3DXVECTOR4	m_baseColor;
 	float		m_baseScale;
 	float       m_rotationDirection;
@@ -352,6 +354,15 @@ bool EmitterInstance::SpawnParticle(TimeF currentTime)
     	particle.m_initialPosition += particle.m_parentSpawnPosition;
     }
 
+    // Match the game's per-frame stepping (see GameParticleStep.h). Bounce particles
+    // keep the exact parabola: the game routes them through a collision path that
+    // has not been decompiled.
+    particle.m_positionSpeedShift = D3DXVECTOR3(0, 0, 0);
+    if (m_emitter.groundBehavior != ParticleSystem::GROUND_BOUNCE)
+    {
+        GameStepPositionSpeedShift(particle.m_acceleration, particle.m_positionSpeedShift);
+    }
+
     if (m_emitter.groundBehavior == ParticleSystem::GROUND_BOUNCE)
     {
         if (particle.m_acceleration.z != 0)
@@ -526,10 +537,10 @@ void EmitterInstance::UpdateParticle(Particle& particle, float t)
     }
 	float offset = particle.m_baseScale * scaleSample / 2;
 
-    // Calculate position with constant acceleration:
-	// x(t) = x(0) + v(0) * t + 0.5 * a * t * t
+    // Calculate position with constant acceleration, as the game steps it:
+	// x(t) = x(0) + (v(0) + 0.5 * a * dt) * t + 0.5 * a * t * t
     float pt = t - particle.m_positionTime;
-	D3DXVECTOR3 position = particle.m_initialPosition + (particle.m_initialSpeed + 0.5 * particle.m_acceleration * pt) * pt;
+	D3DXVECTOR3 position = particle.m_initialPosition + (particle.m_initialSpeed + particle.m_positionSpeedShift + 0.5 * particle.m_acceleration * pt) * pt;
     position += (m_system.GetPosition() - particle.m_systemSpawnPosition) * (m_emitter.linkToSystem ? 1.0f : 0.0f);
 	position += (GetPosition()          - particle.m_parentSpawnPosition) * m_emitter.parentLinkStrength;
 
