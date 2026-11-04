@@ -2,6 +2,7 @@
 #include "ParticleSystemInstance.h"
 #include "ParticleRandom.h"
 #include "SpawnerRandom.h"
+#include "ProjectileShot.h"
 #include <algorithm>
 
 namespace {
@@ -224,17 +225,44 @@ void SpawnerDriver::Tick(float dtSeconds, const ParticleSystem* sys, Engine* eng
 
             D3DXVECTOR3 pos = m_cfg.position + SpawnerRandom::Jitter(m_cfg.jitterPosition);
             anchor.SetPosition(pos);
-            anchor.SetVelocity(m_cfg.velocity);   // no velocity jitter; path is shaped over lifetime instead
+
+            // Match-projectile: the game's flight replaces the authored motion.
+            D3DXVECTOR3 velocity    = m_cfg.velocity;
+            float       maxLifetime = m_cfg.maxLifetimeSec;
+            D3DXVECTOR3 accel       = m_cfg.acceleration;
+            D3DXVECTOR3 squiggle    = m_cfg.squiggleAmplitude;
+            bool        shot        = false;
+            Engine::ReferenceProjectileInfo proj;
+            if (m_cfg.matchProjectile && engine->GetReferenceProjectile(proj))
+            {
+                const float aim[3] = { m_cfg.velocity.x, m_cfg.velocity.y, m_cfg.velocity.z };
+                ProjectileShot flight;
+                if (ComputeProjectileShot(proj.speedPerFrame, proj.range, aim, flight))
+                {
+                    velocity    = D3DXVECTOR3(flight.velocity[0], flight.velocity[1], flight.velocity[2]);
+                    maxLifetime = flight.flightSec;
+                    accel       = D3DXVECTOR3(0, 0, 0);
+                    squiggle    = D3DXVECTOR3(0, 0, 0);
+                    shot        = true;
+                }
+            }
+            anchor.SetVelocity(velocity);   // no velocity jitter; path is shaped over lifetime instead
 
             ParticleSystemInstance* inst = engine->SpawnParticleSystem(*sys, &anchor);
             if (inst != NULL)
             {
                 inst->MarkSpawnerOwned();
-                inst->SetMaxLifetime(m_cfg.maxLifetimeSec);
-                inst->SetPathShape(m_cfg.acceleration,
-                                   m_cfg.squiggleAmplitude,
+                inst->SetMaxLifetime(maxLifetime);
+                inst->SetPathShape(accel,
+                                   squiggle,
                                    m_cfg.squiggleFrequency,
                                    SpawnerRandom::SquigglePhase());
+                if (shot)
+                {
+                    D3DXVECTOR3 dir;
+                    D3DXVec3Normalize(&dir, &velocity);
+                    inst->MarkProjectileShot(dir);
+                }
                 inst->Detach();   // freeze the stamped values; per-frame motion takes over from Update
             }
             else

@@ -16,6 +16,10 @@
 //       frequency — scalar. Path-shaping over each instance's lifetime,
 //       replacing the old one-time velocity jitter.
 //   8. Spawn now — manual-only button (fires spawner/trigger).
+//   9. Projectile — shown when the reference object is a projectile: "Fly
+//      like the projectile" (matchProjectile) takes the game's speed, range
+//      and flight time, so Velocity only aims and the lifetime and path
+//      sections stand down while it is on.
 //
 // State sync. The panel reads `snapshot.spawner` on mount and listens
 // to `engine/state/changed` for external mutations (devtools pokes,
@@ -48,6 +52,7 @@ import { ToolPanel } from "@/components/ToolPanel";
 import { setDock } from "@/lib/right-dock";
 import { makeDefaultSpawnerParams } from "@/lib/spawner-defaults";
 import { getTimelineState, useTimeline } from "@/lib/timeline";
+import { useEngineField } from "@/lib/use-engine-snapshot";
 
 type Props = {
   bridge: Bridge;
@@ -188,6 +193,16 @@ export function SpawnerPane({ bridge }: Props) {
     );
   const setSquiggleFreq = (v: number) =>
     commit(patchSpawner(config, "squiggleFrequency", v));
+  const setMatchProjectile = (on: boolean) =>
+    commit(patchSpawner(config, "matchProjectile", on));
+
+  const projectile = useEngineField(
+    bridge,
+    (s) => s.referenceProjectile ?? null,
+    (a, b) => JSON.stringify(a) === JSON.stringify(b),
+  );
+  // The host flies shots like the projectile only when it can (C++ SpawnerDriver).
+  const matching = config.matchProjectile === true && projectile?.flyable === true;
 
   const handleTrigger = () => {
     if (getTimelineState().active) return;
@@ -295,6 +310,30 @@ export function SpawnerPane({ bridge }: Props) {
         )}
       </ToolPanel.Section>
 
+      {projectile && (
+        <ToolPanel.Section title="Projectile" alwaysOpen>
+          <label className="flex items-center gap-2 text-xs text-text">
+            <Checkbox
+              checked={config.matchProjectile === true}
+              disabled={!projectile.flyable}
+              onChange={(e) => setMatchProjectile(e.target.checked)}
+              aria-label="Fly like the projectile"
+            />
+            <span>Fly like the projectile</span>
+          </label>
+          <p data-testid="spawner-projectile-flight" className="mt-1 text-2xs text-text-3">
+            {projectile.flyable
+              ? `In game: ${Math.round(projectile.speed)} units/s for ${Math.round(projectile.range)} units (${projectile.flightSec.toFixed(2)} s). Velocity sets the direction.`
+              : "This projectile has no usable Max_Speed, so it can't be matched."}
+          </p>
+          {projectile.flyable && !projectile.straightPath && (
+            <p data-testid="spawner-projectile-curved" className="mt-1 text-2xs text-text-3">
+              In game a {projectile.category} shot doesn't fly straight; the preview flies it straight.
+            </p>
+          )}
+        </ToolPanel.Section>
+      )}
+
       <ToolPanel.Section title="Burst" defaultOpen>
         <ToolPanel.Row label="Burst size">
           <Spinner
@@ -399,6 +438,8 @@ export function SpawnerPane({ bridge }: Props) {
         </div>
       </ToolPanel.Section>
 
+      {/* role="none": only carries `disabled` while the shot flies like the projectile. */}
+      <fieldset role="none" disabled={matching} className="m-0 min-w-0 border-0 p-0">
       <ToolPanel.Section title="Lifetime" alwaysOpen>
         <ToolPanel.Row label="Max lifetime">
           <Spinner
@@ -413,6 +454,7 @@ export function SpawnerPane({ bridge }: Props) {
           />
         </ToolPanel.Row>
       </ToolPanel.Section>
+      </fieldset>
 
       <ToolPanel.Section title="Jitter position" unit="units">
         <div className="grid grid-cols-3 gap-1">
@@ -446,6 +488,7 @@ export function SpawnerPane({ bridge }: Props) {
         </div>
       </ToolPanel.Section>
 
+      <fieldset role="none" disabled={matching} className="m-0 min-w-0 border-0 p-0">
       <ToolPanel.Section title="Acceleration (arc)" unit="units/s²">
         <div className="grid grid-cols-3 gap-1">
           <div className="axis-cell">
@@ -524,6 +567,7 @@ export function SpawnerPane({ bridge }: Props) {
           />
         </ToolPanel.Row>
       </ToolPanel.Section>
+      </fieldset>
       </fieldset>
 
       </div>

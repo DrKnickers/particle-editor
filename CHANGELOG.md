@@ -10,6 +10,7 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ### Added
 
+- With a projectile as the reference object, the Spawner's "Fly like the projectile" flies each instance at the shot's in-game speed and range, in a straight line, carrying the projectile model pointed along its flight; missiles, rockets, bombs and grenades are flagged because the game doesn't fly them straight
 - The reference-object picker lists projectiles in their own section, grouped Ground and Space, so an effect can be lined up against the shot it rides on; a projectile with both a land and a space model appears in both groups, and projectiles drawn only by particle effects are left out
 - The editor finds assets a mod packages in its own `.meg` archives (listed in the mod's `Data\MegaFiles.xml`), as total conversions do, ranking them below the mod's loose files and above the base game's files
 - An observation spec can name its own camera (`position`, `target`, `up`), so `node scripts/observe.mjs` can pull back and show a whole large effect; without one, observations keep the fixed golden camera

@@ -59,6 +59,12 @@ struct SpawnerConfig
     D3DXVECTOR3 acceleration      = D3DXVECTOR3(0, 0, 0);   // arc, units/sec²
     D3DXVECTOR3 squiggleAmplitude = D3DXVECTOR3(0, 0, 0);   // per-axis ±, world units
     float       squiggleFrequency = 1.0f;                  // Hz; 0..SQUIGGLE_FREQ_MAX
+
+    // Fly each instance like the selected reference projectile (simulation/ProjectileShot.h):
+    // the game's speed and range replace velocity magnitude, lifetime and path shaping;
+    // `velocity` only aims the shot (+X when zero), and the projectile model rides along.
+    // No effect when the reference object isn't a projectile with a usable <Max_Speed>.
+    bool        matchProjectile   = false;
 };
 
 class SpawnerDriver

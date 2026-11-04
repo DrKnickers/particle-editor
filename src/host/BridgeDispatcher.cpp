@@ -20,6 +20,7 @@
 #include "WindowCapture.h"
 #include "HostMessages.h"   // WM_APP_QUIT_CONFIRMED
 #include "StringConv.h"   // host::Utf8ToWide / WideToUtf8 (consolidated)
+#include "simulation/ProjectileShot.h"   // referenceProjectile snapshot field
 #include "PerfTrace.h"
 #include "host/third_party/nlohmann/json.hpp"
 
@@ -313,6 +314,25 @@ const char* RefStatusToString(ReferenceObjectStatus s)
         case ReferenceObjectStatus::ModelMissing: return "model-missing";
         default:                                  return "none";
     }
+}
+
+// The selected reference projectile's game flight for the spawner pane, or null
+// when the reference object isn't a projectile. `flyable` is false when its
+// <Max_Speed> is absent or unusable (the spawner then flies it as authored).
+static json ReferenceProjectileToJson(const Engine& engine)
+{
+    Engine::ReferenceProjectileInfo proj;
+    if (!engine.GetReferenceProjectile(proj))
+        return nullptr;
+    const float aim[3] = { 1.0f, 0.0f, 0.0f };
+    ProjectileShot flight = {};
+    const bool flyable = ComputeProjectileShot(proj.speedPerFrame, proj.range, aim, flight);
+    return json{ {"flyable",      flyable},
+                 {"speed",        flight.velocity[0]},   // world units per second
+                 {"range",        proj.range},           // world units
+                 {"flightSec",    flight.flightSec},
+                 {"category",     proj.category},
+                 {"straightPath", IsStraightPathProjectileCategory(proj.category)} };
 }
 
 // SkydomeSlotStatus -> wire string for the snapshot DTO. Mirrors
@@ -635,6 +655,7 @@ json BuildEngineStateSnapshot(Engine* engine,
         {"referenceObjectPosition", Vec3ToJson(engine->GetReferencePosition())},
         {"referenceObjectRotation", Vec3ToJson(engine->GetReferenceRotation())},
         {"referenceObjectStatus",   RefStatusToString(engine->GetReferenceObjectStatus())},
+        {"referenceProjectile",     ReferenceProjectileToJson(*engine)},
         // True while the units/structures catalog is (re)building off the UI thread;
         // the picker shows "Loading objects…" and re-queries its list on the true->false
         // transition (catalog ready / mod-switch rebuild) -- not on every state change.

@@ -138,6 +138,14 @@ struct GameObjectRef
     // The game draws the model at scaleFactor x its native .alo size; the reference-
     // object renderer applies it so an imported unit matches its in-game size.
     float     scaleFactor = 1.0f;
+
+    // Projectiles only (Variant_Of-inherited). The game moves a shot projectileSpeed
+    // world units each logic frame (raw <Max_Speed>; 0 = absent or unusable) and
+    // destroys it once it has flown projectileRange units (<Projectile_Max_Flight_Distance>,
+    // default 50 as in the game's constructor). See simulation/ProjectileShot.h.
+    float       projectileSpeed    = 0.0f;
+    float       projectileRange    = 50.0f;
+    std::string projectileCategory;       // raw <Projectile_Category>, e.g. "Laser", "MISSILE"
 };
 
 // Picker keep-gate. Units/structures must be fieldable (a player can build/spawn

@@ -53,25 +53,28 @@ describe("SpawnerPane", () => {
       ...makeDefaultEngineState(),
       spawner: { ...makeDefaultSpawnerParams(), mode: "manual", burstSize: 2 },
     };
-    let resolveSnapshot: (s: unknown) => void = () => {};
-    const captured: { onChanged?: (e: { payload: unknown }) => void } = {};
+    // Every snapshot request and state/changed listener (the pane's own, plus
+    // the shared engine-field store's) is held so the test can drive them all.
+    const snapshotResolvers: Array<(s: unknown) => void> = [];
+    const changedHandlers: Array<(e: { payload: unknown }) => void> = [];
     bridge.request.mockImplementation((req: { kind: string }) => {
       if (req.kind === "engine/state/snapshot") {
-        return new Promise((resolve) => { resolveSnapshot = resolve; });
+        return new Promise((resolve) => { snapshotResolvers.push(resolve); });
       }
       return Promise.resolve({});
     });
     bridge.on.mockImplementation((kind: string, h: (e: { payload: unknown }) => void) => {
-      if (kind === "engine/state/changed") captured.onChanged = h;
+      if (kind === "engine/state/changed") changedHandlers.push(h);
       return () => {};
     });
     render(<SpawnerPane bridge={bridge} />);
 
     // The newer broadcast (burst 7) lands first, then the stale mount
     // snapshot (burst 2) resolves — the panel must keep the broadcast.
-    act(() => captured.onChanged?.({ payload: { ...base, spawner: { ...base.spawner, burstSize: 7 } } }));
+    const newer = { payload: { ...base, spawner: { ...base.spawner, burstSize: 7 } } };
+    act(() => changedHandlers.forEach((h) => h(newer)));
     await act(async () => {
-      resolveSnapshot(base);
+      snapshotResolvers.forEach((r) => r(base));
       await Promise.resolve();
     });
     expect(Number((screen.getByLabelText("Burst size") as HTMLInputElement).value)).toBe(7);
@@ -186,5 +189,59 @@ describe("SpawnerPane", () => {
       expect(result.current).toBeNull();
     });
     expect(localStorage.getItem("alo:right-dock")).toBe("none");
+  });
+});
+
+describe("SpawnerPane — fly like the projectile", () => {
+  function bridgeWith(referenceProjectile: EngineStateDto["referenceProjectile"], matchProjectile = false) {
+    const snapshot: EngineStateDto = {
+      ...makeDefaultEngineState(),
+      referenceObjectName: referenceProjectile ? "Proj_Laser" : "",
+      referenceProjectile,
+      spawner: { ...makeDefaultSpawnerParams(), mode: "manual", matchProjectile },
+    };
+    return {
+      request: vi.fn().mockImplementation((req: { kind: string }) =>
+        Promise.resolve(req.kind === "engine/state/snapshot" ? snapshot : {})),
+      on: vi.fn().mockReturnValue(() => {}),
+    } as unknown as Bridge & { request: ReturnType<typeof vi.fn> };
+  }
+  const laser = { flyable: true, speed: 330, range: 500, flightSec: 46 / 30, category: "Laser", straightPath: true };
+
+  it("hides the section when the reference object is not a projectile", async () => {
+    render(<SpawnerPane bridge={bridgeWith(null)} />);
+    await waitFor(() => expect(screen.getByLabelText("Burst size")).toBeTruthy());
+    expect(screen.queryByLabelText("Fly like the projectile")).toBeNull();
+  });
+
+  it("shows the game flight and commits matchProjectile", async () => {
+    const bridge = bridgeWith(laser);
+    render(<SpawnerPane bridge={bridge} />);
+    const box = await screen.findByLabelText("Fly like the projectile");
+    expect(screen.getByTestId("spawner-projectile-flight").textContent).toContain("330 units/s for 500 units (1.53 s)");
+    expect(screen.queryByTestId("spawner-projectile-curved")).toBeNull();
+    fireEvent.click(box);
+    const start = bridge.request.mock.calls.map((c) => c[0]).find((r) => r.kind === "spawner/start");
+    expect(start?.params.matchProjectile).toBe(true);
+  });
+
+  it("stands down the lifetime and path controls while matching, but not jitter", async () => {
+    render(<SpawnerPane bridge={bridgeWith(laser, true)} />);
+    await waitFor(() => expect(screen.getByLabelText("Max lifetime").matches(":disabled")).toBe(true));
+    expect(screen.getByLabelText("Acceleration X").matches(":disabled")).toBe(true);
+    expect(screen.getByLabelText("Squiggle frequency").matches(":disabled")).toBe(true);
+    expect(screen.getByLabelText("Jitter position X").matches(":disabled")).toBe(false);
+    expect(screen.getByLabelText("Velocity X").matches(":disabled")).toBe(false);
+  });
+
+  it("flags curved categories and refuses a projectile with no speed", async () => {
+    const { unmount } = render(
+      <SpawnerPane bridge={bridgeWith({ ...laser, category: "MISSILE", straightPath: false })} />);
+    expect((await screen.findByTestId("spawner-projectile-curved")).textContent).toContain("MISSILE");
+    unmount();
+    render(<SpawnerPane bridge={bridgeWith({ ...laser, flyable: false, speed: 0 }, true)} />);
+    const box = (await screen.findByLabelText("Fly like the projectile")) as HTMLInputElement;
+    expect(box.disabled).toBe(true);
+    expect(screen.getByLabelText("Max lifetime").matches(":disabled")).toBe(false);
   });
 });

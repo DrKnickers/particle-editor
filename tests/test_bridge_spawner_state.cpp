@@ -89,6 +89,7 @@ static nlohmann::json OutOfRangeConfig()
         {"acceleration",      {-10001.0f, 10001.0f, -10001.0f}},
         {"squiggleAmplitude", {10001.0f, -10001.0f, 10001.0f}},
         {"squiggleFrequency", 21.0f},
+        {"matchProjectile",   true},
     };
 }
 
@@ -107,6 +108,7 @@ static nlohmann::json ClampedConfig()
         {"acceleration",      {-SpawnerDriver::JITTER_MAX, SpawnerDriver::JITTER_MAX, -SpawnerDriver::JITTER_MAX}},
         {"squiggleAmplitude", {SpawnerDriver::JITTER_MAX, -SpawnerDriver::JITTER_MAX, SpawnerDriver::JITTER_MAX}},
         {"squiggleFrequency", SpawnerDriver::SQUIGGLE_FREQ_MAX},
+        {"matchProjectile",   true},
     };
 }
 
@@ -126,7 +128,8 @@ static bool DriverHasClampedConfig(const SpawnerDriver& driver)
         && cfg.jitterPosition.x == SpawnerDriver::JITTER_MAX
         && cfg.acceleration.x == -SpawnerDriver::JITTER_MAX
         && cfg.squiggleAmplitude.x == SpawnerDriver::JITTER_MAX
-        && cfg.squiggleFrequency == SpawnerDriver::SQUIGGLE_FREQ_MAX;
+        && cfg.squiggleFrequency == SpawnerDriver::SQUIGGLE_FREQ_MAX
+        && cfg.matchProjectile;
 }
 
 int main()

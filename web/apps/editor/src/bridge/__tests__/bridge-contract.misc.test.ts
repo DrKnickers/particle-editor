@@ -70,6 +70,7 @@ describe("MockBridge contract — spawner/*, textures/*, subscriptions", () => {
         acceleration: [-10_001, 10_001, -10_001],
         squiggleAmplitude: [10_001, -10_001, 10_001],
         squiggleFrequency: 21,
+        matchProjectile: true,
       },
     });
 
@@ -86,6 +87,7 @@ describe("MockBridge contract — spawner/*, textures/*, subscriptions", () => {
       acceleration: [-10_000, 10_000, -10_000],
       squiggleAmplitude: [10_000, -10_000, 10_000],
       squiggleFrequency: 20,
+      matchProjectile: true,
     };
     expect(lastSnap).not.toBeNull();
     expect(lastSnap!.spawner).toEqual(expected);

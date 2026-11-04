@@ -318,6 +318,9 @@
     <ClInclude Include="simulation\GameParticleStep.h">
       <Filter>Header Files\simulation</Filter>
     </ClInclude>
+    <ClInclude Include="simulation\ProjectileShot.h">
+      <Filter>Header Files\simulation</Filter>
+    </ClInclude>
     <ClInclude Include="effect\CloseDecision.h">
       <Filter>Header Files\effect</Filter>
     </ClInclude>

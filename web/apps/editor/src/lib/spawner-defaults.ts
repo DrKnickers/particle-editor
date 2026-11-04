@@ -17,5 +17,6 @@ export function makeDefaultSpawnerParams(): SpawnerParamsDto {
     acceleration: [0, 0, 0],
     squiggleAmplitude: [0, 0, 0],
     squiggleFrequency: 1,
+    matchProjectile: false,
   };
 }

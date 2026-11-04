@@ -428,6 +428,7 @@ private:
         cfg.acceleration = SpawnerJsonToVec3(params.value("acceleration", nlohmann::json::array()));
         cfg.squiggleAmplitude = SpawnerJsonToVec3(params.value("squiggleAmplitude", nlohmann::json::array()));
         cfg.squiggleFrequency = params.value("squiggleFrequency", 1.0f);
+        cfg.matchProjectile   = params.value("matchProjectile", false);
         return cfg;
     }
 
@@ -452,6 +453,7 @@ private:
             {"acceleration",      vec3(m_spawnerConfig.acceleration)},
             {"squiggleAmplitude", vec3(m_spawnerConfig.squiggleAmplitude)},
             {"squiggleFrequency", m_spawnerConfig.squiggleFrequency},
+            {"matchProjectile",   m_spawnerConfig.matchProjectile},
         };
     }
 
@@ -460,6 +462,7 @@ private:
         m_spawnerConfig = SpawnerConfigFromJson(params);
         ClampSpawnerConfig(m_spawnerConfig);
         if (m_spawnerDriver) m_spawnerDriver->SetConfig(m_spawnerConfig);
+        if (m_engine) m_engine->SetReferenceShotMode(m_spawnerConfig.matchProjectile);
     }
 
     void ApplySpawnerStop()

@@ -26,6 +26,9 @@ void Engine::RenderReferenceShadows()
 {
     if (!m_modelShadowsEnabled || !m_referenceObjectVisible) return;
     if (m_referenceObjectMesh.IsEmpty() || !m_referenceObjectMesh.HasResolved()) return;
+    // Match-projectile mode draws the model at the flying shots, not at rest, and the
+    // shots carry no shadow (RenderReferenceObject).
+    if (!ReferenceRestsInScene()) return;
 
     bool any = !m_referenceObjectMesh.ShadowSubMeshes().empty();
     for (size_t i = 0; !any && i < m_referenceAttachments.size(); ++i)

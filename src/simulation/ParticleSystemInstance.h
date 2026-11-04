@@ -41,6 +41,10 @@ class ParticleSystemInstance : public Object3D
     TimeF                    m_spawnTime      = -1.0f;
     TimeF                    m_lastUpdateTime = -1.0f;
     bool                     m_lifetimeExpired = false;
+    // Match-projectile spawner shot: the reference projectile model is drawn here,
+    // facing m_shotDirection, until the game would destroy the shot (max lifetime).
+    bool                     m_projectileShot  = false;
+    D3DXVECTOR3              m_shotDirection   = D3DXVECTOR3(1, 0, 0);
 
     // Path-shaping. Captured at the first-Update baseline /
     // SetPathShape; the instance position is then computed analytically
@@ -80,6 +84,13 @@ public:
         m_velocity     = GetVelocity();
     }
     bool IsSpawnerOwned() const     { return m_spawnerOwned; }
+    void MarkProjectileShot(const D3DXVECTOR3& direction)
+    {
+        m_projectileShot = true;
+        m_shotDirection  = direction;
+    }
+    bool IsProjectileShotLive() const          { return m_projectileShot && !m_lifetimeExpired; }
+    const D3DXVECTOR3& GetShotDirection() const { return m_shotDirection; }
     TimeF SpawnTimeForObservation() const { return m_spawnTime; }
 
     // Set by the SpawnerDriver after spawn. 0 means "no cap"; > 0 means

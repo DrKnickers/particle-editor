@@ -163,6 +163,12 @@ export type SpawnerParamsDto = {
   /** Squiggle frequency in Hz (oscillations/sec), 0..SQUIGGLE_FREQ_MAX
    *  (=20), shared across axes. */
   squiggleFrequency: number;
+  /** Fly each instance like the selected reference projectile: the game's
+   *  speed and range replace the velocity's magnitude, the lifetime and the
+   *  path shaping; `velocity` only aims the shot (+X when zero), and the
+   *  projectile model rides with it. No effect unless `referenceProjectile`
+   *  is flyable. Absent = false. */
+  matchProjectile?: boolean;
 };
 
 // ─── Emitter tree DTO ──
@@ -248,6 +254,16 @@ export type ReferenceObjectBucket =
   | "Infantry" | "Vehicle" | "Air"                                           // ground units
   | "Fighter" | "Bomber" | "Corvette" | "Frigate" | "Capital" | "Transport"  // space units
   | "Structure" | "Hero" | "Other" | "None";                                 // shared
+// How the game flies the selected reference projectile (simulation/ProjectileShot.h):
+// 30 x <Max_Speed> world units per second until it has flown <Projectile_Max_Flight_Distance>.
+export type ReferenceProjectileDto = {
+  flyable: boolean;      // false: <Max_Speed> absent or unusable, so it can't be matched
+  speed: number;         // world units per second
+  range: number;         // world units
+  flightSec: number;     // seconds until the game destroys the shot
+  category: string;      // raw <Projectile_Category>
+  straightPath: boolean; // false for missiles, rockets, bombs, grenades (the preview flies them straight)
+};
 export type ReferenceObjectEntry = {
   name: string;
   domain: ReferenceObjectDomain;
@@ -313,6 +329,8 @@ export type EngineStateDto = {
   // up (Z), pitch = tilt about X, roll = bank about Y (yaw applied last).
   referenceObjectRotation: Vec3;           // GetReferenceRotation()
   referenceObjectStatus: ReferenceObjectStatus;  // lazy probe of the selected .alo
+  // The selected reference object's game flight when it is a projectile, else null.
+  referenceProjectile: ReferenceProjectileDto | null;
   // true while the units/structures catalog is (re)building off the UI thread;
   // the picker shows "Loading objects…" and re-queries its list on the true->false edge.
   referenceCatalogBuilding: boolean;       // IsReferenceCatalogBuilding()

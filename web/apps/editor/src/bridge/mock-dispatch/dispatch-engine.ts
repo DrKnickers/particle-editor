@@ -5,6 +5,7 @@ import type {
   EngineStateDto,
   LightDto,
   ReferenceObjectStatus,
+  ReferenceProjectileDto,
   SkydomeSlotStatus,
 } from "@particle-editor/bridge-schema";
 import {
@@ -70,6 +71,15 @@ type EngineRequest = Extract<Request, { kind: EngineKind }>;
 // for "skinned / unsupported" objects — selecting one drives the picker's
 // "not supported" status path. Must match a Name in the reference-object-list.
 const MOCK_SKINNED_REFS = new Set<string>(["Stormtrooper_Squad"]);
+
+// Canned game flight for the mock projectiles (the host derives it from
+// <Max_Speed> / <Projectile_Max_Flight_Distance>): 30 x Max_Speed u/s, and
+// ceil(range / Max_Speed) logic frames of flight.
+const MOCK_PROJECTILE_FLIGHT: Record<string, ReferenceProjectileDto> = {
+  Proj_Ground_Blaster_Red:    { flyable: true, speed: 330, range: 500, flightSec: 46 / 30, category: "Laser", straightPath: true },
+  Proj_Ship_Turbolaser_Green: { flyable: true, speed: 600, range: 1500, flightSec: 75 / 30, category: "Laser", straightPath: true },
+  Proj_Proton_Torpedo:        { flyable: true, speed: 240, range: 2000, flightSec: 250 / 30, category: "MISSILE", straightPath: false },
+};
 
 // Names that resolve in the catalog but whose model file is absent from the
 // mod/base (getFile miss) — selecting one drives the "model file not found" status
@@ -205,7 +215,11 @@ export function dispatchEngine(this: MockDispatchHost, req: EngineRequest): unkn
         : MOCK_MISSING_MODELS.has(name)  ? "model-missing"
         : MOCK_SKINNED_REFS.has(name)    ? "skinned"
         :                                  "ok";
-      this.patchAndBroadcast({ referenceObjectName: name, referenceObjectStatus: status });
+      this.patchAndBroadcast({
+        referenceObjectName: name,
+        referenceObjectStatus: status,
+        referenceProjectile: MOCK_PROJECTILE_FLIGHT[name] ?? null,
+      });
       return {};
     }
 

@@ -403,7 +403,7 @@ Engine::ManipHandle Engine::PickManipulatorHandle(short screenX, short screenY) 
 {
     ManipHandle hit;   // NONE / -1
     if (!m_referenceObjectSelected) return hit;   // gizmo only grabbable when selected
-    if (!m_referenceObjectVisible) return hit;
+    if (!m_referenceObjectVisible || !ReferenceRestsInScene()) return hit;
     if (m_referenceObjectMesh.IsEmpty() || !m_referenceObjectMesh.HasResolved()) return hit;
     if (m_pDevice == NULL) return hit;
 
@@ -558,7 +558,7 @@ bool Engine::ManipulatorPlaneOffset(short screenX, short screenY, int normalAxis
 void Engine::RenderReferenceManipulator()
 {
     if (!m_referenceObjectSelected) return;
-    if (!m_referenceObjectVisible) return;
+    if (!m_referenceObjectVisible || !ReferenceRestsInScene()) return;
     if (m_referenceObjectMesh.IsEmpty() || !m_referenceObjectMesh.HasResolved()) return;
 
     const D3DXVECTOR3 o = m_displayPosition;   // eased origin so the gizmo glides with the object
@@ -755,7 +755,7 @@ void Engine::RenderReferenceManipulator()
 void Engine::RenderReferenceSelectionBox()
 {
     if (!m_referenceObjectSelected) return;
-    if (!m_referenceObjectVisible) return;
+    if (!m_referenceObjectVisible || !ReferenceRestsInScene()) return;
     if (m_referenceObjectMesh.IsEmpty() || !m_referenceObjectMesh.HasResolved()) return;
     D3DXVECTOR3 mn, mx;
     if (!m_referenceObjectMesh.GetBoundingBox(mn, mx)) return;
@@ -813,6 +813,7 @@ void Engine::RenderReferenceSelectionBox()
 bool Engine::PickReferenceObject(short screenX, short screenY) const
 {
     if (!m_referenceObjectVisible) return false;   // hidden -> nothing drawn -> not pickable
+    if (!ReferenceRestsInScene()) return false;    // flying with the shots -> nothing at rest
     if (m_referenceObjectMesh.IsEmpty() || !m_referenceObjectMesh.HasResolved()) return false;
     if (m_pDevice == NULL) return false;
     D3DXVECTOR3 bmin, bmax;

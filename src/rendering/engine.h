@@ -790,6 +790,23 @@ public:
 	const D3DXVECTOR3&    GetReferencePosition()      const { return m_referencePosition; }
 	const D3DXVECTOR3&    GetReferenceRotation()      const { return m_referenceRotation; }
 	ReferenceObjectStatus GetReferenceObjectStatus()  const { return m_referenceObjectStatus; }
+	// The selected reference object's flight data when it is a projectile (false
+	// otherwise). Feeds the spawner's match-projectile mode (simulation/ProjectileShot.h).
+	struct ReferenceProjectileInfo
+	{
+	    float       speedPerFrame = 0.0f;   // raw <Max_Speed>; 0 = can't be flown
+	    float       range         = 0.0f;   // <Projectile_Max_Flight_Distance>
+	    std::string category;               // raw <Projectile_Category>
+	};
+	bool GetReferenceProjectile(ReferenceProjectileInfo& out) const
+	     { if (!m_referenceIsProjectile) return false; out = m_referenceProjectile; return true; }
+	// Match-projectile spawner mode: the projectile model is drawn at each live
+	// spawned shot instead of at its resting place. Set by the spawner bridge.
+	void SetReferenceShotMode(bool on) { m_referenceShotMode = on; }
+	bool GetReferenceShotMode() const  { return m_referenceShotMode; }
+	// False while the model flies with the shots: nothing rests at the placement, so it
+	// draws no resting model, shadow, gizmo or selection box and can't be clicked.
+	bool ReferenceRestsInScene() const { return !(m_referenceShotMode && m_referenceIsProjectile); }
 	// [capture] Number of shadow-volume sub-meshes on the loaded reference object
 	// (plus any attachments). Used by --capture-ref to warn when the object has no
 	// shadow geometry so the operator knows the captured image will show no shadow.
@@ -1081,6 +1098,11 @@ private:
 	// transparent) -- each rigid sub-mesh placed by its bone, running its own game
 	// shader 1:1, blended per its phase/blend class. No-op when empty/unresolved.
 	void				RenderReferenceObject();
+	// One opaque or transparent pass of the reference object (unit + hardpoint
+	// attachments) placed at objectWorld. RenderReferenceObject calls it for the
+	// resting object and for each live projectile shot.
+	void				DrawReferenceObjectPhase(const D3DXMATRIX& objectWorld, bool opaquePhase,
+	                                             const D3DXVECTOR4& eyePos);
 	void				RenderReferenceShadows();        // [shadow] stencil shadow-volume pass
 
 	// Live reference-object world (Z-up yaw/pitch/roll then translate). The
@@ -1368,6 +1390,10 @@ private:
 	// RebuildReferenceObjectMesh, set from the catalog only on a successful resolve, so a
 	// mod/submod switch never leaves it stale.
 	float                    m_referenceScaleFactor = 1.0f;
+	// Projectile flight data for the selected object; reset alongside the scale.
+	bool                     m_referenceIsProjectile = false;
+	ReferenceProjectileInfo  m_referenceProjectile;
+	bool                     m_referenceShotMode = false;   // see SetReferenceShotMode
 	// Render-only "display" transform eased toward the committed transform above
 	// each frame so gizmo/object motion is smooth (incl. under snap). Committed values
 	// stay exact (undo / spinners / saved file). See Engine::EaseReferenceDisplay.

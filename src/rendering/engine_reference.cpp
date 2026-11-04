@@ -22,6 +22,8 @@
 #include "common/utils.h"
 #include "Resources/resource.h"
 #include "simulation/EmitterInstance.h"      // EmitterInstance::Vertex (world-line/tri/ribbon draws)
+#include "simulation/ParticleSystemInstance.h"   // projectile shots (match-projectile spawner)
+#include "simulation/ProjectileShot.h"           // ProjectileShotModelAxes
 #include "GizmoSizing.h"          // pure screen-uniform gizmo-handle formula
 #include "PlaneHandle.h"          // pure ground-plane handle math
 #include "GizmoRibbon.h"          // camera-facing ribbon quad expansion
@@ -178,139 +180,38 @@ void Engine::RenderReferenceObject()
     // two-sided; MeshShield itself sets CullMode=NONE) + z-write OFF so the layers
     // don't occlude each other; depth TEST stays on so the opaque hull occludes
     // transparent geometry behind it.
+    // In match-projectile mode the model flies with each live spawned shot instead
+    // of resting at its placement: scaled like the resting model and turned the way
+    // the game turns a shot's model, its -Y along the flight (simulation/ProjectileShot.h).
+    // The shots carry no shadow.
+    const bool shotMode = !ReferenceRestsInScene();
+    std::vector<D3DXMATRIX> shotWorlds;
+    if (shotMode)
+        for (const auto& inst : m_instances)
+        {
+            if (!inst || !inst->IsProjectileShotLive())
+                continue;
+            const D3DXVECTOR3& d = inst->GetShotDirection();
+            const float dir[3] = { d.x, d.y, d.z };
+            float ax[3], ay[3], az[3];
+            ProjectileShotModelAxes(dir, ax, ay, az);
+            const D3DXVECTOR3 p = inst->GetPosition();
+            D3DXMATRIX frame(ax[0], ax[1], ax[2], 0.0f,
+                             ay[0], ay[1], ay[2], 0.0f,
+                             az[0], az[1], az[2], 0.0f,
+                             p.x,   p.y,   p.z,   1.0f);
+            D3DXMATRIX scale;
+            D3DXMatrixScaling(&scale, m_referenceScaleFactor, m_referenceScaleFactor, m_referenceScaleFactor);
+            shotWorlds.push_back(scale * frame);
+        }
+
     for (int phase = 0; phase < 2; ++phase)
     {
       const bool opaquePhase = (phase == 0);
-      // Draw the unit (mi == 0) then each hardpoint attach model, both in this
-      // phase. worldBase = objectWorld for the unit, or attachBone * objectWorld for an
-      // attachment (mounting the attach model at the unit's named Attachment_Bone), so
-      // its own additive/alpha layers (turret glows) blend over the assembled unit.
-      for (size_t mi = 0; mi <= m_referenceAttachments.size(); ++mi)
-      {
-      ReferenceObjectMesh& refMesh = (mi == 0) ? m_referenceObjectMesh
-                                               : m_referenceAttachments[mi - 1]->mesh;
-      const D3DXMATRIX worldBase   = (mi == 0) ? objectWorld
-                                               : (m_referenceAttachments[mi - 1]->boneMatrix * objectWorld);
-      for (RefSubMeshGpu& sub : refMesh.SubMeshes())
-      {
-        if (sub.effect == NULL || sub.vb == NULL || sub.ib == NULL || sub.decl == NULL)
-            continue;
-        const bool subOpaque = (sub.renderClass == ALO_RC_OPAQUE);
-        if (subOpaque != opaquePhase)
-            continue;   // opaque sub-meshes in phase 0, additive/alpha in phase 1
-
-        m_pDevice->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
-        if (subOpaque)
-        {
-            m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE,     TRUE);
-            m_pDevice->SetRenderState(D3DRS_CULLMODE,         D3DCULL_CW);
-            m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-        }
-        else
-        {
-            m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE,     FALSE);
-            m_pDevice->SetRenderState(D3DRS_CULLMODE,         D3DCULL_NONE);
-            m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-            if (sub.renderClass == ALO_RC_ADDITIVE)
-            {
-                m_pDevice->SetRenderState(D3DRS_SRCBLEND,  D3DBLEND_ONE);
-                m_pDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
-            }
-            else // ALO_RC_ALPHA
-            {
-                m_pDevice->SetRenderState(D3DRS_SRCBLEND,  D3DBLEND_SRCALPHA);
-                m_pDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-            }
-        }
-
-        D3DXMATRIX world = sub.placement * worldBase;
-        D3DXMATRIX wvp   = world * m_view * m_projection;
-
-        // Object-space eye + light for the bump shader's tangent-space lighting
-        // (m_eyePosObj / m_light0ObjVector). These equal the world values only at
-        // identity world; transform by inverse-world so the bump + specular stay
-        // correct once the object is moved/rotated (picker spinners / gizmo).
-        D3DXMATRIX invWorld;
-        if (!D3DXMatrixInverse(&invWorld, NULL, &world))   // singular (a degenerate bone matrix)
-            D3DXMatrixIdentity(&invWorld);                 // sane fallback: obj-space == world-space
-        const D3DXVECTOR3 lightDir3(m_lights[0].Position.x, m_lights[0].Position.y, m_lights[0].Position.z);
-        D3DXVECTOR3 eyeObj3, lightObj3;
-        D3DXVec3TransformCoord(&eyeObj3, &m_eye.Position, &invWorld);   // point
-        D3DXVec3TransformNormal(&lightObj3, &lightDir3, &invWorld);     // direction
-        const D3DXVECTOR4 eyeObj  (eyeObj3.x,   eyeObj3.y,   eyeObj3.z,   1.0f);
-        const D3DXVECTOR4 lightObj(lightObj3.x, lightObj3.y, lightObj3.z, 0.0f);
-
-        ID3DXEffect* fx = sub.effect->getD3DEffect();   // AddRef'd
-        const Effect::Handles& h = sub.effect->getHandles();
-
-        fx->SetMatrix(h.hWorld,               &world);
-        fx->SetMatrix(h.hWorldViewProjection, &wvp);
-        fx->SetVector(h.hEyePosition,         &eyePos);
-        fx->SetVector(h.hEyeObjPosition,      &eyeObj);     // m_eyePosObj (was unbound -> wrong specular when rotated)
-        fx->SetVector(h.hGlobalAmbient,       &m_ambient);
-        fx->SetVector(h.hDirLightVec0,        &m_lights[0].Position);
-        fx->SetVector(h.hDirLightObjVec0,     &lightObj);   // object-space light dir (was world)
-        fx->SetVector(h.hDirLightDiffuse,     &m_lights[0].Diffuse);
-        fx->SetVector(h.hDirLightSpecular,    &m_lights[0].Specular);
-        fx->SetMatrixArray(h.hSphLightAll,    m_sphLightAll,  3);
-        fx->SetMatrixArray(h.hSphLightFill,   m_sphLightFill, 3);
-        fx->SetFloat(h.hTime,                 GetTimeF());
-        // Distance fade: mirror the particle path (EmitterInstance::Render). The
-        // editor never authors real DISTANCE_FADE_VALS, so a mesh shader that
-        // strips the baked default reads (0,0) -> Compute_Distance_Fade == 0 and
-        // the mesh previews at reduced alpha. Force (0,1) = no fade -> full alpha;
-        // a no-op on stock shaders whose baked default already resolves to 1.0.
-        if (h.hDistanceFadeVals)
-        {
-            D3DXVECTOR4 distanceFade(0.0f, 1.0f, 0.0f, 0.0f);   // (0,1)=no fade; editor-only, engine sets real vals in-game
-            fx->SetVector(h.hDistanceFadeVals, &distanceFade);
-        }
-
-        // Skinned (RSkin) sub-mesh: render in BIND POSE. The RSkin VS uses
-        // m_viewProj (world->clip) + a float4x3 m_skinMatrixArray[24] bone palette
-        // (P = mul(In.Pos, palette[Normal.w])), NOT m_world / m_worldViewProj. At
-        // bind pose every bone's skin matrix collapses to the object world (verified
-        // against the alo-viewer's invBind*current build), so bind a UNIFORM
-        // objectWorld palette -> P = mul(In.Pos, objectWorld) = world. The .alo
-        // skinned verts are model-space, so `world` here == objectWorld (placement
-        // is identity for skinned).
-        if (sub.skinned && h.hSkinMatrixArray)
-        {
-            D3DXMATRIX palette[24];
-            for (int b = 0; b < 24; ++b) palette[b] = world;
-            fx->SetMatrix(h.hViewProjection, &m_viewProjection);
-            fx->SetMatrixArray(h.hSkinMatrixArray, palette, 24);
-        }
-
-        ApplyAloMaterialParams(fx, sub.params, sub.matHandles, sub.matTextures);
-
-        m_pDevice->SetVertexDeclaration(sub.decl);
-        m_pDevice->SetStreamSource(0, sub.vb, 0, sub.stride);
-        m_pDevice->SetIndices(sub.ib);
-
-        UINT passes = 0;
-        fx->Begin(&passes, 0);
-        for (UINT pass = 0; pass < passes; ++pass)
-        {
-            fx->BeginPass(pass);
-#ifndef NDEBUG
-            if (sub.primitiveCount > 0)
-            {
-                DWORD zw = 0, cm = 0;
-                m_pDevice->GetRenderState(D3DRS_ZWRITEENABLE, &zw);
-                m_pDevice->GetRenderState(D3DRS_CULLMODE,     &cm);
-                fprintf(stderr, "[RefObjDraw] %s pass %u/%u zwrite=%lu cull=%lu prims=%u\n",
-                        sub.shaderName.c_str(), pass + 1, passes, zw, cm, sub.primitiveCount);
-            }
-#endif
-            m_pDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0,
-                                            sub.vertexCount, 0, sub.primitiveCount);
-            fx->EndPass();
-        }
-        fx->End();
-        fx->Release();
-      }   // sub-mesh loop
-      }   // mesh loop (unit + attachments)
+      if (!shotMode)
+          DrawReferenceObjectPhase(objectWorld, opaquePhase, eyePos);
+      for (const D3DXMATRIX& shotWorld : shotWorlds)
+          DrawReferenceObjectPhase(shotWorld, opaquePhase, eyePos);
     }     // phase loop
 
     m_pDevice->SetVertexDeclaration(oldDecl);
@@ -321,6 +222,144 @@ void Engine::RenderReferenceObject()
     m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE,     oldZWrite);
     m_pDevice->SetRenderState(D3DRS_ZENABLE,          oldZEnable);
     m_pDevice->SetRenderState(D3DRS_CULLMODE,         oldCull);
+}
+
+// One opaque or transparent pass of the reference object placed at objectWorld:
+// the unit (mi == 0) then each hardpoint attach model. The caller owns render-state
+// save/restore.
+void Engine::DrawReferenceObjectPhase(const D3DXMATRIX& objectWorld, bool opaquePhase,
+                                      const D3DXVECTOR4& eyePos)
+{
+    // Draw the unit (mi == 0) then each hardpoint attach model, both in this
+    // phase. worldBase = objectWorld for the unit, or attachBone * objectWorld for an
+    // attachment (mounting the attach model at the unit's named Attachment_Bone), so
+    // its own additive/alpha layers (turret glows) blend over the assembled unit.
+    for (size_t mi = 0; mi <= m_referenceAttachments.size(); ++mi)
+    {
+    ReferenceObjectMesh& refMesh = (mi == 0) ? m_referenceObjectMesh
+                                             : m_referenceAttachments[mi - 1]->mesh;
+    const D3DXMATRIX worldBase   = (mi == 0) ? objectWorld
+                                             : (m_referenceAttachments[mi - 1]->boneMatrix * objectWorld);
+    for (RefSubMeshGpu& sub : refMesh.SubMeshes())
+    {
+      if (sub.effect == NULL || sub.vb == NULL || sub.ib == NULL || sub.decl == NULL)
+          continue;
+      const bool subOpaque = (sub.renderClass == ALO_RC_OPAQUE);
+      if (subOpaque != opaquePhase)
+          continue;   // opaque sub-meshes in phase 0, additive/alpha in phase 1
+
+      m_pDevice->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+      if (subOpaque)
+      {
+          m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE,     TRUE);
+          m_pDevice->SetRenderState(D3DRS_CULLMODE,         D3DCULL_CW);
+          m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+      }
+      else
+      {
+          m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE,     FALSE);
+          m_pDevice->SetRenderState(D3DRS_CULLMODE,         D3DCULL_NONE);
+          m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+          if (sub.renderClass == ALO_RC_ADDITIVE)
+          {
+              m_pDevice->SetRenderState(D3DRS_SRCBLEND,  D3DBLEND_ONE);
+              m_pDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+          }
+          else // ALO_RC_ALPHA
+          {
+              m_pDevice->SetRenderState(D3DRS_SRCBLEND,  D3DBLEND_SRCALPHA);
+              m_pDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+          }
+      }
+
+      D3DXMATRIX world = sub.placement * worldBase;
+      D3DXMATRIX wvp   = world * m_view * m_projection;
+
+      // Object-space eye + light for the bump shader's tangent-space lighting
+      // (m_eyePosObj / m_light0ObjVector). These equal the world values only at
+      // identity world; transform by inverse-world so the bump + specular stay
+      // correct once the object is moved/rotated (picker spinners / gizmo).
+      D3DXMATRIX invWorld;
+      if (!D3DXMatrixInverse(&invWorld, NULL, &world))   // singular (a degenerate bone matrix)
+          D3DXMatrixIdentity(&invWorld);                 // sane fallback: obj-space == world-space
+      const D3DXVECTOR3 lightDir3(m_lights[0].Position.x, m_lights[0].Position.y, m_lights[0].Position.z);
+      D3DXVECTOR3 eyeObj3, lightObj3;
+      D3DXVec3TransformCoord(&eyeObj3, &m_eye.Position, &invWorld);   // point
+      D3DXVec3TransformNormal(&lightObj3, &lightDir3, &invWorld);     // direction
+      const D3DXVECTOR4 eyeObj  (eyeObj3.x,   eyeObj3.y,   eyeObj3.z,   1.0f);
+      const D3DXVECTOR4 lightObj(lightObj3.x, lightObj3.y, lightObj3.z, 0.0f);
+
+      ID3DXEffect* fx = sub.effect->getD3DEffect();   // AddRef'd
+      const Effect::Handles& h = sub.effect->getHandles();
+
+      fx->SetMatrix(h.hWorld,               &world);
+      fx->SetMatrix(h.hWorldViewProjection, &wvp);
+      fx->SetVector(h.hEyePosition,         &eyePos);
+      fx->SetVector(h.hEyeObjPosition,      &eyeObj);     // m_eyePosObj (was unbound -> wrong specular when rotated)
+      fx->SetVector(h.hGlobalAmbient,       &m_ambient);
+      fx->SetVector(h.hDirLightVec0,        &m_lights[0].Position);
+      fx->SetVector(h.hDirLightObjVec0,     &lightObj);   // object-space light dir (was world)
+      fx->SetVector(h.hDirLightDiffuse,     &m_lights[0].Diffuse);
+      fx->SetVector(h.hDirLightSpecular,    &m_lights[0].Specular);
+      fx->SetMatrixArray(h.hSphLightAll,    m_sphLightAll,  3);
+      fx->SetMatrixArray(h.hSphLightFill,   m_sphLightFill, 3);
+      fx->SetFloat(h.hTime,                 GetTimeF());
+      // Distance fade: mirror the particle path (EmitterInstance::Render). The
+      // editor never authors real DISTANCE_FADE_VALS, so a mesh shader that
+      // strips the baked default reads (0,0) -> Compute_Distance_Fade == 0 and
+      // the mesh previews at reduced alpha. Force (0,1) = no fade -> full alpha;
+      // a no-op on stock shaders whose baked default already resolves to 1.0.
+      if (h.hDistanceFadeVals)
+      {
+          D3DXVECTOR4 distanceFade(0.0f, 1.0f, 0.0f, 0.0f);   // (0,1)=no fade; editor-only, engine sets real vals in-game
+          fx->SetVector(h.hDistanceFadeVals, &distanceFade);
+      }
+
+      // Skinned (RSkin) sub-mesh: render in BIND POSE. The RSkin VS uses
+      // m_viewProj (world->clip) + a float4x3 m_skinMatrixArray[24] bone palette
+      // (P = mul(In.Pos, palette[Normal.w])), NOT m_world / m_worldViewProj. At
+      // bind pose every bone's skin matrix collapses to the object world (verified
+      // against the alo-viewer's invBind*current build), so bind a UNIFORM
+      // objectWorld palette -> P = mul(In.Pos, objectWorld) = world. The .alo
+      // skinned verts are model-space, so `world` here == objectWorld (placement
+      // is identity for skinned).
+      if (sub.skinned && h.hSkinMatrixArray)
+      {
+          D3DXMATRIX palette[24];
+          for (int b = 0; b < 24; ++b) palette[b] = world;
+          fx->SetMatrix(h.hViewProjection, &m_viewProjection);
+          fx->SetMatrixArray(h.hSkinMatrixArray, palette, 24);
+      }
+
+      ApplyAloMaterialParams(fx, sub.params, sub.matHandles, sub.matTextures);
+
+      m_pDevice->SetVertexDeclaration(sub.decl);
+      m_pDevice->SetStreamSource(0, sub.vb, 0, sub.stride);
+      m_pDevice->SetIndices(sub.ib);
+
+      UINT passes = 0;
+      fx->Begin(&passes, 0);
+      for (UINT pass = 0; pass < passes; ++pass)
+      {
+          fx->BeginPass(pass);
+#ifndef NDEBUG
+          if (sub.primitiveCount > 0)
+          {
+              DWORD zw = 0, cm = 0;
+              m_pDevice->GetRenderState(D3DRS_ZWRITEENABLE, &zw);
+              m_pDevice->GetRenderState(D3DRS_CULLMODE,     &cm);
+              fprintf(stderr, "[RefObjDraw] %s pass %u/%u zwrite=%lu cull=%lu prims=%u\n",
+                      sub.shaderName.c_str(), pass + 1, passes, zw, cm, sub.primitiveCount);
+          }
+#endif
+          m_pDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0,
+                                          sub.vertexCount, 0, sub.primitiveCount);
+          fx->EndPass();
+      }
+      fx->End();
+      fx->Release();
+    }   // sub-mesh loop
+    }   // mesh loop (unit + attachments)
 }
 
 // ---------- Object catalog ----------
@@ -557,6 +596,8 @@ void Engine::ResetReferenceRenderState()
     m_referenceObjectMesh.Clear();
     m_referenceAttachments.clear();
     m_referenceScaleFactor  = 1.0f;
+    m_referenceIsProjectile = false;
+    m_referenceProjectile   = ReferenceProjectileInfo();
     m_referenceObjectStatus = ReferenceObjectStatus::None;
 }
 
@@ -609,6 +650,8 @@ void Engine::RebuildReferenceObjectMesh()
     // ResetReferenceRenderState through ResolveDesiredReference, so Rebuild's deferred
     // return is a fallback.) Overwritten from the catalog only on a successful resolve below.
     m_referenceScaleFactor = 1.0f;
+    m_referenceIsProjectile = false;
+    m_referenceProjectile   = ReferenceProjectileInfo();
 
     if (m_referenceObjectName.empty())
     {
@@ -646,6 +689,13 @@ void Engine::RebuildReferenceObjectMesh()
             selected = &r;
             // Successful catalog resolve -> adopt the per-object render scale.
             m_referenceScaleFactor = r.scaleFactor;
+            if (r.role == ObjRole::Projectile)
+            {
+                m_referenceIsProjectile             = true;
+                m_referenceProjectile.speedPerFrame = r.projectileSpeed;
+                m_referenceProjectile.range         = r.projectileRange;
+                m_referenceProjectile.category      = r.projectileCategory;
+            }
 #ifndef NDEBUG
             fprintf(stderr, "[refscale] '%s' Scale_Factor=%.3f\n", r.name.c_str(), r.scaleFactor);
 #endif

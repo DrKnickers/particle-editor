@@ -43,6 +43,7 @@ function clampSpawnerConfig(params: SpawnerParamsDto): SpawnerParamsDto {
     acceleration: vec3(params.acceleration),
     squiggleAmplitude: vec3(params.squiggleAmplitude),
     squiggleFrequency: clamp(params.squiggleFrequency, 0, 20),
+    matchProjectile: params.matchProjectile === true,
   };
 }
 

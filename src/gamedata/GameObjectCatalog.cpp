@@ -126,6 +126,10 @@ namespace
         std::string    movementRaw;    // <MovementClass>
         std::string    affiliationRaw; // <Affiliation>
         std::string    scaleFactorRaw; // <Scale_Factor> raw string (parsed+guarded in phase 4)
+        // projectile flight (resolved through Variant_Of in phase 4; projectiles only).
+        std::string    maxSpeedRaw;       // <Max_Speed>, world units per logic frame
+        std::string    flightDistanceRaw; // <Projectile_Max_Flight_Distance>, world units
+        std::string    categoryRaw;       // <Projectile_Category>
         // fieldable reference-graph SOURCE lists (this object references others).
         std::string    costRaw;          // <Build_Cost_Credits> (fallback <Required_Star_Base_Level>) -> buildable
         std::string    buildMenuRaw;     // <Tactical_Buildable_Objects_Campaign/_Multiplayer> -> names it builds
@@ -282,6 +286,9 @@ namespace
                 re.movementRaw    = trim(WideToAnsi(childData(e, L"MovementClass")));
                 re.affiliationRaw = trim(WideToAnsi(childData(e, L"Affiliation")));
                 re.scaleFactorRaw = trim(WideToAnsi(childData(e, L"Scale_Factor")));
+                re.maxSpeedRaw       = trim(WideToAnsi(childData(e, L"Max_Speed")));
+                re.flightDistanceRaw = trim(WideToAnsi(childData(e, L"Projectile_Max_Flight_Distance")));
+                re.categoryRaw       = trim(WideToAnsi(childData(e, L"Projectile_Category")));
                 // fieldable source lists.
                 re.costRaw        = trim(WideToAnsi(childData(e, L"Build_Cost_Credits")));
                 if (re.costRaw.empty())
@@ -857,6 +864,22 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out)
                 if (std::isfinite(v) && v > 0.0f) sf = v;
             }
             ref.scaleFactor = sf;
+        }
+        // Projectile flight, inherited like <Scale_Factor>. An absent or unusable
+        // <Max_Speed> leaves projectileSpeed 0 (the shot can't be flown); an absent
+        // <Projectile_Max_Flight_Distance> keeps the game's constructor default.
+        if (ref.role == ObjRole::Projectile)
+        {
+            const std::string speedRaw = resolveRaw(kv.first, byName, &RawEntry::maxSpeedRaw);
+            const float speed = std::strtof(speedRaw.c_str(), nullptr);
+            if (std::isfinite(speed) && speed > 0.0f) ref.projectileSpeed = speed;
+            const std::string rangeRaw = resolveRaw(kv.first, byName, &RawEntry::flightDistanceRaw);
+            if (!rangeRaw.empty())
+            {
+                const float range = std::strtof(rangeRaw.c_str(), nullptr);
+                if (std::isfinite(range) && range >= 0.0f) ref.projectileRange = range;
+            }
+            ref.projectileCategory = resolveRaw(kv.first, byName, &RawEntry::categoryRaw);
         }
         // ref.fieldable / fieldSource filled by the fieldable pass below.
         out.objects.push_back(ref);
