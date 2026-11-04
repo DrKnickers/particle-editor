@@ -23,7 +23,5 @@ export function writeSoftShadows(enabled: boolean): void {
 /** Push the preference to the engine — fire-and-forget so a failed send (mock
  *  quirk, host teardown) never breaks the Preferences UI. */
 export function applySoftShadows(bridge: Bridge, enabled: boolean): void {
-  void bridge
-    .request({ kind: "engine/set/soft-shadows", params: { enabled } })
-    .catch(() => {});
+  void bridge.request({ kind: "engine/set/soft-shadows", params: { enabled } }).catch(() => {});
 }

@@ -9,9 +9,7 @@ import { Spinner } from "../Spinner";
 describe("Spinner", () => {
   it("commit-on-blur clamps value to max", async () => {
     const onChange = vi.fn();
-    render(
-      <Spinner value={5} onChange={onChange} max={10} aria-label="test-spinner" />
-    );
+    render(<Spinner value={5} onChange={onChange} max={10} aria-label="test-spinner" />);
     const input = screen.getByRole("textbox");
     // Focus, type a value above max, blur to commit.
     await userEvent.click(input);
@@ -24,9 +22,7 @@ describe("Spinner", () => {
 
   it("scroll-wheel up increments by step", () => {
     const onChange = vi.fn();
-    render(
-      <Spinner value={5} onChange={onChange} step={1} aria-label="test-spinner" />
-    );
+    render(<Spinner value={5} onChange={onChange} step={1} aria-label="test-spinner" />);
     const input = screen.getByRole("textbox");
     // Wheel deltaY < 0 = scroll up = increment.
     fireEvent.wheel(input, { deltaY: -100 });
@@ -35,9 +31,7 @@ describe("Spinner", () => {
 
   it("scientific notation '2.5e3' parses to 2500 on blur", async () => {
     const onChange = vi.fn();
-    render(
-      <Spinner value={0} onChange={onChange} decimals={0} aria-label="test-spinner" />
-    );
+    render(<Spinner value={0} onChange={onChange} decimals={0} aria-label="test-spinner" />);
     const input = screen.getByRole("textbox");
     await userEvent.click(input);
     await userEvent.clear(input);
@@ -49,9 +43,7 @@ describe("Spinner", () => {
   // Wheel steps a flat 0.1 on decimal fields (regardless of `step`).
   it("scroll-wheel steps 0.1 on a decimal field", () => {
     const onChange = vi.fn();
-    render(
-      <Spinner value={5} onChange={onChange} step={0.1} aria-label="test-spinner" />
-    );
+    render(<Spinner value={5} onChange={onChange} step={0.1} aria-label="test-spinner" />);
     const input = screen.getByRole("textbox");
     fireEvent.wheel(input, { deltaY: -100 });
     expect(onChange).toHaveBeenCalledWith(5.1);
@@ -60,9 +52,7 @@ describe("Spinner", () => {
   // Shift coarsens the wheel step by ×10 (0.1 → 1 on a decimal field).
   it("scroll-wheel with Shift steps ×10", () => {
     const onChange = vi.fn();
-    render(
-      <Spinner value={5} onChange={onChange} step={0.1} aria-label="test-spinner" />
-    );
+    render(<Spinner value={5} onChange={onChange} step={0.1} aria-label="test-spinner" />);
     const input = screen.getByRole("textbox");
     fireEvent.wheel(input, { deltaY: -100, shiftKey: true });
     expect(onChange).toHaveBeenCalledWith(6);
@@ -71,9 +61,7 @@ describe("Spinner", () => {
   // Dragging the text INPUT must NOT scrub the value (it selects text).
   it("dragging the text input does not change the value", () => {
     const onChange = vi.fn();
-    render(
-      <Spinner value={5} onChange={onChange} step={1} aria-label="test-spinner" />
-    );
+    render(<Spinner value={5} onChange={onChange} step={1} aria-label="test-spinner" />);
     const input = screen.getByRole("textbox");
     fireEvent.mouseDown(input, { clientY: 100, button: 0 });
     fireEvent.mouseMove(document, { clientY: 60 });
@@ -84,9 +72,7 @@ describe("Spinner", () => {
   // Dragging the ARROW COLUMN vertically scrubs the value.
   it("dragging the arrow column scrubs the value", () => {
     const onChange = vi.fn();
-    render(
-      <Spinner value={5} onChange={onChange} step={1} aria-label="test-spinner" />
-    );
+    render(<Spinner value={5} onChange={onChange} step={1} aria-label="test-spinner" />);
     const column = screen.getByLabelText("Increment").parentElement as HTMLElement;
     // Drag up 20px (dy = +20) at step 1 → 5 + 20 = 25.
     fireEvent.mouseDown(column, { clientY: 100, button: 0 });
@@ -102,9 +88,7 @@ describe("Spinner", () => {
   it("a scrub emits through the latest onChange prop, not the one captured at mousedown (#614)", () => {
     const first = vi.fn();
     const second = vi.fn();
-    const { rerender } = render(
-      <Spinner value={5} onChange={first} step={1} aria-label="test-spinner" />
-    );
+    const { rerender } = render(<Spinner value={5} onChange={first} step={1} aria-label="test-spinner" />);
     const column = screen.getByLabelText("Increment").parentElement as HTMLElement;
     fireEvent.mouseDown(column, { clientY: 100, button: 0 });
     // Consumer re-renders with a fresh onChange mid-gesture (same instance).
@@ -112,7 +96,7 @@ describe("Spinner", () => {
     fireEvent.mouseMove(document, { clientY: 80 }); // dy=+20 at step 1 → 25
     fireEvent.mouseUp(document);
     expect(second).toHaveBeenLastCalledWith(25); // latest handler
-    expect(first).not.toHaveBeenCalled();        // NOT the mousedown closure
+    expect(first).not.toHaveBeenCalled(); // NOT the mousedown closure
   });
 
   // The arrow column is inset + clipped so its hover/active background
@@ -129,9 +113,7 @@ describe("Spinner", () => {
   // A plain click on an arrow still steps by ±step (no drag).
   it("clicking the increment arrow steps by step", () => {
     const onChange = vi.fn();
-    render(
-      <Spinner value={5} onChange={onChange} step={1} aria-label="test-spinner" />
-    );
+    render(<Spinner value={5} onChange={onChange} step={1} aria-label="test-spinner" />);
     const incr = screen.getByLabelText("Increment");
     fireEvent.mouseDown(incr, { clientY: 100, button: 0 });
     fireEvent.mouseUp(incr);
@@ -194,9 +176,7 @@ describe("Spinner", () => {
   // commit on blur when the user actually edited.
   it("focused-but-untouched field tracks an external value change (not stale)", () => {
     const onChange = vi.fn();
-    const { rerender } = render(
-      <Spinner value={0} onChange={onChange} decimals={1} aria-label="s" />
-    );
+    const { rerender } = render(<Spinner value={0} onChange={onChange} decimals={1} aria-label="s" />);
     const input = screen.getByRole("textbox") as HTMLInputElement;
     fireEvent.focus(input); // user clicks in but types nothing
     rerender(<Spinner value={-130} onChange={onChange} decimals={1} aria-label="s" />); // gizmo moves it
@@ -205,9 +185,7 @@ describe("Spinner", () => {
 
   it("blur with no keystrokes does not commit (no clobber of an external change)", () => {
     const onChange = vi.fn();
-    const { rerender } = render(
-      <Spinner value={0} onChange={onChange} decimals={1} aria-label="s" />
-    );
+    const { rerender } = render(<Spinner value={0} onChange={onChange} decimals={1} aria-label="s" />);
     const input = screen.getByRole("textbox") as HTMLInputElement;
     fireEvent.focus(input);
     rerender(<Spinner value={-130} onChange={onChange} decimals={1} aria-label="s" />);
@@ -223,9 +201,7 @@ describe("Spinner", () => {
   // genuinely different external change.
   it("holds the optimistic value across the async echo gap, then reconciles", () => {
     const onChange = vi.fn();
-    const { rerender } = render(
-      <Spinner value={5} onChange={onChange} step={1} decimals={0} aria-label="s" />
-    );
+    const { rerender } = render(<Spinner value={5} onChange={onChange} step={1} decimals={0} aria-label="s" />);
     const input = screen.getByRole("textbox") as HTMLInputElement;
     const incr = screen.getByLabelText("Increment");
     // arrow-click → emits 6, but the controlled prop hasn't echoed yet (still 5)
@@ -247,9 +223,7 @@ describe("Spinner", () => {
   // pre-step baseline.
   it("optimistic guard does not get stuck when the user typed before stepping", () => {
     const onChange = vi.fn();
-    const { rerender } = render(
-      <Spinner value={5} onChange={onChange} step={1} decimals={0} aria-label="s" />
-    );
+    const { rerender } = render(<Spinner value={5} onChange={onChange} step={1} decimals={0} aria-label="s" />);
     const input = screen.getByRole("textbox") as HTMLInputElement;
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: "5" } }); // a keystroke → edited=true

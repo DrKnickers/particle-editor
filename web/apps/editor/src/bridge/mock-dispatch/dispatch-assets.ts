@@ -1,13 +1,7 @@
 // Mock counterpart of src/host/BridgeDispatch_Assets.cpp.
 
-import type {
-  Request,
-  PaletteEntry,
-} from "@particle-editor/bridge-schema";
-import {
-  useMockEngineState,
-  snapshotEngineState,
-} from "../mock-state";
+import type { Request, PaletteEntry } from "@particle-editor/bridge-schema";
+import { useMockEngineState, snapshotEngineState } from "../mock-state";
 import type { MockDispatchHost } from "./host";
 import { MOCK_ATLAS_PNG } from "./mock-atlas-png";
 
@@ -26,11 +20,32 @@ type AssetsRequest = Extract<Request, { kind: AssetsKind }>;
 
 // Mock layer catalog: two top-level mods (FoCMod has Data\Art at its root;
 // BaseGameMod has nested layers) + nested layers under FoCMod.
-const MOCK_LAYERS: readonly { path: string; label: string; parentLabel?: string; parentPath?: string; isFoC: boolean; kind: "mod" | "nested" }[] = [
-  { path: "C:/mock/corruption/Mods/FoCMod",          label: "FoCMod",   isFoC: true,  kind: "mod" },
-  { path: "C:/mock/corruption/Mods/FoCMod/Bravo",     label: "Bravo",     parentLabel: "FoCMod", parentPath: "C:/mock/corruption/Mods/FoCMod", isFoC: true, kind: "nested" },
-  { path: "C:/mock/corruption/Mods/FoCMod/Core", label: "Core", parentLabel: "FoCMod", parentPath: "C:/mock/corruption/Mods/FoCMod", isFoC: true, kind: "nested" },
-  { path: "C:/mock/GameData/Mods/BaseGameMod",       label: "Demo Mod", isFoC: false, kind: "mod" },
+const MOCK_LAYERS: readonly {
+  path: string;
+  label: string;
+  parentLabel?: string;
+  parentPath?: string;
+  isFoC: boolean;
+  kind: "mod" | "nested";
+}[] = [
+  { path: "C:/mock/corruption/Mods/FoCMod", label: "FoCMod", isFoC: true, kind: "mod" },
+  {
+    path: "C:/mock/corruption/Mods/FoCMod/Bravo",
+    label: "Bravo",
+    parentLabel: "FoCMod",
+    parentPath: "C:/mock/corruption/Mods/FoCMod",
+    isFoC: true,
+    kind: "nested",
+  },
+  {
+    path: "C:/mock/corruption/Mods/FoCMod/Core",
+    label: "Core",
+    parentLabel: "FoCMod",
+    parentPath: "C:/mock/corruption/Mods/FoCMod",
+    isFoC: true,
+    kind: "nested",
+  },
+  { path: "C:/mock/GameData/Mods/BaseGameMod", label: "Demo Mod", isFoC: false, kind: "mod" },
 ];
 
 // Layout-lane seed for the texture palette. Browser mode's palette is
@@ -47,7 +62,6 @@ function getSeededMockPalette(): PaletteEntry[] | null {
 
 export function dispatchAssets(this: MockDispatchHost, req: AssetsRequest): unknown {
   switch (req.kind) {
-
     // ---------------- mods -----------------------------------------
     //
     // Browser-mode MockBridge has no disk to scan, so `mods/list` /
@@ -59,8 +73,14 @@ export function dispatchAssets(this: MockDispatchHost, req: AssetsRequest): unkn
     case "mods/list":
     case "mods/refresh": {
       const mods = [
-        { path: "C:/mock/corruption/Mods/FoCMod",    folderName: "FoCMod",      nickname: "",         isFoC: true,  rootHasArt: true },
-        { path: "C:/mock/GameData/Mods/BaseGameMod", folderName: "BaseGameMod", nickname: "Demo Mod", isFoC: false, rootHasArt: true },
+        { path: "C:/mock/corruption/Mods/FoCMod", folderName: "FoCMod", nickname: "", isFoC: true, rootHasArt: true },
+        {
+          path: "C:/mock/GameData/Mods/BaseGameMod",
+          folderName: "BaseGameMod",
+          nickname: "Demo Mod",
+          isFoC: false,
+          rootHasArt: true,
+        },
       ];
       return {
         mods,
@@ -78,7 +98,10 @@ export function dispatchAssets(this: MockDispatchHost, req: AssetsRequest): unkn
       const next: string[] = [];
       for (const p of params.paths ?? []) {
         const k = p.replace(/[\\/]+$/, "");
-        if (known.has(k.toLowerCase()) && !seen.has(k.toLowerCase())) { seen.add(k.toLowerCase()); next.push(k); }
+        if (known.has(k.toLowerCase()) && !seen.has(k.toLowerCase())) {
+          seen.add(k.toLowerCase());
+          next.push(k);
+        }
       }
       this.layerStack = next;
       useMockEngineState.getState().applyPatch({ activeModPath: next[0] ?? null });

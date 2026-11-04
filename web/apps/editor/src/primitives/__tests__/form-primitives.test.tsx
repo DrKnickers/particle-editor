@@ -17,7 +17,9 @@ import { IconButton } from "../IconButton";
 // IconButton mounts a Tip (Radix Tooltip.Root), which requires the
 // Tooltip.Provider App.tsx supplies in production — this wrapper stands in.
 const TipProvider = ({ children }: { children: ReactNode }) => (
-  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>
+    {children}
+  </Tooltip.Provider>
 );
 const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
@@ -34,7 +36,10 @@ function ThemeSwitch({ onChange }: { onChange?: (m: Mode) => void }) {
     <SegmentedControl<Mode>
       aria-label="Theme"
       value={mode}
-      onValueChange={(m) => { setMode(m); onChange?.(m); }}
+      onValueChange={(m) => {
+        setMode(m);
+        onChange?.(m);
+      }}
       options={MODES}
     />
   );
@@ -102,7 +107,11 @@ describe("Checkbox", () => {
 
 describe("IconButton", () => {
   it("one label feeds the accessible name and the tooltip", async () => {
-    render(<IconButton label="Undo" onClick={() => {}}>U</IconButton>);
+    render(
+      <IconButton label="Undo" onClick={() => {}}>
+        U
+      </IconButton>,
+    );
     const btn = screen.getByRole("button", { name: "Undo" });
     expect(btn).not.toHaveAttribute("title");
     act(() => btn.focus());
@@ -110,7 +119,11 @@ describe("IconButton", () => {
   });
 
   it("tip={null} renders no tooltip; pressed sets aria-pressed + the toggle's accent", () => {
-    render(<IconButton label="Snap" tip={null} variant="toggle" pressed>S</IconButton>);
+    render(
+      <IconButton label="Snap" tip={null} variant="toggle" pressed>
+        S
+      </IconButton>,
+    );
     const btn = screen.getByRole("button", { name: "Snap" });
     expect(btn).toHaveAttribute("aria-pressed", "true");
     expect(btn).toHaveClass("border-accent", "bg-accent-soft");
@@ -120,11 +133,17 @@ describe("IconButton", () => {
 
   it("tipWhenDisabled wraps the button in the same span whether enabled or not", () => {
     const { rerender } = render(
-      <IconButton label="Delete" tipWhenDisabled disabled>D</IconButton>,
+      <IconButton label="Delete" tipWhenDisabled disabled>
+        D
+      </IconButton>,
     );
     const wrapper = () => screen.getByRole("button", { name: "Delete" }).parentElement!;
     expect(wrapper().tagName).toBe("SPAN");
-    rerender(<IconButton label="Delete" tipWhenDisabled>D</IconButton>);
+    rerender(
+      <IconButton label="Delete" tipWhenDisabled>
+        D
+      </IconButton>,
+    );
     expect(wrapper().tagName).toBe("SPAN");
   });
 });

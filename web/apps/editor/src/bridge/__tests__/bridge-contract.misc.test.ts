@@ -6,9 +6,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { MockBridge } from "../mock";
 import { makeMockBridgeWithListener } from "@/test/mock-bridge";
-import type {
-  Event,
-} from "@particle-editor/bridge-schema";
+import type { Event } from "@particle-editor/bridge-schema";
 import { resetMockState } from "@/test/mock-state";
 import { EXTERNAL_LINKS } from "@/lib/external-links";
 
@@ -35,15 +33,20 @@ describe("MockBridge contract — app/open-external", () => {
     }
   });
 
-  it.each(["", "Guide", "Repository", "https://example.com", "file:///C:/test", "__proto__"])("rejects unknown target %s without opening a window", async (target) => {
-    const open = vi.spyOn(window, "open").mockReturnValue(null);
-    const b = new MockBridge();
-    await expect(b.request({
-      kind: "app/open-external",
-      params: { target: target as "guide" },
-    })).rejects.toThrow("app/open-external: unknown target");
-    expect(open).not.toHaveBeenCalled();
-  });
+  it.each(["", "Guide", "Repository", "https://example.com", "file:///C:/test", "__proto__"])(
+    "rejects unknown target %s without opening a window",
+    async (target) => {
+      const open = vi.spyOn(window, "open").mockReturnValue(null);
+      const b = new MockBridge();
+      await expect(
+        b.request({
+          kind: "app/open-external",
+          params: { target: target as "guide" },
+        }),
+      ).rejects.toThrow("app/open-external: unknown target");
+      expect(open).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("MockBridge contract — spawner/*, textures/*, subscriptions", () => {
@@ -128,9 +131,13 @@ describe("MockBridge contract — spawner/*, textures/*, subscriptions", () => {
   // state-change contract so browser-mode tests cannot bless a divergence.
   it("spawner/stop disables the seeded config, broadcasts it, and resets the active count", async () => {
     let lastCount: number | null = null;
-    const { b, off } = makeMockBridgeWithListener("spawner/active-count", (e) => { lastCount = e.payload.count; });
+    const { b, off } = makeMockBridgeWithListener("spawner/active-count", (e) => {
+      lastCount = e.payload.count;
+    });
     let lastState: { spawner?: unknown } | null = null;
-    const offState = b.on("engine/state/changed", (e) => { lastState = e.payload; });
+    const offState = b.on("engine/state/changed", (e) => {
+      lastState = e.payload;
+    });
     const initial = await b.request({ kind: "engine/state/snapshot", params: {} });
     await b.request({
       kind: "spawner/start",
@@ -158,7 +165,9 @@ describe("MockBridge contract — spawner/*, textures/*, subscriptions", () => {
 
   it("on() returns a working unsubscribe", async () => {
     const seen: Event[] = [];
-    const { b, off } = makeMockBridgeWithListener("engine/state/changed", (e) => { seen.push(e); });
+    const { b, off } = makeMockBridgeWithListener("engine/state/changed", (e) => {
+      seen.push(e);
+    });
     await b.request({ kind: "engine/set/ground-z", params: { z: 1 } });
     off();
     await b.request({ kind: "engine/set/ground-z", params: { z: 2 } });
@@ -171,8 +180,12 @@ describe("MockBridge event fan-out", () => {
     const b = new MockBridge();
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     let seen = 0;
-    b.on("engine/state/changed", () => { throw new Error("subscriber bug"); });
-    b.on("engine/state/changed", () => { seen++; });
+    b.on("engine/state/changed", () => {
+      throw new Error("subscriber bug");
+    });
+    b.on("engine/state/changed", () => {
+      seen++;
+    });
     await expect(b.request({ kind: "engine/set/ground-z", params: { z: 3 } })).resolves.toEqual({});
     expect(seen).toBe(1);
     expect(err).toHaveBeenCalled();
@@ -193,5 +206,4 @@ describe("textures/get-preview (mock parity)", () => {
       expect(res.srcH).toBeGreaterThan(0);
     }
   });
-
 });

@@ -22,34 +22,49 @@ declare global {
 
 // Default sized for the routine site lane (~15s); crank VT_ITERATIONS (e.g. 24+) with
 // VT_STYLE_DELAY_MS/VT_CPU_THROTTLE for a dedicated flash hunt.
-const ITERATIONS   = Number(process.env.VT_ITERATIONS ?? 6);
-const STYLE_DELAY  = Number(process.env.VT_STYLE_DELAY_MS ?? 160);
+const ITERATIONS = Number(process.env.VT_ITERATIONS ?? 6);
+const STYLE_DELAY = Number(process.env.VT_STYLE_DELAY_MS ?? 160);
 const CPU_THROTTLE = Number(process.env.VT_CPU_THROTTLE ?? 4);
-const MAX_LUMA     = Number(process.env.VT_MAX_LUMA ?? 170); // dark bg #0b0d12 ≈ luma 13; white = 255
-const SAMPLE_MS    = 8;
-const POST_NAV_MS  = 400;
+const MAX_LUMA = Number(process.env.VT_MAX_LUMA ?? 170); // dark bg #0b0d12 ≈ luma 13; white = 255
+const SAMPLE_MS = 8;
+const POST_NAV_MS = 400;
 const CLIP = { x: 0, y: 0, width: 64, height: 64 };
 
 // Minimal PNG → RGBA decoder (Node built-ins only; no new dep). Handles 8-bit truecolor
 // (colorType 2/6) with the five standard scanline filters, which is what Chromium emits.
 function pngLuma(png: Buffer): number {
   if (png.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a") throw new Error("not a png");
-  let off = 8, width = 0, height = 0, bitDepth = 0, colorType = 0;
+  let off = 8,
+    width = 0,
+    height = 0,
+    bitDepth = 0,
+    colorType = 0;
   const idat: Buffer[] = [];
   while (off < png.length) {
-    const len = png.readUInt32BE(off); off += 4;
-    const type = png.subarray(off, off + 4).toString("ascii"); off += 4;
-    const data = png.subarray(off, off + len); off += len + 4; // +crc
-    if (type === "IHDR") { width = data.readUInt32BE(0); height = data.readUInt32BE(4); bitDepth = data[8]; colorType = data[9]; }
-    else if (type === "IDAT") idat.push(data);
+    const len = png.readUInt32BE(off);
+    off += 4;
+    const type = png.subarray(off, off + 4).toString("ascii");
+    off += 4;
+    const data = png.subarray(off, off + len);
+    off += len + 4; // +crc
+    if (type === "IHDR") {
+      width = data.readUInt32BE(0);
+      height = data.readUInt32BE(4);
+      bitDepth = data[8];
+      colorType = data[9];
+    } else if (type === "IDAT") idat.push(data);
     else if (type === "IEND") break;
   }
   if (bitDepth !== 8 || ![2, 6].includes(colorType)) throw new Error(`unsupported png bd=${bitDepth} ct=${colorType}`);
-  const ch = colorType === 6 ? 4 : 3, stride = width * ch;
-  const raw = inflateSync(Buffer.concat(idat)), rec = Buffer.alloc(height * stride);
-  let src = 0, maxLuma = 0;
+  const ch = colorType === 6 ? 4 : 3,
+    stride = width * ch;
+  const raw = inflateSync(Buffer.concat(idat)),
+    rec = Buffer.alloc(height * stride);
+  let src = 0,
+    maxLuma = 0;
   for (let y = 0; y < height; y++) {
-    const filter = raw[src++], row = y * stride;
+    const filter = raw[src++],
+      row = y * stride;
     for (let x = 0; x < stride; x++) {
       const left = x >= ch ? rec[row + x - ch] : 0;
       const up = y > 0 ? rec[row - stride + x] : 0;
@@ -59,8 +74,12 @@ function pngLuma(png: Buffer): number {
       if (filter === 1) p = left;
       else if (filter === 2) p = up;
       else if (filter === 3) p = (left + up) >> 1;
-      else if (filter === 4) { const pa = Math.abs(up - ul), pb = Math.abs(left - ul), pc = Math.abs(left + up - 2 * ul); p = pa <= pb && pa <= pc ? left : pb <= pc ? up : ul; }
-      else if (filter !== 0) throw new Error(`bad filter ${filter}`);
+      else if (filter === 4) {
+        const pa = Math.abs(up - ul),
+          pb = Math.abs(left - ul),
+          pc = Math.abs(left + up - 2 * ul);
+        p = pa <= pb && pa <= pc ? left : pb <= pc ? up : ul;
+      } else if (filter !== 0) throw new Error(`bad filter ${filter}`);
       rec[row + x] = (v + p) & 255;
     }
   }
@@ -75,20 +94,31 @@ function pngLuma(png: Buffer): number {
 // Returns the worst luma seen AND how many samples succeeded — the caller asserts a floor
 // on the count so an environment where every screenshot fails can't false-green the test.
 async function sampleDuring(page: Page, action: () => Promise<unknown>): Promise<{ worst: number; samples: number }> {
-  let stop = false, worstLuma = 0, samples = 0;
+  let stop = false,
+    worstLuma = 0,
+    samples = 0;
   const loop = (async () => {
     const deadline = Date.now() + 6000;
     while (!stop && Date.now() < deadline) {
       try {
-        worstLuma = Math.max(worstLuma, pngLuma(await page.screenshot({ clip: CLIP, scale: "css", animations: "allow", timeout: 2000 })));
+        worstLuma = Math.max(
+          worstLuma,
+          pngLuma(await page.screenshot({ clip: CLIP, scale: "css", animations: "allow", timeout: 2000 })),
+        );
         samples++;
+      } catch {
+        /* navigation race — ignore */
       }
-      catch { /* navigation race — ignore */ }
       await page.waitForTimeout(SAMPLE_MS).catch(() => {});
     }
   })();
-  try { await action(); await page.waitForTimeout(POST_NAV_MS); }
-  finally { stop = true; await loop; }
+  try {
+    await action();
+    await page.waitForTimeout(POST_NAV_MS);
+  } finally {
+    stop = true;
+    await loop;
+  }
   return { worst: worstLuma, samples };
 }
 
@@ -101,7 +131,8 @@ test("cross-page view transition never paints a light frame", async ({ page, con
   await page.addInitScript(() => {
     // "pagereveal" is not in WindowEventMap, so the listener is typed by hand.
     addEventListener("pagereveal", (e: Event & { viewTransition?: ViewTransition | null }) =>
-      window.__vtSeen?.(!!e.viewTransition));
+      window.__vtSeen?.(!!e.viewTransition),
+    );
   });
 
   // Stress: disable cache + throttle CPU so the transition path is fragile and the flash surfaces.
@@ -121,19 +152,24 @@ test("cross-page view transition never paints a light frame", async ({ page, con
   await expect(page.locator("header.topbar")).toBeVisible();
   delayStyles = true; // only slow navigations, not the cold boot
 
-  let worst = 0, totalSamples = 0;
+  let worst = 0,
+    totalSamples = 0;
   const offenders: string[] = [];
   for (let i = 0; i < ITERATIONS; i++) {
-    const toGuide = await sampleDuring(page, () => Promise.all([
-      page.waitForURL("**/guide/home.html"),
-      page.locator('header.topbar a[href="guide/home.html"]').click(),
-    ]));
-    const toHome = await sampleDuring(page, () => Promise.all([
-      // Glob, not a hardcoded port — the suite's port is SITE_PORT-overridable (see
-      // playwright.site.config.ts) so concurrent worktrees don't share a server.
-      page.waitForURL(/\/(index\.html)?$/),
-      page.goBack({ waitUntil: "load" }),
-    ]));
+    const toGuide = await sampleDuring(page, () =>
+      Promise.all([
+        page.waitForURL("**/guide/home.html"),
+        page.locator('header.topbar a[href="guide/home.html"]').click(),
+      ]),
+    );
+    const toHome = await sampleDuring(page, () =>
+      Promise.all([
+        // Glob, not a hardcoded port — the suite's port is SITE_PORT-overridable (see
+        // playwright.site.config.ts) so concurrent worktrees don't share a server.
+        page.waitForURL(/\/(index\.html)?$/),
+        page.goBack({ waitUntil: "load" }),
+      ]),
+    );
     worst = Math.max(worst, toGuide.worst, toHome.worst);
     totalSamples += toGuide.samples + toHome.samples;
     if (toGuide.worst > MAX_LUMA) offenders.push(`iter ${i} home→guide: luma ${toGuide.worst.toFixed(0)}`);
@@ -141,8 +177,10 @@ test("cross-page view transition never paints a light frame", async ({ page, con
   }
 
   const activated = vtActivated.filter(Boolean).length;
-  console.log(`[vt-flash] worst top-left luma across ${ITERATIONS}×2 navs: ${worst.toFixed(0)} (threshold ${MAX_LUMA}); ` +
-    `${totalSamples} pixel samples; VT active on ${activated}/${vtActivated.length} reveals`);
+  console.log(
+    `[vt-flash] worst top-left luma across ${ITERATIONS}×2 navs: ${worst.toFixed(0)} (threshold ${MAX_LUMA}); ` +
+      `${totalSamples} pixel samples; VT active on ${activated}/${vtActivated.length} reveals`,
+  );
   // Floor on successful samples: if screenshots silently fail, worst stays 0 and the test
   // would false-green — require at least a few samples per navigation on average.
   expect(totalSamples, "pixel sampler captured too few frames to be meaningful").toBeGreaterThan(ITERATIONS * 4);

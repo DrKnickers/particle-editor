@@ -25,9 +25,7 @@ export function coerceMessage(data: unknown): Record<string, unknown> | null {
       return null;
     }
   }
-  return data !== null && typeof data === "object" && !Array.isArray(data)
-    ? (data as Record<string, unknown>)
-    : null;
+  return data !== null && typeof data === "object" && !Array.isArray(data) ? (data as Record<string, unknown>) : null;
 }
 
 /** Validate a bridge `res` / `evt` envelope. Returns null for anything else —

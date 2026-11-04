@@ -47,7 +47,11 @@ export function Section({ title, defaultOpen = true, unit, children }: Props) {
       >
         <span className="flex items-baseline gap-1.5">
           <span>{title}</span>
-          {unit && <span className="font-normal normal-case tracking-normal text-text-3" aria-hidden="true">{unit}</span>}
+          {unit && (
+            <span className="font-normal normal-case tracking-normal text-text-3" aria-hidden="true">
+              {unit}
+            </span>
+          )}
         </span>
         <ChevronDown className="chev size-3" />
       </div>

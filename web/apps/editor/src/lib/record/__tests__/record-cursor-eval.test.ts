@@ -36,10 +36,7 @@ function addEl(
 }
 
 describe("record-cursor-eval", () => {
-  const keys = [
-    pointKey(0, 0, 0, true, false),
-    pointKey(1000, 100, 200, false, true),
-  ];
+  const keys = [pointKey(0, 0, 0, true, false), pointKey(1000, 100, 200, false, true)];
 
   it("smoothstep-eases between point targets", () => {
     expect(evalRecordCursor(keys, 500)).toMatchObject({
@@ -83,7 +80,10 @@ describe("record-cursor-eval", () => {
     expect(mid.mods).toEqual({ ctrl: true, shift: false });
 
     // and the both-unresolved fallback keeps them too
-    const bothBad: RecordCursorKey = { ...from, target: { kind: "element", ref: "testid:also-missing" as CursorElementRef } };
+    const bothBad: RecordCursorKey = {
+      ...from,
+      target: { kind: "element", ref: "testid:also-missing" as CursorElementRef },
+    };
     const none = evalRecordCursor([bothBad, to], 500);
     expect(none.ok).toBe(false);
     expect(none.button).toBe("right");
@@ -190,10 +190,7 @@ describe("record-cursor-eval — element target resolution", () => {
   });
 
   it("rejects an element whose center is clipped outside a scroll container", () => {
-    const scroller = addEl(
-      { "data-testid": "curve-channel-list" },
-      { left: 20, top: 20, width: 100, height: 80 },
-    );
+    const scroller = addEl({ "data-testid": "curve-channel-list" }, { left: 20, top: 20, width: 100, height: 80 });
     scroller.style.overflowY = "auto";
     const clippedRow = addEl(
       { "data-testid": "curve-channel-row-scale" },
@@ -208,10 +205,7 @@ describe("record-cursor-eval — element target resolution", () => {
   });
 
   it("targets the visible slice of a partially clipped element", () => {
-    const scroller = addEl(
-      { "data-testid": "curve-channel-list" },
-      { left: 20, top: 20, width: 100, height: 80 },
-    );
+    const scroller = addEl({ "data-testid": "curve-channel-list" }, { left: 20, top: 20, width: 100, height: 80 });
     scroller.style.overflowY = "auto";
     const partialRow = addEl(
       { "data-testid": "curve-channel-row-scale" },
@@ -290,10 +284,7 @@ describe("record-cursor-eval — element target resolution", () => {
 
   it("holds at the resolved departure end when the upcoming target isn't ready yet", () => {
     addEl({ "data-testid": "from" }, { left: 0, top: 0, width: 20, height: 20 });
-    const keys = [
-      elementKey(0, "testid:from", true, false),
-      elementKey(1000, "testid:not-yet-mounted", true, false),
-    ];
+    const keys = [elementKey(0, "testid:from", true, false), elementKey(1000, "testid:not-yet-mounted", true, false)];
     const c = evalRecordCursor(keys, 500);
     expect(c).toMatchObject({ x: 10, y: 10, ok: true, vis: true, press: false });
     expect(c.resolved).toEqual([expect.objectContaining({ ref: "testid:not-yet-mounted", ok: false })]);
@@ -305,20 +296,14 @@ describe("record-cursor-eval — element target resolution", () => {
   // match — it used to claim a per-entry ok:false report that never existed.)
   it("heads to the destination (ok:false) when the departure element vanished mid-transit", () => {
     addEl({ "data-testid": "to" }, { left: 100, top: 100, width: 20, height: 20 });
-    const keys = [
-      elementKey(0, "testid:vanished", true, false),
-      elementKey(1000, "testid:to", true, false),
-    ];
+    const keys = [elementKey(0, "testid:vanished", true, false), elementKey(1000, "testid:to", true, false)];
     const c = evalRecordCursor(keys, 500);
     expect(c).toMatchObject({ x: 110, y: 110, ok: false, vis: true, press: false });
     expect(c.resolved).toEqual([{ ref: "testid:to", x: 110, y: 110, ok: true }]);
   });
 
   it("hides the cursor when neither transit end resolves", () => {
-    const keys = [
-      elementKey(0, "testid:gone-a", true, false),
-      elementKey(1000, "testid:gone-b", true, true),
-    ];
+    const keys = [elementKey(0, "testid:gone-a", true, false), elementKey(1000, "testid:gone-b", true, true)];
     const c = evalRecordCursor(keys, 500);
     expect(c).toMatchObject({ x: 0, y: 0, ok: false, vis: false, press: true });
     expect(c.resolved).toEqual([expect.objectContaining({ ref: "testid:gone-b", ok: false })]);

@@ -23,7 +23,5 @@ export function writeModelShadows(enabled: boolean): void {
 /** Push the preference to the engine — fire-and-forget so a failed send (mock
  *  quirk, host teardown) never breaks the Preferences UI. */
 export function applyModelShadows(bridge: Bridge, enabled: boolean): void {
-  void bridge
-    .request({ kind: "engine/set/model-shadows", params: { enabled } })
-    .catch(() => {});
+  void bridge.request({ kind: "engine/set/model-shadows", params: { enabled } }).catch(() => {});
 }

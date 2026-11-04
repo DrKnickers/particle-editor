@@ -45,9 +45,7 @@ import { join } from "node:path";
 
 // Host.log path — written by the host's Log() macro, see HostWindow.cpp.
 // Path mirrors what the [host] WebView2 user-data folder line points at.
-const HOST_LOG_PATH = process.env.LOCALAPPDATA
-  ? join(process.env.LOCALAPPDATA, "AloParticleEditor", "host.log")
-  : "";
+const HOST_LOG_PATH = process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, "AloParticleEditor", "host.log") : "";
 
 // Requesting the CDP page waits until the host is up before any test runs.
 test.beforeAll(async ({ cdpPage: _cdpPage }) => {});
@@ -94,7 +92,9 @@ test("[COMP-engine-luid] log line records both adapter LUIDs (multi-GPU guard ar
   const log = readHostLog();
   // Format:
   //   [COMP-engine-luid] D3D11 adapter LUID=00000000-0001067C (engine LUID=00000000-0001067C)
-  expect(log).toMatch(/\[COMP-engine-luid\] D3D11 adapter LUID=[0-9A-Fa-f]+-[0-9A-Fa-f]+ \(engine LUID=[0-9A-Fa-f]+-[0-9A-Fa-f]+\)/);
+  expect(log).toMatch(
+    /\[COMP-engine-luid\] D3D11 adapter LUID=[0-9A-Fa-f]+-[0-9A-Fa-f]+ \(engine LUID=[0-9A-Fa-f]+-[0-9A-Fa-f]+\)/,
+  );
 });
 
 test("[COMP-engine-frame] count grows between samples ~2s apart (CompositeEngineFrame is running)", async () => {
@@ -125,8 +125,12 @@ test("[COMP-engine-handle-hash] resource identity is stable across the smoke win
   // The 1 Hz throttle means there are several samples accumulated by
   // the time the previous tests have run.
   const log = readHostLog();
-  const matches = [...log.matchAll(/\[COMP-engine-handle-hash\] handle=([0-9A-Fa-fx]+) sharedTex=([0-9A-Fa-fx]+) backBuffer=([0-9A-Fa-fx]+) texSize=(\d+x\d+)/g)];
-  expect(matches.length).toBeGreaterThan(1);  // need at least 2 samples to compare
+  const matches = [
+    ...log.matchAll(
+      /\[COMP-engine-handle-hash\] handle=([0-9A-Fa-fx]+) sharedTex=([0-9A-Fa-fx]+) backBuffer=([0-9A-Fa-fx]+) texSize=(\d+x\d+)/g,
+    ),
+  ];
+  expect(matches.length).toBeGreaterThan(1); // need at least 2 samples to compare
 
   // Group consecutive samples by handle. Within a span of the same
   // handle, sharedTex and backBuffer should be identical (re-open
@@ -160,12 +164,8 @@ test("no [COMP-engine-fail] lines anywhere in the host log", () => {
   if (fails > 0) {
     // Surface the actual failure messages in the assert failure for
     // easier diagnosis. Slice to a reasonable length to avoid noise.
-    const failLines = log
-      .split("\n")
-      .filter((l) => l.includes("[COMP-engine-fail]"));
-    throw new Error(
-      `Found ${fails} [COMP-engine-fail] line(s) in host.log:\n  ${failLines.join("\n  ")}`,
-    );
+    const failLines = log.split("\n").filter((l) => l.includes("[COMP-engine-fail]"));
+    throw new Error(`Found ${fails} [COMP-engine-fail] line(s) in host.log:\n  ${failLines.join("\n  ")}`);
   }
   expect(fails).toBe(0);
 });
@@ -174,7 +174,9 @@ test("[COMP-engine-open] confirms shared resource opened with correct format", (
   // Format from Compositor.cpp:
   //   [COMP-engine-open] OpenSharedResource handle=00000000400022C2 texSize=1264x761 fmt=87 bind=0x28 share=0x2
   const log = readHostLog();
-  const match = log.match(/\[COMP-engine-open\] OpenSharedResource handle=([0-9A-Fa-fx]+) texSize=(\d+)x(\d+) fmt=(\d+) bind=0x([0-9A-Fa-f]+) share=0x([0-9A-Fa-f]+)/);
+  const match = log.match(
+    /\[COMP-engine-open\] OpenSharedResource handle=([0-9A-Fa-fx]+) texSize=(\d+)x(\d+) fmt=(\d+) bind=0x([0-9A-Fa-f]+) share=0x([0-9A-Fa-f]+)/,
+  );
   expect(match).not.toBeNull();
   if (match) {
     const [, , w, h, fmt, bind, share] = match;

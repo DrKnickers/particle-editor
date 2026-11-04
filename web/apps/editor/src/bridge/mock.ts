@@ -259,9 +259,7 @@ export class MockBridge implements Bridge, MockDispatchHost {
     // whether anything actually moved (edge-pinned block → no move). The host
     // gates markDirty on its anyMoved flag; we reconstruct the same condition.
     const preMoveRootOrder =
-      req.kind === "emitters/move-many"
-        ? useMockEmitterTree.getState().tree.root.children.map((c) => c.id)
-        : null;
+      req.kind === "emitters/move-many" ? useMockEmitterTree.getState().tree.root.children.map((c) => c.id) : null;
     const preEngineSlot =
       req.kind === "engine/set/ground-texture"
         ? snapshotEngineState().groundTexture
@@ -286,8 +284,7 @@ export class MockBridge implements Bridge, MockDispatchHost {
 
   on<K extends EventKind>(kind: K, handler: (e: EventOf<K>) => void): () => void {
     const unsubscribe = this.events.on(kind, handler);
-    if (kind === "viewport/unavailable" && this.viewportUnavailable)
-      handler(this.viewportUnavailable as EventOf<K>);
+    if (kind === "viewport/unavailable" && this.viewportUnavailable) handler(this.viewportUnavailable as EventOf<K>);
     return unsubscribe;
   }
 

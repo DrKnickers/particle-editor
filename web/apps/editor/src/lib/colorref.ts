@@ -47,11 +47,7 @@ function srgbRelativeLuminance(r: number, g: number, b: number): number {
  *  viewport background. `groundColor` is host-computed — the solid colour for the
  *  solid slot, the loaded texture's average for a textured floor — so the pill
  *  adapts to any floor, including custom textures. */
-export function pillBackdropColor(state: {
-  ground: boolean;
-  groundColor: number;
-  background: number;
-}): number {
+export function pillBackdropColor(state: { ground: boolean; groundColor: number; background: number }): number {
   return state.ground ? state.groundColor : state.background;
 }
 
@@ -63,4 +59,3 @@ export function pillScrimMode(backdrop: number): "light" | "dark" {
   const { r, g, b } = colorrefToRgb(backdrop);
   return srgbRelativeLuminance(r, g, b) < PILL_DARK_THRESHOLD ? "light" : "dark";
 }
-

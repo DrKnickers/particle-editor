@@ -43,7 +43,7 @@
 // spinners are disabled and the sun's az drives fill az.
 const FORCE_ALIGN_FILL1_AZ_OFFSET = 120;
 const FORCE_ALIGN_FILL2_AZ_OFFSET = 210;
-const FORCE_ALIGN_FILL_ALT        = -10;
+const FORCE_ALIGN_FILL_ALT = -10;
 
 import { useEffect, useState } from "react";
 import { Tip } from "@/primitives/Tip";
@@ -233,7 +233,9 @@ export function LightingPane({ bridge, onClose, closing }: Props) {
         setForceAlign(s.forceAlign);
       })
       .catch((err) => console.warn("[LightingPane] settings/lighting failed:", err));
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [bridge]);
 
   const pushLight = (which: LightWhich, s: LightFormState) => {
@@ -358,13 +360,11 @@ export function LightingPane({ bridge, onClose, closing }: Props) {
   // (HostWindow.cpp `ambientToVec4`) and this React `ambientToVec4` push the
   // same w=1, so load == Reset (both stay in lockstep — flip them together or
   // Reset diverges from load again).
-  const ambientToVec4 = (rgb: RgbColor): Vec4 =>
-    [rgb.r / 255, rgb.g / 255, rgb.b / 255, 1.0] as const;
+  const ambientToVec4 = (rgb: RgbColor): Vec4 => [rgb.r / 255, rgb.g / 255, rgb.b / 255, 1.0] as const;
   // Shadow stays w=0: it is render-inert (the engine echoes it back to this
   // panel via the DTO round-trip but never samples it in a shader), so its
   // alpha gates nothing. Light diffuse/specular keep w=1 via buildLightDto.
-  const rgbToVec4 = (rgb: RgbColor): Vec4 =>
-    [rgb.r / 255, rgb.g / 255, rgb.b / 255, 0.0] as const;
+  const rgbToVec4 = (rgb: RgbColor): Vec4 => [rgb.r / 255, rgb.g / 255, rgb.b / 255, 0.0] as const;
 
   const updateAmbient = (rgb: RgbColor) => {
     setAmbient(rgb);
@@ -418,7 +418,7 @@ export function LightingPane({ bridge, onClose, closing }: Props) {
     // updateAmbient/updateShadow, whose persist would capture the stale
     // (pre-reset) sun/fill closures. Persist the full default snapshot once.
     void bridge.request({ kind: "engine/set/ambient", params: { color: ambientToVec4(AMBIENT_DEFAULT) } });
-    void bridge.request({ kind: "engine/set/shadow",  params: { color: rgbToVec4(SHADOW_DEFAULT) } });
+    void bridge.request({ kind: "engine/set/shadow", params: { color: rgbToVec4(SHADOW_DEFAULT) } });
     persistLighting({
       sun: SUN_DEFAULTS,
       fill1: FILL1_DEFAULTS,
@@ -585,21 +585,13 @@ export function LightingPane({ bridge, onClose, closing }: Props) {
 
       <ToolPanel.Section title="Ambient" alwaysOpen>
         <ToolPanel.Row label="Colour">
-          <ColorButton
-            value={rgbToColorButtonValue(ambient)}
-            onChange={updateAmbient}
-            aria-label="Ambient colour"
-          />
+          <ColorButton value={rgbToColorButtonValue(ambient)} onChange={updateAmbient} aria-label="Ambient colour" />
         </ToolPanel.Row>
       </ToolPanel.Section>
 
       <ToolPanel.Section title="Shadow" alwaysOpen>
         <ToolPanel.Row label="Colour">
-          <ColorButton
-            value={rgbToColorButtonValue(shadow)}
-            onChange={updateShadow}
-            aria-label="Shadow colour"
-          />
+          <ColorButton value={rgbToColorButtonValue(shadow)} onChange={updateShadow} aria-label="Shadow colour" />
         </ToolPanel.Row>
       </ToolPanel.Section>
 
@@ -609,9 +601,7 @@ export function LightingPane({ bridge, onClose, closing }: Props) {
             the Tip rides an inline-block span wrapper. The footer is a
             flex-wrap row, so the span is layout-neutral (it becomes the
             flex item; the button keeps its own box). */}
-        <Tip
-          content={forceAlign ? "Disabled while Force Align is on" : undefined}
-        >
+        <Tip content={forceAlign ? "Disabled while Force Align is on" : undefined}>
           <span className="inline-block">
             <button
               type="button"

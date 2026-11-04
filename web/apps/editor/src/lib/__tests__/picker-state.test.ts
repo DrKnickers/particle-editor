@@ -1,10 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  __resetPickerStateCacheForTests,
-  loadPickerState,
-  resolveFaction,
-  savePickerState,
-} from "../picker-state";
+import { __resetPickerStateCacheForTests, loadPickerState, resolveFaction, savePickerState } from "../picker-state";
 
 const KEY = "alo:refpicker:v1";
 
@@ -49,10 +44,7 @@ describe("picker-state persistence", () => {
   });
 
   it("sanitizes bad shapes (non-string faction/collapsed entries, negative scroll)", () => {
-    localStorage.setItem(
-      KEY,
-      JSON.stringify({ faction: 42, collapsed: ["ok", 7, null], scrollTop: -5 }),
-    );
+    localStorage.setItem(KEY, JSON.stringify({ faction: 42, collapsed: ["ok", 7, null], scrollTop: -5 }));
     __resetPickerStateCacheForTests();
     const s = loadPickerState();
     expect(s.faction).toBeNull(); // non-string faction -> null

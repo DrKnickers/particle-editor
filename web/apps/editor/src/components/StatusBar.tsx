@@ -32,12 +32,7 @@ function cell(label: string, value: string, dim: boolean, warn = false) {
   return (
     <span className="flex items-baseline gap-1.5">
       <span className="text-text-3">{label}</span>
-      <span
-        className={cn(
-          "font-mono tabular-nums",
-          warn ? "text-warning-fg" : dim ? "text-text-3" : "text-text-2",
-        )}
-      >
+      <span className={cn("font-mono tabular-nums", warn ? "text-warning-fg" : dim ? "text-text-3" : "text-text-2")}>
         {value}
       </span>
     </span>
@@ -102,10 +97,7 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
   }, [feedbackMessage]);
   useEffect(() => {
     if (feedbackMessage === null) return;
-    const t = window.setTimeout(
-      () => useStatusFeedback.getState().clear(feedbackEpoch),
-      STATUS_FEEDBACK_CLEAR_MS,
-    );
+    const t = window.setTimeout(() => useStatusFeedback.getState().clear(feedbackEpoch), STATUS_FEEDBACK_CLEAR_MS);
     return () => window.clearTimeout(t);
   }, [feedbackMessage, feedbackEpoch]);
 
@@ -152,9 +144,7 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
   }, [bridge]);
 
   // 2dp cursor readout, matching legacy ("Mouse: x, y, z" at 2dp).
-  const cursorText = cursor === null
-    ? "—"
-    : `${cursor.x.toFixed(2)}, ${cursor.y.toFixed(2)}, ${cursor.z.toFixed(2)}`;
+  const cursorText = cursor === null ? "—" : `${cursor.x.toFixed(2)}, ${cursor.y.toFixed(2)}, ${cursor.z.toFixed(2)}`;
 
   return (
     <footer className="flex h-7 shrink-0 items-center gap-3 border-t border-border bg-bg px-4 text-xs">
@@ -212,7 +202,9 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
                 ⚠ Autosave failing
               </span>
             </Tip>
-            <span id={autosaveDetailId} hidden>{AUTOSAVE_FAILED_DETAIL}</span>
+            <span id={autosaveDetailId} hidden>
+              {AUTOSAVE_FAILED_DETAIL}
+            </span>
           </>
         )}
         <span className="shrink-0 text-text-3">⇧ Shift: spawn instance</span>

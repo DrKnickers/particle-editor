@@ -75,10 +75,7 @@ function waitForPreviewReady(
       if (armed) return;
       armed = true;
       unsubscribe = pending.bridge.on("textures/preview-ready", (event) => {
-        if (
-          event.payload.filename === pending.filename &&
-          event.payload.flattenAlpha === pending.flattenAlpha
-        ) {
+        if (event.payload.filename === pending.filename && event.payload.flattenAlpha === pending.flattenAlpha) {
           settleOrRetry();
         }
       });
@@ -92,14 +89,12 @@ function waitForPreviewReady(
     const settleOrRetry = () => {
       if (!armed) return;
       disarm();
-      fetcher().then(
-        (res) => {
-          cacheOk(k, res);
-          if (res.status === "pending") arm();   // still encoding — keep waiting
-          else resolve(res);
-        },
-        reject,
-      );
+      fetcher().then((res) => {
+        cacheOk(k, res);
+        if (res.status === "pending")
+          arm(); // still encoding — keep waiting
+        else resolve(res);
+      }, reject);
     };
     arm();
   }).finally(() => {

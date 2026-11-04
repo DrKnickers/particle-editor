@@ -42,16 +42,15 @@ import { isOwnFootprint } from "@/lib/multi-drag";
 import { makeDefaultSpawnerParams } from "@/lib/spawner-defaults";
 
 // ─── Engine state defaults and store ─────────────────────────────
-export const GROUND_SLOT_COUNT = 8;       // matches Engine::kGroundTextureCount
-export const SKYDOME_SLOT_COUNT = 12;     // matches Engine::kSkydomeSlotCount
-export const SKYDOME_FIRST_CUSTOM = 9;    // matches Engine::kSkydomeFirstCustomSlot
-export const SKYDOME_CUSTOM_COUNT =
-  SKYDOME_SLOT_COUNT - SKYDOME_FIRST_CUSTOM;  // 3
+export const GROUND_SLOT_COUNT = 8; // matches Engine::kGroundTextureCount
+export const SKYDOME_SLOT_COUNT = 12; // matches Engine::kSkydomeSlotCount
+export const SKYDOME_FIRST_CUSTOM = 9; // matches Engine::kSkydomeFirstCustomSlot
+export const SKYDOME_CUSTOM_COUNT = SKYDOME_SLOT_COUNT - SKYDOME_FIRST_CUSTOM; // 3
 
 const zeroLight: LightDto = {
-  diffuse:   [0, 0, 0, 0],
-  specular:  [0, 0, 0, 0],
-  position:  [0, 0, 0, 0],
+  diffuse: [0, 0, 0, 0],
+  specular: [0, 0, 0, 0],
+  position: [0, 0, 0, 0],
   direction: [0, 0, 0, 0],
 };
 
@@ -92,7 +91,7 @@ export function makeDefaultEngineState(): EngineStateDto {
     referenceObjectRotation: [0, 0, 0],
     referenceObjectStatus: "none",
     referenceProjectile: null,
-    referenceCatalogBuilding: false,   // browser mode has no off-thread build
+    referenceCatalogBuilding: false, // browser mode has no off-thread build
     gridVisible: false,
     gridSpacing: 20,
     snapEnabled: false,
@@ -100,18 +99,18 @@ export function makeDefaultEngineState(): EngineStateDto {
     background: 0x00340814,
 
     lights: {
-      sun:   { ...zeroLight },
+      sun: { ...zeroLight },
       fill1: { ...zeroLight },
       fill2: { ...zeroLight },
     },
     ambient: [0, 0, 0, 0],
-    shadow:  [0, 0, 0, 0],
+    shadow: [0, 0, 0, 0],
 
     bloom: false,
-    bloomAvailable: true,    // mock pretends the shader is loaded
+    bloomAvailable: true, // mock pretends the shader is loaded
     bloomStrength: 0.0,
-    bloomCutoff:   0.9,
-    bloomSize:     0.1,
+    bloomCutoff: 0.9,
+    bloomSize: 0.1,
 
     // Leave particles after instance death. Default true
     // matches the native ParticleSystem constructor
@@ -124,11 +123,11 @@ export function makeDefaultEngineState(): EngineStateDto {
 
     camera: {
       position: [0, -250, 125],
-      target:   [0, 0, 0],
-      up:       [0, 0, 1],
+      target: [0, 0, 0],
+      up: [0, 0, 1],
     },
 
-    wind:    [0, 0, 0],
+    wind: [0, 0, 0],
     gravity: [0, 0, -1],
 
     spawner: makeDefaultSpawnerParams(),
@@ -237,20 +236,65 @@ export function makeDefaultEmitterTree(): EmitterTreeDto {
       spawn: ZERO_SPAWN,
       children: [
         {
-          id: 0, stableId: nextStableId(), name: "Smoke", role: "root", linkGroup: 1, visible: true, spawn: ZERO_SPAWN,
+          id: 0,
+          stableId: nextStableId(),
+          name: "Smoke",
+          role: "root",
+          linkGroup: 1,
+          visible: true,
+          spawn: ZERO_SPAWN,
           children: [
-            { id: 1, stableId: nextStableId(), name: "Smoke embers", role: "lifetime", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
-            { id: 2, stableId: nextStableId(), name: "Smoke puff",   role: "death",    linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
+            {
+              id: 1,
+              stableId: nextStableId(),
+              name: "Smoke embers",
+              role: "lifetime",
+              linkGroup: 0,
+              visible: true,
+              spawn: ZERO_SPAWN,
+              children: [],
+            },
+            {
+              id: 2,
+              stableId: nextStableId(),
+              name: "Smoke puff",
+              role: "death",
+              linkGroup: 0,
+              visible: true,
+              spawn: ZERO_SPAWN,
+              children: [],
+            },
           ],
         },
         {
-          id: 3, stableId: nextStableId(), name: "Sparks", role: "root", linkGroup: 1, visible: true, spawn: ZERO_SPAWN,
+          id: 3,
+          stableId: nextStableId(),
+          name: "Sparks",
+          role: "root",
+          linkGroup: 1,
+          visible: true,
+          spawn: ZERO_SPAWN,
           children: [
-            { id: 4, stableId: nextStableId(), name: "Spark trail", role: "lifetime", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
+            {
+              id: 4,
+              stableId: nextStableId(),
+              name: "Spark trail",
+              role: "lifetime",
+              linkGroup: 0,
+              visible: true,
+              spawn: ZERO_SPAWN,
+              children: [],
+            },
           ],
         },
         {
-          id: 5, stableId: nextStableId(), name: "Flash", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
+          id: 5,
+          stableId: nextStableId(),
+          name: "Flash",
+          role: "root",
+          linkGroup: 0,
+          visible: true,
+          spawn: ZERO_SPAWN,
           children: [],
         },
       ],
@@ -297,27 +341,25 @@ export const DEFAULT_LINK_EXEMPT_FIELDS: readonly string[] = Object.freeze([
   // returns only fields the user can toggle.
 ]);
 
-export const useMockLinkGroupExempt = create<LinkGroupExemptStore>(
-  (set, get) => ({
-    exempts: new Map(),
-    get: (groupId) => {
-      const explicit = get().exempts.get(groupId);
-      if (explicit !== undefined) return [...explicit];
-      return [...DEFAULT_LINK_EXEMPT_FIELDS];
-    },
-    set: (groupId, fields) => {
-      const next = new Map(get().exempts);
-      next.set(groupId, [...fields]);
-      set({ exempts: next });
-    },
-    reset: (groupId) => {
-      const next = new Map(get().exempts);
-      next.delete(groupId);
-      set({ exempts: next });
-    },
-    resetAll: () => set({ exempts: new Map() }),
-  }),
-);
+export const useMockLinkGroupExempt = create<LinkGroupExemptStore>((set, get) => ({
+  exempts: new Map(),
+  get: (groupId) => {
+    const explicit = get().exempts.get(groupId);
+    if (explicit !== undefined) return [...explicit];
+    return [...DEFAULT_LINK_EXEMPT_FIELDS];
+  },
+  set: (groupId, fields) => {
+    const next = new Map(get().exempts);
+    next.set(groupId, [...fields]);
+    set({ exempts: next });
+  },
+  reset: (groupId) => {
+    const next = new Map(get().exempts);
+    next.delete(groupId);
+    set({ exempts: next });
+  },
+  resetAll: () => set({ exempts: new Map() }),
+}));
 
 // ─── Join-conflict seam (mock only) ──────────────────────────
 //
@@ -337,14 +379,11 @@ type LinkGroupConflictStore = {
   resetAll: () => void;
 };
 
-export const useMockLinkGroupConflicts = create<LinkGroupConflictStore>(
-  (set) => ({
-    conflicts: [],
-    setConflicts: (conflicts) =>
-      set({ conflicts: conflicts.map((c) => ({ ...c, fields: [...c.fields] })) }),
-    resetAll: () => set({ conflicts: [] }),
-  }),
-);
+export const useMockLinkGroupConflicts = create<LinkGroupConflictStore>((set) => ({
+  conflicts: [],
+  setConflicts: (conflicts) => set({ conflicts: conflicts.map((c) => ({ ...c, fields: [...c.fields] })) }),
+  resetAll: () => set({ conflicts: [] }),
+}));
 
 // ─── Tree-mutation helpers ──────────────────────
 //
@@ -362,11 +401,7 @@ function cloneNode(n: EmitterTreeNode): EmitterTreeNode {
 
 /** Walk and apply a transform to every node matching `id`. Returns a
  *  new tree (structurally cloned) with the transform applied. */
-function mapNode(
-  tree: EmitterTreeDto,
-  id: number,
-  transform: (n: EmitterTreeNode) => EmitterTreeNode,
-): EmitterTreeDto {
+function mapNode(tree: EmitterTreeDto, id: number, transform: (n: EmitterTreeNode) => EmitterTreeNode): EmitterTreeDto {
   const walk = (n: EmitterTreeNode): EmitterTreeNode => {
     if (n.id === id) return transform(n);
     return { ...n, children: n.children.map(walk) };
@@ -390,10 +425,7 @@ function maxIdIn(tree: EmitterTreeDto): number {
  *  in src/main.cpp: strips a trailing `_<digits>` if
  *  present, then appends `_<next>` where next is `max+1` across all
  *  emitters whose name shares the same base. */
-export function generateDuplicateName(
-  tree: EmitterTreeDto,
-  sourceName: string,
-): string {
+export function generateDuplicateName(tree: EmitterTreeDto, sourceName: string): string {
   // Strip trailing _<digits> from the base.
   let base = sourceName;
   const underscore = base.lastIndexOf("_");
@@ -435,10 +467,7 @@ export function generateDuplicateName(
  *  child of the synthetic root. Returns the new tree + the id of the
  *  duplicated root. Returns null when the source id isn't in the tree
  *  (or is the synthetic root). */
-export function duplicateEmitter(
-  tree: EmitterTreeDto,
-  id: number,
-): { tree: EmitterTreeDto; newId: number } | null {
+export function duplicateEmitter(tree: EmitterTreeDto, id: number): { tree: EmitterTreeDto; newId: number } | null {
   if (id === -1) return null;
   const source = findEmitterNode(tree, id);
   if (source === null) return null;
@@ -474,10 +503,7 @@ export function duplicateEmitter(
  *  Post-deletion, runs `enforceSingleMemberLinkGroups` so the
  *  survivor of a 2-member group whose other member was just deleted
  *  drops to `linkGroup = 0` automatically. */
-export function deleteEmitter(
-  tree: EmitterTreeDto,
-  id: number,
-): EmitterTreeDto | null {
+export function deleteEmitter(tree: EmitterTreeDto, id: number): EmitterTreeDto | null {
   if (id === -1) return null;
   const prune = (n: EmitterTreeNode): EmitterTreeNode | null => {
     if (n.id === id) return null;
@@ -490,17 +516,13 @@ export function deleteEmitter(
     };
   };
   const next = prune(tree.root);
-  if (next === null) return null;  // can't prune synthetic root
+  if (next === null) return null; // can't prune synthetic root
   return enforceSingleMemberLinkGroups({ root: next });
 }
 
 /** Rename the emitter at `id`. Returns the new tree (always defined;
  *  no-op if id not found). */
-export function renameEmitter(
-  tree: EmitterTreeDto,
-  id: number,
-  name: string,
-): EmitterTreeDto {
+export function renameEmitter(tree: EmitterTreeDto, id: number, name: string): EmitterTreeDto {
   return mapNode(tree, id, (n) => ({ ...n, name }));
 }
 
@@ -596,9 +618,7 @@ export function addLifetimeChildEmitter(
  *  New id = `maxIdIn(tree) + 1` to match the existing id-allocator
  *  pattern used by the other add helpers. Appended at the end of the
  *  root child list — mirrors the engine's push-back insertion. */
-export function addRootEmitterMock(
-  tree: EmitterTreeDto,
-): { tree: EmitterTreeDto; newId: number } {
+export function addRootEmitterMock(tree: EmitterTreeDto): { tree: EmitterTreeDto; newId: number } {
   const newId = maxIdIn(tree) + 1;
   const child: EmitterTreeNode = {
     id: newId,
@@ -679,11 +699,7 @@ export function pasteAsChildFromClipboard(
  *  Returns null on missing id, non-root emitter, or move past edge —
  *  matches `ParticleSystem::moveEmitter` semantics (children can't be
  *  reordered since each parent has fixed-role slots). */
-export function moveEmitterInTree(
-  tree: EmitterTreeDto,
-  id: number,
-  direction: "up" | "down",
-): EmitterTreeDto | null {
+export function moveEmitterInTree(tree: EmitterTreeDto, id: number, direction: "up" | "down"): EmitterTreeDto | null {
   if (id === -1) return null;
   // Only root emitters can be moved; find the target in the root list.
   const idx = tree.root.children.findIndex((c) => c.id === id);
@@ -699,11 +715,7 @@ export function moveEmitterInTree(
  *  success or null when the id isn't found. Matches the legacy
  *  `EmitterList_ToggleEmitterVisibility` which flips the selected
  *  emitter only — children are untouched. */
-export function setEmitterVisibleMock(
-  tree: EmitterTreeDto,
-  id: number,
-  visible: boolean,
-): EmitterTreeDto | null {
+export function setEmitterVisibleMock(tree: EmitterTreeDto, id: number, visible: boolean): EmitterTreeDto | null {
   let found = false;
   const walk = (n: EmitterTreeNode): EmitterTreeNode => {
     if (n.id === id) {
@@ -719,10 +731,7 @@ export function setEmitterVisibleMock(
 /** Recursively set `visible` on every non-virtual emitter in the tree
  *  (excludes the synthetic root). Matches the legacy
  *  `EmitterList_SetAllEmitterVisibility`. */
-export function setAllEmittersVisibleMock(
-  tree: EmitterTreeDto,
-  visible: boolean,
-): EmitterTreeDto {
+export function setAllEmittersVisibleMock(tree: EmitterTreeDto, visible: boolean): EmitterTreeDto {
   const walk = (n: EmitterTreeNode): EmitterTreeNode => ({
     ...n,
     visible,
@@ -748,11 +757,7 @@ export function findUnusedLinkGroupId(tree: EmitterTreeDto): number {
  *  via `findUnusedLinkGroupId`). `null` or `0` clears membership.
  *  Post-mutation, runs `enforceSingleMemberLinkGroups` to keep the
  *  data layer aligned with the render-layer filter. */
-export function setLinkGroupMembership(
-  tree: EmitterTreeDto,
-  ids: number[],
-  groupId: number | null,
-): EmitterTreeDto {
+export function setLinkGroupMembership(tree: EmitterTreeDto, ids: number[], groupId: number | null): EmitterTreeDto {
   let resolved: number;
   if (groupId === null || groupId === 0) {
     resolved = 0;
@@ -763,9 +768,7 @@ export function setLinkGroupMembership(
   }
   const idSet = new Set(ids);
   const walk = (n: EmitterTreeNode): EmitterTreeNode => {
-    const transformed = idSet.has(n.id)
-      ? { ...n, linkGroup: resolved }
-      : n;
+    const transformed = idSet.has(n.id) ? { ...n, linkGroup: resolved } : n;
     return { ...transformed, children: transformed.children.map(walk) };
   };
   return enforceSingleMemberLinkGroups({ root: walk(tree.root) });
@@ -778,9 +781,7 @@ export function setLinkGroupMembership(
  *  (a single-member group renders no group indicator). Pure function —
  *  returns a new tree
  *  DTO; doesn't mutate the input. */
-export function enforceSingleMemberLinkGroups(
-  tree: EmitterTreeDto,
-): EmitterTreeDto {
+export function enforceSingleMemberLinkGroups(tree: EmitterTreeDto): EmitterTreeDto {
   // Pass 1: count members per positive linkGroup.
   const counts = new Map<number, number>();
   const visit = (n: EmitterTreeNode) => {
@@ -794,13 +795,14 @@ export function enforceSingleMemberLinkGroups(
   // Short-circuit: if every group has ≥ 2 members already, no rewrite.
   // (Common case once enforcement has been running — a no-op call.)
   let anySingleton = false;
-  counts.forEach((c) => { if (c === 1) anySingleton = true; });
+  counts.forEach((c) => {
+    if (c === 1) anySingleton = true;
+  });
   if (!anySingleton) return tree;
 
   // Pass 2: rebuild with singletons demoted to linkGroup=0.
   const demote = (n: EmitterTreeNode): EmitterTreeNode => {
-    const shouldDemote =
-      n.linkGroup > 0 && counts.get(n.linkGroup) === 1;
+    const shouldDemote = n.linkGroup > 0 && counts.get(n.linkGroup) === 1;
     const next = shouldDemote ? { ...n, linkGroup: 0 } : n;
     return { ...next, children: next.children.map(demote) };
   };
@@ -811,10 +813,7 @@ export function enforceSingleMemberLinkGroups(
 
 /** Find the parent of `id` in the tree (returns the synthetic root if
  *  the id is a top-level root). Returns null when the id isn't found. */
-function findParentNode(
-  tree: EmitterTreeDto,
-  id: number,
-): EmitterTreeNode | null {
+function findParentNode(tree: EmitterTreeDto, id: number): EmitterTreeNode | null {
   const visit = (n: EmitterTreeNode): EmitterTreeNode | null => {
     for (const c of n.children) {
       if (c.id === id) return n;
@@ -831,14 +830,10 @@ function findParentNode(
  *  gap K means "land before position K in the new list". Returns the
  *  mutated tree, or null when the source isn't a root or the no-op
  *  case fires (gap K equals sourceIdx or sourceIdx+1). */
-export function reorderRootEmitter(
-  tree: EmitterTreeDto,
-  id: number,
-  rootIndex: number,
-): EmitterTreeDto | null {
+export function reorderRootEmitter(tree: EmitterTreeDto, id: number, rootIndex: number): EmitterTreeDto | null {
   const roots = tree.root.children;
   const sourceIdx = roots.findIndex((c) => c.id === id);
-  if (sourceIdx === -1) return null;          // not a root
+  if (sourceIdx === -1) return null; // not a root
   if (rootIndex < 0 || rootIndex > roots.length) return null;
   // No-op detection: gap [sourceIdx, sourceIdx+1] is the source's
   // own position. The C++ side returns false here too.
@@ -857,11 +852,7 @@ export function reorderRootEmitter(
  *  Returns the mutated tree, or null on: out-of-range gap, empty selection,
  *  any non-root id, or an own-footprint no-op (a contiguous block dropped
  *  anywhere in [first, last+1]). */
-export function reorderManyRoots(
-  tree: EmitterTreeDto,
-  ids: number[],
-  rootIndex: number,
-): EmitterTreeDto | null {
+export function reorderManyRoots(tree: EmitterTreeDto, ids: number[], rootIndex: number): EmitterTreeDto | null {
   const roots = tree.root.children;
   const N = roots.length;
   if (rootIndex < 0 || rootIndex > N) return null; // out of range (gap is 0..N)
@@ -931,9 +922,7 @@ export function reparentEmitterInTree(
     // renders before death; insert at the front for "lifetime", append
     // for "death" — matches the legacy ordering convention.
     if (n.id === targetId) {
-      nextChildren = slot === "lifetime"
-        ? [clonedSource, ...nextChildren]
-        : [...nextChildren, clonedSource];
+      nextChildren = slot === "lifetime" ? [clonedSource, ...nextChildren] : [...nextChildren, clonedSource];
     }
     return { ...n, children: nextChildren.map(walk) };
   };
@@ -958,13 +947,11 @@ type EmitterClipboardStore = {
   reset: () => void;
 };
 
-export const useMockEmitterClipboard = create<EmitterClipboardStore>(
-  (set) => ({
-    buffer: [],
-    set: (buffer) => set({ buffer: buffer.map(cloneNode) }),
-    reset: () => set({ buffer: [] }),
-  }),
-);
+export const useMockEmitterClipboard = create<EmitterClipboardStore>((set) => ({
+  buffer: [],
+  set: (buffer) => set({ buffer: buffer.map(cloneNode) }),
+  reset: () => set({ buffer: [] }),
+}));
 
 /** Reassign ids in a (deep-cloned) subtree starting at `startId`,
  *  walking depth-first. Returns the new root id + the mutated subtree
@@ -984,10 +971,7 @@ function reassignIdsInPlace(n: EmitterTreeNode, startId: number): number {
 /** Copy the named nodes' subtrees into the clipboard. Returns the
  *  list of cloned subtrees (order matches `ids`). Missing ids are
  *  silently skipped. */
-export function copyEmittersToClipboard(
-  tree: EmitterTreeDto,
-  ids: number[],
-): EmitterTreeNode[] {
+export function copyEmittersToClipboard(tree: EmitterTreeDto, ids: number[]): EmitterTreeNode[] {
   const out: EmitterTreeNode[] = [];
   for (const id of ids) {
     if (id === -1) continue;
@@ -1079,7 +1063,13 @@ export const useMockRecentFiles = create<RecentFilesStore>((set, get) => ({
 // screenshots.
 
 const TRACK_INTERPOLATIONS: readonly InterpolationType[] = Object.freeze([
-  "linear", "smooth", "linear", "linear", "smooth", "step", "linear",
+  "linear",
+  "smooth",
+  "linear",
+  "linear",
+  "smooth",
+  "step",
+  "linear",
 ]);
 
 /** Tiny LCG-ish hash so the keys for emitter id N differ from id M but
@@ -1106,52 +1096,52 @@ function buildFixtureTrack(id: number, trackIdx: number): TrackDto {
   switch (trackIdx) {
     case 0: // red
       keys = [
-        { time: 0,   value: 0 },
-        { time: 30,  value: 0.8 + jitter * 0.2 },
-        { time: 60,  value: 1.0 },
+        { time: 0, value: 0 },
+        { time: 30, value: 0.8 + jitter * 0.2 },
+        { time: 60, value: 1.0 },
         { time: 100, value: 0 },
       ];
       break;
     case 1: // green
       keys = [
-        { time: 0,   value: 0 },
-        { time: 50,  value: 0 },
-        { time: 75,  value: 0.6 + jitter * 0.3 },
+        { time: 0, value: 0 },
+        { time: 50, value: 0 },
+        { time: 75, value: 0.6 + jitter * 0.3 },
         { time: 100, value: 0.2 },
       ];
       break;
     case 2: // blue
       keys = [
-        { time: 0,   value: 0.9 },
+        { time: 0, value: 0.9 },
         { time: 100, value: 0.1 },
       ];
       break;
     case 3: // alpha
       keys = [
-        { time: 0,   value: 0 },
-        { time: 20,  value: 1 },
-        { time: 80,  value: 1 },
+        { time: 0, value: 0 },
+        { time: 20, value: 1 },
+        { time: 80, value: 1 },
         { time: 100, value: 0 },
       ];
       break;
     case 4: // scale
       keys = [
-        { time: 0,   value: 1 },
+        { time: 0, value: 1 },
         { time: 100, value: 3 + jitter * 2 },
       ];
       break;
     case 5: // index
       keys = [
-        { time: 0,   value: 0 },
-        { time: 33,  value: 3 },
-        { time: 66,  value: 7 },
+        { time: 0, value: 0 },
+        { time: 33, value: 3 },
+        { time: 66, value: 7 },
         { time: 100, value: 7 },
       ];
       break;
     case 6: // rotation speed
       keys = [
-        { time: 0,   value: -2 + jitter },
-        { time: 50,  value: 0 },
+        { time: 0, value: -2 + jitter },
+        { time: 50, value: 0 },
         { time: 100, value: 2 - jitter },
       ];
       break;
@@ -1203,18 +1193,22 @@ export const useMockTrackOverlay = create<TrackOverlayStore>((set, get) => ({
   overlay: new Map(),
   read: (id) => {
     const explicit = get().overlay.get(id);
-    if (explicit !== undefined) return explicit.map((t) => ({
-      ...t,
-      keys: t.keys.map((k) => ({ ...k })),
-    }));
+    if (explicit !== undefined)
+      return explicit.map((t) => ({
+        ...t,
+        keys: t.keys.map((k) => ({ ...k })),
+      }));
     return makeFixtureTracks(id);
   },
   write: (id, tracks) => {
     const next = new Map(get().overlay);
-    next.set(id, tracks.map((t) => ({
-      ...t,
-      keys: t.keys.map((k) => ({ ...k })),
-    })));
+    next.set(
+      id,
+      tracks.map((t) => ({
+        ...t,
+        keys: t.keys.map((k) => ({ ...k })),
+      })),
+    );
     set({ overlay: next });
   },
   reset: () => set({ overlay: new Map() }),
@@ -1227,11 +1221,7 @@ export const useMockTrackOverlay = create<TrackOverlayStore>((set, get) => ({
  *  carries the key's wire-shipped `time` value directly, so equality
  *  holds within IEEE-754 round-trip rules). Returns the count of
  *  keys actually removed (0 = nothing matched / all border keys). */
-export function deleteTrackKeysInOverlay(
-  id: number,
-  trackName: TrackName,
-  times: number[],
-): number {
+export function deleteTrackKeysInOverlay(id: number, trackName: TrackName, times: number[]): number {
   const cur = useMockTrackOverlay.getState().read(id);
   const trackIdx = cur.findIndex((t) => t.name === trackName);
   if (trackIdx === -1) return 0;
@@ -1240,10 +1230,7 @@ export function deleteTrackKeysInOverlay(
   // Border keys = first + last in time order. The fixture wire
   // contract is keys-ascending-by-time, so first/last are simply
   // indices 0 and length-1.
-  const borderTimes = new Set<number>([
-    target.keys[0]!.time,
-    target.keys[target.keys.length - 1]!.time,
-  ]);
+  const borderTimes = new Set<number>([target.keys[0]!.time, target.keys[target.keys.length - 1]!.time]);
   const toDelete = new Set<number>();
   for (const t of times) {
     if (!borderTimes.has(t)) toDelete.add(t);
@@ -1252,9 +1239,7 @@ export function deleteTrackKeysInOverlay(
   const nextKeys = target.keys.filter((k) => !toDelete.has(k.time));
   const removed = target.keys.length - nextKeys.length;
   if (removed === 0) return 0;
-  const nextTracks = cur.map((t, i) =>
-    i === trackIdx ? { ...t, keys: nextKeys } : t,
-  );
+  const nextTracks = cur.map((t, i) => (i === trackIdx ? { ...t, keys: nextKeys } : t));
   useMockTrackOverlay.getState().write(id, nextTracks);
   return removed;
 }
@@ -1272,11 +1257,7 @@ export function deleteTrackKeysInOverlay(
  *      — the master's edits are instantly visible through the follower,
  *      and `trackContents[i]` is preserved intact throughout the lock.
  *  Returns true when the state actually changed (write happened). */
-export function setTrackLockInOverlay(
-  id: number,
-  channel: TrackName,
-  lockTo: TrackName | null,
-): boolean {
+export function setTrackLockInOverlay(id: number, channel: TrackName, lockTo: TrackName | null): boolean {
   const cur = useMockTrackOverlay.getState().read(id);
   const channelIdx = cur.findIndex((t) => t.name === channel);
   if (channelIdx === -1 || channelIdx >= 4) return false;
@@ -1295,9 +1276,7 @@ export function setTrackLockInOverlay(
   // Write ONLY the lockedTo field — canonical keys are untouched in both the
   // lock and unlock paths. The live view is derived at the get-tracks read
   // boundary via `deriveLockViews`.
-  const nextTracks = cur.map((t, i) =>
-    i === channelIdx ? { ...t, lockedTo: resolvedLockTo } : t,
-  );
+  const nextTracks = cur.map((t, i) => (i === channelIdx ? { ...t, lockedTo: resolvedLockTo } : t));
   useMockTrackOverlay.getState().write(id, nextTracks);
   return true;
 }
@@ -1324,17 +1303,11 @@ export function deriveLockViews(tracks: TrackDto[]): TrackDto[] {
 
 /** Set `track.interpolation = interp` on emitter `id`. Always succeeds
  *  (when the track is known) — no refusal path on the wire. */
-export function setTrackInterpolationInOverlay(
-  id: number,
-  trackName: TrackName,
-  interp: InterpolationType,
-): boolean {
+export function setTrackInterpolationInOverlay(id: number, trackName: TrackName, interp: InterpolationType): boolean {
   const cur = useMockTrackOverlay.getState().read(id);
   const trackIdx = cur.findIndex((t) => t.name === trackName);
   if (trackIdx === -1) return false;
-  const nextTracks = cur.map((t, i) =>
-    i === trackIdx ? { ...t, interpolation: interp } : t,
-  );
+  const nextTracks = cur.map((t, i) => (i === trackIdx ? { ...t, interpolation: interp } : t));
   useMockTrackOverlay.getState().write(id, nextTracks);
   return true;
 }
@@ -1364,9 +1337,7 @@ export function setTrackKeyInOverlay(
   if (keyIdx === -1) return false;
   // Border-key detection: oldTime is border iff it matches the first
   // or last key in time order (the wire contract is ascending by time).
-  const isBorder =
-    oldTime === target.keys[0]!.time ||
-    oldTime === target.keys[target.keys.length - 1]!.time;
+  const isBorder = oldTime === target.keys[0]!.time || oldTime === target.keys[target.keys.length - 1]!.time;
   const effectiveTime = isBorder ? oldTime : newTime;
   // Build the next keys list: drop the old key, insert the new one in
   // time order. The wire contract is ascending-by-time so callers can
@@ -1377,9 +1348,7 @@ export function setTrackKeyInOverlay(
   let ins = remaining.findIndex((k) => k.time > effectiveTime);
   if (ins === -1) ins = remaining.length;
   const nextKeys = [...remaining.slice(0, ins), inserted, ...remaining.slice(ins)];
-  const nextTracks = cur.map((t, i) =>
-    i === trackIdx ? { ...t, keys: nextKeys } : t,
-  );
+  const nextTracks = cur.map((t, i) => (i === trackIdx ? { ...t, keys: nextKeys } : t));
   useMockTrackOverlay.getState().write(id, nextTracks);
   return true;
 }
@@ -1398,7 +1367,7 @@ export function setTrackKeyInOverlay(
 
 function makeDefaultGroup(): GroupDto {
   return {
-    type: 0,                  // GT_EXACT
+    type: 0, // GT_EXACT
     min: [0, 0, 0],
     max: [0, 0, 0],
     sideLength: 0,
@@ -1414,7 +1383,7 @@ function makeDefaultGroup(): GroupDto {
 export function makeFixtureProperties(id: number): EmitterPropertiesDto {
   // Per-id deterministic perturbation so different selections show
   // different starting values without sharing a global counter.
-  const lifetimeSeed = ((Math.abs(id) % 5) + 1);  // 1..5 s
+  const lifetimeSeed = (Math.abs(id) % 5) + 1; // 1..5 s
   return {
     // Basic
     name: id === -1 ? "" : `Emitter ${id}`,
@@ -1559,9 +1528,7 @@ export function addTrackKeyInOverlay(
   let ins = target.keys.findIndex((k) => k.time > effectiveTime);
   if (ins === -1) ins = target.keys.length;
   const nextKeys = [...target.keys.slice(0, ins), inserted, ...target.keys.slice(ins)];
-  const nextTracks = cur.map((t, i) =>
-    i === trackIdx ? { ...t, keys: nextKeys } : t,
-  );
+  const nextTracks = cur.map((t, i) => (i === trackIdx ? { ...t, keys: nextKeys } : t));
   useMockTrackOverlay.getState().write(id, nextTracks);
   return { time: effectiveTime, value };
 }

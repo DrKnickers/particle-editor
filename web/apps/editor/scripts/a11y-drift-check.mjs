@@ -57,11 +57,14 @@ function killStaleTestHost() {
 function findMsbuild() {
   const vswhere = join(
     process.env["ProgramFiles(x86)"] || "C:/Program Files (x86)",
-    "Microsoft Visual Studio", "Installer", "vswhere.exe",
+    "Microsoft Visual Studio",
+    "Installer",
+    "vswhere.exe",
   );
   for (const extra of [[], ["-products", "*"]]) {
     const r = spawnSync(vswhere, ["-latest", ...extra, "-find", "MSBuild\\**\\Bin\\MSBuild.exe"], {
-      encoding: "utf8", shell: false,
+      encoding: "utf8",
+      shell: false,
     });
     const path = (r.stdout || "").split(/\r?\n/).find((l) => l.trim().endsWith("MSBuild.exe"));
     if (path) return path.trim();
@@ -142,7 +145,10 @@ function buildWebDist() {
   // Report a skipped `pnpm install` clearly: run() spawns `node <bin>`, so a
   // MISSING bin surfaces as node's MODULE_NOT_FOUND (exit 1, no spawn error) —
   // indistinguishable from a compile failure. Check the bins up front instead.
-  for (const [pkg, bin] of [["typescript", tsc], ["vite", vite]]) {
+  for (const [pkg, bin] of [
+    ["typescript", tsc],
+    ["vite", vite],
+  ]) {
     if (!existsSync(bin)) {
       die(`web dist/ build: ${pkg} bin missing (${bin}) — run \`pnpm install\` in web/.`);
     }
@@ -161,11 +167,19 @@ function buildWebDist() {
   // UI green (the stale-dist trap this build exists to close). Comparing two file
   // mtimes (not wall-clock) sidesteps statSync-float vs Date.now-int skew.
   let beforeMs = -1;
-  try { beforeMs = statSync(indexHtml).mtimeMs; } catch { /* no prior dist */ }
+  try {
+    beforeMs = statSync(indexHtml).mtimeMs;
+  } catch {
+    /* no prior dist */
+  }
   step("tsc -b", tsc, ["-b"]);
   step("vite build", vite, ["build"]);
   let afterMs = -1;
-  try { afterMs = statSync(indexHtml).mtimeMs; } catch { /* still missing */ }
+  try {
+    afterMs = statSync(indexHtml).mtimeMs;
+  } catch {
+    /* still missing */
+  }
   if (afterMs <= beforeMs) {
     die("vite build exited 0 but dist/index.html was not (re)produced (missing or unchanged).");
   }
@@ -207,7 +221,9 @@ function regenerateGoldens() {
 
 function changedGoldens() {
   const r = spawnSync("git", ["status", "--porcelain", "--", goldensDir], {
-    cwd: repoRoot, encoding: "utf8", shell: false,
+    cwd: repoRoot,
+    encoding: "utf8",
+    shell: false,
   });
   if (r.status !== 0) die("git status failed.");
   return parseChangedGoldens(r.stdout || "");

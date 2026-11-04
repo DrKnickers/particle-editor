@@ -25,9 +25,7 @@ export function estimatePerEmitter(s: SpawnParamsDto): number {
     result = s.nParticlesPerSecond * s.lifetime;
   } else if (s.burstDelay <= 0) {
     const infinite = s.nBursts === 0;
-    result = infinite
-      ? s.nParticlesPerBurst > 0 ? DEGENERATE_CAP : 0
-      : s.nParticlesPerBurst * s.nBursts;
+    result = infinite ? (s.nParticlesPerBurst > 0 ? DEGENERATE_CAP : 0) : s.nParticlesPerBurst * s.nBursts;
   } else {
     const infinite = s.nBursts === 0;
     const concurrent = Math.floor(s.lifetime / s.burstDelay) + 1;
@@ -88,14 +86,21 @@ export function estimateChainLoad(
   // `perEmitter` here is the per-generation multiplier (linkMultiplier) — E for
   // root/lifetime rows, E·L(child)/L(parent) for death rows — so the tooltip's
   // running product (parentCumulative × perEmitter = cumulative) stays coherent.
-  const visit = (node: EmitterTreeNode, parentCumulative: number, parentLifetime: number, trail: TrailEntry[]): void => {
+  const visit = (
+    node: EmitterTreeNode,
+    parentCumulative: number,
+    parentLifetime: number,
+    trail: TrailEntry[],
+  ): void => {
     const perEmitter = linkMultiplier(node, parentLifetime);
     const cumulative = parentCumulative * perEmitter;
     const path = [...trail, { stableId: node.stableId, name: node.name, perEmitter, cumulative }];
     if (cumulative > threshold) {
       // One shared copy is safe: the display array is never mutated downstream.
       const display = path.map(({ name, perEmitter: e, cumulative: a }) => ({
-        name, perEmitter: e, cumulative: a,
+        name,
+        perEmitter: e,
+        cumulative: a,
       }));
       for (const entry of path) {
         const prev = out.get(entry.stableId);
@@ -146,8 +151,7 @@ export function formatChainWarning(w: ChainWarning): string {
       ? `${p.name}: ~${fmtMultiplier(p.perEmitter)} particles`
       : `→ ${p.name}: ×${fmtMultiplier(p.perEmitter)} → ~${fmtCount(p.cumulative)}`,
   );
-  return [
-    `This ${subject} may spawn too many particles — ~${fmtCount(w.estimate)} particles estimated`,
-    ...lines,
-  ].join("\n");
+  return [`This ${subject} may spawn too many particles — ~${fmtCount(w.estimate)} particles estimated`, ...lines].join(
+    "\n",
+  );
 }

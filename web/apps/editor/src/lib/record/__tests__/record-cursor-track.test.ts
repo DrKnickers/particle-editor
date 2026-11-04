@@ -6,13 +6,9 @@ describe("record-cursor-track", () => {
     expect(
       parseCursorTrackMessage({
         type: "ui/cursor-track",
-        keys: [
-          { t: 0, vis: true, press: false, activate: false, target: { kind: "point", x: 10, y: 20 } },
-        ],
+        keys: [{ t: 0, vis: true, press: false, activate: false, target: { kind: "point", x: 10, y: 20 } }],
       }),
-    ).toEqual([
-      { t: 0, vis: true, press: false, activate: false, target: { kind: "point", x: 10, y: 20 } },
-    ]);
+    ).toEqual([{ t: 0, vis: true, press: false, activate: false, target: { kind: "point", x: 10, y: 20 } }]);
   });
 
   it("parses element-target cursor tracks from JSON strings", () => {
@@ -39,13 +35,41 @@ describe("record-cursor-track", () => {
       parseCursorTrackMessage({
         type: "ui/cursor-track",
         keys: [
-          { t: 0, vis: true, press: true, activate: true, mods: { ctrl: true }, target: { kind: "element", ref: "testid:emitter-row:3" } },
-          { t: 1, vis: true, press: true, activate: true, mods: { shift: true }, target: { kind: "element", ref: "testid:emitter-row:4" } },
+          {
+            t: 0,
+            vis: true,
+            press: true,
+            activate: true,
+            mods: { ctrl: true },
+            target: { kind: "element", ref: "testid:emitter-row:3" },
+          },
+          {
+            t: 1,
+            vis: true,
+            press: true,
+            activate: true,
+            mods: { shift: true },
+            target: { kind: "element", ref: "testid:emitter-row:4" },
+          },
         ],
       }),
     ).toEqual([
-      { t: 0, vis: true, press: true, activate: true, mods: { ctrl: true, shift: false }, target: { kind: "element", ref: "testid:emitter-row:3" } },
-      { t: 1, vis: true, press: true, activate: true, mods: { ctrl: false, shift: true }, target: { kind: "element", ref: "testid:emitter-row:4" } },
+      {
+        t: 0,
+        vis: true,
+        press: true,
+        activate: true,
+        mods: { ctrl: true, shift: false },
+        target: { kind: "element", ref: "testid:emitter-row:3" },
+      },
+      {
+        t: 1,
+        vis: true,
+        press: true,
+        activate: true,
+        mods: { ctrl: false, shift: true },
+        target: { kind: "element", ref: "testid:emitter-row:4" },
+      },
     ]);
   });
 
@@ -71,7 +95,14 @@ describe("record-cursor-track", () => {
     const parsed = parseCursorTrackMessage({
       type: "ui/cursor-track",
       keys: [
-        { t: 0, vis: true, press: true, activate: true, button: "right", target: { kind: "element", ref: "testid:emitter-row:2" } },
+        {
+          t: 0,
+          vis: true,
+          press: true,
+          activate: true,
+          button: "right",
+          target: { kind: "element", ref: "testid:emitter-row:2" },
+        },
         { t: 1, vis: true, press: true, activate: true, target: { kind: "point", x: 1, y: 2 } },
       ],
     });

@@ -97,12 +97,7 @@ export function CanvasWithAxisLabels({
             style={{
               top: `${l.pct * 100}%`,
               right: 0,
-              transform:
-                l.pct === 0
-                  ? "translateY(0)"
-                  : l.pct === 1
-                    ? "translateY(-100%)"
-                    : "translateY(-50%)",
+              transform: l.pct === 0 ? "translateY(0)" : l.pct === 1 ? "translateY(-100%)" : "translateY(-50%)",
               whiteSpace: "nowrap",
             }}
           >
@@ -134,12 +129,7 @@ export function CanvasWithAxisLabels({
             className="absolute pt-1.5 text-3xs leading-none text-text-2"
             style={{
               left: `${t}%`,
-              transform:
-                t === 0
-                  ? "translateX(0)"
-                  : t === 100
-                    ? "translateX(-100%)"
-                    : "translateX(-50%)",
+              transform: t === 0 ? "translateX(0)" : t === 100 ? "translateX(-100%)" : "translateX(-50%)",
               whiteSpace: "nowrap",
             }}
           >
@@ -154,4 +144,3 @@ export function CanvasWithAxisLabels({
     </div>
   );
 }
-

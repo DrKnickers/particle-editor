@@ -41,7 +41,11 @@ if (!existsSync(exe)) {
 }
 const CDP = "http://localhost:9222";
 const probeCdp = async () => {
-  try { return (await fetch(`${CDP}/json/version`)).ok; } catch { return false; }
+  try {
+    return (await fetch(`${CDP}/json/version`)).ok;
+  } catch {
+    return false;
+  }
 };
 function killTestHost() {
   return new Promise((res) => {
@@ -49,9 +53,11 @@ function killTestHost() {
       "Get-CimInstance Win32_Process -Filter \"Name='ParticleEditor.exe'\" | " +
       "Where-Object { $_.CommandLine -like '*--test-host*' } | " +
       "ForEach-Object { Stop-Process -Id $_.ProcessId -Force }";
-    const p = spawn("powershell.exe",
+    const p = spawn(
+      "powershell.exe",
       ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", cmd],
-      { stdio: "ignore", shell: false });
+      { stdio: "ignore", shell: false },
+    );
     p.on("exit", () => res());
     p.on("error", () => res());
   });
@@ -62,17 +68,25 @@ await sleep(300);
 const spawnArgs = gameDir ? ["--test-host", gameDir] : ["--test-host"];
 const child = spawn(exe, spawnArgs, { cwd: repoRoot, stdio: ["ignore", "ignore", "ignore"], detached: false });
 let childExited = false;
-child.on("exit", () => { childExited = true; });
+child.on("exit", () => {
+  childExited = true;
+});
 
 let browser;
 let failed = 0;
 const ok = (m) => console.log(`  ok: ${m}`);
-const fail = (m) => { console.log(`  FAIL: ${m}`); failed++; };
+const fail = (m) => {
+  console.log(`  FAIL: ${m}`);
+  failed++;
+};
 try {
   let ready = false;
   for (let i = 0; i < 60; i++) {
     if (childExited) throw new Error("Host (--test-host) exited before CDP came up");
-    if (await probeCdp()) { ready = true; break; }
+    if (await probeCdp()) {
+      ready = true;
+      break;
+    }
     await sleep(500);
   }
   if (!ready) throw new Error("CDP :9222 did not come up within 30s");
@@ -84,11 +98,14 @@ try {
   await page.waitForFunction(() => typeof window.bridge !== "undefined", null, { timeout: 15000 });
 
   const snapshot = () => page.evaluate(() => window.bridge.request({ kind: "engine/state/snapshot", params: {} }));
-  const setSlot = (slot) => page.evaluate((s) => window.bridge.request({ kind: "engine/set/ground-texture", params: { slot: s } }), slot);
+  const setSlot = (slot) =>
+    page.evaluate((s) => window.bridge.request({ kind: "engine/set/ground-texture", params: { slot: s } }), slot);
 
-  console.log(degraded
-    ? "MODE: degraded (empty fixture install -- grass/sand/snow must be UNAVAILABLE)"
-    : "MODE: happy path (real install -- grass/sand/snow must be available)");
+  console.log(
+    degraded
+      ? "MODE: degraded (empty fixture install -- grass/sand/snow must be UNAVAILABLE)"
+      : "MODE: happy path (real install -- grass/sand/snow must be available)",
+  );
 
   const snap0 = await snapshot();
   const avail = snap0.groundSlotAvailable;
@@ -96,12 +113,22 @@ try {
   if (!Array.isArray(avail) || avail.length !== 8) fail(`groundSlotAvailable not an 8-array: ${JSON.stringify(avail)}`);
   else {
     // Dirt + Solid Color are always available regardless of the install.
-    if (avail[0] === true) ok("slot 0 (dirt) available"); else fail("dirt should always be available");
-    if (avail[4] === true) ok("slot 4 (solid color) available"); else fail("solid color should always be available");
-    for (const [slot, name] of [[1, "grass"], [2, "sand"], [3, "snow"]]) {
+    if (avail[0] === true) ok("slot 0 (dirt) available");
+    else fail("dirt should always be available");
+    if (avail[4] === true) ok("slot 4 (solid color) available");
+    else fail("solid color should always be available");
+    for (const [slot, name] of [
+      [1, "grass"],
+      [2, "sand"],
+      [3, "snow"],
+    ]) {
       const want = !degraded;
       if (avail[slot] === want) {
-        ok(degraded ? `slot ${slot} (${name}) correctly UNAVAILABLE (greyed)` : `slot ${slot} (${name}) resolves from the install`);
+        ok(
+          degraded
+            ? `slot ${slot} (${name}) correctly UNAVAILABLE (greyed)`
+            : `slot ${slot} (${name}) resolves from the install`,
+        );
       } else {
         fail(`slot ${slot} (${name}) availability=${avail[slot]} (expected ${want})`);
       }
@@ -110,7 +137,11 @@ try {
 
   // Selection behaviour: happy path sticks at the slot; degraded is refused by
   // SetGroundTexture (!IsGroundSlotAvailable) so the index stays at dirt (0).
-  for (const [slot, name] of [[1, "grass"], [2, "sand"], [3, "snow"]]) {
+  for (const [slot, name] of [
+    [1, "grass"],
+    [2, "sand"],
+    [3, "snow"],
+  ]) {
     await setSlot(slot);
     const snap = await snapshot();
     if (!degraded) {
@@ -118,18 +149,30 @@ try {
       else fail(`select ${name}: groundTexture=${snap.groundTexture} (expected ${slot} -- bounced => resolve failed)`);
     } else {
       if (snap.groundTexture === 0) ok(`select ${name} refused (groundTexture stays 0/dirt -- no hard-fail)`);
-      else fail(`select ${name}: groundTexture=${snap.groundTexture} (expected 0 -- an unavailable slot must be refused)`);
+      else
+        fail(`select ${name}: groundTexture=${snap.groundTexture} (expected 0 -- an unavailable slot must be refused)`);
     }
   }
 } catch (e) {
   console.error(`verify-ground: FAILED: ${e.message}`);
   failed++;
 } finally {
-  try { await browser?.close(); } catch { /* ignore */ }
-  try { child.kill(); } catch { /* ignore */ }
+  try {
+    await browser?.close();
+  } catch {
+    /* ignore */
+  }
+  try {
+    child.kill();
+  } catch {
+    /* ignore */
+  }
   await sleep(300);
   await killTestHost();
 }
-if (failed > 0) { console.log(`[verify-ground] FAILED (${failed})`); process.exit(1); }
+if (failed > 0) {
+  console.log(`[verify-ground] FAILED (${failed})`);
+  process.exit(1);
+}
 console.log("[verify-ground] ALL PASS");
 process.exit(0);

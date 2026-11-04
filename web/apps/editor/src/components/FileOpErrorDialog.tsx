@@ -12,7 +12,9 @@ export function FileOpErrorDialog({ bridge }: { bridge: Bridge }) {
     <Modal
       bridge={bridge}
       open={message !== null}
-      onOpenChange={(o) => { if (!o) clear(); }}
+      onOpenChange={(o) => {
+        if (!o) clear();
+      }}
       title={title ?? "Couldn't complete that"}
       size="sm"
     >

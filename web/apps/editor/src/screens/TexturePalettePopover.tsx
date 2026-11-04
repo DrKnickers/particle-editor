@@ -192,18 +192,10 @@ function PaletteSection({
 
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-2xs font-medium uppercase tracking-wide text-text-3">
-        {label}
-      </span>
+      <span className="text-2xs font-medium uppercase tracking-wide text-text-3">{label}</span>
       <div className="grid grid-cols-4 gap-2">
         {entries.map((e) => (
-          <PaletteCell
-            key={e.filename}
-            entry={e}
-            bridge={bridge}
-            onApply={onApply}
-            onTogglePin={onTogglePin}
-          />
+          <PaletteCell key={e.filename} entry={e} bridge={bridge} onApply={onApply} onTogglePin={onTogglePin} />
         ))}
         {Array.from({ length: empties }, (_, i) => (
           <div
@@ -276,8 +268,8 @@ function PaletteCell({
                   thumb?.status === "broken"
                     ? "bg-danger/10 text-danger-fg"
                     : thumb?.status === "missing"
-                    ? "bg-bg-2 text-text-3"
-                    : "bg-bg-2",
+                      ? "bg-bg-2 text-text-3"
+                      : "bg-bg-2",
                 )}
               >
                 {thumb && (

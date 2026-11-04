@@ -65,9 +65,7 @@ test("File → New on a clean system fires file/new (no prompt)", async () => {
   expect(result.dirty).toBe(false);
 
   // The save-changes prompt should NOT be present in the DOM.
-  const hasPrompt = await page
-    .locator('text="Save changes?"')
-    .count();
+  const hasPrompt = await page.locator('text="Save changes?"').count();
   expect(hasPrompt).toBe(0);
 });
 
@@ -98,27 +96,17 @@ test("File → New on a dirty system shows the Save Changes prompt", async () =>
   const fileTrigger = page.locator('[role="menubar"] >> text=File').first();
   await fileTrigger.click();
   await page.waitForSelector('[role="menu"]', { timeout: 2000 });
-  await page
-    .locator('[role="menuitem"]:has-text("New")')
-    .first()
-    .click();
+  await page.locator('[role="menuitem"]:has-text("New")').first().click();
 
   // The SaveChangesDialog modal should now be mounted. Title-text
   // selector — the modal renders the literal "Save changes?" string.
   await page.waitForSelector('text="Save changes?"', { timeout: 2000 });
-  const promptVisible = await page
-    .locator('text="Save changes?"')
-    .isVisible();
+  const promptVisible = await page.locator('text="Save changes?"').isVisible();
   expect(promptVisible).toBe(true);
 
   // Click Cancel to dismiss and leave the next test with a clean DOM.
-  await page
-    .locator('[role="dialog"][data-state="open"]')
-    .getByRole("button", { name: "Cancel" })
-    .click();
-  await page
-    .waitForSelector('text="Save changes?"', { state: "detached", timeout: 2000 })
-    .catch(() => {});
+  await page.locator('[role="dialog"][data-state="open"]').getByRole("button", { name: "Cancel" }).click();
+  await page.waitForSelector('text="Save changes?"', { state: "detached", timeout: 2000 }).catch(() => {});
 });
 
 // ── 3. file/save with a pre-seeded path clears dirty ────────────────────────
@@ -197,11 +185,7 @@ test("Window title reflects dirty + currentFilePath", async () => {
   });
 
   // Give React a tick to react to the snapshot event + update title.
-  await page.waitForFunction(
-    () => /title-test\.alo/.test(document.title),
-    null,
-    { timeout: 3000 },
-  );
+  await page.waitForFunction(() => /title-test\.alo/.test(document.title), null, { timeout: 3000 });
 
   // Clean + named — exact match (NOT toContain: "Particle Editor" is a
   // substring of the old "AloParticleEditor", so contains-checks can't
@@ -214,11 +198,7 @@ test("Window title reflects dirty + currentFilePath", async () => {
     const b = window.bridge!;
     await b.request({ kind: "engine/set/ground-z", params: { z: 5 } });
   });
-  await page.waitForFunction(
-    () => document.title.startsWith("● "),
-    null,
-    { timeout: 3000 },
-  );
+  await page.waitForFunction(() => document.title.startsWith("● "), null, { timeout: 3000 });
   const dirtyTitle = await page.title();
   expect(dirtyTitle).toBe("● title-test.alo — Particle Editor");
 });
@@ -237,11 +217,7 @@ test("Window title shows Untitled.alo after file/new", async () => {
       params: { path: "C:/Temp/untitled-reset.alo" },
     });
   });
-  await page.waitForFunction(
-    () => /untitled-reset\.alo/.test(document.title),
-    null,
-    { timeout: 3000 },
-  );
+  await page.waitForFunction(() => /untitled-reset\.alo/.test(document.title), null, { timeout: 3000 });
 
   // file/new clears the current path → the title returns to the
   // Untitled placeholder.
@@ -249,10 +225,6 @@ test("Window title shows Untitled.alo after file/new", async () => {
     const b = window.bridge!;
     await b.request({ kind: "file/new", params: {} });
   });
-  await page.waitForFunction(
-    () => document.title === "Untitled.alo — Particle Editor",
-    null,
-    { timeout: 3000 },
-  );
+  await page.waitForFunction(() => document.title === "Untitled.alo — Particle Editor", null, { timeout: 3000 });
   expect(await page.title()).toBe("Untitled.alo — Particle Editor");
 });

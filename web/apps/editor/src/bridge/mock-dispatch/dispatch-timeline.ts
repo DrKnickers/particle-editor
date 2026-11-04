@@ -8,12 +8,7 @@
 import type { Request, TimelineStateDto } from "@particle-editor/bridge-schema";
 import type { MockDispatchHost } from "./host";
 
-type TimelineKind =
-  | "timeline/begin"
-  | "timeline/end"
-  | "timeline/seek"
-  | "timeline/set"
-  | "timeline/new-variation";
+type TimelineKind = "timeline/begin" | "timeline/end" | "timeline/seek" | "timeline/set" | "timeline/new-variation";
 
 type TimelineRequest = Extract<Request, { kind: TimelineKind }>;
 
@@ -32,16 +27,27 @@ export const TIMELINE_GATED_KINDS: ReadonlySet<Request["kind"]> = new Set<Reques
 
 export function closedTimelineState(seed = 1): TimelineStateDto {
   return {
-    active: false, playing: false, loop: false, frame: 0, timeSeconds: 0,
-    maxFrames: MOCK_TIMELINE_MAX_FRAMES, seed, status: "closed", refused: false, revision: 0,
+    active: false,
+    playing: false,
+    loop: false,
+    frame: 0,
+    timeSeconds: 0,
+    maxFrames: MOCK_TIMELINE_MAX_FRAMES,
+    seed,
+    status: "closed",
+    refused: false,
+    revision: 0,
   };
 }
 
 function withStatus(state: TimelineStateDto): TimelineStateDto {
-  const status = !state.active ? "closed"
-    : state.playing ? "playing"
-    : state.frame >= state.maxFrames ? "ended"
-    : "paused";
+  const status = !state.active
+    ? "closed"
+    : state.playing
+      ? "playing"
+      : state.frame >= state.maxFrames
+        ? "ended"
+        : "paused";
   return { ...state, timeSeconds: state.frame / 60, status };
 }
 
@@ -70,7 +76,10 @@ export function dispatchTimeline(this: MockDispatchHost, req: TimelineRequest): 
     case "timeline/set": {
       if (!t.active) throw new Error("the timeline is not open");
       const { playing, loop } = req.params;
-      for (const [field, value] of [["playing", playing], ["loop", loop]] as const)
+      for (const [field, value] of [
+        ["playing", playing],
+        ["loop", loop],
+      ] as const)
         if (value !== undefined && typeof value !== "boolean") throw new Error(`${field} must be a boolean`);
       let next = { ...t, loop: loop ?? t.loop };
       if (playing !== undefined) {

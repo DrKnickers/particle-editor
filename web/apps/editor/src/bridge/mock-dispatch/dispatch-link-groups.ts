@@ -1,8 +1,6 @@
 // Mock counterpart of src/host/BridgeDispatch_LinkGroups.cpp.
 
-import type {
-  Request,
-} from "@particle-editor/bridge-schema";
+import type { Request } from "@particle-editor/bridge-schema";
 import {
   setLinkGroupMembership,
   useMockEmitterTree,
@@ -24,14 +22,9 @@ type LinkGroupsRequest = Extract<Request, { kind: LinkGroupsKind }>;
 
 export function dispatchLinkGroups(this: MockDispatchHost, req: LinkGroupsRequest): unknown {
   switch (req.kind) {
-
     case "linkGroups/set-membership": {
       const cur = useMockEmitterTree.getState().tree;
-      const next = setLinkGroupMembership(
-        cur,
-        req.params.ids,
-        req.params.groupId,
-      );
+      const next = setLinkGroupMembership(cur, req.params.ids, req.params.groupId);
       useMockEmitterTree.getState().setTree(next);
       this.emit({ kind: "emitters/tree/changed", payload: next });
       this.emit({ kind: "engine/state/changed", payload: snapshotEngineState() });

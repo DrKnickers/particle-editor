@@ -31,7 +31,11 @@ async function advance(ms: number): Promise<void> {
 }
 
 const tick = (overload: boolean) => ({
-  fps: 30, emitters: 1, particles: 16384, instances: 1, overload,
+  fps: 30,
+  emitters: 1,
+  particles: 16384,
+  instances: 1,
+  overload,
 });
 
 describe("OverloadBanner", () => {

@@ -85,9 +85,7 @@ describe("AtlasPickerPane", () => {
 
   it("non-square header 'M of N'", async () => {
     setup({ textureSize: 20 });
-    await waitFor(() =>
-      expect(screen.getByTestId("atlas-meta").textContent).toContain("16 of 20"),
-    );
+    await waitFor(() => expect(screen.getByTestId("atlas-meta").textContent).toContain("16 of 20"));
   });
 
   it("single-frame placeholder", async () => {
@@ -97,9 +95,7 @@ describe("AtlasPickerPane", () => {
 
   it("no-texture placeholder", async () => {
     setup({ textureSize: 16, colorTexture: "" });
-    await waitFor(() =>
-      expect(screen.getByText(/no color texture/i)).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByText(/no color texture/i)).toBeTruthy());
   });
 
   it("missing placeholder", async () => {
@@ -112,7 +108,12 @@ describe("AtlasPickerPane", () => {
     const bridge = new MockBridge();
     rejectMatching(bridge, (r) => r.kind === "textures/get-preview");
     useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "broken.dds" });
-    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [0.3] } });
+    publishAtlasContext({
+      emitterId: 1,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: 5, keyTimes: [0.3] },
+    });
     render(<AtlasPickerPane bridge={bridge} onClose={() => {}} />);
     await waitFor(() => expect(screen.getByText(/could not be read/i).textContent).toContain("broken.dds"));
     expect(screen.getByText(/could not be read/i).textContent).toContain("Appearance → Textures");
@@ -131,11 +132,7 @@ describe("AtlasPickerPane", () => {
       interpolation: "step",
       selection: { frame: null, keyTimes: [] },
     });
-    await waitFor(() =>
-      expect(
-        screen.getByText(/select keys on the index channel/i),
-      ).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByText(/select keys on the index channel/i)).toBeTruthy());
   });
 
   it("broken placeholder", async () => {
@@ -156,9 +153,7 @@ describe("AtlasPickerPane", () => {
       // frame 99 is off the 4×4 grid → nothing selected; the roving target
       // falls back to frame 0, whose option is NOT selected.
       expect(activeOption().getAttribute("aria-selected")).toBe("false");
-      expect(
-        screen.getByText(/frame 99 — outside the 4×4 atlas \(in-game sampling is off-grid\)/i),
-      ).toBeTruthy();
+      expect(screen.getByText(/frame 99 — outside the 4×4 atlas \(in-game sampling is off-grid\)/i)).toBeTruthy();
     });
   });
 
@@ -212,14 +207,22 @@ describe("AtlasPickerPane", () => {
   it("resets the roving cursor when switching to a smaller atlas (stale-index)", async () => {
     // start on an 8x8 (64-cell) atlas, assigned frame 50
     useMockEmitterProperties.getState().patch(1, { textureSize: 64, colorTexture: "fire.dds" });
-    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step",
-      selection: { frame: 50, keyTimes: [0.3] } });
+    publishAtlasContext({
+      emitterId: 1,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: 50, keyTimes: [0.3] },
+    });
     const view = render(<AtlasPickerPane bridge={new MockBridge()} onClose={() => {}} />);
     await waitFor(() => expect(activeOption().getAttribute("aria-setsize")).toBe("64"));
     // switch to a 4x4 (16-cell) atlas, assigned frame 3
     useMockEmitterProperties.getState().patch(2, { textureSize: 16, colorTexture: "smoke.dds" });
-    publishAtlasContext({ emitterId: 2, focusedTrack: "index", interpolation: "step",
-      selection: { frame: 3, keyTimes: [0.3] } });
+    publishAtlasContext({
+      emitterId: 2,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: 3, keyTimes: [0.3] },
+    });
     view.rerender(<AtlasPickerPane bridge={new MockBridge()} onClose={() => {}} />);
     // roving target resets to the new in-range assigned frame (3), never a stale 50.
     // Anchor on BOTH the cursor and the new grid size: frame 3 exists in the old
@@ -239,13 +242,13 @@ describe("AtlasPickerPane", () => {
     await waitFor(() => expect(activeDesc()).toBe("atlas-opt-5"));
     fireEvent.keyDown(grid, { key: "ArrowRight" }); // 5 -> 6
     await waitFor(() => expect(activeDesc()).toBe("atlas-opt-6"));
-    fireEvent.keyDown(grid, { key: "ArrowDown" });  // 6 -> 10 (+4)
+    fireEvent.keyDown(grid, { key: "ArrowDown" }); // 6 -> 10 (+4)
     await waitFor(() => expect(activeDesc()).toBe("atlas-opt-10"));
-    fireEvent.keyDown(grid, { key: "ArrowUp" });    // 10 -> 6
+    fireEvent.keyDown(grid, { key: "ArrowUp" }); // 10 -> 6
     await waitFor(() => expect(activeDesc()).toBe("atlas-opt-6"));
-    fireEvent.keyDown(grid, { key: "Home" });       // -> 0
+    fireEvent.keyDown(grid, { key: "Home" }); // -> 0
     await waitFor(() => expect(activeDesc()).toBe("atlas-opt-0"));
-    fireEvent.keyDown(grid, { key: "End" });        // -> 15
+    fireEvent.keyDown(grid, { key: "End" }); // -> 15
     await waitFor(() => expect(activeDesc()).toBe("atlas-opt-15"));
   });
 
@@ -262,7 +265,7 @@ describe("AtlasPickerPane", () => {
     await waitFor(() => expect(activeDesc()).toBe("atlas-opt-13"));
     fireEvent.keyDown(grid, { key: "ArrowDown" }); // 13 -> 17? past last cell -> no-op, stays 13
     await waitFor(() => expect(activeDesc()).toBe("atlas-opt-13"));
-    fireEvent.keyDown(grid, { key: "ArrowUp" });   // 13 -> 9 (reversible)
+    fireEvent.keyDown(grid, { key: "ArrowUp" }); // 13 -> 9 (reversible)
     await waitFor(() => expect(activeDesc()).toBe("atlas-opt-9"));
   });
 
@@ -270,17 +273,26 @@ describe("AtlasPickerPane", () => {
     const bridge = new MockBridge();
     const req = vi.spyOn(bridge, "request");
     useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds" });
-    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [0.3] } });
+    publishAtlasContext({
+      emitterId: 1,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: 5, keyTimes: [0.3] },
+    });
     render(<AtlasPickerPane bridge={bridge} onClose={() => {}} />);
     const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
     // Wait for the cursor to settle at the assigned frame before firing keys.
     await waitFor(() => expect(activeDesc()).toBe("atlas-opt-5"));
-    fireEvent.keyDown(grid, { key: "Home" });   // focus 0
-    fireEvent.keyDown(grid, { key: "Enter" });  // assign 0
-    await waitFor(() => expect(req).toHaveBeenCalledWith(expect.objectContaining({
-      kind: "emitters/set-track-key",
-      params: expect.objectContaining({ newValue: 0, oldTime: 0.3 }),
-    })));
+    fireEvent.keyDown(grid, { key: "Home" }); // focus 0
+    fireEvent.keyDown(grid, { key: "Enter" }); // assign 0
+    await waitFor(() =>
+      expect(req).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "emitters/set-track-key",
+          params: expect.objectContaining({ newValue: 0, oldTime: 0.3 }),
+        }),
+      ),
+    );
     const ev = createEvent.keyDown(grid, { key: " " });
     fireEvent(grid, ev);
     expect(ev.defaultPrevented).toBe(true); // Space must not scroll the panel
@@ -317,7 +329,12 @@ describe("AtlasPickerPane", () => {
       return realOn(kind, cb as never);
     });
     useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds" });
-    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [0.3] } });
+    publishAtlasContext({
+      emitterId: 1,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: 5, keyTimes: [0.3] },
+    });
     render(<AtlasPickerPane bridge={bridge} onClose={() => {}} />);
     await screen.findByRole("listbox", { name: /atlas frames/i });
     // 16 cells @ w=215 → 4 cols × 50px → box width 4*50 + 3*gap(4) = 212px.
@@ -338,7 +355,12 @@ describe("AtlasPickerPane", () => {
       return realOn(kind, cb as never);
     });
     useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds" });
-    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [0.3] } });
+    publishAtlasContext({
+      emitterId: 1,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: 5, keyTimes: [0.3] },
+    });
     render(<AtlasPickerPane bridge={bridge} onClose={() => {}} />);
     await waitFor(() => expect(activeOption().getAttribute("aria-setsize")).toBe("16")); // 4×4
     // swap the emitter's texture to a larger atlas, then signal the change
@@ -351,18 +373,31 @@ describe("AtlasPickerPane", () => {
   it("re-fetches the preview when the texture epoch bumps (reload textures)", async () => {
     const bridge = new MockBridge();
     const req = vi.spyOn(bridge, "request");
-    const previewCalls = () => req.mock.calls.filter(([r]) => (r as { kind: string }).kind === "textures/get-preview").length;
+    const previewCalls = () =>
+      req.mock.calls.filter(([r]) => (r as { kind: string }).kind === "textures/get-preview").length;
     useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds" });
-    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [33] } });
+    publishAtlasContext({
+      emitterId: 1,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: 5, keyTimes: [33] },
+    });
     render(<AtlasPickerPane bridge={bridge} onClose={() => {}} />);
     await waitFor(() => expect(previewCalls()).toBe(2)); // both alpha modes prefetched (then cached)
-    act(() => { bumpTextureEpoch(); }); // simulate a "reload textures"
+    act(() => {
+      bumpTextureEpoch();
+    }); // simulate a "reload textures"
     await waitFor(() => expect(previewCalls()).toBe(4)); // cache dropped → both modes re-fetch fresh content
   });
 
   it("keeps the loaded grid mounted across same-input parent rerenders", async () => {
     useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds" });
-    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [33] } });
+    publishAtlasContext({
+      emitterId: 1,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: 5, keyTimes: [33] },
+    });
     const firstBridge = new MockBridge();
     const v = render(<AtlasPickerPane bridge={firstBridge} onClose={() => {}} />);
     await waitFor(() => expect(activeOption().getAttribute("aria-setsize")).toBe("16"));
@@ -372,7 +407,6 @@ describe("AtlasPickerPane", () => {
     expect(activeOption().getAttribute("aria-setsize")).toBe("16");
     expect(screen.getByTestId("atlas-hero").textContent).toMatch(/frame 5/i);
   });
-
 
   // The manual Alpha toggle + its localStorage persistence were removed — the
   // emitter's blend mode (blendAlphaGated) now drives the preview. These tests
@@ -390,7 +424,12 @@ describe("AtlasPickerPane", () => {
     const bridge = new MockBridge();
     const req = vi.spyOn(bridge, "request");
     useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds", blendAlphaGated: false });
-    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [0.3] } });
+    publishAtlasContext({
+      emitterId: 1,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: 5, keyTimes: [0.3] },
+    });
     render(<AtlasPickerPane bridge={bridge} onClose={() => {}} />);
     // Both modes fetch upfront (color + real-alpha), order-independent → sort.
     await waitFor(() => expect([...previewFlattenParams(req.mock.calls)].sort()).toEqual([false, true]));
@@ -404,7 +443,12 @@ describe("AtlasPickerPane", () => {
     const bridge = new MockBridge();
     const req = vi.spyOn(bridge, "request");
     useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds", blendAlphaGated: true });
-    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [0.3] } });
+    publishAtlasContext({
+      emitterId: 1,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: 5, keyTimes: [0.3] },
+    });
     render(<AtlasPickerPane bridge={bridge} onClose={() => {}} />);
     // Alpha-gated → the real-alpha preview (flattenAlpha=false) is active → first.
     await waitFor(() => expect(previewFlattenParams(req.mock.calls)[0]).toBe(false));
@@ -422,12 +466,19 @@ describe("AtlasPickerPane", () => {
     const previewCount = () =>
       req.mock.calls.filter(([r]) => (r as { kind: string }).kind === "textures/get-preview").length;
     useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds", blendAlphaGated: false });
-    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [0.3] } });
+    publishAtlasContext({
+      emitterId: 1,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: 5, keyTimes: [0.3] },
+    });
     render(<AtlasPickerPane bridge={bridge} onClose={() => {}} />);
     await waitFor(() => expect(previewCount()).toBe(2)); // both modes prefetched
     // Flip ONLY the blend classification (same texture) via a tree/changed refetch.
     useMockEmitterProperties.getState().patch(1, { blendAlphaGated: true });
-    act(() => { handlers.forEach((h) => h({ kind: "emitters/tree/changed" })); });
+    act(() => {
+      handlers.forEach((h) => h({ kind: "emitters/tree/changed" }));
+    });
     await waitFor(() => expect(activeOption().getAttribute("aria-setsize")).toBe("16"));
     expect(previewCount()).toBe(2); // unchanged — no redundant fetch
   });
@@ -436,8 +487,8 @@ describe("AtlasPickerPane", () => {
     setup({ textureSize: 16 });
     await screen.findByTestId("atlas-meta"); // header is up
     await screen.findByRole("listbox", { name: /atlas frames/i }); // canvas grid mounted
-    expect(screen.queryByTestId("atlas-scroll")).not.toBeNull();   // scroll region present
-    expect(screen.queryByTestId("atlas-hero")).not.toBeNull();     // hero preview present
+    expect(screen.queryByTestId("atlas-scroll")).not.toBeNull(); // scroll region present
+    expect(screen.queryByTestId("atlas-hero")).not.toBeNull(); // hero preview present
   });
 
   it("backing is contained: scroll container never carries bg-black", async () => {
@@ -458,9 +509,7 @@ describe("AtlasPickerPane", () => {
     expect(grid.style.getPropertyValue("--atlas-url")).toBe("");
     // the hero is a <canvas> crop (no CSS background raster) — it mounts once the
     // preview resolves to "ok"; assert the canvas is present rather than a token.
-    await waitFor(() =>
-      expect(screen.getByTestId("atlas-hero").querySelector("canvas")).not.toBeNull(),
-    );
+    await waitFor(() => expect(screen.getByTestId("atlas-hero").querySelector("canvas")).not.toBeNull());
   });
 
   it("gives a hover-highlight overlay that tracks the pointer (and hides on leave)", async () => {
@@ -500,7 +549,12 @@ describe("AtlasPickerPane", () => {
 
   it("alpha-gated mode: the canvas stays the uniform gray (no shared raster); listbox unchanged", async () => {
     useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds", blendAlphaGated: true });
-    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [0.3] } });
+    publishAtlasContext({
+      emitterId: 1,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: 5, keyTimes: [0.3] },
+    });
     render(<AtlasPickerPane bridge={new MockBridge()} onClose={() => {}} />);
     const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
     expect(grid.className).toContain("bg-bg-2");
@@ -517,7 +571,12 @@ describe("AtlasPickerPane", () => {
       return realOn(kind, cb as never);
     });
     useMockEmitterProperties.getState().patch(1, { textureSize: 64, colorTexture: "fire.dds" });
-    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [33] } });
+    publishAtlasContext({
+      emitterId: 1,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: 5, keyTimes: [33] },
+    });
     render(<AtlasPickerPane bridge={bridge} onClose={() => {}} />);
     const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
     await waitFor(() => expect(activeDesc()).toBe("atlas-opt-5")); // settled
@@ -529,9 +588,7 @@ describe("AtlasPickerPane", () => {
     handlers.forEach((h) => h({ kind: "emitters/tree/changed" }));
     await waitFor(() => expect(activeOption().getAttribute("aria-setsize")).toBe("4"));
     // focus did NOT fall to <body> — it was re-homed onto the grid canvas.
-    await waitFor(() =>
-      expect(document.activeElement).toBe(screen.getByRole("listbox", { name: /atlas frames/i })),
-    );
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("listbox", { name: /atlas frames/i })));
   });
 
   // Reject every request whose kind/params match — delegate the rest to the real
@@ -548,11 +605,16 @@ describe("AtlasPickerPane", () => {
     const bridge = new MockBridge();
     rejectMatching(bridge, (r) => r.kind === "emitters/set-track-key"); // host rejects the write
     useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds" });
-    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [0.3] } });
+    publishAtlasContext({
+      emitterId: 1,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: 5, keyTimes: [0.3] },
+    });
     render(<AtlasPickerPane bridge={bridge} onClose={() => {}} />);
     const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
     await waitFor(() => expect(activeDesc()).toBe("atlas-opt-5")); // cursor settled
-    fireEvent.keyDown(grid, { key: "Home" });  // focus frame 0
+    fireEvent.keyDown(grid, { key: "Home" }); // focus frame 0
     fireEvent.keyDown(grid, { key: "Enter" }); // assign → set-track-key rejects → commit fails
     await waitFor(() =>
       expect(document.querySelector('[aria-live="polite"]')!.textContent).toMatch(/could not assign frame 0/i),
@@ -562,7 +624,12 @@ describe("AtlasPickerPane", () => {
   it("re-open seeds the grid synchronously from the cache for the SAME emitter", async () => {
     // First mount populates the module-level lastEmitterProps for emitter 1 (8×8).
     useMockEmitterProperties.getState().patch(1, { textureSize: 64, colorTexture: "fire.dds" });
-    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 0, keyTimes: [0.3] } });
+    publishAtlasContext({
+      emitterId: 1,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: 0, keyTimes: [0.3] },
+    });
     const v1 = render(<AtlasPickerPane bridge={new MockBridge()} onClose={() => {}} />);
     await waitFor(() => expect(activeOption().getAttribute("aria-setsize")).toBe("64"));
     v1.unmount();
@@ -575,7 +642,12 @@ describe("AtlasPickerPane", () => {
       req.kind === "emitters/get-properties"
         ? new Promise<never>(() => {}) // never resolves
         : real(req as never)) as typeof blocked.request);
-    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 0, keyTimes: [0.3] } });
+    publishAtlasContext({
+      emitterId: 1,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: 0, keyTimes: [0.3] },
+    });
     render(<AtlasPickerPane bridge={blocked} onClose={() => {}} />);
     // Seeded from lastEmitterProps (id matches) → grid paints without waiting…
     await waitFor(() => expect(activeOption().getAttribute("aria-setsize")).toBe("64"));
@@ -586,7 +658,12 @@ describe("AtlasPickerPane", () => {
   it("re-open does NOT show stale frames for a DIFFERENT emitter (id-match guard)", async () => {
     // Warm the cache for emitter 1 (8×8).
     useMockEmitterProperties.getState().patch(1, { textureSize: 64, colorTexture: "fire.dds" });
-    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 0, keyTimes: [0.3] } });
+    publishAtlasContext({
+      emitterId: 1,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: 0, keyTimes: [0.3] },
+    });
     const v1 = render(<AtlasPickerPane bridge={new MockBridge()} onClose={() => {}} />);
     await waitFor(() => expect(activeOption().getAttribute("aria-setsize")).toBe("64"));
     v1.unmount();
@@ -600,7 +677,12 @@ describe("AtlasPickerPane", () => {
       req.kind === "emitters/get-properties"
         ? new Promise<never>(() => {})
         : real(req as never)) as typeof blocked.request);
-    publishAtlasContext({ emitterId: 2, focusedTrack: "index", interpolation: "step", selection: { frame: 0, keyTimes: [0.3] } });
+    publishAtlasContext({
+      emitterId: 2,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: 0, keyTimes: [0.3] },
+    });
     render(<AtlasPickerPane bridge={blocked} onClose={() => {}} />);
     await waitFor(() => expect(screen.getByText(/no color texture set/i)).toBeTruthy());
     expect(screen.queryByRole("listbox", { name: /atlas frames/i })).toBeNull(); // no stale grid
@@ -616,13 +698,20 @@ describe("AtlasPickerPane", () => {
     });
     rejectMatching(bridge, (r) => r.kind === "textures/get-preview" && r.params.flattenAlpha === false);
     useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds", blendAlphaGated: false });
-    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [0.3] } });
+    publishAtlasContext({
+      emitterId: 1,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: 5, keyTimes: [0.3] },
+    });
     render(<AtlasPickerPane bridge={bridge} onClose={() => {}} />);
     // active (color) mode renders fine…
     await waitFor(() => expect(activeOption().getAttribute("aria-setsize")).toBe("16"));
     // …the emitter becomes alpha-gated → the failed alpha mode becomes active → broken.
     useMockEmitterProperties.getState().patch(1, { blendAlphaGated: true });
-    act(() => { handlers.forEach((h) => h({ kind: "emitters/tree/changed" })); });
+    act(() => {
+      handlers.forEach((h) => h({ kind: "emitters/tree/changed" }));
+    });
     await waitFor(() => expect(screen.getByText(/could not be read/i)).toBeTruthy());
   });
 
@@ -644,13 +733,20 @@ describe("AtlasPickerPane", () => {
     const origR = globalThis.requestIdleCallback;
     const origC = globalThis.cancelIdleCallback;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (globalThis as any).requestIdleCallback = (cb: () => void) => { idleQ.push(cb); return idleQ.length; };
+    (globalThis as any).requestIdleCallback = (cb: () => void) => {
+      idleQ.push(cb);
+      return idleQ.length;
+    };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (globalThis as any).cancelIdleCallback = (id: number) => { idleQ[id - 1] = () => {}; };
+    (globalThis as any).cancelIdleCallback = (id: number) => {
+      idleQ[id - 1] = () => {};
+    };
     try {
       useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds" });
       publishAtlasContext({
-        emitterId: 1, focusedTrack: "index", interpolation: "step",
+        emitterId: 1,
+        focusedTrack: "index",
+        interpolation: "step",
         selection: { frame: 5, keyTimes: [0.3] },
       });
       const bridge = new MockBridge();
@@ -661,7 +757,9 @@ describe("AtlasPickerPane", () => {
       // Active mode fetched synchronously; the inactive mode is queued, not yet fetched.
       await waitFor(() => expect(previewFetches()).toBe(1));
       // Flush idle → the inactive mode now fetches.
-      await act(async () => { idleQ.splice(0).forEach((fn) => fn()); });
+      await act(async () => {
+        idleQ.splice(0).forEach((fn) => fn());
+      });
       await waitFor(() => expect(previewFetches()).toBe(2));
     } finally {
       globalThis.requestIdleCallback = origR;

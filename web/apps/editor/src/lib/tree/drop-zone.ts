@@ -37,10 +37,7 @@ export function computeDropZone(yWithinRow: number, rowHeight: number): DropZone
  *  subtree (including `source` itself). Used to refuse reparent drops
  *  that would create a cycle. DFS via the children array; bounded by
  *  the tree's depth, which in practice is in the single digits. */
-export function isDescendant(
-  source: EmitterTreeNode,
-  candidateId: number,
-): boolean {
+export function isDescendant(source: EmitterTreeNode, candidateId: number): boolean {
   if (source.id === candidateId) return true;
   for (const c of source.children) {
     if (isDescendant(c, candidateId)) return true;
@@ -56,13 +53,11 @@ export function isDescendant(
  *    - both filled → null (caller refuses the drop)
  *  Uses each child's `role` field, populated on every
  *  EmitterTreeNode. */
-export function resolveReparentSlot(
-  target: EmitterTreeNode,
-): "lifetime" | "death" | null {
+export function resolveReparentSlot(target: EmitterTreeNode): "lifetime" | "death" | null {
   const hasLifetime = target.children.some((c) => c.role === "lifetime");
-  const hasDeath    = target.children.some((c) => c.role === "death");
+  const hasDeath = target.children.some((c) => c.role === "death");
   if (!hasLifetime) return "lifetime";
-  if (!hasDeath)    return "death";
+  if (!hasDeath) return "death";
   return null;
 }
 
@@ -72,9 +67,6 @@ export function resolveReparentSlot(
  *  semantics (gap K means "insert at position K", so dropping above
  *  the row at index K resolves to gap K, dropping below resolves to
  *  gap K+1). */
-export function computeRootGapIndex(
-  targetRootIdx: number,
-  zone: "above" | "below",
-): number {
+export function computeRootGapIndex(targetRootIdx: number, zone: "above" | "below"): number {
   return zone === "above" ? targetRootIdx : targetRootIdx + 1;
 }

@@ -65,10 +65,7 @@ async function captureStableIds(bridge: Bridge, ids: number[]): Promise<Map<numb
 /** Re-resolve an (oldId → stableId) capture to (oldId → newId) against the
  *  FRESH tree after a reorder reindexed positional ids. Members that no longer
  *  exist (impossible for a pure reorder, but defensive) drop out. */
-async function remapByStableId(
-  bridge: Bridge,
-  captured: Map<number, number>,
-): Promise<Map<number, number>> {
+async function remapByStableId(bridge: Bridge, captured: Map<number, number>): Promise<Map<number, number>> {
   if (captured.size === 0) return new Map();
   const dto = await bridge.request({ kind: "emitters/list", params: {} });
   const byStable = new Map<number, number>();
@@ -82,11 +79,7 @@ async function remapByStableId(
 }
 
 /** Move `ids` up/down as a block; the selection follows to the new order. */
-export async function moveEmitters(
-  bridge: Bridge,
-  ids: number[],
-  direction: "up" | "down",
-): Promise<void> {
+export async function moveEmitters(bridge: Bridge, ids: number[], direction: "up" | "down"): Promise<void> {
   if (ids.length === 0) return;
   const primary = useEmitterSelectionStore.getState().primary;
   const r = await bridge.request({ kind: "emitters/move-many", params: { ids, direction } });
@@ -102,10 +95,7 @@ export async function moveEmitters(
  *  "Duplicated emitter — Ctrl+Z to undo" while nothing had been duplicated.
  *  Swallowing the flag here defeated a guard the
  *  caller was already applying correctly. */
-export async function duplicateEmitters(
-  bridge: Bridge,
-  ids: number[],
-): Promise<{ ok: boolean }> {
+export async function duplicateEmitters(bridge: Bridge, ids: number[]): Promise<{ ok: boolean }> {
   if (ids.length === 0) return { ok: false };
   const primary = useEmitterSelectionStore.getState().primary;
   const r = await bridge.request({ kind: "emitters/duplicate-many", params: { ids } });
@@ -115,11 +105,7 @@ export async function duplicateEmitters(
 
 /** Drag-reorder `ids` (the selected roots, in tree order) to land contiguous
  *  at gap `rootIndex`; the selection follows to the new positions. */
-export async function reorderManyEmitters(
-  bridge: Bridge,
-  ids: number[],
-  rootIndex: number,
-): Promise<void> {
+export async function reorderManyEmitters(bridge: Bridge, ids: number[], rootIndex: number): Promise<void> {
   if (ids.length === 0) return;
   const { ids: fullSelection, primary } = useEmitterSelectionStore.getState();
   // Prior-selection members NOT in the moved block (e.g. a selected child of an
@@ -127,8 +113,7 @@ export async function reorderManyEmitters(
   // their stable identity BEFORE the reorder reshuffles positional ids; the
   // cost is two extra list reads, paid only when the selection is mixed.
   const untouched = fullSelection.filter((id) => !ids.includes(id));
-  const captured =
-    untouched.length > 0 ? await captureStableIds(bridge, untouched) : new Map<number, number>();
+  const captured = untouched.length > 0 ? await captureStableIds(bridge, untouched) : new Map<number, number>();
   const r = await bridge.request({ kind: "emitters/reorder-many", params: { ids, rootIndex } });
   if (!r.ok) return;
   const untouchedRemap = await remapByStableId(bridge, captured);

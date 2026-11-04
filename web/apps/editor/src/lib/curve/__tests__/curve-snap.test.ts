@@ -1,11 +1,6 @@
 // Unit tests for the pure snap-to-grid math.
 import { describe, it, expect } from "vitest";
-import {
-  snapToGrid,
-  GRID_CELLS,
-  GRID_SUBDIVISIONS,
-  GRID_MINOR_CELLS,
-} from "../curve-snap";
+import { snapToGrid, GRID_CELLS, GRID_SUBDIVISIONS, GRID_MINOR_CELLS } from "../curve-snap";
 
 describe("snapToGrid", () => {
   it("snaps a mid-cell value to the nearest stop", () => {

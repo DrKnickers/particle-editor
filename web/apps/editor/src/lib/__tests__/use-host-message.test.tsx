@@ -14,7 +14,9 @@ beforeEach(() => {
   listeners = [];
   (window as unknown as { chrome: unknown }).chrome = {
     webview: {
-      addEventListener: (ev: string, h: Listener) => { if (ev === "message") listeners.push(h); },
+      addEventListener: (ev: string, h: Listener) => {
+        if (ev === "message") listeners.push(h);
+      },
       removeEventListener: (ev: string, h: Listener) => {
         if (ev === "message") listeners = listeners.filter((l) => l !== h);
       },

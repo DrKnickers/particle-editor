@@ -16,7 +16,9 @@ import { usePaletteStore } from "../palette-store";
 // the app-level Tooltip.Provider — wrapper stands in for it (precedent:
 // renderToolbar in Toolbar.test.tsx).
 const TipProvider = ({ children }: { children: ReactNode }) => (
-  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>
+    {children}
+  </Tooltip.Provider>
 );
 const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
@@ -156,9 +158,7 @@ describe("ColorButton", () => {
 
   it("reopening after an external value change re-snapshots the fresh original", async () => {
     const onChange = vi.fn();
-    const { rerender } = render(
-      <ColorButton value={RED} onChange={onChange} aria-label="color-btn" />
-    );
+    const { rerender } = render(<ColorButton value={RED} onChange={onChange} aria-label="color-btn" />);
     // Value changes externally before the user opens the picker.
     rerender(<ColorButton value={{ r: 0, g: 255, b: 0 }} onChange={onChange} aria-label="color-btn" />);
     await openPicker();

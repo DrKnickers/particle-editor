@@ -87,9 +87,7 @@ describe("PanelLayout — persistence helpers", () => {
 
   it("saveLayout writes JSON to localStorage", () => {
     saveLayout("alo:layout:test", { a: 33, b: 67 });
-    expect(localStorage.getItem("alo:layout:test")).toBe(
-      JSON.stringify({ a: 33, b: 67 }),
-    );
+    expect(localStorage.getItem("alo:layout:test")).toBe(JSON.stringify({ a: 33, b: 67 }));
   });
 });
 
@@ -126,18 +124,13 @@ describe("PanelLayout — collapseDockShare (dock-mount fix)", () => {
   it("seeds the dock slot at zero share when closed at mount with a stale stored layout", () => {
     // The full repro: dock closed + persisted open-width blob.
     localStorage.setItem("alo:right-dock", "none");
-    localStorage.setItem(
-      "alo:layout:outer:3col",
-      JSON.stringify({ left: 20, center: 60, spawner: 20 }),
-    );
+    localStorage.setItem("alo:layout:outer:3col", JSON.stringify({ left: 20, center: 60, spawner: 20 }));
     __resetRightDockForTests();
 
     const bridge = makeStubBridge();
     renderPanelLayout(bridge);
 
-    const slotPanel = screen
-      .getByTestId("quadrant-spawner")
-      .closest("[data-panel]") as HTMLElement;
+    const slotPanel = screen.getByTestId("quadrant-spawner").closest("[data-panel]") as HTMLElement;
     expect(slotPanel).not.toBeNull();
     // The library maps each panel's layout share onto flex-grow. With the
     // fix, the Group's defaultLayout carries spawner=0 (the stale 20 is
@@ -279,9 +272,7 @@ describe("PanelLayout — DOM structure", () => {
     const bridge = makeStubBridge();
     renderPanelLayout(bridge);
     expect(screen.getByTestId("quadrant-spawner")).toBeInTheDocument();
-    expect(
-      screen.getByRole("dialog", { name: "Lighting" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Lighting" })).toBeInTheDocument();
     expect(screen.getByTestId("quadrant-curve-editor")).toBeInTheDocument();
   });
 
@@ -303,16 +294,12 @@ describe("PanelLayout — DOM structure", () => {
 
     const separators = Array.from(container.querySelectorAll("[data-separator]"));
     expect(separators.length).toBeGreaterThan(0);
-    const disabled = separators.filter(
-      (s) => s.getAttribute("aria-disabled") === "true",
-    );
+    const disabled = separators.filter((s) => s.getAttribute("aria-disabled") === "true");
     // Exactly one disabled separator: the dock's (the hidden vertical one).
     expect(disabled).toHaveLength(1);
     expect(disabled[0]!.className).toContain("invisible");
 
-    const slotPanel = screen
-      .getByTestId("quadrant-spawner")
-      .closest("[data-panel]");
+    const slotPanel = screen.getByTestId("quadrant-spawner").closest("[data-panel]");
     expect(slotPanel).not.toBeNull();
     expect(slotPanel!.hasAttribute("data-disabled")).toBe(true);
   });
@@ -324,13 +311,9 @@ describe("PanelLayout — DOM structure", () => {
 
     const separators = Array.from(container.querySelectorAll("[data-separator]"));
     expect(separators.length).toBeGreaterThan(0);
-    expect(
-      separators.filter((s) => s.getAttribute("aria-disabled") === "true"),
-    ).toHaveLength(0);
+    expect(separators.filter((s) => s.getAttribute("aria-disabled") === "true")).toHaveLength(0);
 
-    const slotPanel = screen
-      .getByTestId("quadrant-spawner")
-      .closest("[data-panel]");
+    const slotPanel = screen.getByTestId("quadrant-spawner").closest("[data-panel]");
     expect(slotPanel).not.toBeNull();
     expect(slotPanel!.hasAttribute("data-disabled")).toBe(false);
   });

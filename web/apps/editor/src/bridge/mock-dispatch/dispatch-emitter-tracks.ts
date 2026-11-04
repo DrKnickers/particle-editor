@@ -1,8 +1,6 @@
 // Mock counterpart of src/host/BridgeDispatch_EmitterTracks.cpp.
 
-import type {
-  Request,
-} from "@particle-editor/bridge-schema";
+import type { Request } from "@particle-editor/bridge-schema";
 import {
   addTrackKeyInOverlay,
   deriveLockViews,
@@ -30,7 +28,6 @@ type EmitterTracksRequest = Extract<Request, { kind: EmitterTracksKind }>;
 
 export function dispatchEmitterTracks(this: MockDispatchHost, req: EmitterTracksRequest): unknown {
   switch (req.kind) {
-
     // ---------------- emitters/get-tracks -------
     //
     // Read-only. Always returns 7 deterministic tracks per emitter
@@ -46,10 +43,13 @@ export function dispatchEmitterTracks(this: MockDispatchHost, req: EmitterTracks
         // is bypassed here intentionally — invalid ids must not be
         // observable through the overlay channel either.
         return {
-          tracks: useMockTrackOverlay.getState().read(-1).map((t) => ({
-            ...t,
-            keys: [],
-          })),
+          tracks: useMockTrackOverlay
+            .getState()
+            .read(-1)
+            .map((t) => ({
+              ...t,
+              keys: [],
+            })),
         };
       }
       // Read through the overlay so mutations made via

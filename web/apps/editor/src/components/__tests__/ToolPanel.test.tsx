@@ -82,17 +82,13 @@ describe("ToolPanel", () => {
       </ToolPanel>,
     );
     // Open: no data-state → still matches the "open ToolPanel" selector.
-    expect(
-      screen.getByRole("dialog", { name: "Lighting" }).hasAttribute("data-state"),
-    ).toBe(false);
+    expect(screen.getByRole("dialog", { name: "Lighting" }).hasAttribute("data-state")).toBe(false);
 
     rerender(
       <ToolPanel title="Lighting" onClose={() => {}} closing>
         body
       </ToolPanel>,
     );
-    expect(
-      screen.getByRole("dialog", { name: "Lighting" }).getAttribute("data-state"),
-    ).toBe("closing");
+    expect(screen.getByRole("dialog", { name: "Lighting" }).getAttribute("data-state")).toBe("closing");
   });
 });

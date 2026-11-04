@@ -104,15 +104,27 @@ export function SetLinkGroupDialog({ bridge }: Props) {
   // drives the inline note — OK always proceeds. Re-runs when the target
   // changes (mode / chosen group / selection).
   useEffect(() => {
-    if (!open || selectedIds.length === 0) { setConflicts([]); return; }
-    if (mode === "existing" && chosenGroup === null) { setConflicts([]); return; }
+    if (!open || selectedIds.length === 0) {
+      setConflicts([]);
+      return;
+    }
+    if (mode === "existing" && chosenGroup === null) {
+      setConflicts([]);
+      return;
+    }
     const groupId = mode === "new" ? -1 : chosenGroup!;
     let cancelled = false;
     bridge
       .request({ kind: "linkGroups/diff-membership", params: { ids: selectedIds, groupId } })
-      .then((r) => { if (!cancelled) setConflicts(r?.conflicts ?? []); })
-      .catch(() => { if (!cancelled) setConflicts([]); });
-    return () => { cancelled = true; };
+      .then((r) => {
+        if (!cancelled) setConflicts(r?.conflicts ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setConflicts([]);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [open, bridge, selectedIds, mode, chosenGroup]);
 
   // OK joins in ONE click. The inline note above already showed any field
@@ -138,7 +150,9 @@ export function SetLinkGroupDialog({ bridge }: Props) {
     <Modal
       bridge={bridge}
       open={open}
-      onOpenChange={(o) => { if (!o) close(); }}
+      onOpenChange={(o) => {
+        if (!o) close();
+      }}
       title="Set Link Group"
       size="sm"
     >
@@ -155,9 +169,7 @@ export function SetLinkGroupDialog({ bridge }: Props) {
             />
             <span>Create new group</span>
           </label>
-          <label
-            className={cn("flex items-center gap-2", hasExisting ? "text-text" : "text-text-3")}
-          >
+          <label className={cn("flex items-center gap-2", hasExisting ? "text-text" : "text-text-3")}>
             <input
               type="radio"
               name="set-link-group-mode"
@@ -204,15 +216,10 @@ export function SetLinkGroupDialog({ bridge }: Props) {
               className="rounded border border-warning/60 bg-warning/15 px-2 py-1.5 text-2xs leading-relaxed text-warning-fg"
             >
               <p className="font-medium">
-                Joining overwrites {conflictFields.length}{" "}
-                {conflictFields.length === 1 ? "field" : "fields"} on{" "}
-                {conflictEmitterCount}{" "}
-                {conflictEmitterCount === 1 ? "emitter" : "emitters"} with the
-                group's values:
+                Joining overwrites {conflictFields.length} {conflictFields.length === 1 ? "field" : "fields"} on{" "}
+                {conflictEmitterCount} {conflictEmitterCount === 1 ? "emitter" : "emitters"} with the group's values:
               </p>
-              <p className="mt-0.5 font-medium text-warning-fg">
-                {conflictFields.join(", ")}
-              </p>
+              <p className="mt-0.5 font-medium text-warning-fg">{conflictFields.join(", ")}</p>
             </div>
           )}
         </div>

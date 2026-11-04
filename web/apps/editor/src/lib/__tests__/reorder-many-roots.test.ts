@@ -6,12 +6,20 @@ import type { EmitterTreeDto, EmitterTreeNode } from "@particle-editor/bridge-sc
 const LETTERS = ["A", "B", "C", "D", "E", "F"];
 function tree(): EmitterTreeDto {
   const children: EmitterTreeNode[] = LETTERS.map((name, id) => ({
-    id, stableId: 100 + id, name, role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [],
+    id,
+    stableId: 100 + id,
+    name,
+    role: "root",
+    linkGroup: 0,
+    visible: true,
+    spawn: ZERO_SPAWN,
+    children: [],
   }));
-  return { root: { id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children } };
+  return {
+    root: { id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children },
+  };
 }
-const order = (t: EmitterTreeDto | null) =>
-  t === null ? null : t.root.children.map((c) => c.name).join("");
+const order = (t: EmitterTreeDto | null) => (t === null ? null : t.root.children.map((c) => c.name).join(""));
 
 describe("reorderManyRoots", () => {
   it("collapses a non-contiguous selection to a contiguous block, in tree order", () => {

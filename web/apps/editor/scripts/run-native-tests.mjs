@@ -27,12 +27,9 @@ async function cleanupAutosaveTempRoot() {
   if (!autosaveTempRoot) return;
   const target = resolve(autosaveTempRoot);
   const tempBase = resolve(tmpdir());
-  const underTemp =
-    target.toLowerCase().startsWith(`${tempBase}${sep}`.toLowerCase());
+  const underTemp = target.toLowerCase().startsWith(`${tempBase}${sep}`.toLowerCase());
   if (!underTemp || !basename(target).startsWith("pe-native-autosave-")) {
-    throw new Error(
-      `[run-native-tests] refused autosave test cleanup outside its exact temp root: ${target}`,
-    );
+    throw new Error(`[run-native-tests] refused autosave test cleanup outside its exact temp root: ${target}`);
   }
   await rm(target, { recursive: true, force: true });
   autosaveTempRoot = null;
@@ -42,9 +39,10 @@ async function cleanupAutosaveTempRoot() {
 // need real textures CAN run here. Mirrors the same registry probe the gate's
 // drive-smoke prereq uses.
 function gameDataPathPresent() {
-  const r = spawnSync("reg.exe",
-    ["query", String.raw`HKCU\Software\AloParticleEditor`, "/v", "GameDataPath"],
-    { encoding: "utf8", shell: false });
+  const r = spawnSync("reg.exe", ["query", String.raw`HKCU\Software\AloParticleEditor`, "/v", "GameDataPath"], {
+    encoding: "utf8",
+    shell: false,
+  });
   return r.status === 0;
 }
 
@@ -226,126 +224,130 @@ async function main() {
   // On Windows the playwright .bin entry is a .CMD shim; node's spawn
   // refuses to launch .CMD without shell:true, so use the JS cli entry
   // directly via node to keep the spawn cross-platform and shell-free.
-  const playwrightCli = join(editorDir, "node_modules", "@playwright", "test",
-    "cli.js");
+  const playwrightCli = join(editorDir, "node_modules", "@playwright", "test", "cli.js");
   const pwExit = await new Promise((resolve) => {
     pwRunning = true;
-    const pw = spawn(process.execPath, [
-      playwrightCli, "test",
-      "tests/bridge-native.spec.ts",
-      "tests/background-picker.spec.ts",
-      "tests/app-shell.spec.ts",
-      "tests/toolbar.spec.ts",
-      "tests/menu-bar.spec.ts",
-      "tests/primitives.spec.ts",
-      "tests/dialogs.spec.ts",
-      "tests/tools.spec.ts",
-      "tests/file-ops.spec.ts",
-      "tests/spawner-import-mod.spec.ts",
-      "tests/host-state-plumbing.spec.ts",
-      "tests/render-loop.spec.ts",
-      "tests/viewport-camera.spec.ts",
-      "tests/viewport-resize.spec.ts",
-      "tests/emitter-tree.spec.ts",
-      "tests/emitter-mutations.spec.ts",
-      "tests/emitter-multi-mutations.spec.ts",
-      "tests/selection-identity.spec.ts",
-      "tests/unsaved-changes-refusal.spec.ts",
-      "tests/undo-navigation.spec.ts",
-      "tests/emitter-import.spec.ts",
-      // Non-UTF-8 emitter name end to end: responses + tree/changed event
-      // carry U+FFFD instead of the host throwing (bridge serializer).
-      "tests/bridge-utf8-safety.spec.ts",
-      "tests/emitter-drag.spec.ts",
-      "tests/emitter-keyboard.spec.ts",
-      "tests/track-editor.spec.ts",
-      "tests/property-tabs.spec.ts",
-      // app/open-external: a known link name answers opened:false under
-      // --test-host (no browser is started) and any other name is refused.
-      "tests/external-links.spec.ts",
-      // PreferencesDialog host round-trips (Edit → Preferences…): MSAA
-      // level via engine/query/msaa-levels `current`, plus toggle
-      // persistence across reopen. Restores every setting it mutates.
-      "tests/preferences.spec.ts",
-      // AtlasPickerPane click-to-assign: index-channel key selection
-      // auto-opens the docked picker; cell clicks write frames via
-      // emitters/set-track-key (incl. the differing-frames confirm
-      // modal). Runtime-skips when the seed texture can't be decoded
-      // (textures/get-preview != ok — game data unreachable).
-      "tests/atlas-picker.spec.ts",
-      "tests/mods-contract.spec.ts",
-      "tests/mod-stack.spec.ts",
-      "tests/leave-particles.spec.ts",
-      "tests/autosave-recovery.spec.ts",
-      "tests/splitters.spec.ts",
-      "tests/d3d9ex.spec.ts",
-      "tests/alpha-compositor-snapshot.spec.ts",
-      // DOM-event → viewport/input bridge wiring under the canvas-in-DOM
-      // viewport. The spec self-skips only when its native transport is
-      // unavailable, reporting that precise host failure.
-      // Composition-hosting integration gate for the standard native host.
-      "tests/composition-hosting.spec.ts",
-      // DXGI transport, resize-stress, and performance gates. Playwright's
-      // DOM-only screenshots cannot see DXGI engine pixels; manual visual
-      // smoke remains the irreducible gate.
-      "tests/dxgi-transport.spec.ts",
-      "tests/dxgi-resize-stress.spec.ts",
-      "tests/dxgi-perf.spec.ts",
-      // Scene-rect transform gate. Asserts [COMP-engine-transform] log lines fire on
-      // layout/scene-rect dispatch with the expected absolute clip.
-      "tests/dxgi-scene-rect.spec.ts",
-      // Composition-mode a11y DOM-snapshot specs.
-      // (The HWND/UIA `[hwnd]` quartet + their `.golden.json` goldens
-      // were removed along with the legacy `--legacy` lane.)
-      // Mirror the HWND quartet but capture via
-      // page.accessibility.snapshot() (CDP) instead of Win32 UIA. Reuse the
-      // surface-driver arrays from the golden lanes unchanged.
-      "tests/a11y-chrome-composition.spec.ts",
-      "tests/a11y-dialogs-composition.spec.ts",
-      "tests/a11y-keyboard-composition.spec.ts",
-      "tests/a11y-curve-spinner-composition.spec.ts",
-      // Composition-mode UIA backbone
-      // reachability spec. Asserts the composition-hosted tree
-      // exposes AloHostMain → Chromium chrome → EmbeddedBrowserFrame
-      // → React menubar all the way down via Win32 UIA. Catches the
-      // case where Blink's lazy a11y regresses (would leave
-      // composition users with no screen-reader access to React).
-      "tests/a11y-uia-composition-reachable.spec.ts",
-      // The interactive timeline through the bridge: play pacing from the
-      // idle slot, the session gate, replays for edits and camera moves,
-      // and the end restore. After the a11y goldens: its last test reloads
-      // the page to prove app/ready closes the host's session.
-      "tests/timeline.spec.ts",
-      // Preview overload guard regression. Bombs the
-      // live preview with rate=1e9 and asserts the engine plateaus at
-      // the particle budget + latches `overload` on stats/tick instead
-      // of OOM-crashing. Runs LAST: it floods the live engine and
-      // briefly mutates the boot doc's first emitter; its finally-block
-      // restores properties + clears instances, but keeping it after
-      // the deterministic a11y goldens removes any timing coupling.
-      "tests/preview-overload.spec.ts",
-      // Forward unknown args (e.g. --grep
-      // "dialog-about") so scoped a11y refresh actually scopes. See
-      // RECOGNISED_FLAGS above.
-      ...forwardedArgs,
-    ], {
-      cwd: editorDir,
-      stdio: "inherit",
-      shell: false,
-      // Demand real game textures WHEN THIS MACHINE HAS THEM.
-      //
-      // Several native specs (atlas assignment, seed-dependent reparent /
-      // paste-as-child) call test.skip() when game data can't be reached, and
-      // nothing ever set PE_REQUIRE_GAME_TEXTURES — so on a box with the game
-      // installed they still silently self-skipped, and breaking atlas
-      // assignment or ParticleSystem::reparentEmitter left the lane green.
-      //
-      // Gated on the registry game path rather than forced: a machine with no
-      // install genuinely cannot run them, and failing there would punish a
-      // legitimate environment. Where the data IS present, a skip now means a
-      // real problem and fails loudly.
-      env: playwrightEnv,
-    });
+    const pw = spawn(
+      process.execPath,
+      [
+        playwrightCli,
+        "test",
+        "tests/bridge-native.spec.ts",
+        "tests/background-picker.spec.ts",
+        "tests/app-shell.spec.ts",
+        "tests/toolbar.spec.ts",
+        "tests/menu-bar.spec.ts",
+        "tests/primitives.spec.ts",
+        "tests/dialogs.spec.ts",
+        "tests/tools.spec.ts",
+        "tests/file-ops.spec.ts",
+        "tests/spawner-import-mod.spec.ts",
+        "tests/host-state-plumbing.spec.ts",
+        "tests/render-loop.spec.ts",
+        "tests/viewport-camera.spec.ts",
+        "tests/viewport-resize.spec.ts",
+        "tests/emitter-tree.spec.ts",
+        "tests/emitter-mutations.spec.ts",
+        "tests/emitter-multi-mutations.spec.ts",
+        "tests/selection-identity.spec.ts",
+        "tests/unsaved-changes-refusal.spec.ts",
+        "tests/undo-navigation.spec.ts",
+        "tests/emitter-import.spec.ts",
+        // Non-UTF-8 emitter name end to end: responses + tree/changed event
+        // carry U+FFFD instead of the host throwing (bridge serializer).
+        "tests/bridge-utf8-safety.spec.ts",
+        "tests/emitter-drag.spec.ts",
+        "tests/emitter-keyboard.spec.ts",
+        "tests/track-editor.spec.ts",
+        "tests/property-tabs.spec.ts",
+        // app/open-external: a known link name answers opened:false under
+        // --test-host (no browser is started) and any other name is refused.
+        "tests/external-links.spec.ts",
+        // PreferencesDialog host round-trips (Edit → Preferences…): MSAA
+        // level via engine/query/msaa-levels `current`, plus toggle
+        // persistence across reopen. Restores every setting it mutates.
+        "tests/preferences.spec.ts",
+        // AtlasPickerPane click-to-assign: index-channel key selection
+        // auto-opens the docked picker; cell clicks write frames via
+        // emitters/set-track-key (incl. the differing-frames confirm
+        // modal). Runtime-skips when the seed texture can't be decoded
+        // (textures/get-preview != ok — game data unreachable).
+        "tests/atlas-picker.spec.ts",
+        "tests/mods-contract.spec.ts",
+        "tests/mod-stack.spec.ts",
+        "tests/leave-particles.spec.ts",
+        "tests/autosave-recovery.spec.ts",
+        "tests/splitters.spec.ts",
+        "tests/d3d9ex.spec.ts",
+        "tests/alpha-compositor-snapshot.spec.ts",
+        // DOM-event → viewport/input bridge wiring under the canvas-in-DOM
+        // viewport. The spec self-skips only when its native transport is
+        // unavailable, reporting that precise host failure.
+        // Composition-hosting integration gate for the standard native host.
+        "tests/composition-hosting.spec.ts",
+        // DXGI transport, resize-stress, and performance gates. Playwright's
+        // DOM-only screenshots cannot see DXGI engine pixels; manual visual
+        // smoke remains the irreducible gate.
+        "tests/dxgi-transport.spec.ts",
+        "tests/dxgi-resize-stress.spec.ts",
+        "tests/dxgi-perf.spec.ts",
+        // Scene-rect transform gate. Asserts [COMP-engine-transform] log lines fire on
+        // layout/scene-rect dispatch with the expected absolute clip.
+        "tests/dxgi-scene-rect.spec.ts",
+        // Composition-mode a11y DOM-snapshot specs.
+        // (The HWND/UIA `[hwnd]` quartet + their `.golden.json` goldens
+        // were removed along with the legacy `--legacy` lane.)
+        // Mirror the HWND quartet but capture via
+        // page.accessibility.snapshot() (CDP) instead of Win32 UIA. Reuse the
+        // surface-driver arrays from the golden lanes unchanged.
+        "tests/a11y-chrome-composition.spec.ts",
+        "tests/a11y-dialogs-composition.spec.ts",
+        "tests/a11y-keyboard-composition.spec.ts",
+        "tests/a11y-curve-spinner-composition.spec.ts",
+        // Composition-mode UIA backbone
+        // reachability spec. Asserts the composition-hosted tree
+        // exposes AloHostMain → Chromium chrome → EmbeddedBrowserFrame
+        // → React menubar all the way down via Win32 UIA. Catches the
+        // case where Blink's lazy a11y regresses (would leave
+        // composition users with no screen-reader access to React).
+        "tests/a11y-uia-composition-reachable.spec.ts",
+        // The interactive timeline through the bridge: play pacing from the
+        // idle slot, the session gate, replays for edits and camera moves,
+        // and the end restore. After the a11y goldens: its last test reloads
+        // the page to prove app/ready closes the host's session.
+        "tests/timeline.spec.ts",
+        // Preview overload guard regression. Bombs the
+        // live preview with rate=1e9 and asserts the engine plateaus at
+        // the particle budget + latches `overload` on stats/tick instead
+        // of OOM-crashing. Runs LAST: it floods the live engine and
+        // briefly mutates the boot doc's first emitter; its finally-block
+        // restores properties + clears instances, but keeping it after
+        // the deterministic a11y goldens removes any timing coupling.
+        "tests/preview-overload.spec.ts",
+        // Forward unknown args (e.g. --grep
+        // "dialog-about") so scoped a11y refresh actually scopes. See
+        // RECOGNISED_FLAGS above.
+        ...forwardedArgs,
+      ],
+      {
+        cwd: editorDir,
+        stdio: "inherit",
+        shell: false,
+        // Demand real game textures WHEN THIS MACHINE HAS THEM.
+        //
+        // Several native specs (atlas assignment, seed-dependent reparent /
+        // paste-as-child) call test.skip() when game data can't be reached, and
+        // nothing ever set PE_REQUIRE_GAME_TEXTURES — so on a box with the game
+        // installed they still silently self-skipped, and breaking atlas
+        // assignment or ParticleSystem::reparentEmitter left the lane green.
+        //
+        // Gated on the registry game path rather than forced: a machine with no
+        // install genuinely cannot run them, and failing there would punish a
+        // legitimate environment. Where the data IS present, a skip now means a
+        // real problem and fails loudly.
+        env: playwrightEnv,
+      },
+    );
     pwChild = pw;
     pw.on("exit", (code) => {
       pwRunning = false;

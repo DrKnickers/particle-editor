@@ -10,14 +10,7 @@
 // Lives under src/test/ (not __tests__/) so Vitest never collects it as a
 // suite; it is test-support code only and excluded from coverage.
 
-import type {
-  Bridge,
-  Event,
-  EventKind,
-  EventOf,
-  Request,
-  ResponseMap,
-} from "@particle-editor/bridge-schema";
+import type { Bridge, Event, EventKind, EventOf, Request, ResponseMap } from "@particle-editor/bridge-schema";
 import { act } from "@testing-library/react";
 import { vi, type Mock } from "vitest";
 
@@ -34,9 +27,7 @@ export type StubResponse<K extends Kind> = Loose<ResponseMap[K]>;
 /** Per-kind responses: a value, or a function of the request params (return a
  *  rejected promise or throw to simulate a transport failure). */
 export type StubResponses = {
-  [K in Kind]?:
-    | StubResponse<K>
-    | ((params: ParamsOf<K>) => StubResponse<K> | Promise<StubResponse<K>>);
+  [K in Kind]?: StubResponse<K> | ((params: ParamsOf<K>) => StubResponse<K> | Promise<StubResponse<K>>);
 };
 
 export type BridgeStubOptions = {
@@ -55,10 +46,7 @@ export type BridgeStub = Bridge & {
 };
 
 export function makeBridgeStub(opts: BridgeStubOptions = {}): BridgeStub {
-  const responses = (opts.responses ?? {}) as Record<
-    string,
-    unknown | ((params: unknown) => unknown)
-  >;
+  const responses = (opts.responses ?? {}) as Record<string, unknown | ((params: unknown) => unknown)>;
   const fallback = "fallback" in opts ? opts.fallback : {};
   const handlers = new Map<EventKind, Set<(event: Event) => void>>();
 

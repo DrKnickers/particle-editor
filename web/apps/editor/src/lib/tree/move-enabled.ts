@@ -10,17 +10,10 @@
 
 /** @param targetIds the ids the move would act on (selection, or one row).
  *  @param rootIdsInOrder the root emitter ids, top-to-bottom. */
-export function canMoveSelection(
-  targetIds: number[],
-  rootIdsInOrder: number[],
-  direction: "up" | "down",
-): boolean {
+export function canMoveSelection(targetIds: number[], rootIdsInOrder: number[], direction: "up" | "down"): boolean {
   if (rootIdsInOrder.length === 0) return false;
   const target = new Set(targetIds);
   if (!rootIdsInOrder.some((id) => target.has(id))) return false; // no root in target
-  const edge =
-    direction === "up"
-      ? rootIdsInOrder[0]!
-      : rootIdsInOrder[rootIdsInOrder.length - 1]!;
+  const edge = direction === "up" ? rootIdsInOrder[0]! : rootIdsInOrder[rootIdsInOrder.length - 1]!;
   return !target.has(edge);
 }

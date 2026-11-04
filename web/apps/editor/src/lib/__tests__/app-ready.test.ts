@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 describe("signalAppReady", () => {
-  it("posts exactly {\"kind\":\"app/ready\"} when chrome.webview is present", () => {
+  it('posts exactly {"kind":"app/ready"} when chrome.webview is present', () => {
     const post = vi.fn();
     installWebview(post);
 

@@ -51,9 +51,7 @@ describe("PanelLayout — atlas dock branch (Task 10)", () => {
     expect(screen.getByTestId("quadrant-spawner")).toBeInTheDocument();
     // ToolPanel renders its title in a dialog heading with role="dialog"
     // name matching the title prop "Atlas Frames".
-    expect(
-      screen.getByRole("dialog", { name: "Atlas Frames" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Atlas Frames" })).toBeInTheDocument();
   });
 
   it("the atlas dock slot shares the same quadrant-spawner testid as the other docks", () => {

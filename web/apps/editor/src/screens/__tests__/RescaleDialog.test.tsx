@@ -10,9 +10,7 @@ import { makeBridgeStub } from "@/test/bridge-stub";
 describe("RescaleDialog", () => {
   it("clicking OK fires engine/action/rescale-system with current spinner values", () => {
     const bridge = makeBridgeStub();
-    render(
-      <RescaleDialog bridge={bridge} open onOpenChange={() => {}} />
-    );
+    render(<RescaleDialog bridge={bridge} open onOpenChange={() => {}} />);
     // Defaults: durationScale=100, sizeScale=100. We click OK directly
     // (no spinner edits) so the call payload reflects the initial state.
     const okBtn = screen.getByRole("button", { name: "OK" });

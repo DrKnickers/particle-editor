@@ -19,6 +19,4 @@ export type FlatRow = {
 //   - "onto": a reparent ring on a target row (single-drag only — drop onto
 //             the middle third of a row to nest under it).
 export type DropIndicator =
-  | { kind: "gap"; gapIndex: number; gapHeight: number }
-  | { kind: "onto"; targetId: number }
-  | null;
+  { kind: "gap"; gapIndex: number; gapHeight: number } | { kind: "onto"; targetId: number } | null;

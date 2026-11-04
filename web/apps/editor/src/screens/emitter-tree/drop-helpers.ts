@@ -1,18 +1,6 @@
-import type {
-  EmitterTreeDto,
-  EmitterTreeNode,
-} from "@particle-editor/bridge-schema";
-import {
-  computeRootGapIndex,
-  isDescendant,
-  resolveReparentSlot,
-  type DropZone,
-} from "@/lib/tree/drop-zone";
-import {
-  collectSubtreeIds,
-  type RootBlockGeometry,
-  type RowGeometry,
-} from "@/lib/multi-drag";
+import type { EmitterTreeDto, EmitterTreeNode } from "@particle-editor/bridge-schema";
+import { computeRootGapIndex, isDescendant, resolveReparentSlot, type DropZone } from "@/lib/tree/drop-zone";
+import { collectSubtreeIds, type RootBlockGeometry, type RowGeometry } from "@/lib/multi-drag";
 import type { FlatRow } from "./types";
 
 // [multi-drag] Chip-magnetize tuning: how far the chip's Y leans toward the
@@ -44,10 +32,7 @@ export type DropParams =
  *  height varies with density and a block's height with its subtree. Returns
  *  null if any row element is missing (defensive: the drag then shows no gap
  *  and a release is a no-op). */
-export function captureRootBlockGeometry(
-  sc: HTMLElement | null,
-  roots: EmitterTreeNode[],
-): RootBlockGeometry | null {
+export function captureRootBlockGeometry(sc: HTMLElement | null, roots: EmitterTreeNode[]): RootBlockGeometry | null {
   if (sc === null) return null;
   // content Y of a rect = rect.top - scroll viewport top + scrollTop
   const scTop = sc.getBoundingClientRect().top - sc.scrollTop;
@@ -69,10 +54,7 @@ export function captureRootBlockGeometry(
  *  hovered row (for reparent-onto detection) against this snapshot instead of
  *  the live DOM, so a reflowing make-room gap can't corrupt the hit-test.
  *  Returns null if any row element is missing. */
-export function captureRowGeometry(
-  sc: HTMLElement | null,
-  rows: FlatRow[],
-): RowGeometry | null {
+export function captureRowGeometry(sc: HTMLElement | null, rows: FlatRow[]): RowGeometry | null {
   if (sc === null) return null;
   const scTop = sc.getBoundingClientRect().top - sc.scrollTop;
   const ids: number[] = [];
@@ -90,10 +72,7 @@ export function captureRowGeometry(
 }
 
 /** Find the parent node of `id` in the tree (null for a root / not found). */
-export function findParentNode(
-  root: EmitterTreeNode,
-  id: number,
-): EmitterTreeNode | null {
+export function findParentNode(root: EmitterTreeNode, id: number): EmitterTreeNode | null {
   for (const c of root.children) {
     if (c.id === id) return root;
     const hit = findParentNode(c, id);

@@ -16,7 +16,9 @@ async function sweep(page: Page) {
   return page.evaluate(() => {
     const splitterCursor = (x: number, y: number) => {
       const target = document.elementFromPoint(x, y) ?? document.body;
-      target.dispatchEvent(new PointerEvent("pointermove", { clientX: x, clientY: y, bubbles: true, pointerType: "mouse" }));
+      target.dispatchEvent(
+        new PointerEvent("pointermove", { clientX: x, clientY: y, bubbles: true, pointerType: "mouse" }),
+      );
       return getComputedStyle(document.documentElement).cursor.includes("resize");
     };
     const result = Array.from(document.querySelectorAll<HTMLElement>("[data-separator]")).map((sep) => {
@@ -30,7 +32,11 @@ async function sweep(page: Page) {
           const y = vertical ? r.top + r.height * along : r.top + d;
           if (splitterCursor(x, y)) offsets.add(d);
         }
-      return { disabled: sep.getAttribute("aria-disabled") === "true", thickness, offsets: [...offsets].sort((a, b) => a - b) };
+      return {
+        disabled: sep.getAttribute("aria-disabled") === "true",
+        thickness,
+        offsets: [...offsets].sort((a, b) => a - b),
+      };
     });
     splitterCursor(1, 1);
     return result;
@@ -38,7 +44,9 @@ async function sweep(page: Page) {
 }
 
 const toggleDock = (page: Page) =>
-  page.evaluate(() => document.querySelector<HTMLButtonElement>('.toolbar button[aria-label="Toggle Spawner panel"]')?.click());
+  page.evaluate(() =>
+    document.querySelector<HTMLButtonElement>('.toolbar button[aria-label="Toggle Spawner panel"]')?.click(),
+  );
 
 /** An enabled separator's cursor zone is exactly its band (both edges inclusive);
  *  a disabled one has none. */

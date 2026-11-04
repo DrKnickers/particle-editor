@@ -6,7 +6,9 @@ import type { ReactElement, ReactNode } from "react";
 import { FieldCheckbox, FieldSelect, FieldSpinner, EMIT_FROM_MESH_OPTIONS } from "../fields";
 
 const TipProvider = ({ children }: { children: ReactNode }) => (
-  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>
+    {children}
+  </Tooltip.Provider>
 );
 const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
@@ -17,7 +19,13 @@ describe("Field help", () => {
         <FieldSpinner label="Lifetime:" help="First lifespan." value={1} onCommit={vi.fn()} />
         <FieldSpinner label="Lifetime:" help="Second lifespan." value={2} onCommit={vi.fn()} />
         <FieldCheckbox label="Linked" help="Follow the instance." checked={false} onCheckedChange={vi.fn()} />
-        <FieldSelect label="Emit mode:" help="Select a mode." value={0} options={EMIT_FROM_MESH_OPTIONS} onCommit={vi.fn()} />
+        <FieldSelect
+          label="Emit mode:"
+          help="Select a mode."
+          value={0}
+          options={EMIT_FROM_MESH_OPTIONS}
+          onCommit={vi.fn()}
+        />
       </>,
     );
     const controls = [
@@ -27,7 +35,12 @@ describe("Field help", () => {
     ];
     const ids = controls.map((control) => control.getAttribute("aria-describedby"));
     expect(new Set(ids).size).toBe(4);
-    for (const [index, help] of ["First lifespan.", "Second lifespan.", "Follow the instance.", "Select a mode."].entries()) {
+    for (const [index, help] of [
+      "First lifespan.",
+      "Second lifespan.",
+      "Follow the instance.",
+      "Select a mode.",
+    ].entries()) {
       expect(ids[index]).toBeTruthy();
       const description = document.getElementById(ids[index]!);
       expect(description).toHaveAttribute("hidden");
@@ -57,7 +70,14 @@ describe("Field help", () => {
       <>
         <FieldSpinner label="Number:" help="Number unavailable." value={1} disabled onCommit={onCommit} />
         <FieldCheckbox label="Flag" help="Flag unavailable." checked={false} disabled onCheckedChange={onCommit} />
-        <FieldSelect label="Mode:" help="Mode unavailable." value={0} options={EMIT_FROM_MESH_OPTIONS} disabled onCommit={onCommit} />
+        <FieldSelect
+          label="Mode:"
+          help="Mode unavailable."
+          value={0}
+          options={EMIT_FROM_MESH_OPTIONS}
+          disabled
+          onCommit={onCommit}
+        />
       </>,
     );
     const labels = ["Number:", "Flag", "Mode:"].map((label) => screen.getByText(label));
@@ -80,7 +100,13 @@ describe("Field help", () => {
     const onFlag = vi.fn();
     render(
       <>
-        <FieldSpinner label="Minimum lifetime:" help="Percent of maximum." value={0.5} displayInvertedPercent onCommit={onNumber} />
+        <FieldSpinner
+          label="Minimum lifetime:"
+          help="Percent of maximum."
+          value={0.5}
+          displayInvertedPercent
+          onCommit={onNumber}
+        />
         <FieldCheckbox label="Linked" help="Follow the instance." checked={false} onCheckedChange={onFlag} />
       </>,
     );

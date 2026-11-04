@@ -48,9 +48,7 @@ describe("native-test harness allowlist", () => {
     const harness = new Set(specsInHarness());
     const excluded = new Set(Object.keys(INTENTIONALLY_EXCLUDED));
 
-    const missing = disk.filter(
-      (name) => !harness.has(name) && !excluded.has(name),
-    );
+    const missing = disk.filter((name) => !harness.has(name) && !excluded.has(name));
 
     expect(
       missing,
@@ -76,9 +74,7 @@ describe("native-test harness allowlist", () => {
 
   it("does not waive specs that aren't on disk", () => {
     const disk = new Set(specsOnDisk());
-    const phantoms = Object.keys(INTENTIONALLY_EXCLUDED).filter(
-      (name) => !disk.has(name),
-    );
+    const phantoms = Object.keys(INTENTIONALLY_EXCLUDED).filter((name) => !disk.has(name));
 
     expect(
       phantoms,

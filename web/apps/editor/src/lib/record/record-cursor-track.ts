@@ -1,14 +1,9 @@
 import { coerceMessage } from "@/bridge/wire";
 
 export type CursorElementRef =
-  | `curve-key:${string}:${string}`
-  | `atlas-tile:${string}`
-  | `channel-row:${string}`
-  | `testid:${string}`;
+  `curve-key:${string}:${string}` | `atlas-tile:${string}` | `channel-row:${string}` | `testid:${string}`;
 
-export type CursorTarget =
-  | { kind: "element"; ref: CursorElementRef }
-  | { kind: "point"; x: number; y: number };
+export type CursorTarget = { kind: "element"; ref: CursorElementRef } | { kind: "point"; x: number; y: number };
 
 /** Modifier keys held during an activate-click. Absent = none held (the common
  *  case). Lets a clip drive a real Ctrl/Cmd-click (toggle) or Shift-click (range)
@@ -75,9 +70,7 @@ function parseTarget(value: unknown): CursorTarget | null {
   if (!value || typeof value !== "object") return null;
   const target = value as Record<string, unknown>;
   if (target.kind === "point") {
-    return isFiniteNumber(target.x) && isFiniteNumber(target.y)
-      ? { kind: "point", x: target.x, y: target.y }
-      : null;
+    return isFiniteNumber(target.x) && isFiniteNumber(target.y) ? { kind: "point", x: target.x, y: target.y } : null;
   }
   if (target.kind === "element" && typeof target.ref === "string") {
     const ref = parseElementRef(target.ref);

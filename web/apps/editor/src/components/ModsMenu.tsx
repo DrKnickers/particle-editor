@@ -19,14 +19,44 @@ const MODS_MENU_VALUE = "mods";
 // name churn): a refresh arc, an expand-to-modal arrow, a filled "top wins"
 // triangle.
 const RefreshIcon = () => (
-  <svg aria-hidden width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round"><path d="M13 8a5 5 0 1 1-1.5-3.5" /><path d="M13 2.5V5h-2.5" /></svg>
+  <svg
+    aria-hidden
+    width="13"
+    height="13"
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={1.4}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M13 8a5 5 0 1 1-1.5-3.5" />
+    <path d="M13 2.5V5h-2.5" />
+  </svg>
 );
 const ExpandIcon = () => (
-  <svg aria-hidden width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 2.5h4v4M13.5 2.5l-5 5M7 3.5H3.5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V9" /></svg>
+  <svg
+    aria-hidden
+    width="12"
+    height="12"
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={1.4}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M9.5 2.5h4v4M13.5 2.5l-5 5M7 3.5H3.5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V9" />
+  </svg>
 );
 const TopWinsBadge = () => (
-  <span aria-hidden className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-1.5 py-px text-4xs font-semibold uppercase tracking-wide text-accent">
-    <svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><path d="M8 3l5 6H3z" /></svg>
+  <span
+    aria-hidden
+    className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-1.5 py-px text-4xs font-semibold uppercase tracking-wide text-accent"
+  >
+    <svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M8 3l5 6H3z" />
+    </svg>
     top wins
   </span>
 );
@@ -78,12 +108,14 @@ export function ModsMenu({ bridge, onMenuValueChange }: ModsMenuProps) {
     try {
       const r = await bridge.request({ kind: "mods/set-layers", params: { paths } });
       if (!r.ok) {
-        useFileOpErrorStore.getState().show(
-          "error" in r && r.error
-            ? `Couldn't apply the load order: ${r.error}`
-            : "Couldn't apply the load order — the mod shaders failed to reload.",
-          "Load order",
-        );
+        useFileOpErrorStore
+          .getState()
+          .show(
+            "error" in r && r.error
+              ? `Couldn't apply the load order: ${r.error}`
+              : "Couldn't apply the load order — the mod shaders failed to reload.",
+            "Load order",
+          );
       }
     } catch (err) {
       useFileOpErrorStore.getState().show(`Couldn't apply the load order: ${String(err)}`, "Load order");
@@ -104,8 +136,7 @@ export function ModsMenu({ bridge, onMenuValueChange }: ModsMenuProps) {
       console.warn("[MenuBar] mods/refresh failed:", err);
     }
   };
-  const labelFor = (p: string) =>
-    layers.find((l) => eqPath(l.path, p))?.label ?? basename(p);
+  const labelFor = (p: string) => layers.find((l) => eqPath(l.path, p))?.label ?? basename(p);
   // The menu composes the stack via TOGGLES (the modal owns ordering):
   // clicking a layer adds it (appended) if absent, or removes it if present.
   // toggle-add from an empty stack == the old quick-switch, but a composed
@@ -113,8 +144,7 @@ export function ModsMenu({ bridge, onMenuValueChange }: ModsMenuProps) {
   const inStack = (p: string) => stack.some((s) => eqPath(s, p));
   const toggleLayer = (p: string) =>
     void setLayerStack(inStack(p) ? stack.filter((s) => !eqPath(s, p)) : [...stack, p]);
-  const removeFromStack = (p: string) =>
-    void setLayerStack(stack.filter((s) => !eqPath(s, p)));
+  const removeFromStack = (p: string) => void setLayerStack(stack.filter((s) => !eqPath(s, p)));
   // In-menu stack reorder via the shared glide engine — live-commits
   // each reorder (the menu IS the editor; the modal is the "Expand" fallback). No
   // scroll container (the dropdown list is short; big stacks use Expand).
@@ -137,7 +167,9 @@ export function ModsMenu({ bridge, onMenuValueChange }: ModsMenuProps) {
     // interactive paint (trims startup bridge fan-out). Active mod arrives via
     // the eager snapshot; the list changes rarely and the live engine/state/changed
     // subscription above keeps it current, so the initial fetch is non-paint-critical.
-    const cancelModsSeed = runWhenIdle(() => { if (!cancelled) void refreshModsList(); });
+    const cancelModsSeed = runWhenIdle(() => {
+      if (!cancelled) void refreshModsList();
+    });
     return () => {
       cancelled = true;
       cancelModsSeed();
@@ -165,12 +197,17 @@ export function ModsMenu({ bridge, onMenuValueChange }: ModsMenuProps) {
     const key = l.kind === "nested" ? (l.parentPath ?? l.path) : l.path;
     const headerLabel = l.kind === "nested" ? (l.parentLabel ?? l.label) : l.label;
     let grp = addGroups.find((x) => eqPath(x.key, key));
-    if (!grp) { grp = { key, label: headerLabel, items: [] }; addGroups.push(grp); }
+    if (!grp) {
+      grp = { key, label: headerLabel, items: [] };
+      addGroups.push(grp);
+    }
     grp.items.push(l);
   }
   const aq = addQuery.trim().toLowerCase();
   const addVisibleGroups = aq
-    ? addGroups.map((g) => ({ ...g, items: g.items.filter((l) => l.label.toLowerCase().includes(aq)) })).filter((g) => g.items.length > 0)
+    ? addGroups
+        .map((g) => ({ ...g, items: g.items.filter((l) => l.label.toLowerCase().includes(aq)) }))
+        .filter((g) => g.items.length > 0)
     : addGroups;
   // Make-room spacer for the in-menu drag (matches the modal); role=presentation so
   // it never counts as a stack listitem.
@@ -195,19 +232,25 @@ export function ModsMenu({ bridge, onMenuValueChange }: ModsMenuProps) {
             // Guardrail: suppress the dropdown's auto-dismiss while a drag
             // is live, so a drag that strays past the menu edge can't close it
             // mid-gesture (the designer's #1 risk for in-popover drag).
-            onEscapeKeyDown={(e) => { if (menuDrag.dragging) e.preventDefault(); }}
-            onPointerDownOutside={(e) => { if (menuDrag.dragging) e.preventDefault(); }}
-            onFocusOutside={(e) => { if (menuDrag.dragging) e.preventDefault(); }}
-            onInteractOutside={(e) => { if (menuDrag.dragging) e.preventDefault(); }}
+            onEscapeKeyDown={(e) => {
+              if (menuDrag.dragging) e.preventDefault();
+            }}
+            onPointerDownOutside={(e) => {
+              if (menuDrag.dragging) e.preventDefault();
+            }}
+            onFocusOutside={(e) => {
+              if (menuDrag.dragging) e.preventDefault();
+            }}
+            onInteractOutside={(e) => {
+              if (menuDrag.dragging) e.preventDefault();
+            }}
           >
             {/* Active load order — the menu IS the editor: drag rows by the grip to
                 reorder in place (live-committed). Expand opens the full modal (kept
                 as the demoted fallback + the keyboard/AT reorder path). */}
             <div className="mb-1 rounded-md border border-border bg-bg p-2">
               <div className="mb-1.5 flex items-center gap-1.5 px-0.5">
-                <span className="text-3xs font-semibold uppercase tracking-wide text-text-3">
-                  Active load order
-                </span>
+                <span className="text-3xs font-semibold uppercase tracking-wide text-text-3">Active load order</span>
                 {stack.length > 0 && <TopWinsBadge />}
                 <span className="flex-1" />
                 {/* Expand → the full modal: the demoted fallback AND the keyboard/AT
@@ -231,7 +274,11 @@ export function ModsMenu({ bridge, onMenuValueChange }: ModsMenuProps) {
               ) : (
                 <div className="flex gap-1.5">
                   <div className="my-0.5 w-[3px] shrink-0 rounded-[var(--radius-2xs)] bg-gradient-to-b from-accent via-accent-2 to-border-2" />
-                  <ul ref={menuDrag.listRef} className="flex min-w-0 flex-1 flex-col gap-[3px]" aria-label="Active load order">
+                  <ul
+                    ref={menuDrag.listRef}
+                    className="flex min-w-0 flex-1 flex-col gap-[3px]"
+                    aria-label="Active load order"
+                  >
                     {stack.map((p, i) => (
                       <Fragment key={p}>
                         {menuDrag.gap === i && menuDrag.dragIndex !== null && menuGapSpacer}
@@ -250,7 +297,12 @@ export function ModsMenu({ bridge, onMenuValueChange }: ModsMenuProps) {
                           <span className="flex w-3.5 shrink-0 items-center justify-center text-text-3" aria-hidden>
                             <GripVertical className="size-2.5" />
                           </span>
-                          <span className="min-w-[11px] shrink-0 text-right text-2xs font-semibold tabular-nums text-text-3" aria-hidden="true">{i + 1}</span>
+                          <span
+                            className="min-w-[11px] shrink-0 text-right text-2xs font-semibold tabular-nums text-text-3"
+                            aria-hidden="true"
+                          >
+                            {i + 1}
+                          </span>
                           <Layers className="size-3 shrink-0 text-text-3" strokeWidth={1.3} />
                           <span className="min-w-0 flex-1 truncate text-text">{labelFor(p)}</span>
                           <button
@@ -278,16 +330,14 @@ export function ModsMenu({ bridge, onMenuValueChange }: ModsMenuProps) {
                 preventDefault keeps the flyout open so you can add several. */}
             <Menubar.Sub>
               <Menubar.SubTrigger className={ITEM}>
-                <span className="flex size-3.5 shrink-0 items-center justify-center text-accent"><Plus className="size-3.5" strokeWidth={1.8} /></span>
+                <span className="flex size-3.5 shrink-0 items-center justify-center text-accent">
+                  <Plus className="size-3.5" strokeWidth={1.8} />
+                </span>
                 <span className="flex-1">Add mod…</span>
                 <ChevronRight className="size-3.5 text-text-3" />
               </Menubar.SubTrigger>
               <Menubar.Portal>
-                <Menubar.SubContent
-                  className={cn(CONTENT, "w-60")}
-                  sideOffset={2}
-                  alignOffset={-4}
-                >
+                <Menubar.SubContent className={cn(CONTENT, "w-60")} sideOffset={2} alignOffset={-4}>
                   {/* focus-within accent border = the keyboard-focus cue for the
                       borderless input inside (was focus-invisible). */}
                   <div className="mb-1 flex h-[var(--row-h)] items-center gap-1.5 rounded-[var(--radius-sm)] border border-border-2 bg-bg-3 px-2 transition-colors motion-reduce:transition-none focus-within:border-accent">
@@ -304,21 +354,35 @@ export function ModsMenu({ bridge, onMenuValueChange }: ModsMenuProps) {
                   </div>
                   {addVisibleGroups.map((g) => (
                     <div key={g.key}>
-                      <div className="px-2 pb-0.5 pt-1 text-3xs font-semibold uppercase tracking-wide text-text-3">{g.label}</div>
+                      <div className="px-2 pb-0.5 pt-1 text-3xs font-semibold uppercase tracking-wide text-text-3">
+                        {g.label}
+                      </div>
                       {g.items.map((l) => {
                         const added = inStack(l.path);
                         const nested = l.kind === "nested";
                         return added ? (
-                          <div key={l.path} className={cn("flex h-[var(--row-h)] items-center gap-1.5 px-2 text-xs text-text-3", nested && "pl-5")}>
+                          <div
+                            key={l.path}
+                            className={cn(
+                              "flex h-[var(--row-h)] items-center gap-1.5 px-2 text-xs text-text-3",
+                              nested && "pl-5",
+                            )}
+                          >
                             <Layers className="size-3 shrink-0 text-text-3" strokeWidth={1.3} />
                             <span className="min-w-0 flex-1 truncate">{l.label}</span>
-                            <span className="flex shrink-0 items-center gap-1 text-3xs"><Check className="size-2.5 text-success-fg" strokeWidth={1.8} />in stack</span>
+                            <span className="flex shrink-0 items-center gap-1 text-3xs">
+                              <Check className="size-2.5 text-success-fg" strokeWidth={1.8} />
+                              in stack
+                            </span>
                           </div>
                         ) : (
                           <Menubar.Item
                             key={l.path}
                             className={cn(ITEM, nested && "pl-5")}
-                            onSelect={(e) => { e.preventDefault(); toggleLayer(l.path); }}
+                            onSelect={(e) => {
+                              e.preventDefault();
+                              toggleLayer(l.path);
+                            }}
                           >
                             <Layers className="size-3 shrink-0 text-text-3" strokeWidth={1.3} />
                             <span className="flex-1 truncate">{l.label}</span>
@@ -342,7 +406,10 @@ export function ModsMenu({ bridge, onMenuValueChange }: ModsMenuProps) {
                 so the cleared state shows live above. */}
             <Menubar.Item
               className={ITEM}
-              onSelect={(e) => { e.preventDefault(); void setLayerStack([]); }}
+              onSelect={(e) => {
+                e.preventDefault();
+                void setLayerStack([]);
+              }}
             >
               <Layers className="size-3.5 shrink-0 text-text-3" strokeWidth={1.3} />
               <span aria-hidden className="h-3.5 w-0 border-l border-dotted border-border-2" />
@@ -352,9 +419,13 @@ export function ModsMenu({ bridge, onMenuValueChange }: ModsMenuProps) {
             <Menubar.Separator className={SEPARATOR} />
             <Menubar.Item
               className={ITEM}
-              onSelect={() => { void handleModRefresh(); }}
+              onSelect={() => {
+                void handleModRefresh();
+              }}
             >
-              <span className="flex w-3.5 shrink-0 justify-center text-text-2"><RefreshIcon /></span>
+              <span className="flex w-3.5 shrink-0 justify-center text-text-2">
+                <RefreshIcon />
+              </span>
               <span className="flex-1">Refresh Mod List</span>
             </Menubar.Item>
           </Menubar.Content>
@@ -371,4 +442,3 @@ export function ModsMenu({ bridge, onMenuValueChange }: ModsMenuProps) {
     </>
   );
 }
-

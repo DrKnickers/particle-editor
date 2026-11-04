@@ -29,11 +29,7 @@
 // validate the surfacing logic against the schema without a real install.
 
 import { useEffect, useRef, useState } from "react";
-import type {
-  Bridge,
-  EngineStateDto,
-  SkydomeSlotStatus,
-} from "@particle-editor/bridge-schema";
+import type { Bridge, EngineStateDto, SkydomeSlotStatus } from "@particle-editor/bridge-schema";
 import { colorrefToHex, hexToColorref } from "@/lib/colorref";
 import { SegmentedControl } from "@/primitives/SegmentedControl";
 import { NativeSelect } from "@/primitives/Select";
@@ -64,7 +60,9 @@ export function BackgroundPopoverBody({ bridge }: BodyProps) {
     let cancelled = false;
     bridge
       .request({ kind: "engine/state/snapshot", params: {} })
-      .then((s) => { if (!cancelled) setSnapshot(s); })
+      .then((s) => {
+        if (!cancelled) setSnapshot(s);
+      })
       .catch((err) => console.warn("[BackgroundPopoverBody] snapshot failed:", err));
     const off = bridge.on("engine/state/changed", (e) => {
       setSnapshot(e.payload);
@@ -112,14 +110,12 @@ export function BackgroundPopoverBody({ bridge }: BodyProps) {
         setSecondaryNames(r.secondary ?? []);
       })
       .catch((err) => console.warn("[BackgroundPopoverBody] skydome-list failed:", err));
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [bridge, context]);
 
-  const setEnvironment = (
-    ctx: "land" | "space",
-    primary: string,
-    secondary: string,
-  ) => {
+  const setEnvironment = (ctx: "land" | "space", primary: string, secondary: string) => {
     void bridge.request({
       kind: "engine/set/skydome-environment",
       params: { context: ctx, primaryName: primary, secondaryName: secondary },
@@ -133,18 +129,15 @@ export function BackgroundPopoverBody({ bridge }: BodyProps) {
     setEnvironment(ctx, NONE, NONE);
   };
 
-  const handlePrimaryChange = (name: string) =>
-    setEnvironment(context, name, secondaryName);
+  const handlePrimaryChange = (name: string) => setEnvironment(context, name, secondaryName);
 
-  const handleSecondaryChange = (name: string) =>
-    setEnvironment(context, primaryName, name);
+  const handleSecondaryChange = (name: string) => setEnvironment(context, primaryName, name);
 
   // Always include the current selection as an option, even if it's not in the
   // freshly-enumerated list yet (async load) or at all (a persisted/mod dome
   // absent from this context's list) — otherwise the controlled <select> would
   // silently fall back to "None" and misreport the active dome.
-  const withCurrent = (name: string, list: string[]) =>
-    name && !list.includes(name) ? [name, ...list] : list;
+  const withCurrent = (name: string, list: string[]) => (name && !list.includes(name) ? [name, ...list] : list);
   const primaryOptions = withCurrent(primaryName, primaryNames);
   const secondaryOptions = withCurrent(secondaryName, secondaryNames);
 
@@ -180,11 +173,7 @@ export function BackgroundPopoverBody({ bridge }: BodyProps) {
   return (
     <div className="flex flex-col gap-4">
       {/* ── Active-mode indicator: what the renderer is actually showing ── */}
-      <p
-        role="status"
-        aria-label="Active background"
-        className="flex flex-wrap items-center gap-2 text-xs"
-      >
+      <p role="status" aria-label="Active background" className="flex flex-wrap items-center gap-2 text-xs">
         <span className="text-text-3">Showing:</span>
         <span
           className={cn(
@@ -192,23 +181,15 @@ export function BackgroundPopoverBody({ bridge }: BodyProps) {
             gameDomeRendering ? "bg-accent-strong text-white" : "bg-bg-2 text-text-2",
           )}
         >
-          {gameDomeRendering
-            ? "Game dome"
-            : legacyTextureActive
-              ? "Custom texture"
-              : "Solid colour"}
+          {gameDomeRendering ? "Game dome" : legacyTextureActive ? "Custom texture" : "Solid colour"}
         </span>
-        {gameDomeSelected && !gameDomeRendering && (
-          <span className="text-warning-fg">— selected dome didn't load</span>
-        )}
+        {gameDomeSelected && !gameDomeRendering && <span className="text-warning-fg">— selected dome didn't load</span>}
       </p>
 
       {/* ── Game dome (real .alo skydome) ────────────────────────────── */}
       <section className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium uppercase tracking-wide text-text-3">
-            Game dome
-          </span>
+          <span className="text-xs font-medium uppercase tracking-wide text-text-3">Game dome</span>
           {/* Land / Space context toggle */}
           <SegmentedControl
             aria-label="Battle context"
@@ -227,12 +208,16 @@ export function BackgroundPopoverBody({ bridge }: BodyProps) {
           >
             <option value={NONE}>None</option>
             {primaryOptions.map((n) => (
-              <option key={n} value={n}>{n}</option>
+              <option key={n} value={n}>
+                {n}
+              </option>
             ))}
           </NativeSelect>
         </label>
         {primaryNote && (
-          <p role="alert" className="text-xs text-warning-fg">{primaryNote}</p>
+          <p role="alert" className="text-xs text-warning-fg">
+            {primaryNote}
+          </p>
         )}
 
         <label className="flex flex-col gap-1 text-xs text-text-2">
@@ -244,20 +229,22 @@ export function BackgroundPopoverBody({ bridge }: BodyProps) {
           >
             <option value={NONE}>None</option>
             {secondaryOptions.map((n) => (
-              <option key={n} value={n}>{n}</option>
+              <option key={n} value={n}>
+                {n}
+              </option>
             ))}
           </NativeSelect>
         </label>
         {secondaryNote && (
-          <p role="alert" className="text-xs text-warning-fg">{secondaryNote}</p>
+          <p role="alert" className="text-xs text-warning-fg">
+            {secondaryNote}
+          </p>
         )}
       </section>
 
       {/* ── Solid colour (fallback when no game dome renders) ─────────── */}
       <section className="flex flex-col gap-2">
-        <span className="text-xs font-medium uppercase tracking-wide text-text-3">
-          Solid colour
-        </span>
+        <span className="text-xs font-medium uppercase tracking-wide text-text-3">Solid colour</span>
 
         <button
           type="button"
@@ -270,9 +257,7 @@ export function BackgroundPopoverBody({ bridge }: BodyProps) {
           aria-label="Solid colour"
           aria-pressed={simpleSolidSelected}
         >
-          <span className="rounded bg-bg/70 px-2 py-0.5 text-xs text-text backdrop-blur-sm">
-            Solid colour
-          </span>
+          <span className="rounded bg-bg/70 px-2 py-0.5 text-xs text-text backdrop-blur-sm">Solid colour</span>
           {simpleSolidSelected && <SelectedBadge corner="top-right" />}
         </button>
         <input

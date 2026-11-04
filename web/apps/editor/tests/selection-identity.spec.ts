@@ -42,24 +42,17 @@ for (const deletionKind of [
       };
       const b = window.bridge!;
       const sleep = (ms: number) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
-      const list = () =>
-        b.request({ kind: "emitters/list", params: {} });
+      const list = () => b.request({ kind: "emitters/list", params: {} });
       const snapshot = () =>
         b.request({
           kind: "engine/state/snapshot",
           params: {},
         });
-      const flatten = (node: TreeNode): TreeNode[] => [
-        node,
-        ...node.children.flatMap(flatten),
-      ];
+      const flatten = (node: TreeNode): TreeNode[] => [node, ...node.children.flatMap(flatten)];
       const selectedStableId = async () => {
         const [tree, state] = await Promise.all([list(), snapshot()]);
         if (state.selectedEmitterId === null) return null;
-        return (
-          flatten(tree.root).find((node) => node.id === state.selectedEmitterId)
-            ?.stableId ?? null
-        );
+        return flatten(tree.root).find((node) => node.id === state.selectedEmitterId)?.stableId ?? null;
       };
       const addRoots = async (count: number) => {
         for (let i = 0; i < count; i++) {
@@ -99,9 +92,7 @@ for (const deletionKind of [
       const [a, , c, d, e] = lowerBefore;
       if (!a || !c || !d || !e) throw new Error("lower-index fixture needs five roots");
       await b.request({ kind: "emitters/select", params: { id: c.id } });
-      const lower = await deleteIds(
-        kind === "emitters/delete" ? [a.id] : [a.id, e.id],
-      );
+      const lower = await deleteIds(kind === "emitters/delete" ? [a.id] : [a.id, e.id]);
 
       // Recursive deletion: B1 is inside A0's subtree. Baseline keeps id 1,
       // which selects surviving root D after A+B disappear.
@@ -128,9 +119,7 @@ for (const deletionKind of [
         params: { id: selectedChild.id },
       });
       const ancestor = await deleteIds(
-        kind === "emitters/delete"
-          ? [ancestorRoot.id]
-          : [ancestorRoot.id, ancestorTail.id],
+        kind === "emitters/delete" ? [ancestorRoot.id] : [ancestorRoot.id, ancestorTail.id],
       );
 
       // Overreach guard: deleting a higher-index unrelated root must neither
@@ -164,33 +153,19 @@ for (const deletionKind of [
 
     expect.soft(result.lower.selectedId).toBe(1);
     expect.soft(result.lower.selectedStableId).toBe(result.lower.cStableId);
-    expect
-      .soft(
-        result.lower.nodes.find(
-          (node) => node.stableId === result.lower.dStableId,
-        )?.id,
-      )
-      .toBe(2);
+    expect.soft(result.lower.nodes.find((node) => node.stableId === result.lower.dStableId)?.id).toBe(2);
     expect.soft(result.lower.announced).toEqual([1]);
 
     expect.soft(result.ancestor.selectedId).toBeNull();
     expect.soft(result.ancestor.selectedStableId).toBeNull();
-    expect.soft(
-      result.ancestor.nodes.some(
-        (node) => node.stableId === result.ancestor.selectedChildStableId,
-      ),
-    ).toBe(false);
-    expect.soft(
-      result.ancestor.nodes.find(
-        (node) => node.stableId === result.ancestor.survivingDStableId,
-      )?.id,
-    ).toBe(1);
+    expect
+      .soft(result.ancestor.nodes.some((node) => node.stableId === result.ancestor.selectedChildStableId))
+      .toBe(false);
+    expect.soft(result.ancestor.nodes.find((node) => node.stableId === result.ancestor.survivingDStableId)?.id).toBe(1);
     expect.soft(result.ancestor.announced).toEqual([null]);
 
     expect.soft(result.overreach.selectedId).toBe(0);
-    expect.soft(result.overreach.selectedStableId).toBe(
-      result.overreach.selectedAStableId,
-    );
+    expect.soft(result.overreach.selectedStableId).toBe(result.overreach.selectedAStableId);
     expect.soft(result.overreach.announced).toEqual([]);
   });
 }
@@ -227,8 +202,7 @@ async function captureReplacementEvents(request: E2ERequest) {
     const offState = b.on("engine/state/changed", (event) => {
       seen.push({
         kind: "engine/state/changed",
-        selectedEmitterId: (event.payload as { selectedEmitterId: number | null })
-          .selectedEmitterId,
+        selectedEmitterId: (event.payload as { selectedEmitterId: number | null }).selectedEmitterId,
       });
     });
     const offTree = b.on("emitters/tree/changed", () => {

@@ -39,11 +39,7 @@ function tForU(u: number): number {
 /** Evaluate the track's RENDERED y (data space) at time x. Formula-
  *  identical to the path builders; clamps outside the border keys.
  *  Step: left key's value; exactly at a key, the key's own value. */
-export function sampleTrackY(
-  keys: ReadonlyArray<Key>,
-  interp: InterpolationType,
-  x: number,
-): number {
+export function sampleTrackY(keys: ReadonlyArray<Key>, interp: InterpolationType, x: number): number {
   if (keys.length === 0) return 0;
   if (x <= keys[0]!.time) return keys[0]!.value;
   const last = keys[keys.length - 1]!;
@@ -108,11 +104,7 @@ export function sampleTrackPx(
 
 /** Linear-resample a displayed piecewise-linear polyline (xsOld, ysOld)
  *  onto a new grid — interruption folding across grid changes. */
-export function resampleOntoGrid(
-  xsOld: Float64Array,
-  ysOld: Float64Array,
-  xsNew: Float64Array,
-): Float64Array {
+export function resampleOntoGrid(xsOld: Float64Array, ysOld: Float64Array, xsNew: Float64Array): Float64Array {
   if (xsOld.length === 0) return new Float64Array(xsNew.length);
   if (xsOld.length === 1) return new Float64Array(xsNew.length).fill(ysOld[0]!);
   const out = new Float64Array(xsNew.length);
@@ -124,9 +116,7 @@ export function resampleOntoGrid(
     const x1 = xsOld[j + 1]!;
     const y0 = ysOld[j]!;
     const y1 = ysOld[j + 1]!;
-    out[i] = x1 > x0
-      ? y0 + ((y1 - y0) * Math.max(0, Math.min(1, (x - x0) / (x1 - x0))))
-      : y0;
+    out[i] = x1 > x0 ? y0 + (y1 - y0) * Math.max(0, Math.min(1, (x - x0) / (x1 - x0))) : y0;
   }
   return out;
 }
@@ -137,10 +127,7 @@ export function resampleOntoGrid(
  *    "none"       identical keys + interpolation
  *    "moved"      same count & times (EPS), >=1 value differs
  *    "structural" anything else (count / time / interp) */
-export function classifyTrackChange(
-  prev: TrackDto,
-  next: TrackDto,
-): "none" | "moved" | "structural" {
+export function classifyTrackChange(prev: TrackDto, next: TrackDto): "none" | "moved" | "structural" {
   if (prev.interpolation !== next.interpolation) return "structural";
   if (prev.keys.length !== next.keys.length) return "structural";
   let moved = false;
@@ -154,7 +141,10 @@ export function classifyTrackChange(
 }
 
 /** Match keys old->new by time (EPS) for the marker choreography. */
-export function matchKeys(prev: TrackDto, next: TrackDto): {
+export function matchKeys(
+  prev: TrackDto,
+  next: TrackDto,
+): {
   moved: Array<{ from: Key; to: Key }>;
   added: Key[];
   removed: Key[];
@@ -163,9 +153,7 @@ export function matchKeys(prev: TrackDto, next: TrackDto): {
   const added: Key[] = [];
   const usedPrev = new Set<number>();
   for (const k of next.keys) {
-    const idx = prev.keys.findIndex(
-      (p, i) => !usedPrev.has(i) && Math.abs(p.time - k.time) <= KEY_MATCH_EPS,
-    );
+    const idx = prev.keys.findIndex((p, i) => !usedPrev.has(i) && Math.abs(p.time - k.time) <= KEY_MATCH_EPS);
     if (idx >= 0) {
       usedPrev.add(idx);
       moved.push({ from: prev.keys[idx]!, to: k });

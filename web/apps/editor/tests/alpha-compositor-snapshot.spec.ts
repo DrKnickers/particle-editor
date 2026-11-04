@@ -33,7 +33,6 @@
 
 import { test, expect, type Page } from "./helpers/cdp";
 
-
 type SnapshotDto = { imageBase64: string; w: number; h: number };
 
 let page: Page;
@@ -88,17 +87,20 @@ async function distinctColors(page: Page, base64: string): Promise<number> {
 // above can still tell a rendered scene from a blank one, rather than us
 // trusting a threshold that was tuned once and never re-checked.
 async function solidFillColors(page: Page, w: number, h: number): Promise<number> {
-  const b64 = await page.evaluate(({ w, h }) => {
-    const c = document.createElement("canvas");
-    c.width = w; c.height = h;
-    const ctx = c.getContext("2d")!;
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, w, h);
-    return c.toDataURL("image/jpeg").split(",")[1]!;
-  }, { w, h });
+  const b64 = await page.evaluate(
+    ({ w, h }) => {
+      const c = document.createElement("canvas");
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext("2d")!;
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, w, h);
+      return c.toDataURL("image/jpeg").split(",")[1]!;
+    },
+    { w, h },
+  );
   return distinctColors(page, b64);
 }
-
 
 // NOTE: the payload is a JPEG, not a PNG — the backdrop is shown blurred behind
 // a dialog, so lossy is invisible and far cheaper. The test NAME said PNG while
@@ -147,9 +149,9 @@ test("first viewport/capture-snapshot after boot returns a valid, non-blank JPEG
   // control below keeps that claim honest instead of assumed.
   const colors = await distinctColors(page, result.imageBase64);
   const blank = await solidFillColors(page, result.w, result.h);
-  expect(blank).toBeLessThan(8);          // the oracle can still detect a blank frame
+  expect(blank).toBeLessThan(8); // the oracle can still detect a blank frame
   expect(colors).toBeGreaterThanOrEqual(8);
-  expect(colors).toBeGreaterThan(blank);  // ...and the real snapshot clears it
+  expect(colors).toBeGreaterThan(blank); // ...and the real snapshot clears it
   // The backdrop snapshot is downscaled before encoding (min 2x, capped at a
   // 1024 long edge — it's blurred behind the dialog; see
   // AlphaCompositor::CaptureSnapshotJpegBase64). 1024x768 is under the cap, so it

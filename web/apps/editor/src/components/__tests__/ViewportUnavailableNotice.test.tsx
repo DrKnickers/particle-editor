@@ -64,11 +64,14 @@ describe("ViewportUnavailableNotice", () => {
     (window as unknown as { chrome: unknown }).chrome = {
       webview: {
         postMessage: vi.fn(),
-        addEventListener: (_ev: string, h: typeof receive) => { receive = h; },
+        addEventListener: (_ev: string, h: typeof receive) => {
+          receive = h;
+        },
       },
     };
     const event = {
-      type: "evt", kind: "viewport/unavailable",
+      type: "evt",
+      kind: "viewport/unavailable",
       payload: { reason: "The graphics frame could not be attached." },
     };
     const bridge = new NativeBridge();

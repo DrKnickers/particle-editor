@@ -30,10 +30,10 @@ test("F2 on focused tree row enters inline rename (input appears)", async () => 
   const seed = await page.evaluate(async () => {
     const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
-    const tree = await bridge.request({
+    const tree = (await bridge.request({
       kind: "emitters/list",
       params: {},
-    }) as { root: { children: { id: number; name: string }[] } };
+    })) as { root: { children: { id: number; name: string }[] } };
     return { firstId: tree.root.children[0]?.id ?? -1, firstName: tree.root.children[0]?.name ?? "" };
   });
   if (seed.firstId < 0) {
@@ -67,16 +67,16 @@ test("Delete key on focused tree fires emitters/delete on the selection", async 
   const seed = await page.evaluate(async () => {
     const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
-    const before = await bridge.request({
+    const before = (await bridge.request({
       kind: "emitters/list",
       params: {},
-    }) as { root: { children: { id: number }[] } };
+    })) as { root: { children: { id: number }[] } };
     const firstId = before.root.children[0]?.id ?? -1;
     if (firstId < 0) return { error: "no seed root" };
-    const dup = await bridge.request({
+    const dup = (await bridge.request({
       kind: "emitters/duplicate",
       params: { id: firstId },
-    }) as { ok: boolean; newId?: number };
+    })) as { ok: boolean; newId?: number };
     if (!dup.ok || typeof dup.newId !== "number") return { error: "duplicate failed" };
     return { dupId: dup.newId };
   });
@@ -87,7 +87,7 @@ test("Delete key on focused tree fires emitters/delete on the selection", async 
 
   const before = await page.evaluate(async () => {
     const bridge = window.bridge!;
-    const tree = await bridge.request({ kind: "emitters/list", params: {} }) as {
+    const tree = (await bridge.request({ kind: "emitters/list", params: {} })) as {
       root: { children: { id: number }[] };
     };
     return tree.root.children.length;
@@ -104,12 +104,10 @@ test("Delete key on focused tree fires emitters/delete on the selection", async 
     ({ countBefore }) => {
       const bridge = window.bridge;
       if (!bridge) return false;
-      return bridge
-        .request({ kind: "emitters/list", params: {} })
-        .then((t: unknown) => {
-          const tree = t as { root: { children: { id: number }[] } };
-          return tree.root.children.length < countBefore;
-        });
+      return bridge.request({ kind: "emitters/list", params: {} }).then((t: unknown) => {
+        const tree = t as { root: { children: { id: number }[] } };
+        return tree.root.children.length < countBefore;
+      });
     },
     { countBefore: before },
     { timeout: 5_000 },
@@ -117,7 +115,7 @@ test("Delete key on focused tree fires emitters/delete on the selection", async 
 
   const after = await page.evaluate(async () => {
     const bridge = window.bridge!;
-    const tree = await bridge.request({ kind: "emitters/list", params: {} }) as {
+    const tree = (await bridge.request({ kind: "emitters/list", params: {} })) as {
       root: { children: { id: number }[] };
     };
     return tree.root.children.length;
@@ -132,25 +130,25 @@ test("emitters/copy + paste round-trip via the bridge creates a new root", async
     const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
 
-    const before = await bridge.request({
+    const before = (await bridge.request({
       kind: "emitters/list",
       params: {},
-    }) as { root: { children: { id: number; name: string }[] } };
+    })) as { root: { children: { id: number; name: string }[] } };
     const srcId = before.root.children[0]?.id ?? -1;
     if (srcId < 0) return { error: "no seed root" };
     const srcName = before.root.children[0]!.name;
     const countBefore = before.root.children.length;
 
     await bridge.request({ kind: "emitters/copy", params: { ids: [srcId] } });
-    const pasteRes = await bridge.request({
+    const pasteRes = (await bridge.request({
       kind: "emitters/paste",
       params: {},
-    }) as { newIds: number[] };
+    })) as { newIds: number[] };
 
-    const after = await bridge.request({
+    const after = (await bridge.request({
       kind: "emitters/list",
       params: {},
-    }) as { root: { children: { id: number; name: string }[] } };
+    })) as { root: { children: { id: number; name: string }[] } };
     const countAfter = after.root.children.length;
 
     // Cleanup — drop the pasted root(s).

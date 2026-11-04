@@ -5,7 +5,19 @@
 // via ×; base game is implicit (a pinned, non-removable footer row). Apply dispatches
 // mods/set-layers once and calls onApplied so the menu summary refreshes.
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
-import { Search, Package, Check, Plus, GripVertical, ChevronUp, ChevronDown, X, Lock, Triangle, Layers } from "lucide-react";
+import {
+  Search,
+  Package,
+  Check,
+  Plus,
+  GripVertical,
+  ChevronUp,
+  ChevronDown,
+  X,
+  Lock,
+  Triangle,
+  Layers,
+} from "lucide-react";
 import type { Bridge, LayerRef } from "@particle-editor/bridge-schema";
 import { Modal } from "@/components/Modal";
 import { cn } from "@/lib/utils";
@@ -21,30 +33,42 @@ type Props = { bridge: Bridge; open: boolean; onOpenChange: (open: boolean) => v
 // for an in-stack path absent from the catalog (matches MenuBar's basename).
 export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props) {
   const [catalog, setCatalog] = useState<LayerRef[]>([]);
-  const [order, setOrder] = useState<string[]>([]);   // working stack (paths, front = top)
+  const [order, setOrder] = useState<string[]>([]); // working stack (paths, front = top)
   const [query, setQuery] = useState("");
   const [applyPending, setApplyPending] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
-  const [loadState, setLoadState] = useState<{ bridge: Bridge; status: "loading" | "ready" | "error"; error?: string }>({ bridge, status: "loading" });
+  const [loadState, setLoadState] = useState<{ bridge: Bridge; status: "loading" | "ready" | "error"; error?: string }>(
+    { bridge, status: "loading" },
+  );
   const loadGeneration = useRef(0);
   const ready = open && loadState.bridge === bridge && loadState.status === "ready";
 
   // An unresolved in-stack path (absent from the catalog) falls back to its
   // normalized basename rather than the full path, so trailing separators do not blank the fallback label.
-  const labelFor = (p: string) => catalog.find((l) => eqPath(l.path, p))?.label ?? basename(p, { normalizeSeparators: true });
+  const labelFor = (p: string) =>
+    catalog.find((l) => eqPath(l.path, p))?.label ?? basename(p, { normalizeSeparators: true });
   const inStack = (p: string) => order.some((o) => eqPath(o, p));
-  const add = (p: string) => { if (ready) setOrder((o) => (inStack(p) ? o : [...o, p])); };
-  const remove = (i: number) => { if (ready) setOrder((o) => o.filter((_, j) => j !== i)); };
-  const move = (i: number, dir: -1 | 1) => setOrder((o) => {
-    if (!ready) return o;
-    const j = i + dir; if (j < 0 || j >= o.length) return o;
-    const n = o.slice(); [n[i], n[j]] = [n[j], n[i]]; return n;
-  });
+  const add = (p: string) => {
+    if (ready) setOrder((o) => (inStack(p) ? o : [...o, p]));
+  };
+  const remove = (i: number) => {
+    if (ready) setOrder((o) => o.filter((_, j) => j !== i));
+  };
+  const move = (i: number, dir: -1 | 1) =>
+    setOrder((o) => {
+      if (!ready) return o;
+      const j = i + dir;
+      if (j < 0 || j >= o.length) return o;
+      const n = o.slice();
+      [n[i], n[j]] = [n[j], n[i]];
+      return n;
+    });
   // Move `from` to insertion gap `target` (target === order.length → append).
-  const reorder = (from: number, target: number) => setOrder((o) => {
-    if (!ready) return o;
-    return moveItemToGap(o, from, target);
-  });
+  const reorder = (from: number, target: number) =>
+    setOrder((o) => {
+      if (!ready) return o;
+      return moveItemToGap(o, from, target);
+    });
 
   // Shared drag/glide engine (also powers the Mods dropdown's in-place reorder).
   const drag = useStackReorder({ order, labelFor, onReorder: reorder });
@@ -54,20 +78,27 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
     setLoadState({ bridge, status: "loading" });
     setCatalog([]);
     setOrder([]);
-    bridge.request({ kind: "mods/list", params: {} }).then((r) => {
-      if (generation !== loadGeneration.current) return;
-      setCatalog(Array.isArray(r?.layers) ? r.layers : []);
-      // Initialise the working order to the FULL incoming configured stack as-is.
-      // Do NOT filter to only the catalog: it excludes temporarily unavailable
-      // paths as well as mod roots without Data\Art (a migrated submod root or a
-      // MEG-packed mod), so dropping either kind here would silently erase those
-      // layers on Apply.
-      setOrder(Array.isArray(r?.stack) ? r.stack : []);
-      setLoadState({ bridge, status: "ready" });
-    }).catch((err: unknown) => {
-      if (generation !== loadGeneration.current) return;
-      setLoadState({ bridge, status: "error", error: `Couldn't load mods: ${err instanceof Error ? err.message : String(err)}` });
-    });
+    bridge
+      .request({ kind: "mods/list", params: {} })
+      .then((r) => {
+        if (generation !== loadGeneration.current) return;
+        setCatalog(Array.isArray(r?.layers) ? r.layers : []);
+        // Initialise the working order to the FULL incoming configured stack as-is.
+        // Do NOT filter to only the catalog: it excludes temporarily unavailable
+        // paths as well as mod roots without Data\Art (a migrated submod root or a
+        // MEG-packed mod), so dropping either kind here would silently erase those
+        // layers on Apply.
+        setOrder(Array.isArray(r?.stack) ? r.stack : []);
+        setLoadState({ bridge, status: "ready" });
+      })
+      .catch((err: unknown) => {
+        if (generation !== loadGeneration.current) return;
+        setLoadState({
+          bridge,
+          status: "error",
+          error: `Couldn't load mods: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      });
   }, [bridge]);
 
   useEffect(() => {
@@ -78,7 +109,9 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
     setApplyError(null);
     setQuery("");
     if (open) load();
-    return () => { loadGeneration.current += 1; };
+    return () => {
+      loadGeneration.current += 1;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, bridge]);
 
@@ -126,13 +159,18 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
     const key = l.kind === "nested" ? (l.parentPath ?? l.path) : l.path;
     const headerLabel = l.kind === "nested" ? (l.parentLabel ?? l.label) : l.label;
     let grp = groups.find((x) => eqPath(x.key, key));
-    if (!grp) { grp = { key, label: headerLabel, items: [] }; groups.push(grp); }
+    if (!grp) {
+      grp = { key, label: headerLabel, items: [] };
+      groups.push(grp);
+    }
     grp.items.push(l);
   }
   // Search filter (case-insensitive on the label); empty groups drop out.
   const q = query.trim().toLowerCase();
   const visibleGroups = q
-    ? groups.map((g) => ({ ...g, items: g.items.filter((l) => l.label.toLowerCase().includes(q)) })).filter((g) => g.items.length > 0)
+    ? groups
+        .map((g) => ({ ...g, items: g.items.filter((l) => l.label.toLowerCase().includes(q)) }))
+        .filter((g) => g.items.length > 0)
     : groups;
 
   // Make-room gap spacer (matches EmitterTree): role=presentation so it's never a
@@ -150,11 +188,10 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
     <Modal bridge={bridge} open={open} onOpenChange={onOpenChange} title="Mod Load Order" size="lg">
       <Modal.Body>
         <p className="mb-3 text-2xs leading-relaxed text-text-3">
-          Top of the stack <span className="text-text-2">wins</span> on a shared file. Drag or use the
-          arrows to reorder. <span className="text-text-2">Base game</span> is always the bottom layer.
+          Top of the stack <span className="text-text-2">wins</span> on a shared file. Drag or use the arrows to
+          reorder. <span className="text-text-2">Base game</span> is always the bottom layer.
         </p>
         <div className="flex items-stretch gap-3.5">
-
           {/* LEFT — available */}
           <div className="flex min-w-0 flex-1 flex-col">
             <div className="mb-[7px] text-3xs font-semibold uppercase tracking-[0.06em] text-text-3">
@@ -176,7 +213,9 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
             <div className="flex flex-col gap-2">
               {visibleGroups.map((g) => (
                 <div key={g.key}>
-                  <div className="px-1.5 pb-1 text-3xs font-semibold uppercase tracking-[0.06em] text-text-3">{g.label}</div>
+                  <div className="px-1.5 pb-1 text-3xs font-semibold uppercase tracking-[0.06em] text-text-3">
+                    {g.label}
+                  </div>
                   <div className="flex flex-col gap-px">
                     {g.items.map((l) => {
                       const added = inStack(l.path);
@@ -218,16 +257,24 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
                 </div>
               ))}
               {!ready && (loadState.bridge !== bridge || loadState.status === "loading") && (
-                <div role="status" className="px-1.5 py-2 text-2xs text-text-3">Loading mods…</div>
+                <div role="status" className="px-1.5 py-2 text-2xs text-text-3">
+                  Loading mods…
+                </div>
               )}
               {loadState.bridge === bridge && loadState.status === "error" && (
                 <div className="flex flex-col items-start gap-2 px-1.5 py-2 text-2xs">
-                  <div role="alert" className="text-danger-fg">{loadState.error}</div>
-                  <Button variant="secondary" onClick={load}>Retry</Button>
+                  <div role="alert" className="text-danger-fg">
+                    {loadState.error}
+                  </div>
+                  <Button variant="secondary" onClick={load}>
+                    Retry
+                  </Button>
                 </div>
               )}
               {ready && visibleGroups.length === 0 && (
-                <div className="px-1.5 py-2 text-2xs text-text-3">{catalog.length === 0 ? "No mods found." : `No mods match “${query}”.`}</div>
+                <div className="px-1.5 py-2 text-2xs text-text-3">
+                  {catalog.length === 0 ? "No mods found." : `No mods match “${query}”.`}
+                </div>
               )}
             </div>
           </div>
@@ -272,19 +319,39 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
                           <span className="flex w-[14px] shrink-0 items-center justify-center text-text-3" aria-hidden>
                             <GripVertical className="size-2.5" />
                           </span>
-                          <span className="min-w-[13px] shrink-0 text-right text-2xs font-semibold tabular-nums text-text-3" aria-hidden="true">{i + 1}</span>
+                          <span
+                            className="min-w-[13px] shrink-0 text-right text-2xs font-semibold tabular-nums text-text-3"
+                            aria-hidden="true"
+                          >
+                            {i + 1}
+                          </span>
                           <span className="min-w-0 flex-1 truncate text-text">{labelFor(p)}</span>
                           <div className="flex shrink-0 items-center gap-px">
-                            <IconButton variant="row" label={`Move ${labelFor(p)} up`} tip="Move up"
-                                        disabled={i === 0} onClick={() => move(i, -1)}>
+                            <IconButton
+                              variant="row"
+                              label={`Move ${labelFor(p)} up`}
+                              tip="Move up"
+                              disabled={i === 0}
+                              onClick={() => move(i, -1)}
+                            >
                               <ChevronUp className="size-3" strokeWidth={1.6} />
                             </IconButton>
-                            <IconButton variant="row" label={`Move ${labelFor(p)} down`} tip="Move down"
-                                        disabled={i === order.length - 1} onClick={() => move(i, 1)}>
+                            <IconButton
+                              variant="row"
+                              label={`Move ${labelFor(p)} down`}
+                              tip="Move down"
+                              disabled={i === order.length - 1}
+                              onClick={() => move(i, 1)}
+                            >
                               <ChevronDown className="size-3" strokeWidth={1.6} />
                             </IconButton>
-                            <IconButton variant="row" label={`Remove ${labelFor(p)}`} tip="Remove"
-                                        onClick={() => remove(i)} className="text-text-3 hover:text-danger-fg">
+                            <IconButton
+                              variant="row"
+                              label={`Remove ${labelFor(p)}`}
+                              tip="Remove"
+                              onClick={() => remove(i)}
+                              className="text-text-3 hover:text-danger-fg"
+                            >
                               <X className="size-3" strokeWidth={1.5} />
                             </IconButton>
                           </div>
@@ -316,7 +383,9 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
           </span>
         )}
         <Modal.CancelButton onClick={() => onOpenChange(false)}>Cancel</Modal.CancelButton>
-        <Modal.OkButton onClick={apply} disabled={!ready || applyPending}>{applyPending ? "Applying…" : "Apply"}</Modal.OkButton>
+        <Modal.OkButton onClick={apply} disabled={!ready || applyPending}>
+          {applyPending ? "Applying…" : "Apply"}
+        </Modal.OkButton>
       </Modal.Footer>
 
       {drag.chipNode}

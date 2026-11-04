@@ -30,8 +30,10 @@ const VARIANT_CLASS: Record<IconButtonVariant, string> = {
   // `:active` pressed state (lighter bg + slight scale), suppressed while
   // disabled — the Tailwind twin of `.tb-btn`'s press feedback.
   tree: "flex h-7 w-7 items-center justify-center rounded text-text-2 transition motion-reduce:transition-none hover:bg-panel-2 hover:text-text active:bg-panel-3 active:scale-95 disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent disabled:active:scale-100 focus-ring",
-  toggle: "grid h-6 w-6 place-items-center rounded border transition-colors motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-40 focus-ring",
-  ghost: "flex size-6 items-center justify-center rounded text-text-2 transition-colors motion-reduce:transition-none hover:bg-panel-2 hover:text-text focus-ring",
+  toggle:
+    "grid h-6 w-6 place-items-center rounded border transition-colors motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-40 focus-ring",
+  ghost:
+    "flex size-6 items-center justify-center rounded text-text-2 transition-colors motion-reduce:transition-none hover:bg-panel-2 hover:text-text focus-ring",
   row: "flex size-5 shrink-0 items-center justify-center rounded-[var(--radius-xs)] text-text-2 transition-colors motion-reduce:transition-none hover:bg-hover hover:text-text disabled:pointer-events-none disabled:opacity-40 focus-ring",
 };
 

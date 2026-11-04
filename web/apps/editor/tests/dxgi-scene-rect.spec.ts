@@ -33,9 +33,7 @@ import { test, expect, type Page } from "./helpers/cdp";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const HOST_LOG_PATH = process.env.LOCALAPPDATA
-  ? join(process.env.LOCALAPPDATA, "AloParticleEditor", "host.log")
-  : "";
+const HOST_LOG_PATH = process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, "AloParticleEditor", "host.log") : "";
 
 let page: Page;
 
@@ -60,14 +58,12 @@ function readHostLog(): string {
 // Parse all [COMP-engine-transform] lines into structured tuples.
 // Format: `[COMP-engine-transform] clip=(L,T,R,B) (absolute host-client)`
 function extractTransforms(log: string): Array<{ l: number; t: number; r: number; b: number }> {
-  return [...log.matchAll(/\[COMP-engine-transform\] clip=\((-?\d+),(-?\d+),(-?\d+),(-?\d+)\)/g)].map(
-    (m) => ({
-      l: parseInt(m[1], 10),
-      t: parseInt(m[2], 10),
-      r: parseInt(m[3], 10),
-      b: parseInt(m[4], 10),
-    }),
-  );
+  return [...log.matchAll(/\[COMP-engine-transform\] clip=\((-?\d+),(-?\d+),(-?\d+),(-?\d+)\)/g)].map((m) => ({
+    l: parseInt(m[1], 10),
+    t: parseInt(m[2], 10),
+    r: parseInt(m[3], 10),
+    b: parseInt(m[4], 10),
+  }));
 }
 
 test("[COMP-engine-transform] boot seed fired with non-degenerate clip", () => {
@@ -98,10 +94,13 @@ test("layout/scene-rect dispatch produces a matching [COMP-engine-transform] lin
   const expectedR = targetX + targetW;
   const expectedB = targetY + targetH;
 
-  await page.evaluate(async ({ x, y, w, h }) => {
-    const b = window.bridge!;
-    await b.request({ kind: "layout/scene-rect", params: { x, y, w, h } });
-  }, { x: targetX, y: targetY, w: targetW, h: targetH });
+  await page.evaluate(
+    async ({ x, y, w, h }) => {
+      const b = window.bridge!;
+      await b.request({ kind: "layout/scene-rect", params: { x, y, w, h } });
+    },
+    { x: targetX, y: targetY, w: targetW, h: targetH },
+  );
 
   // The deferred-clip mechanism (Compositor.cpp) queues
   // the transform; it applies in the NEXT CompositeEngineFrame after
@@ -119,8 +118,8 @@ test("layout/scene-rect dispatch produces a matching [COMP-engine-transform] lin
   expect(
     found,
     `Expected [COMP-engine-transform] with clip=(${expectedL},${expectedT},${expectedR},${expectedB}) ` +
-    `after layout/scene-rect dispatch (x=${targetX} y=${targetY} w=${targetW} h=${targetH}). ` +
-    `Recent transforms: ${JSON.stringify(transforms.slice(-5))}`,
+      `after layout/scene-rect dispatch (x=${targetX} y=${targetY} w=${targetW} h=${targetH}). ` +
+      `Recent transforms: ${JSON.stringify(transforms.slice(-5))}`,
   ).toBeDefined();
 });
 
@@ -129,9 +128,9 @@ test("three sequential scene-rect dispatches produce three transform lines in or
   // tuples so identical-args idempotence in SetEngineVisualTransform
   // doesn't suppress any of them.
   const dispatches = [
-    { x: 200, y: 80,  w: 1000, h: 700 },   // clip = (200, 80, 1200, 780)
-    { x: 250, y: 100, w: 1100, h: 720 },   // clip = (250, 100, 1350, 820)
-    { x: 220, y: 90,  w: 1050, h: 710 },   // clip = (220, 90, 1270, 800)
+    { x: 200, y: 80, w: 1000, h: 700 }, // clip = (200, 80, 1200, 780)
+    { x: 250, y: 100, w: 1100, h: 720 }, // clip = (250, 100, 1350, 820)
+    { x: 220, y: 90, w: 1050, h: 710 }, // clip = (220, 90, 1270, 800)
   ];
 
   const transformsBefore = extractTransforms(readHostLog()).length;
@@ -166,7 +165,7 @@ test("three sequential scene-rect dispatches produce three transform lines in or
     expect(
       found,
       `Expected transform clip=(${expectedL},${expectedT},${expectedR},${expectedB}) ` +
-      `for dispatch ${JSON.stringify(d)}. Got transforms: ${JSON.stringify(newTransforms)}`,
+        `for dispatch ${JSON.stringify(d)}. Got transforms: ${JSON.stringify(newTransforms)}`,
     ).toBeDefined();
   }
 
@@ -184,8 +183,8 @@ test("three sequential scene-rect dispatches produce three transform lines in or
     expect(
       indices[i],
       `Transform ordering broken: ${expectedTuples[i]} appeared at index ${indices[i]}, ` +
-      `expected AFTER ${expectedTuples[i - 1]} at index ${indices[i - 1]}. ` +
-      `New transforms: ${JSON.stringify(newTuples)}`,
+        `expected AFTER ${expectedTuples[i - 1]} at index ${indices[i - 1]}. ` +
+        `New transforms: ${JSON.stringify(newTuples)}`,
     ).toBeGreaterThan(indices[i - 1]);
   }
 });
@@ -208,7 +207,7 @@ test("no [COMP-engine-fail] lines emitted by the scene-rect path", () => {
   if (totalFails > 0) {
     throw new Error(
       `Found ${totalFails} transform-related [COMP-engine-fail] line(s):\n  ` +
-      [...failLines, ...applyFailLines].join("\n  "),
+        [...failLines, ...applyFailLines].join("\n  "),
     );
   }
   expect(totalFails).toBe(0);

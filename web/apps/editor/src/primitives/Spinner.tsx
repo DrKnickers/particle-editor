@@ -178,34 +178,43 @@ export function Spinner({
   // sidesteps float-ULP differences between what we sent and what echoes back.
   const pendingBase = useRef<number | null>(null);
 
-  const commit = useCallback((raw: string, modifiers?: { shift?: boolean; ctrl?: boolean }) => {
-    const parsed = parseValue(raw);
-    if (parsed === null) {
-      // Invalid input: revert.
-      setText(fmt(value));
-      return;
-    }
-    let final = parsed;
-    if (modifiers) {
-      // Modifier-adjusted steps aren't used in commit from text, only from
-      // wheel/drag. But keep the hook consistent.
-    }
-    final = clamp(parsed, min, max);
-    setText(fmt(final));
-    if (final !== value) { pendingBase.current = valueRef.current; onChange(final); }
-  }, [value, onChange, min, max, fmt]);
+  const commit = useCallback(
+    (raw: string, modifiers?: { shift?: boolean; ctrl?: boolean }) => {
+      const parsed = parseValue(raw);
+      if (parsed === null) {
+        // Invalid input: revert.
+        setText(fmt(value));
+        return;
+      }
+      let final = parsed;
+      if (modifiers) {
+        // Modifier-adjusted steps aren't used in commit from text, only from
+        // wheel/drag. But keep the hook consistent.
+      }
+      final = clamp(parsed, min, max);
+      setText(fmt(final));
+      if (final !== value) {
+        pendingBase.current = valueRef.current;
+        onChange(final);
+      }
+    },
+    [value, onChange, min, max, fmt],
+  );
 
-  const adjustBy = useCallback((delta: number) => {
-    // Round so a float step can't leave drift (0.2 + 0.1 = 0.30000000000000004)
-    // in the committed value — to the displayed precision, or the step's own
-    // precision when that is finer, so a Ctrl fine-step (0.001 on a 2dp field)
-    // still moves the value instead of rounding back to where it started.
-    const scale = 10 ** Math.min(10, Math.max(dp, decimalPlaces(delta)));
-    const next = clamp(Math.round((value + delta) * scale) / scale, min, max);
-    setText(fmt(next));
-    pendingBase.current = valueRef.current;
-    onChange(next);
-  }, [value, onChange, min, max, fmt, dp]);
+  const adjustBy = useCallback(
+    (delta: number) => {
+      // Round so a float step can't leave drift (0.2 + 0.1 = 0.30000000000000004)
+      // in the committed value — to the displayed precision, or the step's own
+      // precision when that is finer, so a Ctrl fine-step (0.001 on a 2dp field)
+      // still moves the value instead of rounding back to where it started.
+      const scale = 10 ** Math.min(10, Math.max(dp, decimalPlaces(delta)));
+      const next = clamp(Math.round((value + delta) * scale) / scale, min, max);
+      setText(fmt(next));
+      pendingBase.current = valueRef.current;
+      onChange(next);
+    },
+    [value, onChange, min, max, fmt, dp],
+  );
 
   // Keyboard: Enter commits; arrow keys increment/decrement. Shift = coarse
   // (×10); Ctrl = fine (×0.1) on decimal fields only — whole-number fields
@@ -404,11 +413,7 @@ export function Spinner({
       // Whole-number fields ignore Ctrl so a scrub never yields a fraction.
       const fine = stepIsWhole ? step : step / 10;
       const s = me.shiftKey ? step * 10 : me.ctrlKey ? fine : step;
-      const next = clamp(
-        Math.round((dragStartValue.current + dy * s) * 1e6) / 1e6,
-        min,
-        max,
-      );
+      const next = clamp(Math.round((dragStartValue.current + dy * s) * 1e6) / 1e6, min, max);
       setText(fmt(next));
       // Queue the coalesced emission (release flushes the tail value).
       scrubPendingVal = next;
@@ -480,10 +485,13 @@ export function Spinner({
   };
 
   // Clear any pending hold timers and in-flight gesture listeners on unmount.
-  useEffect(() => () => {
-    clearHoldTimers();
-    detachGesture.current?.();
-  }, [clearHoldTimers]);
+  useEffect(
+    () => () => {
+      clearHoldTimers();
+      detachGesture.current?.();
+    },
+    [clearHoldTimers],
+  );
 
   // Keep text in sync when prop changes from outside (not while actively
   // editing). Effect runs post-commit so the displayed value reflects external
@@ -520,14 +528,10 @@ export function Spinner({
   // present, push the unit left of the arrow column too.
   const ARROW_W = 14;
   const unitPad = unit ? unit.length * 7 + 6 : 0; // ~7px per char + a hair
-  const inputPadRight = ARROW_W + unitPad + 4;    // arrows + unit + breathing room
+  const inputPadRight = ARROW_W + unitPad + 4; // arrows + unit + breathing room
 
   return (
-    <div
-      ref={wrapRef}
-      className={cn("relative flex items-center", dragging && "cursor-ns-resize")}
-      style={{ height }}
-    >
+    <div ref={wrapRef} className={cn("relative flex items-center", dragging && "cursor-ns-resize")} style={{ height }}>
       <input
         ref={inputRef}
         type="text"
@@ -535,7 +539,10 @@ export function Spinner({
         disabled={disabled}
         aria-label={ariaLabel}
         aria-describedby={ariaDescribedBy}
-        onChange={(e) => { edited.current = true; setText(e.target.value); }}
+        onChange={(e) => {
+          edited.current = true;
+          setText(e.target.value);
+        }}
         onKeyDown={handleKeyDown}
         onBlur={handleBlur}
         onFocus={handleFocus}

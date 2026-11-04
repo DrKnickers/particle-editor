@@ -17,13 +17,7 @@ import {
   MAX_MAX_PARTICLES,
   type OverloadGuardConfig,
 } from "@/lib/overload-guard";
-import {
-  applyMsaaLevel,
-  queryMsaaLevels,
-  readMsaaLevel,
-  writeMsaaLevel,
-  type MsaaLevel,
-} from "@/lib/msaa-quality";
+import { applyMsaaLevel, queryMsaaLevels, readMsaaLevel, writeMsaaLevel, type MsaaLevel } from "@/lib/msaa-quality";
 import { applyModelShadows, readModelShadows, writeModelShadows } from "@/lib/model-shadows";
 import { applySoftShadows, readSoftShadows, writeSoftShadows } from "@/lib/soft-shadows";
 
@@ -52,7 +46,10 @@ function SectionCard({ title, children }: { title: string; children: ReactNode }
 export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
   const [mode, setMode] = useState<ThemeMode>(() => readStoredMode());
   const [confirmDelete, setConfirmDelete] = useState<boolean>(() => readConfirmDelete());
-  const choose = (m: ThemeMode) => { setMode(m); applyMode(m); };
+  const choose = (m: ThemeMode) => {
+    setMode(m);
+    applyMode(m);
+  };
 
   const [guard, setGuard] = useState<OverloadGuardConfig>(() => readOverloadGuard());
   // Draft string for the number field so partial typing ("2", "25") isn't
@@ -90,9 +87,7 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
       // Do NOT collapse to "Off-only", do NOT persist, do NOT send.
       if (levels.length === 0) return;
       // Filter to only the valid set to avoid unvalidated casts downstream.
-      const validLevels = levels.filter((l): l is MsaaLevel =>
-        l === 0 || l === 2 || l === 4 || l === 8,
-      );
+      const validLevels = levels.filter((l): l is MsaaLevel => l === 0 || l === 2 || l === 4 || l === 8);
       if (validLevels.length === 0) return;
       setMsaaLevels(validLevels);
       // Reconcile displayed value — READ-ONLY: never writeMsaaLevel or
@@ -106,7 +101,9 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
           : 0;
       setMsaaLevel(displayed);
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [bridge]);
 
   const commitMsaaLevel = (level: MsaaLevel) => {
@@ -141,7 +138,6 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
     <Modal bridge={bridge} open={open} onOpenChange={onOpenChange} title="Preferences" size="md">
       <Modal.Body>
         <div className="flex flex-col gap-2.5">
-
           {/* APPEARANCE */}
           <SectionCard title="Appearance">
             <div className="flex items-center justify-between gap-3 px-3 py-[9px]">
@@ -163,7 +159,10 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
                 id="pref-confirm-delete"
                 aria-label="Confirm before deleting emitters"
                 checked={confirmDelete}
-                onChange={(e) => { setConfirmDelete(e.target.checked); writeConfirmDelete(e.target.checked); }}
+                onChange={(e) => {
+                  setConfirmDelete(e.target.checked);
+                  writeConfirmDelete(e.target.checked);
+                }}
               />
             </div>
           </SectionCard>
@@ -241,8 +240,7 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
               <div className="mx-3 mb-[11px] flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 px-[9px] py-[7px]">
                 <AlertTriangle className="mt-px size-3 shrink-0 text-warning-fg" strokeWidth={1.5} />
                 <span className="text-2xs leading-snug text-warning-fg">
-                  Unlimited spawning can crash the editor on extreme effects —
-                  unsaved changes are at risk.
+                  Unlimited spawning can crash the editor on extreme effects — unsaved changes are at risk.
                 </span>
               </div>
             )}
@@ -253,7 +251,9 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
               disabled while the query is in-flight (msaaLevels===null). */}
           <SectionCard title="Rendering">
             <div className="flex items-center justify-between gap-3 px-3 py-[9px]">
-              <label htmlFor="pref-msaa-level" className="text-xs text-text">Antialiasing</label>
+              <label htmlFor="pref-msaa-level" className="text-xs text-text">
+                Antialiasing
+              </label>
               <NativeSelect
                 id="pref-msaa-level"
                 aria-label="Antialiasing"

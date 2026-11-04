@@ -7,14 +7,28 @@ import { act, renderHook } from "@testing-library/react";
 import type { Request, TimelineStateDto } from "@particle-editor/bridge-schema";
 import { makeBridgeStub } from "@/test/bridge-stub";
 import {
-  CLOSED_TIMELINE, closeTimeline, getTimelineState, openTimeline, resetTimeline, resetTimelineStoreForTests,
-  seekTimeline, setTimelineLoop, setTimelinePlaying, stepTimeline, toggleTimeline, useTimelineEvents,
+  CLOSED_TIMELINE,
+  closeTimeline,
+  getTimelineState,
+  openTimeline,
+  resetTimeline,
+  resetTimelineStoreForTests,
+  seekTimeline,
+  setTimelineLoop,
+  setTimelinePlaying,
+  stepTimeline,
+  toggleTimeline,
+  useTimelineEvents,
   useTimelineStore,
 } from "../timeline";
 import { __resetStatusFeedbackForTests, useStatusFeedback } from "../status-feedback";
 
 const open = (patch: Partial<TimelineStateDto> = {}): TimelineStateDto => ({
-  ...CLOSED_TIMELINE, active: true, status: "paused", seed: 7, ...patch,
+  ...CLOSED_TIMELINE,
+  active: true,
+  status: "paused",
+  seed: 7,
+  ...patch,
 });
 
 const flush = () => act(() => new Promise((r) => setTimeout(r, 0)));
@@ -72,7 +86,9 @@ describe("timeline store", () => {
     });
     await openTimeline(bridge);
     expect(getTimelineState()).toEqual(CLOSED_TIMELINE);
-    expect(useStatusFeedback.getState().message).toBe("Open timeline failed: the timeline is not available in this run");
+    expect(useStatusFeedback.getState().message).toBe(
+      "Open timeline failed: the timeline is not available in this run",
+    );
   });
 });
 
@@ -96,7 +112,9 @@ describe("seeks", () => {
     expect(sent(bridge, "timeline/seek").map((r) => (r as { params: { frame: number } }).params.frame)).toEqual([10]);
     release.shift()!();
     await flush();
-    expect(sent(bridge, "timeline/seek").map((r) => (r as { params: { frame: number } }).params.frame)).toEqual([10, 30]);
+    expect(sent(bridge, "timeline/seek").map((r) => (r as { params: { frame: number } }).params.frame)).toEqual([
+      10, 30,
+    ]);
     release.shift()!();
     await flush();
     expect(getTimelineState().frame).toBe(30);
@@ -106,18 +124,22 @@ describe("seeks", () => {
   it("steps build on the seek in flight, then on the pending one", async () => {
     const { bridge, release } = deferredSeekBridge();
     useTimelineStore.getState().apply(open({ frame: 100 }));
-    void seekTimeline(bridge, 300);   // in flight; the store still says 100
-    stepTimeline(bridge, 1);          // 301, pending
-    stepTimeline(bridge, 10);         // 311, pending
+    void seekTimeline(bridge, 300); // in flight; the store still says 100
+    stepTimeline(bridge, 1); // 301, pending
+    stepTimeline(bridge, 10); // 311, pending
     release.shift()!();
     await flush();
-    expect(sent(bridge, "timeline/seek").map((r) => (r as { params: { frame: number } }).params.frame)).toEqual([300, 311]);
-    stepTimeline(bridge, 1);          // 312, while 311 is in flight
+    expect(sent(bridge, "timeline/seek").map((r) => (r as { params: { frame: number } }).params.frame)).toEqual([
+      300, 311,
+    ]);
+    stepTimeline(bridge, 1); // 312, while 311 is in flight
     release.shift()!();
     await flush();
     release.shift()!();
     await flush();
-    expect(sent(bridge, "timeline/seek").map((r) => (r as { params: { frame: number } }).params.frame)).toEqual([300, 311, 312]);
+    expect(sent(bridge, "timeline/seek").map((r) => (r as { params: { frame: number } }).params.frame)).toEqual([
+      300, 311, 312,
+    ]);
     expect(getTimelineState().frame).toBe(312);
   });
 
@@ -128,7 +150,9 @@ describe("seeks", () => {
     release.shift()!();
     await flush();
     stepTimeline(bridge, -1000);
-    expect(sent(bridge, "timeline/seek").map((r) => (r as { params: { frame: number } }).params.frame)).toEqual([600, 0]);
+    expect(sent(bridge, "timeline/seek").map((r) => (r as { params: { frame: number } }).params.frame)).toEqual([
+      600, 0,
+    ]);
   });
 
   it("closing drops a pending seek, and the drain settles even when the host refuses", async () => {

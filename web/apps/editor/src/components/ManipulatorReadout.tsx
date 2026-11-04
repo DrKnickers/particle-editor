@@ -19,20 +19,24 @@ const fmt = (v: number, d: number) => {
 };
 
 export function ManipulatorReadout({
-  bridge, overlayRef,
-}: { bridge: Bridge; overlayRef: React.RefObject<HTMLElement | null> }) {
+  bridge,
+  overlayRef,
+}: {
+  bridge: Bridge;
+  overlayRef: React.RefObject<HTMLElement | null>;
+}) {
   const [drag, setDrag] = useState<DragActive | null>(null);
   const pillRef = useRef<HTMLDivElement>(null);
-  const hideDragForReference = useEngineField(
-    bridge,
-    (s) => s.referenceObjectName === "" || s.referenceObjectLocked,
-  ) ?? false;
+  const hideDragForReference =
+    useEngineField(bridge, (s) => s.referenceObjectName === "" || s.referenceObjectLocked) ?? false;
 
   useEffect(() => {
     const off1 = bridge.on("engine/manipulator/drag", (e) => {
       setDrag(e.payload.active ? e.payload : null);
     });
-    return () => { off1(); };
+    return () => {
+      off1();
+    };
   }, [bridge]);
 
   // Belt-and-suspenders: if the reference object is cleared (mod-switch /
@@ -46,12 +50,14 @@ export function ManipulatorReadout({
   if (!drag || !drag.visible) return null;
 
   const box = overlayRef.current?.getBoundingClientRect();
-  const W = box?.width ?? 0, H = box?.height ?? 0;
-  const pw = pillRef.current?.offsetWidth ?? 0, ph = pillRef.current?.offsetHeight ?? 0;
+  const W = box?.width ?? 0,
+    H = box?.height ?? 0;
+  const pw = pillRef.current?.offsetWidth ?? 0,
+    ph = pillRef.current?.offsetHeight ?? 0;
   const clamp = (v: number, max: number) => Math.max(4, Math.min(v, max - 4));
   const offset = drag.kind === "rotate" ? OFFSET_RING : OFFSET_AXIS;
   const left = clamp(drag.nx * W + offset, W - pw);
-  const top  = clamp(drag.ny * H - offset, H - ph);
+  const top = clamp(drag.ny * H - offset, H - ph);
 
   // Iterate the shorter of the two arrays so a (host-impossible but schema-allowed)
   // labels/values length mismatch can't render "NaN" silently.
@@ -61,8 +67,9 @@ export function ManipulatorReadout({
   // distance, labelled once with a trailing "units" (the pill has room, unlike
   // the cramped XYZ spinner grids that label via their section header).
   const text =
-    Array.from({ length: n }, (_, i) =>
-      `${drag.labels[i]} ${fmt(drag.values[i], drag.decimals)}${isRotate ? "°" : ""}`,
+    Array.from(
+      { length: n },
+      (_, i) => `${drag.labels[i]} ${fmt(drag.values[i], drag.decimals)}${isRotate ? "°" : ""}`,
     ).join("   ") + (isRotate ? "" : "   units");
 
   return (

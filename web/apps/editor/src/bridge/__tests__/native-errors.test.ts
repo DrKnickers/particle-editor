@@ -213,7 +213,9 @@ describe("NativeBridge events", () => {
     const b = new NativeBridge();
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     const seen: unknown[] = [];
-    b.on("dirty/changed" as never, () => { throw new Error("subscriber bug"); });
+    b.on("dirty/changed" as never, () => {
+      throw new Error("subscriber bug");
+    });
     b.on("dirty/changed" as never, (e) => seen.push(e));
     expect(() => deliver(evt("dirty/changed", { dirty: true }))).not.toThrow();
     expect(seen).toEqual([{ kind: "dirty/changed", payload: { dirty: true } }]);
@@ -245,9 +247,7 @@ describe("NativeBridge teardown", () => {
     const p = b.request({ kind: "emitters/list", params: {} } as never);
     window.dispatchEvent(new Event("beforeunload"));
     await expect(p).rejects.toThrow(/disposed|disconnect/i);
-    await expect(b.request({ kind: "emitters/list", params: {} } as never)).rejects.toThrow(
-      /disposed|disconnect/i,
-    );
+    await expect(b.request({ kind: "emitters/list", params: {} } as never)).rejects.toThrow(/disposed|disconnect/i);
     expect(pendingSize(b)).toBe(0);
   });
 
@@ -269,9 +269,10 @@ describe("NativeBridge teardown", () => {
     process.on("unhandledRejection", onUnhandled);
     try {
       const b = new NativeBridge();
-      const settled = b
-        .request({ kind: "emitters/list", params: {} } as never)
-        .then(() => "resolved", (e: Error) => e.message);
+      const settled = b.request({ kind: "emitters/list", params: {} } as never).then(
+        () => "resolved",
+        (e: Error) => e.message,
+      );
       b.dispose();
       await expect(settled).resolves.toMatch(/disposed/);
       // A stale host response for the torn-down request is silently dropped.

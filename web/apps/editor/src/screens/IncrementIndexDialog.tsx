@@ -91,12 +91,9 @@ export function IncrementIndexDialog({ bridge }: Props) {
             />
           </div>
           <p className="text-2xs leading-relaxed text-text-3">
-            Duplicates the emitter and shifts every atlas-index keyframe
-            on the duplicate by this delta. If the source has no index
-            keys, a single key at t=0 is inserted with the chosen value.
-            A repeat count above 1 chains that many duplicates in one step —
-            each made from the previous copy, so the index climbs by the
-            delta each time.
+            Duplicates the emitter and shifts every atlas-index keyframe on the duplicate by this delta. If the source
+            has no index keys, a single key at t=0 is inserted with the chosen value. A repeat count above 1 chains that
+            many duplicates in one step — each made from the previous copy, so the index climbs by the delta each time.
           </p>
         </div>
       </Modal.Body>

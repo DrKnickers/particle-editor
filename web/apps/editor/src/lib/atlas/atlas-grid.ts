@@ -6,9 +6,16 @@ export function gridSide(textureSize: number): number {
   const n = Number.isFinite(textureSize) ? Math.max(1, Math.floor(textureSize)) : 1;
   return Math.floor(Math.sqrt(n));
 }
-export function frameCount(textureSize: number): number { const s = gridSide(textureSize); return s * s; }
-export function isAtlasEligible(textureSize: number): boolean { return gridSide(textureSize) >= 2; }
-export function isAtlasTooLarge(textureSize: number): boolean { return gridSide(textureSize) > ATLAS_MAX_SIDE; }
+export function frameCount(textureSize: number): number {
+  const s = gridSide(textureSize);
+  return s * s;
+}
+export function isAtlasEligible(textureSize: number): boolean {
+  return gridSide(textureSize) >= 2;
+}
+export function isAtlasTooLarge(textureSize: number): boolean {
+  return gridSide(textureSize) > ATLAS_MAX_SIDE;
+}
 export function resolveFrame(value: number, side: number): number | null {
   if (!Number.isFinite(value)) return null;
   const f = Math.floor(value);
@@ -27,9 +34,17 @@ export function wrapFrame(value: number, count: number): number {
   const r = m < 0 ? m + count : m;
   return r === 0 ? 0 : r; // normalise -0 (from negative multiples) to 0
 }
-export interface CellRect { left: number; top: number; width: number; height: number; }
+export interface CellRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
 export function cellRect(k: number, side: number, srcW: number, srcH: number): CellRect {
-  const col = k % side, row = Math.floor(k / side), cw = srcW / side, ch = srcH / side;
+  const col = k % side,
+    row = Math.floor(k / side),
+    cw = srcW / side,
+    ch = srcH / side;
   return { left: col * cw, top: row * ch, width: cw, height: ch };
 }
 // Width-only, count-aware grid sizing for the picker. Aim for a
@@ -39,7 +54,10 @@ export function cellRect(k: number, side: number, srcW: number, srcH: number): C
 // width (cell clamped to `max`), while large atlases stay a dense, scrolling
 // grid at the min-cell floor. Needs only the container width — no fragile
 // height math. Pure: numbers in, numbers out.
-export interface GridLayout { cols: number; cell: number; }
+export interface GridLayout {
+  cols: number;
+  cell: number;
+}
 export function fitGridLayout(n: number, w: number, gap: number, min: number, max: number): GridLayout {
   if (n <= 0 || w <= 0) return { cols: 1, cell: min };
   const ideal = Math.round(Math.sqrt(n));

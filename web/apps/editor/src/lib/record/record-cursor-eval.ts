@@ -222,7 +222,17 @@ export function evalRecordCursor(keys: readonly RecordCursorKey[], t: number): E
     // open and the clip would record a no-op).
     if (ar.ok) {
       // Upcoming target not ready yet — hold at the resolved (due) end.
-      return { x: ar.x, y: ar.y, ok: true, vis: b.vis, press: b.press, activate: b.activate, mods: b.mods, button: b.button, resolved };
+      return {
+        x: ar.x,
+        y: ar.y,
+        ok: true,
+        vis: b.vis,
+        press: b.press,
+        activate: b.activate,
+        mods: b.mods,
+        button: b.button,
+        resolved,
+      };
     }
     if (br.ok) {
       // The due element vanished (e.g. its channel defocused as we leave it) but
@@ -230,10 +240,30 @@ export function evalRecordCursor(keys: readonly RecordCursorKey[], t: number): E
       // DESTINATION entry (computed unconditionally above); a's failure is
       // surfaced only via this frame's top-level ok:false, never per-entry.
       // (Pinned by record-cursor-eval.test.ts.)
-      return { x: br.x, y: br.y, ok: false, vis: b.vis, press: b.press, activate: b.activate, mods: b.mods, button: b.button, resolved };
+      return {
+        x: br.x,
+        y: br.y,
+        ok: false,
+        vis: b.vis,
+        press: b.press,
+        activate: b.activate,
+        mods: b.mods,
+        button: b.button,
+        resolved,
+      };
     }
     // Neither end resolvable mid-transit — hide the cursor this frame.
-    return { x: 0, y: 0, ok: false, vis: false, press: b.press, activate: b.activate, mods: b.mods, button: b.button, resolved };
+    return {
+      x: 0,
+      y: 0,
+      ok: false,
+      vis: false,
+      press: b.press,
+      activate: b.activate,
+      mods: b.mods,
+      button: b.button,
+      resolved,
+    };
   }
 
   return holdKey(last);

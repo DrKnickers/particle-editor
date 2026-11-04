@@ -27,7 +27,7 @@ describe("boolean-pref", () => {
     expect(readBooleanPref(KEY, true)).toBe(false);
   });
 
-  it("write: stores the canonical \"1\"/\"0\"", () => {
+  it('write: stores the canonical "1"/"0"', () => {
     writeBooleanPref(KEY, true);
     expect(localStorage.getItem(KEY)).toBe("1");
     writeBooleanPref(KEY, false);

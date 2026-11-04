@@ -19,9 +19,7 @@ import { Tip } from "@/primitives/Tip";
 
 export type CurveEditMode = "select" | "insert";
 
-const INTERP_KINDS: readonly InterpolationType[] = Object.freeze([
-  "linear", "smooth", "step",
-]);
+const INTERP_KINDS: readonly InterpolationType[] = Object.freeze(["linear", "smooth", "step"]);
 
 /** Tiny inline glyphs for the three interpolation modes. Each is a
  *  16×16 SVG showing the curve shape between two endpoints — clearer
@@ -30,21 +28,45 @@ const INTERP_KINDS: readonly InterpolationType[] = Object.freeze([
  *  curve-editor glyphs). */
 const INTERP_ICONS: Record<InterpolationType, ReactElement> = {
   linear: (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      aria-hidden="true"
+    >
       <line x1="2" y1="12" x2="14" y2="4" strokeLinecap="round" />
       <circle cx="2" cy="12" r="1.5" fill="currentColor" />
       <circle cx="14" cy="4" r="1.5" fill="currentColor" />
     </svg>
   ),
   smooth: (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      aria-hidden="true"
+    >
       <path d="M 2 12 C 5 12, 7 4, 14 4" strokeLinecap="round" />
       <circle cx="2" cy="12" r="1.5" fill="currentColor" />
       <circle cx="14" cy="4" r="1.5" fill="currentColor" />
     </svg>
   ),
   step: (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      aria-hidden="true"
+    >
       <polyline points="2,12 8,12 8,4 14,4" strokeLinecap="round" strokeLinejoin="round" />
       <circle cx="2" cy="12" r="1.5" fill="currentColor" />
       <circle cx="14" cy="4" r="1.5" fill="currentColor" />
@@ -251,7 +273,9 @@ export function CurveEditorToolbar({
 
       {/* Time / Value spinners — the focus channel's selected key, or the
           AVERAGE of the selected keys when >1 is selected. */}
-      <label className="text-xs text-text-2" htmlFor="ce-spinner-time">Time:&nbsp;</label>
+      <label className="text-xs text-text-2" htmlFor="ce-spinner-time">
+        Time:&nbsp;
+      </label>
       <div style={{ width: 84 }} data-testid="ce-spinner-time-wrapper">
         <Spinner
           key={time.resetKey}
@@ -270,7 +294,9 @@ export function CurveEditorToolbar({
           density="tight"
         />
       </div>
-      <label className="text-xs text-text-2 ml-1" htmlFor="ce-spinner-value">Value:&nbsp;</label>
+      <label className="text-xs text-text-2 ml-1" htmlFor="ce-spinner-value">
+        Value:&nbsp;
+      </label>
       <div style={{ width: 84 }} data-testid="ce-spinner-value-wrapper">
         <Spinner
           key={value.resetKey}

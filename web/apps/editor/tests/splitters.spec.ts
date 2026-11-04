@@ -43,12 +43,8 @@ test.beforeAll(async ({ cdpPage }) => {
 // Reset persistence + reload to a known clean state before each test.
 test.beforeEach(async () => {
   await page.evaluate(() => {
-    for (const k of [
-      "alo:layout:outer:3col",
-      "alo:layout:outer:2col",
-      "alo:layout:left",
-      "alo:layout:center",
-    ]) localStorage.removeItem(k);
+    for (const k of ["alo:layout:outer:3col", "alo:layout:outer:2col", "alo:layout:left", "alo:layout:center"])
+      localStorage.removeItem(k);
   });
   await page.reload();
   // Wait for the React layout to settle.
@@ -65,16 +61,12 @@ function readLayout() {
     for (const g of Array.from(groups)) {
       const horizontal = window.getComputedStyle(g).flexDirection === "row";
       const orient = horizontal ? "horizontal" : "vertical";
-      const total = horizontal
-        ? g.getBoundingClientRect().width
-        : g.getBoundingClientRect().height;
+      const total = horizontal ? g.getBoundingClientRect().width : g.getBoundingClientRect().height;
       const panels = Array.from(g.querySelectorAll<HTMLElement>(":scope > [data-panel]"));
       const key = panels.map((p) => p.id).join(",");
       const ratios: Record<string, number> = {};
       for (const p of panels) {
-        const size = horizontal
-          ? p.getBoundingClientRect().width
-          : p.getBoundingClientRect().height;
+        const size = horizontal ? p.getBoundingClientRect().width : p.getBoundingClientRect().height;
         ratios[p.id] = (size / total) * 100;
       }
       out[`${orient}:${key}`] = ratios;
@@ -83,11 +75,7 @@ function readLayout() {
   });
 }
 
-function dragSeparator(
-  selector: string,
-  deltaX: number,
-  deltaY: number,
-) {
+function dragSeparator(selector: string, deltaX: number, deltaY: number) {
   return page.evaluate(
     ({ selector, deltaX, deltaY }) => {
       const sep = document.querySelector<HTMLElement>(selector);
@@ -96,15 +84,17 @@ function dragSeparator(
       const x = r.x + r.width / 2;
       const y = r.y + r.height / 2;
       function fire(target: Element | Document, type: string, cx: number, cy: number, buttons: number) {
-        target.dispatchEvent(new PointerEvent(type, {
-          bubbles: true,
-          clientX: cx,
-          clientY: cy,
-          pointerId: 1,
-          pointerType: "mouse",
-          button: 0,
-          buttons,
-        }));
+        target.dispatchEvent(
+          new PointerEvent(type, {
+            bubbles: true,
+            clientX: cx,
+            clientY: cy,
+            pointerId: 1,
+            pointerType: "mouse",
+            button: 0,
+            buttons,
+          }),
+        );
       }
       fire(sep, "pointerdown", x, y, 1);
       fire(document, "pointermove", x + deltaX, y + deltaY, 1);
@@ -253,9 +243,7 @@ test("drag inner viewport↔curve separator (vertical) persists across reload", 
   });
   await dragSeparator("[data-test-target=center-h]", 0, -90);
 
-  const persisted = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem("alo:layout:center") ?? "null"),
-  );
+  const persisted = await page.evaluate(() => JSON.parse(localStorage.getItem("alo:layout:center") ?? "null"));
   expect(persisted).not.toBeNull();
   expect(Object.keys(persisted).sort()).toEqual(["curve", "viewport"]);
   expect(Math.abs(persisted.viewport + persisted.curve - 100)).toBeLessThan(0.5);
@@ -299,26 +287,20 @@ test("Spawner toggle collapses the always-mounted dock (no remount), restores on
   // node = the left-pane flicker); the always-mounted collapsible dock keeps
   // it, so a custom property set on the node survives the toggle.
   await page.evaluate(() => {
-    const tree = document.querySelector(
-      '[data-testid="quadrant-emitter-tree"]',
-    ) as (HTMLElement & { __aliveMarker?: string }) | null;
+    const tree = document.querySelector('[data-testid="quadrant-emitter-tree"]') as
+      (HTMLElement & { __aliveMarker?: string }) | null;
     if (tree) tree.__aliveMarker = "alive";
   });
 
   const clickToggle = () =>
     page.evaluate(() => {
-      const btn = document.querySelector<HTMLButtonElement>(
-        '.toolbar button[aria-label="Toggle Spawner panel"]',
-      );
+      const btn = document.querySelector<HTMLButtonElement>('.toolbar button[aria-label="Toggle Spawner panel"]');
       if (!btn) throw new Error("Spawner toolbar button not found");
       btn.click();
     });
   const spawnerWidth = () =>
     page.evaluate(
-      () =>
-        document
-          .querySelector('[data-testid="quadrant-spawner"]')
-          ?.getBoundingClientRect().width ?? -1,
+      () => document.querySelector('[data-testid="quadrant-spawner"]')?.getBoundingClientRect().width ?? -1,
     );
 
   // Toggle OFF — the dock slot collapses to width 0 but stays MOUNTED
@@ -332,9 +314,8 @@ test("Spawner toggle collapses the always-mounted dock (no remount), restores on
   const markerSurvived = await page.evaluate(
     () =>
       (
-        document.querySelector(
-          '[data-testid="quadrant-emitter-tree"]',
-        ) as (HTMLElement & { __aliveMarker?: string }) | null
+        document.querySelector('[data-testid="quadrant-emitter-tree"]') as
+          (HTMLElement & { __aliveMarker?: string }) | null
       )?.__aliveMarker === "alive",
   );
   expect(markerSurvived).toBe(true);

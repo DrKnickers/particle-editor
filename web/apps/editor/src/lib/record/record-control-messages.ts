@@ -61,9 +61,7 @@ const SHOW_PANELS = ["spawner", "lighting", "atlas"] as const;
  * sends it during --record so a clip can open the Atlas dock (or close all).
  * `panel: null` is a valid command (close) — distinct from "not this message".
  */
-export function parseShowPanelMessage(
-  data: unknown,
-): { panel: "spawner" | "lighting" | "atlas" | null } | null {
+export function parseShowPanelMessage(data: unknown): { panel: "spawner" | "lighting" | "atlas" | null } | null {
   const m = coerceMessage(data);
   if (!m || m.type !== "ui/show-panel") return null;
   if (m.panel === null) return { panel: null };
@@ -99,14 +97,13 @@ export type PoseDragTarget = "stack" | "emitter";
  * `target` picks the list (the mod stack or the emitter tree); `from` is the row being
  * lifted, `gap` the insertion gap (0..len). All three are required + validated.
  */
-export function parsePoseDragMessage(
-  data: unknown,
-): { target: PoseDragTarget; from: number; gap: number } | null {
+export function parsePoseDragMessage(data: unknown): { target: PoseDragTarget; from: number; gap: number } | null {
   const m = coerceMessage(data);
   if (!m || m.type !== "ui/pose-drag") return null;
   const target = m.target;
   if (target !== "stack" && target !== "emitter") return null;
-  const from = m.from, gap = m.gap;
+  const from = m.from,
+    gap = m.gap;
   if (typeof from !== "number" || !Number.isInteger(from) || from < 0) return null;
   if (typeof gap !== "number" || !Number.isInteger(gap) || gap < 0) return null;
   return { target, from, gap };
@@ -121,9 +118,7 @@ const PICKER_WHICH = ["reference", "background", "mods"] as const;
  * open (or close) one of the workspace pickers — the reference-object dropdown,
  * the background/skydome dropdown, or the Mods menu. `open` defaults to true.
  */
-export function parseOpenPickerMessage(
-  data: unknown,
-): { which: PickerWhich; open: boolean } | null {
+export function parseOpenPickerMessage(data: unknown): { which: PickerWhich; open: boolean } | null {
   const m = coerceMessage(data);
   if (!m || m.type !== "ui/open-picker") return null;
   if (typeof m.which !== "string" || !(PICKER_WHICH as readonly string[]).includes(m.which)) {

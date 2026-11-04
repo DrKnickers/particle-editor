@@ -35,8 +35,8 @@ describe("computeAutoscrollDelta", () => {
   });
 
   it("clamps to max speed past the edges (pointer outside the container)", () => {
-    expect(computeAutoscrollDelta(50, RECT)).toBeCloseTo(-12);  // above top
-    expect(computeAutoscrollDelta(600, RECT)).toBeCloseTo(12);  // below bottom
+    expect(computeAutoscrollDelta(50, RECT)).toBeCloseTo(-12); // above top
+    expect(computeAutoscrollDelta(600, RECT)).toBeCloseTo(12); // below bottom
   });
 
   it("scrolls DOWN when the pointer is nearer the bottom in a viewport shorter than 2×zone", () => {
@@ -52,8 +52,6 @@ describe("computeAutoscrollDelta", () => {
 
   it("respects custom zone and maxSpeed", () => {
     // rect [0,200], zone 20, maxSpeed 5; 10px in = halfway → -2.5.
-    expect(
-      computeAutoscrollDelta(10, { top: 0, bottom: 200 }, { zone: 20, maxSpeed: 5 }),
-    ).toBeCloseTo(-2.5);
+    expect(computeAutoscrollDelta(10, { top: 0, bottom: 200 }, { zone: 20, maxSpeed: 5 })).toBeCloseTo(-2.5);
   });
 });

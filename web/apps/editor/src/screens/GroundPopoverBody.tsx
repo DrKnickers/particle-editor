@@ -52,10 +52,10 @@ type BundledSlot = {
 const SOLID_COLOR_SLOT = 4;
 
 export const BUNDLED_GROUND_SLOTS: readonly BundledSlot[] = [
-  { slot: 0, name: "Dirt",  gradient: "linear-gradient(180deg, #6b5b3a 0%, #8c7a54 100%)" },
+  { slot: 0, name: "Dirt", gradient: "linear-gradient(180deg, #6b5b3a 0%, #8c7a54 100%)" },
   { slot: 1, name: "Grass", gradient: "linear-gradient(180deg, #3a7a3a 0%, #5ca35c 100%)" },
-  { slot: 2, name: "Sand",  gradient: "linear-gradient(180deg, #c2a872 0%, #e1c89a 100%)" },
-  { slot: 3, name: "Snow",  gradient: "linear-gradient(180deg, #e0e0e8 0%, #ffffff 100%)" },
+  { slot: 2, name: "Sand", gradient: "linear-gradient(180deg, #c2a872 0%, #e1c89a 100%)" },
+  { slot: 3, name: "Snow", gradient: "linear-gradient(180deg, #e0e0e8 0%, #ffffff 100%)" },
 ] as const;
 
 const CUSTOM_SLOTS: readonly number[] = [5, 6, 7];
@@ -108,9 +108,7 @@ export function GroundPopoverBody({ bridge }: BodyProps) {
 
   const reportGroundTextureError = (err: unknown) => {
     console.warn("[GroundPopoverBody] custom texture failed:", err);
-    setCustomPathError(
-      "Couldn't use that ground texture. Choose a local DDS or TGA file.",
-    );
+    setCustomPathError("Couldn't use that ground texture. Choose a local DDS or TGA file.");
   };
   const requestGroundSlot = async (slot: number) => {
     const result = await bridge.request({
@@ -182,11 +180,7 @@ export function GroundPopoverBody({ bridge }: BodyProps) {
   return (
     <>
       <label className="mb-3 flex items-center gap-2 text-xs text-text">
-        <Checkbox
-          checked={groundOn}
-          onChange={(e) => handleToggleGround(e.target.checked)}
-          aria-label="Show ground"
-        />
+        <Checkbox checked={groundOn} onChange={(e) => handleToggleGround(e.target.checked)} aria-label="Show ground" />
         <span>Show ground</span>
       </label>
 
@@ -218,17 +212,13 @@ export function GroundPopoverBody({ bridge }: BodyProps) {
           onClick={handleSolidColorClick}
           className={cn(
             "relative flex h-16 w-full items-center justify-between rounded-md border-2 px-3 transition focus-ring-inset",
-            selectedSlot === SOLID_COLOR_SLOT
-              ? "border-accent"
-              : "border-border hover:border-border-2",
+            selectedSlot === SOLID_COLOR_SLOT ? "border-accent" : "border-border hover:border-border-2",
           )}
           style={{ backgroundColor: solidHex }}
           aria-label="Solid colour"
           aria-pressed={selectedSlot === SOLID_COLOR_SLOT}
         >
-          <span className="rounded bg-bg/70 px-2 py-0.5 text-xs text-text backdrop-blur-sm">
-            Solid colour
-          </span>
+          <span className="rounded bg-bg/70 px-2 py-0.5 text-xs text-text backdrop-blur-sm">Solid colour</span>
           {selectedSlot === SOLID_COLOR_SLOT && <SelectedBadge />}
         </button>
         {/* Hidden native colour input. Clicking the solid-colour tile
@@ -270,8 +260,8 @@ export function GroundPopoverBody({ bridge }: BodyProps) {
                     unavailable
                       ? "cursor-not-allowed border-border opacity-40"
                       : selected
-                      ? "border-accent"
-                      : "border-border hover:border-border-2",
+                        ? "border-accent"
+                        : "border-border hover:border-border-2",
                   )}
                   aria-label={unavailable ? `${name} (unavailable — requires game install)` : name}
                   aria-pressed={selected}
@@ -314,8 +304,8 @@ export function GroundPopoverBody({ bridge }: BodyProps) {
                 selected
                   ? "border-accent"
                   : isEmpty
-                  ? "border-dashed border-border-2 hover:border-text-3"
-                  : "border-border hover:border-border-2",
+                    ? "border-dashed border-border-2 hover:border-text-3"
+                    : "border-border hover:border-border-2",
               )}
               aria-label={isEmpty ? `Custom slot ${slot - 4} (empty)` : `Custom slot ${slot - 4}: ${label}`}
               aria-pressed={selected}
@@ -355,9 +345,7 @@ export function GroundPopoverBody({ bridge }: BodyProps) {
         <span className={gridVisible ? "" : "opacity-40"}>Grid spacing</span>
         <Spinner
           value={gridSpacing}
-          onChange={(v) =>
-            void bridge.request({ kind: "engine/set/grid-spacing", params: { spacing: v } })
-          }
+          onChange={(v) => void bridge.request({ kind: "engine/set/grid-spacing", params: { spacing: v } })}
           min={1}
           step={5}
           decimals={0}

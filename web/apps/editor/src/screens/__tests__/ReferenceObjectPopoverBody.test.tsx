@@ -22,7 +22,9 @@ import type { Bridge } from "@particle-editor/bridge-schema";
 // Tooltip.Provider App.tsx supplies in production — this wrapper stands in
 // for it (precedent: renderWithTooltips in EmitterTree.test.tsx).
 const TipProvider = ({ children }: { children: ReactNode }) => (
-  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>
+    {children}
+  </Tooltip.Provider>
 );
 const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
@@ -65,9 +67,7 @@ describe("ReferenceObjectPopoverBody — selection + status", () => {
     const bridge = new MockBridge();
     render(<ReferenceObjectPopoverBody bridge={bridge as unknown as Bridge} />);
     await screen.findByRole("tree", { name: "Reference object" });
-    await waitFor(() =>
-      expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument());
     // The leaf row (the click/select target) carries a positional-by-name testid so a
     // --record cursor can land on a specific unit.
     const leaf = screen.getByRole("treeitem", { name: "AT_AT_Walker" });
@@ -81,7 +81,9 @@ describe("ReferenceObjectPopoverBody — selection + status", () => {
     const listeners: Record<string, Array<(e: { data: unknown }) => void>> = {};
     (window as unknown as { chrome?: unknown }).chrome = {
       webview: {
-        addEventListener: (e: string, h: (ev: { data: unknown }) => void) => { (listeners[e] ||= []).push(h); },
+        addEventListener: (e: string, h: (ev: { data: unknown }) => void) => {
+          (listeners[e] ||= []).push(h);
+        },
         removeEventListener: (e: string, h: (ev: { data: unknown }) => void) => {
           listeners[e] = (listeners[e] ?? []).filter((x) => x !== h);
         },
@@ -99,9 +101,7 @@ describe("ReferenceObjectPopoverBody — selection + status", () => {
         (listeners.message ?? []).forEach((h) => h(msg));
       });
 
-      await waitFor(() =>
-        expect(screen.queryByRole("treeitem", { name: "AT_ST_Walker" })).not.toBeInTheDocument(),
-      );
+      await waitFor(() => expect(screen.queryByRole("treeitem", { name: "AT_ST_Walker" })).not.toBeInTheDocument());
       expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument();
     } finally {
       delete (window as unknown as { chrome?: unknown }).chrome;
@@ -117,9 +117,7 @@ describe("ReferenceObjectPopoverBody — selection + status", () => {
     const spaceHeader = screen.getByRole("treeitem", { name: "Space" });
     expect(spaceHeader).toHaveAttribute("aria-expanded", "true");
     fireEvent.click(spaceHeader); // collapse
-    await waitFor(() =>
-      expect(screen.queryByRole("treeitem", { name: "Star_Destroyer" })).not.toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.queryByRole("treeitem", { name: "Star_Destroyer" })).not.toBeInTheDocument());
     expect(screen.getByRole("treeitem", { name: "Space" })).toHaveAttribute("aria-expanded", "false");
     // Ground items are unaffected.
     expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument();
@@ -135,7 +133,9 @@ describe("ReferenceObjectPopoverBody — selection + status", () => {
     const listeners: Record<string, Array<(e: { data: unknown }) => void>> = {};
     (window as unknown as { chrome?: unknown }).chrome = {
       webview: {
-        addEventListener: (e: string, h: (ev: { data: unknown }) => void) => { (listeners[e] ||= []).push(h); },
+        addEventListener: (e: string, h: (ev: { data: unknown }) => void) => {
+          (listeners[e] ||= []).push(h);
+        },
         removeEventListener: (e: string, h: (ev: { data: unknown }) => void) => {
           listeners[e] = (listeners[e] ?? []).filter((x) => x !== h);
         },
@@ -157,9 +157,7 @@ describe("ReferenceObjectPopoverBody — selection + status", () => {
 
       // The host force-collapses Space (bare section name) -> its items hide DESPITE the search.
       send({ type: "ui/picker-collapse", keys: ["Space"] });
-      await waitFor(() =>
-        expect(screen.queryByRole("treeitem", { name: "Star_Destroyer" })).not.toBeInTheDocument(),
-      );
+      await waitFor(() => expect(screen.queryByRole("treeitem", { name: "Star_Destroyer" })).not.toBeInTheDocument());
       expect(screen.getByRole("treeitem", { name: "Space" })).toHaveAttribute("aria-expanded", "false");
       // A non-collapsed section's items stay visible.
       expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument();
@@ -209,7 +207,7 @@ describe("ReferenceObjectPopoverBody — selection + status", () => {
 
     const posX = await screen.findByLabelText("Position X");
     fireEvent.change(posX, { target: { value: "12.5" } });
-    fireEvent.blur(posX);  // Spinner commits on blur
+    fireEvent.blur(posX); // Spinner commits on blur
     await waitFor(async () => {
       const snap = await bridge.request({ kind: "engine/state/snapshot", params: {} });
       expect(snap.referenceObjectPosition[0]).toBe(12.5);
@@ -255,7 +253,7 @@ describe("ReferenceObjectPopoverBody — selection + status", () => {
     fireEvent.blur(posY);
     await waitFor(async () => {
       const snap = await bridge.request({ kind: "engine/state/snapshot", params: {} });
-      expect(snap.referenceObjectPosition).toEqual([1, 99, 3]);   // X + Z preserved
+      expect(snap.referenceObjectPosition).toEqual([1, 99, 3]); // X + Z preserved
       expect(snap.referenceObjectRotation).toEqual([10, 20, 30]); // rotation untouched
     });
   });
@@ -276,8 +274,7 @@ describe("ReferenceObjectPopoverBody — async build + search", () => {
   function makeBuildingBridge() {
     let listBuilding = true;
     let handler: ((e: { kind: string; payload: unknown }) => void) | null = null;
-    const list = () =>
-      listBuilding ? { objects: [], building: true } : { objects: [ENTRY], building: false };
+    const list = () => (listBuilding ? { objects: [], building: true } : { objects: [ENTRY], building: false });
     const bridge = {
       request: (req: { kind: string }) => {
         if (req.kind === "engine/query/reference-object-list") return Promise.resolve(list());
@@ -289,10 +286,15 @@ describe("ReferenceObjectPopoverBody — async build + search", () => {
         return () => {};
       },
     } as unknown as Bridge;
-    const emit = (building: boolean) =>
-      handler?.({ kind: "engine/state/changed", payload: SNAP(building) });
-    const finishBuild = () => { listBuilding = false; emit(false); };
-    const startRebuild = () => { listBuilding = true; emit(true); };
+    const emit = (building: boolean) => handler?.({ kind: "engine/state/changed", payload: SNAP(building) });
+    const finishBuild = () => {
+      listBuilding = false;
+      emit(false);
+    };
+    const startRebuild = () => {
+      listBuilding = true;
+      emit(true);
+    };
     return { bridge, finishBuild, startRebuild };
   }
 
@@ -302,17 +304,13 @@ describe("ReferenceObjectPopoverBody — async build + search", () => {
 
     expect(await screen.findByText(/loading objects/i)).toBeInTheDocument();
     expect(screen.queryByRole("tree", { name: "Reference object" })).not.toBeInTheDocument();
-    expect(
-      (screen.getByLabelText("Search reference objects") as HTMLInputElement).disabled
-    ).toBe(true);
+    expect((screen.getByLabelText("Search reference objects") as HTMLInputElement).disabled).toBe(true);
 
     act(() => finishBuild());
     const tree = await screen.findByRole("tree", { name: "Reference object" });
     expect(within(tree).getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument();
     expect(screen.queryByText(/loading objects/i)).not.toBeInTheDocument();
-    expect(
-      (screen.getByLabelText("Search reference objects") as HTMLInputElement).disabled
-    ).toBe(false);
+    expect((screen.getByLabelText("Search reference objects") as HTMLInputElement).disabled).toBe(false);
   });
 
   it("does NOT re-query the list on unrelated state changes once loaded (no fetch storm)", async () => {
@@ -343,9 +341,7 @@ describe("ReferenceObjectPopoverBody — async build + search", () => {
           payload: { ...SNAP(false), referenceObjectPosition: [i, 0, 0] },
         });
     });
-    await waitFor(() =>
-      expect((screen.getByLabelText("Position X") as HTMLInputElement).value).toBe("10.0")
-    );
+    await waitFor(() => expect((screen.getByLabelText("Position X") as HTMLInputElement).value).toBe("10.0"));
     expect(listCalls).toBe(afterLoad);
   });
 
@@ -368,16 +364,12 @@ describe("ReferenceObjectPopoverBody — async build + search", () => {
     const bridge = new MockBridge();
     render(<ReferenceObjectPopoverBody bridge={bridge as unknown as Bridge} />);
     await screen.findByRole("tree", { name: "Reference object" });
-    await waitFor(() =>
-      expect(screen.getByRole("treeitem", { name: "Star_Destroyer" })).toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.getByRole("treeitem", { name: "Star_Destroyer" })).toBeInTheDocument());
 
     fireEvent.change(screen.getByLabelText("Search reference objects"), {
       target: { value: "at_" },
     });
-    await waitFor(() =>
-      expect(screen.queryByRole("treeitem", { name: "Star_Destroyer" })).not.toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.queryByRole("treeitem", { name: "Star_Destroyer" })).not.toBeInTheDocument());
     expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument();
     expect(screen.getByRole("treeitem", { name: "AT_ST_Walker" })).toBeInTheDocument();
   });
@@ -390,9 +382,7 @@ describe("ReferenceObjectPopoverBody — lock", () => {
     const bridge = new MockBridge();
     render(<ReferenceObjectPopoverBody bridge={bridge as unknown as Bridge} />);
     await screen.findByRole("tree", { name: "Reference object" });
-    await waitFor(() =>
-      expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("treeitem", { name: "AT_AT_Walker" }));
 
     const lock = await screen.findByRole("checkbox", { name: "Lock object" });
@@ -409,24 +399,20 @@ describe("ReferenceObjectPopoverBody — lock", () => {
     const bridge = new MockBridge();
     render(<ReferenceObjectPopoverBody bridge={bridge as unknown as Bridge} />);
     await screen.findByRole("tree", { name: "Reference object" });
-    await waitFor(() =>
-      expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("treeitem", { name: "AT_AT_Walker" }));
 
     // Enabled before locking.
     expect(((await screen.findByLabelText("Position X")) as HTMLInputElement).disabled).toBe(false);
     // Lock -> round-trips -> inputs disable.
     fireEvent.click(await screen.findByRole("checkbox", { name: "Lock object" }));
-    await waitFor(() =>
-      expect((screen.getByLabelText("Position X") as HTMLInputElement).disabled).toBe(true)
-    );
+    await waitFor(() => expect((screen.getByLabelText("Position X") as HTMLInputElement).disabled).toBe(true));
     expect((screen.getByLabelText("Position Y") as HTMLInputElement).disabled).toBe(true);
     expect((screen.getByLabelText("Position Z") as HTMLInputElement).disabled).toBe(true);
     expect((screen.getByLabelText("Rotation Yaw") as HTMLInputElement).disabled).toBe(true);
-    expect(
-      (screen.getByRole("button", { name: "Reset transform to origin" }) as HTMLButtonElement).disabled
-    ).toBe(true);
+    expect((screen.getByRole("button", { name: "Reset transform to origin" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
   });
 
   it("disables the Lock checkbox when no object is selected", async () => {
@@ -444,24 +430,18 @@ describe("ReferenceObjectPopoverBody — lock", () => {
     const bridge = new MockBridge();
     render(<ReferenceObjectPopoverBody bridge={bridge as unknown as Bridge} />);
     await screen.findByRole("tree", { name: "Reference object" });
-    await waitFor(() =>
-      expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("treeitem", { name: "AT_AT_Walker" }));
 
     const lock = await screen.findByRole("checkbox", { name: "Lock object" });
     fireEvent.click(lock); // lock
-    await waitFor(() =>
-      expect((screen.getByLabelText("Position X") as HTMLInputElement).disabled).toBe(true)
-    );
+    await waitFor(() => expect((screen.getByLabelText("Position X") as HTMLInputElement).disabled).toBe(true));
     fireEvent.click(lock); // unlock
-    await waitFor(() =>
-      expect((screen.getByLabelText("Position X") as HTMLInputElement).disabled).toBe(false)
-    );
+    await waitFor(() => expect((screen.getByLabelText("Position X") as HTMLInputElement).disabled).toBe(false));
     expect((screen.getByLabelText("Rotation Yaw") as HTMLInputElement).disabled).toBe(false);
-    expect(
-      (screen.getByRole("button", { name: "Reset transform to origin" }) as HTMLButtonElement).disabled
-    ).toBe(false);
+    expect((screen.getByRole("button", { name: "Reset transform to origin" }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
   });
 
   // The freeze holds at the (mock) bridge: a transform request against a locked
@@ -482,7 +462,7 @@ describe("ReferenceObjectPopoverBody — lock", () => {
       params: { position: [99, 99, 99], rotation: [45, 0, 0] },
     });
     const snap = await bridge.request({ kind: "engine/state/snapshot", params: {} });
-    expect(snap.referenceObjectPosition).toEqual([5, 6, 7]);   // unchanged — frozen
+    expect(snap.referenceObjectPosition).toEqual([5, 6, 7]); // unchanged — frozen
     expect(snap.referenceObjectRotation).toEqual([0, 0, 0]);
   });
 });
@@ -495,8 +475,7 @@ describe("ReferenceObjectPopoverBody — keyboard navigation + persisted-selecti
     await waitFor(() => expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument());
     return bridge;
   };
-  const tabbable = () =>
-    screen.getAllByRole("treeitem").filter((el) => el.getAttribute("tabindex") === "0");
+  const tabbable = () => screen.getAllByRole("treeitem").filter((el) => el.getAttribute("tabindex") === "0");
 
   it("keeps exactly one tree row tabbable (roving tabindex), starting at None", async () => {
     await ready();
@@ -524,7 +503,7 @@ describe("ReferenceObjectPopoverBody — keyboard navigation + persisted-selecti
     expect(space).toHaveAttribute("aria-expanded", "true");
     fireEvent.keyDown(space, { key: "ArrowLeft" });
     await waitFor(() =>
-      expect(screen.getByRole("treeitem", { name: "Space" })).toHaveAttribute("aria-expanded", "false")
+      expect(screen.getByRole("treeitem", { name: "Space" })).toHaveAttribute("aria-expanded", "false"),
     );
     expect(screen.queryByRole("treeitem", { name: "Star_Destroyer" })).not.toBeInTheDocument();
     fireEvent.keyDown(screen.getByRole("treeitem", { name: "Space" }), { key: "ArrowRight" });
@@ -569,13 +548,11 @@ describe("ReferenceObjectPopoverBody — faction filter chips", () => {
     expect(screen.getByRole("button", { name: "Empire" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Rebel" })).toBeInTheDocument();
     // Default (All): both an Empire-only and a Rebel object are visible.
-    expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument();   // Empire
+    expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument(); // Empire
     expect(screen.getByRole("treeitem", { name: "Rebel_Barracks" })).toBeInTheDocument(); // Rebel
 
     fireEvent.click(screen.getByRole("button", { name: "Rebel" }));
-    await waitFor(() =>
-      expect(screen.queryByRole("treeitem", { name: "AT_AT_Walker" })).not.toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.queryByRole("treeitem", { name: "AT_AT_Walker" })).not.toBeInTheDocument());
     expect(screen.getByRole("button", { name: "Rebel" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("treeitem", { name: "Rebel_Barracks" })).toBeInTheDocument();
     // A multi-faction object ("Rebel, Empire") shows under Rebel too.
@@ -638,8 +615,8 @@ describe("ReferenceObjectPopoverBody — props + templates", () => {
     // Only props remain.
     expect(screen.getByRole("treeitem", { name: "Asteroid_Field_Prop" })).toBeInTheDocument();
     expect(screen.getByRole("treeitem", { name: "Rebel_Crate_Prop" })).toBeInTheDocument();
-    expect(screen.queryByRole("treeitem", { name: "AT_AT_Walker" })).not.toBeInTheDocument();          // unit
-    expect(screen.queryByRole("treeitem", { name: "Darth_Vader" })).not.toBeInTheDocument();           // hero
+    expect(screen.queryByRole("treeitem", { name: "AT_AT_Walker" })).not.toBeInTheDocument(); // unit
+    expect(screen.queryByRole("treeitem", { name: "Darth_Vader" })).not.toBeInTheDocument(); // hero
     expect(screen.queryByRole("treeitem", { name: "Generic_Frigate_Template" })).not.toBeInTheDocument(); // template
 
     // Toggling off restores the full list.
@@ -666,7 +643,7 @@ describe("ReferenceObjectPopoverBody — props + templates", () => {
       expect(snap.referenceObjectName).toBe("Proj_Proton_Torpedo");
     });
     await waitFor(() =>
-      expect(within(section).getAllByRole("treeitem", { name: "Proj_Proton_Torpedo", selected: true })).toHaveLength(2)
+      expect(within(section).getAllByRole("treeitem", { name: "Proj_Proton_Torpedo", selected: true })).toHaveLength(2),
     );
   });
 

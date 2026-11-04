@@ -57,10 +57,10 @@ async function queryMsaa(): Promise<{ levels: number[]; current: number }> {
   return page.evaluate(async () => {
     const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
-    return await bridge.request({
+    return (await bridge.request({
       kind: "engine/query/msaa-levels",
       params: {},
-    }) as { levels: number[]; current: number };
+    })) as { levels: number[]; current: number };
   });
 }
 
@@ -83,9 +83,9 @@ test("Edit → Preferences opens; Antialiasing select is populated from engine/q
   // one of them.
   const { levels } = await queryMsaa();
   const validLevels = levels.filter((l) => l === 0 || l === 2 || l === 4 || l === 8);
-  const optionValues = await select.locator("option").evaluateAll(
-    (opts) => opts.map((o) => Number((o as HTMLOptionElement).value)),
-  );
+  const optionValues = await select
+    .locator("option")
+    .evaluateAll((opts) => opts.map((o) => Number((o as HTMLOptionElement).value)));
   expect(optionValues.sort((a, b) => a - b)).toEqual(validLevels.sort((a, b) => a - b));
   const displayed = Number(await select.inputValue());
   expect(validLevels).toContain(displayed);
@@ -119,9 +119,7 @@ test("changing Antialiasing fires engine/set/msaa-level (observed via query `cur
 
     // The setter marks the level dirty; the render thread applies it on
     // the next frame — poll the query's authoritative `current`.
-    await expect
-      .poll(async () => (await queryMsaa()).current, { timeout: 10_000 })
-      .toBe(target);
+    await expect.poll(async () => (await queryMsaa()).current, { timeout: 10_000 }).toBe(target);
 
     await closePreferences();
 
@@ -134,18 +132,19 @@ test("changing Antialiasing fires engine/set/msaa-level (observed via query `cur
     // Best-effort dialog dismiss (may or may not be open on failure),
     // then restore the original persisted value + engine level.
     await page.keyboard.press("Escape").catch(() => {});
-    await page.evaluate(async (args: { stored: string | null; level: number }) => {
-      if (args.stored === null) localStorage.removeItem("alo:msaa-quality");
-      else localStorage.setItem("alo:msaa-quality", args.stored);
-      const bridge = window.bridge;
-      await bridge!.request({
-        kind: "engine/set/msaa-level",
-        params: { level: args.level },
-      });
-    }, { stored: storedBefore, level: before.current });
-    await expect
-      .poll(async () => (await queryMsaa()).current, { timeout: 10_000 })
-      .toBe(before.current);
+    await page.evaluate(
+      async (args: { stored: string | null; level: number }) => {
+        if (args.stored === null) localStorage.removeItem("alo:msaa-quality");
+        else localStorage.setItem("alo:msaa-quality", args.stored);
+        const bridge = window.bridge;
+        await bridge!.request({
+          kind: "engine/set/msaa-level",
+          params: { level: args.level },
+        });
+      },
+      { stored: storedBefore, level: before.current },
+    );
+    await expect.poll(async () => (await queryMsaa()).current, { timeout: 10_000 }).toBe(before.current);
   }
 });
 
@@ -185,14 +184,19 @@ test("Model shadows toggle persists across dialog reopen (localStorage-backed)",
     // originally-unset key doesn't linger), and push the original state
     // to the engine directly — the UI path may be unavailable on failure.
     await page.keyboard.press("Escape").catch(() => {});
-    await page.evaluate(async (args: { stored: string | null; enabled: boolean }) => {
-      if (args.stored === null) localStorage.removeItem("alo:model-shadows");
-      else localStorage.setItem("alo:model-shadows", args.stored);
-      const bridge = window.bridge;
-      await bridge!.request({
-        kind: "engine/set/model-shadows",
-        params: { enabled: args.enabled },
-      }).catch(() => {});
-    }, { stored: storedBefore, enabled: wasChecked });
+    await page.evaluate(
+      async (args: { stored: string | null; enabled: boolean }) => {
+        if (args.stored === null) localStorage.removeItem("alo:model-shadows");
+        else localStorage.setItem("alo:model-shadows", args.stored);
+        const bridge = window.bridge;
+        await bridge!
+          .request({
+            kind: "engine/set/model-shadows",
+            params: { enabled: args.enabled },
+          })
+          .catch(() => {});
+      },
+      { stored: storedBefore, enabled: wasChecked },
+    );
   }
 });

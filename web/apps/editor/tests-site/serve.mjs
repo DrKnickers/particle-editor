@@ -8,10 +8,17 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(fileURLToPath(new URL("../../../../site", import.meta.url)));
 const PORT = Number(process.env.PORT || 5175);
 const TYPES = {
-  ".html": "text/html", ".css": "text/css", ".js": "text/javascript",
-  ".svg": "image/svg+xml", ".json": "application/json",
-  ".mp4": "video/mp4", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-  ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif",
+  ".html": "text/html",
+  ".css": "text/css",
+  ".js": "text/javascript",
+  ".svg": "image/svg+xml",
+  ".json": "application/json",
+  ".mp4": "video/mp4",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
 };
 
 createServer(async (req, res) => {
@@ -20,7 +27,10 @@ createServer(async (req, res) => {
     if (p === "/") p = "/index.html";
     const full = join(ROOT, p);
     const rel = relative(ROOT, full);
-    if (rel.startsWith("..") || isAbsolute(rel)) { res.writeHead(403).end(); return; }
+    if (rel.startsWith("..") || isAbsolute(rel)) {
+      res.writeHead(403).end();
+      return;
+    }
     const body = await readFile(full);
     res.writeHead(200, { "content-type": TYPES[extname(full)] || "application/octet-stream" });
     res.end(body);

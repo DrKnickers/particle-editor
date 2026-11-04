@@ -14,7 +14,9 @@ import type { Bridge, PaletteEntry } from "@particle-editor/bridge-schema";
 // requires the app-level Tooltip.Provider — wrapper stands in for it
 // (precedent: renderToolbar in Toolbar.test.tsx).
 const TipProvider = ({ children }: { children: ReactNode }) => (
-  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>
+    {children}
+  </Tooltip.Provider>
 );
 const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
@@ -38,25 +40,23 @@ function makeBridge(opts?: {
     recents: [],
     ...opts?.list,
   };
-  const request = vi
-    .fn()
-    .mockImplementation((req: { kind: string; params?: Record<string, unknown> }) => {
-      switch (req.kind) {
-        case "textures/palette/list":
-          return Promise.resolve({ ...listResp, filter: req.params!.slot });
-        case "textures/palette/thumbnail":
-          return Promise.resolve({
-            dataUri: opts?.thumbnail ?? null,
-            status: opts?.thumbnailStatus ?? (opts?.thumbnail ? "ok" : "missing"),
-          });
-        case "textures/palette/toggle-pin":
-          return Promise.resolve(opts?.togglePin ?? { ok: true, pinned: true });
-        case "textures/palette/touch-recent":
-          return Promise.resolve({ ok: true });
-        default:
-          return Promise.resolve({});
-      }
-    });
+  const request = vi.fn().mockImplementation((req: { kind: string; params?: Record<string, unknown> }) => {
+    switch (req.kind) {
+      case "textures/palette/list":
+        return Promise.resolve({ ...listResp, filter: req.params!.slot });
+      case "textures/palette/thumbnail":
+        return Promise.resolve({
+          dataUri: opts?.thumbnail ?? null,
+          status: opts?.thumbnailStatus ?? (opts?.thumbnail ? "ok" : "missing"),
+        });
+      case "textures/palette/toggle-pin":
+        return Promise.resolve(opts?.togglePin ?? { ok: true, pinned: true });
+      case "textures/palette/touch-recent":
+        return Promise.resolve({ ok: true });
+      default:
+        return Promise.resolve({});
+    }
+  });
   const on = vi.fn().mockReturnValue(() => {});
   return { request, on } as unknown as Bridge & {
     request: ReturnType<typeof vi.fn>;
@@ -87,12 +87,8 @@ describe("TexturePalettePopover", () => {
       </TexturePalettePopover>,
     );
     open();
-    expect(
-      await screen.findByRole("button", { name: `Apply ${pin.filename}` }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: `Apply ${recent.filename}` }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: `Apply ${pin.filename}` })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `Apply ${recent.filename}` })).toBeInTheDocument();
     expect(screen.getByText("Pinned")).toBeInTheDocument();
     expect(screen.getByText("Recent")).toBeInTheDocument();
   });
@@ -140,14 +136,10 @@ describe("TexturePalettePopover", () => {
       </TexturePalettePopover>,
     );
     open();
-    fireEvent.click(
-      await screen.findByRole("button", { name: `Apply ${pin.filename}` }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: `Apply ${pin.filename}` }));
     expect(onApply).toHaveBeenCalledWith(pin.filename);
     await waitFor(() => {
-      expect(
-        screen.queryByRole("button", { name: `Apply ${pin.filename}` }),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: `Apply ${pin.filename}` })).not.toBeInTheDocument();
     });
   });
 
@@ -159,9 +151,7 @@ describe("TexturePalettePopover", () => {
       </TexturePalettePopover>,
     );
     open();
-    fireEvent.click(
-      await screen.findByRole("button", { name: `Pin ${recent.filename}` }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: `Pin ${recent.filename}` }));
     await waitFor(() => {
       expect(b.request).toHaveBeenCalledWith({
         kind: "textures/palette/toggle-pin",
@@ -181,9 +171,7 @@ describe("TexturePalettePopover", () => {
       </TexturePalettePopover>,
     );
     open();
-    fireEvent.click(
-      await screen.findByRole("button", { name: `Pin ${recent.filename}` }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: `Pin ${recent.filename}` }));
     expect(await screen.findByText(/pins full/i)).toBeInTheDocument();
   });
 
@@ -195,9 +183,7 @@ describe("TexturePalettePopover", () => {
       </TexturePalettePopover>,
     );
     open();
-    expect(
-      await screen.findByTestId(`palette-thumb-placeholder-${pin.filename}`),
-    ).toBeInTheDocument();
+    expect(await screen.findByTestId(`palette-thumb-placeholder-${pin.filename}`)).toBeInTheDocument();
   });
 
   it("distinguishes a broken thumbnail (decode-failed) from missing", async () => {
@@ -251,15 +237,8 @@ describe("TexturePalettePopover", () => {
     );
     open();
     const applyBtn = await screen.findByRole("button", { name: `Apply ${pin.filename}` });
-    await waitFor(() =>
-      expect(applyBtn.querySelector("img")).toHaveAttribute(
-        "src",
-        "data:image/png;base64,AAAA",
-      ),
-    );
-    expect(
-      screen.queryByTestId(`palette-thumb-placeholder-${pin.filename}`),
-    ).not.toBeInTheDocument();
+    await waitFor(() => expect(applyBtn.querySelector("img")).toHaveAttribute("src", "data:image/png;base64,AAAA"));
+    expect(screen.queryByTestId(`palette-thumb-placeholder-${pin.filename}`)).not.toBeInTheDocument();
   });
 
   it("shows the no-mod hint when no mod is active", async () => {

@@ -18,13 +18,25 @@ const node = (
   children: EmitterTreeNode[] = [],
   role: EmitterTreeNode["role"] = "root",
 ): EmitterTreeNode => ({
-  id: nextStable, stableId: nextStable++, name, role,
-  linkGroup: 0, visible: true, spawn: spawn(s), children,
+  id: nextStable,
+  stableId: nextStable++,
+  name,
+  role,
+  linkGroup: 0,
+  visible: true,
+  spawn: spawn(s),
+  children,
 });
 
 const syntheticRoot = (children: EmitterTreeNode[]): EmitterTreeNode => ({
-  id: -1, stableId: 0, name: "", role: "root",
-  linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children,
+  id: -1,
+  stableId: 0,
+  name: "",
+  role: "root",
+  linkGroup: 0,
+  visible: true,
+  spawn: ZERO_SPAWN,
+  children,
 });
 
 describe("estimatePerEmitter", () => {
@@ -33,24 +45,54 @@ describe("estimatePerEmitter", () => {
   });
   it("burst: particlesPerBurst × concurrent bursts, capped by nBursts", () => {
     // lifetime 3s / delay 1s → floor(3)+1 = 4 concurrent, capped at nBursts=2
-    expect(estimatePerEmitter(spawn({
-      useBursts: true, nParticlesPerBurst: 10, nBursts: 2, burstDelay: 1, lifetime: 3,
-    }))).toBe(20);
+    expect(
+      estimatePerEmitter(
+        spawn({
+          useBursts: true,
+          nParticlesPerBurst: 10,
+          nBursts: 2,
+          burstDelay: 1,
+          lifetime: 3,
+        }),
+      ),
+    ).toBe(20);
   });
   it("burst: nBursts=0 means infinite (no cap)", () => {
-    expect(estimatePerEmitter(spawn({
-      useBursts: true, nParticlesPerBurst: 10, nBursts: 0, burstDelay: 1, lifetime: 3,
-    }))).toBe(40);
+    expect(
+      estimatePerEmitter(
+        spawn({
+          useBursts: true,
+          nParticlesPerBurst: 10,
+          nBursts: 0,
+          burstDelay: 1,
+          lifetime: 3,
+        }),
+      ),
+    ).toBe(40);
   });
   it("burst: burstDelay=0 degenerates to per-burst × nBursts", () => {
-    expect(estimatePerEmitter(spawn({
-      useBursts: true, nParticlesPerBurst: 7, nBursts: 5, burstDelay: 0, lifetime: 1,
-    }))).toBe(35);
+    expect(
+      estimatePerEmitter(
+        spawn({
+          useBursts: true,
+          nParticlesPerBurst: 7,
+          nBursts: 5,
+          burstDelay: 0,
+          lifetime: 1,
+        }),
+      ),
+    ).toBe(35);
   });
   it("burst: infinite bursts at zero delay clamps finite (no Infinity/NaN)", () => {
-    const e = estimatePerEmitter(spawn({
-      useBursts: true, nParticlesPerBurst: 1, nBursts: 0, burstDelay: 0, lifetime: 1,
-    }));
+    const e = estimatePerEmitter(
+      spawn({
+        useBursts: true,
+        nParticlesPerBurst: 1,
+        nBursts: 0,
+        burstDelay: 0,
+        lifetime: 1,
+      }),
+    );
     expect(Number.isFinite(e)).toBe(true);
     expect(e).toBeGreaterThan(CHAIN_WARN_THRESHOLD);
   });
@@ -81,8 +123,7 @@ describe("estimateChainLoad", () => {
     for (const n of [root, mid, leaf]) {
       expect(warnings.get(n.stableId)?.estimate).toBeCloseTo(21_600);
     }
-    expect(warnings.get(root.stableId)?.path.map((p) => p.name))
-      .toEqual(["sparkle", "highlight", "smoke"]);
+    expect(warnings.get(root.stableId)?.path.map((p) => p.name)).toEqual(["sparkle", "highlight", "smoke"]);
   });
   it("a sibling on a sane branch stays unmarked", () => {
     const bomb = node("bomb", { nParticlesPerSecond: 200, lifetime: 100 }, [], "lifetime"); // 20,000
@@ -95,7 +136,7 @@ describe("estimateChainLoad", () => {
   });
   it("an ancestor shared by two offending paths reports the WORST estimate", () => {
     const worse = node("worse", { nParticlesPerSecond: 5000, lifetime: 1 }, [], "lifetime"); // 50,000
-    const bad = node("bad", { nParticlesPerSecond: 2000, lifetime: 1 }, [], "death");        // 20,000
+    const bad = node("bad", { nParticlesPerSecond: 2000, lifetime: 1 }, [], "death"); // 20,000
     const root = node("base", { nParticlesPerSecond: 10, lifetime: 1 }, [worse, bad]);
     const warnings = estimateChainLoad(syntheticRoot([root]));
     expect(warnings.get(root.stableId)?.estimate).toBeCloseTo(50_000);
@@ -210,9 +251,17 @@ describe("death children (spawnOnDeath) scale by death rate, not alive count (#5
     // Burst parent with lifetime 0 has E>0 but L(parent)=0; the MIN_PARENT_LIFETIME
     // floor keeps the death factor finite.
     const child = node("child", { nParticlesPerSecond: 1, lifetime: 1 }, [], "death");
-    const parent = node("flash", {
-      useBursts: true, nParticlesPerBurst: 5, nBursts: 1, burstDelay: 1, lifetime: 0,
-    }, [child]);
+    const parent = node(
+      "flash",
+      {
+        useBursts: true,
+        nParticlesPerBurst: 5,
+        nBursts: 1,
+        burstDelay: 1,
+        lifetime: 0,
+      },
+      [child],
+    );
     const total = estimateSystemLoad(syntheticRoot([parent]));
     expect(Number.isFinite(total)).toBe(true);
   });

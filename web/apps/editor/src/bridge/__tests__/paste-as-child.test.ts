@@ -4,10 +4,7 @@
 import { beforeEach, describe, it, expect } from "vitest";
 import { ZERO_SPAWN } from "@particle-editor/bridge-schema";
 import type { EmitterTreeDto, EmitterTreeNode } from "@particle-editor/bridge-schema";
-import {
-  pasteAsChildFromClipboard,
-  useMockEmitterTree,
-} from "../mock-state";
+import { pasteAsChildFromClipboard, useMockEmitterTree } from "../mock-state";
 import { MockBridge } from "../mock";
 import { resetMockState } from "@/test/mock-state";
 
@@ -30,9 +27,7 @@ function freshTree(): EmitterTreeDto {
   };
 }
 
-const clip: EmitterTreeNode[] = [
-  node(99, "Copied", "root", [node(100, "Copied kid", "lifetime")]),
-];
+const clip: EmitterTreeNode[] = [node(99, "Copied", "root", [node(100, "Copied kid", "lifetime")])];
 
 describe("pasteAsChildFromClipboard", () => {
   it("attaches clipboard[0] as a lifetime child of the target", () => {
@@ -60,9 +55,7 @@ describe("pasteAsChildFromClipboard", () => {
 
   it("returns null when the lifetime slot is already occupied", () => {
     const tree: EmitterTreeDto = {
-      root: node(0, "", "root", [
-        node(1, "Alpha", "root", [node(5, "existing", "lifetime")]),
-      ]),
+      root: node(0, "", "root", [node(1, "Alpha", "root", [node(5, "existing", "lifetime")])]),
     };
     expect(pasteAsChildFromClipboard(tree, clip, 1, "lifetime")).toBeNull();
   });
@@ -78,10 +71,7 @@ describe("pasteAsChildFromClipboard", () => {
     // (legacy React-key rule) AND a fresh stableId (the glide keys rows and
     // FLIP maps by stableId now — a collision breaks row identity).
     const colliding: EmitterTreeNode[] = [
-      node(0, "Src", "root", [
-        node(1, "Src life", "lifetime"),
-        node(2, "Src death", "death"),
-      ]),
+      node(0, "Src", "root", [node(1, "Src life", "lifetime"), node(2, "Src death", "death")]),
     ];
     const r = pasteAsChildFromClipboard(freshTree(), colliding, 1, "lifetime");
     expect(r).not.toBeNull();
@@ -93,7 +83,7 @@ describe("pasteAsChildFromClipboard", () => {
       n.children.forEach(walk);
     };
     walk(r!.tree.root);
-    expect(new Set(ids).size).toBe(ids.length);   // all positional ids unique
+    expect(new Set(ids).size).toBe(ids.length); // all positional ids unique
     expect(new Set(sids).size).toBe(sids.length); // all stableIds unique too
   });
 });

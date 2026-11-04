@@ -29,13 +29,7 @@ type Aggregate = {
 };
 type Dump = Record<string, Aggregate>;
 
-const PROFILED_IDS = [
-  "Toolbar",
-  "StatusBar",
-  "EmitterTree",
-  "CurveEditorPanel",
-  "AtlasPickerPane",
-] as const;
+const PROFILED_IDS = ["Toolbar", "StatusBar", "EmitterTree", "CurveEditorPanel", "AtlasPickerPane"] as const;
 
 declare global {
   interface Window {
@@ -78,10 +72,7 @@ async function settle(page: import("@playwright/test").Page): Promise<void> {
 
 /** One measured interaction: drain prior work, reset, run `action`, drain again,
  *  then dump — so the count is complete and isolated from neighbouring rows. */
-async function measure(
-  page: import("@playwright/test").Page,
-  action: () => Promise<void>,
-): Promise<Dump> {
+async function measure(page: import("@playwright/test").Page, action: () => Promise<void>): Promise<Dump> {
   await settle(page);
   await page.evaluate(() => window.__profilerAudit!.reset());
   await action();
@@ -89,9 +80,7 @@ async function measure(
   return page.evaluate(() => window.__profilerAudit!.dump());
 }
 
-test("react re-render audit: per-component commit counts under scripted interactions", async ({
-  page,
-}, testInfo) => {
+test("react re-render audit: per-component commit counts under scripted interactions", async ({ page }, testInfo) => {
   const results: Record<string, Dump> = {};
 
   await page.goto("/");
@@ -161,9 +150,7 @@ test("react re-render audit: per-component commit counts under scripted interact
   //     this confirms the panel stays out of the hover path. Required: seedAtlas must exist and the
   //     grid must mount, so a 0 here is a real finding, not an absence. ---
   let atlasFramesHovered = 0;
-  const atlasSeedable = await page.evaluate(
-    () => typeof window.__atlasTest?.seedAtlas === "function",
-  );
+  const atlasSeedable = await page.evaluate(() => typeof window.__atlasTest?.seedAtlas === "function");
   expect(atlasSeedable, "atlas seam present (seedAtlas)").toBe(true);
   await page.evaluate(() => window.__atlasTest!.seedAtlas({ textureSize: 64 }));
   const atlasCanvas = page.locator('[data-testid="atlas-canvas"]');
@@ -214,8 +201,7 @@ test("react re-render audit: per-component commit counts under scripted interact
   const diag = await page.evaluate(async () => {
     // MockBridge internals (TS-private), read only for this diagnostic.
     const b = window.bridge as
-      | (E2EBridge & { events?: { listenerCount(key: string): number }; emit?: unknown })
-      | undefined;
+      (E2EBridge & { events?: { listenerCount(key: string): number }; emit?: unknown }) | undefined;
     const cursorListeners = b?.events?.listenerCount?.("cursor/position-3d") ?? null;
     const statsListeners = b?.events?.listenerCount?.("stats/tick") ?? null;
     window.__profilerAudit!.reset();
@@ -256,10 +242,7 @@ test("react re-render audit: per-component commit counts under scripted interact
   // The synthetic-emit path is live: one cursor emit produced a StatusBar row.
   expect(diag.hasBridge, "window.bridge present").toBe(true);
   expect(diag.emitType, "window.bridge.emit is callable").toBe("function");
-  expect(
-    diag.cursorListeners ?? 0,
-    "StatusBar subscribed to cursor/position-3d on window.bridge",
-  ).toBeGreaterThan(0);
+  expect(diag.cursorListeners ?? 0, "StatusBar subscribed to cursor/position-3d on window.bridge").toBeGreaterThan(0);
   expect(
     diag.rowsAfterOneCursorEmit.some((r) => (r as { id?: string }).id === "StatusBar"),
     "one cursor emit re-rendered StatusBar",

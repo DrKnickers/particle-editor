@@ -6,8 +6,16 @@ export function useDecodedImage(dataUri: string | null) {
   const [imageReady, setImageReady] = useState(false);
 
   useEffect(() => {
-    if (!dataUri) { imageRef.current = null; imageUriRef.current = null; setImageReady(false); return; }
-    if (imageUriRef.current === dataUri && imageRef.current) { setImageReady(true); return; }
+    if (!dataUri) {
+      imageRef.current = null;
+      imageUriRef.current = null;
+      setImageReady(false);
+      return;
+    }
+    if (imageUriRef.current === dataUri && imageRef.current) {
+      setImageReady(true);
+      return;
+    }
     let live = true;
     setImageReady(false);
     const img = new Image();
@@ -18,9 +26,17 @@ export function useDecodedImage(dataUri: string | null) {
       imageUriRef.current = dataUri;
       setImageReady(true);
     };
-    if (typeof img.decode === "function") img.decode().then(ready).catch(() => { /* fall back to onload */ });
+    if (typeof img.decode === "function")
+      img
+        .decode()
+        .then(ready)
+        .catch(() => {
+          /* fall back to onload */
+        });
     img.onload = ready;
-    return () => { live = false; };
+    return () => {
+      live = false;
+    };
   }, [dataUri]);
 
   return { imageRef, imageReady };

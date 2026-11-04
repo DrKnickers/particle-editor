@@ -10,7 +10,9 @@ import { markHeadless, __resetRecordModeForTests } from "@/lib/record/record-mod
 // Tooltip.Provider App.tsx supplies in production — this wrapper stands in
 // for it (precedent: renderWithTooltips in EmitterTree.test.tsx).
 const TipProvider = ({ children }: { children: ReactNode }) => (
-  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>
+    {children}
+  </Tooltip.Provider>
 );
 const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 

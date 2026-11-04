@@ -18,10 +18,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 
-const schemaSrc = readFileSync(
-  "../../packages/bridge-schema/src/index.ts",
-  "utf8",
-);
+const schemaSrc = readFileSync("../../packages/bridge-schema/src/index.ts", "utf8");
 const mockSrc = readFileSync("src/bridge/mock.ts", "utf8");
 
 /** Slice the `Request` union block: from `export type Request =` to the next
@@ -88,9 +85,7 @@ describe("bridge contract drift (schema Request kinds vs MockBridge)", () => {
   });
 
   it("every schema Request kind is mock-handled or explicitly deferred", () => {
-    const unaccounted = kinds.filter(
-      (k) => !handled.has(k) && !deferred.has(k),
-    );
+    const unaccounted = kinds.filter((k) => !handled.has(k) && !deferred.has(k));
     expect(unaccounted).toEqual([]);
   });
 

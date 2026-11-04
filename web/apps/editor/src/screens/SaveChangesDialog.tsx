@@ -85,21 +85,20 @@ export function SaveChangesDialog({ bridge }: Props) {
     >
       <Modal.Body>
         <p className="text-sm text-text-2">
-          Do you want to save changes to{" "}
-          <span className="font-medium text-text">{fileLabel}</span>?
+          Do you want to save changes to <span className="font-medium text-text">{fileLabel}</span>?
         </p>
       </Modal.Body>
       <Modal.Footer>
-        <Modal.CancelButton onClick={handleCancel} aria-label="Cancel">Cancel</Modal.CancelButton>
+        <Modal.CancelButton onClick={handleCancel} aria-label="Cancel">
+          Cancel
+        </Modal.CancelButton>
         <Modal.OkButton
           variant="secondary"
           onClick={() =>
             // "Don't Save" runs the parked action (Ctrl+O/Ctrl+N), which may
             // reject; runFileOp already surfaces file failures, so swallow to
             // avoid an unhandled promise rejection.
-            void handleDiscard().catch((err) =>
-              console.warn("[save-prompt] discard action failed:", err),
-            )
+            void handleDiscard().catch((err) => console.warn("[save-prompt] discard action failed:", err))
           }
           aria-label="Don't Save"
         >

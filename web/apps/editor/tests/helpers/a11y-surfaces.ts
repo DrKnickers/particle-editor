@@ -68,11 +68,7 @@ export async function seedCanonicalUiState(page: Page): Promise<void> {
     localStorage.setItem("alo:right-dock", "spawner");
   });
   await page.reload({ waitUntil: "domcontentloaded" });
-  await page.waitForFunction(
-    () => typeof window.bridge !== "undefined",
-    null,
-    { timeout: 15_000 },
-  );
+  await page.waitForFunction(() => typeof window.bridge !== "undefined", null, { timeout: 15_000 });
 }
 
 // Note: EmitterPropertyTabs.tsx already exposes
@@ -93,7 +89,9 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
     setup: async (page) => {
       await page.locator('[data-testid="app-shell"]').focus();
     },
-    teardown: async (page) => { await dismissModals(page); },
+    teardown: async (page) => {
+      await dismissModals(page);
+    },
   },
   {
     id: "menubar-file-open",
@@ -102,7 +100,9 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
       await page.locator('button:has-text("File")').click();
       await page.waitForSelector('[role="menu"]');
     },
-    teardown: async (page) => { await dismissModals(page); },
+    teardown: async (page) => {
+      await dismissModals(page);
+    },
   },
   {
     id: "menubar-edit-open",
@@ -111,7 +111,9 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
       await page.locator('button:has-text("Edit")').click();
       await page.waitForSelector('[role="menu"]');
     },
-    teardown: async (page) => { await dismissModals(page); },
+    teardown: async (page) => {
+      await dismissModals(page);
+    },
   },
   {
     id: "menubar-emitters-open",
@@ -120,7 +122,9 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
       await page.locator('button:has-text("Emitters")').click();
       await page.waitForSelector('[role="menu"]');
     },
-    teardown: async (page) => { await dismissModals(page); },
+    teardown: async (page) => {
+      await dismissModals(page);
+    },
   },
   // menubar-mods-open is intentionally NOT a golden surface: the Mods menu
   // lists mods scanned asynchronously from disk, so its captured tree depends
@@ -136,7 +140,9 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
       await page.locator('button:has-text("View")').click();
       await page.waitForSelector('[role="menu"]');
     },
-    teardown: async (page) => { await dismissModals(page); },
+    teardown: async (page) => {
+      await dismissModals(page);
+    },
   },
   {
     id: "menubar-help-open",
@@ -145,7 +151,9 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
       await page.locator('button:has-text("Help")').click();
       await page.waitForSelector('[role="menu"]');
     },
-    teardown: async (page) => { await dismissModals(page); },
+    teardown: async (page) => {
+      await dismissModals(page);
+    },
   },
   {
     id: "toolbar",
@@ -153,7 +161,9 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
     setup: async (page) => {
       await page.locator('[data-testid="toolbar"]').focus();
     },
-    teardown: async (_page) => { /* no-op */ },
+    teardown: async (_page) => {
+      /* no-op */
+    },
   },
   {
     id: "emitter-tree",
@@ -162,7 +172,9 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
       // Assumes fixture has at least one root emitter loaded.
       await page.locator('[data-testid="emitter-tree"]').focus();
     },
-    teardown: async (_page) => { /* no-op */ },
+    teardown: async (_page) => {
+      /* no-op */
+    },
   },
   {
     id: "property-tabs-basic",
@@ -170,7 +182,9 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
     setup: async (page) => {
       await page.locator('[role="tab"]:has-text("Basic")').click();
     },
-    teardown: async (_page) => { /* no-op */ },
+    teardown: async (_page) => {
+      /* no-op */
+    },
   },
   {
     id: "property-tabs-appearance",
@@ -178,7 +192,9 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
     setup: async (page) => {
       await page.locator('[role="tab"]:has-text("Appearance")').click();
     },
-    teardown: async (_page) => { /* no-op */ },
+    teardown: async (_page) => {
+      /* no-op */
+    },
   },
   {
     id: "property-tabs-physics",
@@ -186,7 +202,9 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
     setup: async (page) => {
       await page.locator('[role="tab"]:has-text("Physics")').click();
     },
-    teardown: async (_page) => { /* no-op */ },
+    teardown: async (_page) => {
+      /* no-op */
+    },
   },
   // viewport-pill surface removed: the ViewportPill was deleted and its
   // three toggles moved into the toolbar (captured by the `toolbar`
@@ -233,7 +251,9 @@ export const DIALOG_SURFACES: SurfaceCapture[] = [
       await page.locator('[data-testid="menu-help-shortcuts"]').click();
       await page.waitForSelector('[role="dialog"]');
     },
-    teardown: async (page) => { await dismissModals(page); },
+    teardown: async (page) => {
+      await dismissModals(page);
+    },
   },
   {
     id: "dialog-about",
@@ -243,7 +263,9 @@ export const DIALOG_SURFACES: SurfaceCapture[] = [
       await page.locator('[role="menuitem"]:has-text("About")').click();
       await page.waitForSelector('[role="dialog"]');
     },
-    teardown: async (page) => { await dismissModals(page); },
+    teardown: async (page) => {
+      await dismissModals(page);
+    },
   },
   {
     id: "dialog-rescale-system",
@@ -253,7 +275,9 @@ export const DIALOG_SURFACES: SurfaceCapture[] = [
       await page.locator('[role="menuitem"]:has-text("Rescale")').click();
       await page.waitForSelector('[role="dialog"]');
     },
-    teardown: async (page) => { await dismissModals(page); },
+    teardown: async (page) => {
+      await dismissModals(page);
+    },
   },
   {
     id: "dialog-reset-view-settings",
@@ -263,7 +287,9 @@ export const DIALOG_SURFACES: SurfaceCapture[] = [
       await page.locator('[role="menuitem"]:has-text("Reset View Settings")').click();
       await page.waitForSelector('[role="dialog"]');
     },
-    teardown: async (page) => { await dismissModals(page); },
+    teardown: async (page) => {
+      await dismissModals(page);
+    },
   },
   {
     id: "dialog-import-emitters",
@@ -277,7 +303,9 @@ export const DIALOG_SURFACES: SurfaceCapture[] = [
       await page.locator('[role="menuitem"]:has-text("Import Emitters")').click();
       await page.waitForSelector('[role="dialog"]');
     },
-    teardown: async (page) => { await dismissModals(page); },
+    teardown: async (page) => {
+      await dismissModals(page);
+    },
   },
 
   // ── Menu-triggered ToolPanel dialogs (role="dialog" container) ───
@@ -294,9 +322,7 @@ export const DIALOG_SURFACES: SurfaceCapture[] = [
     teardown: async (page) => {
       // ToolPanel does NOT close on Esc by design (modeless tool
       // window). Click its X glyph instead — it collapses the dock.
-      await page
-        .locator('[role="dialog"][aria-label="Lighting"] [aria-label="Close"]')
-        .click();
+      await page.locator('[role="dialog"][aria-label="Lighting"] [aria-label="Close"]').click();
     },
   },
   // dialog-bloom-settings removed: Bloom settings folded into
@@ -335,40 +361,40 @@ export const DIALOG_SURFACES: SurfaceCapture[] = [
     id: "dialog-increment-index",
     scope: (page) => page.getByRole("dialog"),
     setup: async (page) => {
-      const firstRow = page
-        .locator('[data-testid="emitter-tree"] [role="treeitem"]')
-        .first();
+      const firstRow = page.locator('[data-testid="emitter-tree"] [role="treeitem"]').first();
       await firstRow.click({ button: "right" });
       await page.locator('[role="menuitem"]:has-text("Increment Index")').click();
       await page.waitForSelector('[role="dialog"]');
     },
-    teardown: async (page) => { await dismissModals(page); },
+    teardown: async (page) => {
+      await dismissModals(page);
+    },
   },
   {
     id: "dialog-rescale-emitter",
     scope: (page) => page.getByRole("dialog"),
     setup: async (page) => {
-      const firstRow = page
-        .locator('[data-testid="emitter-tree"] [role="treeitem"]')
-        .first();
+      const firstRow = page.locator('[data-testid="emitter-tree"] [role="treeitem"]').first();
       await firstRow.click({ button: "right" });
       await page.locator('[role="menuitem"]:has-text("Rescale Emitter")').click();
       await page.waitForSelector('[role="dialog"]');
     },
-    teardown: async (page) => { await dismissModals(page); },
+    teardown: async (page) => {
+      await dismissModals(page);
+    },
   },
   {
     id: "dialog-set-link-group",
     scope: (page) => page.getByRole("dialog"),
     setup: async (page) => {
-      const firstRow = page
-        .locator('[data-testid="emitter-tree"] [role="treeitem"]')
-        .first();
+      const firstRow = page.locator('[data-testid="emitter-tree"] [role="treeitem"]').first();
       await firstRow.click({ button: "right" });
       await page.locator('[role="menuitem"]:has-text("Set Link Group")').click();
       await page.waitForSelector('[role="dialog"]');
     },
-    teardown: async (page) => { await dismissModals(page); },
+    teardown: async (page) => {
+      await dismissModals(page);
+    },
   },
 ];
 
@@ -393,7 +419,9 @@ export const KEYBOARD_SURFACES: SurfaceCapture[] = [
       await page.locator('[data-testid="app-shell"]').focus();
       await page.keyboard.press("Tab");
     },
-    teardown: async (_page) => { /* no-op */ },
+    teardown: async (_page) => {
+      /* no-op */
+    },
   },
   {
     id: "kbd-tab-cycle-stop-2",
@@ -403,7 +431,9 @@ export const KEYBOARD_SURFACES: SurfaceCapture[] = [
       await page.keyboard.press("Tab");
       await page.keyboard.press("Tab");
     },
-    teardown: async (_page) => { /* no-op */ },
+    teardown: async (_page) => {
+      /* no-op */
+    },
   },
   {
     id: "kbd-emitter-rename-mode",
@@ -412,7 +442,9 @@ export const KEYBOARD_SURFACES: SurfaceCapture[] = [
       await page.locator('[data-testid="emitter-tree"] [role="treeitem"]').first().click();
       await page.keyboard.press("F2");
     },
-    teardown: async (page) => { await page.keyboard.press("Escape"); },
+    teardown: async (page) => {
+      await page.keyboard.press("Escape");
+    },
   },
   {
     id: "kbd-arrow-tree-expanded",
@@ -421,7 +453,9 @@ export const KEYBOARD_SURFACES: SurfaceCapture[] = [
       await page.locator('[data-testid="emitter-tree"] [role="treeitem"]').first().focus();
       await page.keyboard.press("ArrowRight");
     },
-    teardown: async (_page) => { /* no-op */ },
+    teardown: async (_page) => {
+      /* no-op */
+    },
   },
 ];
 
@@ -469,7 +503,9 @@ export const CUSTOM_PRIMITIVE_SURFACES: SurfaceCapture[] = [
       await page.locator('[role="tab"]:has-text("Basic")').click();
       await page.locator('[data-testid="curve-editor-svg"]').click();
     },
-    teardown: async (_page) => { /* no-op */ },
+    teardown: async (_page) => {
+      /* no-op */
+    },
   },
   {
     id: "spinner-focused",
@@ -480,6 +516,8 @@ export const CUSTOM_PRIMITIVE_SURFACES: SurfaceCapture[] = [
       await page.locator('[role="tab"]:has-text("Basic")').click();
       await page.locator('[data-testid="spinner-particles-per-second"] input').focus();
     },
-    teardown: async (_page) => { /* no-op */ },
+    teardown: async (_page) => {
+      /* no-op */
+    },
   },
 ];

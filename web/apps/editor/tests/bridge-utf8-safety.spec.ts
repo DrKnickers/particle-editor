@@ -53,57 +53,60 @@ test.afterAll(async () => {
 });
 
 test("a non-UTF-8 emitter name reaches the UI as U+FFFD on responses and events", async () => {
-  const result = await page.evaluate(async ({ path, name }) => {
-    type TreeNode = { id: number; name: string; children?: TreeNode[] };
-    const names = (node: TreeNode | undefined): string[] =>
-      (node?.children ?? []).flatMap((c) => [c.name, ...names(c)]);
-    const collectIds = (node: TreeNode | undefined): number[] =>
-      (node?.children ?? []).flatMap((c) => [c.id, ...collectIds(c)]);
-    const bridge = window.bridge!;
-    // Imported emitters are renamed through GenerateDuplicateName, which adds a
-    // numeric suffix ("<name>_01"), so after the import match on the prefix.
-    const hasImported = (list: string[]) => list.some((n) => n.startsWith(name));
+  const result = await page.evaluate(
+    async ({ path, name }) => {
+      type TreeNode = { id: number; name: string; children?: TreeNode[] };
+      const names = (node: TreeNode | undefined): string[] =>
+        (node?.children ?? []).flatMap((c) => [c.name, ...names(c)]);
+      const collectIds = (node: TreeNode | undefined): number[] =>
+        (node?.children ?? []).flatMap((c) => [c.id, ...collectIds(c)]);
+      const bridge = window.bridge!;
+      // Imported emitters are renamed through GenerateDuplicateName, which adds a
+      // numeric suffix ("<name>_01"), so after the import match on the prefix.
+      const hasImported = (list: string[]) => list.some((n) => n.startsWith(name));
 
-    const treeEventNames: string[][] = [];
-    const off = bridge.on("emitters/tree/changed", (e: { payload: { root: TreeNode } }) => {
-      treeEventNames.push(names(e.payload.root));
-    });
+      const treeEventNames: string[][] = [];
+      const off = bridge.on("emitters/tree/changed", (e: { payload: { root: TreeNode } }) => {
+        treeEventNames.push(names(e.payload.root));
+      });
 
-    // Response path 1: the preview tree of the file itself.
-    const preview = await bridge.request({ kind: "emitters/preview-from-file", params: { path } });
-    const previewNames = preview.ok ? names(preview.tree) : [];
-    const selected = preview.ok ? collectIds(preview.tree) : [];
+      // Response path 1: the preview tree of the file itself.
+      const preview = await bridge.request({ kind: "emitters/preview-from-file", params: { path } });
+      const previewNames = preview.ok ? names(preview.tree) : [];
+      const selected = preview.ok ? collectIds(preview.tree) : [];
 
-    const imp = await bridge.request({ kind: "emitters/import-from-file", params: { path, selected } });
+      const imp = await bridge.request({ kind: "emitters/import-from-file", params: { path, selected } });
 
-    // Response path 2: the live tree, now holding the imported emitters.
-    const list = await bridge.request({ kind: "emitters/list", params: {} });
-    const listNames = names(list.root);
+      // Response path 2: the live tree, now holding the imported emitters.
+      const list = await bridge.request({ kind: "emitters/list", params: {} });
+      const listNames = names(list.root);
 
-    // Event path: wait (bounded) for a tree/changed push carrying the name.
-    await new Promise<void>((done) => {
-      const deadline = Date.now() + 3000;
-      const poll = () => {
-        if (treeEventNames.some(hasImported) || Date.now() >= deadline) done();
-        else setTimeout(poll, 10);
+      // Event path: wait (bounded) for a tree/changed push carrying the name.
+      await new Promise<void>((done) => {
+        const deadline = Date.now() + 3000;
+        const poll = () => {
+          if (treeEventNames.some(hasImported) || Date.now() >= deadline) done();
+          else setTimeout(poll, 10);
+        };
+        poll();
+      });
+      off();
+
+      // Restore the pre-import tree for later specs.
+      await bridge.request({ kind: "undo/perform", params: { direction: "undo" } });
+      const after = await bridge.request({ kind: "emitters/list", params: {} });
+
+      return {
+        previewOk: preview.ok === true,
+        previewHasName: previewNames.includes(name),
+        importOk: imp.ok === true,
+        listHasName: hasImported(listNames),
+        eventHasName: treeEventNames.some(hasImported),
+        undoneHasName: hasImported(names(after.root)),
       };
-      poll();
-    });
-    off();
-
-    // Restore the pre-import tree for later specs.
-    await bridge.request({ kind: "undo/perform", params: { direction: "undo" } });
-    const after = await bridge.request({ kind: "emitters/list", params: {} });
-
-    return {
-      previewOk: preview.ok === true,
-      previewHasName: previewNames.includes(name),
-      importOk: imp.ok === true,
-      listHasName: hasImported(listNames),
-      eventHasName: treeEventNames.some(hasImported),
-      undoneHasName: hasImported(names(after.root)),
-    };
-  }, { path: patchedPath, name: REPLACED_NAME });
+    },
+    { path: patchedPath, name: REPLACED_NAME },
+  );
 
   expect(result.previewOk).toBe(true);
   expect(result.previewHasName).toBe(true);

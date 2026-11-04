@@ -23,7 +23,9 @@ export function useEmitterRename({ bridge, restoreFocus }: UseEmitterRenameOptio
   // progress.
   const [editing, setEditing] = useState<RenameEditingState>(null);
   const editingRef = useRef<RenameEditingState>(null);
-  useEffect(() => { editingRef.current = editing; }, [editing]);
+  useEffect(() => {
+    editingRef.current = editing;
+  }, [editing]);
 
   // Rename commit/cancel unmounts the inline
   // input, which drops focus to <body> — return it to the edited row so
@@ -51,7 +53,9 @@ export function useEmitterRename({ bridge, restoreFocus }: UseEmitterRenameOptio
   const setEditValue = useCallback((value: string) => {
     setEditing((cur) => (cur === null ? null : { ...cur, value }));
   }, []);
-  const cancelEdit = useCallback(() => { setEditing(null); }, []);
+  const cancelEdit = useCallback(() => {
+    setEditing(null);
+  }, []);
   const commitEdit = useCallback(() => {
     const cur = editingRef.current;
     if (cur === null) return;

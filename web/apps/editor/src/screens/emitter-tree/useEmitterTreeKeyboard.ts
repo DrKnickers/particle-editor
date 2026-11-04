@@ -30,13 +30,14 @@ export function useEmitterTreeKeyboard({
   beginEdit,
   treeContainerRef,
 }: UseEmitterTreeKeyboardOptions) {
-  const focusRowById = useCallback((id: number) => {
-    if (treeContainerRef.current === null) return;
-    const btn = treeContainerRef.current.querySelector(
-      `[data-emitter-id="${id}"]`,
-    ) as HTMLElement | null;
-    btn?.focus();
-  }, [treeContainerRef]);
+  const focusRowById = useCallback(
+    (id: number) => {
+      if (treeContainerRef.current === null) return;
+      const btn = treeContainerRef.current.querySelector(`[data-emitter-id="${id}"]`) as HTMLElement | null;
+      btn?.focus();
+    },
+    [treeContainerRef],
+  );
 
   const handleTreeKeyDown = useCallback(
     (e: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -117,7 +118,10 @@ export function useEmitterTreeKeyboard({
         const cur = useEmitterSelectionStore.getState().ids;
         if (cur.length === 0) return;
         e.preventDefault();
-        announceWhenOk(bridge.request({ kind: "emitters/cut", params: { ids: cur } }), `Cut ${cur.length === 1 ? "emitter" : `${cur.length} emitters`} — Ctrl+Z to undo`);
+        announceWhenOk(
+          bridge.request({ kind: "emitters/cut", params: { ids: cur } }),
+          `Cut ${cur.length === 1 ? "emitter" : `${cur.length} emitters`} — Ctrl+Z to undo`,
+        );
         markEmittersCopied();
         return;
       }

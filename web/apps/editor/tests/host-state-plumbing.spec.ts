@@ -59,7 +59,11 @@ test("file/save with a path writes a non-zero-byte .alo to disk", async () => {
   expect(stat.size).toBeGreaterThan(0);
 
   // Clean up — keep the worktree tidy across runs.
-  try { fs.unlinkSync(filePath); } catch { /* best-effort */ }
+  try {
+    fs.unlinkSync(filePath);
+  } catch {
+    /* best-effort */
+  }
 });
 
 // ── 2. Open round-trip reads back the saved file ───────────────────────────
@@ -93,7 +97,11 @@ test("file/open after file/save reads the file back; snapshot reflects the path"
   expect(result.dirty).toBe(false);
 
   // Clean up.
-  try { fs.unlinkSync(filePath); } catch { /* best-effort */ }
+  try {
+    fs.unlinkSync(filePath);
+  } catch {
+    /* best-effort */
+  }
 });
 
 // ── 3. Rescale fires emitters/tree/changed ─────────────────────────────────
@@ -119,9 +127,7 @@ test("engine/action/rescale-system fires emitters/tree/changed", async () => {
   // Give the event channel a tick to deliver.
   await page.waitForTimeout(150);
 
-  const count = await page.evaluate(
-    () => window.__rescaleTreeEvents,
-  );
+  const count = await page.evaluate(() => window.__rescaleTreeEvents);
   expect(count).toBeGreaterThanOrEqual(1);
 });
 
@@ -133,14 +139,18 @@ test("held Shift survives clear then file/new without a stale-instance crash", a
   try {
     await page.keyboard.down("Shift");
 
-    await expect.poll(async () => page.evaluate(async () => {
-      const b = window.bridge!;
-      const live = await b.request({
-        kind: "engine/query/live-instances",
-        params: {},
-      });
-      return live.instances as number;
-    })).toBeGreaterThanOrEqual(1);
+    await expect
+      .poll(async () =>
+        page.evaluate(async () => {
+          const b = window.bridge!;
+          const live = await b.request({
+            kind: "engine/query/live-instances",
+            params: {},
+          });
+          return live.instances as number;
+        }),
+      )
+      .toBeGreaterThanOrEqual(1);
 
     const result = await page.evaluate(async () => {
       const b = window.bridge!;

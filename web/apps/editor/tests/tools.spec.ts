@@ -88,10 +88,8 @@ test("Opening the Background popover does not close the Lighting panel (independ
 
   // The popover should mount as a Radix popper wrapper, and the
   // Lighting tool panel should still be present.
-  await page.waitForSelector('[data-radix-popper-content-wrapper]', { timeout: 2000 });
-  const stillLighting = await page
-    .locator('[role="dialog"][aria-label="Lighting"]')
-    .count();
+  await page.waitForSelector("[data-radix-popper-content-wrapper]", { timeout: 2000 });
+  const stillLighting = await page.locator('[role="dialog"][aria-label="Lighting"]').count();
   expect(stillLighting).toBe(1);
 
   // Cleanup so the next test starts from a clean slate. Press Escape
@@ -107,10 +105,7 @@ test("Toggling Enable Bloom fires engine/set/bloom (observed via state/changed)"
   await closeAnyPanel(page);
   await openMenuItem(page, "View", "Lighting");
   await waitForPanel(page, "Lighting");
-  await page
-    .locator('[role="dialog"][aria-label="Lighting"] [role="button"]:has-text("Bloom")')
-    .first()
-    .click();
+  await page.locator('[role="dialog"][aria-label="Lighting"] [role="button"]:has-text("Bloom")').first().click();
 
   // Subscribe to engine/state/changed and capture the bloom flag from
   // each payload. The React panel commits Enable changes directly to
@@ -136,9 +131,7 @@ test("Toggling Enable Bloom fires engine/set/bloom (observed via state/changed)"
   // Wait for the host to emit the resulting state/changed.
   await page.waitForTimeout(300);
 
-  const changes = await page.evaluate(
-    () => window.__bloomChanges,
-  );
+  const changes = await page.evaluate(() => window.__bloomChanges);
   // At least one event with the flipped value should have arrived.
   expect(changes).toContain(!before);
 
@@ -163,7 +156,7 @@ test("Ground popover opens from the toolbar dropdown trigger", async () => {
     if (!btn) return { clicked: false, popover: false, slots: 0 };
     btn.click();
     await new Promise((r) => setTimeout(r, 250));
-    const popover = document.querySelector('[data-radix-popper-content-wrapper]');
+    const popover = document.querySelector("[data-radix-popper-content-wrapper]");
     const slots = popover?.querySelectorAll("button[aria-pressed]").length ?? 0;
     return { clicked: true, popover: !!popover, slots };
   });
@@ -194,12 +187,10 @@ test("Clicking a bundled ground slot in the popover updates groundTexture", asyn
 
   // Open the Ground popover from the toolbar.
   await page.locator('button[aria-label="Ground"]').first().click();
-  await page.waitForSelector('[data-radix-popper-content-wrapper]', { timeout: 2000 });
+  await page.waitForSelector("[data-radix-popper-content-wrapper]", { timeout: 2000 });
 
   // Slot buttons live inside the popover wrapper now.
-  await page
-    .locator(`[data-radix-popper-content-wrapper] button[aria-label="${targetName}"]`)
-    .click();
+  await page.locator(`[data-radix-popper-content-wrapper] button[aria-label="${targetName}"]`).click();
 
   await page.waitForTimeout(300);
 

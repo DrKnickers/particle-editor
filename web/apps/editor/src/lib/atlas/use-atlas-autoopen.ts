@@ -29,17 +29,8 @@
 // fix below compares the observed dock against a PERSISTED `selfTarget` ref
 // (the value we last wrote) which survives the next-render subscription read.
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
-import {
-  autoOpenReducer,
-  initialAutoOpen,
-  type AutoOpenState,
-  type AutoOpenEvent,
-} from "./atlas-autoopen";
-import {
-  getAtlasContext,
-  subscribeAtlasContext,
-  type AtlasContext,
-} from "./atlas-context";
+import { autoOpenReducer, initialAutoOpen, type AutoOpenState, type AutoOpenEvent } from "./atlas-autoopen";
+import { getAtlasContext, subscribeAtlasContext, type AtlasContext } from "./atlas-context";
 import { setDock, useRightDock, type RightDock } from "../right-dock";
 
 export function useAtlasAutoOpen({ atlasEligible }: { atlasEligible: boolean }) {
@@ -67,8 +58,13 @@ export function useAtlasAutoOpen({ atlasEligible }: { atlasEligible: boolean }) 
   const dispatch = useCallback((ev: AutoOpenEvent) => {
     const { state, command } = autoOpenReducer(stateRef.current, ev);
     stateRef.current = state;
-    if (command.type === "open") { selfTarget.current = "atlas"; setDock("atlas"); }
-    else if (command.type === "restore") { selfTarget.current = command.to; setDock(command.to); }
+    if (command.type === "open") {
+      selfTarget.current = "atlas";
+      setDock("atlas");
+    } else if (command.type === "restore") {
+      selfTarget.current = command.to;
+      setDock(command.to);
+    }
   }, []);
 
   // Observe the atlas context NON-REACTIVELY: replay once at mount, then
@@ -100,18 +96,14 @@ export function useAtlasAutoOpen({ atlasEligible }: { atlasEligible: boolean }) 
       hadSelection.current = has;
     };
     const handle = (ctx: AtlasContext, prev: AtlasContext | undefined) => {
-      if (prev === undefined || !Object.is(ctx.focusedTrack, prev.focusedTrack))
-        runFocusTransition(ctx.focusedTrack);
+      if (prev === undefined || !Object.is(ctx.focusedTrack, prev.focusedTrack)) runFocusTransition(ctx.focusedTrack);
       if (
         prev === undefined ||
         !Object.is(ctx.focusedTrack, prev.focusedTrack) ||
         !Object.is(ctx.selection.keyTimes, prev.selection.keyTimes)
       )
         runSelectionEdge(ctx);
-      if (
-        (prev === undefined || !Object.is(ctx.emitterId, prev.emitterId)) &&
-        ctx.emitterId === null
-      )
+      if ((prev === undefined || !Object.is(ctx.emitterId, prev.emitterId)) && ctx.emitterId === null)
         dispatch({ type: "emitterCleared" });
     };
     handle(getAtlasContext(), undefined); // mount replay
@@ -120,7 +112,9 @@ export function useAtlasAutoOpen({ atlasEligible }: { atlasEligible: boolean }) 
 
   // Eligibility loss is driven by the `atlasEligible` PROP (not the context
   // store), so it stays a normal reactive effect — it is not part of the loop.
-  useEffect(() => { if (!atlasEligible) dispatch({ type: "eligibilityLost" }); }, [atlasEligible, dispatch]);
+  useEffect(() => {
+    if (!atlasEligible) dispatch({ type: "eligibilityLost" });
+  }, [atlasEligible, dispatch]);
 
   // User dock mutation = a dock change we did NOT cause. Compare to the persisted
   // target (survives the next-render subscription read; a synchronous flag would not).
@@ -137,7 +131,10 @@ export function useAtlasAutoOpen({ atlasEligible }: { atlasEligible: boolean }) 
       if (selfTarget.current === undefined) selfTarget.current = dock;
       return;
     }
-    if (dock === selfTarget.current) { selfTarget.current = undefined; return; } // our own write
+    if (dock === selfTarget.current) {
+      selfTarget.current = undefined;
+      return;
+    } // our own write
     dispatch({ type: "userDockMutation" });
   }, [dock, dispatch]);
 }

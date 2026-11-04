@@ -1,8 +1,6 @@
 // Mock counterpart of src/host/BridgeDispatch_Shell.cpp.
 
-import type {
-  Request,
-} from "@particle-editor/bridge-schema";
+import type { Request } from "@particle-editor/bridge-schema";
 import type { MockDispatchHost } from "./host";
 import { EXTERNAL_LINKS } from "@/lib/external-links";
 
@@ -22,7 +20,6 @@ type ShellRequest = Extract<Request, { kind: ShellKind }>;
 
 export function dispatchShell(this: MockDispatchHost, req: ShellRequest): unknown {
   switch (req.kind) {
-
     // ---------------- stats freeze (test-only knob) ----------------
     // Mock parity for native stats/set-frozen. Browser
     // mode emits no stats/tick, so freezing is largely no-op, but

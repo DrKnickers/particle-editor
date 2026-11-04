@@ -36,59 +36,59 @@ import { useTreeContextStore } from "@/lib/tree/tree-context";
 // renders (just without a friendly label). Mirrors the labels in the
 // legacy Win32 editor's `kLinkSettingsFields` table.
 const FIELD_LABELS: Readonly<Record<string, string>> = {
-  colorTexture:            "Color texture",
-  normalTexture:           "Normal texture",
-  trackIndex:              "Atlas index curve",
-  trackRed:                "Red curve",
-  trackGreen:              "Green curve",
-  trackBlue:               "Blue curve",
-  trackAlpha:              "Alpha curve",
-  trackScale:              "Scale curve",
-  trackRotationSpeed:      "Rotation speed curve",
-  lifetime:                "Lifetime",
-  initialDelay:            "Initial delay",
-  burstDelay:              "Burst delay",
-  nBursts:                 "Number of bursts",
-  nParticlesPerBurst:      "Particles per burst",
-  nParticlesPerSecond:     "Particles per second",
-  useBursts:               "Use bursts",
-  gravity:                 "Gravity",
-  acceleration:            "Acceleration",
-  inwardSpeed:             "Inward speed",
-  inwardAcceleration:      "Inward acceleration",
-  bounciness:              "Bounciness",
-  groundBehavior:          "Ground behavior",
+  colorTexture: "Color texture",
+  normalTexture: "Normal texture",
+  trackIndex: "Atlas index curve",
+  trackRed: "Red curve",
+  trackGreen: "Green curve",
+  trackBlue: "Blue curve",
+  trackAlpha: "Alpha curve",
+  trackScale: "Scale curve",
+  trackRotationSpeed: "Rotation speed curve",
+  lifetime: "Lifetime",
+  initialDelay: "Initial delay",
+  burstDelay: "Burst delay",
+  nBursts: "Number of bursts",
+  nParticlesPerBurst: "Particles per burst",
+  nParticlesPerSecond: "Particles per second",
+  useBursts: "Use bursts",
+  gravity: "Gravity",
+  acceleration: "Acceleration",
+  inwardSpeed: "Inward speed",
+  inwardAcceleration: "Inward acceleration",
+  bounciness: "Bounciness",
+  groundBehavior: "Ground behavior",
   objectSpaceAcceleration: "Object-space acceleration",
-  affectedByWind:          "Affected by wind",
-  blendMode:               "Blend mode",
-  textureSize:             "Texture size",
-  nTriangles:              "Triangles per particle",
-  randomScalePerc:         "Random scale %",
-  randomLifetimePerc:      "Random lifetime %",
-  hasTail:                 "Has tail",
-  tailSize:                "Tail size",
-  noDepthTest:             "No depth test",
-  randomColors:            "Random colors",
-  isWeatherParticle:       "Weather particle",
-  weatherCubeSize:         "Weather cube size",
-  weatherCubeDistance:     "Weather cube distance",
-  weatherFadeoutDistance:  "Weather fadeout distance",
-  randomRotation:          "Random rotation",
+  affectedByWind: "Affected by wind",
+  blendMode: "Blend mode",
+  textureSize: "Texture size",
+  nTriangles: "Triangles per particle",
+  randomScalePerc: "Random scale %",
+  randomLifetimePerc: "Random lifetime %",
+  hasTail: "Has tail",
+  tailSize: "Tail size",
+  noDepthTest: "No depth test",
+  randomColors: "Random colors",
+  isWeatherParticle: "Weather particle",
+  weatherCubeSize: "Weather cube size",
+  weatherCubeDistance: "Weather cube distance",
+  weatherFadeoutDistance: "Weather fadeout distance",
+  randomRotation: "Random rotation",
   randomRotationDirection: "Random rotation direction",
-  randomRotationAverage:   "Random rotation average",
-  randomRotationVariance:  "Random rotation variance",
-  linkToSystem:            "Link to system",
-  parentLinkStrength:      "Parent link strength",
-  doColorAddGrayscale:     "Color-add grayscale",
-  isHeatParticle:          "Heat particle",
-  isWorldOriented:         "World-oriented",
-  freezeTime:              "Freeze time",
-  skipTime:                "Skip time",
-  emitFromMesh:            "Emit from mesh",
-  emitFromMeshOffset:      "Emit from mesh offset",
-  groupSpeed:              "Speed params (random box)",
-  groupLifetime:           "Lifetime params (random box)",
-  groupPosition:           "Position params (random box)",
+  randomRotationAverage: "Random rotation average",
+  randomRotationVariance: "Random rotation variance",
+  linkToSystem: "Link to system",
+  parentLinkStrength: "Parent link strength",
+  doColorAddGrayscale: "Color-add grayscale",
+  isHeatParticle: "Heat particle",
+  isWorldOriented: "World-oriented",
+  freezeTime: "Freeze time",
+  skipTime: "Skip time",
+  emitFromMesh: "Emit from mesh",
+  emitFromMeshOffset: "Emit from mesh offset",
+  groupSpeed: "Speed params (random box)",
+  groupLifetime: "Lifetime params (random box)",
+  groupPosition: "Position params (random box)",
 };
 
 // Field organization — groups the flag set into categories that mirror
@@ -102,46 +102,70 @@ const FIELD_CATEGORIES: readonly FieldCategory[] = [
   {
     id: "curves",
     label: "Curves",
-    fields: [
-      "trackRed", "trackGreen", "trackBlue", "trackAlpha",
-      "trackScale", "trackRotationSpeed", "trackIndex",
-    ],
+    fields: ["trackRed", "trackGreen", "trackBlue", "trackAlpha", "trackScale", "trackRotationSpeed", "trackIndex"],
   },
   {
     id: "basic",
     label: "Basic",
     fields: [
-      "lifetime", "initialDelay", "randomLifetimePerc",
-      "useBursts", "nBursts", "burstDelay",
-      "nParticlesPerBurst", "nParticlesPerSecond",
-      "emitFromMesh", "emitFromMeshOffset", "groupLifetime",
-      "linkToSystem", "parentLinkStrength",
+      "lifetime",
+      "initialDelay",
+      "randomLifetimePerc",
+      "useBursts",
+      "nBursts",
+      "burstDelay",
+      "nParticlesPerBurst",
+      "nParticlesPerSecond",
+      "emitFromMesh",
+      "emitFromMeshOffset",
+      "groupLifetime",
+      "linkToSystem",
+      "parentLinkStrength",
     ],
   },
   {
     id: "appearance",
     label: "Appearance",
     fields: [
-      "colorTexture", "normalTexture",
-      "blendMode", "textureSize", "nTriangles", "randomScalePerc",
-      "noDepthTest", "isWorldOriented", "isHeatParticle",
-      "hasTail", "tailSize",
-      "randomColors", "doColorAddGrayscale",
-      "randomRotation", "randomRotationDirection",
-      "randomRotationAverage", "randomRotationVariance",
-      "isWeatherParticle", "weatherCubeSize",
-      "weatherCubeDistance", "weatherFadeoutDistance",
+      "colorTexture",
+      "normalTexture",
+      "blendMode",
+      "textureSize",
+      "nTriangles",
+      "randomScalePerc",
+      "noDepthTest",
+      "isWorldOriented",
+      "isHeatParticle",
+      "hasTail",
+      "tailSize",
+      "randomColors",
+      "doColorAddGrayscale",
+      "randomRotation",
+      "randomRotationDirection",
+      "randomRotationAverage",
+      "randomRotationVariance",
+      "isWeatherParticle",
+      "weatherCubeSize",
+      "weatherCubeDistance",
+      "weatherFadeoutDistance",
     ],
   },
   {
     id: "physics",
     label: "Physics",
     fields: [
-      "gravity", "acceleration", "inwardSpeed", "inwardAcceleration",
-      "objectSpaceAcceleration", "affectedByWind",
-      "bounciness", "groundBehavior",
-      "groupSpeed", "groupPosition",
-      "freezeTime", "skipTime",
+      "gravity",
+      "acceleration",
+      "inwardSpeed",
+      "inwardAcceleration",
+      "objectSpaceAcceleration",
+      "affectedByWind",
+      "bounciness",
+      "groundBehavior",
+      "groupSpeed",
+      "groupPosition",
+      "freezeTime",
+      "skipTime",
     ],
   },
 ];
@@ -199,18 +223,13 @@ function CategorySection({
       <div className="collapse-anim" data-open={!collapsed}>
         <div className="pl-4">
           {fields.map((field) => (
-            <label
-              key={field}
-              className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-panel-2"
-            >
+            <label key={field} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-panel-2">
               <Checkbox
                 data-field={field}
                 checked={!exempt.has(field)}
                 onChange={(e) => onToggleField(field, e.target.checked)}
               />
-              <span className="text-xs text-text">
-                {FIELD_LABELS[field] ?? field}
-              </span>
+              <span className="text-xs text-text">{FIELD_LABELS[field] ?? field}</span>
             </label>
           ))}
         </div>
@@ -223,10 +242,7 @@ type Props = {
   bridge: Bridge;
 };
 
-type LoadState =
-  | { kind: "loading" }
-  | { kind: "loaded"; exempt: Set<string> }
-  | { kind: "error"; message: string };
+type LoadState = { kind: "loading" } | { kind: "loaded"; exempt: Set<string> } | { kind: "error"; message: string };
 
 export function LinkGroupSettingsDialog({ bridge }: Props) {
   const open = useTreeContextStore((s) => s.open === "link-group");
@@ -354,9 +370,7 @@ export function LinkGroupSettingsDialog({ bridge }: Props) {
   const otherFields: string[] =
     state.kind === "loaded"
       ? (() => {
-          const categorized = new Set(
-            FIELD_CATEGORIES.flatMap((c) => c.fields),
-          );
+          const categorized = new Set(FIELD_CATEGORIES.flatMap((c) => c.fields));
           return Array.from(state.exempt).filter((f) => !categorized.has(f));
         })()
       : [];
@@ -372,9 +386,7 @@ export function LinkGroupSettingsDialog({ bridge }: Props) {
       size="md"
     >
       <Modal.Body>
-        {state.kind === "loading" && (
-          <div className="text-sm text-text-2">Loading…</div>
-        )}
+        {state.kind === "loading" && <div className="text-sm text-text-2">Loading…</div>}
         {state.kind === "error" && (
           <div data-testid="link-group-error" className="text-sm text-danger-fg">
             Could not load exempt fields: {state.message}
@@ -383,14 +395,11 @@ export function LinkGroupSettingsDialog({ bridge }: Props) {
         {state.kind === "loaded" && (
           <div className="flex flex-col gap-1 text-sm">
             <p className="mb-2 text-2xs leading-relaxed text-text-3">
-              Checked fields are <em>shared</em> across the link group —
-              edits propagate to every member. Unchecked fields are{" "}
-              <em>per-emitter</em>.
+              Checked fields are <em>shared</em> across the link group — edits propagate to every member. Unchecked
+              fields are <em>per-emitter</em>.
             </p>
             {(() => {
-              const conflictFields = Array.from(
-                new Set(conflicts.flatMap((c) => c.fields)),
-              );
+              const conflictFields = Array.from(new Set(conflicts.flatMap((c) => c.fields)));
               if (conflictFields.length === 0) return null;
               const n = conflictFields.length;
               const m = conflicts.length;
@@ -400,9 +409,8 @@ export function LinkGroupSettingsDialog({ bridge }: Props) {
                   className="mb-2 rounded border border-warning/60 bg-warning/15 px-2 py-1.5 text-2xs leading-relaxed text-warning-fg"
                 >
                   <p className="font-medium">
-                    Sharing {n} {n === 1 ? "field" : "fields"} will overwrite{" "}
-                    {m} {m === 1 ? "emitter" : "emitters"} with the canonical
-                    (first-in-tree-order) value:
+                    Sharing {n} {n === 1 ? "field" : "fields"} will overwrite {m} {m === 1 ? "emitter" : "emitters"}{" "}
+                    with the canonical (first-in-tree-order) value:
                   </p>
                   <p className="mt-0.5 font-medium text-warning-fg">
                     {conflictFields.map((f) => FIELD_LABELS[f] ?? f).join(", ")}
@@ -448,10 +456,7 @@ export function LinkGroupSettingsDialog({ bridge }: Props) {
           Reset All
         </button>
         <Modal.CancelButton>Cancel</Modal.CancelButton>
-        <Modal.OkButton
-          onClick={handleOk}
-          disabled={state.kind !== "loaded"}
-        >
+        <Modal.OkButton onClick={handleOk} disabled={state.kind !== "loaded"}>
           OK
         </Modal.OkButton>
       </Modal.Footer>

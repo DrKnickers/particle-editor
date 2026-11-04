@@ -9,7 +9,9 @@ import { markRecording, __resetRecordModeForTests } from "@/lib/record/record-mo
 // jsdom path (hover needs real pointer events Radix sniffs for).
 function renderTip(ui: React.ReactElement) {
   return render(
-    <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{ui}</Tooltip.Provider>,
+    <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>
+      {ui}
+    </Tooltip.Provider>,
   );
 }
 
@@ -18,7 +20,9 @@ describe("Tip", () => {
 
   it("renders the trigger unchanged (asChild — no wrapper element)", () => {
     renderTip(
-      <Tip content="Save the file"><button aria-label="Save">S</button></Tip>,
+      <Tip content="Save the file">
+        <button aria-label="Save">S</button>
+      </Tip>,
     );
     const btn = screen.getByRole("button", { name: "Save" });
     expect(btn.parentElement?.tagName).not.toBe("SPAN"); // no shim injected
@@ -27,7 +31,9 @@ describe("Tip", () => {
 
   it("opens on focus and shows the styled content", () => {
     renderTip(
-      <Tip content="Save the file"><button aria-label="Save">S</button></Tip>,
+      <Tip content="Save the file">
+        <button aria-label="Save">S</button>
+      </Tip>,
     );
     act(() => screen.getByRole("button", { name: "Save" }).focus());
     // Radix renders the visible content + a duplicate inside a visually
@@ -45,7 +51,9 @@ describe("Tip", () => {
 
   it("renders the bare child when content is nullish or empty", () => {
     renderTip(
-      <Tip content={undefined}><button aria-label="Plain">P</button></Tip>,
+      <Tip content={undefined}>
+        <button aria-label="Plain">P</button>
+      </Tip>,
     );
     act(() => screen.getByRole("button", { name: "Plain" }).focus());
     expect(document.querySelector(".tip-surface")).toBeNull();
@@ -54,7 +62,9 @@ describe("Tip", () => {
   it("suppresses the tooltip under --record (no blur to close a focus-opened tip)", () => {
     markRecording();
     renderTip(
-      <Tip content="Save the file"><button aria-label="Save">S</button></Tip>,
+      <Tip content="Save the file">
+        <button aria-label="Save">S</button>
+      </Tip>,
     );
     // Even with focus (the record path that pins a tooltip open), no tip renders.
     act(() => screen.getByRole("button", { name: "Save" }).focus());
@@ -69,7 +79,9 @@ describe("Tip", () => {
     // THEN the host starts recording. This is why record-mode is a reactive store
     // (not a plain module boolean) — the open Tip must re-render and drop itself.
     renderTip(
-      <Tip content="Save the file"><button aria-label="Save">S</button></Tip>,
+      <Tip content="Save the file">
+        <button aria-label="Save">S</button>
+      </Tip>,
     );
     act(() => screen.getByRole("button", { name: "Save" }).focus());
     expect(screen.getAllByText("Save the file").length).toBeGreaterThan(0); // open first
@@ -79,7 +91,9 @@ describe("Tip", () => {
 
   it("forwards side and align to the content", () => {
     renderTip(
-      <Tip content="hint" side="right" align="start"><button aria-label="T">T</button></Tip>,
+      <Tip content="hint" side="right" align="start">
+        <button aria-label="T">T</button>
+      </Tip>,
     );
     act(() => screen.getByRole("button", { name: "T" }).focus());
     // side/align are forwarded to the Radix Content (now the .tip-animate element).
@@ -90,7 +104,9 @@ describe("Tip", () => {
 
   it("wraps plain-string content in the padded tip-body (rich JSX brings its own padding)", () => {
     renderTip(
-      <Tip content="plain hint"><button aria-label="T">T</button></Tip>,
+      <Tip content="plain hint">
+        <button aria-label="T">T</button>
+      </Tip>,
     );
     act(() => screen.getByRole("button", { name: "T" }).focus());
     expect(document.querySelector(".tip-surface .tip-body")).not.toBeNull();

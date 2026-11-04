@@ -1,10 +1,7 @@
 // Vitest unit tests for the link-group colour palette.
 
 import { describe, it, expect } from "vitest";
-import {
-  BRACKET_PALETTE_SIZE,
-  colorForGroup,
-} from "../link-group-colors";
+import { BRACKET_PALETTE_SIZE, colorForGroup } from "../link-group-colors";
 
 describe("link-group-colors", () => {
   it("colorForGroup returns null for unlinked (group 0) and cycles through 8 colours for non-zero groups", () => {

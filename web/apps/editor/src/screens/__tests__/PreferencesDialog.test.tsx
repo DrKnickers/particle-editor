@@ -30,10 +30,10 @@ describe("PreferencesDialog", () => {
     localStorage.removeItem("alo:confirm-delete");
     render(<PreferencesDialog bridge={makePrefsBridge().bridge} open onOpenChange={() => {}} />);
     const box = screen.getByLabelText("Confirm before deleting emitters") as HTMLInputElement;
-    expect(box.checked).toBe(true);            // default on
+    expect(box.checked).toBe(true); // default on
     await userEvent.click(box);
     expect(box.checked).toBe(false);
-    expect(readConfirmDelete()).toBe(false);   // persisted
+    expect(readConfirmDelete()).toBe(false); // persisted
   });
 
   it("renders the preview guard controls (checkbox on, number enabled, no warning)", () => {
@@ -222,5 +222,4 @@ describe("PreferencesDialog", () => {
     // …but the parent toggle must never overwrite the stored soft preference.
     expect(localStorage.getItem("alo:soft-shadows")).not.toBe("0");
   });
-
 });

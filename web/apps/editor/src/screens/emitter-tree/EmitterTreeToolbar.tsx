@@ -25,9 +25,7 @@ function findNodeInTree(
   id: number | null,
 ): { node: EmitterTreeNode; siblings: EmitterTreeNode[]; indexInSiblings: number } | null {
   if (tree === null || id === null) return null;
-  const walk = (
-    siblings: EmitterTreeNode[],
-  ): ReturnType<typeof findNodeInTree> => {
+  const walk = (siblings: EmitterTreeNode[]): ReturnType<typeof findNodeInTree> => {
     for (let i = 0; i < siblings.length; i++) {
       const n = siblings[i];
       if (n.id === id) return { node: n, siblings, indexInSiblings: i };
@@ -51,10 +49,8 @@ export function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
   const selIds = useEmitterSelectionStore((s) => s.ids);
   // Lifetime/Death child adds require both a primary AND a free slot
   // (parents can hold at most one of each role).
-  const canAddLifetime =
-    hasPrimary && !primary!.node.children.some((c) => c.role === "lifetime");
-  const canAddDeath =
-    hasPrimary && !primary!.node.children.some((c) => c.role === "death");
+  const canAddLifetime = hasPrimary && !primary!.node.children.some((c) => c.role === "lifetime");
+  const canAddDeath = hasPrimary && !primary!.node.children.some((c) => c.role === "death");
   // Move is a root-only operation — same gate as the per-row context
   // menu. Sibling reordering at lifetime/death depth is a separate
   // capability not exposed by the legacy panel toolbar either.
@@ -68,24 +64,33 @@ export function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
     announceWhenOk(bridge.request({ kind: "emitters/add-root", params: {} }), "Added emitter — Ctrl+Z to undo");
   const addLifetime = () => {
     if (primaryId === null) return;
-    announceWhenOk(bridge.request({
-      kind: "emitters/add-lifetime-child",
-      params: { parentId: primaryId },
-    }), "Added lifetime child — Ctrl+Z to undo");
+    announceWhenOk(
+      bridge.request({
+        kind: "emitters/add-lifetime-child",
+        params: { parentId: primaryId },
+      }),
+      "Added lifetime child — Ctrl+Z to undo",
+    );
   };
   const addDeath = () => {
     if (primaryId === null) return;
-    announceWhenOk(bridge.request({
-      kind: "emitters/add-death-child",
-      params: { parentId: primaryId },
-    }), "Added death child — Ctrl+Z to undo");
+    announceWhenOk(
+      bridge.request({
+        kind: "emitters/add-death-child",
+        params: { parentId: primaryId },
+      }),
+      "Added death child — Ctrl+Z to undo",
+    );
   };
   const duplicatePrimary = () => {
     // Toolbar Duplicate is selection-aware (like the trash button); the new
     // copies become the selection.
     const ids = useEmitterSelectionStore.getState().ids;
     if (ids.length === 0) return;
-    announceWhenOk(duplicateEmitters(bridge, ids) as Promise<unknown>, `Duplicated ${ids.length === 1 ? "emitter" : `${ids.length} emitters`} — Ctrl+Z to undo`);
+    announceWhenOk(
+      duplicateEmitters(bridge, ids) as Promise<unknown>,
+      `Duplicated ${ids.length === 1 ? "emitter" : `${ids.length} emitters`} — Ctrl+Z to undo`,
+    );
   };
   const del = () => {
     // Selection-aware: the trash button deletes the WHOLE multi-selection
@@ -118,31 +123,17 @@ export function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
     });
 
   return (
-    <div
-      data-testid="emitter-tree-toolbar"
-      className="tree-actions"
-    >
+    <div data-testid="emitter-tree-toolbar" className="tree-actions">
       <Menubar.Root>
         <Menubar.Menu>
           <Tip content="New Emitter">
-            <Menubar.Trigger
-              className={iconButtonClass("tree")}
-              aria-label="New Emitter"
-            >
+            <Menubar.Trigger className={iconButtonClass("tree")} aria-label="New Emitter">
               <Plus className="size-4" />
             </Menubar.Trigger>
           </Tip>
           <Menubar.Portal>
-            <Menubar.Content
-              className={cn(MENU_CONTENT, "min-w-[160px]")}
-              align="start"
-              sideOffset={4}
-            >
-              <Menubar.Item
-                onSelect={addRoot}
-                className={MENU_ITEM}
-                data-testid="new-emitter-root"
-              >
+            <Menubar.Content className={cn(MENU_CONTENT, "min-w-[160px]")} align="start" sideOffset={4}>
+              <Menubar.Item onSelect={addRoot} className={MENU_ITEM} data-testid="new-emitter-root">
                 Root Emitter
               </Menubar.Item>
               <Menubar.Item
@@ -179,13 +170,34 @@ export function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
       >
         <Copy className="size-4" />
       </IconButton>
-      <IconButton variant="tree" label="Delete emitter" tip="Delete" tipWhenDisabled disabled={!hasPrimary} onClick={del}>
+      <IconButton
+        variant="tree"
+        label="Delete emitter"
+        tip="Delete"
+        tipWhenDisabled
+        disabled={!hasPrimary}
+        onClick={del}
+      >
         <Trash2 className="size-4" />
       </IconButton>
-      <IconButton variant="tree" label="Move emitter up" tip="Move Up" tipWhenDisabled disabled={!canMoveUp} onClick={moveUp}>
+      <IconButton
+        variant="tree"
+        label="Move emitter up"
+        tip="Move Up"
+        tipWhenDisabled
+        disabled={!canMoveUp}
+        onClick={moveUp}
+      >
         <ChevronUp className="size-4" />
       </IconButton>
-      <IconButton variant="tree" label="Move emitter down" tip="Move Down" tipWhenDisabled disabled={!canMoveDown} onClick={moveDown}>
+      <IconButton
+        variant="tree"
+        label="Move emitter down"
+        tip="Move Down"
+        tipWhenDisabled
+        disabled={!canMoveDown}
+        onClick={moveDown}
+      >
         <ChevronDown className="size-4" />
       </IconButton>
       <IconButton variant="tree" label="Show all emitters" tip="Show All Emitters" onClick={showAll}>

@@ -163,12 +163,9 @@ try {
 
   if (openAlo) {
     const aloPath = resolve(openAlo);
-    const r = await page.evaluate(
-      (p) => window.bridge.request({ kind: "file/open", params: { path: p } }),
-      aloPath,
-    );
+    const r = await page.evaluate((p) => window.bridge.request({ kind: "file/open", params: { path: p } }), aloPath);
     if (!r || r.ok === false) {
-      throw new Error(`file/open failed for ${aloPath}: ${(r && r.error) ? r.error : "unknown"}`);
+      throw new Error(`file/open failed for ${aloPath}: ${r && r.error ? r.error : "unknown"}`);
     }
     console.error(`probe[${tag}]: file/open -> ${JSON.stringify(r)}`);
   }

@@ -50,13 +50,7 @@ type ToolPanelProps = {
 
 const HEADER_HEIGHT_PX = 48;
 
-export function ToolPanel({
-  title,
-  onClose,
-  children,
-  closing = false,
-  bodyScroll = true,
-}: ToolPanelProps) {
+export function ToolPanel({ title, onClose, children, closing = false, bodyScroll = true }: ToolPanelProps) {
   // Focus management. Non-modal dialog, so no trap — just:
   // (1) INITIAL FOCUS, only for explicit chrome-triggered opens: if the
   //     element focused at mount lives in the toolbar or menubar (the panel
@@ -82,8 +76,7 @@ export function ToolPanel({
   // OUTSIDE the panel (relatedTarget null = the inert/unmount kick, keep it).
   const ownedFocusRef = useRef(false);
   useEffect(() => {
-    const opener =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     // Never record the panel itself (or anything inside it) as the opener —
     // StrictMode's dev double-mount otherwise records the panel container the
     // FIRST mount pass just focused, and close would "restore" focus into the
@@ -91,8 +84,7 @@ export function ToolPanel({
     // first pass's value is correct.
     if (opener !== null && !rootRef.current?.contains(opener)) {
       openerRef.current = opener;
-      const fromChrome =
-        opener.closest(".toolbar") !== null || opener.closest('[role="menubar"]') !== null;
+      const fromChrome = opener.closest(".toolbar") !== null || opener.closest('[role="menubar"]') !== null;
       if (fromChrome) rootRef.current?.focus();
     }
   }, []);
@@ -115,7 +107,9 @@ export function ToolPanel({
     <div
       ref={rootRef}
       tabIndex={-1}
-      onFocusCapture={() => { ownedFocusRef.current = true; }}
+      onFocusCapture={() => {
+        ownedFocusRef.current = true;
+      }}
       onBlurCapture={(e) => {
         const to = e.relatedTarget as Node | null;
         if (to !== null && !e.currentTarget.contains(to)) ownedFocusRef.current = false;
@@ -141,10 +135,7 @@ export function ToolPanel({
           (panels with their own internal scroll) drops the overflow + reserved
           gutter so the body doesn't waste a 15px right strip. */}
       <div
-        className={cn(
-          "flex-1 p-3",
-          bodyScroll ? "overflow-y-auto scrollbar-stable" : "overflow-hidden",
-        )}
+        className={cn("flex-1 p-3", bodyScroll ? "overflow-y-auto scrollbar-stable" : "overflow-hidden")}
         style={{ height: `calc(100% - ${HEADER_HEIGHT_PX}px)` }}
       >
         {children}
@@ -167,13 +158,7 @@ type ToolPanelSectionProps = {
   children?: ReactNode;
 };
 
-function ToolPanelSection({
-  title,
-  defaultOpen = false,
-  alwaysOpen = false,
-  unit,
-  children,
-}: ToolPanelSectionProps) {
+function ToolPanelSection({ title, defaultOpen = false, alwaysOpen = false, unit, children }: ToolPanelSectionProps) {
   // Shared `.panel-section` class set with Section.tsx so both
   // collapsible-section consumers use one source-of-truth styling.
   // alwaysOpen branch keeps its no-chevron / no-cursor variant; the
@@ -194,7 +179,11 @@ function ToolPanelSection({
   // details toggles content instantly and can't tween. Header matches
   // Section.tsx (div role=button) so both controlled disclosures expose
   // the same a11y shape + chevron behaviour.
-  return <Section title={title} defaultOpen={defaultOpen} unit={unit}>{children}</Section>;
+  return (
+    <Section title={title} defaultOpen={defaultOpen} unit={unit}>
+      {children}
+    </Section>
+  );
 }
 
 // Shared section-header label: title + optional muted unit annotation.
@@ -205,7 +194,11 @@ function SectionTitle({ title, unit }: { title: string; unit?: string }) {
   return (
     <span className="flex items-baseline gap-1.5">
       <span>{title}</span>
-      {unit && <span className="font-normal normal-case tracking-normal text-text-3" aria-hidden="true">{unit}</span>}
+      {unit && (
+        <span className="font-normal normal-case tracking-normal text-text-3" aria-hidden="true">
+          {unit}
+        </span>
+      )}
     </span>
   );
 }
@@ -213,11 +206,7 @@ function SectionTitle({ title, unit }: { title: string; unit?: string }) {
 type ToolPanelFooterProps = { children?: ReactNode };
 
 function ToolPanelFooter({ children }: ToolPanelFooterProps) {
-  return (
-    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
-      {children}
-    </div>
-  );
+  return <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">{children}</div>;
 }
 
 type ToolPanelRowProps = {

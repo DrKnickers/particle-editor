@@ -4,9 +4,9 @@
 import type { RightDock } from "../right-dock";
 
 export interface AutoOpenState {
-  armed: boolean;          // a fresh index-focus entry re-armed one auto-open
-  active: boolean;         // the picker is AUTO-occupying the dock right now
-  remembered: RightDock;   // the panel the auto-open displaced (null allowed)
+  armed: boolean; // a fresh index-focus entry re-armed one auto-open
+  active: boolean; // the picker is AUTO-occupying the dock right now
+  remembered: RightDock; // the panel the auto-open displaced (null allowed)
 }
 
 export const initialAutoOpen: AutoOpenState = { armed: false, active: false, remembered: null };
@@ -20,9 +20,7 @@ export type AutoOpenEvent =
   | { type: "eligibilityLost" };
 
 export type AutoOpenCommand =
-  | { type: "none" }
-  | { type: "open"; remembered: RightDock }
-  | { type: "restore"; to: RightDock };
+  { type: "none" } | { type: "open"; remembered: RightDock } | { type: "restore"; to: RightDock };
 
 export function autoOpenReducer(
   s: AutoOpenState,

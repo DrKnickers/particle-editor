@@ -23,7 +23,9 @@ function SecondaryActionFixture({ onClick }: { onClick: () => void }) {
     <Modal bridge={bridge} open={open} onOpenChange={setOpen} title="Secondary action">
       <Modal.Body>body</Modal.Body>
       <Modal.Footer>
-        <Modal.OkButton variant="secondary" onClick={onClick}>Keep open</Modal.OkButton>
+        <Modal.OkButton variant="secondary" onClick={onClick}>
+          Keep open
+        </Modal.OkButton>
       </Modal.Footer>
     </Modal>
   );
@@ -39,7 +41,7 @@ describe("Modal", () => {
         <Modal.Footer>
           <Modal.OkButton>OK</Modal.OkButton>
         </Modal.Footer>
-      </Modal>
+      </Modal>,
     );
     expect(screen.getByText("Test Modal")).toBeInTheDocument();
     expect(screen.getByText("body-content")).toBeInTheDocument();
@@ -71,7 +73,7 @@ describe("Modal", () => {
     render(
       <Modal bridge={bridge} open onOpenChange={onOpenChange} title="Test Modal">
         <Modal.Body>body</Modal.Body>
-      </Modal>
+      </Modal>,
     );
     // Radix Dialog listens for Escape on the document while open.
     fireEvent.keyDown(document.activeElement ?? document.body, {
@@ -94,7 +96,7 @@ describe("Modal", () => {
     render(
       <Modal bridge={bridge} open onOpenChange={() => {}} title="Test Modal">
         <Modal.Body>body</Modal.Body>
-      </Modal>
+      </Modal>,
     );
     // The body element is the rounded card itself — anchor via Radix's
     // implicit `role=dialog` (Dialog.Content). Class string check
@@ -111,7 +113,7 @@ describe("Modal", () => {
     render(
       <Modal bridge={bridge} open onOpenChange={() => {}} title="Test Modal">
         <Modal.Body>body</Modal.Body>
-      </Modal>
+      </Modal>,
     );
     const content = screen.getByRole("dialog");
     // Larger Tailwind shadow tokens extend beyond the modal's alpha-cut
@@ -130,7 +132,7 @@ describe("Modal", () => {
     render(
       <Modal bridge={bridge} open onOpenChange={() => {}} title="Test Modal">
         <Modal.Body>body</Modal.Body>
-      </Modal>
+      </Modal>,
     );
     const content = screen.getByRole("dialog");
     expect(content.className).toContain("modal-animate");
@@ -164,9 +166,7 @@ describe("Modal", () => {
       });
     });
     // Lock: the deleted modal-mask surface MUST NOT be invoked any more.
-    expect(bridge.request).not.toHaveBeenCalledWith(
-      expect.objectContaining({ kind: "viewport/set-modal-mask" }),
-    );
+    expect(bridge.request).not.toHaveBeenCalledWith(expect.objectContaining({ kind: "viewport/set-modal-mask" }));
   });
 
   it("close glyph in header fires onOpenChange(false)", () => {
@@ -181,7 +181,7 @@ describe("Modal", () => {
     render(
       <Modal bridge={bridge} open onOpenChange={onOpenChange} title="Test Modal">
         <Modal.Body>body</Modal.Body>
-      </Modal>
+      </Modal>,
     );
     const closeBtn = screen.getByRole("button", { name: "Close" });
     fireEvent.click(closeBtn);
@@ -196,12 +196,12 @@ describe("Modal", () => {
       </Modal>
     );
     const { rerender, unmount } = render(view(true));
-    expect(useModalOpen.getState().count).toBe(1);   // open -> inc
+    expect(useModalOpen.getState().count).toBe(1); // open -> inc
     rerender(view(false));
-    expect(useModalOpen.getState().count).toBe(0);   // close -> dec
+    expect(useModalOpen.getState().count).toBe(0); // close -> dec
     rerender(view(true));
-    expect(useModalOpen.getState().count).toBe(1);   // reopen -> inc
+    expect(useModalOpen.getState().count).toBe(1); // reopen -> inc
     unmount();
-    expect(useModalOpen.getState().count).toBe(0);   // unmount -> dec
+    expect(useModalOpen.getState().count).toBe(0); // unmount -> dec
   });
 });

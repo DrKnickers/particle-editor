@@ -1,12 +1,7 @@
 // Mock counterpart of src/host/BridgeDispatch_SpawnerLighting.cpp.
 
-import type {
-  Request,
-  SpawnerParamsDto,
-} from "@particle-editor/bridge-schema";
-import {
-  snapshotEngineState,
-} from "../mock-state";
+import type { Request, SpawnerParamsDto } from "@particle-editor/bridge-schema";
+import { snapshotEngineState } from "../mock-state";
 import type { MockDispatchHost } from "./host";
 
 type SpawnerLightingKind =
@@ -26,10 +21,12 @@ type SpawnerLightingRequest = Extract<Request, { kind: SpawnerLightingKind }>;
 // +/-JITTER_MAX (10000), and squiggleFrequency 0..SQUIGGLE_FREQ_MAX (20).
 // Native code remains the source of truth.
 function clampSpawnerConfig(params: SpawnerParamsDto): SpawnerParamsDto {
-  const clamp = (value: number, min: number, max: number) =>
-    Math.min(max, Math.max(min, value));
-  const vec3 = (value: SpawnerParamsDto["position"]): SpawnerParamsDto["position"] =>
-    [clamp(value[0], -10_000, 10_000), clamp(value[1], -10_000, 10_000), clamp(value[2], -10_000, 10_000)];
+  const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+  const vec3 = (value: SpawnerParamsDto["position"]): SpawnerParamsDto["position"] => [
+    clamp(value[0], -10_000, 10_000),
+    clamp(value[1], -10_000, 10_000),
+    clamp(value[2], -10_000, 10_000),
+  ];
   return {
     ...params,
     mode: params.mode === "manual" ? "manual" : "auto",
@@ -50,7 +47,6 @@ function clampSpawnerConfig(params: SpawnerParamsDto): SpawnerParamsDto {
 
 export function dispatchSpawnerLighting(this: MockDispatchHost, req: SpawnerLightingRequest): unknown {
   switch (req.kind) {
-
     // ---------------- spawner ----------------
     //
     // The native host treats spawner/start as a full-config replace
@@ -106,11 +102,11 @@ export function dispatchSpawnerLighting(this: MockDispatchHost, req: SpawnerLigh
       }
       const rgb = (r: number, g: number, b: number) => r | (g << 8) | (b << 16);
       return {
-        sun:   { intensity: 0.5, az: 0,   alt: 45,  diffuse: rgb(180, 180, 190), specular: rgb(190, 190, 200) },
-        fill1: { intensity: 0.5, az: 120, alt: -10, diffuse: rgb(60, 80, 160),   specular: 0 },
-        fill2: { intensity: 0.5, az: 210, alt: -10, diffuse: rgb(60, 80, 160),   specular: 0 },
+        sun: { intensity: 0.5, az: 0, alt: 45, diffuse: rgb(180, 180, 190), specular: rgb(190, 190, 200) },
+        fill1: { intensity: 0.5, az: 120, alt: -10, diffuse: rgb(60, 80, 160), specular: 0 },
+        fill2: { intensity: 0.5, az: 210, alt: -10, diffuse: rgb(60, 80, 160), specular: 0 },
         ambient: rgb(40, 40, 50),
-        shadow:  rgb(100, 100, 110),
+        shadow: rgb(100, 100, 110),
         forceAlign: this.lightingForceAlign,
       };
     }

@@ -14,7 +14,9 @@ import type { Bridge } from "@particle-editor/bridge-schema";
 // disabled, which requires the app-level Tooltip.Provider — wrapper stands
 // in for it (precedent: renderToolbar in Toolbar.test.tsx).
 const TipProvider = ({ children }: { children: ReactNode }) => (
-  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>
+    {children}
+  </Tooltip.Provider>
 );
 const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
@@ -32,9 +34,24 @@ function makeStubBridge(): Bridge & { request: ReturnType<typeof vi.fn>; on: Ret
     skydomeCustomPaths: ["", "", ""],
     background: 0,
     lights: {
-      sun: { diffuse: [0.7, 0.7, 0.75, 1], specular: [0.75, 0.75, 0.8, 1], position: [1, 0, 0.7, 0], direction: [0, 0, 0, 0] },
-      fill1: { diffuse: [0.24, 0.31, 0.62, 1], specular: [0, 0, 0, 1], position: [-0.5, 0.85, -0.17, 0], direction: [0, 0, 0, 0] },
-      fill2: { diffuse: [0.24, 0.31, 0.62, 1], specular: [0, 0, 0, 1], position: [-0.85, -0.5, -0.17, 0], direction: [0, 0, 0, 0] },
+      sun: {
+        diffuse: [0.7, 0.7, 0.75, 1],
+        specular: [0.75, 0.75, 0.8, 1],
+        position: [1, 0, 0.7, 0],
+        direction: [0, 0, 0, 0],
+      },
+      fill1: {
+        diffuse: [0.24, 0.31, 0.62, 1],
+        specular: [0, 0, 0, 1],
+        position: [-0.5, 0.85, -0.17, 0],
+        direction: [0, 0, 0, 0],
+      },
+      fill2: {
+        diffuse: [0.24, 0.31, 0.62, 1],
+        specular: [0, 0, 0, 1],
+        position: [-0.85, -0.5, -0.17, 0],
+        direction: [0, 0, 0, 0],
+      },
     },
     ambient: [0.16, 0.16, 0.2, 1],
     shadow: [0.4, 0.4, 0.43, 1],

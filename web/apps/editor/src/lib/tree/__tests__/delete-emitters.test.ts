@@ -1,18 +1,25 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
-  computeDeleteImpact, performDelete, requestDeleteEmitters,
-  readConfirmDelete, writeConfirmDelete, useDeleteConfirmStore,
-  collapseToRoots, confirmPendingDelete,
+  computeDeleteImpact,
+  performDelete,
+  requestDeleteEmitters,
+  readConfirmDelete,
+  writeConfirmDelete,
+  useDeleteConfirmStore,
+  collapseToRoots,
+  confirmPendingDelete,
 } from "@/lib/tree/delete-emitters";
 import { useEmitterTreeStore } from "@/lib/tree/emitter-tree";
 import type { Bridge, EmitterTreeDto, EmitterTreeNode } from "@particle-editor/bridge-schema";
 
 // helper to build a node; role is irrelevant to impact logic.
 const node = (id: number, name: string, children: EmitterTreeNode[] = []): EmitterTreeNode =>
-  ({ id, name, role: "root", visible: true, children } as unknown as EmitterTreeNode);
+  ({ id, name, role: "root", visible: true, children }) as unknown as EmitterTreeNode;
 
 // tree: root -> a(0) -> [a1(1), a2(2)] ; b(3)
-const tree = { root: node(-1, "root", [node(0, "a", [node(1, "a1"), node(2, "a2")]), node(3, "b")]) } as unknown as EmitterTreeDto;
+const tree = {
+  root: node(-1, "root", [node(0, "a", [node(1, "a1"), node(2, "a2")]), node(3, "b")]),
+} as unknown as EmitterTreeDto;
 
 // Records every request so a spec can assert HOW MANY landed, not just which
 // ids — a multi-root delete is one gesture and must ride one batched request.
@@ -31,8 +38,7 @@ function recordingBridge() {
   // The helpers only read a tree the store holds for THEIR bridge — claim the
   // beforeEach-seeded tree for this one, as EmitterTree's emitters/list would.
   useEmitterTreeStore.setState({ bridge });
-  const deleteCalls = () =>
-    requests.filter((r) => r.kind === "emitters/delete-many").map((r) => r.params.ids ?? []);
+  const deleteCalls = () => requests.filter((r) => r.kind === "emitters/delete-many").map((r) => r.params.ids ?? []);
   return { bridge, requests, deleteCalls };
 }
 
@@ -61,9 +67,17 @@ describe("computeDeleteImpact", () => {
 });
 
 describe("confirm-delete setting", () => {
-  it("defaults to true when unset", () => { expect(readConfirmDelete()).toBe(true); });
-  it("round-trips false", () => { writeConfirmDelete(false); expect(readConfirmDelete()).toBe(false); });
-  it("treats garbage as default true", () => { localStorage.setItem("alo:confirm-delete", "wat"); expect(readConfirmDelete()).toBe(true); });
+  it("defaults to true when unset", () => {
+    expect(readConfirmDelete()).toBe(true);
+  });
+  it("round-trips false", () => {
+    writeConfirmDelete(false);
+    expect(readConfirmDelete()).toBe(false);
+  });
+  it("treats garbage as default true", () => {
+    localStorage.setItem("alo:confirm-delete", "wat");
+    expect(readConfirmDelete()).toBe(true);
+  });
 });
 
 describe("performDelete", () => {
@@ -90,13 +104,13 @@ describe("performDelete", () => {
 // shifting positional id never deletes the wrong node.
 describe("collapseToRoots (#8)", () => {
   it("drops a descendant whose ancestor is also selected", () => {
-    expect(collapseToRoots([0, 1], tree)).toEqual([0]);        // a + a1 -> a
+    expect(collapseToRoots([0, 1], tree)).toEqual([0]); // a + a1 -> a
   });
   it("drops all descendants of a selected ancestor", () => {
-    expect(collapseToRoots([0, 1, 2], tree)).toEqual([0]);     // a + a1 + a2 -> a
+    expect(collapseToRoots([0, 1, 2], tree)).toEqual([0]); // a + a1 + a2 -> a
   });
   it("keeps disjoint subtrees (no shared ancestor)", () => {
-    expect(collapseToRoots([1, 3], tree)).toEqual([1, 3]);     // a1 + b -> both
+    expect(collapseToRoots([1, 3], tree)).toEqual([1, 3]); // a1 + b -> both
   });
   it("is a no-op for a single id or null tree", () => {
     expect(collapseToRoots([1], tree)).toEqual([1]);
@@ -105,7 +119,7 @@ describe("collapseToRoots (#8)", () => {
   it("performDelete collapses then deletes only the root", () => {
     const { bridge, deleteCalls } = recordingBridge();
     performDelete(bridge, [0, 1, 2], tree);
-    expect(deleteCalls()).toEqual([[0]]);                      // not [[2,1,0]]
+    expect(deleteCalls()).toEqual([[0]]); // not [[2,1,0]]
   });
 });
 
@@ -129,7 +143,7 @@ describe("confirmPendingDelete (#8 confirm-time revalidation)", () => {
     // A new emitters/list landed — different tree object reference.
     useEmitterTreeStore.setState({ tree: { root: node(-1, "root", [node(0, "a")]) } as unknown as EmitterTreeDto });
     confirmPendingDelete(bridge);
-    expect(deleteCalls()).toEqual([]);                         // stale -> no delete
+    expect(deleteCalls()).toEqual([]); // stale -> no delete
     expect(useDeleteConfirmStore.getState().pending).toBeNull();
   });
 });

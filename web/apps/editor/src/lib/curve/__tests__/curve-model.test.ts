@@ -14,12 +14,9 @@ function track(name: TrackName, values: number[]): TrackDto {
 }
 
 describe("valueRangeForTrack", () => {
-  it.each(["red", "green", "blue", "alpha"] as const)(
-    "%s is a fixed [0, 1] range regardless of key values",
-    (name) => {
-      expect(valueRangeForTrack(track(name, [5, -3]))).toEqual({ min: 0, max: 1 });
-    },
-  );
+  it.each(["red", "green", "blue", "alpha"] as const)("%s is a fixed [0, 1] range regardless of key values", (name) => {
+    expect(valueRangeForTrack(track(name, [5, -3]))).toEqual({ min: 0, max: 1 });
+  });
 
   it.each(["scale", "index"] as const)("%s grows its max to the largest key value", (name) => {
     expect(valueRangeForTrack(track(name, [0.5, 3, 2]))).toEqual({ min: 0, max: 3 });

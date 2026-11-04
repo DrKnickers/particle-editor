@@ -64,9 +64,7 @@ export class TestHostBridge implements Bridge {
   async request<R extends Request>(req: R): Promise<ResponseFor<R>> {
     const hb = window.chrome?.webview?.hostObjects?.hostBridge;
     if (!hb) {
-      throw new Error(
-        "TestHostBridge: chrome.webview.hostObjects.hostBridge unavailable"
-      );
+      throw new Error("TestHostBridge: chrome.webview.hostObjects.hostBridge unavailable");
     }
     const envelope = {
       type: "req" as const,

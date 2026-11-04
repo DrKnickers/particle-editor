@@ -33,42 +33,30 @@ type Props = {
 
 export function AboutDialog({ bridge, open, onOpenChange }: Props) {
   const handleOpenRepository = async () => {
-    const result = await fireAndReport(bridge, {
-      kind: "app/open-external",
-      params: { target: "repository" },
-    }, "Open project page");
+    const result = await fireAndReport(
+      bridge,
+      {
+        kind: "app/open-external",
+        params: { target: "repository" },
+      },
+      "Open project page",
+    );
     if (!result?.opened) {
       useStatusFeedback.getState().announce("Could not open project page. Copy the project address into your browser.");
     }
   };
 
   return (
-    <Modal
-      bridge={bridge}
-      open={open}
-      onOpenChange={onOpenChange}
-      title="About Particle Editor"
-      size="sm"
-    >
+    <Modal bridge={bridge} open={open} onOpenChange={onOpenChange} title="About Particle Editor" size="sm">
       <Modal.Body>
         <div className="flex flex-col gap-3 text-sm">
-          <div className="text-lg font-semibold text-text">
-            Particle Editor
-          </div>
-          <div className="text-text-2">
-            Version {VERSION}
-          </div>
-          <div className="text-xs text-text-3">
-            Build date: {BUILD_DATE}
-          </div>
-          <div className="text-xs text-text-3">
-            Forked from Mike.NL's GlyphX Particle Editor v1.5
-          </div>
+          <div className="text-lg font-semibold text-text">Particle Editor</div>
+          <div className="text-text-2">Version {VERSION}</div>
+          <div className="text-xs text-text-3">Build date: {BUILD_DATE}</div>
+          <div className="text-xs text-text-3">Forked from Mike.NL's GlyphX Particle Editor v1.5</div>
           <p className="mt-2 text-xs leading-relaxed text-text-2">
-            Particle editor for the Petroglyph Alamo engine
-            (Star Wars: Empire at War / Forces of Corruption).
-            Distributed under the MIT licence. This software is provided
-            "as is", without warranty of any kind.
+            Particle editor for the Petroglyph Alamo engine (Star Wars: Empire at War / Forces of Corruption).
+            Distributed under the MIT licence. This software is provided "as is", without warranty of any kind.
           </p>
           <Button variant="secondary" onClick={() => void handleOpenRepository()}>
             Open project page

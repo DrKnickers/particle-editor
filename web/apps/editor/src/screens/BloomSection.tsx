@@ -95,11 +95,7 @@ export function BloomSection({ bridge, defaultOpen = false }: Props) {
         />
         <span>Enable bloom</span>
       </label>
-      {disabled && (
-        <p className="text-3xs text-text-3">
-          (Bloom is not supported on this device.)
-        </p>
-      )}
+      {disabled && <p className="text-3xs text-text-3">(Bloom is not supported on this device.)</p>}
       <ToolPanel.Row label="Strength">
         <Spinner
           value={strength}

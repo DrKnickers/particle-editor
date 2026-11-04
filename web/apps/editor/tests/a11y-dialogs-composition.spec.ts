@@ -39,20 +39,13 @@ test.beforeEach(async () => {
   // navigation (a demo route resetting the ?demo= query param), which
   // temporarily undefines window.bridge while the app re-mounts. Mirror
   // the HWND lane's a11y-dialogs.spec.ts beforeEach pattern.
-  await page.waitForFunction(
-    () => typeof window.bridge !== "undefined",
-    null,
-    { timeout: 15_000 }
-  );
-  await page.evaluate(
-    async (fixturePath) => {
-      const bridge = window.bridge!;
-      await bridge.request({ kind: "file/open", params: { path: fixturePath } });
-      await bridge.request({ kind: "engine/set/paused", params: { paused: true } });
-      await bridge.request({ kind: "stats/set-frozen", params: { frozen: true } });
-    },
-    FIXTURE_PATH
-  );
+  await page.waitForFunction(() => typeof window.bridge !== "undefined", null, { timeout: 15_000 });
+  await page.evaluate(async (fixturePath) => {
+    const bridge = window.bridge!;
+    await bridge.request({ kind: "file/open", params: { path: fixturePath } });
+    await bridge.request({ kind: "engine/set/paused", params: { paused: true } });
+    await bridge.request({ kind: "stats/set-frozen", params: { frozen: true } });
+  }, FIXTURE_PATH);
 });
 
 test.describe("a11y/dialogs [composition]", () => {
@@ -61,9 +54,7 @@ test.describe("a11y/dialogs [composition]", () => {
       try {
         await surface.setup(page);
         const snap = await captureDomA11y(page, surface.scope(page));
-        expect(snap).toMatchJSONGolden(
-          `a11y-goldens/${surface.id}.composition.golden.yaml`
-        );
+        expect(snap).toMatchJSONGolden(`a11y-goldens/${surface.id}.composition.golden.yaml`);
       } finally {
         await surface.teardown(page);
       }

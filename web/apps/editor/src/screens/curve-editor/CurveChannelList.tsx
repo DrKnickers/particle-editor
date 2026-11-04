@@ -35,12 +35,7 @@ export function CurveChannelList({
   dividerBefore,
 }: Props) {
   return (
-    <div
-      className="curve-list"
-      role="group"
-      aria-label="Curve channels"
-      data-testid="curve-channel-list"
-    >
+    <div className="curve-list" role="group" aria-label="Curve channels" data-testid="curve-channel-list">
       {channels.flatMap((c) => {
         const isOn = visible[c.id] ?? c.defaultOn;
         const isFocus = c.id === focusChannel;

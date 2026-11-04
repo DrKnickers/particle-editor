@@ -80,8 +80,7 @@ test("ground texture cycle through bundled slots (device-lost regression)", asyn
   // be groundTexture stuck at 0 — the literal incident symptom.
   const result = await page.evaluate(async () => {
     const b = window.bridge!;
-    const snapshot = async () =>
-      await b.request({ kind: "engine/state/snapshot", params: {} });
+    const snapshot = async () => await b.request({ kind: "engine/state/snapshot", params: {} });
     const set = async (slot: number) => {
       await b.request({ kind: "engine/set/ground-texture", params: { slot } });
       return (await snapshot()).groundTexture;
@@ -112,7 +111,7 @@ test("solid-colour ground (slot 4) ⇒ CreateSolidColorTexture under D3DPOOL_DEF
     const b = window.bridge!;
     // Color is a packed COLORREF number (Win32 0x00BBGGRR), not an
     // {r,g,b} object. 0x2050C8 = B=32, G=80, R=200 — orange-ish.
-    await b.request({ kind: "engine/set/ground-solid-color", params: { rgb: 0x2050C8 } });
+    await b.request({ kind: "engine/set/ground-solid-color", params: { rgb: 0x2050c8 } });
     await b.request({ kind: "engine/set/ground-texture", params: { slot: 4 } });
     const dto = await b.request({ kind: "engine/state/snapshot", params: {} });
     return dto.groundTexture;
@@ -128,8 +127,7 @@ test("skydome cycle through bundled slots ⇒ implicit Reset exercise", async ()
   // texture path itself broke.
   const result = await page.evaluate(async () => {
     const b = window.bridge!;
-    const get = async () =>
-      (await b.request({ kind: "engine/state/snapshot", params: {} })).skydomeSlot;
+    const get = async () => (await b.request({ kind: "engine/state/snapshot", params: {} })).skydomeSlot;
     const set = async (slot: number) => {
       await b.request({ kind: "engine/set/skydome-slot", params: { slot } });
       return get();
@@ -162,11 +160,11 @@ test("10× resize cycle ⇒ Engine::Reset survives the new D3DPOOL_DEFAULT relea
     await b.request({ kind: "engine/set/skydome-slot", params: { slot: 1 } });
 
     const sizes = [
-      { x: 0, y: 0, w: 640,  h: 480  },
-      { x: 0, y: 0, w: 1280, h: 720  },
+      { x: 0, y: 0, w: 640, h: 480 },
+      { x: 0, y: 0, w: 1280, h: 720 },
       { x: 0, y: 0, w: 1920, h: 1080 },
-      { x: 0, y: 0, w: 800,  h: 600  },
-      { x: 0, y: 0, w: 1600, h: 900  },
+      { x: 0, y: 0, w: 800, h: 600 },
+      { x: 0, y: 0, w: 1600, h: 900 },
     ];
     let lastSnapshot: EngineStateDto | null = null;
     for (let cycle = 0; cycle < 2; ++cycle) {
@@ -290,16 +288,10 @@ test("blocked full texture reload replays once without duplicating authored work
 
   expect(result.controlHeld.pending).toBe(false);
   expect(result.controlHeld.reloadCount - result.controlBase.reloadCount).toBe(0);
-  expect(
-    result.controlHeld.authoredApplyCount -
-      result.controlBase.authoredApplyCount,
-  ).toBe(0);
+  expect(result.controlHeld.authoredApplyCount - result.controlBase.authoredApplyCount).toBe(0);
   expect(result.controlAfter.pending).toBe(false);
   expect(result.controlAfter.reloadCount - result.controlBase.reloadCount).toBe(0);
-  expect(
-    result.controlAfter.authoredApplyCount -
-      result.controlBase.authoredApplyCount,
-  ).toBe(1);
+  expect(result.controlAfter.authoredApplyCount - result.controlBase.authoredApplyCount).toBe(1);
   expect(result.controlAfter.frameReady).toBe(true);
   expect(result.controlHeld.frameReady).toBe(false);
   expect(result.controlSettled.pending).toBe(false);
@@ -312,23 +304,12 @@ test("blocked full texture reload replays once without duplicating authored work
 
   expect(result.reloadHeld.pending).toBe(true);
   expect(result.reloadHeld.reloadCount - result.reloadBase.reloadCount).toBe(0);
-  expect(
-    result.reloadHeld.authoredApplyCount -
-      result.reloadBase.authoredApplyCount,
-  ).toBe(0);
+  expect(result.reloadHeld.authoredApplyCount - result.reloadBase.authoredApplyCount).toBe(0);
   expect(result.reloadAfter.pending).toBe(false);
   expect(result.reloadAfter.reloadCount - result.reloadBase.reloadCount).toBe(1);
-  expect(
-    result.reloadAfter.authoredApplyCount -
-      result.reloadBase.authoredApplyCount,
-  ).toBe(1);
-  expect(
-    result.reloadSettled.authoredApplyCount -
-      result.reloadBase.authoredApplyCount,
-  ).toBe(1);
-  expect(
-    result.reloadSettled.reloadCount - result.reloadBase.reloadCount,
-  ).toBe(1);
+  expect(result.reloadAfter.authoredApplyCount - result.reloadBase.authoredApplyCount).toBe(1);
+  expect(result.reloadSettled.authoredApplyCount - result.reloadBase.authoredApplyCount).toBe(1);
+  expect(result.reloadSettled.reloadCount - result.reloadBase.reloadCount).toBe(1);
   expect(result.reloadSettled.pending).toBe(false);
   expect(result.reloadAfter.frameReady).toBe(true);
   expect(result.reloadSettled.frameReady).toBe(true);
@@ -348,8 +329,7 @@ test("healthy composed frames use the production admission door without probing"
     await new Promise((resolve) => setTimeout(resolve, 100));
     const after = await debug("query");
     return {
-      frameDelta:
-        after.composedFramePrepareCount - before.composedFramePrepareCount,
+      frameDelta: after.composedFramePrepareCount - before.composedFramePrepareCount,
       probeDelta: after.deviceProbeCount - before.deviceProbeCount,
       frameReady: after.frameReady,
     };
@@ -368,9 +348,7 @@ test("failed production event query schedules one probe and recreates once", asy
         kind: "debug/device-recovery-work",
         params,
       });
-    const waitFor = async (
-      predicate: (state: DeviceRecoveryWorkState) => boolean,
-    ) => {
+    const waitFor = async (predicate: (state: DeviceRecoveryWorkState) => boolean) => {
       const deadline = Date.now() + 15_000;
       let state = await debug({ action: "query" });
       while (!predicate(state) && Date.now() < deadline) {
@@ -391,29 +369,18 @@ test("failed production event query schedules one probe and recreates once", asy
       });
       const after = await waitFor(
         (state) =>
-          state.endFrameQueryOverrideConsumedCount >=
-            before.endFrameQueryOverrideConsumedCount + 1 &&
-          state.endFrameQueryFailureCount >=
-            before.endFrameQueryFailureCount + 1 &&
+          state.endFrameQueryOverrideConsumedCount >= before.endFrameQueryOverrideConsumedCount + 1 &&
+          state.endFrameQueryFailureCount >= before.endFrameQueryFailureCount + 1 &&
           state.deviceProbeCount >= before.deviceProbeCount + 1 &&
-          state.endFrameQueryCreateCount >=
-            before.endFrameQueryCreateCount + 1 &&
+          state.endFrameQueryCreateCount >= before.endFrameQueryCreateCount + 1 &&
           state.frameReady,
       );
       return {
-        consumedDelta:
-          after.endFrameQueryOverrideConsumedCount -
-          before.endFrameQueryOverrideConsumedCount,
-        failureDelta:
-          after.endFrameQueryFailureCount -
-          before.endFrameQueryFailureCount,
-        timeoutDelta:
-          after.endFrameQueryTimeoutCount -
-          before.endFrameQueryTimeoutCount,
+        consumedDelta: after.endFrameQueryOverrideConsumedCount - before.endFrameQueryOverrideConsumedCount,
+        failureDelta: after.endFrameQueryFailureCount - before.endFrameQueryFailureCount,
+        timeoutDelta: after.endFrameQueryTimeoutCount - before.endFrameQueryTimeoutCount,
         probeDelta: after.deviceProbeCount - before.deviceProbeCount,
-        createDelta:
-          after.endFrameQueryCreateCount -
-          before.endFrameQueryCreateCount,
+        createDelta: after.endFrameQueryCreateCount - before.endFrameQueryCreateCount,
         overrideRemaining: after.endFrameQueryOverrideRemaining,
         frameReady: after.frameReady,
       };
@@ -449,8 +416,7 @@ test("S_OK and one pending S_FALSE do not schedule recovery", async () => {
       const deadline = Date.now() + 15_000;
       let after = await debug({ action: "query" });
       while (
-        after.endFrameQueryOverrideConsumedCount <
-          before.endFrameQueryOverrideConsumedCount + 1 &&
+        after.endFrameQueryOverrideConsumedCount < before.endFrameQueryOverrideConsumedCount + 1 &&
         Date.now() < deadline
       ) {
         await new Promise((resolve) => setTimeout(resolve, 20));
@@ -459,19 +425,11 @@ test("S_OK and one pending S_FALSE do not schedule recovery", async () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
       after = await debug({ action: "query" });
       return {
-        consumedDelta:
-          after.endFrameQueryOverrideConsumedCount -
-          before.endFrameQueryOverrideConsumedCount,
-        failureDelta:
-          after.endFrameQueryFailureCount -
-          before.endFrameQueryFailureCount,
-        timeoutDelta:
-          after.endFrameQueryTimeoutCount -
-          before.endFrameQueryTimeoutCount,
+        consumedDelta: after.endFrameQueryOverrideConsumedCount - before.endFrameQueryOverrideConsumedCount,
+        failureDelta: after.endFrameQueryFailureCount - before.endFrameQueryFailureCount,
+        timeoutDelta: after.endFrameQueryTimeoutCount - before.endFrameQueryTimeoutCount,
         probeDelta: after.deviceProbeCount - before.deviceProbeCount,
-        createDelta:
-          after.endFrameQueryCreateCount -
-          before.endFrameQueryCreateCount,
+        createDelta: after.endFrameQueryCreateCount - before.endFrameQueryCreateCount,
       };
     };
 
@@ -518,10 +476,8 @@ test("the exact 100001-poll S_FALSE timeout stays degraded, not lost", async () 
       const deadline = Date.now() + 90_000;
       let after = await debug({ action: "query" });
       while (
-        (after.endFrameQueryOverrideConsumedCount <
-          before.endFrameQueryOverrideConsumedCount + 100001 ||
-          after.endFrameQueryTimeoutCount <
-            before.endFrameQueryTimeoutCount + 1) &&
+        (after.endFrameQueryOverrideConsumedCount < before.endFrameQueryOverrideConsumedCount + 100001 ||
+          after.endFrameQueryTimeoutCount < before.endFrameQueryTimeoutCount + 1) &&
         Date.now() < deadline
       ) {
         await new Promise((resolve) => setTimeout(resolve, 20));
@@ -530,19 +486,11 @@ test("the exact 100001-poll S_FALSE timeout stays degraded, not lost", async () 
       await new Promise((resolve) => setTimeout(resolve, 100));
       after = await debug({ action: "query" });
       return {
-        consumedDelta:
-          after.endFrameQueryOverrideConsumedCount -
-          before.endFrameQueryOverrideConsumedCount,
-        failureDelta:
-          after.endFrameQueryFailureCount -
-          before.endFrameQueryFailureCount,
-        timeoutDelta:
-          after.endFrameQueryTimeoutCount -
-          before.endFrameQueryTimeoutCount,
+        consumedDelta: after.endFrameQueryOverrideConsumedCount - before.endFrameQueryOverrideConsumedCount,
+        failureDelta: after.endFrameQueryFailureCount - before.endFrameQueryFailureCount,
+        timeoutDelta: after.endFrameQueryTimeoutCount - before.endFrameQueryTimeoutCount,
         probeDelta: after.deviceProbeCount - before.deviceProbeCount,
-        createDelta:
-          after.endFrameQueryCreateCount -
-          before.endFrameQueryCreateCount,
+        createDelta: after.endFrameQueryCreateCount - before.endFrameQueryCreateCount,
         overrideRemaining: after.endFrameQueryOverrideRemaining,
       };
     } finally {
@@ -575,9 +523,7 @@ test("blocked shader and layer actions fail without moving roots; healthy reload
     await debug("release");
     const originalStack = [...(await list()).stack];
     const refusedPath = "C:\\__particle_editor_blocked_layer_probe__";
-    let blockedLayer:
-      | { ok: boolean; stack: string[]; error?: string }
-      | undefined;
+    let blockedLayer: { ok: boolean; stack: string[]; error?: string } | undefined;
     let blockedShaderRejected = false;
     let healthyShaderReloaded = false;
     let healthyLayerReloaded = false;

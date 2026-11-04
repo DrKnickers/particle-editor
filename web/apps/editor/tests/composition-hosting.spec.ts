@@ -207,9 +207,7 @@ test("modifier keys round-trip via React event system under composition", async 
   const trigger = page.locator('button[aria-label="Background"]').first();
   await trigger.click({ modifiers: ["Shift"] });
 
-  const observedShift = await page.evaluate(
-    () => window.__lastClickShift,
-  );
+  const observedShift = await page.evaluate(() => window.__lastClickShift);
   expect(observedShift).toBe(true);
   await page.keyboard.press("Escape").catch(() => {});
 });
@@ -265,9 +263,7 @@ test("keyboard input via CDP reaches focused React input under composition", asy
   const trigger = page.locator('[role="menubar"] >> text=View').first();
   await trigger.click();
   await page.waitForSelector('[role="menu"]', { timeout: 2000 });
-  const lightingItem = page
-    .locator('[role="menuitem"]:has-text("Lighting")')
-    .first();
+  const lightingItem = page.locator('[role="menuitem"]:has-text("Lighting")').first();
   if ((await lightingItem.count()) === 0) {
     test.skip(true, "View → Lighting menu item not present in this build");
     return;
@@ -279,10 +275,7 @@ test("keyboard input via CDP reaches focused React input under composition", asy
   // Expand the collapsible Bloom section so its checkbox is actionable.
   // (Section header is a controlled div[role="button"] since the
   // <details>→controlled conversion that enabled the collapse animation.)
-  await page
-    .locator('[role="dialog"][aria-label="Lighting"] [role="button"]:has-text("Bloom")')
-    .first()
-    .click();
+  await page.locator('[role="dialog"][aria-label="Lighting"] [role="button"]:has-text("Bloom")').first().click();
 
   // Find the Enable bloom checkbox; toggling via keyboard (Space)
   // should fire engine/set/bloom + the snapshot should reflect it.
@@ -309,9 +302,7 @@ test("keyboard input via CDP reaches focused React input under composition", asy
     const b = window.bridge!;
     await b.request({ kind: "engine/set/bloom", params: { enabled: orig } });
   }, before);
-  const closeBtn = page
-    .locator('[role="dialog"][aria-label="Lighting"] button[aria-label="Close"]')
-    .first();
+  const closeBtn = page.locator('[role="dialog"][aria-label="Lighting"] button[aria-label="Close"]').first();
   if (await closeBtn.count()) {
     await closeBtn.click();
   }

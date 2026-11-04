@@ -34,7 +34,9 @@ describe("record-control-messages", () => {
 
   it("parses a ui/set-picker-search message (object + string form)", () => {
     expect(parseSetPickerSearchMessage({ type: "ui/set-picker-search", text: "AT_" })).toEqual({ text: "AT_" });
-    expect(parseSetPickerSearchMessage(JSON.stringify({ type: "ui/set-picker-search", text: "" }))).toEqual({ text: "" });
+    expect(parseSetPickerSearchMessage(JSON.stringify({ type: "ui/set-picker-search", text: "" }))).toEqual({
+      text: "",
+    });
   });
   it("ignores non-search messages and bad payloads", () => {
     expect(parseSetPickerSearchMessage({ type: "ui/open-picker", which: "reference" })).toBeNull();
@@ -44,8 +46,12 @@ describe("record-control-messages", () => {
     expect(parseSetPickerSearchMessage("not json")).toBeNull();
   });
   it("parses a ui/picker-collapse message (object + string form)", () => {
-    expect(parseSetPickerCollapseMessage({ type: "ui/picker-collapse", keys: ["Heroes"] })).toEqual({ keys: ["Heroes"] });
-    expect(parseSetPickerCollapseMessage(JSON.stringify({ type: "ui/picker-collapse", keys: [] }))).toEqual({ keys: [] });
+    expect(parseSetPickerCollapseMessage({ type: "ui/picker-collapse", keys: ["Heroes"] })).toEqual({
+      keys: ["Heroes"],
+    });
+    expect(parseSetPickerCollapseMessage(JSON.stringify({ type: "ui/picker-collapse", keys: [] }))).toEqual({
+      keys: [],
+    });
   });
   it("ignores non-collapse messages and bad payloads", () => {
     expect(parseSetPickerCollapseMessage({ type: "ui/set-picker-search", text: "AT_" })).toBeNull();

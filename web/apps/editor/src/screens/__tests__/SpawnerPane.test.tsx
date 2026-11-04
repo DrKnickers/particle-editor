@@ -14,10 +14,7 @@ import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
 import { SpawnerPane } from "../SpawnerPane";
 import { makeDefaultEngineState } from "@/bridge/mock-state";
 import { makeDefaultSpawnerParams } from "@/lib/spawner-defaults";
-import {
-  useRightDock,
-  __resetRightDockForTests,
-} from "@/lib/right-dock";
+import { useRightDock, __resetRightDockForTests } from "@/lib/right-dock";
 import { renderHook } from "@testing-library/react";
 
 beforeEach(() => {
@@ -59,7 +56,9 @@ describe("SpawnerPane", () => {
     const changedHandlers: Array<(e: { payload: unknown }) => void> = [];
     bridge.request.mockImplementation((req: { kind: string }) => {
       if (req.kind === "engine/state/snapshot") {
-        return new Promise((resolve) => { snapshotResolvers.push(resolve); });
+        return new Promise((resolve) => {
+          snapshotResolvers.push(resolve);
+        });
       }
       return Promise.resolve({});
     });
@@ -89,7 +88,9 @@ describe("SpawnerPane", () => {
     let resolveSnapshot: (s: unknown) => void = () => {};
     bridge.request.mockImplementation((req: { kind: string }) => {
       if (req.kind === "engine/state/snapshot") {
-        return new Promise((resolve) => { resolveSnapshot = resolve; });
+        return new Promise((resolve) => {
+          resolveSnapshot = resolve;
+        });
       }
       return Promise.resolve({});
     });
@@ -126,8 +127,8 @@ describe("SpawnerPane", () => {
     // Velocity + acceleration carry the compound units (each unique);
     // the distance sections (Position / Jitter position / Squiggle amplitude)
     // each show the bare "units" word.
-    expect(screen.getByText("units/s")).toBeInTheDocument();   // Velocity
-    expect(screen.getByText("units/s²")).toBeInTheDocument();  // Acceleration (arc)
+    expect(screen.getByText("units/s")).toBeInTheDocument(); // Velocity
+    expect(screen.getByText("units/s²")).toBeInTheDocument(); // Acceleration (arc)
     expect(screen.getAllByText("units").length).toBeGreaterThanOrEqual(3);
   });
 
@@ -140,9 +141,7 @@ describe("SpawnerPane", () => {
 
     await waitFor(() => {
       // Manual radio is checked once the snapshot lands.
-      expect(
-        (screen.getByLabelText("Manual mode") as HTMLInputElement).checked,
-      ).toBe(true);
+      expect((screen.getByLabelText("Manual mode") as HTMLInputElement).checked).toBe(true);
     });
 
     expect(screen.queryByLabelText("Burst interval")).toBeNull();
@@ -205,13 +204,22 @@ describe("SpawnerPane — fly like the projectile", () => {
       spawner: { ...makeDefaultSpawnerParams(), mode: "manual", matchProjectile, projectileOutOfReach },
     };
     return {
-      request: vi.fn().mockImplementation((req: { kind: string }) =>
-        Promise.resolve(req.kind === "engine/state/snapshot" ? snapshot : {})),
+      request: vi
+        .fn()
+        .mockImplementation((req: { kind: string }) =>
+          Promise.resolve(req.kind === "engine/state/snapshot" ? snapshot : {}),
+        ),
       on: vi.fn().mockReturnValue(() => {}),
     } as unknown as Bridge & { request: ReturnType<typeof vi.fn> };
   }
   const laser = {
-    flyable: true, speed: 330, range: 500, flightSec: 46 / 30, category: "Laser", pathEmulated: true, usesTarget: false,
+    flyable: true,
+    speed: 330,
+    range: 500,
+    flightSec: 46 / 30,
+    category: "Laser",
+    pathEmulated: true,
+    usesTarget: false,
   };
   const missile = { ...laser, category: "MISSILE", usesTarget: true };
 
@@ -268,7 +276,8 @@ describe("SpawnerPane — fly like the projectile", () => {
 
   it("flags categories the preview still flies straight and refuses a projectile with no speed", async () => {
     const { unmount } = render(
-      <SpawnerPane bridge={bridgeWith({ ...laser, category: "LIGHT_SABER", pathEmulated: false })} />);
+      <SpawnerPane bridge={bridgeWith({ ...laser, category: "LIGHT_SABER", pathEmulated: false })} />,
+    );
     expect((await screen.findByTestId("spawner-projectile-curved")).textContent).toContain("LIGHT_SABER");
     unmount();
     render(<SpawnerPane bridge={bridgeWith({ ...laser, flyable: false, speed: 0 }, true)} />);

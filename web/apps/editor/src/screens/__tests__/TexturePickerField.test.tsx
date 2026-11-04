@@ -20,32 +20,32 @@ import type { Bridge } from "@particle-editor/bridge-schema";
 // and buttons, which require the app-level Tooltip.Provider — wrapper stands
 // in for it (precedent: renderWithTooltips in EmitterTree.test.tsx).
 const TipProvider = ({ children }: { children: ReactNode }) => (
-  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>
+    {children}
+  </Tooltip.Provider>
 );
 const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
 function makeBridge() {
-  const request = vi
-    .fn()
-    .mockImplementation((req: { kind: string; params?: Record<string, unknown> }) => {
-      switch (req.kind) {
-        case "textures/palette/list":
-          return Promise.resolve({
-            hasMod: true,
-            filter: req.params!.slot,
-            pins: [],
-            recents: [],
-          });
-        case "textures/palette/thumbnail":
-          return Promise.resolve({ dataUri: null });
-        case "textures/palette/toggle-pin":
-          return Promise.resolve({ ok: true, pinned: true });
-        case "textures/palette/touch-recent":
-          return Promise.resolve({ ok: true });
-        default:
-          return Promise.resolve({});
-      }
-    });
+  const request = vi.fn().mockImplementation((req: { kind: string; params?: Record<string, unknown> }) => {
+    switch (req.kind) {
+      case "textures/palette/list":
+        return Promise.resolve({
+          hasMod: true,
+          filter: req.params!.slot,
+          pins: [],
+          recents: [],
+        });
+      case "textures/palette/thumbnail":
+        return Promise.resolve({ dataUri: null });
+      case "textures/palette/toggle-pin":
+        return Promise.resolve({ ok: true, pinned: true });
+      case "textures/palette/touch-recent":
+        return Promise.resolve({ ok: true });
+      default:
+        return Promise.resolve({});
+    }
+  });
   const on = vi.fn().mockReturnValue(() => {});
   return { request, on } as unknown as Bridge & {
     request: ReturnType<typeof vi.fn>;
@@ -66,9 +66,7 @@ describe("TexturePickerField — Browse button", () => {
     );
     const input = screen.getByRole("textbox", { name: "Color texture:" });
     expect((input as HTMLInputElement).value).toBe("p_smoke_atlas_02.dds");
-    expect(
-      screen.getByRole("button", { name: "Browse for Color texture:" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Browse for Color texture:" })).toBeTruthy();
   });
 
   it("commits the picked basename when Browse resolves non-empty, passing the slot", async () => {
@@ -85,9 +83,7 @@ describe("TexturePickerField — Browse button", () => {
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Browse for Color texture:" }));
-    await waitFor(() =>
-      expect(onCommit).toHaveBeenCalledWith("p_explosion_atlas_02.dds"),
-    );
+    await waitFor(() => expect(onCommit).toHaveBeenCalledWith("p_explosion_atlas_02.dds"));
     expect(onBrowse).toHaveBeenCalledWith("color");
   });
 
@@ -123,9 +119,7 @@ describe("TexturePickerField — palette button + usage tracking", () => {
         bridge={b}
       />,
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Open texture palette for Color texture:" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Open texture palette for Color texture:" }));
     await waitFor(() => {
       expect(b.request).toHaveBeenCalledWith({
         kind: "textures/palette/list",

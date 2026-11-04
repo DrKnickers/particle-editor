@@ -15,7 +15,9 @@ import { makeBridgeStub } from "@/test/bridge-stub";
 // Tooltip.Provider App.tsx supplies in production — this wrapper stands in
 // for it (precedent: renderWithTooltips in EmitterTree.test.tsx).
 const TipProvider = ({ children }: { children: ReactNode }) => (
-  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>
+    {children}
+  </Tooltip.Provider>
 );
 const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
@@ -46,9 +48,7 @@ describe("StatusBar", () => {
     emit("engine/state/changed", { paused: false });
     // usePresence keeps the tag mounted through its exit fade;
     // jsdom fires no animationend, so unmount lands on the timeout fallback.
-    await waitFor(() =>
-      expect(screen.queryByText("PAUSED")).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.queryByText("PAUSED")).not.toBeInTheDocument());
   });
 
   it("renders the cursor readout with 2 decimals", () => {
@@ -62,7 +62,11 @@ describe("StatusBar", () => {
     const { bridge, emit } = makeBridge();
     render(<StatusBar bridge={bridge} />);
     emit("stats/tick", {
-      fps: 59.6, emitters: 2, particles: 16384, instances: 3, overload: false,
+      fps: 59.6,
+      emitters: 2,
+      particles: 16384,
+      instances: 3,
+      overload: false,
     });
 
     const fpsLabel = screen.getByText("FPS");
@@ -78,7 +82,11 @@ describe("StatusBar", () => {
     const { bridge, emit } = makeBridge();
     render(<StatusBar bridge={bridge} />);
     const tick = (overload: boolean) => ({
-      fps: 30, emitters: 2, particles: 16384, instances: 3, overload,
+      fps: 30,
+      emitters: 2,
+      particles: 16384,
+      instances: 3,
+      overload,
     });
 
     emit("stats/tick", tick(true));
@@ -172,7 +180,9 @@ describe("StatusBar", () => {
         expect(screen.getByTestId("status-autosave-failed")).toBeInTheDocument();
 
         // Far longer than any transient-banner window in this app.
-        act(() => { vi.advanceTimersByTime(120_000); });
+        act(() => {
+          vi.advanceTimersByTime(120_000);
+        });
         expect(screen.getByTestId("status-autosave-failed")).toBeInTheDocument();
 
         // Only a successful write clears it.

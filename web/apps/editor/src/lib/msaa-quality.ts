@@ -38,18 +38,14 @@ export function writeMsaaLevel(level: MsaaLevel): void {
 /** Push the saved MSAA level to the engine — fire-and-forget so a failed
  *  send (mock quirk, host teardown) never breaks the Preferences UI. */
 export function applyMsaaLevel(bridge: Bridge, level: number): void {
-  void bridge
-    .request({ kind: "engine/set/msaa-level", params: { level } })
-    .catch(() => {});
+  void bridge.request({ kind: "engine/set/msaa-level", params: { level } }).catch(() => {});
 }
 
 /** Query the engine for supported MSAA levels (hardware-gated).
  *  Returns `{ levels: [], current: -1 }` ("unknown") on error or a
  *  malformed response — callers must treat an empty `levels` as
  *  "couldn't determine support" and leave the saved preference intact. */
-export async function queryMsaaLevels(
-  bridge: Bridge,
-): Promise<{ levels: number[]; current: number }> {
+export async function queryMsaaLevels(bridge: Bridge): Promise<{ levels: number[]; current: number }> {
   try {
     const result = await bridge.request({ kind: "engine/query/msaa-levels", params: {} });
     // Guard against stubs/mocks that return {} instead of the real shape.

@@ -20,11 +20,7 @@ function makeStubBridge(saveOk = true): Bridge & { request: ReturnType<typeof vi
   return {
     request: vi.fn().mockImplementation((req: { kind: string }) => {
       if (req.kind === "file/save") {
-        return Promise.resolve(
-          saveOk
-            ? { ok: true, path: "C:/tmp/test.alo" }
-            : { ok: false, error: "user-cancelled" },
-        );
+        return Promise.resolve(saveOk ? { ok: true, path: "C:/tmp/test.alo" } : { ok: false, error: "user-cancelled" });
       }
       return Promise.resolve({});
     }),
@@ -97,11 +93,13 @@ describe("SaveChangesDialog", () => {
 
   it("a FAILED save surfaces the error modal, keeps the prompt open, and does not run the pending action", async () => {
     const bridge = {
-      request: vi.fn().mockImplementation((req: { kind: string }) =>
-        req.kind === "file/save"
-          ? Promise.resolve({ ok: false, error: "C:/x.alo is read-only" })
-          : Promise.resolve({}),
-      ),
+      request: vi
+        .fn()
+        .mockImplementation((req: { kind: string }) =>
+          req.kind === "file/save"
+            ? Promise.resolve({ ok: false, error: "C:/x.alo is read-only" })
+            : Promise.resolve({}),
+        ),
       on: vi.fn().mockReturnValue(() => {}),
     } as unknown as Bridge;
     const action = vi.fn();
@@ -122,11 +120,11 @@ describe("SaveChangesDialog", () => {
 
   it("a CANCELLED save stays silent (no error modal) and keeps the prompt open", async () => {
     const bridge = {
-      request: vi.fn().mockImplementation((req: { kind: string }) =>
-        req.kind === "file/save"
-          ? Promise.resolve({ ok: false, error: "user-cancelled" })
-          : Promise.resolve({}),
-      ),
+      request: vi
+        .fn()
+        .mockImplementation((req: { kind: string }) =>
+          req.kind === "file/save" ? Promise.resolve({ ok: false, error: "user-cancelled" }) : Promise.resolve({}),
+        ),
       on: vi.fn().mockReturnValue(() => {}),
     } as unknown as Bridge;
     const action = vi.fn();
@@ -147,11 +145,11 @@ describe("SaveChangesDialog", () => {
 
   it("a REJECTED save surfaces the error, keeps the prompt open, and does not run the pending action (#11)", async () => {
     const bridge = {
-      request: vi.fn().mockImplementation((req: { kind: string }) =>
-        req.kind === "file/save"
-          ? Promise.reject(new Error("bridge offline"))
-          : Promise.resolve({}),
-      ),
+      request: vi
+        .fn()
+        .mockImplementation((req: { kind: string }) =>
+          req.kind === "file/save" ? Promise.reject(new Error("bridge offline")) : Promise.resolve({}),
+        ),
       on: vi.fn().mockReturnValue(() => {}),
     } as unknown as Bridge;
     const action = vi.fn();

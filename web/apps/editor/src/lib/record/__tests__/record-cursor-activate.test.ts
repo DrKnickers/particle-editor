@@ -1,9 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  applyRecordActivation,
-  createRecordActivateState,
-  resetRecordActivation,
-} from "../record-cursor-activate";
+import { applyRecordActivation, createRecordActivateState, resetRecordActivation } from "../record-cursor-activate";
 
 function listen(target: EventTarget, type: string, sink: Event[]): () => void {
   const h = (e: Event) => sink.push(e);
@@ -81,8 +77,16 @@ describe("record-cursor-activate", () => {
     const off = listen(button, "click", clicks as Event[]);
     const state = createRecordActivateState();
 
-    applyRecordActivation({ x: 10, y: 10, press: true, ok: true, activate: true, mods: { ctrl: true, shift: false } }, state, { dpr: 1 });
-    applyRecordActivation({ x: 10, y: 10, press: false, ok: true, activate: true, mods: { ctrl: true, shift: false } }, state, { dpr: 1 });
+    applyRecordActivation(
+      { x: 10, y: 10, press: true, ok: true, activate: true, mods: { ctrl: true, shift: false } },
+      state,
+      { dpr: 1 },
+    );
+    applyRecordActivation(
+      { x: 10, y: 10, press: false, ok: true, activate: true, mods: { ctrl: true, shift: false } },
+      state,
+      { dpr: 1 },
+    );
     off();
 
     expect(clicks).toHaveLength(1);
@@ -96,8 +100,16 @@ describe("record-cursor-activate", () => {
     const off = listen(button, "click", clicks as Event[]);
     const state = createRecordActivateState();
 
-    applyRecordActivation({ x: 10, y: 10, press: true, ok: true, activate: true, mods: { ctrl: false, shift: true } }, state, { dpr: 1 });
-    applyRecordActivation({ x: 10, y: 10, press: false, ok: true, activate: true, mods: { ctrl: false, shift: true } }, state, { dpr: 1 });
+    applyRecordActivation(
+      { x: 10, y: 10, press: true, ok: true, activate: true, mods: { ctrl: false, shift: true } },
+      state,
+      { dpr: 1 },
+    );
+    applyRecordActivation(
+      { x: 10, y: 10, press: false, ok: true, activate: true, mods: { ctrl: false, shift: true } },
+      state,
+      { dpr: 1 },
+    );
     off();
 
     expect(clicks).toHaveLength(1);
@@ -112,7 +124,11 @@ describe("record-cursor-activate", () => {
     const state = createRecordActivateState();
 
     // press with ctrl; release without mods — the click must still be a ctrl-click.
-    applyRecordActivation({ x: 10, y: 10, press: true, ok: true, activate: true, mods: { ctrl: true, shift: false } }, state, { dpr: 1 });
+    applyRecordActivation(
+      { x: 10, y: 10, press: true, ok: true, activate: true, mods: { ctrl: true, shift: false } },
+      state,
+      { dpr: 1 },
+    );
     applyRecordActivation({ x: 10, y: 10, press: false, ok: true, activate: true }, state, { dpr: 1 });
     off();
 
@@ -143,7 +159,7 @@ describe("record-cursor-activate", () => {
     const state = createRecordActivateState();
 
     applyRecordActivation({ x: 10, y: 10, press: true, ok: true, activate: true, button: "right" }, state, { dpr: 1 });
-    expect(ctx).toHaveLength(1);            // fires at press-down, like a real browser
+    expect(ctx).toHaveLength(1); // fires at press-down, like a real browser
     expect(ctx[0].button).toBe(2);
     applyRecordActivation({ x: 10, y: 10, press: false, ok: true, activate: true, button: "right" }, state, { dpr: 1 });
     offC();
@@ -184,9 +200,9 @@ describe("record-cursor-activate", () => {
     offU();
     offK();
 
-    expect(downs[0].buttons).toBe(1);   // left held during the press
-    expect(ups[0].buttons).toBe(0);     // released — nothing held
-    expect(ups[0].button).toBe(0);      // ...but still names the button that changed
+    expect(downs[0].buttons).toBe(1); // left held during the press
+    expect(ups[0].buttons).toBe(0); // released — nothing held
+    expect(ups[0].button).toBe(0); // ...but still names the button that changed
     expect(clicks[0].buttons).toBe(0);
   });
 
@@ -353,9 +369,7 @@ describe("record-cursor-activate pointer pair", () => {
 
   it("dispatches pointerdown before mousedown, and pointerup before mouseup/click", () => {
     const sink: Event[] = [];
-    const offs = ["pointerdown", "mousedown", "pointerup", "mouseup", "click"].map((t) =>
-      listen(button, t, sink),
-    );
+    const offs = ["pointerdown", "mousedown", "pointerup", "mouseup", "click"].map((t) => listen(button, t, sink));
     const state = createRecordActivateState();
     applyRecordActivation({ x: 10, y: 10, press: true, ok: true, activate: true }, state, { dpr: 1 });
     applyRecordActivation({ x: 10, y: 10, press: false, ok: true, activate: true }, state, { dpr: 1 });

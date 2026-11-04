@@ -67,7 +67,9 @@ describe("BloomSection", () => {
     const captured: { onChanged?: (e: { payload: unknown }) => void } = {};
     bridge.request.mockImplementation((req: { kind: string }) => {
       if (req.kind === "engine/state/snapshot") {
-        return new Promise((resolve) => { resolveSnapshot = resolve; });
+        return new Promise((resolve) => {
+          resolveSnapshot = resolve;
+        });
       }
       if (req.kind === "engine/query/bloom-available") return Promise.resolve(true);
       return Promise.resolve({});

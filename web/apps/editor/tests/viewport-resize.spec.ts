@@ -27,8 +27,8 @@ test("host survives a sequence of layout/viewport-rect resizes and keeps snapsho
     const b = window.bridge!;
 
     const sizes = [
-      { x: 0, y: 0, w: 320,  h: 240  },
-      { x: 0, y: 0, w: 800,  h: 600  },
+      { x: 0, y: 0, w: 320, h: 240 },
+      { x: 0, y: 0, w: 800, h: 600 },
       { x: 0, y: 0, w: 1600, h: 1200 },
     ];
 

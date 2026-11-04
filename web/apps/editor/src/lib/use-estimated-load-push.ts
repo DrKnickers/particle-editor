@@ -13,20 +13,15 @@ const EPS = 0.5;
  *  preemptive overload gate. Pushed here (where the ⚠ data is computed)
  *  so the gate's number equals the glyph's. Pushes on mount too;
  *  BridgeDispatcher caches + reapplies across SetEngine. */
-export function useEstimatedLoadPush(
-  bridge: Bridge,
-  tree: { root: EmitterTreeNode } | null,
-): void {
+export function useEstimatedLoadPush(bridge: Bridge, tree: { root: EmitterTreeNode } | null): void {
   const last = useRef<number | null>(null);
   useEffect(() => {
     if (tree === null) return;
     const perInstance = estimateSystemLoad(tree.root);
     if (last.current !== null && Math.abs(perInstance - last.current) < EPS) return;
     last.current = perInstance;
-    void bridge
-      .request({ kind: "engine/set/estimated-load", params: { perInstance } })
-      .catch(() => {
-        /* mock / no-engine: harmless */
-      });
+    void bridge.request({ kind: "engine/set/estimated-load", params: { perInstance } }).catch(() => {
+      /* mock / no-engine: harmless */
+    });
   }, [bridge, tree]);
 }

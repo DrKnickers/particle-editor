@@ -95,10 +95,8 @@ test("Opening the Background popover does not close the Spawner column (independ
   await waitForPanel(page, "Spawner");
 
   await page.locator('button[aria-label="Background"]').first().click();
-  await page.waitForSelector('[data-radix-popper-content-wrapper]', { timeout: 2000 });
-  const stillSpawner = await page
-    .locator('[aria-label="Spawner"].panel')
-    .count();
+  await page.waitForSelector("[data-radix-popper-content-wrapper]", { timeout: 2000 });
+  const stillSpawner = await page.locator('[aria-label="Spawner"].panel').count();
   expect(stillSpawner).toBe(1);
 
   // Dismiss the Radix popover.
@@ -115,20 +113,15 @@ test("Changing Burst size fires engine/state/changed with new spawner.burstSize"
     window.__spawnerUnsub?.();
     const changes: number[] = [];
     window.__spawnerBurstChanges = changes;
-    window.__spawnerUnsub = window.bridge!.on(
-      "engine/state/changed",
-      (e) => {
-        if (e.payload.spawner) {
-          changes.push(e.payload.spawner.burstSize);
-        }
-      },
-    );
+    window.__spawnerUnsub = window.bridge!.on("engine/state/changed", (e) => {
+      if (e.payload.spawner) {
+        changes.push(e.payload.spawner.burstSize);
+      }
+    });
   });
 
   // Type a new burstSize into the Spinner and blur to commit.
-  const burst = page
-    .locator('[aria-label="Spawner"].panel input[aria-label="Burst size"]')
-    .first();
+  const burst = page.locator('[aria-label="Spawner"].panel input[aria-label="Burst size"]').first();
   await burst.click();
   await page.keyboard.press("Control+A");
   await page.keyboard.type("4");
@@ -136,9 +129,7 @@ test("Changing Burst size fires engine/state/changed with new spawner.burstSize"
 
   await page.waitForTimeout(300);
 
-  const changes = await page.evaluate(
-    () => window.__spawnerBurstChanges,
-  );
+  const changes = await page.evaluate(() => window.__spawnerBurstChanges);
   expect(changes).toContain(4);
 
   // Restore by snapping back to 1 (the default) so the next test starts
@@ -166,11 +157,7 @@ test("File → Import Emitters opens the Import Emitters modal", async () => {
   // Assert the dialog's heading carries the modal title so we know we
   // opened the right one (the old BackgroundPicker also used role="dialog" but
   // without data-state — RADIX_DIALOG already filters that out).
-  const title = await page
-    .locator(RADIX_DIALOG)
-    .locator("text=Import Emitters")
-    .first()
-    .textContent();
+  const title = await page.locator(RADIX_DIALOG).locator("text=Import Emitters").first().textContent();
   expect(title).toMatch(/Import Emitters/);
 
   // Dismiss the modal so the next test starts clean.

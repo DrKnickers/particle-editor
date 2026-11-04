@@ -25,7 +25,12 @@ import { useModalOpen } from "../../lib/modal-open";
 // ViewportSlot renders the display-options pill, whose <Tip> buttons need a
 // Tooltip.Provider (App.tsx supplies one in production). Inject it for all renders.
 const render = (ui: ReactElement, options?: RenderOptions) =>
-  rtlRender(<Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{ui}</Tooltip.Provider>, options);
+  rtlRender(
+    <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>
+      {ui}
+    </Tooltip.Provider>,
+    options,
+  );
 
 function makeStubBridge() {
   return makeBridgeStub();
@@ -50,9 +55,7 @@ describe("ViewportSlot — render surface", () => {
     expect(bridge.request).toHaveBeenCalled();
     // The viewport overlay (a child) also dispatches engine/state/snapshot on
     // mount, so find the scene-rect call rather than assume it's first.
-    const sceneRect = bridge.request.mock.calls
-      .map((c) => c?.[0])
-      .find((r) => r?.kind === "layout/scene-rect");
+    const sceneRect = bridge.request.mock.calls.map((c) => c?.[0]).find((r) => r?.kind === "layout/scene-rect");
     expect(sceneRect).toBeTruthy();
     expect(sceneRect?.params).toMatchObject({
       x: expect.any(Number),
@@ -70,17 +73,15 @@ describe("ViewportSlot — render surface", () => {
 // here we lock down that the listeners get attached on mount, fire the
 // right Request kind + payload shape, and detach on unmount.
 
-function findViewportInputCalls(
-  bridge: { request: ReturnType<typeof vi.fn> },
-): Array<{ kind: string; params: Record<string, unknown> }> {
+function findViewportInputCalls(bridge: {
+  request: ReturnType<typeof vi.fn>;
+}): Array<{ kind: string; params: Record<string, unknown> }> {
   return bridge.request.mock.calls
     .map((c) => c[0] as { kind: string; params: Record<string, unknown> })
     .filter((req) => req.kind === "viewport/input");
 }
 
-function findMouseMoveInputs(
-  bridge: { request: ReturnType<typeof vi.fn> },
-): Array<Record<string, unknown>> {
+function findMouseMoveInputs(bridge: { request: ReturnType<typeof vi.fn> }): Array<Record<string, unknown>> {
   return findViewportInputCalls(bridge)
     .map((req) => req.params)
     .filter((params) => params.type === "mousemove");
@@ -238,9 +239,7 @@ describe("ViewportSlot — input forwarding", () => {
       fireEvent.pointerMove(canvas, { clientX: 70, clientY: 80, buttons: 1 });
 
       expect(raf.request).not.toHaveBeenCalled();
-      expect(findMouseMoveInputs(bridge)).toEqual([
-        expect.objectContaining({ type: "mousemove", x: 70, y: 80 }),
-      ]);
+      expect(findMouseMoveInputs(bridge)).toEqual([expect.objectContaining({ type: "mousemove", x: 70, y: 80 })]);
     } finally {
       restoreVisibility();
       raf.restore();
@@ -255,7 +254,7 @@ describe("ViewportSlot — input forwarding", () => {
     const inputs = findViewportInputCalls(bridge);
     const wheel = inputs.find((r) => r.params.type === "wheel");
     expect(wheel).toBeTruthy();
-    expect(wheel?.params.deltaY).toBe(-120);  // DOM +100 → Win32 -WHEEL_DELTA
+    expect(wheel?.params.deltaY).toBe(-120); // DOM +100 → Win32 -WHEEL_DELTA
   });
 
   // ── Shift-spawn gate (2026-07-18): the Shift KEYDOWN forwards only while
@@ -283,7 +282,9 @@ describe("ViewportSlot — input forwarding", () => {
     const bridge = makeStubBridge();
     render(
       <div>
-        <button data-testid="some-ui" type="button">ui</button>
+        <button data-testid="some-ui" type="button">
+          ui
+        </button>
         <ViewportSlot bridge={bridge} />
       </div>,
     );
@@ -443,10 +444,10 @@ describe("ViewportSlot — dock-slide RO suppression (Item 3)", () => {
     const bridge = makeStubBridge();
     render(<ViewportSlot bridge={bridge} />);
     const before = sceneRectCalls(bridge);
-    roCallbacks.forEach((cb) => cb());            // same rect as mount
-    window.dispatchEvent(new Event("resize"));    // same rect again
-    window.dispatchEvent(new Event("scroll"));    // and again
-    expect(sceneRectCalls(bridge)).toBe(before);  // all deduped
+    roCallbacks.forEach((cb) => cb()); // same rect as mount
+    window.dispatchEvent(new Event("resize")); // same rect again
+    window.dispatchEvent(new Event("scroll")); // and again
+    expect(sceneRectCalls(bridge)).toBe(before); // all deduped
   });
 });
 
@@ -459,12 +460,10 @@ describe("ViewportSlot — modal-open key suppression (#12)", () => {
   it("suppresses viewport keydown/keyup while a modal is open", () => {
     const bridge = makeStubBridge();
     render(<ViewportSlot bridge={bridge} />);
-    useModalOpen.setState({ count: 1 });            // a blocking modal is open
+    useModalOpen.setState({ count: 1 }); // a blocking modal is open
     fireEvent.keyDown(window, { keyCode: 70, key: "f" });
     fireEvent.keyUp(window, { keyCode: 70, key: "f" });
-    const keys = findViewportInputCalls(bridge).filter(
-      (r) => r.params.type === "keydown" || r.params.type === "keyup",
-    );
+    const keys = findViewportInputCalls(bridge).filter((r) => r.params.type === "keydown" || r.params.type === "keyup");
     expect(keys).toHaveLength(0);
   });
 
@@ -479,7 +478,7 @@ describe("ViewportSlot — modal-open key suppression (#12)", () => {
     const bridge = makeStubBridge();
     render(<ViewportSlot bridge={bridge} />);
     const blursBefore = findViewportInputCalls(bridge).filter((r) => r.params.type === "blur").length;
-    useModalOpen.getState().open();                 // count 0 -> 1
+    useModalOpen.getState().open(); // count 0 -> 1
     const blursAfter = findViewportInputCalls(bridge).filter((r) => r.params.type === "blur").length;
     expect(blursAfter).toBe(blursBefore + 1);
   });

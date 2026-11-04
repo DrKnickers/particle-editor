@@ -14,7 +14,9 @@ declare global {
 // they pin belong to the site, not to any one page.
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => { window.__MEDIA_BASE__ = "/media-local/"; });
+  await page.addInitScript(() => {
+    window.__MEDIA_BASE__ = "/media-local/";
+  });
 });
 
 test("topbar: landing and guide render the identical ordered nav; What's New is gone", async ({ page }) => {
@@ -31,7 +33,9 @@ test("topbar: landing and guide render the identical ordered nav; What's New is 
       [...el.children].map((c) =>
         c.tagName === "A"
           ? "a:" + c.getAttribute("href")
-          : c.tagName.toLowerCase() + ":" + (c as HTMLElement).className.trim()));
+          : c.tagName.toLowerCase() + ":" + (c as HTMLElement).className.trim(),
+      ),
+    );
     expect(children, path + " ordered nav children").toEqual([
       "a:https://github.com/DrKnickers/particle-editor/releases/latest",
       "a:" + guideHref,
@@ -71,8 +75,9 @@ test("responsive: neither the body nor the topbar scrolls horizontally on narrow
     for (const width of NARROW_WIDTHS) {
       await page.setViewportSize({ width, height: 800 });
       await page.goto(path);
-      const overflows = await page.evaluate(() =>
-        document.documentElement.scrollWidth > document.documentElement.clientWidth);
+      const overflows = await page.evaluate(
+        () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      );
       expect(overflows, `${path} must not scroll horizontally at ${width}px`).toBe(false);
       const bar = page.locator("header.topbar");
       const barOverflows = await bar.evaluate((el) => el.scrollWidth > el.clientWidth);

@@ -23,7 +23,11 @@ import { makeStubBridge, stubRect } from "./emitter-tree-fixtures";
 // toggles and the footer toolbar, which requires the Tooltip.Provider that
 // App.tsx supplies in production — this helper stands in for it here.
 const renderWithTooltips = (ui: ReactElement) =>
-  render(<Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{ui}</Tooltip.Provider>);
+  render(
+    <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>
+      {ui}
+    </Tooltip.Provider>,
+  );
 
 function expectSelection(ids: number[], primary: number | null | undefined = undefined) {
   const selected = new Set(ids);
@@ -126,7 +130,13 @@ describe("EmitterTree", () => {
     // still paints the live tree at once, with no blank or exit-ghost flash.
     const tree = (name: string, stableId: number): EmitterTreeDto => ({
       root: {
-        id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
+        id: -1,
+        stableId: 0,
+        name: "",
+        role: "root",
+        linkGroup: 0,
+        visible: true,
+        spawn: ZERO_SPAWN,
         children: [
           { id: 0, stableId, name, role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
         ],
@@ -161,19 +171,67 @@ describe("EmitterTree", () => {
     // brand-new elements, snap instead of glide — the pre-glide behavior.)
     const before: EmitterTreeDto = {
       root: {
-        id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
+        id: -1,
+        stableId: 0,
+        name: "",
+        role: "root",
+        linkGroup: 0,
+        visible: true,
+        spawn: ZERO_SPAWN,
         children: [
-          { id: 0, stableId: 501, name: "Alpha", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
-          { id: 1, stableId: 502, name: "Beta",  role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
+          {
+            id: 0,
+            stableId: 501,
+            name: "Alpha",
+            role: "root",
+            linkGroup: 0,
+            visible: true,
+            spawn: ZERO_SPAWN,
+            children: [],
+          },
+          {
+            id: 1,
+            stableId: 502,
+            name: "Beta",
+            role: "root",
+            linkGroup: 0,
+            visible: true,
+            spawn: ZERO_SPAWN,
+            children: [],
+          },
         ],
       },
     };
     const after: EmitterTreeDto = {
       root: {
-        id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
+        id: -1,
+        stableId: 0,
+        name: "",
+        role: "root",
+        linkGroup: 0,
+        visible: true,
+        spawn: ZERO_SPAWN,
         children: [
-          { id: 0, stableId: 502, name: "Beta",  role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
-          { id: 1, stableId: 501, name: "Alpha", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
+          {
+            id: 0,
+            stableId: 502,
+            name: "Beta",
+            role: "root",
+            linkGroup: 0,
+            visible: true,
+            spawn: ZERO_SPAWN,
+            children: [],
+          },
+          {
+            id: 1,
+            stableId: 501,
+            name: "Alpha",
+            role: "root",
+            linkGroup: 0,
+            visible: true,
+            spawn: ZERO_SPAWN,
+            children: [],
+          },
         ],
       },
     };
@@ -182,7 +240,7 @@ describe("EmitterTree", () => {
     await waitFor(() => expect(screen.getByText("Alpha")).toBeInTheDocument());
 
     const alphaLi = screen.getByText("Alpha").closest("li")!;
-    const betaLi  = screen.getByText("Beta").closest("li")!;
+    const betaLi = screen.getByText("Beta").closest("li")!;
     expect(alphaLi.getAttribute("data-stable-id")).toBe("501");
 
     pushTree(after);
@@ -363,7 +421,7 @@ describe("EmitterTree", () => {
     renderWithTooltips(<EmitterTree bridge={bridge} />);
     await waitFor(() => expect(screen.getByText("Sparks")).toBeInTheDocument());
     stubAllRows();
-    const flashBtn  = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
+    const flashBtn = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
     const sparksBtn = screen.getByText("Sparks").closest<HTMLElement>("[data-emitter-id]")!;
 
     // Drag Flash; hover Sparks' middle third (y=84 in [80,88)) → onto ring.
@@ -447,7 +505,7 @@ describe("EmitterTree", () => {
       expect(screen.getByText("Sparks")).toBeInTheDocument();
     });
     stubAllRows();
-    const flashBtn  = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
+    const flashBtn = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
     const sparksBtn = screen.getByText("Sparks").closest<HTMLElement>("[data-emitter-id]")!;
 
     // A real (threshold-crossing) single-root drag → reorder gap 1.
@@ -633,9 +691,9 @@ describe("EmitterTree", () => {
     });
 
     // 6 emitter rows in the fixture → 6 eye buttons.
-    expect(screen.getByTestId("emitter-vis-0")).toBeInTheDocument();  // Smoke
-    expect(screen.getByTestId("emitter-vis-1")).toBeInTheDocument();  // Smoke embers
-    expect(screen.getByTestId("emitter-vis-3")).toBeInTheDocument();  // Sparks
+    expect(screen.getByTestId("emitter-vis-0")).toBeInTheDocument(); // Smoke
+    expect(screen.getByTestId("emitter-vis-1")).toBeInTheDocument(); // Smoke embers
+    expect(screen.getByTestId("emitter-vis-3")).toBeInTheDocument(); // Sparks
   });
 
   it("clicking the per-row eye dispatches emitters/set-visible with toggled state", async () => {
@@ -665,7 +723,7 @@ describe("EmitterTree", () => {
     // Before click: selection is empty (beforeEach clears the store).
     expect(screen.getByTestId("emitter-tree")).toHaveAttribute("data-primary-id", "");
 
-    fireEvent.click(screen.getByTestId("emitter-vis-1"));  // Smoke embers
+    fireEvent.click(screen.getByTestId("emitter-vis-1")); // Smoke embers
 
     // Selection still empty — no emitters/select dispatched as a side effect.
     expect(screen.getByTestId("emitter-tree")).toHaveAttribute("data-primary-id", "");
@@ -703,9 +761,7 @@ describe("EmitterTree", () => {
     expect(rowButton.style.gridTemplateColumns).toBe("18px 18px 1fr");
 
     // The visibility toggle is the FIRST DOM child (auto-placed in column 1).
-    expect(rowButton.firstElementChild).toBe(
-      rowButton.querySelector('[data-testid="emitter-vis-0"]'),
-    );
+    expect(rowButton.firstElementChild).toBe(rowButton.querySelector('[data-testid="emitter-vis-0"]'));
     // Root rows no longer render a role glyph; children show theirs
     // (lifetime ↻ / on-death ✕) on the right.
     expect(screen.queryByLabelText("root emitter")).toBeNull();
@@ -724,7 +780,7 @@ describe("EmitterTree", () => {
       expect(screen.getByText("Smoke")).toBeInTheDocument();
     });
 
-    const tree    = screen.getByRole("tree", { name: "Emitters" });
+    const tree = screen.getByRole("tree", { name: "Emitters" });
     const toolbar = screen.getByTestId("emitter-tree-toolbar");
 
     // The toolbar comes after the tree's <ul> in document order.
@@ -961,8 +1017,7 @@ describe("EmitterTree", () => {
       expect(screen.getByText("Smoke")).toBeInTheDocument();
     });
 
-    const rowFor = (id: number) =>
-      document.querySelector(`[data-emitter-id="${id}"]`) as HTMLElement;
+    const rowFor = (id: number) => document.querySelector(`[data-emitter-id="${id}"]`) as HTMLElement;
 
     // Hover Smoke (id=0, group 1) → both group-1 members tint.
     fireEvent.pointerEnter(rowFor(0));
@@ -981,8 +1036,7 @@ describe("EmitterTree", () => {
     await waitFor(() => {
       expect(screen.getByText("Flash")).toBeInTheDocument();
     });
-    const rowFor = (id: number) =>
-      document.querySelector(`[data-emitter-id="${id}"]`) as HTMLElement;
+    const rowFor = (id: number) => document.querySelector(`[data-emitter-id="${id}"]`) as HTMLElement;
 
     fireEvent.pointerEnter(rowFor(5)); // Flash, linkGroup 0
     expect(rowFor(5).getAttribute("data-link-hover")).toBe("false");
@@ -1030,17 +1084,25 @@ describe("EmitterTree", () => {
 });
 
 const node = (id: number, name: string, children: EmitterTreeNode[] = []) =>
-  ({ id, name, role: "root", visible: true, spawn: ZERO_SPAWN, children } as unknown as EmitterTreeNode);
+  ({ id, name, role: "root", visible: true, spawn: ZERO_SPAWN, children }) as unknown as EmitterTreeNode;
 
 describe("EmitterTree delete gating (helper-level)", () => {
   beforeEach(() => {
-    useEmitterTreeStore.setState({ tree: { root: node(-1, "root", [node(0, "a", [node(1, "a1")])]) } as unknown as EmitterTreeDto });
+    useEmitterTreeStore.setState({
+      tree: { root: node(-1, "root", [node(0, "a", [node(1, "a1")])]) } as unknown as EmitterTreeDto,
+    });
     useDeleteConfirmStore.setState({ pending: null });
     localStorage.clear();
   });
   it("deleting a parent opens the confirm", () => {
     const calls: number[] = [];
-    const bridge = { request: (r: { kind: string; params: { ids?: number[] } }) => { if (r.kind === "emitters/delete-many") calls.push(...r.params.ids!); return Promise.resolve({}); }, on: () => () => {} } as unknown as Bridge;
+    const bridge = {
+      request: (r: { kind: string; params: { ids?: number[] } }) => {
+        if (r.kind === "emitters/delete-many") calls.push(...r.params.ids!);
+        return Promise.resolve({});
+      },
+      on: () => () => {},
+    } as unknown as Bridge;
     useEmitterTreeStore.setState({ bridge }); // the seeded tree is this bridge's
     requestDeleteEmitters(bridge, [0]);
     expect(calls).toEqual([]);
@@ -1187,8 +1249,6 @@ describe("chain-warning glyph tracks the configurable guard cap", () => {
     // waitFor (not an immediate query): if a transient over-cap estimate
     // flashed the chip during load, usePresence holds it mounted through the
     // ~200ms exit fade before unmounting.
-    await waitFor(() =>
-      expect(screen.queryByTestId("system-load-chip")).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.queryByTestId("system-load-chip")).not.toBeInTheDocument());
   });
 });

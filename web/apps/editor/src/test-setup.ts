@@ -64,8 +64,7 @@ if (!HTMLElement.prototype.releasePointerCapture) {
 // (drawGrid). Stub getContext to return null so those paths take their
 // documented no-canvas fallback quietly instead of spamming stderr.
 if (typeof HTMLCanvasElement !== "undefined") {
-  HTMLCanvasElement.prototype.getContext =
-    vi.fn(() => null) as unknown as HTMLCanvasElement["getContext"];
+  HTMLCanvasElement.prototype.getContext = vi.fn(() => null) as unknown as HTMLCanvasElement["getContext"];
 }
 
 // jsdom doesn't implement requestIdleCallback / cancelIdleCallback. Run the
@@ -91,11 +90,19 @@ if (typeof window.localStorage === "undefined") {
     configurable: true,
     value: {
       getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
-      setItem: (k: string, v: string) => { store.set(k, String(v)); },
-      removeItem: (k: string) => { store.delete(k); },
-      clear: () => { store.clear(); },
+      setItem: (k: string, v: string) => {
+        store.set(k, String(v));
+      },
+      removeItem: (k: string) => {
+        store.delete(k);
+      },
+      clear: () => {
+        store.clear();
+      },
       key: (i: number) => Array.from(store.keys())[i] ?? null,
-      get length() { return store.size; },
+      get length() {
+        return store.size;
+      },
     },
   });
 }
@@ -122,7 +129,7 @@ if (typeof window.matchMedia === "undefined") {
       matches: false,
       media: query,
       onchange: null,
-      addListener: vi.fn(),    // deprecated; some libs still call this
+      addListener: vi.fn(), // deprecated; some libs still call this
       removeListener: vi.fn(),
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),

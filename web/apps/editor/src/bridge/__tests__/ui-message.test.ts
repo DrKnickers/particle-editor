@@ -10,7 +10,9 @@ function installWebview() {
   listeners = [];
   (window as unknown as { chrome: unknown }).chrome = {
     webview: {
-      addEventListener: (ev: string, h: Listener) => { if (ev === "message") listeners.push(h); },
+      addEventListener: (ev: string, h: Listener) => {
+        if (ev === "message") listeners.push(h);
+      },
       removeEventListener: (ev: string, h: Listener) => {
         if (ev === "message") listeners = listeners.filter((l) => l !== h);
       },
@@ -27,10 +29,18 @@ afterEach(() => {
 
 describe("parseUiMessage", () => {
   it("parses object and string forms into a typed message", () => {
-    expect(parseUiMessage({ type: "ui/show-panel", panel: "atlas" })).toEqual({ type: "ui/show-panel", panel: "atlas" });
+    expect(parseUiMessage({ type: "ui/show-panel", panel: "atlas" })).toEqual({
+      type: "ui/show-panel",
+      panel: "atlas",
+    });
     expect(parseUiMessage(JSON.stringify({ type: "ui/hide-panel" }))).toEqual({ type: "ui/hide-panel" });
     expect(parseUiMessage({ type: "ui/cursor", x: 1, y: 2, visible: true, pressed: false, frame: 7 })).toEqual({
-      type: "ui/cursor", x: 1, y: 2, visible: true, pressed: false, frame: 7,
+      type: "ui/cursor",
+      x: 1,
+      y: 2,
+      visible: true,
+      pressed: false,
+      frame: 7,
     });
   });
 
@@ -65,7 +75,9 @@ describe("onUiMessage", () => {
   it("a throwing handler is logged and does not starve the next one", () => {
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     const seen: string[] = [];
-    const offA = onUiMessage("ui/set-picker-search", () => { throw new Error("handler bug"); });
+    const offA = onUiMessage("ui/set-picker-search", () => {
+      throw new Error("handler bug");
+    });
     const offB = onUiMessage("ui/set-picker-search", (m) => seen.push(m.text));
     expect(() => deliver({ type: "ui/set-picker-search", text: "AT-AT" })).not.toThrow();
     expect(seen).toEqual(["AT-AT"]);

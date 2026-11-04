@@ -85,7 +85,9 @@ export function EmitterPropertyTabs({ bridge }: Props) {
         if (seedGeneration !== selectionGeneration.current) return;
         select(snap.selectedEmitterId);
       })
-      .catch(() => { /* placeholder branch handles null */ });
+      .catch(() => {
+        /* placeholder branch handles null */
+      });
     return () => {
       selectionGeneration.current += 1;
       readGeneration.current += 1;
@@ -108,8 +110,10 @@ export function EmitterPropertyTabs({ bridge }: Props) {
       setLoading(true);
       const req = { kind: "emitters/get-properties", params: { id } } as const;
       const request = coalesceTreeRefetch ? requestTreeRefetch(bridge, req) : bridge.request(req);
-      const isCurrent = () => generation === readGeneration.current
-        && currentSelection.current.bridge === bridge && currentSelection.current.id === id;
+      const isCurrent = () =>
+        generation === readGeneration.current &&
+        currentSelection.current.bridge === bridge &&
+        currentSelection.current.id === id;
       request
         .then((res) => {
           if (!isCurrent()) return;
@@ -143,31 +147,38 @@ export function EmitterPropertyTabs({ bridge }: Props) {
   // Commit helper — fires the bridge patch + optimistic local update.
   const commit = useCallback(
     (patch: Partial<EmitterPropertiesDto>) => {
-      if (selectedId === null || properties === null
-        || currentSelection.current !== selection) return;
+      if (selectedId === null || properties === null || currentSelection.current !== selection) return;
       const selectedGeneration = selectionGeneration.current;
       const generation = ++readGeneration.current;
       setLoading(false);
       // Optimistic local update so the spinner doesn't flash back to
       // the old value before the engine re-emits.
-      setLoaded((p) => p?.bridge === bridge && p.id === selectedId
-        ? { ...p, properties: { ...p.properties, ...patch } } : p);
-      void fireAndReport(bridge, {
-        kind: "emitters/set-properties",
-        params: { id: selectedId, patch },
-      }, "Edit emitter properties")
-        .then((res) => {
-          if (selectedGeneration !== selectionGeneration.current
-            || currentSelection.current.bridge !== bridge || currentSelection.current.id !== selectedId) return;
-          if (res !== undefined && res.skipped.length === 0) return;
-          if (res !== undefined) {
-            useStatusFeedback.getState().announce(`Couldn't apply emitter properties: ${res.skipped.join(", ")}`);
-          }
-          if (generation !== readGeneration.current) return;
-          // On failure, re-fetch the authoritative value so we don't
-          // leave the form stuck on a value the engine refused.
-          fetchProps(selectedId);
-        });
+      setLoaded((p) =>
+        p?.bridge === bridge && p.id === selectedId ? { ...p, properties: { ...p.properties, ...patch } } : p,
+      );
+      void fireAndReport(
+        bridge,
+        {
+          kind: "emitters/set-properties",
+          params: { id: selectedId, patch },
+        },
+        "Edit emitter properties",
+      ).then((res) => {
+        if (
+          selectedGeneration !== selectionGeneration.current ||
+          currentSelection.current.bridge !== bridge ||
+          currentSelection.current.id !== selectedId
+        )
+          return;
+        if (res !== undefined && res.skipped.length === 0) return;
+        if (res !== undefined) {
+          useStatusFeedback.getState().announce(`Couldn't apply emitter properties: ${res.skipped.join(", ")}`);
+        }
+        if (generation !== readGeneration.current) return;
+        // On failure, re-fetch the authoritative value so we don't
+        // leave the form stuck on a value the engine refused.
+        fetchProps(selectedId);
+      });
     },
     [bridge, selection, selectedId, properties, fetchProps],
   );
@@ -178,10 +189,14 @@ export function EmitterPropertyTabs({ bridge }: Props) {
   // result through `commit`, same as the text input.
   const browseTexture = useCallback(
     async (slot: "color" | "bump"): Promise<string> => {
-      const res = await fireAndReport(bridge, {
-        kind: "textures/browse",
-        params: { slot },
-      }, "Browse texture");
+      const res = await fireAndReport(
+        bridge,
+        {
+          kind: "textures/browse",
+          params: { slot },
+        },
+        "Browse texture",
+      );
       return res?.filename ?? "";
     },
     [bridge],
@@ -203,12 +218,17 @@ export function EmitterPropertyTabs({ bridge }: Props) {
         </div>
       );
     }
-    const error = readError === null ? null : (
-      <div className="flex flex-col items-center gap-2 p-4 text-center text-xs">
-        <div role="alert" className="text-danger-fg">{readError}</div>
-        <Button variant="secondary" onClick={() => fetchProps(selectedId)}>Retry</Button>
-      </div>
-    );
+    const error =
+      readError === null ? null : (
+        <div className="flex flex-col items-center gap-2 p-4 text-center text-xs">
+          <div role="alert" className="text-danger-fg">
+            {readError}
+          </div>
+          <Button variant="secondary" onClick={() => fetchProps(selectedId)}>
+            Retry
+          </Button>
+        </div>
+      );
     if (properties === null) {
       if (error) return error;
       return (
@@ -217,7 +237,12 @@ export function EmitterPropertyTabs({ bridge }: Props) {
         </div>
       );
     }
-    return <>{error}{content(properties)}</>;
+    return (
+      <>
+        {error}
+        {content(properties)}
+      </>
+    );
   };
 
   return (
@@ -227,10 +252,7 @@ export function EmitterPropertyTabs({ bridge }: Props) {
       defaultValue="basic"
       className="flex h-full flex-col"
     >
-      <Tabs.List
-        className="flex shrink-0 border-b border-border bg-bg"
-        aria-label="Emitter property tabs"
-      >
+      <Tabs.List className="flex shrink-0 border-b border-border bg-bg" aria-label="Emitter property tabs">
         <TabTrigger value="basic" label="Basic" />
         <TabTrigger value="appearance" label="Appearance" />
         <TabTrigger value="physics" label="Physics" />
@@ -243,7 +265,9 @@ export function EmitterPropertyTabs({ bridge }: Props) {
         className="inspector-tab-scroll flex-1 min-h-0 overflow-y-auto outline-none focus-ring-inset scrollbar-stable fade-in-fast"
         data-testid="tab-basic-content"
       >
-        {renderBody((p) => <BasicTab properties={p} onCommit={commit} />)}
+        {renderBody((p) => (
+          <BasicTab properties={p} onCommit={commit} />
+        ))}
       </Tabs.Content>
       <Tabs.Content
         value="appearance"
@@ -251,12 +275,7 @@ export function EmitterPropertyTabs({ bridge }: Props) {
         data-testid="tab-appearance-content"
       >
         {renderBody((p) => (
-          <AppearanceTab
-            properties={p}
-            onCommit={commit}
-            onBrowseTexture={browseTexture}
-            bridge={bridge}
-          />
+          <AppearanceTab properties={p} onCommit={commit} onBrowseTexture={browseTexture} bridge={bridge} />
         ))}
       </Tabs.Content>
       <Tabs.Content
@@ -264,7 +283,9 @@ export function EmitterPropertyTabs({ bridge }: Props) {
         className="inspector-tab-scroll flex-1 min-h-0 overflow-y-auto outline-none focus-ring-inset scrollbar-stable fade-in-fast"
         data-testid="tab-physics-content"
       >
-        {renderBody((p) => <PhysicsTab properties={p} onCommit={commit} />)}
+        {renderBody((p) => (
+          <PhysicsTab properties={p} onCommit={commit} />
+        ))}
       </Tabs.Content>
     </Tabs.Root>
   );

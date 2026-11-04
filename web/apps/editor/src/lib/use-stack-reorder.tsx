@@ -22,10 +22,10 @@ import { DRAG_FEEL, pickFlipDuration } from "@/lib/flip";
 import { useRecording } from "@/lib/record/record-mode";
 
 // Tuning — mirrors EmitterTree.tsx so every reorderable list feels the same.
-const DRAG_THRESHOLD = 4;   // px (Manhattan) before a press becomes a drag
-const CHIP_SPRING = 0.25;   // per-frame ease of the chip toward its target
-const CHIP_PULL = 0.6;      // how far the chip leans toward the gap center
-const CHIP_EXIT_MS = 160;   // chip fly-into-gap + fade on release
+const DRAG_THRESHOLD = 4; // px (Manhattan) before a press becomes a drag
+const CHIP_SPRING = 0.25; // per-frame ease of the chip toward its target
+const CHIP_PULL = 0.6; // how far the chip leans toward the gap center
+const CHIP_EXIT_MS = 160; // chip fly-into-gap + fade on release
 // Row-glide durations come from the shared DRAG_FEEL in lib/flip.ts (drag =
 // snappy, settle = slower; recordDragMs is the --record active-drag glide).
 // --record only (mirrors EmitterTree.tsx via pickFlipDuration in lib/flip.ts): the
@@ -42,8 +42,7 @@ const CHIP_EXIT_RECORD_MS = 760;
 type Chip = { x: number; y: number; name: string; exit?: { x: number; y: number } };
 
 const prefersReducedMotion = () =>
-  typeof window.matchMedia === "function" &&
-  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 export type StackReorder = {
   /** Index of the row being dragged (dim it), or null. */
@@ -97,7 +96,12 @@ export function useStackReorder(opts: {
   // Never let a gesture outlive the component.
   useEffect(() => () => activeDragCancelRef.current?.(), []);
 
-  const cancel = () => { activeDragCancelRef.current?.(); setDragIndex(null); setGap(null); setChip(null); };
+  const cancel = () => {
+    activeDragCancelRef.current?.();
+    setDragIndex(null);
+    setGap(null);
+    setChip(null);
+  };
 
   // --record posed drag: render a frozen lift (dimmed row + make-room gap + a chip
   // leaning toward the gap) directly from `pose`, reusing the same geometry the live
@@ -110,9 +114,14 @@ export function useStackReorder(opts: {
     if (!ul) return;
     const sc = getSC(ul);
     const scTop = sc ? sc.getBoundingClientRect().top - sc.scrollTop : 0;
-    const tops: number[] = [], bottoms: number[] = [];
+    const tops: number[] = [],
+      bottoms: number[] = [];
     const lis = ul.querySelectorAll<HTMLElement>(":scope > li[data-flip-key]");
-    lis.forEach((li) => { const r = li.getBoundingClientRect(); tops.push(r.top - scTop); bottoms.push(r.bottom - scTop); });
+    lis.forEach((li) => {
+      const r = li.getBoundingClientRect();
+      tops.push(r.top - scTop);
+      bottoms.push(r.bottom - scTop);
+    });
     if (pose.from < 0 || pose.from >= tops.length) return;
     const geom: RootBlockGeometry = { tops, bottoms };
     const liftedH = liftedBlockHeight(geom, [pose.from]);
@@ -125,7 +134,11 @@ export function useStackReorder(opts: {
     setDragIndex(pose.from);
     setGap(clampedGap);
     setChip({ x: chipAt.x, y: chipAt.y, name: labelFor(order[pose.from]!) });
-    return () => { setDragIndex(null); setGap(null); setChip(null); };
+    return () => {
+      setDragIndex(null);
+      setGap(null);
+      setChip(null);
+    };
     // Keyed on the posed indices + a STABLE STRING of the order — never the array itself,
     // whose identity consumers churn every render (that would loop: setState → re-render →
     // re-fire). The string key re-runs the pose once the stack CONTENT settles — e.g. after
@@ -142,9 +155,15 @@ export function useStackReorder(opts: {
     const captureEl = e.currentTarget;
     const pointerId = e.pointerId;
     dragPointerRef.current = pointerId;
-    try { captureEl.setPointerCapture(pointerId); } catch { /* jsdom */ }
-    const startX = e.clientX, startY = e.clientY;
-    let lastX = startX, lastY = startY;
+    try {
+      captureEl.setPointerCapture(pointerId);
+    } catch {
+      /* jsdom */
+    }
+    const startX = e.clientX,
+      startY = e.clientY;
+    let lastX = startX,
+      lastY = startY;
     let active = false;
     let geom: RootBlockGeometry | null = null;
     let liftedH = 0;
@@ -156,22 +175,27 @@ export function useStackReorder(opts: {
     const reduce = prefersReducedMotion();
     const sc = listRef.current ? getSC(listRef.current) : null;
 
-    const toContentY = (clientY: number) =>
-      sc ? clientY - sc.getBoundingClientRect().top + sc.scrollTop : clientY;
+    const toContentY = (clientY: number) => (sc ? clientY - sc.getBoundingClientRect().top + sc.scrollTop : clientY);
 
     const captureGeometry = (): RootBlockGeometry | null => {
       const ul = listRef.current;
       if (!ul) return null;
       const scTop = sc ? sc.getBoundingClientRect().top - sc.scrollTop : 0;
-      const tops: number[] = [], bottoms: number[] = [];
+      const tops: number[] = [],
+        bottoms: number[] = [];
       ul.querySelectorAll<HTMLElement>(":scope > li[data-flip-key]").forEach((li) => {
         const r = li.getBoundingClientRect();
-        tops.push(r.top - scTop); bottoms.push(r.bottom - scTop);
+        tops.push(r.top - scTop);
+        bottoms.push(r.bottom - scTop);
       });
       return { tops, bottoms };
     };
 
-    const setGapState = (g: number | null) => { if (g === lastGap) return; lastGap = g; setGap(g); };
+    const setGapState = (g: number | null) => {
+      if (g === lastGap) return;
+      lastGap = g;
+      setGap(g);
+    };
     const updateTarget = (clientY: number) => {
       if (!geom) return;
       const res = resolveGapFromGeometry(geom, [from], toContentY(clientY), lastGap, liftedH);
@@ -185,27 +209,43 @@ export function useStackReorder(opts: {
         gapCenter = gapContentY(geom, lastGap) + baseT + liftedH / 2;
       }
       const target = computeChipTarget(lastX, lastY, gapCenter, CHIP_PULL);
-      if (reduce) { chipPos.x = target.x; chipPos.y = target.y; }
-      else { chipPos.x += (target.x - chipPos.x) * CHIP_SPRING; chipPos.y += (target.y - chipPos.y) * CHIP_SPRING; }
+      if (reduce) {
+        chipPos.x = target.x;
+        chipPos.y = target.y;
+      } else {
+        chipPos.x += (target.x - chipPos.x) * CHIP_SPRING;
+        chipPos.y += (target.y - chipPos.y) * CHIP_SPRING;
+      }
       setChip({ x: chipPos.x, y: chipPos.y, name: chipName });
     };
     const tick = () => {
-      if (sc) { const d = computeAutoscrollDelta(lastY, sc.getBoundingClientRect()); if (d !== 0) { sc.scrollTop += d; updateTarget(lastY); } }
+      if (sc) {
+        const d = computeAutoscrollDelta(lastY, sc.getBoundingClientRect());
+        if (d !== 0) {
+          sc.scrollTop += d;
+          updateTarget(lastY);
+        }
+      }
       stepChip();
       rafId = requestAnimationFrame(tick);
     };
 
     const onMove = (ev: PointerEvent) => {
       if (ev.pointerId !== pointerId) return;
-      lastX = ev.clientX; lastY = ev.clientY;
+      lastX = ev.clientX;
+      lastY = ev.clientY;
       if (!active) {
         if (Math.abs(ev.clientX - startX) + Math.abs(ev.clientY - startY) < DRAG_THRESHOLD) return;
         // Force-finish any in-flight FLIP glide so the snapshot reads RESTING rects.
         listRef.current?.querySelectorAll<HTMLElement>(":scope > li[data-flip-key]").forEach((li) => {
-          li.style.transition = "none"; li.style.transform = "";
+          li.style.transition = "none";
+          li.style.transform = "";
         });
         geom = captureGeometry();
-        if (geom === null) { finish(false); return; }
+        if (geom === null) {
+          finish(false);
+          return;
+        }
         liftedH = liftedBlockHeight(geom, [from]);
         active = true;
         setGapHeight(liftedH);
@@ -219,7 +259,9 @@ export function useStackReorder(opts: {
       stepChip();
     };
     const onBlur = () => finish(false);
-    const onVis = () => { if (document.visibilityState === "hidden") finish(false); };
+    const onVis = () => {
+      if (document.visibilityState === "hidden") finish(false);
+    };
     const finish = (commit: boolean) => {
       document.removeEventListener("pointermove", onMove);
       document.removeEventListener("pointerup", onUp);
@@ -228,9 +270,19 @@ export function useStackReorder(opts: {
       document.removeEventListener("visibilitychange", onVis);
       if (dragPointerRef.current === pointerId) dragPointerRef.current = null;
       activeDragCancelRef.current = null;
-      try { captureEl.releasePointerCapture(pointerId); } catch { /* already released */ }
-      if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
-      if (chipTimer !== null) { clearTimeout(chipTimer); chipTimer = null; }
+      try {
+        captureEl.releasePointerCapture(pointerId);
+      } catch {
+        /* already released */
+      }
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      if (chipTimer !== null) {
+        clearTimeout(chipTimer);
+        chipTimer = null;
+      }
       if (!active) return; // pre-threshold release — nothing was shown
       active = false;
       const targetGap = lastGap;
@@ -250,8 +302,12 @@ export function useStackReorder(opts: {
       setDragIndex(null);
       setGap(null);
     };
-    const onUp = (ev: PointerEvent) => { if (ev.pointerId === pointerId) finish(true); };
-    const onCancel = (ev: PointerEvent) => { if (ev.pointerId === pointerId) finish(false); };
+    const onUp = (ev: PointerEvent) => {
+      if (ev.pointerId === pointerId) finish(true);
+    };
+    const onCancel = (ev: PointerEvent) => {
+      if (ev.pointerId === pointerId) finish(false);
+    };
 
     document.addEventListener("pointermove", onMove);
     document.addEventListener("pointerup", onUp);
@@ -292,7 +348,7 @@ export function useStackReorder(opts: {
       if (was === undefined || was === top) continue;
       const el = els.get(k)!;
       const m = /matrix\([^,]+,[^,]+,[^,]+,[^,]+,[^,]+,\s*(-?[\d.]+)\)/.exec(getComputedStyle(el).transform);
-      const total = (was - top) + (m !== null ? parseFloat(m[1]!) : 0);
+      const total = was - top + (m !== null ? parseFloat(m[1]!) : 0);
       if (total === 0) continue;
       el.style.transition = "none";
       el.style.transform = `translateY(${total}px)`;

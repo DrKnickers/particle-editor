@@ -8,11 +8,7 @@ import { renderHook, waitFor, act } from "@testing-library/react";
 import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
 import { MockBridge } from "@/bridge/mock";
 import { resetMockState } from "@/test/mock-state";
-import {
-  markEmittersCopied,
-  useEmitterClipboardStore,
-  useSeedEmitterClipboard,
-} from "../emitter-clipboard";
+import { markEmittersCopied, useEmitterClipboardStore, useSeedEmitterClipboard } from "../emitter-clipboard";
 
 function state(emitterClipboardHasContent: boolean): EngineStateDto {
   return { emitterClipboardHasContent } as unknown as EngineStateDto;

@@ -72,7 +72,6 @@ test.afterAll(async () => {
   // .mjs.
 });
 
-
 // Walk the subtree, return the first node matching `pred`, or
 // undefined if none.
 function findFirst(node: UIANode, pred: (n: UIANode) => boolean): UIANode | undefined {
@@ -105,8 +104,7 @@ test.describe("a11y/uia-composition-reachable [composition]", () => {
     // good early warning.
     expect(
       findFirst(tree, (n) => n.ClassName === "Chrome_WidgetWin_1"),
-      "Chrome_WidgetWin_1 wrapper missing under host HWND — WebView2 " +
-      "hosting topology may have changed."
+      "Chrome_WidgetWin_1 wrapper missing under host HWND — WebView2 " + "hosting topology may have changed.",
     ).toBeDefined();
 
     // (3) Chromium frame view is present (the wrapper that hosts the
@@ -114,8 +112,7 @@ test.describe("a11y/uia-composition-reachable [composition]", () => {
     // differently than expected.
     expect(
       findFirst(tree, (n) => n.ClassName === "EmbeddedBrowserFrameView"),
-      "EmbeddedBrowserFrameView missing — Chromium frame-view layer " +
-      "is no longer reachable under the host HWND."
+      "EmbeddedBrowserFrameView missing — Chromium frame-view layer " + "is no longer reachable under the host HWND.",
     ).toBeDefined();
 
     // (4) The React menubar IS reachable, AND it contains the React
@@ -137,21 +134,17 @@ test.describe("a11y/uia-composition-reachable [composition]", () => {
       // Discriminator: at least one direct child is one of the
       // React app's menu items. Filters out the Win32 system MenuBar
       // (its child is the "System" menu item only).
-      return (n.children ?? []).some(
-        (c) =>
-          c.ControlType === "MenuItem" &&
-          expectedMenuItems.includes(c.Name ?? "")
-      );
+      return (n.children ?? []).some((c) => c.ControlType === "MenuItem" && expectedMenuItems.includes(c.Name ?? ""));
     });
     expect(
       reactMenuBar,
       `React menubar not reachable from host HWND. Looked for a UIA ` +
-      `MenuBar with at least one child MenuItem named one of: ` +
-      `${expectedMenuItems.join(", ")}. Either Blink's a11y has ` +
-      `regressed to lazy-init under composition hosting (check the ` +
-      `--force-renderer-accessibility flag in HostWindow.cpp and the ` +
-      `UIA warmup in uia_inspector.cpp), or the React menubar's ` +
-      `structure has changed and this assertion needs updating.`
+        `MenuBar with at least one child MenuItem named one of: ` +
+        `${expectedMenuItems.join(", ")}. Either Blink's a11y has ` +
+        `regressed to lazy-init under composition hosting (check the ` +
+        `--force-renderer-accessibility flag in HostWindow.cpp and the ` +
+        `UIA warmup in uia_inspector.cpp), or the React menubar's ` +
+        `structure has changed and this assertion needs updating.`,
     ).toBeDefined();
   });
 });

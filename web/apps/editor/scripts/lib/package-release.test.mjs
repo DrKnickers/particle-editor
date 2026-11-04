@@ -50,11 +50,7 @@ function buildFixture(root, omit = []) {
 }
 
 // Run the packager against a fresh temp fixture; returns { res, stage, zip }.
-function runCase(
-  t,
-  omit = [],
-  { withZip = true, passRepoRoot = true, useFixtureScript = false, stagePath } = {},
-) {
+function runCase(t, omit = [], { withZip = true, passRepoRoot = true, useFixtureScript = false, stagePath } = {}) {
   assert.ok(shell, "PowerShell (pwsh/powershell) is required under CI but was not found");
   const tmp = mkdtempSync(path.join(tmpdir(), "pkgrel-"));
   t.after(() => rmSync(tmp, { recursive: true, force: true }));
@@ -84,7 +80,10 @@ test("case 1: full fixture stages the two-file bundle and a verified zip", skipO
   assert.ok(staged(stage, "x64", "Release", "d3dx9_43.dll"), "d3dx9 staged");
   // The WebView2 loader is statically linked into the exe (no WebView2Loader.dll)
   // and the runtime bootstrapper is no longer bundled, so NEITHER may be staged.
-  assert.ok(!staged(stage, "x64", "Release", "WebView2Loader.dll"), "WebView2Loader.dll NOT staged (statically linked)");
+  assert.ok(
+    !staged(stage, "x64", "Release", "WebView2Loader.dll"),
+    "WebView2Loader.dll NOT staged (statically linked)",
+  );
   assert.ok(!staged(stage, "x64", "Release", "MicrosoftEdgeWebview2Setup.exe"), "WebView2 bootstrapper NOT staged");
   // The React UI is embedded in the exe as RCDATA — no separate web/ folder ships.
   assert.ok(!staged(stage, "web"), "no web/ folder staged (UI embedded in exe)");
@@ -127,7 +126,11 @@ for (const c of [
   { name: "case 4: missing vendored d3dx9", omit: ["d3dx9"], rx: /Missing required source.*d3dx9_43\.dll/s },
   // The reviewer's scenario: an exe that staged fine but carries no embedded bundle
   // (a stale folder-mapping build) — must be rejected, not shipped as an unusable release.
-  { name: "case 11: exe without an embedded bundle is rejected", omit: ["noembed"], rx: /does not embed the web bundle/ },
+  {
+    name: "case 11: exe without an embedded bundle is rejected",
+    omit: ["noembed"],
+    rx: /does not embed the web bundle/,
+  },
 ]) {
   test(c.name, skipOpt, (t) => {
     const { res } = runCase(t, c.omit);

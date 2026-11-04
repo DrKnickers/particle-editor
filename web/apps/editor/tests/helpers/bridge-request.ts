@@ -41,13 +41,13 @@ export type TestHostRequest =
   // BridgeDispatch_File.cpp — request-scoped interactive unsaved-work guard.
   | { kind: "file/new"; params: { __testRefuseUnsaved: boolean; discardUnsaved?: true } }
   | { kind: "file/open"; params: { __testRefuseUnsaved: boolean; path: string; filter?: "alo"; discardUnsaved?: true } }
-  | { kind: "debug/device-recovery-work";     params: DeviceRecoveryWorkParams }
-  | { kind: "undo/test/budget";               params: { maxTotalBytes?: number } }
+  | { kind: "debug/device-recovery-work"; params: DeviceRecoveryWorkParams }
+  | { kind: "undo/test/budget"; params: { maxTotalBytes?: number } }
   // BridgeDispatch_File.cpp — document-replacement seams (selection-identity.spec.ts).
-  | { kind: "debug/seed-autosave-recovery";   params: { path: string; originalFilename?: string } }
-  | { kind: "debug/emit-document-replaced";   params: Record<string, never> }
+  | { kind: "debug/seed-autosave-recovery"; params: { path: string; originalFilename?: string } }
+  | { kind: "debug/emit-document-replaced"; params: Record<string, never> }
   // BridgeDispatch_File.cpp — test-host opt-ins on the production autosave kinds.
-  | { kind: "autosave/check-recovery";        params: { __testAllowRecovery: boolean } }
+  | { kind: "autosave/check-recovery"; params: { __testAllowRecovery: boolean } }
   | {
       kind: "autosave/recover";
       params: {
@@ -57,23 +57,26 @@ export type TestHostRequest =
       };
     }
   // BridgeDispatch_SpawnerLighting.cpp — the --record cursor-preview seam.
-  | { kind: "preview/attach";                 params: { x: number; y: number } }
-  | { kind: "preview/place";                  params: Record<string, never> }
-  | { kind: "preview/kill";                   params: Record<string, never> };
+  | { kind: "preview/attach"; params: { x: number; y: number } }
+  | { kind: "preview/place"; params: Record<string, never> }
+  | { kind: "preview/kill"; params: Record<string, never> };
 
-type TestHostResponseFor<R extends TestHostRequest> =
-  R extends { kind: "debug/device-recovery-work" } ? DeviceRecoveryWorkState :
-  R extends { kind: "undo/test/budget" }           ? UndoBudgetState :
-  // Production kinds with test-only params answer with the production shape.
-  R extends { kind: infer K extends Request["kind"] } ? ResponseFor<Extract<Request, { kind: K }>> :
-  Record<string, never>;
+type TestHostResponseFor<R extends TestHostRequest> = R extends { kind: "debug/device-recovery-work" }
+  ? DeviceRecoveryWorkState
+  : R extends { kind: "undo/test/budget" }
+    ? UndoBudgetState
+    : // Production kinds with test-only params answer with the production shape.
+      R extends { kind: infer K extends Request["kind"] }
+      ? ResponseFor<Extract<Request, { kind: K }>>
+      : Record<string, never>;
 
 export type E2ERequest = Request | TestHostRequest;
 
-export type E2EResponseFor<R extends E2ERequest> =
-  R extends Request ? ResponseFor<R> :
-  R extends TestHostRequest ? TestHostResponseFor<R> :
-  never;
+export type E2EResponseFor<R extends E2ERequest> = R extends Request
+  ? ResponseFor<R>
+  : R extends TestHostRequest
+    ? TestHostResponseFor<R>
+    : never;
 
 export type E2EBridge = Omit<Bridge, "request"> & {
   request<R extends E2ERequest>(req: R): Promise<E2EResponseFor<R>>;

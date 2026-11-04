@@ -48,11 +48,7 @@ export function computeSceneRect(el: HTMLElement): SceneRect {
  * residual is a sub-pixel-to-few-px snap at the very end of the slide. Same
  * mechanism absorbs the narrow-window edge where the LEFT pane also moves.
  */
-export function dockSlideTarget(
-  from: SceneRect,
-  dockWidthDev: number,
-  opening: boolean,
-): SceneRect {
+export function dockSlideTarget(from: SceneRect, dockWidthDev: number, opening: boolean): SceneRect {
   return {
     x: from.x,
     y: from.y,

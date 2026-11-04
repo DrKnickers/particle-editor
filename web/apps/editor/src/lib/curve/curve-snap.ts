@@ -25,12 +25,7 @@ export const GRID_MINOR_CELLS = GRID_CELLS * GRID_SUBDIVISIONS; // 50
  * inside `[min, max]` the result stays inside the range; callers still apply
  * their own bounds/neighbour clamps afterward, so no clamping is done here.
  */
-export function snapToGrid(
-  value: number,
-  min: number,
-  max: number,
-  cells: number = GRID_MINOR_CELLS,
-): number {
+export function snapToGrid(value: number, min: number, max: number, cells: number = GRID_MINOR_CELLS): number {
   if (min === max || cells <= 0 || !Number.isFinite(value)) return value;
   const step = (max - min) / cells;
   return min + Math.round((value - min) / step) * step;

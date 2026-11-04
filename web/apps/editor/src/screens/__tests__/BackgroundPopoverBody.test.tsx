@@ -40,8 +40,7 @@ function makeSnapshotBridge(partial: Partial<EngineStateDto>): Bridge {
   };
   const request = vi.fn().mockImplementation((req: { kind: string }) => {
     if (req.kind === "engine/state/snapshot") return Promise.resolve(snapshot);
-    if (req.kind === "engine/query/skydome-list")
-      return Promise.resolve({ primary: [], secondary: [] });
+    if (req.kind === "engine/query/skydome-list") return Promise.resolve({ primary: [], secondary: [] });
     return Promise.resolve({});
   });
   return {

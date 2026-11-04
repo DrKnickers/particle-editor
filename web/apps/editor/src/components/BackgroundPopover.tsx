@@ -28,9 +28,7 @@ export function BackgroundPopover({ bridge }: Props) {
   // only when it actually loaded (status "ok"), mirroring the picker body's
   // gameDomeRendering. A selected-but-failed dome falls back to the simple
   // background, so its swatch must too (not paint the dome gradient).
-  const gameDomeRendering =
-    skydomePrimaryStatus === "ok" ||
-    skydomeSecondaryStatus === "ok";
+  const gameDomeRendering = skydomePrimaryStatus === "ok" || skydomeSecondaryStatus === "ok";
   // Scene-preview literals, NOT UI chrome: the navy gradient depicts the
   // default space skydome and #000000 the viewport's unset background — both
   // represent the 3D scene, which does not theme-flip. Deliberately outside
@@ -49,11 +47,7 @@ export function BackgroundPopover({ bridge }: Props) {
       onOpenChange={setOpen}
       panelClassName="bg-panel border border-border-2 rounded-token shadow-[var(--shadow-soft)] p-3 min-w-[280px] z-50"
       trigger={
-        <button
-          type="button"
-          className="tb-btn"
-          aria-label="Background"
-        >
+        <button type="button" className="tb-btn" aria-label="Background">
           <span>Background:</span>
           <span
             className="inline-block w-4 h-4 rounded-sm border border-border-2"

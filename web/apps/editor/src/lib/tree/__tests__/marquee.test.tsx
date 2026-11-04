@@ -2,13 +2,7 @@ import { type ReactElement } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { describe, it, expect, beforeEach } from "vitest";
-import {
-  rectFromPoints,
-  rectsIntersect,
-  emittersInMarquee,
-  mergeMarqueeSelection,
-  type Rect,
-} from "../marquee";
+import { rectFromPoints, rectsIntersect, emittersInMarquee, mergeMarqueeSelection, type Rect } from "../marquee";
 import { EmitterTree } from "../../../screens/EmitterTree";
 import { useEmitterSelectionStore } from "../emitter-selection";
 import { makeStubBridge, marqueeFlatRootsTree, stubRect } from "../../../screens/__tests__/emitter-tree-fixtures";

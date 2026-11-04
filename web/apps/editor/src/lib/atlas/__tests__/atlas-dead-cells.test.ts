@@ -9,7 +9,9 @@ function rgba(imgW: number, imgH: number, alphaAt: (x: number, y: number) => num
   for (let y = 0; y < imgH; y++) {
     for (let x = 0; x < imgW; x++) {
       const i = (y * imgW + x) * 4;
-      buf[i] = 255; buf[i + 1] = 255; buf[i + 2] = 255;
+      buf[i] = 255;
+      buf[i + 1] = 255;
+      buf[i + 2] = 255;
       buf[i + 3] = alphaAt(x, y);
     }
   }
@@ -59,24 +61,50 @@ describe("deadCellsFromAlpha", () => {
     // Left ~half transparent, right ~half opaque; proportional split still classifies.
     const buf = rgba(5, 5, (x) => (x < 2 ? 0 : 255));
     const dead = deadCellsFromAlpha(buf, 5, 5, 2);
-    expect(dead.has(0)).toBe(true);  // top-left (x 0..1) transparent
+    expect(dead.has(0)).toBe(true); // top-left (x 0..1) transparent
     expect(dead.has(1)).toBe(false); // top-right (x 2..4) opaque
   });
 
   it("side 1 → the whole texture is one cell", () => {
-    expect(deadCellsFromAlpha(rgba(4, 4, () => 0), 4, 4, 1)).toEqual(new Set([0]));
-    expect(deadCellsFromAlpha(rgba(4, 4, () => 255), 4, 4, 1)).toEqual(new Set());
+    expect(
+      deadCellsFromAlpha(
+        rgba(4, 4, () => 0),
+        4,
+        4,
+        1,
+      ),
+    ).toEqual(new Set([0]));
+    expect(
+      deadCellsFromAlpha(
+        rgba(4, 4, () => 255),
+        4,
+        4,
+        1,
+      ),
+    ).toEqual(new Set());
   });
 
   it("degenerate side > image dim: unsamplable (zero-area) cells are NOT flagged dead", () => {
     // side 4 over a 2×2 image → many cells have zero pixel area; fail OPEN (don't dim
     // what we can't verify) rather than falsely dimming.
-    const dead = deadCellsFromAlpha(rgba(2, 2, () => 255), 2, 2, 4);
+    const dead = deadCellsFromAlpha(
+      rgba(2, 2, () => 255),
+      2,
+      2,
+      4,
+    );
     expect(dead.size).toBe(0);
   });
 
   it("guards invalid inputs (empty set, no throw)", () => {
     expect(deadCellsFromAlpha(new Uint8ClampedArray(0), 0, 0, 8)).toEqual(new Set());
-    expect(deadCellsFromAlpha(rgba(4, 4, () => 0), 4, 4, 0)).toEqual(new Set());
+    expect(
+      deadCellsFromAlpha(
+        rgba(4, 4, () => 0),
+        4,
+        4,
+        0,
+      ),
+    ).toEqual(new Set());
   });
 });

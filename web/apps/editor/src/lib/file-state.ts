@@ -124,9 +124,7 @@ export function useSeedFileState(bridge: Bridge): void {
           if (cancelled) return;
           useFileStateStore.getState().setRecentFiles(r.paths);
         })
-        .catch((err) =>
-          console.warn("[file-state] file/recent/list failed:", err),
-        );
+        .catch((err) => console.warn("[file-state] file/recent/list failed:", err));
     });
 
     // 3. Subscribe to the three event channels.
@@ -140,9 +138,7 @@ export function useSeedFileState(bridge: Bridge): void {
     // up on every engine/state/changed broadcast so the atom stays
     // accurate even if the dedicated dirty/changed event is dropped.
     const offSnap = bridge.on("engine/state/changed", (e) => {
-      useFileStateStore
-        .getState()
-        .setCurrentFilePath(e.payload.currentFilePath);
+      useFileStateStore.getState().setCurrentFilePath(e.payload.currentFilePath);
       useFileStateStore.getState().setDirty(e.payload.dirty);
     });
 
@@ -219,4 +215,3 @@ export function reopenSaveChangesDialog(action: PendingActionFn): void {
   store.setDirty(true);
   store.setPendingAction(action);
 }
-

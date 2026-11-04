@@ -17,10 +17,7 @@ import { act, fireEvent, render as rtlRender, screen, waitFor, within } from "@t
 import userEvent from "@testing-library/user-event";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import type { ReactElement, ReactNode } from "react";
-import type {
-  Bridge,
-  TrackDto,
-} from "@particle-editor/bridge-schema";
+import type { Bridge, TrackDto } from "@particle-editor/bridge-schema";
 import { TRACK_NAMES } from "@particle-editor/bridge-schema";
 import { CurveEditorPanel, CHANNELS } from "../CurveEditorPanel";
 
@@ -28,14 +25,13 @@ import { CurveEditorPanel, CHANNELS } from "../CurveEditorPanel";
 // require the app-level Tooltip.Provider — wrapper stands in for it
 // (precedent: renderToolbar in Toolbar.test.tsx).
 const TipProvider = ({ children }: { children: ReactNode }) => (
-  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>
+    {children}
+  </Tooltip.Provider>
 );
 const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 import { makeDefaultEngineState } from "@/bridge/mock-state";
-import {
-  getCurveKeysClipboard,
-  setCurveKeysClipboard,
-} from "@/lib/curve/curve-key-clipboard";
+import { getCurveKeysClipboard, setCurveKeysClipboard } from "@/lib/curve/curve-key-clipboard";
 import { __resetAtlasContext } from "@/lib/atlas/atlas-context";
 import { __resetRightDockForTests } from "@/lib/right-dock";
 import { useModalOpen } from "@/lib/modal-open";
@@ -44,7 +40,7 @@ function fixtureTracks(): TrackDto[] {
   return TRACK_NAMES.map((name) => ({
     name,
     keys: [
-      { time: 0,   value: 0 },
+      { time: 0, value: 0 },
       { time: 100, value: name === "rotationSpeed" ? -1 : 1 },
     ],
     interpolation: "linear",
@@ -126,9 +122,7 @@ describe("CurveEditorPanel", () => {
     expect(screen.getByTestId("curve-editor-panel")).toBeInTheDocument();
     // All 7 channel checkboxes are present.
     for (const c of CHANNELS) {
-      const cb = screen.getByTestId(
-        `curve-channel-checkbox-${c.id}`,
-      ) as HTMLInputElement;
+      const cb = screen.getByTestId(`curve-channel-checkbox-${c.id}`) as HTMLInputElement;
       expect(cb).toBeInTheDocument();
     }
   });
@@ -136,15 +130,11 @@ describe("CurveEditorPanel", () => {
   it("R / G / B default ON; Scale / Alpha / Rotation / Index default OFF", () => {
     renderPanel(null);
     for (const id of ["red", "green", "blue"]) {
-      const cb = screen.getByTestId(
-        `curve-channel-checkbox-${id}`,
-      ) as HTMLInputElement;
+      const cb = screen.getByTestId(`curve-channel-checkbox-${id}`) as HTMLInputElement;
       expect(cb.checked).toBe(true);
     }
     for (const id of ["scale", "alpha", "rotation", "index"]) {
-      const cb = screen.getByTestId(
-        `curve-channel-checkbox-${id}`,
-      ) as HTMLInputElement;
+      const cb = screen.getByTestId(`curve-channel-checkbox-${id}`) as HTMLInputElement;
       expect(cb.checked).toBe(false);
     }
   });
@@ -168,9 +158,7 @@ describe("CurveEditorPanel", () => {
     // 3 channels default ON → 3 layers (R / G / B). The rest are
     // hidden until the user clicks them on.
     for (const id of ["red", "green", "blue"]) {
-      expect(
-        screen.getByTestId(`curve-layer-${id}`),
-      ).toBeInTheDocument();
+      expect(screen.getByTestId(`curve-layer-${id}`)).toBeInTheDocument();
     }
     for (const id of ["scale", "alpha", "rotation", "index"]) {
       expect(screen.queryByTestId(`curve-layer-${id}`)).toBeNull();
@@ -189,9 +177,7 @@ describe("CurveEditorPanel", () => {
     // on would hide everything else and skew this spec's intent.)
     expect(screen.queryByTestId("curve-layer-alpha")).toBeNull();
     // Click the Alpha checkbox to enable it.
-    const alphaCb = screen.getByTestId(
-      "curve-channel-checkbox-alpha",
-    ) as HTMLInputElement;
+    const alphaCb = screen.getByTestId("curve-channel-checkbox-alpha") as HTMLInputElement;
     fireEvent.click(alphaCb);
     expect(alphaCb.checked).toBe(true);
     // Layer appears.
@@ -200,9 +186,7 @@ describe("CurveEditorPanel", () => {
     });
 
     // Click Red checkbox to disable it (default ON).
-    const redCb = screen.getByTestId(
-      "curve-channel-checkbox-red",
-    ) as HTMLInputElement;
+    const redCb = screen.getByTestId("curve-channel-checkbox-red") as HTMLInputElement;
     fireEvent.click(redCb);
     expect(redCb.checked).toBe(false);
     await waitFor(() => {
@@ -217,20 +201,14 @@ describe("CurveEditorPanel", () => {
     });
     // Sanity: R / G / B start visible.
     for (const id of ["red", "green", "blue"]) {
-      expect(
-        (screen.getByTestId(`curve-channel-checkbox-${id}`) as HTMLInputElement).checked,
-      ).toBe(true);
+      expect((screen.getByTestId(`curve-channel-checkbox-${id}`) as HTMLInputElement).checked).toBe(true);
     }
     // Click Scale checkbox on.
     fireEvent.click(screen.getByTestId("curve-channel-checkbox-scale"));
     // Scale ON; everything else OFF.
-    expect(
-      (screen.getByTestId("curve-channel-checkbox-scale") as HTMLInputElement).checked,
-    ).toBe(true);
+    expect((screen.getByTestId("curve-channel-checkbox-scale") as HTMLInputElement).checked).toBe(true);
     for (const id of ["red", "green", "blue", "alpha", "rotation", "index"]) {
-      expect(
-        (screen.getByTestId(`curve-channel-checkbox-${id}`) as HTMLInputElement).checked,
-      ).toBe(false);
+      expect((screen.getByTestId(`curve-channel-checkbox-${id}`) as HTMLInputElement).checked).toBe(false);
     }
     // Layer set reflects: only Scale present.
     await waitFor(() => {
@@ -244,18 +222,12 @@ describe("CurveEditorPanel", () => {
   it("enabling Scale via row click also hides every other channel", () => {
     renderPanel(0);
     fireEvent.click(screen.getByTestId("curve-channel-row-scale"));
-    expect(
-      (screen.getByTestId("curve-channel-checkbox-scale") as HTMLInputElement).checked,
-    ).toBe(true);
+    expect((screen.getByTestId("curve-channel-checkbox-scale") as HTMLInputElement).checked).toBe(true);
     for (const id of ["red", "green", "blue"]) {
-      expect(
-        (screen.getByTestId(`curve-channel-checkbox-${id}`) as HTMLInputElement).checked,
-      ).toBe(false);
+      expect((screen.getByTestId(`curve-channel-checkbox-${id}`) as HTMLInputElement).checked).toBe(false);
     }
     // Focus also moved to Scale.
-    expect(
-      (screen.getByTestId("curve-editor-panel")).dataset.focusChannel,
-    ).toBe("scale");
+    expect(screen.getByTestId("curve-editor-panel").dataset.focusChannel).toBe("scale");
   });
 
   it("clicking a non-Scale row while Scale is visible hides Scale (exits solo)", async () => {
@@ -265,21 +237,13 @@ describe("CurveEditorPanel", () => {
     });
     // Enter Scale solo.
     fireEvent.click(screen.getByTestId("curve-channel-row-scale"));
-    expect(
-      (screen.getByTestId("curve-channel-checkbox-scale") as HTMLInputElement).checked,
-    ).toBe(true);
+    expect((screen.getByTestId("curve-channel-checkbox-scale") as HTMLInputElement).checked).toBe(true);
     // Click Green row.
     fireEvent.click(screen.getByTestId("curve-channel-row-green"));
     // Scale hidden, Green visible + focused.
-    expect(
-      (screen.getByTestId("curve-channel-checkbox-scale") as HTMLInputElement).checked,
-    ).toBe(false);
-    expect(
-      (screen.getByTestId("curve-channel-checkbox-green") as HTMLInputElement).checked,
-    ).toBe(true);
-    expect(
-      screen.getByTestId("curve-editor-panel").dataset.focusChannel,
-    ).toBe("green");
+    expect((screen.getByTestId("curve-channel-checkbox-scale") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByTestId("curve-channel-checkbox-green") as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByTestId("curve-editor-panel").dataset.focusChannel).toBe("green");
   });
 
   it("enabling other channels via CHECKBOX while Scale is on does NOT auto-hide Scale", async () => {
@@ -289,17 +253,11 @@ describe("CurveEditorPanel", () => {
     });
     // Enable Scale (others now hidden).
     fireEvent.click(screen.getByTestId("curve-channel-checkbox-scale"));
-    expect(
-      (screen.getByTestId("curve-channel-checkbox-scale") as HTMLInputElement).checked,
-    ).toBe(true);
+    expect((screen.getByTestId("curve-channel-checkbox-scale") as HTMLInputElement).checked).toBe(true);
     // Re-enable Red. Scale must STAY on.
     fireEvent.click(screen.getByTestId("curve-channel-checkbox-red"));
-    expect(
-      (screen.getByTestId("curve-channel-checkbox-red") as HTMLInputElement).checked,
-    ).toBe(true);
-    expect(
-      (screen.getByTestId("curve-channel-checkbox-scale") as HTMLInputElement).checked,
-    ).toBe(true);
+    expect((screen.getByTestId("curve-channel-checkbox-red") as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByTestId("curve-channel-checkbox-scale") as HTMLInputElement).checked).toBe(true);
   });
 
   // Index is exclusive too — enabling it hides every other channel.
@@ -309,13 +267,9 @@ describe("CurveEditorPanel", () => {
       expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
     });
     fireEvent.click(screen.getByTestId("curve-channel-checkbox-index"));
-    expect(
-      (screen.getByTestId("curve-channel-checkbox-index") as HTMLInputElement).checked,
-    ).toBe(true);
+    expect((screen.getByTestId("curve-channel-checkbox-index") as HTMLInputElement).checked).toBe(true);
     for (const id of ["red", "green", "blue", "alpha", "scale", "rotation"]) {
-      expect(
-        (screen.getByTestId(`curve-channel-checkbox-${id}`) as HTMLInputElement).checked,
-      ).toBe(false);
+      expect((screen.getByTestId(`curve-channel-checkbox-${id}`) as HTMLInputElement).checked).toBe(false);
     }
     await waitFor(() => {
       expect(screen.getByTestId("curve-layer-index")).toBeInTheDocument();
@@ -327,19 +281,11 @@ describe("CurveEditorPanel", () => {
   it("clicking Index while Scale is solo swaps solo to Index", () => {
     renderPanel(0);
     fireEvent.click(screen.getByTestId("curve-channel-row-scale"));
-    expect(
-      (screen.getByTestId("curve-channel-checkbox-scale") as HTMLInputElement).checked,
-    ).toBe(true);
+    expect((screen.getByTestId("curve-channel-checkbox-scale") as HTMLInputElement).checked).toBe(true);
     fireEvent.click(screen.getByTestId("curve-channel-row-index"));
-    expect(
-      (screen.getByTestId("curve-channel-checkbox-index") as HTMLInputElement).checked,
-    ).toBe(true);
-    expect(
-      (screen.getByTestId("curve-channel-checkbox-scale") as HTMLInputElement).checked,
-    ).toBe(false);
-    expect(
-      screen.getByTestId("curve-editor-panel").dataset.focusChannel,
-    ).toBe("index");
+    expect((screen.getByTestId("curve-channel-checkbox-index") as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByTestId("curve-channel-checkbox-scale") as HTMLInputElement).checked).toBe(false);
+    expect(screen.getByTestId("curve-editor-panel").dataset.focusChannel).toBe("index");
   });
 
   // Selecting a non-exclusive curve exits Index solo.
@@ -349,16 +295,10 @@ describe("CurveEditorPanel", () => {
       expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
     });
     fireEvent.click(screen.getByTestId("curve-channel-row-index"));
-    expect(
-      (screen.getByTestId("curve-channel-checkbox-index") as HTMLInputElement).checked,
-    ).toBe(true);
+    expect((screen.getByTestId("curve-channel-checkbox-index") as HTMLInputElement).checked).toBe(true);
     fireEvent.click(screen.getByTestId("curve-channel-row-green"));
-    expect(
-      (screen.getByTestId("curve-channel-checkbox-index") as HTMLInputElement).checked,
-    ).toBe(false);
-    expect(
-      (screen.getByTestId("curve-channel-checkbox-green") as HTMLInputElement).checked,
-    ).toBe(true);
+    expect((screen.getByTestId("curve-channel-checkbox-index") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByTestId("curve-channel-checkbox-green") as HTMLInputElement).checked).toBe(true);
   });
 
   // Rotation is exclusive too (matches Index/Scale).
@@ -368,13 +308,9 @@ describe("CurveEditorPanel", () => {
       expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
     });
     fireEvent.click(screen.getByTestId("curve-channel-checkbox-rotation"));
-    expect(
-      (screen.getByTestId("curve-channel-checkbox-rotation") as HTMLInputElement).checked,
-    ).toBe(true);
+    expect((screen.getByTestId("curve-channel-checkbox-rotation") as HTMLInputElement).checked).toBe(true);
     for (const id of ["red", "green", "blue", "alpha", "scale", "index"]) {
-      expect(
-        (screen.getByTestId(`curve-channel-checkbox-${id}`) as HTMLInputElement).checked,
-      ).toBe(false);
+      expect((screen.getByTestId(`curve-channel-checkbox-${id}`) as HTMLInputElement).checked).toBe(false);
     }
     await waitFor(() => {
       expect(screen.getByTestId("curve-layer-rotation")).toBeInTheDocument();
@@ -384,19 +320,11 @@ describe("CurveEditorPanel", () => {
   it("clicking Rotation while Index is solo swaps solo to Rotation", () => {
     renderPanel(0);
     fireEvent.click(screen.getByTestId("curve-channel-row-index"));
-    expect(
-      (screen.getByTestId("curve-channel-checkbox-index") as HTMLInputElement).checked,
-    ).toBe(true);
+    expect((screen.getByTestId("curve-channel-checkbox-index") as HTMLInputElement).checked).toBe(true);
     fireEvent.click(screen.getByTestId("curve-channel-row-rotation"));
-    expect(
-      (screen.getByTestId("curve-channel-checkbox-rotation") as HTMLInputElement).checked,
-    ).toBe(true);
-    expect(
-      (screen.getByTestId("curve-channel-checkbox-index") as HTMLInputElement).checked,
-    ).toBe(false);
-    expect(
-      screen.getByTestId("curve-editor-panel").dataset.focusChannel,
-    ).toBe("rotation");
+    expect((screen.getByTestId("curve-channel-checkbox-rotation") as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByTestId("curve-channel-checkbox-index") as HTMLInputElement).checked).toBe(false);
+    expect(screen.getByTestId("curve-editor-panel").dataset.focusChannel).toBe("rotation");
   });
 
   it("clicking a non-Rotation row while Rotation is solo exits solo", async () => {
@@ -405,16 +333,10 @@ describe("CurveEditorPanel", () => {
       expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
     });
     fireEvent.click(screen.getByTestId("curve-channel-row-rotation"));
-    expect(
-      (screen.getByTestId("curve-channel-checkbox-rotation") as HTMLInputElement).checked,
-    ).toBe(true);
+    expect((screen.getByTestId("curve-channel-checkbox-rotation") as HTMLInputElement).checked).toBe(true);
     fireEvent.click(screen.getByTestId("curve-channel-row-green"));
-    expect(
-      (screen.getByTestId("curve-channel-checkbox-rotation") as HTMLInputElement).checked,
-    ).toBe(false);
-    expect(
-      (screen.getByTestId("curve-channel-checkbox-green") as HTMLInputElement).checked,
-    ).toBe(true);
+    expect((screen.getByTestId("curve-channel-checkbox-rotation") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByTestId("curve-channel-checkbox-green") as HTMLInputElement).checked).toBe(true);
   });
 
   // ── Hybrid focus-channel restoration ─────────────────────────────
@@ -437,9 +359,7 @@ describe("CurveEditorPanel", () => {
       expect(screen.getByTestId("curve-channel-row-green").dataset.focus).toBe("true");
       expect(screen.getByTestId("curve-channel-row-red").dataset.focus).toBe("false");
       // Green was already visible; row click MUST NOT turn it off.
-      const greenCb = screen.getByTestId(
-        "curve-channel-checkbox-green",
-      ) as HTMLInputElement;
+      const greenCb = screen.getByTestId("curve-channel-checkbox-green") as HTMLInputElement;
       expect(greenCb.checked).toBe(true);
     });
 
@@ -526,9 +446,7 @@ describe("CurveEditorPanel", () => {
     it("clicking a HIDDEN channel row turns it ON and sets focus", () => {
       renderPanel(null);
       // Index defaults OFF.
-      const indexCb = screen.getByTestId(
-        "curve-channel-checkbox-index",
-      ) as HTMLInputElement;
+      const indexCb = screen.getByTestId("curve-channel-checkbox-index") as HTMLInputElement;
       expect(indexCb.checked).toBe(false);
       // Click the Index row body (not the checkbox).
       fireEvent.click(screen.getByTestId("curve-channel-row-index"));
@@ -544,9 +462,7 @@ describe("CurveEditorPanel", () => {
       expect(panel.dataset.focusChannel).toBe("red");
       // Click the Green checkbox — should toggle visibility off without
       // moving focus to Green.
-      const greenCb = screen.getByTestId(
-        "curve-channel-checkbox-green",
-      ) as HTMLInputElement;
+      const greenCb = screen.getByTestId("curve-channel-checkbox-green") as HTMLInputElement;
       fireEvent.click(greenCb);
       expect(greenCb.checked).toBe(false);
       // Focus still on red.
@@ -582,9 +498,7 @@ describe("CurveEditorPanel", () => {
       renderPanel(null);
       const panel = screen.getByTestId("curve-editor-panel");
       // Focus starts on red. Hide red via its checkbox.
-      const redCb = screen.getByTestId(
-        "curve-channel-checkbox-red",
-      ) as HTMLInputElement;
+      const redCb = screen.getByTestId("curve-channel-checkbox-red") as HTMLInputElement;
       fireEvent.click(redCb);
       expect(redCb.checked).toBe(false);
       // Focus should auto-move to the next visible channel (green).
@@ -615,12 +529,8 @@ describe("CurveEditorPanel", () => {
       renderPanel(null);
       const panel = screen.getByTestId("curve-editor-panel");
       expect(panel.dataset.mode).toBe("select");
-      expect(
-        screen.getByTestId("ce-tool-select").getAttribute("data-state"),
-      ).toBe("on");
-      expect(
-        screen.getByTestId("ce-tool-insert").getAttribute("data-state"),
-      ).toBe("off");
+      expect(screen.getByTestId("ce-tool-select").getAttribute("data-state")).toBe("on");
+      expect(screen.getByTestId("ce-tool-insert").getAttribute("data-state")).toBe("off");
     });
 
     it("clicking Insert flips the mode to insert", () => {
@@ -628,9 +538,7 @@ describe("CurveEditorPanel", () => {
       fireEvent.click(screen.getByTestId("ce-tool-insert"));
       const panel = screen.getByTestId("curve-editor-panel");
       expect(panel.dataset.mode).toBe("insert");
-      expect(
-        screen.getByTestId("ce-tool-insert").getAttribute("data-state"),
-      ).toBe("on");
+      expect(screen.getByTestId("ce-tool-insert").getAttribute("data-state")).toBe("on");
     });
 
     it("clicking the Smooth interpolation toggle fires set-track-interpolation for the focus channel's track", async () => {
@@ -640,9 +548,7 @@ describe("CurveEditorPanel", () => {
       });
       fireEvent.click(screen.getByTestId("ce-interp-smooth"));
       const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls;
-      const match = calls.find(
-        (call) => (call[0] as { kind: string }).kind === "emitters/set-track-interpolation",
-      );
+      const match = calls.find((call) => (call[0] as { kind: string }).kind === "emitters/set-track-interpolation");
       expect(match).toBeDefined();
       expect(match![0]).toMatchObject({
         kind: "emitters/set-track-interpolation",
@@ -684,12 +590,8 @@ describe("CurveEditorPanel", () => {
       await waitFor(() => {
         expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
       });
-      expect(
-        screen.getByTestId("ce-interp-step").getAttribute("data-state"),
-      ).toBe("on");
-      expect(
-        screen.getByTestId("ce-interp-linear").getAttribute("data-state"),
-      ).toBe("off");
+      expect(screen.getByTestId("ce-interp-step").getAttribute("data-state")).toBe("on");
+      expect(screen.getByTestId("ce-interp-linear").getAttribute("data-state")).toBe("off");
     });
 
     it("Lock-to combo trigger is disabled when the focus track only has 'None' (Red)", () => {
@@ -739,9 +641,7 @@ describe("CurveEditorPanel", () => {
 
       // Click the middle scale key (time=50, value=50).
       const circles = document.querySelectorAll("[data-testid='curve-key']");
-      const middle = Array.from(circles).find(
-        (c) => c.getAttribute("data-key-time") === "50",
-      );
+      const middle = Array.from(circles).find((c) => c.getAttribute("data-key-time") === "50");
       expect(middle).toBeDefined();
       fireEvent.click(middle!);
 
@@ -766,22 +666,16 @@ describe("CurveEditorPanel", () => {
       });
       // Select the middle scale key (time=50).
       const circles = document.querySelectorAll("[data-testid='curve-key']");
-      const middle = Array.from(circles).find(
-        (c) => c.getAttribute("data-key-time") === "50",
-      )!;
+      const middle = Array.from(circles).find((c) => c.getAttribute("data-key-time") === "50")!;
       fireEvent.click(middle);
-      const valueInput = screen.getByTestId(
-        "ce-spinner-value-wrapper",
-      ).querySelector("input") as HTMLInputElement;
+      const valueInput = screen.getByTestId("ce-spinner-value-wrapper").querySelector("input") as HTMLInputElement;
       await waitFor(() => expect(valueInput.disabled).toBe(false));
       fireEvent.focus(valueInput);
       fireEvent.change(valueInput, { target: { value: "75" } });
       fireEvent.blur(valueInput);
       await waitFor(() => {
         const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls;
-        const match = calls.find(
-          (call) => (call[0] as { kind: string }).kind === "emitters/set-track-key",
-        );
+        const match = calls.find((call) => (call[0] as { kind: string }).kind === "emitters/set-track-key");
         expect(match).toBeDefined();
         expect(match![0]).toMatchObject({
           kind: "emitters/set-track-key",
@@ -806,17 +700,13 @@ describe("CurveEditorPanel", () => {
       });
       // Select the middle scale key (time=50).
       const circles = document.querySelectorAll("[data-testid='curve-key']");
-      const middle = Array.from(circles).find(
-        (c) => c.getAttribute("data-key-time") === "50",
-      )!;
+      const middle = Array.from(circles).find((c) => c.getAttribute("data-key-time") === "50")!;
       fireEvent.click(middle);
       // Fire a Delete keydown on the document body.
       fireEvent.keyDown(document.body, { key: "Delete" });
       await waitFor(() => {
         const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls;
-        const match = calls.find(
-          (call) => (call[0] as { kind: string }).kind === "emitters/delete-track-keys",
-        );
+        const match = calls.find((call) => (call[0] as { kind: string }).kind === "emitters/delete-track-keys");
         expect(match).toBeDefined();
         expect(match![0]).toMatchObject({
           kind: "emitters/delete-track-keys",
@@ -837,21 +727,15 @@ describe("CurveEditorPanel", () => {
       });
       // Select an interior key.
       const circles = document.querySelectorAll("[data-testid='curve-key']");
-      const middle = Array.from(circles).find(
-        (c) => c.getAttribute("data-key-time") === "50",
-      )!;
+      const middle = Array.from(circles).find((c) => c.getAttribute("data-key-time") === "50")!;
       fireEvent.click(middle);
       // Now focus the Value spinner input and fire Delete on it.
-      const valueInput = screen.getByTestId(
-        "ce-spinner-value-wrapper",
-      ).querySelector("input") as HTMLInputElement;
+      const valueInput = screen.getByTestId("ce-spinner-value-wrapper").querySelector("input") as HTMLInputElement;
       valueInput.focus();
       fireEvent.keyDown(valueInput, { key: "Delete" });
       // No delete-track-keys call should appear.
       const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls;
-      const match = calls.find(
-        (call) => (call[0] as { kind: string }).kind === "emitters/delete-track-keys",
-      );
+      const match = calls.find((call) => (call[0] as { kind: string }).kind === "emitters/delete-track-keys");
       expect(match).toBeUndefined();
     });
 
@@ -864,27 +748,25 @@ describe("CurveEditorPanel", () => {
       await waitFor(() => {
         expect(screen.getByTestId("curve-layer-scale")).toBeInTheDocument();
       });
-      const middle = Array.from(
-        document.querySelectorAll("[data-testid='curve-key']"),
-      ).find((c) => c.getAttribute("data-key-time") === "50")!;
+      const middle = Array.from(document.querySelectorAll("[data-testid='curve-key']")).find(
+        (c) => c.getAttribute("data-key-time") === "50",
+      )!;
       fireEvent.click(middle);
       await waitFor(() => {
-        expect(
-          screen.getByTestId("curve-editor-panel").getAttribute("data-selected-key-count"),
-        ).toBe("1");
+        expect(screen.getByTestId("curve-editor-panel").getAttribute("data-selected-key-count")).toBe("1");
       });
     }
     const deleteCalls = (bridge: { request: ReturnType<typeof vi.fn> }) =>
-      bridge.request.mock.calls.filter(
-        (call) => (call[0] as { kind: string }).kind === "emitters/delete-track-keys",
-      );
+      bridge.request.mock.calls.filter((call) => (call[0] as { kind: string }).kind === "emitters/delete-track-keys");
 
     it("Delete with focus on an element OUTSIDE the panel (a tree row) does NOT fire delete-track-keys", async () => {
       const { bridge } = makeStubBridgeWithFocusInteriorKey(7);
       render(
         <>
           <div data-testid="emitter-tree">
-            <button type="button" data-testid="tree-row-standin">Emitter 1</button>
+            <button type="button" data-testid="tree-row-standin">
+              Emitter 1
+            </button>
           </div>
           <CurveEditorPanel bridge={bridge} />
         </>,
@@ -905,7 +787,9 @@ describe("CurveEditorPanel", () => {
       render(
         <>
           <div role="dialog">
-            <button type="button" data-testid="modal-ok-standin">OK</button>
+            <button type="button" data-testid="modal-ok-standin">
+              OK
+            </button>
           </div>
           <CurveEditorPanel bridge={bridge} />
         </>,
@@ -914,7 +798,9 @@ describe("CurveEditorPanel", () => {
         expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
       });
       await selectScaleMiddleKey();
-      act(() => { useModalOpen.getState().open(); });
+      act(() => {
+        useModalOpen.getState().open();
+      });
       try {
         const ok = screen.getByTestId("modal-ok-standin");
         ok.focus();
@@ -924,7 +810,9 @@ describe("CurveEditorPanel", () => {
         await new Promise((r) => setTimeout(r, 20));
         expect(deleteCalls(bridge)).toHaveLength(0);
       } finally {
-        act(() => { useModalOpen.getState().close(); });
+        act(() => {
+          useModalOpen.getState().close();
+        });
       }
     });
 
@@ -964,10 +852,18 @@ describe("CurveEditorPanel", () => {
       configurable: true,
     });
     const svg = screen.getByTestId("curve-editor-svg");
-    svg.getBoundingClientRect = () => ({
-      x: 0, y: 0, top: 0, left: 0, right: 600, bottom: 300,
-      width: 600, height: 300, toJSON: () => ({}),
-    } as DOMRect);
+    svg.getBoundingClientRect = () =>
+      ({
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        right: 600,
+        bottom: 300,
+        width: 600,
+        height: 300,
+        toJSON: () => ({}),
+      }) as DOMRect;
     fireEvent.pointerDown(backdrop, {
       button: 0,
       clientX: 300,
@@ -976,9 +872,7 @@ describe("CurveEditorPanel", () => {
     });
     await waitFor(() => {
       const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls;
-      const match = calls.find(
-        (call) => (call[0] as { kind: string }).kind === "emitters/add-track-key",
-      );
+      const match = calls.find((call) => (call[0] as { kind: string }).kind === "emitters/add-track-key");
       expect(match).toBeDefined();
       expect((match![0] as { params: { track: string } }).params.track).toBe("red");
     });
@@ -1034,11 +928,7 @@ describe("CurveEditorPanel", () => {
         .slice(callsBefore)
         .map((call) => (call[0] as { kind: string }).kind);
 
-      const mutatingKinds = [
-        "emitters/set-track-key",
-        "emitters/add-track-key",
-        "emitters/delete-track-keys",
-      ];
+      const mutatingKinds = ["emitters/set-track-key", "emitters/add-track-key", "emitters/delete-track-keys"];
       for (const kind of mutatingKinds) {
         expect(newCalls).not.toContain(kind);
       }
@@ -1050,9 +940,17 @@ describe("CurveEditorPanel", () => {
       // attempt a delete-track-keys call before the guard closes it.
       const unlockedGreenWith3Keys: TrackDto[] = TRACK_NAMES.map((name) => ({
         name,
-        keys: name === "green"
-          ? [{ time: 0, value: 0 }, { time: 50, value: 0.5 }, { time: 100, value: 1 }]
-          : [{ time: 0, value: 0 }, { time: 100, value: name === "rotationSpeed" ? -1 : 1 }],
+        keys:
+          name === "green"
+            ? [
+                { time: 0, value: 0 },
+                { time: 50, value: 0.5 },
+                { time: 100, value: 1 },
+              ]
+            : [
+                { time: 0, value: 0 },
+                { time: 100, value: name === "rotationSpeed" ? -1 : 1 },
+              ],
         interpolation: "linear" as const,
         lockedTo: null,
       }));
@@ -1119,9 +1017,9 @@ describe("CurveEditorPanel", () => {
       });
 
       // Click the interior green key at t=50 to create a live selection.
-      const greenInterior = Array.from(
-        document.querySelectorAll("[data-testid='curve-key']"),
-      ).find((c) => c.getAttribute("data-key-time") === "50");
+      const greenInterior = Array.from(document.querySelectorAll("[data-testid='curve-key']")).find(
+        (c) => c.getAttribute("data-key-time") === "50",
+      );
       expect(greenInterior).toBeDefined();
       fireEvent.click(greenInterior!);
 
@@ -1139,18 +1037,16 @@ describe("CurveEditorPanel", () => {
 
       // Wait for the lock to land — the lock-to trigger reflects it.
       await waitFor(() => {
-        expect(
-          screen.getByTestId("ce-lock-to-trigger").getAttribute("data-locked"),
-        ).toBe("true");
+        expect(screen.getByTestId("ce-lock-to-trigger").getAttribute("data-locked")).toBe("true");
       });
 
       // Selection must survive the refetch that delivered the lock — a future
       // change that clears selection on refetch would make subsequent guards
       // pass vacuously.
       expect(panel.getAttribute("data-selected-key-count")).toBe("1");
-      const greenInteriorAfterLock = Array.from(
-        document.querySelectorAll("[data-testid='curve-key']"),
-      ).find((c) => c.getAttribute("data-key-time") === "50");
+      const greenInteriorAfterLock = Array.from(document.querySelectorAll("[data-testid='curve-key']")).find(
+        (c) => c.getAttribute("data-key-time") === "50",
+      );
       expect(greenInteriorAfterLock?.getAttribute("data-selected")).toBe("true");
 
       // Clear call history so we only see calls made AFTER the lock landed.
@@ -1160,18 +1056,14 @@ describe("CurveEditorPanel", () => {
       fireEvent.keyDown(window, { key: "Delete" });
 
       // ── Assert spinner is disabled (focusLocked disables spinners after the guard) ──
-      const valueInput = screen
-        .getByTestId("ce-spinner-value-wrapper")
-        .querySelector("input") as HTMLInputElement;
+      const valueInput = screen.getByTestId("ce-spinner-value-wrapper").querySelector("input") as HTMLInputElement;
       expect(valueInput.disabled).toBe(true);
 
       // Allow any async microtasks to flush before checking.
       await new Promise((r) => setTimeout(r, 0));
 
       // Neither a delete nor a set-track-key call should have been issued.
-      const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map(
-        (c) => (c[0] as { kind: string }).kind,
-      );
+      const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => (c[0] as { kind: string }).kind);
       expect(calls).not.toContain("emitters/delete-track-keys");
       expect(calls).not.toContain("emitters/set-track-key");
     });
@@ -1188,9 +1080,17 @@ describe("CurveEditorPanel", () => {
       // in jsdom without any special tricks.
       const unlockedTracks: TrackDto[] = TRACK_NAMES.map((name) => ({
         name,
-        keys: name === "green"
-          ? [{ time: 0, value: 0 }, { time: 50, value: 0.5 }, { time: 100, value: 1 }]
-          : [{ time: 0, value: 0 }, { time: 100, value: name === "rotationSpeed" ? -1 : 1 }],
+        keys:
+          name === "green"
+            ? [
+                { time: 0, value: 0 },
+                { time: 50, value: 0.5 },
+                { time: 100, value: 1 },
+              ]
+            : [
+                { time: 0, value: 0 },
+                { time: 100, value: name === "rotationSpeed" ? -1 : 1 },
+              ],
         interpolation: "linear" as const,
         lockedTo: null,
       }));
@@ -1244,9 +1144,9 @@ describe("CurveEditorPanel", () => {
       });
 
       // Select the interior green key at t=50.
-      const greenInterior = Array.from(
-        document.querySelectorAll("[data-testid='curve-key']"),
-      ).find((c) => c.getAttribute("data-key-time") === "50");
+      const greenInterior = Array.from(document.querySelectorAll("[data-testid='curve-key']")).find(
+        (c) => c.getAttribute("data-key-time") === "50",
+      );
       expect(greenInterior).toBeDefined();
       fireEvent.click(greenInterior!);
 
@@ -1256,9 +1156,7 @@ describe("CurveEditorPanel", () => {
       });
 
       // Grab the value spinner input and begin an edit while the track is unlocked.
-      const valueInput = screen
-        .getByTestId("ce-spinner-value-wrapper")
-        .querySelector("input") as HTMLInputElement;
+      const valueInput = screen.getByTestId("ce-spinner-value-wrapper").querySelector("input") as HTMLInputElement;
       await waitFor(() => expect(valueInput.disabled).toBe(false));
       fireEvent.focus(valueInput);
       fireEvent.change(valueInput, { target: { value: "0.99" } });
@@ -1270,9 +1168,7 @@ describe("CurveEditorPanel", () => {
 
       // Wait for the lock to land.
       await waitFor(() => {
-        expect(
-          screen.getByTestId("ce-lock-to-trigger").getAttribute("data-locked"),
-        ).toBe("true");
+        expect(screen.getByTestId("ce-lock-to-trigger").getAttribute("data-locked")).toBe("true");
       });
       // Spinner must now be disabled (focusLocked disables it on re-render).
       expect(valueInput.disabled).toBe(true);
@@ -1327,11 +1223,7 @@ describe("CurveEditorPanel", () => {
         .slice(callsBefore)
         .map((call) => (call[0] as { kind: string }).kind);
 
-      const mutatingKinds = [
-        "emitters/set-track-key",
-        "emitters/add-track-key",
-        "emitters/delete-track-keys",
-      ];
+      const mutatingKinds = ["emitters/set-track-key", "emitters/add-track-key", "emitters/delete-track-keys"];
       for (const kind of mutatingKinds) {
         expect(newCalls).not.toContain(kind);
       }
@@ -1393,9 +1285,7 @@ describe("CurveEditorPanel", () => {
 
       // Wait for the lock to land.
       await waitFor(() => {
-        expect(
-          screen.getByTestId("ce-lock-to-trigger").getAttribute("data-locked"),
-        ).toBe("true");
+        expect(screen.getByTestId("ce-lock-to-trigger").getAttribute("data-locked")).toBe("true");
       });
 
       // Insert button must revert to off; both buttons must be disabled.
@@ -1419,9 +1309,7 @@ describe("CurveEditorPanel", () => {
 
       await new Promise((r) => setTimeout(r, 0));
 
-      const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map(
-        (c) => (c[0] as { kind: string }).kind,
-      );
+      const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => (c[0] as { kind: string }).kind);
       expect(calls).not.toContain("emitters/add-track-key");
     });
 
@@ -1429,9 +1317,17 @@ describe("CurveEditorPanel", () => {
       // Race-test scaffold: select t=50 unlocked → flip fixture → fire tree/changed → waitFor data-locked.
       const unlockedGreenWith3Keys: TrackDto[] = TRACK_NAMES.map((name) => ({
         name,
-        keys: name === "green"
-          ? [{ time: 0, value: 0 }, { time: 50, value: 0.5 }, { time: 100, value: 1 }]
-          : [{ time: 0, value: 0 }, { time: 100, value: name === "rotationSpeed" ? -1 : 1 }],
+        keys:
+          name === "green"
+            ? [
+                { time: 0, value: 0 },
+                { time: 50, value: 0.5 },
+                { time: 100, value: 1 },
+              ]
+            : [
+                { time: 0, value: 0 },
+                { time: 100, value: name === "rotationSpeed" ? -1 : 1 },
+              ],
         interpolation: "linear" as const,
         lockedTo: null,
       }));
@@ -1484,9 +1380,9 @@ describe("CurveEditorPanel", () => {
       });
 
       // Select the interior green key at t=50.
-      const greenInterior = Array.from(
-        document.querySelectorAll("[data-testid='curve-key']"),
-      ).find((c) => c.getAttribute("data-key-time") === "50");
+      const greenInterior = Array.from(document.querySelectorAll("[data-testid='curve-key']")).find(
+        (c) => c.getAttribute("data-key-time") === "50",
+      );
       expect(greenInterior).toBeDefined();
       fireEvent.click(greenInterior!);
 
@@ -1501,9 +1397,7 @@ describe("CurveEditorPanel", () => {
 
       // Wait for the lock to land.
       await waitFor(() => {
-        expect(
-          screen.getByTestId("ce-lock-to-trigger").getAttribute("data-locked"),
-        ).toBe("true");
+        expect(screen.getByTestId("ce-lock-to-trigger").getAttribute("data-locked")).toBe("true");
       });
 
       // Selection must survive the refetch (guards would pass vacuously if cleared).
@@ -1546,14 +1440,10 @@ describe("CurveEditorPanel", () => {
       // Wait for the lock trigger to appear (curves loaded + green focused).
       fireEvent.click(screen.getByTestId("curve-channel-row-green"));
       await waitFor(() => {
-        expect(
-          screen.getByTestId("ce-lock-to-trigger").getAttribute("data-locked"),
-        ).toBe("true");
+        expect(screen.getByTestId("ce-lock-to-trigger").getAttribute("data-locked")).toBe("true");
       });
 
-      expect(screen.getByTestId("ce-lock-glyph").getAttribute("aria-label")).toBe(
-        "Green is locked to Red — read-only",
-      );
+      expect(screen.getByTestId("ce-lock-glyph").getAttribute("aria-label")).toBe("Green is locked to Red — read-only");
 
       unmount();
 
@@ -1581,16 +1471,17 @@ function makeStubBridgeWithFocusInteriorKey(initialSelectedId: number) {
   const listeners: SelectionListener[] = [];
   const tracksWithMiddleKey: TrackDto[] = TRACK_NAMES.map((name) => ({
     name,
-    keys: name === "scale"
-      ? [
-          { time: 0,   value: 0 },
-          { time: 50,  value: 50 },
-          { time: 100, value: 100 },
-        ]
-      : [
-          { time: 0,   value: 0 },
-          { time: 100, value: name === "rotationSpeed" ? -1 : 1 },
-        ],
+    keys:
+      name === "scale"
+        ? [
+            { time: 0, value: 0 },
+            { time: 50, value: 50 },
+            { time: 100, value: 100 },
+          ]
+        : [
+            { time: 0, value: 0 },
+            { time: 100, value: name === "rotationSpeed" ? -1 : 1 },
+          ],
     interpolation: "linear",
     lockedTo: null,
   }));
@@ -1632,18 +1523,19 @@ function makeStubBridgeMultiInterior(initialSelectedId: number) {
   const listeners: SelectionListener[] = [];
   const tracks: TrackDto[] = TRACK_NAMES.map((name) => ({
     name,
-    keys: name === "scale"
-      ? [
-          { time: 0,   value: 0 },
-          { time: 25,  value: 20 },
-          { time: 50,  value: 40 },
-          { time: 75,  value: 60 },
-          { time: 100, value: 80 },
-        ]
-      : [
-          { time: 0,   value: 0 },
-          { time: 100, value: name === "rotationSpeed" ? -1 : 1 },
-        ],
+    keys:
+      name === "scale"
+        ? [
+            { time: 0, value: 0 },
+            { time: 25, value: 20 },
+            { time: 50, value: 40 },
+            { time: 75, value: 60 },
+            { time: 100, value: 80 },
+          ]
+        : [
+            { time: 0, value: 0 },
+            { time: 100, value: name === "rotationSpeed" ? -1 : 1 },
+          ],
     interpolation: "linear",
     lockedTo: null,
   }));
@@ -1678,9 +1570,7 @@ function makeStubBridgeMultiInterior(initialSelectedId: number) {
 describe("CurveEditorPanel — multi-key average edit", () => {
   /** Click a focus-channel key by its time (ctrl for additive). */
   function clickKey(time: number, additive: boolean) {
-    const el = screen
-      .getAllByTestId("curve-key")
-      .find((k) => k.getAttribute("data-key-time") === String(time));
+    const el = screen.getAllByTestId("curve-key").find((k) => k.getAttribute("data-key-time") === String(time));
     if (el === undefined) throw new Error(`no curve-key at time ${time}`);
     fireEvent.click(el, additive ? { ctrlKey: true } : {});
   }
@@ -1709,13 +1599,9 @@ describe("CurveEditorPanel — multi-key average edit", () => {
     await selectScaleInterior(bridge);
     // avg time = (25+50+75)/3 = 50; avg value = (20+40+60)/3 = 40.
     // Time spinner (step 0.1) renders at the app-wide 2dp default.
-    expect(
-      (screen.getByLabelText("Selected key time") as HTMLInputElement).value,
-    ).toBe("50.00");
+    expect((screen.getByLabelText("Selected key time") as HTMLInputElement).value).toBe("50.00");
     // Scale track (step 0.1) now renders at the app-wide 2dp default.
-    expect(
-      (screen.getByLabelText("Selected key value") as HTMLInputElement).value,
-    ).toBe("40.00");
+    expect((screen.getByLabelText("Selected key value") as HTMLInputElement).value).toBe("40.00");
   });
 
   it("editing the Value average shifts every selected key by the delta", async () => {
@@ -1775,7 +1661,7 @@ describe("CurveEditorPanel — multi-key average edit", () => {
     await selectScaleInterior(bridge);
     const svg = screen.getByTestId("curve-editor-svg") as unknown as SVGSVGElement;
     svg.getBoundingClientRect = () =>
-      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" }) as DOMRect;
     const anchor = screen
       .getAllByTestId("curve-key")
       .find((k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "scale")!;
@@ -1799,13 +1685,9 @@ describe("CurveEditorPanel — multi-key average edit", () => {
     fireEvent.click(screen.getByTestId("curve-channel-row-scale"));
     clickKey(0, false);
     clickKey(100, true);
-    expect(
-      (screen.getByLabelText("Selected key time") as HTMLInputElement).disabled,
-    ).toBe(true);
+    expect((screen.getByLabelText("Selected key time") as HTMLInputElement).disabled).toBe(true);
     // Value stays editable (border values can move).
-    expect(
-      (screen.getByLabelText("Selected key value") as HTMLInputElement).disabled,
-    ).toBe(false);
+    expect((screen.getByLabelText("Selected key value") as HTMLInputElement).disabled).toBe(false);
   });
 });
 
@@ -1822,9 +1704,9 @@ describe("CurveEditorPanel — decimal-grained time", () => {
     await waitFor(() => {
       expect(screen.getByTestId("curve-layer-scale")).toBeInTheDocument();
     });
-    const middle = Array.from(
-      document.querySelectorAll("[data-testid='curve-key']"),
-    ).find((c) => c.getAttribute("data-key-time") === "50")!;
+    const middle = Array.from(document.querySelectorAll("[data-testid='curve-key']")).find(
+      (c) => c.getAttribute("data-key-time") === "50",
+    )!;
     fireEvent.click(middle);
     await waitFor(() => {
       const timeInput = screen.getByLabelText("Selected key time") as HTMLInputElement;
@@ -1843,9 +1725,9 @@ describe("CurveEditorPanel — decimal-grained time", () => {
     await waitFor(() => {
       expect(screen.getByTestId("curve-layer-scale")).toBeInTheDocument();
     });
-    const middle = Array.from(
-      document.querySelectorAll("[data-testid='curve-key']"),
-    ).find((c) => c.getAttribute("data-key-time") === "50")!;
+    const middle = Array.from(document.querySelectorAll("[data-testid='curve-key']")).find(
+      (c) => c.getAttribute("data-key-time") === "50",
+    )!;
     fireEvent.click(middle);
     const timeInput = screen.getByLabelText("Selected key time") as HTMLInputElement;
     await waitFor(() => expect(timeInput.disabled).toBe(false));
@@ -1874,9 +1756,9 @@ describe("CurveEditorPanel — right-click deselect", () => {
     await waitFor(() => {
       expect(screen.getByTestId("curve-layer-scale")).toBeInTheDocument();
     });
-    const middle = Array.from(
-      document.querySelectorAll("[data-testid='curve-key']"),
-    ).find((c) => c.getAttribute("data-key-time") === "50")!;
+    const middle = Array.from(document.querySelectorAll("[data-testid='curve-key']")).find(
+      (c) => c.getAttribute("data-key-time") === "50",
+    )!;
     fireEvent.click(middle);
     const panel = screen.getByTestId("curve-editor-panel");
     await waitFor(() => expect(panel.getAttribute("data-selected-key-count")).toBe("1"));
@@ -1911,9 +1793,9 @@ describe("CurveEditorPanel — key copy/cut/paste", () => {
   beforeEach(() => setCurveKeysClipboard([]));
 
   function clickKeyByTime(time: number, additive = false) {
-    const el = Array.from(
-      document.querySelectorAll("[data-testid='curve-key']"),
-    ).find((c) => c.getAttribute("data-key-time") === String(time));
+    const el = Array.from(document.querySelectorAll("[data-testid='curve-key']")).find(
+      (c) => c.getAttribute("data-key-time") === String(time),
+    );
     if (el === undefined) throw new Error(`no curve-key at time ${time}`);
     fireEvent.click(el, additive ? { ctrlKey: true } : {});
   }
@@ -1923,10 +1805,13 @@ describe("CurveEditorPanel — key copy/cut/paste", () => {
   // undo entry per key host-side, so a single Ctrl+Z undid one key of a paste.
   function addTrackKeysCalls(bridge: { request: ReturnType<typeof vi.fn> }) {
     return bridge.request.mock.calls
-      .map((c) => c[0] as {
-        kind: string;
-        params: { track: string; keys: { time: number; value: number }[] };
-      })
+      .map(
+        (c) =>
+          c[0] as {
+            kind: string;
+            params: { track: string; keys: { time: number; value: number }[] };
+          },
+      )
       .filter((c) => c.kind === "emitters/add-track-keys");
   }
 
@@ -1982,7 +1867,7 @@ describe("CurveEditorPanel — key copy/cut/paste", () => {
     fireEvent.keyDown(document.body, { key: "v", ctrlKey: true });
     await waitFor(() => {
       const adds = addTrackKeysCalls(bridge);
-      expect(adds).toHaveLength(1);                 // not 2 — one gesture, one request
+      expect(adds).toHaveLength(1); // not 2 — one gesture, one request
       expect(adds[0]!.params.keys).toEqual([
         { time: 25, value: 20 },
         { time: 50, value: 40 },
@@ -2026,9 +1911,7 @@ describe("CurveEditorPanel — key copy/cut/paste", () => {
     const { bridge } = makeStubBridgeWithFocusInteriorKey(0);
     await focusScale(bridge);
     clickKeyByTime(50);
-    const valueInput = screen
-      .getByTestId("ce-spinner-value-wrapper")
-      .querySelector("input") as HTMLInputElement;
+    const valueInput = screen.getByTestId("ce-spinner-value-wrapper").querySelector("input") as HTMLInputElement;
     valueInput.focus();
     fireEvent.keyDown(valueInput, { key: "c", ctrlKey: true });
     expect(getCurveKeysClipboard()).toHaveLength(0);
@@ -2081,17 +1964,18 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
   function makeStubBridgeRedInterior() {
     const tracks: TrackDto[] = TRACK_NAMES.map((name) => ({
       name,
-      keys: name === "red"
-        ? [
-            { time: 0,   value: 0 },
-            { time: 25,  value: 0.25 },
-            { time: 75,  value: 0.75 },
-            { time: 100, value: 1 },
-          ]
-        : [
-            { time: 0,   value: 0 },
-            { time: 100, value: name === "rotationSpeed" ? -1 : 1 },
-          ],
+      keys:
+        name === "red"
+          ? [
+              { time: 0, value: 0 },
+              { time: 25, value: 0.25 },
+              { time: 75, value: 0.75 },
+              { time: 100, value: 1 },
+            ]
+          : [
+              { time: 0, value: 0 },
+              { time: 100, value: name === "rotationSpeed" ? -1 : 1 },
+            ],
       interpolation: "linear" as const,
       lockedTo: null,
     }));
@@ -2123,9 +2007,11 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
     });
 
     // Select both interior red keys (t=25 and t=75) with ctrl+click.
-    const keyAt25 = screen.getAllByTestId("curve-key")
+    const keyAt25 = screen
+      .getAllByTestId("curve-key")
       .find((k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "red");
-    const keyAt75 = screen.getAllByTestId("curve-key")
+    const keyAt75 = screen
+      .getAllByTestId("curve-key")
       .find((k) => k.getAttribute("data-key-time") === "75" && k.getAttribute("data-channel-id") === "red");
     expect(keyAt25).toBeDefined();
     expect(keyAt75).toBeDefined();
@@ -2138,11 +2024,8 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
     // Verify the committed average value is (0.25 + 0.75) / 2 = 0.5 before the drag.
     // NOTE: the Spinner is keyed by its value, so it REMOUNTS on every live
     // change — re-query `getByLabelText` for each read rather than caching it.
-    const readValue = () =>
-      Number((screen.getByLabelText("Selected key value") as HTMLInputElement).value);
-    await waitFor(() =>
-      expect((screen.getByLabelText("Selected key value") as HTMLInputElement).disabled).toBe(false),
-    );
+    const readValue = () => Number((screen.getByLabelText("Selected key value") as HTMLInputElement).value);
+    await waitFor(() => expect((screen.getByLabelText("Selected key value") as HTMLInputElement).disabled).toBe(false));
     expect(readValue()).toBeCloseTo(0.5, 2);
 
     // Set up the SVG for pointer event coordinates.
@@ -2150,7 +2033,7 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
     const svg = document.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
     expect(svg).not.toBeNull();
     svg.getBoundingClientRect = () =>
-      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" }) as DOMRect;
 
     // Begin group drag on the t=25 key.
     // t=25 → x = 25/100 * 600 = 150; v=0.25 → y = 300 - (0.25 * 300) = 225.
@@ -2166,7 +2049,7 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
     await waitFor(() => {
       const liveValue = readValue();
       expect(liveValue).not.toBeCloseTo(0.5, 1); // spinner must have updated
-      expect(liveValue).toBeGreaterThan(0.5);     // drag went up → value increased
+      expect(liveValue).toBeGreaterThan(0.5); // drag went up → value increased
     });
   });
 
@@ -2178,9 +2061,11 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
       expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
     });
 
-    const keyAt25 = screen.getAllByTestId("curve-key")
+    const keyAt25 = screen
+      .getAllByTestId("curve-key")
       .find((k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "red")!;
-    const keyAt75 = screen.getAllByTestId("curve-key")
+    const keyAt75 = screen
+      .getAllByTestId("curve-key")
       .find((k) => k.getAttribute("data-key-time") === "75" && k.getAttribute("data-channel-id") === "red")!;
     fireEvent.click(keyAt25);
     fireEvent.click(keyAt75, { ctrlKey: true });
@@ -2190,14 +2075,11 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
 
     const svg = document.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
     svg.getBoundingClientRect = () =>
-      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" }) as DOMRect;
 
     // The Spinner remounts on each live change — re-query per read.
-    const readValue = () =>
-      Number((screen.getByLabelText("Selected key value") as HTMLInputElement).value);
-    await waitFor(() =>
-      expect((screen.getByLabelText("Selected key value") as HTMLInputElement).disabled).toBe(false),
-    );
+    const readValue = () => Number((screen.getByLabelText("Selected key value") as HTMLInputElement).value);
+    await waitFor(() => expect((screen.getByLabelText("Selected key value") as HTMLInputElement).disabled).toBe(false));
 
     // Drag past slop, then cancel.
     fireEvent.pointerDown(keyAt25, { button: 0, pointerId: 78, clientX: 150, clientY: 225 });
@@ -2219,9 +2101,11 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
     render(<CurveEditorPanel bridge={bridge} />);
     await waitFor(() => expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument());
 
-    const keyAt25 = screen.getAllByTestId("curve-key")
+    const keyAt25 = screen
+      .getAllByTestId("curve-key")
       .find((k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "red")!;
-    const keyAt75 = screen.getAllByTestId("curve-key")
+    const keyAt75 = screen
+      .getAllByTestId("curve-key")
       .find((k) => k.getAttribute("data-key-time") === "75" && k.getAttribute("data-channel-id") === "red")!;
     fireEvent.click(keyAt25);
     fireEvent.click(keyAt75, { ctrlKey: true });
@@ -2230,14 +2114,11 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
 
     const svg = document.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
     svg.getBoundingClientRect = () =>
-      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" }) as DOMRect;
 
     // Both interior keys selected → avgTime = (25+75)/2 = 50 before the drag.
-    const readTime = () =>
-      Number((screen.getByLabelText("Selected key time") as HTMLInputElement).value);
-    await waitFor(() =>
-      expect((screen.getByLabelText("Selected key time") as HTMLInputElement).disabled).toBe(false),
-    );
+    const readTime = () => Number((screen.getByLabelText("Selected key time") as HTMLInputElement).value);
+    await waitFor(() => expect((screen.getByLabelText("Selected key time") as HTMLInputElement).disabled).toBe(false));
     expect(readTime()).toBeCloseTo(50, 1);
 
     // Grab t=25 (x=150) and drag RIGHT by 60px → +60/600*100 = +10 time units.
@@ -2247,7 +2128,7 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
     await waitFor(() => {
       const t = readTime();
       expect(t).not.toBeCloseTo(50, 1); // Time spinner must live-update too
-      expect(t).toBeGreaterThan(50);    // dragged right → average time increased
+      expect(t).toBeGreaterThan(50); // dragged right → average time increased
     });
   });
 
@@ -2257,9 +2138,11 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
     await waitFor(() => expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument());
 
     // Select BOTH border keys (t=0, t=100) — no interior in the selection.
-    const keyAt0 = screen.getAllByTestId("curve-key")
+    const keyAt0 = screen
+      .getAllByTestId("curve-key")
       .find((k) => k.getAttribute("data-key-time") === "0" && k.getAttribute("data-channel-id") === "red")!;
-    const keyAt100 = screen.getAllByTestId("curve-key")
+    const keyAt100 = screen
+      .getAllByTestId("curve-key")
       .find((k) => k.getAttribute("data-key-time") === "100" && k.getAttribute("data-channel-id") === "red")!;
     fireEvent.click(keyAt0);
     fireEvent.click(keyAt100, { ctrlKey: true });
@@ -2268,12 +2151,11 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
 
     const svg = document.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
     svg.getBoundingClientRect = () =>
-      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" }) as DOMRect;
 
     // Time spinner disabled (all-border selection); value spinner enabled at avg (0+1)/2 = 0.5.
     const timeInput = () => screen.getByLabelText("Selected key time") as HTMLInputElement;
-    const readValue = () =>
-      Number((screen.getByLabelText("Selected key value") as HTMLInputElement).value);
+    const readValue = () => Number((screen.getByLabelText("Selected key value") as HTMLInputElement).value);
     await waitFor(() => expect(timeInput().disabled).toBe(true));
     expect(readValue()).toBeCloseTo(0.5, 2);
 
@@ -2284,7 +2166,7 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
     await waitFor(() => {
       expect(readValue()).toBeGreaterThan(0.5); // borders shift in value
     });
-    expect(timeInput().disabled).toBe(true);     // time still pinned for all-border
+    expect(timeInput().disabled).toBe(true); // time still pinned for all-border
   });
 
   // Regression: the live-spinner state write is COALESCED to an animation
@@ -2316,9 +2198,11 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
       render(<CurveEditorPanel bridge={bridge} />);
       await waitFor(() => expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument());
 
-      const keyAt25 = screen.getAllByTestId("curve-key")
+      const keyAt25 = screen
+        .getAllByTestId("curve-key")
         .find((k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "red")!;
-      const keyAt75 = screen.getAllByTestId("curve-key")
+      const keyAt75 = screen
+        .getAllByTestId("curve-key")
         .find((k) => k.getAttribute("data-key-time") === "75" && k.getAttribute("data-channel-id") === "red")!;
       fireEvent.click(keyAt25);
       fireEvent.click(keyAt75, { ctrlKey: true });
@@ -2327,9 +2211,18 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
 
       const svg = document.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
       svg.getBoundingClientRect = () =>
-        ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
-      const readValue = () =>
-        Number((screen.getByLabelText("Selected key value") as HTMLInputElement).value);
+        ({
+          left: 0,
+          top: 0,
+          right: 600,
+          bottom: 300,
+          width: 600,
+          height: 300,
+          x: 0,
+          y: 0,
+          toJSON: () => "",
+        }) as DOMRect;
+      const readValue = () => Number((screen.getByLabelText("Selected key value") as HTMLInputElement).value);
       await waitFor(() =>
         expect((screen.getByLabelText("Selected key value") as HTMLInputElement).disabled).toBe(false),
       );
@@ -2373,10 +2266,16 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
     Object.defineProperty(window, "matchMedia", {
       configurable: true,
       value: (q: string) => ({
-        matches: false, media: q, onchange: null,
-        addListener() {}, removeListener() {},
-        addEventListener() {}, removeEventListener() {},
-        dispatchEvent() { return false; },
+        matches: false,
+        media: q,
+        onchange: null,
+        addListener() {},
+        removeListener() {},
+        addEventListener() {},
+        removeEventListener() {},
+        dispatchEvent() {
+          return false;
+        },
       }),
     });
     try {
@@ -2385,9 +2284,9 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
       await waitFor(() => expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument());
 
       const keyAt25 = () =>
-        screen.getAllByTestId("curve-key").find(
-          (k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "red",
-        )!;
+        screen
+          .getAllByTestId("curve-key")
+          .find((k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "red")!;
       fireEvent.click(keyAt25());
       const panel = screen.getByTestId("curve-editor-panel");
       await waitFor(() => expect(panel.getAttribute("data-selected-key-count")).toBe("1"));
@@ -2395,9 +2294,7 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
       const cyBefore = Number(keyAt25().getAttribute("cy"));
 
       // Edit the Value spinner up (0.25 -> 0.9) and commit.
-      const valueInput = screen
-        .getByTestId("ce-spinner-value-wrapper")
-        .querySelector("input") as HTMLInputElement;
+      const valueInput = screen.getByTestId("ce-spinner-value-wrapper").querySelector("input") as HTMLInputElement;
       await waitFor(() => expect(valueInput.disabled).toBe(false));
       fireEvent.focus(valueInput);
       fireEvent.change(valueInput, { target: { value: "0.9" } });
@@ -2428,24 +2325,23 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
   it("a stale get-tracks response from before a newer local edit does not yank the curve back (#613)", async () => {
     const seedTracks: TrackDto[] = TRACK_NAMES.map((name) => ({
       name,
-      keys: name === "red"
-        ? [
-            { time: 0,   value: 0 },
-            { time: 25,  value: 0.25 },
-            { time: 100, value: 1 },
-          ]
-        : [
-            { time: 0,   value: 0 },
-            { time: 100, value: name === "rotationSpeed" ? -1 : 1 },
-          ],
+      keys:
+        name === "red"
+          ? [
+              { time: 0, value: 0 },
+              { time: 25, value: 0.25 },
+              { time: 100, value: 1 },
+            ]
+          : [
+              { time: 0, value: 0 },
+              { time: 100, value: name === "rotationSpeed" ? -1 : 1 },
+            ],
       interpolation: "linear" as const,
       lockedTo: null,
     }));
     // The stale snapshot: red@25 = 0.5 (the FIRST edit), not the newest (0.9).
     const staleTracks = seedTracks.map((t) =>
-      t.name !== "red"
-        ? t
-        : { ...t, keys: t.keys.map((k) => (k.time === 25 ? { time: 25, value: 0.5 } : k)) },
+      t.name !== "red" ? t : { ...t, keys: t.keys.map((k) => (k.time === 25 ? { time: 25, value: 0.5 } : k)) },
     );
 
     // Bridge stub with manual control: the initial get-tracks resolves with the
@@ -2464,7 +2360,9 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
             firstFetch = false;
             return Promise.resolve({ tracks: seedTracks });
           }
-          return new Promise((res) => { pendingGetTracks.push(res as (v: { tracks: TrackDto[] }) => void); });
+          return new Promise((res) => {
+            pendingGetTracks.push(res as (v: { tracks: TrackDto[] }) => void);
+          });
         }
         return Promise.resolve({});
       }),
@@ -2478,15 +2376,14 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
     await waitFor(() => expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument());
 
     const keyAt25 = () =>
-      screen.getAllByTestId("curve-key").find(
-        (k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "red",
-      )!;
+      screen
+        .getAllByTestId("curve-key")
+        .find((k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "red")!;
     fireEvent.click(keyAt25());
     const panel = screen.getByTestId("curve-editor-panel");
     await waitFor(() => expect(panel.getAttribute("data-selected-key-count")).toBe("1"));
 
-    const valueInput = () =>
-      screen.getByTestId("ce-spinner-value-wrapper").querySelector("input") as HTMLInputElement;
+    const valueInput = () => screen.getByTestId("ce-spinner-value-wrapper").querySelector("input") as HTMLInputElement;
     await waitFor(() => expect(valueInput().disabled).toBe(false));
 
     // Edit #1 (scrub tick): 0.25 → 0.5. The host echo then triggers a refetch
@@ -2494,7 +2391,9 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
     fireEvent.focus(valueInput());
     fireEvent.change(valueInput(), { target: { value: "0.5" } });
     fireEvent.blur(valueInput());
-    act(() => { for (const cb of treeChanged) cb(); });
+    act(() => {
+      for (const cb of treeChanged) cb();
+    });
     await waitFor(() => expect(pendingGetTracks.length).toBe(1));
 
     // Edit #2 (next scrub tick): 0.5 → 0.9. Optimistic curve moves to 0.9.
@@ -2526,18 +2425,34 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
   it("a selection-change fetch still applies even if a local edit bumped the epoch after it was issued (#613)", async () => {
     const tracksA: TrackDto[] = TRACK_NAMES.map((name) => ({
       name,
-      keys: name === "red"
-        ? [{ time: 0, value: 0 }, { time: 25, value: 0.25 }, { time: 100, value: 1 }]
-        : [{ time: 0, value: 0 }, { time: 100, value: name === "rotationSpeed" ? -1 : 1 }],
+      keys:
+        name === "red"
+          ? [
+              { time: 0, value: 0 },
+              { time: 25, value: 0.25 },
+              { time: 100, value: 1 },
+            ]
+          : [
+              { time: 0, value: 0 },
+              { time: 100, value: name === "rotationSpeed" ? -1 : 1 },
+            ],
       interpolation: "linear" as const,
       lockedTo: null,
     }));
     // Emitter B's red track has a DISTINCTIVE key at t=50 that A lacks.
     const tracksB: TrackDto[] = TRACK_NAMES.map((name) => ({
       name,
-      keys: name === "red"
-        ? [{ time: 0, value: 0 }, { time: 50, value: 0.5 }, { time: 100, value: 1 }]
-        : [{ time: 0, value: 0 }, { time: 100, value: name === "rotationSpeed" ? -1 : 1 }],
+      keys:
+        name === "red"
+          ? [
+              { time: 0, value: 0 },
+              { time: 50, value: 0.5 },
+              { time: 100, value: 1 },
+            ]
+          : [
+              { time: 0, value: 0 },
+              { time: 100, value: name === "rotationSpeed" ? -1 : 1 },
+            ],
       interpolation: "linear" as const,
       lockedTo: null,
     }));
@@ -2552,7 +2467,9 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
         if (req.kind === "emitters/get-tracks") {
           if (req.params?.id === 1) return Promise.resolve({ tracks: tracksA });
           // Emitter B's fetch is deferred so the test controls when it lands.
-          return new Promise((res) => { pendingBFetch.push(res as (v: { tracks: TrackDto[] }) => void); });
+          return new Promise((res) => {
+            pendingBFetch.push(res as (v: { tracks: TrackDto[] }) => void);
+          });
         }
         return Promise.resolve({});
       }),
@@ -2566,30 +2483,30 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
     // Emitter A loaded (its t=25 key is present, B's t=50 is not).
     await waitFor(() =>
       expect(
-        screen.getAllByTestId("curve-key").some(
-          (k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "red",
-        ),
+        screen
+          .getAllByTestId("curve-key")
+          .some((k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "red"),
       ).toBe(true),
     );
 
     // Select A's interior key so a spinner edit is possible.
     fireEvent.click(
-      screen.getAllByTestId("curve-key").find(
-        (k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "red",
-      )!,
+      screen
+        .getAllByTestId("curve-key")
+        .find((k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "red")!,
     );
     const panel = screen.getByTestId("curve-editor-panel");
     await waitFor(() => expect(panel.getAttribute("data-selected-key-count")).toBe("1"));
 
     // Switch selection to emitter B → B's get-tracks is issued (and deferred).
-    act(() => { for (const cb of selectionListeners) cb({ payload: { id: 2 } }); });
+    act(() => {
+      for (const cb of selectionListeners) cb({ payload: { id: 2 } });
+    });
     await waitFor(() => expect(pendingBFetch.length).toBe(1));
 
     // Edit the still-visible A key via the Value spinner → bumps the edit epoch
     // (bridge id is now 2; the host would no-op with no tree/changed).
-    const valueInput = screen
-      .getByTestId("ce-spinner-value-wrapper")
-      .querySelector("input") as HTMLInputElement;
+    const valueInput = screen.getByTestId("ce-spinner-value-wrapper").querySelector("input") as HTMLInputElement;
     await waitFor(() => expect(valueInput.disabled).toBe(false));
     fireEvent.focus(valueInput);
     fireEvent.change(valueInput, { target: { value: "0.7" } });
@@ -2603,10 +2520,11 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
       await Promise.resolve();
     });
     await waitFor(() => {
-      const keys = screen.getAllByTestId("curve-key")
+      const keys = screen
+        .getAllByTestId("curve-key")
         .filter((k) => k.getAttribute("data-channel-id") === "red")
         .map((k) => k.getAttribute("data-key-time"));
-      expect(keys).toContain("50");   // B applied
+      expect(keys).toContain("50"); // B applied
       expect(keys).not.toContain("25"); // not stranded on A
     });
   });
@@ -2652,20 +2570,25 @@ describe("CurveEditorPanel — snap-to-grid toggle (#618)", () => {
     // Give red an interior key at t=50 so we can drag it freely.
     const tracks = fixtureTracks().map((t) =>
       t.name === "red"
-        ? { ...t, keys: [{ time: 0, value: 0.5 }, { time: 50, value: 0.5 }, { time: 100, value: 0.5 }] }
+        ? {
+            ...t,
+            keys: [
+              { time: 0, value: 0.5 },
+              { time: 50, value: 0.5 },
+              { time: 100, value: 0.5 },
+            ],
+          }
         : t,
     );
     const { bridge } = renderPanel(0, tracks);
     const svg = (await screen.findByTestId("curve-editor-svg")) as unknown as SVGSVGElement;
     svg.getBoundingClientRect = () =>
-      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" }) as DOMRect;
 
     // Turn snap ON, then drag the interior key off-grid: t=50 (x=300, v=0.5 →
     // y=150) → x=307 (time 51.17 → snaps 52), y=143 (value 0.5233 → snaps 0.52).
     fireEvent.click(screen.getByTestId("curve-snap-toggle"));
-    const key = document.querySelector(
-      '[data-testid="curve-key"][data-key-time="50"][data-channel-id="red"]',
-    )!;
+    const key = document.querySelector('[data-testid="curve-key"][data-key-time="50"][data-channel-id="red"]')!;
     fireEvent.pointerDown(key, { button: 0, pointerId: 80, clientX: 300, clientY: 150 });
     fireEvent.pointerMove(svg, { pointerId: 80, clientX: 307, clientY: 143 });
     fireEvent.pointerUp(svg, { pointerId: 80, clientX: 307, clientY: 143 });
@@ -2675,7 +2598,7 @@ describe("CurveEditorPanel — snap-to-grid toggle (#618)", () => {
     );
     expect(call).toBeDefined();
     const params = (call![0] as { params: { newTime: number; newValue: number } }).params;
-    expect(params.newTime).toBeCloseTo(52, 4);   // snapped, not raw 51.17
+    expect(params.newTime).toBeCloseTo(52, 4); // snapped, not raw 51.17
     expect(params.newValue).toBeCloseTo(0.52, 4); // snapped, not raw 0.5233
   });
 });
@@ -2690,15 +2613,23 @@ describe("CurveEditorPanel — time-spinner scrub tracks the moving key (#614)",
 
   it("chains oldTime across scrub ticks instead of freezing at the mousedown time", async () => {
     // rAF sync so each mousemove emits exactly one scrub tick immediately.
-    const raf = vi
-      .spyOn(window, "requestAnimationFrame")
-      .mockImplementation((cb: FrameRequestCallback) => { cb(0); return 1; });
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
+      cb(0);
+      return 1;
+    });
     const caf = vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
     try {
       // red with an interior key at t=25 (Time enabled; draggable).
       const tracks = fixtureTracks().map((t) =>
         t.name === "red"
-          ? { ...t, keys: [{ time: 0, value: 0.5 }, { time: 25, value: 0.5 }, { time: 100, value: 0.5 }] }
+          ? {
+              ...t,
+              keys: [
+                { time: 0, value: 0.5 },
+                { time: 25, value: 0.5 },
+                { time: 100, value: 0.5 },
+              ],
+            }
           : t,
       );
       const { bridge } = renderPanel(0, tracks);
@@ -2715,9 +2646,7 @@ describe("CurveEditorPanel — time-spinner scrub tracks the moving key (#614)",
       await waitFor(() => expect(panel.getAttribute("data-selected-key-count")).toBe("1"));
 
       const timeWrap = screen.getByTestId("ce-spinner-time-wrapper");
-      await waitFor(() =>
-        expect((timeWrap.querySelector("input") as HTMLInputElement).disabled).toBe(false),
-      );
+      await waitFor(() => expect((timeWrap.querySelector("input") as HTMLInputElement).disabled).toBe(false));
       const column = timeWrap.querySelector('[aria-label="Increment"]')!.parentElement as HTMLElement;
 
       // Scrub upward: step 0.1, start t=25. dy=10 → 26 (tick 1), dy=20 → 27 (tick 2).
@@ -2767,13 +2696,17 @@ describe("CurveEditorPanel — late mutation completions are emitter-scoped", ()
     const tracksFor = (id: number): TrackDto[] =>
       TRACK_NAMES.map((name) => ({
         name,
-        keys: name === "scale"
-          ? [
-              { time: 0, value: 0 },
-              { time: 50, value: id === 0 ? VALUE_ON_0 : VALUE_ON_1 },
-              { time: 100, value: 100 },
-            ]
-          : [{ time: 0, value: 0 }, { time: 100, value: 1 }],
+        keys:
+          name === "scale"
+            ? [
+                { time: 0, value: 0 },
+                { time: 50, value: id === 0 ? VALUE_ON_0 : VALUE_ON_1 },
+                { time: 100, value: 100 },
+              ]
+            : [
+                { time: 0, value: 0 },
+                { time: 100, value: 1 },
+              ],
         interpolation: "linear",
         lockedTo: null,
       }));
@@ -2790,7 +2723,9 @@ describe("CurveEditorPanel — late mutation completions are emitter-scoped", ()
         }
         if (req.kind === "emitters/add-track-key") {
           // Held open so the test controls exactly when the completion lands.
-          return new Promise<{ time: number; value: number }>((res) => { resolveAdd = res; });
+          return new Promise<{ time: number; value: number }>((res) => {
+            resolveAdd = res;
+          });
         }
         return Promise.resolve({});
       }),
@@ -2804,8 +2739,12 @@ describe("CurveEditorPanel — late mutation completions are emitter-scoped", ()
     } as unknown as Bridge & { request: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn> };
     return {
       bridge,
-      selectEmitter: (id: number) => { for (const h of [...listeners]) h({ payload: { id } }); },
-      landStaleAdd: (v: { time: number; value: number }) => { resolveAdd?.(v); },
+      selectEmitter: (id: number) => {
+        for (const h of [...listeners]) h({ payload: { id } });
+      },
+      landStaleAdd: (v: { time: number; value: number }) => {
+        resolveAdd?.(v);
+      },
     };
   }
 
@@ -2824,19 +2763,30 @@ describe("CurveEditorPanel — late mutation completions are emitter-scoped", ()
       value: backdrop.parentElement,
       configurable: true,
     });
-    screen.getByTestId("curve-editor-svg").getBoundingClientRect = () => ({
-      x: 0, y: 0, top: 0, left: 0, right: 600, bottom: 300,
-      width: 600, height: 300, toJSON: () => ({}),
-    } as DOMRect);
+    screen.getByTestId("curve-editor-svg").getBoundingClientRect = () =>
+      ({
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        right: 600,
+        bottom: 300,
+        width: 600,
+        height: 300,
+        toJSON: () => ({}),
+      }) as DOMRect;
     fireEvent.pointerDown(backdrop, { button: 0, clientX: 300, clientY: 150, pointerId: 1 });
     await waitFor(() => {
-      const adds = h.bridge.request.mock.calls
-        .filter((c) => (c[0] as { kind: string }).kind === "emitters/add-track-key");
+      const adds = h.bridge.request.mock.calls.filter(
+        (c) => (c[0] as { kind: string }).kind === "emitters/add-track-key",
+      );
       expect(adds).toHaveLength(1);
     });
 
     // The user clicks a different emitter while that request is still open.
-    await act(async () => { h.selectEmitter(1); });
+    await act(async () => {
+      h.selectEmitter(1);
+    });
     await waitFor(() => {
       const gets = h.bridge.request.mock.calls
         .filter((c) => (c[0] as { kind: string; params: { id?: number } }).kind === "emitters/get-tracks")
@@ -2845,7 +2795,9 @@ describe("CurveEditorPanel — late mutation completions are emitter-scoped", ()
     });
 
     // Only NOW does emitter 0's completion arrive, echoing t=50 / value=80.
-    await act(async () => { h.landStaleAdd({ time: 50, value: VALUE_ON_0 }); });
+    await act(async () => {
+      h.landStaleAdd({ time: 50, value: VALUE_ON_0 });
+    });
 
     const panel = screen.getByTestId("curve-editor-panel");
     // THE REGRESSION: unguarded, this selects t=50 on emitter 1 — a key the
@@ -2854,9 +2806,7 @@ describe("CurveEditorPanel — late mutation completions are emitter-scoped", ()
     // ...and because singleSelected prefers optimisticSelected over the fetched
     // track, the Value spinner would read 80 for a key that holds 10. Asserting
     // the specific wrong number, not merely "something differs".
-    const valueInput = screen
-      .getByTestId("ce-spinner-value-wrapper")
-      .querySelector("input") as HTMLInputElement;
+    const valueInput = screen.getByTestId("ce-spinner-value-wrapper").querySelector("input") as HTMLInputElement;
     expect(valueInput.value).not.toBe(String(VALUE_ON_0));
   });
 
@@ -2872,20 +2822,28 @@ describe("CurveEditorPanel — late mutation completions are emitter-scoped", ()
     await waitFor(() => expect(screen.getByTestId("curve-layer-scale")).toBeInTheDocument());
 
     const svg = screen.getByTestId("curve-editor-svg");
-    svg.getBoundingClientRect = () => ({
-      x: 0, y: 0, top: 0, left: 0, right: 600, bottom: 300,
-      width: 600, height: 300, toJSON: () => ({}),
-    } as DOMRect);
-    const key = document.querySelector(
-      '[data-testid="curve-key"][data-key-time="50"][data-channel-id="scale"]',
-    )!;
+    svg.getBoundingClientRect = () =>
+      ({
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        right: 600,
+        bottom: 300,
+        width: 600,
+        height: 300,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    const key = document.querySelector('[data-testid="curve-key"][data-key-time="50"][data-channel-id="scale"]')!;
     const cx = Number(key.getAttribute("cx"));
     const cy = Number(key.getAttribute("cy"));
     fireEvent.pointerDown(key, { button: 0, pointerId: 90, clientX: cx, clientY: cy });
     fireEvent.pointerMove(svg, { pointerId: 90, clientX: cx + 20, clientY: cy - 20 });
 
     // The selection moves to emitter 1 while the pointer is still down.
-    await act(async () => { h.selectEmitter(1); });
+    await act(async () => {
+      h.selectEmitter(1);
+    });
     await waitFor(() => {
       const gets = h.bridge.request.mock.calls
         .filter((c) => (c[0] as { kind: string }).kind === "emitters/get-tracks")
@@ -2914,13 +2872,20 @@ describe("CurveEditorPanel — late mutation completions are emitter-scoped", ()
     await waitFor(() => expect(screen.getByTestId("curve-layer-scale")).toBeInTheDocument());
 
     const svg = screen.getByTestId("curve-editor-svg");
-    svg.getBoundingClientRect = () => ({
-      x: 0, y: 0, top: 0, left: 0, right: 600, bottom: 300,
-      width: 600, height: 300, toJSON: () => ({}),
-    } as DOMRect);
-    const scaleKey = (t: number) => document.querySelector(
-      `[data-testid="curve-key"][data-key-time="${t}"][data-channel-id="scale"]`,
-    )!;
+    svg.getBoundingClientRect = () =>
+      ({
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        right: 600,
+        bottom: 300,
+        width: 600,
+        height: 300,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    const scaleKey = (t: number) =>
+      document.querySelector(`[data-testid="curve-key"][data-key-time="${t}"][data-channel-id="scale"]`)!;
     fireEvent.click(scaleKey(50));
     fireEvent.click(scaleKey(100), { ctrlKey: true });
     const panel = screen.getByTestId("curve-editor-panel");
@@ -2932,7 +2897,9 @@ describe("CurveEditorPanel — late mutation completions are emitter-scoped", ()
     fireEvent.pointerDown(key, { button: 0, pointerId: 91, clientX: cx, clientY: cy });
     fireEvent.pointerMove(svg, { pointerId: 91, clientX: cx + 10, clientY: cy + 20 });
 
-    await act(async () => { h.selectEmitter(1); });
+    await act(async () => {
+      h.selectEmitter(1);
+    });
     await waitFor(() => {
       const gets = h.bridge.request.mock.calls
         .filter((c) => (c[0] as { kind: string }).kind === "emitters/get-tracks")
@@ -2967,9 +2934,17 @@ describe("CurveEditorPanel — optimistic spinner value reconciles with refetch"
     const tracksWith = (v: number): TrackDto[] =>
       TRACK_NAMES.map((name) => ({
         name,
-        keys: name === "red"
-          ? [{ time: 0, value: 0 }, { time: 25, value: v }, { time: 100, value: 1 }]
-          : [{ time: 0, value: 0 }, { time: 100, value: name === "rotationSpeed" ? -1 : 1 }],
+        keys:
+          name === "red"
+            ? [
+                { time: 0, value: 0 },
+                { time: 25, value: v },
+                { time: 100, value: 1 },
+              ]
+            : [
+                { time: 0, value: 0 },
+                { time: 100, value: name === "rotationSpeed" ? -1 : 1 },
+              ],
         interpolation: "linear" as const,
         lockedTo: null,
       }));
@@ -3011,8 +2986,7 @@ describe("CurveEditorPanel — optimistic spinner value reconciles with refetch"
     fireEvent.click(keyAt25);
     const panel = screen.getByTestId("curve-editor-panel");
     await waitFor(() => expect(panel.getAttribute("data-selected-key-count")).toBe("1"));
-    const valueInput = () =>
-      screen.getByTestId("ce-spinner-value-wrapper").querySelector("input") as HTMLInputElement;
+    const valueInput = () => screen.getByTestId("ce-spinner-value-wrapper").querySelector("input") as HTMLInputElement;
     await waitFor(() => expect(Number(valueInput().value)).toBeCloseTo(0.25, 5));
 
     const svg = screen.getByTestId("curve-editor-svg");
@@ -3053,8 +3027,9 @@ describe("CurveEditorPanel — key context menu", () => {
     return { bridge };
   }
   function keyAt(time: number) {
-    return Array.from(document.querySelectorAll("[data-testid='curve-key']"))
-      .find((c) => c.getAttribute("data-key-time") === String(time))!;
+    return Array.from(document.querySelectorAll("[data-testid='curve-key']")).find(
+      (c) => c.getAttribute("data-key-time") === String(time),
+    )!;
   }
 
   it("right-click on an interior key opens a menu whose Delete fires delete-track-keys", async () => {

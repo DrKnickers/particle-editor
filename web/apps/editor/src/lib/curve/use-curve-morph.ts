@@ -34,12 +34,12 @@ export type MorphChannelInput = {
   channelId: string;
   color: string;
   track: TrackDto;
-  vMin: number;       // the channel's own projection (projY)
+  vMin: number; // the channel's own projection (projY)
   vMax: number;
-  dashed: boolean;    // READONLY_DASH carrier (locked focus channel)
+  dashed: boolean; // READONLY_DASH carrier (locked focus channel)
   strokeWidth: number;
-  opacity: number;    // dimmed background layers morph dimmed
-  isFocus: boolean;   // edit-morph markers are focus-only; a switch glides every channel
+  opacity: number; // dimmed background layers morph dimmed
+  isFocus: boolean; // edit-morph markers are focus-only; a switch glides every channel
   // Static key-dot styling for THIS channel, so the morph overlay markers match
   // it exactly (no size/stroke jump at the overlay→static handoff). Computed by
   // the caller with the same logic as the static layer (CurveEditor.tsx).
@@ -66,13 +66,13 @@ type Marker = {
 };
 
 type Job = {
-  input: MorphChannelInput;   // latest target styling
-  gridX: Float64Array;        // data-space xs
-  from: Float64Array;         // pixel ys
-  to: Float64Array;           // pixel ys
-  start: number;              // performance.now at (re)start
-  lastE: number;              // last eased progress, for interruption folding
-  el: SVGGElement | null;     // overlay group (attached by React)
+  input: MorphChannelInput; // latest target styling
+  gridX: Float64Array; // data-space xs
+  from: Float64Array; // pixel ys
+  to: Float64Array; // pixel ys
+  start: number; // performance.now at (re)start
+  lastE: number; // last eased progress, for interruption folding
+  el: SVGGElement | null; // overlay group (attached by React)
   // imperative children, created on first tick:
   line?: SVGPolylineElement;
   fill?: SVGPathElement;
@@ -87,12 +87,7 @@ type Job = {
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 /** Project data-space x-grid onto pixel-space x values for the canvas. */
-function toPixelXs(
-  gridX: Float64Array,
-  timeMin: number,
-  timeMax: number,
-  width: number,
-): Float64Array {
+function toPixelXs(gridX: Float64Array, timeMin: number, timeMax: number, width: number): Float64Array {
   const range = timeMax - timeMin;
   if (range <= 0) return new Float64Array(gridX.length);
   const out = new Float64Array(gridX.length);
@@ -137,18 +132,14 @@ export function movesMatch(
   // A stale / garbage suppression whose anchors have no match in prev
   // should never suppress a real morph.
   for (const m of moves) {
-    const found = prevTrack.keys.some(
-      (pk) => Math.abs(pk.time - m.oldTime) <= KEY_MATCH_EPS,
-    );
+    const found = prevTrack.keys.some((pk) => Math.abs(pk.time - m.oldTime) <= KEY_MATCH_EPS);
     if (!found) return false;
   }
 
   // Build expected = prev.keys mapped through the recorded moves.
   const expected = prevTrack.keys.map((pk) => {
     const m = moves.find((mv) => Math.abs(pk.time - mv.oldTime) <= KEY_MATCH_EPS);
-    return m
-      ? { time: m.newTime, value: m.newValue }
-      : { time: pk.time, value: pk.value };
+    return m ? { time: m.newTime, value: m.newValue } : { time: pk.time, value: pk.value };
   });
 
   // Require a bijection between expected and next.keys, matched within EPS
@@ -160,10 +151,7 @@ export function movesMatch(
     for (let i = 0; i < expected.length; i++) {
       if (used[i]) continue;
       const ek = expected[i]!;
-      if (
-        Math.abs(nk.time - ek.time) <= KEY_MATCH_EPS &&
-        Math.abs(nk.value - ek.value) <= KEY_MATCH_EPS
-      ) {
+      if (Math.abs(nk.time - ek.time) <= KEY_MATCH_EPS && Math.abs(nk.value - ek.value) <= KEY_MATCH_EPS) {
         used[i] = true;
         matched = true;
         break;
@@ -199,7 +187,6 @@ function buildFillD(xs: Float64Array, ys: Float64Array, height: number): string 
   parts.push("Z");
   return parts.join(" ");
 }
-
 
 /** Project a key's (time, value) to pixel coordinates using the same
  *  formula as sampleTrackPx / the curve sampler:
@@ -287,13 +274,7 @@ function computeMarkers(
  *  focus fill uses a self-contained linearGradient (morph-fill-<id>)
  *  that is identical to the static curve-fill-<id> gradient: stopOpacity
  *  0.25→0, x1/y1/x2/y2 = 0/0/0/1, objectBoundingBox units. */
-function drawJob(
-  job: Job,
-  e: number,
-  dims: { width: number; height: number },
-  timeMin: number,
-  timeMax: number,
-): void {
+function drawJob(job: Job, e: number, dims: { width: number; height: number }, timeMin: number, timeMax: number): void {
   const { el, from, to, input } = job;
   if (el === null) return;
 
@@ -369,7 +350,11 @@ function drawJob(
     // the node may no longer be a child → NotFoundError. Matches the
     // defensive posture of the classification-effect's pre-clear path.
     for (const c of job.markerCircles) {
-      try { el.removeChild(c); } catch { /* already detached */ }
+      try {
+        el.removeChild(c);
+      } catch {
+        /* already detached */
+      }
     }
     job.markerCircles = [];
     for (let i = 0; i < markers.length; i++) {
@@ -460,8 +445,7 @@ export function useCurveMorph(args: {
     // Emitter switch: the tracks now belong to a different emitter than the
     // `prev` snapshot. Guarded against the first run (prevEmitterId undefined)
     // so an initial mount never glides. Markers then ride the line, not pop by time.
-    const isEmitterSwitch =
-      prevEmitterId.current !== undefined && prevEmitterId.current !== emitterId;
+    const isEmitterSwitch = prevEmitterId.current !== undefined && prevEmitterId.current !== emitterId;
 
     for (const c of channels) {
       next.set(c.channelId, { track: c.track, vMin: c.vMin, vMax: c.vMax });
@@ -474,11 +458,7 @@ export function useCurveMorph(args: {
       // Drag-commit suppression (the curve editor records it; here we only
       // consume. If suppressRef.current is null, this is a no-op).
       const sup = suppressRef.current;
-      if (
-        sup &&
-        sup.channelId === c.channelId &&
-        movesMatch(p.track, c.track, sup.moves)
-      ) {
+      if (sup && sup.channelId === c.channelId && movesMatch(p.track, c.track, sup.moves)) {
         // Snap: the change is explained by a recorded drag — don't morph.
         suppressRef.current = null;
         continue;
@@ -521,7 +501,11 @@ export function useCurveMorph(args: {
       const existingCircles = existing?.markerCircles ?? [];
       if (existingCircles.length > 0 && existing?.el) {
         for (const circle of existingCircles) {
-          try { existing.el.removeChild(circle); } catch { /* already removed */ }
+          try {
+            existing.el.removeChild(circle);
+          } catch {
+            /* already removed */
+          }
         }
       }
 

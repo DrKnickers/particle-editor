@@ -48,27 +48,41 @@ const NONE = ""; // empty Name = no object selected
 // Bucket display order + plural labels, per domain. "None" folds into
 // "Other" so an object whose fine bucket didn't resolve is still grouped, never
 // dropped (the engine never lists Excluded objects, so role is Unit/Structure/Hero).
-const GROUND_BUCKETS: readonly ReferenceObjectBucket[] = [
-  "Infantry", "Vehicle", "Air", "Structure", "Other",
-];
+const GROUND_BUCKETS: readonly ReferenceObjectBucket[] = ["Infantry", "Vehicle", "Air", "Structure", "Other"];
 const SPACE_BUCKETS: readonly ReferenceObjectBucket[] = [
-  "Fighter", "Bomber", "Corvette", "Frigate", "Capital", "Transport", "Structure", "Other",
+  "Fighter",
+  "Bomber",
+  "Corvette",
+  "Frigate",
+  "Capital",
+  "Transport",
+  "Structure",
+  "Other",
 ];
 const BUCKET_LABEL: Record<ReferenceObjectBucket, string> = {
-  Infantry: "Infantry", Vehicle: "Vehicles", Air: "Air",
-  Fighter: "Fighters", Bomber: "Bombers", Corvette: "Corvettes", Frigate: "Frigates",
-  Capital: "Capitals", Transport: "Transports", Structure: "Structures",
-  Hero: "Heroes", Other: "Other", None: "Other",
+  Infantry: "Infantry",
+  Vehicle: "Vehicles",
+  Air: "Air",
+  Fighter: "Fighters",
+  Bomber: "Bombers",
+  Corvette: "Corvettes",
+  Frigate: "Frigates",
+  Capital: "Capitals",
+  Transport: "Transports",
+  Structure: "Structures",
+  Hero: "Heroes",
+  Other: "Other",
+  None: "Other",
 };
 
 // ariaLabel: the Projectiles groups read "Ground"/"Space" on screen, but need a name
 // distinct from the top-level Ground/Space sections.
 type BucketGroup = { key: string; label: string; ariaLabel?: string; items: string[] };
 type Section = {
-  key: string;       // "Heroes" | "Ground" | "Space" | "Props" | "Templates" | "Projectiles"
+  key: string; // "Heroes" | "Ground" | "Space" | "Props" | "Templates" | "Projectiles"
   label: string;
   total: number;
-  flat: string[];    // Heroes: the names directly (no bucket sub-headers)
+  flat: string[]; // Heroes: the names directly (no bucket sub-headers)
   buckets: BucketGroup[]; // Ground/Space: bucket sub-groups; Projectiles: Ground/Space groups
 };
 
@@ -103,25 +117,44 @@ function buildSections(objects: ReferenceObjectEntry[], matches: (n: string) => 
     else if (o.role === "Projectile") {
       if (o.dualEnv || o.domain !== "Space") projGround.push(o.name);
       if (o.dualEnv || o.domain === "Space") projSpace.push(o.name);
-    }
-    else if (o.domain === "Space") push(space, o.bucket, o.name);
+    } else if (o.domain === "Space") push(space, o.bucket, o.name);
     else push(ground, o.bucket, o.name); // Ground + Unknown fall here
   }
-  const bucketGroups = (m: Map<ReferenceObjectBucket, string[]>, order: readonly ReferenceObjectBucket[]): BucketGroup[] =>
+  const bucketGroups = (
+    m: Map<ReferenceObjectBucket, string[]>,
+    order: readonly ReferenceObjectBucket[],
+  ): BucketGroup[] =>
     order
       .filter((b) => (m.get(b)?.length ?? 0) > 0)
       .map((b) => ({ key: `${b}`, label: BUCKET_LABEL[b], items: m.get(b)!.slice().sort() }));
-  const flatSection = (key: string, label: string, names: string[]): Section =>
-    ({ key, label, total: names.length, flat: names.slice().sort(), buckets: [] });
+  const flatSection = (key: string, label: string, names: string[]): Section => ({
+    key,
+    label,
+    total: names.length,
+    flat: names.slice().sort(),
+    buckets: [],
+  });
 
   const sections: Section[] = [];
   if (heroes.length) sections.push(flatSection("Heroes", "Heroes", heroes));
   const g = bucketGroups(ground, GROUND_BUCKETS);
   if (g.length)
-    sections.push({ key: "Ground", label: "Ground", total: g.reduce((a, b) => a + b.items.length, 0), flat: [], buckets: g });
+    sections.push({
+      key: "Ground",
+      label: "Ground",
+      total: g.reduce((a, b) => a + b.items.length, 0),
+      flat: [],
+      buckets: g,
+    });
   const s = bucketGroups(space, SPACE_BUCKETS);
   if (s.length)
-    sections.push({ key: "Space", label: "Space", total: s.reduce((a, b) => a + b.items.length, 0), flat: [], buckets: s });
+    sections.push({
+      key: "Space",
+      label: "Space",
+      total: s.reduce((a, b) => a + b.items.length, 0),
+      flat: [],
+      buckets: s,
+    });
   // Props + Templates + Projectiles last: less often the primary reference.
   if (props.length) sections.push(flatSection("Props", "Props", props));
   if (templates.length) sections.push(flatSection("Templates", "Templates", templates));
@@ -130,7 +163,13 @@ function buildSections(objects: ReferenceObjectEntry[], matches: (n: string) => 
     { key: "Space", label: "Space", ariaLabel: "Space projectiles", items: projSpace.sort() },
   ].filter((b) => b.items.length > 0);
   if (p.length)
-    sections.push({ key: "Projectiles", label: "Projectiles", total: p.reduce((a, b) => a + b.items.length, 0), flat: [], buckets: p });
+    sections.push({
+      key: "Projectiles",
+      label: "Projectiles",
+      total: p.reduce((a, b) => a + b.items.length, 0),
+      flat: [],
+      buckets: p,
+    });
   return sections;
 }
 /**
@@ -168,7 +207,10 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
 
   useEffect(() => {
     let cancelled = false;
-    const markReady = (v: boolean) => { readyRef.current = v; setReady(v); };
+    const markReady = (v: boolean) => {
+      readyRef.current = v;
+      setReady(v);
+    };
     const fetchList = () => {
       bridge
         .request({ kind: "engine/query/reference-object-list", params: {} })
@@ -185,7 +227,9 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
     };
     bridge
       .request({ kind: "engine/state/snapshot", params: {} })
-      .then((s) => { if (!cancelled) setSnapshot(s); })
+      .then((s) => {
+        if (!cancelled) setSnapshot(s);
+      })
       .catch((err) => console.warn("[ReferenceObjectPopoverBody] snapshot failed:", err));
     fetchList();
     const off = bridge.on("engine/state/changed", (e) => {
@@ -196,7 +240,10 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
       // Re-query only while we still need a list; a no-op (early-returns) while building.
       if (!readyRef.current) fetchList();
     });
-    return () => { cancelled = true; off(); };
+    return () => {
+      cancelled = true;
+      off();
+    };
   }, [bridge]);
 
   // --record only: the host drives the search box via a ui/set-picker-search push
@@ -225,7 +272,10 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
   // set is every distinct token across all objects, and an object passes when it carries the
   // selected faction. (Objects with no affiliation appear only under "All".)
   const factionsOf = (o: ReferenceObjectEntry) =>
-    (o.affiliation ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    (o.affiliation ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
   const factions = useMemo(() => {
     const set = new Set<string>();
     for (const o of objects) for (const f of factionsOf(o)) set.add(f);
@@ -288,16 +338,15 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
     setCollapsed((prev) => {
       if (c === prev.has(key)) return prev;
       const next = new Set(prev);
-      if (c) next.add(key); else next.delete(key);
+      if (c) next.add(key);
+      else next.delete(key);
       return next;
     });
 
   // The persisted/active selection may be absent from the visible list (mod object,
   // async load, or filtered by the search); surface it as a standalone row so the tree
   // doesn't silently lose it.
-  const known =
-    name === NONE ||
-    (visibleObjects.some((o) => o.name === name) && matches(name));
+  const known = name === NONE || (visibleObjects.some((o) => o.name === name) && matches(name));
 
   // The flat list of VISIBLE tree rows in DOM order — drives roving-tabindex
   // arrow navigation. Each row carries enough to move (kind/expanded/parent).
@@ -342,15 +391,19 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
     const obj = objects.find((o) => o.name === name);
     if (!obj) return;
     const domainKey = obj.domain === "Space" ? "Space" : "Ground";
-    const keys = obj.role === "Hero"
-      ? ["sec:Heroes"]
-      : obj.role === "Prop"
-        ? ["sec:Props"]
-        : obj.role === "Template"
-          ? ["sec:Templates"]
-          : obj.role === "Projectile"
-            ? ["sec:Projectiles", ...(obj.dualEnv ? ["Ground", "Space"] : [domainKey]).map((d) => `buc:Projectiles/${d}`)]
-            : [`sec:${domainKey}`, `buc:${domainKey}/${obj.bucket === "None" ? "Other" : obj.bucket}`];
+    const keys =
+      obj.role === "Hero"
+        ? ["sec:Heroes"]
+        : obj.role === "Prop"
+          ? ["sec:Props"]
+          : obj.role === "Template"
+            ? ["sec:Templates"]
+            : obj.role === "Projectile"
+              ? [
+                  "sec:Projectiles",
+                  ...(obj.dualEnv ? ["Ground", "Space"] : [domainKey]).map((d) => `buc:Projectiles/${d}`),
+                ]
+              : [`sec:${domainKey}`, `buc:${domainKey}/${obj.bucket === "None" ? "Other" : obj.bucket}`];
     setCollapsed((prev) => {
       if (!keys.some((k) => prev.has(k))) return prev;
       const next = new Set(prev);
@@ -377,10 +430,22 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
     if (idx < 0) return;
     const row = rows[idx];
     switch (e.key) {
-      case "ArrowDown": e.preventDefault(); if (idx < rows.length - 1) focusRow(rows[idx + 1].key); break;
-      case "ArrowUp":   e.preventDefault(); if (idx > 0) focusRow(rows[idx - 1].key); break;
-      case "Home":      e.preventDefault(); focusRow(rows[0].key); break;
-      case "End":       e.preventDefault(); focusRow(rows[rows.length - 1].key); break;
+      case "ArrowDown":
+        e.preventDefault();
+        if (idx < rows.length - 1) focusRow(rows[idx + 1].key);
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        if (idx > 0) focusRow(rows[idx - 1].key);
+        break;
+      case "Home":
+        e.preventDefault();
+        focusRow(rows[0].key);
+        break;
+      case "End":
+        e.preventDefault();
+        focusRow(rows[rows.length - 1].key);
+        break;
       case "ArrowRight":
         if (row.kind === "exp") {
           e.preventDefault();
@@ -395,7 +460,8 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
         break;
       case "Enter":
       case " ":
-        e.preventDefault(); e.stopPropagation();
+        e.preventDefault();
+        e.stopPropagation();
         if (row.kind === "leaf") selectObject(row.name);
         else toggle(row.collapseKey);
         break;
@@ -406,10 +472,18 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
     void fireAndReport(bridge, { kind: "engine/set/reference-object", params: { name: n } }, "Set reference object");
 
   const setVisible = (v: boolean) =>
-    void fireAndReport(bridge, { kind: "engine/set/reference-object-visible", params: { visible: v } }, "Toggle reference visibility");
+    void fireAndReport(
+      bridge,
+      { kind: "engine/set/reference-object-visible", params: { visible: v } },
+      "Toggle reference visibility",
+    );
 
   const setLocked = (v: boolean) =>
-    void fireAndReport(bridge, { kind: "engine/set/reference-object-lock", params: { locked: v } }, "Toggle reference lock");
+    void fireAndReport(
+      bridge,
+      { kind: "engine/set/reference-object-lock", params: { locked: v } },
+      "Toggle reference lock",
+    );
 
   // Persistent gizmo snap toggle. Ticking it persists/round-trips now; the
   // drag-time apply (reads the engine's snap state) lands in a separate task.
@@ -455,7 +529,11 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
         data-testid={`ref-unit:${n}`}
         ref={setRowRef(rowKey)}
         tabIndex={activeKey === rowKey ? 0 : -1}
-        onClick={(e) => { e.stopPropagation(); setActiveKey(rowKey); selectObject(n); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          setActiveKey(rowKey);
+          selectObject(n);
+        }}
         onKeyDown={(e) => onTreeKeyDown(e, rowKey)}
         className={cn(
           "cursor-pointer truncate rounded px-2 py-0.5 text-sm transition motion-reduce:transition-none focus-ring",
@@ -478,7 +556,10 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
     >
       <span
         aria-hidden
-        className={cn("inline-block w-3 text-text-3 transition-transform motion-reduce:transition-none", open && "rotate-90")}
+        className={cn(
+          "inline-block w-3 text-text-3 transition-transform motion-reduce:transition-none",
+          open && "rotate-90",
+        )}
       >
         ▸
       </span>
@@ -491,9 +572,7 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
     <div className="flex flex-col gap-4">
       {/* ── Object selection ─────────────────────────────────────────── */}
       <section className="flex flex-col gap-2">
-        <span className="text-xs font-medium uppercase tracking-wide text-text-3">
-          Reference object
-        </span>
+        <span className="text-xs font-medium uppercase tracking-wide text-text-3">Reference object</span>
 
         <input
           type="search"
@@ -506,7 +585,9 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
         />
 
         {loading ? (
-          <p role="status" className="text-xs text-text-2">Loading objects…</p>
+          <p role="status" className="text-xs text-text-2">
+            Loading objects…
+          </p>
         ) : (
           <>
             {/* Category filter: "Props only" chip (only when the content has props).
@@ -564,7 +645,10 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
                 aria-selected={name === NONE}
                 ref={setRowRef("none")}
                 tabIndex={activeKey === "none" ? 0 : -1}
-                onClick={() => { setActiveKey("none"); selectObject(NONE); }}
+                onClick={() => {
+                  setActiveKey("none");
+                  selectObject(NONE);
+                }}
                 onKeyDown={(e) => onTreeKeyDown(e, "none")}
                 className={cn(
                   "cursor-pointer rounded px-2 py-0.5 text-sm transition motion-reduce:transition-none focus-ring",
@@ -588,13 +672,19 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
                     aria-expanded={openSec}
                     ref={setRowRef(secKey)}
                     tabIndex={activeKey === secKey ? 0 : -1}
-                    onClick={(e) => { e.stopPropagation(); setActiveKey(secKey); toggle(secKey); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveKey(secKey);
+                      toggle(secKey);
+                    }}
                     onKeyDown={(e) => onTreeKeyDown(e, secKey)}
                     className="flex flex-col rounded focus-ring"
                   >
                     {labelRow(sec.label, sec.total, openSec, false)}
                     {openSec && sec.buckets.length === 0 && (
-                      <div role="group" className="flex flex-col pl-3">{sec.flat.map((n) => itemRow(n, secKey))}</div>
+                      <div role="group" className="flex flex-col pl-3">
+                        {sec.flat.map((n) => itemRow(n, secKey))}
+                      </div>
                     )}
                     {openSec && sec.buckets.length > 0 && (
                       <div role="group" className="flex flex-col">
@@ -609,13 +699,19 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
                               aria-expanded={openBuc}
                               ref={setRowRef(bk)}
                               tabIndex={activeKey === bk ? 0 : -1}
-                              onClick={(e) => { e.stopPropagation(); setActiveKey(bk); toggle(bk); }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveKey(bk);
+                                toggle(bk);
+                              }}
                               onKeyDown={(e) => onTreeKeyDown(e, bk)}
                               className="flex flex-col rounded focus-ring"
                             >
                               {labelRow(b.label, b.items.length, openBuc, true)}
                               {openBuc && (
-                                <div role="group" className="flex flex-col pl-6">{b.items.map((n) => itemRow(n, bk))}</div>
+                                <div role="group" className="flex flex-col pl-6">
+                                  {b.items.map((n) => itemRow(n, bk))}
+                                </div>
                               )}
                             </div>
                           );
@@ -628,18 +724,25 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
             </div>
             {visibleCount === 0 && (searching || faction !== null || propsOnly) && (
               <p className="text-xs text-text-3">
-                {searching
-                  ? <>No {propsOnly ? "props" : "objects"} match “{query}”{faction !== null ? <> in {faction.replace(/_/g, " ")}</> : null}.</>
-                  : propsOnly
-                    ? <>No props{faction !== null ? <> in {faction.replace(/_/g, " ")}</> : null}.</>
-                    : <>No {faction!.replace(/_/g, " ")} objects.</>}
+                {searching ? (
+                  <>
+                    No {propsOnly ? "props" : "objects"} match “{query}”
+                    {faction !== null ? <> in {faction.replace(/_/g, " ")}</> : null}.
+                  </>
+                ) : propsOnly ? (
+                  <>No props{faction !== null ? <> in {faction.replace(/_/g, " ")}</> : null}.</>
+                ) : (
+                  <>No {faction!.replace(/_/g, " ")} objects.</>
+                )}
               </p>
             )}
           </>
         )}
 
         {statusNote && (
-          <p role="alert" className="text-xs text-warning-fg">{statusNote}</p>
+          <p role="alert" className="text-xs text-warning-fg">
+            {statusNote}
+          </p>
         )}
 
         <label className="flex items-center gap-2 text-xs text-text-2">
@@ -656,9 +759,7 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
       {/* ── Numeric transform (position + rotation) ──────────────────── */}
       <section className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium uppercase tracking-wide text-text-3">
-            Transform
-          </span>
+          <span className="text-xs font-medium uppercase tracking-wide text-text-3">Transform</span>
           {/* Reset the object back to where it loads (origin, no rotation). */}
           <Tip content="Reset position + rotation to 0">
             <button

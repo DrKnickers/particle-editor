@@ -121,10 +121,7 @@ function detach(): void {
  *  no-op outside WebView2 (browser dev, jsdom without a fake webview). The
  *  webview listener is attached on the first subscription and removed with
  *  the last, and re-attached if `chrome.webview` has been replaced. */
-export function onUiMessage<T extends UiMessageType>(
-  type: T,
-  handler: (msg: UiMessageOf<T>) => void,
-): () => void {
+export function onUiMessage<T extends UiMessageType>(type: T, handler: (msg: UiMessageOf<T>) => void): () => void {
   const webview = window.chrome?.webview;
   if (!webview?.addEventListener) return () => {};
   if (attachedTo !== webview) {

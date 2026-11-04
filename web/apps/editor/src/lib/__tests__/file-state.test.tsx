@@ -23,11 +23,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, renderHook, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { StrictMode } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
-import {
-  useFileStateStore,
-  useSeedFileState,
-  promptSaveChanges,
-} from "../file-state";
+import { useFileStateStore, useSeedFileState, promptSaveChanges } from "../file-state";
 import { SaveChangesDialog } from "@/screens/SaveChangesDialog";
 import { useFileOpErrorStore } from "@/lib/file-op";
 
@@ -110,10 +106,7 @@ describe("useSeedFileState — seeding", () => {
     });
     expect(useFileStateStore.getState().dirty).toBe(true);
     await waitFor(() => {
-      expect(useFileStateStore.getState().recentFiles).toEqual([
-        "C:/mods/fire.alo",
-        "C:/mods/smoke.alo",
-      ]);
+      expect(useFileStateStore.getState().recentFiles).toEqual(["C:/mods/fire.alo", "C:/mods/smoke.alo"]);
     });
     unmount();
   });
@@ -158,10 +151,7 @@ describe("useSeedFileState — host events", () => {
     const { unmount } = renderHook(() => useSeedFileState(bridge));
 
     act(() => emit("recent/changed", { paths: ["C:/a.alo", "C:/b.alo"] }));
-    expect(useFileStateStore.getState().recentFiles).toEqual([
-      "C:/a.alo",
-      "C:/b.alo",
-    ]);
+    expect(useFileStateStore.getState().recentFiles).toEqual(["C:/a.alo", "C:/b.alo"]);
     unmount();
   });
 
@@ -249,7 +239,9 @@ describe("promptSaveChanges", () => {
     const { bridge } = makeFakeBridge({ snapshot });
     const { unmount } = renderHook(() => useSeedFileState(bridge));
     await waitFor(() => expect(bridge.request).toHaveBeenCalledWith({ kind: "engine/state/snapshot", params: {} }));
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(useFileStateStore.getState().dirty).toBe(false);
 
     // The host is now dirty (an edit just landed) but its dirty/changed
@@ -292,9 +284,7 @@ describe("promptSaveChanges", () => {
     await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
     // The action learns the user chose to discard, so it may tell the host.
     expect(action).toHaveBeenCalledWith({ discardUnsaved: true });
-    expect(bridge.request).not.toHaveBeenCalledWith(
-      expect.objectContaining({ kind: "file/save" }),
-    );
+    expect(bridge.request).not.toHaveBeenCalledWith(expect.objectContaining({ kind: "file/save" }));
     expect(useFileStateStore.getState().pendingAction).toBeNull();
   });
 
@@ -308,9 +298,7 @@ describe("promptSaveChanges", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(useFileStateStore.getState().pendingAction).toBeNull();
-    expect(bridge.request).not.toHaveBeenCalledWith(
-      expect.objectContaining({ kind: "file/save" }),
-    );
+    expect(bridge.request).not.toHaveBeenCalledWith(expect.objectContaining({ kind: "file/save" }));
 
     // Flush any queued microtasks: a deferred invocation of the discarded
     // closure would be a destructive-op-after-cancel bug.

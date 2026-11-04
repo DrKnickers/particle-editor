@@ -1,27 +1,61 @@
 import { describe, it, expect } from "vitest";
-import { ATLAS_MAX_SIDE, gridSide, frameCount, isAtlasEligible, isAtlasTooLarge,
-  resolveFrame, wrapFrame, cellRect, fitGridLayout } from "../atlas-grid";
+import {
+  ATLAS_MAX_SIDE,
+  gridSide,
+  frameCount,
+  isAtlasEligible,
+  isAtlasTooLarge,
+  resolveFrame,
+  wrapFrame,
+  cellRect,
+  fitGridLayout,
+} from "../atlas-grid";
 
 describe("gridSide mirrors floor(sqrt(max(1,n)))", () => {
-  it.each([[1,1],[2,1],[3,1],[4,2],[5,2],[9,3],[16,4],[20,4],[25,5],[0,1],[-7,1]])(
-    "textureSize %i -> side %i", (n, side) => expect(gridSide(n)).toBe(side));
-  it("NaN/Infinity -> 1", () => { expect(gridSide(NaN)).toBe(1); expect(gridSide(Infinity)).toBe(1); });
+  it.each([
+    [1, 1],
+    [2, 1],
+    [3, 1],
+    [4, 2],
+    [5, 2],
+    [9, 3],
+    [16, 4],
+    [20, 4],
+    [25, 5],
+    [0, 1],
+    [-7, 1],
+  ])("textureSize %i -> side %i", (n, side) => expect(gridSide(n)).toBe(side));
+  it("NaN/Infinity -> 1", () => {
+    expect(gridSide(NaN)).toBe(1);
+    expect(gridSide(Infinity)).toBe(1);
+  });
 });
 describe("frameCount / eligibility / too-large", () => {
-  it("frameCount is side^2", () => { expect(frameCount(20)).toBe(16); expect(frameCount(16)).toBe(16); });
-  it("eligible when side>=2", () => { expect(isAtlasEligible(3)).toBe(false); expect(isAtlasEligible(4)).toBe(true); });
+  it("frameCount is side^2", () => {
+    expect(frameCount(20)).toBe(16);
+    expect(frameCount(16)).toBe(16);
+  });
+  it("eligible when side>=2", () => {
+    expect(isAtlasEligible(3)).toBe(false);
+    expect(isAtlasEligible(4)).toBe(true);
+  });
   it("too large above cap", () => {
-    expect(isAtlasTooLarge((ATLAS_MAX_SIDE+1)**2)).toBe(true);
-    expect(isAtlasTooLarge(ATLAS_MAX_SIDE**2)).toBe(false);
+    expect(isAtlasTooLarge((ATLAS_MAX_SIDE + 1) ** 2)).toBe(true);
+    expect(isAtlasTooLarge(ATLAS_MAX_SIDE ** 2)).toBe(false);
     expect(isAtlasTooLarge(1_000_000)).toBe(true);
   });
 });
 describe("resolveFrame", () => {
   it("floors fractional", () => expect(resolveFrame(5.7, 4)).toBe(5));
-  it("in range", () => { expect(resolveFrame(0,4)).toBe(0); expect(resolveFrame(15,4)).toBe(15); });
+  it("in range", () => {
+    expect(resolveFrame(0, 4)).toBe(0);
+    expect(resolveFrame(15, 4)).toBe(15);
+  });
   it("out of range -> null", () => {
-    expect(resolveFrame(16,4)).toBeNull(); expect(resolveFrame(-1,4)).toBeNull();
-    expect(resolveFrame(NaN,4)).toBeNull(); expect(resolveFrame(Infinity,4)).toBeNull();
+    expect(resolveFrame(16, 4)).toBeNull();
+    expect(resolveFrame(-1, 4)).toBeNull();
+    expect(resolveFrame(NaN, 4)).toBeNull();
+    expect(resolveFrame(Infinity, 4)).toBeNull();
   });
 });
 describe("wrapFrame mirrors the engine's index % side² torus", () => {
@@ -31,7 +65,7 @@ describe("wrapFrame mirrors the engine's index % side² torus", () => {
     expect(wrapFrame(2.7, 4)).toBe(2);
   });
   it("wraps index == count to 0 (the reported #563 case)", () => {
-    expect(wrapFrame(4, 4)).toBe(0);   // 2×2 atlas, index 4 -> frame 0
+    expect(wrapFrame(4, 4)).toBe(0); // 2×2 atlas, index 4 -> frame 0
     expect(wrapFrame(16, 16)).toBe(0); // 4×4 atlas, index 16 -> frame 0
   });
   it("wraps arbitrary overflow modulo count", () => {
@@ -40,9 +74,9 @@ describe("wrapFrame mirrors the engine's index % side² torus", () => {
     expect(wrapFrame(9, 4)).toBe(1);
   });
   it("wraps for non-power-of-two counts (3×3, 5×5 atlases)", () => {
-    expect(wrapFrame(9, 9)).toBe(0);   // 3×3 atlas, index 9 -> frame 0
+    expect(wrapFrame(9, 9)).toBe(0); // 3×3 atlas, index 9 -> frame 0
     expect(wrapFrame(10, 9)).toBe(1);
-    expect(wrapFrame(8, 9)).toBe(8);   // in range, unchanged
+    expect(wrapFrame(8, 9)).toBe(8); // in range, unchanged
     expect(wrapFrame(25, 25)).toBe(0); // 5×5 atlas, index 25 -> frame 0
     expect(wrapFrame(27, 25)).toBe(2);
     // NOTE: negative values on a non-power-of-two count intentionally diverge
@@ -59,15 +93,17 @@ describe("wrapFrame mirrors the engine's index % side² torus", () => {
   });
 });
 describe("cellRect per-axis source crop", () => {
-  it("square", () => expect(cellRect(5,4,256,256)).toEqual({ left:64, top:64, width:64, height:64 }));
-  it("non-square", () => expect(cellRect(5,4,256,512)).toEqual({ left:64, top:128, width:64, height:128 }));
+  it("square", () => expect(cellRect(5, 4, 256, 256)).toEqual({ left: 64, top: 64, width: 64, height: 64 }));
+  it("non-square", () => expect(cellRect(5, 4, 256, 512)).toEqual({ left: 64, top: 128, width: 64, height: 128 }));
   it("first/last", () => {
-    expect(cellRect(0,4,400,400)).toEqual({ left:0, top:0, width:100, height:100 });
-    expect(cellRect(15,4,400,400)).toEqual({ left:300, top:300, width:100, height:100 });
+    expect(cellRect(0, 4, 400, 400)).toEqual({ left: 0, top: 0, width: 100, height: 100 });
+    expect(cellRect(15, 4, 400, 400)).toEqual({ left: 300, top: 300, width: 100, height: 100 });
   });
 });
 describe("fitGridLayout (width-only, ~sqrt(n) columns, dense floor)", () => {
-  const GAP = 4, MIN = 44, MAX = 160;
+  const GAP = 4,
+    MIN = 44,
+    MAX = 160;
   it("4 frames -> 2x2 of big thumbnails (fills width)", () => {
     const { cols, cell } = fitGridLayout(4, 226, GAP, MIN, MAX);
     expect(cols).toBe(2);
@@ -89,7 +125,14 @@ describe("fitGridLayout (width-only, ~sqrt(n) columns, dense floor)", () => {
     expect(fitGridLayout(4, 600, GAP, MIN, MAX).cell).toBe(MAX);
   });
   it("never overflows the available width", () => {
-    for (const [n, w] of [[4, 226], [9, 226], [16, 226], [25, 300], [36, 180], [64, 213]] as const) {
+    for (const [n, w] of [
+      [4, 226],
+      [9, 226],
+      [16, 226],
+      [25, 300],
+      [36, 180],
+      [64, 213],
+    ] as const) {
       const { cols, cell } = fitGridLayout(n, w, GAP, MIN, MAX);
       expect(cols * cell + (cols - 1) * GAP).toBeLessThanOrEqual(w);
     }

@@ -1,9 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import {
-  readSoftShadows,
-  writeSoftShadows,
-  applySoftShadows,
-} from "@/lib/soft-shadows";
+import { readSoftShadows, writeSoftShadows, applySoftShadows } from "@/lib/soft-shadows";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
 describe("soft-shadows preference", () => {

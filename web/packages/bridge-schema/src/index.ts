@@ -208,12 +208,7 @@ export type EmitterRole = "root" | "lifetime" | "death";
 // web/apps/editor/src/lib/chain-load.ts.
 export type SpawnParamsDto = Pick<
   EmitterPropertiesDto,
-  | "lifetime"
-  | "useBursts"
-  | "nBursts"
-  | "burstDelay"
-  | "nParticlesPerSecond"
-  | "nParticlesPerBurst"
+  "lifetime" | "useBursts" | "nBursts" | "burstDelay" | "nParticlesPerSecond" | "nParticlesPerBurst"
 >;
 
 // All-zero spawn for synthetic roots and test fixtures that don't care
@@ -259,20 +254,30 @@ export type ReferenceObjectDomain = "Ground" | "Space" | "Unknown";
 // never emitted.
 export type ReferenceObjectRole = "Unit" | "Structure" | "Hero" | "Prop" | "Template" | "Projectile" | "Excluded";
 export type ReferenceObjectBucket =
-  | "Infantry" | "Vehicle" | "Air"                                           // ground units
-  | "Fighter" | "Bomber" | "Corvette" | "Frigate" | "Capital" | "Transport"  // space units
-  | "Structure" | "Hero" | "Other" | "None";                                 // shared
+  | "Infantry"
+  | "Vehicle"
+  | "Air" // ground units
+  | "Fighter"
+  | "Bomber"
+  | "Corvette"
+  | "Frigate"
+  | "Capital"
+  | "Transport" // space units
+  | "Structure"
+  | "Hero"
+  | "Other"
+  | "None"; // shared
 // How the game flies the selected reference projectile (simulation/ProjectileShot.h and
 // ProjectileFlight.h): 30 x <Max_Speed> world units per second until it has flown
 // <Projectile_Max_Flight_Distance>, along its category's path.
 export type ReferenceProjectileDto = {
-  flyable: boolean;      // false: <Max_Speed> absent or unusable, so it can't be matched
-  speed: number;         // world units per second
-  range: number;         // world units
-  flightSec: number;     // seconds until the game destroys the shot
-  category: string;      // raw <Projectile_Category>
+  flyable: boolean; // false: <Max_Speed> absent or unusable, so it can't be matched
+  speed: number; // world units per second
+  range: number; // world units
+  flightSec: number; // seconds until the game destroys the shot
+  category: string; // raw <Projectile_Category>
   pathEmulated: boolean; // false for the lightsaber throw (the preview flies it straight)
-  usesTarget: boolean;   // missiles, rockets, grenades and cluster bombs aim at the spawner's target
+  usesTarget: boolean; // missiles, rockets, grenades and cluster bombs aim at the spawner's target
 };
 export type ReferenceObjectEntry = {
   name: string;
@@ -308,60 +313,60 @@ export type EngineStateDto = {
   dirty: boolean;
 
   // Ground plane
-  ground: boolean;                  // GetGround()
-  groundZ: number;                  // GetGroundZ()
-  groundTexture: number;            // GetGroundTexture() — slot index 0..kGroundTextureCount-1
-  groundSolidColor: Color;          // GetGroundSolidColor() — slot kGroundSolidColorSlot colour
-  groundColor: Color;               // GetGroundColor() — effective floor colour (solid colour, or the loaded texture's average)
-  groundSlotCustomPaths: string[];  // GetGroundSlotCustomPath() across all slots
-  groundSlotAvailable: boolean[];   // IsGroundSlotAvailable() per slot — false ⇒ greyed in the picker (Grass/Sand/Snow when the game install can't resolve them)
+  ground: boolean; // GetGround()
+  groundZ: number; // GetGroundZ()
+  groundTexture: number; // GetGroundTexture() — slot index 0..kGroundTextureCount-1
+  groundSolidColor: Color; // GetGroundSolidColor() — slot kGroundSolidColorSlot colour
+  groundColor: Color; // GetGroundColor() — effective floor colour (solid colour, or the loaded texture's average)
+  groundSlotCustomPaths: string[]; // GetGroundSlotCustomPath() across all slots
+  groundSlotAvailable: boolean[]; // IsGroundSlotAvailable() per slot — false ⇒ greyed in the picker (Grass/Sand/Snow when the game install can't resolve them)
 
   // Skydome — legacy bundled/custom texture slot (simple-background fallback)
-  skydomeSlot: number;              // GetSkydomeSlot() — 0=Off, 1-8=bundled, 9-11=custom
-  skydomeCustomPaths: string[];     // GetSkydomeCustomPath() for slots 9..11
+  skydomeSlot: number; // GetSkydomeSlot() — 0=Off, 1-8=bundled, 9-11=custom
+  skydomeCustomPaths: string[]; // GetSkydomeCustomPath() for slots 9..11
 
   // Game-faithful skydome environment (real .alo domes by GameObject Name).
   // Empty primary+secondary names => no game dome (the slot above renders instead).
-  skydomeContext: "land" | "space";   // GetSkydomeContext()
-  skydomePrimaryName: string;         // GetSkydomePrimaryName() — "" = none
-  skydomeSecondaryName: string;       // GetSkydomeSecondaryName() — "" = none
+  skydomeContext: "land" | "space"; // GetSkydomeContext()
+  skydomePrimaryName: string; // GetSkydomePrimaryName() — "" = none
+  skydomeSecondaryName: string; // GetSkydomeSecondaryName() — "" = none
   // Per-slot load outcome. "load-failed" => the chosen dome's .alo
   // wouldn't load and the renderer fell back to the solid background.
-  skydomePrimaryStatus: SkydomeSlotStatus;    // GetSkydomePrimaryStatus()
-  skydomeSecondaryStatus: SkydomeSlotStatus;  // GetSkydomeSecondaryStatus()
+  skydomePrimaryStatus: SkydomeSlotStatus; // GetSkydomePrimaryStatus()
+  skydomeSecondaryStatus: SkydomeSlotStatus; // GetSkydomeSecondaryStatus()
 
   // Imported reference object (scale reference) + unit grid.
-  referenceObjectName: string;             // GetReferenceObjectName() — "" = none
-  referenceObjectVisible: boolean;         // GetReferenceObjectVisible()
-  referenceObjectLocked: boolean;          // IsReferenceLocked() — placement frozen
-  referenceObjectPosition: Vec3;           // GetReferencePosition() — world units
+  referenceObjectName: string; // GetReferenceObjectName() — "" = none
+  referenceObjectVisible: boolean; // GetReferenceObjectVisible()
+  referenceObjectLocked: boolean; // IsReferenceLocked() — placement frozen
+  referenceObjectPosition: Vec3; // GetReferencePosition() — world units
   // degrees [yaw,pitch,roll]; the engine is Z-up, so yaw = heading about world
   // up (Z), pitch = tilt about X, roll = bank about Y (yaw applied last).
-  referenceObjectRotation: Vec3;           // GetReferenceRotation()
-  referenceObjectStatus: ReferenceObjectStatus;  // lazy probe of the selected .alo
+  referenceObjectRotation: Vec3; // GetReferenceRotation()
+  referenceObjectStatus: ReferenceObjectStatus; // lazy probe of the selected .alo
   // The selected reference object's game flight when it is a projectile, else null.
   referenceProjectile: ReferenceProjectileDto | null;
   // true while the units/structures catalog is (re)building off the UI thread;
   // the picker shows "Loading objects…" and re-queries its list on the true->false edge.
-  referenceCatalogBuilding: boolean;       // IsReferenceCatalogBuilding()
-  gridVisible: boolean;                    // GetGridVisible()
-  gridSpacing: number;                     // GetGridSpacing() — world units between lines
-  snapEnabled: boolean;                    // GetSnapEnabled() — gizmo grid/angle snap
+  referenceCatalogBuilding: boolean; // IsReferenceCatalogBuilding()
+  gridVisible: boolean; // GetGridVisible()
+  gridSpacing: number; // GetGridSpacing() — world units between lines
+  snapEnabled: boolean; // GetSnapEnabled() — gizmo grid/angle snap
 
   // Background (solid colour when skydome slot 0)
-  background: Color;                // GetBackground()
+  background: Color; // GetBackground()
 
   // Lights / ambient / shadow
   lights: { sun: LightDto; fill1: LightDto; fill2: LightDto };
-  ambient: Vec4;                    // GetAmbient()
-  shadow: Vec4;                     // GetShadow()
+  ambient: Vec4; // GetAmbient()
+  shadow: Vec4; // GetShadow()
 
   // Bloom
-  bloom: boolean;                   // GetBloom()
-  bloomAvailable: boolean;          // IsBloomAvailable()
-  bloomStrength: number;            // GetBloomStrength()
-  bloomCutoff: number;              // GetBloomCutoff()
-  bloomSize: number;                // GetBloomSize()
+  bloom: boolean; // GetBloom()
+  bloomAvailable: boolean; // IsBloomAvailable()
+  bloomStrength: number; // GetBloomStrength()
+  bloomCutoff: number; // GetBloomCutoff()
+  bloomSize: number; // GetBloomSize()
 
   // Leave particles after instance death. Defaults true —
   // matches the ParticleSystem constructor's seed.
@@ -370,20 +375,20 @@ export type EngineStateDto = {
   leaveParticles: boolean;
 
   // Debug
-  heatDebug: boolean;               // GetHeatDebug()
+  heatDebug: boolean; // GetHeatDebug()
 
   // View state (preview clock)
-  paused: boolean;                  // IsPreviewPaused()
+  paused: boolean; // IsPreviewPaused()
 
   // Camera
-  camera: CameraDto;                // GetCamera()
+  camera: CameraDto; // GetCamera()
 
   // Wind / gravity — exposed on Engine but not currently driven by any UI.
   // Included in the DTO so future panels can read them without a schema
   // bump; setters live on Engine but are intentionally not wired to a
   // bridge command yet.
-  wind: Vec3;                       // GetWind()
-  gravity: Vec3;                    // GetGravity()
+  wind: Vec3; // GetWind()
+  gravity: Vec3; // GetGravity()
 
   // Spawner. Defaults mirror SpawnerConfig()'s
   // initialiser in src/SpawnerDriver.h — Auto mode + disabled +
@@ -444,15 +449,15 @@ export type ModDescriptor = {
   folderName: string;
   nickname: string;
   isFoC: boolean;
-  rootHasArt?: boolean;   // mod root itself carries Data\Art (optional; default false)
+  rootHasArt?: boolean; // mod root itself carries Data\Art (optional; default false)
 };
 
 // A stackable content layer (a top-level mod with Data\Art, or a nested folder).
 export type LayerRef = {
-  path: string;            // absolute, slash-free
+  path: string; // absolute, slash-free
   label: string;
-  parentLabel?: string;    // present for kind === "nested"
-  parentPath?: string;     // owning mod's absolute slash-free path; present for kind === "nested"
+  parentLabel?: string; // present for kind === "nested"
+  parentPath?: string; // owning mod's absolute slash-free path; present for kind === "nested"
   isFoC: boolean;
   kind: "mod" | "nested";
 };
@@ -497,8 +502,7 @@ export type LayerRef = {
 // (HostWindow_Viewport.cpp) runs when the user Alt-Tabs away mid-Shift-hold.
 export type ViewportInputEvent =
   | { type: "mousemove"; x: number; y: number; buttons: number }
-  | { type: "mousedown" | "mouseup"; button: "left" | "right" | "middle";
-      x: number; y: number; buttons: number }
+  | { type: "mousedown" | "mouseup"; button: "left" | "right" | "middle"; x: number; y: number; buttons: number }
   | { type: "wheel"; x: number; y: number; deltaY: number; buttons: number }
   | { type: "keydown" | "keyup"; vk: number; repeat: boolean }
   | { type: "blur" };
@@ -528,14 +532,7 @@ export type TrackKey = {
   value: number;
 };
 
-export type TrackName =
-  | "red"
-  | "green"
-  | "blue"
-  | "alpha"
-  | "scale"
-  | "index"
-  | "rotationSpeed";
+export type TrackName = "red" | "green" | "blue" | "alpha" | "scale" | "index" | "rotationSpeed";
 
 export type TrackDto = {
   name: TrackName;
@@ -589,16 +586,16 @@ export const TRACK_NAMES: readonly TrackName[] = Object.freeze([
 // engine enum.
 
 export type GroupDto = {
-  type: number;                  // ParticleSystem::GT_* (0..4)
-  min: Vec3;                     // (minX, minY, minZ)
-  max: Vec3;                     // (maxX, maxY, maxZ)
+  type: number; // ParticleSystem::GT_* (0..4)
+  min: Vec3; // (minX, minY, minZ)
+  max: Vec3; // (maxX, maxY, maxZ)
   sideLength: number;
   sphereRadius: number;
   sphereEdge: number;
   cylinderRadius: number;
   cylinderEdge: number;
   cylinderHeight: number;
-  val: Vec3;                     // (valX, valY, valZ)
+  val: Vec3; // (valX, valY, valZ)
 };
 
 // Adding a property field: see web/apps/editor/README.md, "Adding a property field".
@@ -701,9 +698,9 @@ export type PaletteEntry = { filename: string; pinned: boolean; slotMask: number
 // Mtimes are epoch-ms so React can render "N minutes ago" without a wire
 // format dependency.
 export type AutosaveOrphan = {
-  originalFilename: string;        // "" = untitled ("Unsaved new file")
-  recentMtimeMs: number | null;    // recent-tier file mtime, null if no recent file
-  stableMtimeMs: number | null;    // stable-tier file mtime, null if no stable file
+  originalFilename: string; // "" = untitled ("Unsaved new file")
+  recentMtimeMs: number | null; // recent-tier file mtime, null if no recent file
+  stableMtimeMs: number | null; // stable-tier file mtime, null if no stable file
 };
 
 // The interactive timeline's session (timeline/* kinds, timeline/state).
@@ -736,27 +733,27 @@ export type Request =
   // host refuses them with { ok: false, error: "unsaved-changes" } while it is
   // dirty unless `discardUnsaved: true` says the user chose Don't Save
   // (automation and --test-host runs are exempt).
-  | { kind: "file/new";                   params: { discardUnsaved?: true } }
-  | { kind: "file/open";                  params: { path?: string; filter?: "alo" | "skydome" | "ground"; discardUnsaved?: true } }   // path undef = native picker; filter selects lpstrFilter (default "alo")
-  | { kind: "file/pick-open";             params: { filter?: "alo" | "skydome" | "ground" } }   // NON-MUTATING picker: returns the chosen path WITHOUT loading it as the active doc
-  | { kind: "file/save";                  params: { path?: string } }   // path undef = native picker
-  | { kind: "file/save-as";               params: Record<string, never> } // always opens native picker
-  | { kind: "file/recent/list";           params: Record<string, never> }
+  | { kind: "file/new"; params: { discardUnsaved?: true } }
+  | { kind: "file/open"; params: { path?: string; filter?: "alo" | "skydome" | "ground"; discardUnsaved?: true } } // path undef = native picker; filter selects lpstrFilter (default "alo")
+  | { kind: "file/pick-open"; params: { filter?: "alo" | "skydome" | "ground" } } // NON-MUTATING picker: returns the chosen path WITHOUT loading it as the active doc
+  | { kind: "file/save"; params: { path?: string } } // path undef = native picker
+  | { kind: "file/save-as"; params: Record<string, never> } // always opens native picker
+  | { kind: "file/recent/list"; params: Record<string, never> }
 
   // Window controls — the frameless custom title bar's min / max-restore / close
   // buttons. `window/maximize` toggles maximize↔restore. `window/close` routes
   // through the SAME dirty-close flow as the native frame-X (posts WM_CLOSE →
   // app/close-requested → Save prompt), never a direct teardown.
-  | { kind: "window/minimize";            params: Record<string, never> }
-  | { kind: "window/maximize";            params: Record<string, never> }
-  | { kind: "window/close";               params: Record<string, never> }
+  | { kind: "window/minimize"; params: Record<string, never> }
+  | { kind: "window/maximize"; params: Record<string, never> }
+  | { kind: "window/close"; params: Record<string, never> }
 
   // Texture browse — host-side native file dialog for an emitter's
   // color/bump texture. Opens in the active mod's texture folder,
   // filtered to *.tga;*.dds; returns the chosen file's basename (or ""
   // if cancelled). `slot` drives only the dialog title (and future
   // palette usage-tracking).
-  | { kind: "textures/browse";            params: { slot: "color" | "bump" } }
+  | { kind: "textures/browse"; params: { slot: "color" | "bump" } }
 
   // Frequently-used texture palette — per-mod pinned + recent textures
   // backed by the C++ TexturePalette::Store. `list` applies the
@@ -765,8 +762,8 @@ export type Request =
   // `toggle-pin` flips pinned state (rejects when pins are full);
   // `touch-recent` records a texture as used in the given slot.
   // No active mod ⇒ list is empty and mutations are no-ops.
-  | { kind: "textures/palette/list";         params: { slot: "color" | "bump" } }
-  | { kind: "textures/palette/thumbnail";    params: { filename: string } }
+  | { kind: "textures/palette/list"; params: { slot: "color" | "bump" } }
+  | { kind: "textures/palette/thumbnail"; params: { filename: string } }
   | {
       kind: "textures/get-preview";
       // bare basename as stored in EmitterDto.colorTexture; host prepends
@@ -776,45 +773,48 @@ export type Request =
       // false to honor the texture's real alpha.
       params: { filename: string; flattenAlpha?: boolean };
     }
-  | { kind: "textures/palette/toggle-pin";   params: { filename: string } }
+  | { kind: "textures/palette/toggle-pin"; params: { filename: string } }
   | { kind: "textures/palette/touch-recent"; params: { filename: string; slot: "color" | "bump" } }
 
   // Engine state — full snapshot
-  | { kind: "engine/state/snapshot";      params: Record<string, never> }
+  | { kind: "engine/state/snapshot"; params: Record<string, never> }
 
   // Engine setters — ground
-  | { kind: "engine/set/ground";              params: { enabled: boolean } }
-  | { kind: "engine/set/ground-z";            params: { z: number } }
-  | { kind: "engine/set/ground-texture";      params: { slot: number } }
-  | { kind: "engine/set/ground-solid-color";  params: { rgb: Color } }
+  | { kind: "engine/set/ground"; params: { enabled: boolean } }
+  | { kind: "engine/set/ground-z"; params: { z: number } }
+  | { kind: "engine/set/ground-texture"; params: { slot: number } }
+  | { kind: "engine/set/ground-solid-color"; params: { rgb: Color } }
   | { kind: "engine/set/ground-slot-custom-path"; params: { slot: number; path: string } }
 
   // Engine setters — skydome / background
-  | { kind: "engine/set/skydome-slot";        params: { slot: number } }
+  | { kind: "engine/set/skydome-slot"; params: { slot: number } }
   | { kind: "engine/set/skydome-custom-path"; params: { slot: number; path: string } }
   // Select real game/mod domes by GameObject Name for a battle context.
   // Empty names clear the corresponding slot.
-  | { kind: "engine/set/skydome-environment"; params: { context: "land" | "space"; primaryName: string; secondaryName: string } }
-  | { kind: "engine/set/background";          params: { rgb: Color } }
+  | {
+      kind: "engine/set/skydome-environment";
+      params: { context: "land" | "space"; primaryName: string; secondaryName: string };
+    }
+  | { kind: "engine/set/background"; params: { rgb: Color } }
 
   // Imported reference object + unit grid.
   // `reference-object` selects by in-game Name ("" clears it). `-transform`
   // carries world position + rotation (degrees [yaw,pitch,roll]; Z-up engine, so
   // yaw = heading about world Z). Grid spacing is world units between lines (host
   // clamps to > 0).
-  | { kind: "engine/set/reference-object";           params: { name: string } }
-  | { kind: "engine/set/reference-object-visible";   params: { visible: boolean } }
-  | { kind: "engine/set/reference-object-lock";      params: { locked: boolean } }
+  | { kind: "engine/set/reference-object"; params: { name: string } }
+  | { kind: "engine/set/reference-object-visible"; params: { visible: boolean } }
+  | { kind: "engine/set/reference-object-lock"; params: { locked: boolean } }
   | { kind: "engine/set/reference-object-transform"; params: { position: Vec3; rotation: Vec3 } }
-  | { kind: "engine/set/grid-visible";               params: { visible: boolean } }
-  | { kind: "engine/set/grid-spacing";               params: { spacing: number } }
-  | { kind: "engine/set/snap-enabled";               params: { enabled: boolean } }
+  | { kind: "engine/set/grid-visible"; params: { visible: boolean } }
+  | { kind: "engine/set/grid-spacing"; params: { spacing: number } }
+  | { kind: "engine/set/snap-enabled"; params: { enabled: boolean } }
 
   // Engine setters — bloom
-  | { kind: "engine/set/bloom";               params: { enabled: boolean } }
-  | { kind: "engine/set/bloom-strength";      params: { v: number } }
-  | { kind: "engine/set/bloom-cutoff";        params: { v: number } }
-  | { kind: "engine/set/bloom-size";          params: { v: number } }
+  | { kind: "engine/set/bloom"; params: { enabled: boolean } }
+  | { kind: "engine/set/bloom-strength"; params: { v: number } }
+  | { kind: "engine/set/bloom-cutoff"; params: { v: number } }
+  | { kind: "engine/set/bloom-size"; params: { v: number } }
 
   // Engine setters — leave particles after instance death.
   // Mirrors ParticleSystem::setLeaveParticles / getLeaveParticles
@@ -823,61 +823,61 @@ export type Request =
   // instance just stops spawning); when false the engine destroys
   // the instance + its remaining particles immediately. Honored by
   // Engine::KillParticleSystem.
-  | { kind: "engine/set/leave-particles";     params: { enabled: boolean } }
+  | { kind: "engine/set/leave-particles"; params: { enabled: boolean } }
 
   // Engine setters — debug / camera / lighting
-  | { kind: "engine/set/heat-debug";          params: { enabled: boolean } }
-  | { kind: "engine/set/camera";              params: CameraDto }
-  | { kind: "engine/set/light";               params: { which: LightWhich } & LightDto }
-  | { kind: "engine/set/ambient";             params: { color: Vec4 } }
-  | { kind: "engine/set/shadow";              params: { color: Vec4 } }
+  | { kind: "engine/set/heat-debug"; params: { enabled: boolean } }
+  | { kind: "engine/set/camera"; params: CameraDto }
+  | { kind: "engine/set/light"; params: { which: LightWhich } & LightDto }
+  | { kind: "engine/set/ambient"; params: { color: Vec4 } }
+  | { kind: "engine/set/shadow"; params: { color: Vec4 } }
 
   // Engine setters — view state (preview clock)
-  | { kind: "engine/set/paused";              params: { paused: boolean } }
-  | { kind: "engine/set/overload-guard";      params: { enabled: boolean; maxParticles: number } }
-  | { kind: "engine/set/msaa-level";          params: { level: number } }
+  | { kind: "engine/set/paused"; params: { paused: boolean } }
+  | { kind: "engine/set/overload-guard"; params: { enabled: boolean; maxParticles: number } }
+  | { kind: "engine/set/msaa-level"; params: { level: number } }
   // [model-shadows] "Model shadows" view preference — casts the game's stencil
   // shadow for the reference model onto the ground (and self-shadows it).
   // View-only; persisted web-side, re-applied at startup.
-  | { kind: "engine/set/model-shadows";       params: { enabled: boolean } }
+  | { kind: "engine/set/model-shadows"; params: { enabled: boolean } }
   // [soft-shadows] "Soft shadows" view preference — blurs the stencil shadow
   // edges to match the game's soft-shadow rendering.
   // View-only; persisted web-side, re-applied at startup.
-  | { kind: "engine/set/soft-shadows";        params: { enabled: boolean } }
+  | { kind: "engine/set/soft-shadows"; params: { enabled: boolean } }
   // [hard-guard] Estimated alive particles per placed instance, pushed by
   // the web (chain-load.ts). The engine multiplies by its live placed-
   // instance count for the preemptive overload gate.
-  | { kind: "engine/set/estimated-load";      params: { perInstance: number } }
+  | { kind: "engine/set/estimated-load"; params: { perInstance: number } }
 
   // Test-only knob: suppress the 4 Hz stats/tick emission
   // AND tell React's StatusBar to clear its local state via
   // stats/frozen-changed. Used by a11y spec beforeEach for deterministic
   // UIA goldens. `frozen` defaults to true on the host if omitted.
-  | { kind: "stats/set-frozen";               params: { frozen: boolean } }
+  | { kind: "stats/set-frozen"; params: { frozen: boolean } }
 
   // Engine actions
-  | { kind: "engine/action/clear";            params: Record<string, never> }
-  | { kind: "engine/action/reload-shaders";   params: Record<string, never> }
-  | { kind: "engine/action/reload-textures";  params: Record<string, never> }
+  | { kind: "engine/action/clear"; params: Record<string, never> }
+  | { kind: "engine/action/reload-shaders"; params: Record<string, never> }
+  | { kind: "engine/action/reload-textures"; params: Record<string, never> }
   | { kind: "engine/action/on-particle-system-changed"; params: { track: number } }
-  | { kind: "engine/action/step-frames";      params: { frames: number } }
-  | { kind: "engine/action/rescale-system";   params: { durationScalePercent: number; sizeScalePercent: number } }
+  | { kind: "engine/action/step-frames"; params: { frames: number } }
+  | { kind: "engine/action/rescale-system"; params: { durationScalePercent: number; sizeScalePercent: number } }
 
   // Engine queries
-  | { kind: "engine/query/ground-slot-empty";  params: { slot: number } }
+  | { kind: "engine/query/ground-slot-empty"; params: { slot: number } }
   | { kind: "engine/query/skydome-slot-empty"; params: { slot: number } }
   // Enumerate selectable game-dome Names for a battle context (both the
   // primary and secondary lists), read from the game/mod's *Skydomes.xml.
-  | { kind: "engine/query/skydome-list";       params: { context: "land" | "space" } }
+  | { kind: "engine/query/skydome-list"; params: { context: "land" | "space" } }
   // Enumerate selectable game objects (Name + category) for the reference-
   // object picker, read from the active mod/base via GameObjectFiles.xml.
   | { kind: "engine/query/reference-object-list"; params: Record<string, never> }
-  | { kind: "engine/query/bloom-available";    params: Record<string, never> }
-  | { kind: "engine/query/msaa-levels";        params: Record<string, never> }
+  | { kind: "engine/query/bloom-available"; params: Record<string, never> }
+  | { kind: "engine/query/msaa-levels"; params: Record<string, never> }
   // Live-simulation counters (read-only). Distinct from emitters/list, which
   // describes the AUTHORED system: these count what is actually instantiated
   // and rendering right now. Native-only — browser mode has no engine.
-  | { kind: "engine/query/live-instances";     params: Record<string, never> }
+  | { kind: "engine/query/live-instances"; params: Record<string, never> }
 
   // Settings (registry persistence). Lighting persists under
   // HKCU\Software\AloParticleEditor (the legacy Win32 editor's keys); the
@@ -896,37 +896,37 @@ export type Request =
   // `--test-host` so the dialog-lighting a11y golden stays deterministic —
   // unless ALO_SETTINGS_LIVE is set (the test seam that drives the real
   // registry over CDP without disturbing the a11y harness).
-  | { kind: "settings/lighting";                 params: Record<string, never> }
+  | { kind: "settings/lighting"; params: Record<string, never> }
   | { kind: "settings/lighting-force-align/set"; params: { enabled: boolean } }
-  | { kind: "settings/lighting/set";             params: LightingSettingsDto }
+  | { kind: "settings/lighting/set"; params: LightingSettingsDto }
 
   // Emitters
-  | { kind: "emitters/list";              params: Record<string, never> }
-  | { kind: "emitters/select";            params: { id: number | null } }
-  | { kind: "emitters/import-from-file";  params: { path: string; selected: number[] } }
+  | { kind: "emitters/list"; params: Record<string, never> }
+  | { kind: "emitters/select"; params: { id: number | null } }
+  | { kind: "emitters/import-from-file"; params: { path: string; selected: number[] } }
   | { kind: "emitters/preview-from-file"; params: { path: string } }
 
   // Track read. Read-only here; key mutations land later.
-  | { kind: "emitters/get-tracks";        params: { id: number } }
+  | { kind: "emitters/get-tracks"; params: { id: number } }
 
   // Emitter property read/write. Single
   // round-trip read returns the full property DTO for `id`. Writes use
   // a JSON patch object — only the keys actually present in `patch` are
   // applied to the engine, so the React form can fire one field at a
   // time without sending the whole DTO each commit.
-  | { kind: "emitters/get-properties";    params: { id: number } }
-  | { kind: "emitters/set-properties";
-      params: { id: number; patch: Partial<EmitterPropertiesDto> } }
+  | { kind: "emitters/get-properties"; params: { id: number } }
+  | { kind: "emitters/set-properties"; params: { id: number; patch: Partial<EmitterPropertiesDto> } }
 
   // Track mutations. Border
   // keys (first + last in time order) are silently skipped server-side
   // by `delete-track-keys` — they define the track's time range and
   // are not deletable per legacy semantics. The React UI filters them
   // out before calling for cleanliness; the host enforces.
-  | { kind: "emitters/delete-track-keys";
-      params: { id: number; track: TrackName; times: number[] } }
-  | { kind: "emitters/set-track-interpolation";
-      params: { id: number; track: TrackName; interpolation: InterpolationType } }
+  | { kind: "emitters/delete-track-keys"; params: { id: number; track: TrackName; times: number[] } }
+  | {
+      kind: "emitters/set-track-interpolation";
+      params: { id: number; track: TrackName; interpolation: InterpolationType };
+    }
 
   // Per-channel track lock — point `emit->tracks[channel]` at another
   // channel's `trackContents`, making the locked channel a read-only
@@ -936,8 +936,7 @@ export type Request =
   // locks to earlier-channel" pairs (mirrors the legacy Win32 track
   // editor); other
   // combinations are silently rejected with an ok response.
-  | { kind: "emitters/set-track-lock";
-      params: { id: number; channel: TrackName; lockTo: TrackName | null } }
+  | { kind: "emitters/set-track-lock"; params: { id: number; channel: TrackName; lockTo: TrackName | null } }
 
   // Track key mutations.
   //
@@ -950,25 +949,24 @@ export type Request =
   // exact `time`, the host bumps `time` slightly so the multiset
   // doesn't accumulate dupes. Returns the *actual* inserted time so
   // the React side can auto-select the new key without a re-fetch.
-  | { kind: "emitters/set-track-key";
-      params: { id: number; track: TrackName; oldTime: number; newTime: number; newValue: number } }
-  | { kind: "emitters/add-track-key";
-      params: { id: number; track: TrackName; time: number; value: number } }
+  | {
+      kind: "emitters/set-track-key";
+      params: { id: number; track: TrackName; oldTime: number; newTime: number; newValue: number };
+    }
+  | { kind: "emitters/add-track-key"; params: { id: number; track: TrackName; time: number; value: number } }
   // batch: insert every key under ONE undo entry, so a multi-key curve paste
   // is a single Ctrl+Z. Each key is dedupe-bumped
   // independently, so response.keys are the ACTUAL inserted (time, value)
   // pairs, aligned to the input order.
-  | { kind: "emitters/add-track-keys";
-      params: { id: number; track: TrackName; keys: TrackKey[] } }
+  | { kind: "emitters/add-track-keys"; params: { id: number; track: TrackName; keys: TrackKey[] } }
 
   // Emitter mutations
-  | { kind: "emitters/duplicate";                       params: { id: number } }
-  | { kind: "emitters/duplicate-many";                  params: { ids: number[] } }   // batch: duplicate each; response.newIds are the copies, aligned to input order
-  | { kind: "emitters/delete";                          params: { id: number } }
-  | { kind: "emitters/delete-many";                     params: { ids: number[] } }   // batch: delete each subtree under ONE undo entry, so a multi-root delete is a single Ctrl+Z. Ids are POSITIONS, so the host re-resolves each one inside the loop
-
-  | { kind: "emitters/rename";                          params: { id: number; name: string } }
-  | { kind: "emitters/duplicate-with-index-increment";  params: { id: number; delta: number } }
+  | { kind: "emitters/duplicate"; params: { id: number } }
+  | { kind: "emitters/duplicate-many"; params: { ids: number[] } } // batch: duplicate each; response.newIds are the copies, aligned to input order
+  | { kind: "emitters/delete"; params: { id: number } }
+  | { kind: "emitters/delete-many"; params: { ids: number[] } } // batch: delete each subtree under ONE undo entry, so a multi-root delete is a single Ctrl+Z. Ids are POSITIONS, so the host re-resolves each one inside the loop
+  | { kind: "emitters/rename"; params: { id: number; name: string } }
+  | { kind: "emitters/duplicate-with-index-increment"; params: { id: number; delta: number } }
   | { kind: "emitters/duplicate-with-index-increment-many"; params: { id: number; delta: number; count: number } } // batch: `count` chained duplicates, each made from the previous copy so its index track climbs by `delta` per step; ONE undo step. response.newIds are the copies in creation order
 
   // Emitter mutations
@@ -990,26 +988,26 @@ export type Request =
   //   - `groupId > 0`: join the named group.
   //   - `groupId === -1`: sentinel for "create a new group" — host picks
   //     the smallest unused positive uint32_t.
-  | { kind: "emitters/add-lifetime-child";  params: { parentId: number } }
-  | { kind: "emitters/add-death-child";     params: { parentId: number } }
+  | { kind: "emitters/add-lifetime-child"; params: { parentId: number } }
+  | { kind: "emitters/add-death-child"; params: { parentId: number } }
   // Legacy "New Root Emitter" menu item.
   // Wraps `ParticleSystem::addRootEmitter()` (parameter-less; the
   // optional template overload isn't exposed across the wire). Always
   // succeeds at the engine level — returns `newId: -1` only when the
   // particle-system pointer is unavailable (shouldn't happen in
   // practice).
-  | { kind: "emitters/add-root";            params: Record<string, never> }
-  | { kind: "emitters/move";                params: { id: number; direction: "up" | "down" } }
-  | { kind: "emitters/move-many";           params: { ids: number[]; direction: "up" | "down" } }   // batch: move the selected roots as a block; response.newIds follow them
-  | { kind: "emitters/reorder-many";        params: { ids: number[]; rootIndex: number } }   // batch drag-reorder: move selected roots to land contiguous at gap rootIndex; response.newIds follow them (input order)
+  | { kind: "emitters/add-root"; params: Record<string, never> }
+  | { kind: "emitters/move"; params: { id: number; direction: "up" | "down" } }
+  | { kind: "emitters/move-many"; params: { ids: number[]; direction: "up" | "down" } } // batch: move the selected roots as a block; response.newIds follow them
+  | { kind: "emitters/reorder-many"; params: { ids: number[]; rootIndex: number } } // batch drag-reorder: move selected roots to land contiguous at gap rootIndex; response.newIds follow them (input order)
   // Visibility ops for the EmitterTree panel
   // toolbar. `set-visible` flips a single emitter's `visible` flag
   // without touching its children; `set-all-visible` walks the whole
   // tree (both match the legacy Win32 editor's emitter list).
   // Both emit `emitters/tree/changed` + `engine/state/changed`.
-  | { kind: "emitters/set-visible";         params: { id: number; visible: boolean } }
-  | { kind: "emitters/set-all-visible";     params: { visible: boolean } }
-  | { kind: "linkGroups/set-membership";    params: { ids: number[]; groupId: number | null } }
+  | { kind: "emitters/set-visible"; params: { id: number; visible: boolean } }
+  | { kind: "emitters/set-all-visible"; params: { visible: boolean } }
+  | { kind: "linkGroups/set-membership"; params: { ids: number[]; groupId: number | null } }
 
   // Emitter drag/drop
   //
@@ -1022,10 +1020,11 @@ export type Request =
   // semantics: gap 0 = before first root, gap K = between roots K-1 and
   // K, gap N = after the last root. The engine refuses no-op gaps
   // (sourceRootIdx and sourceRootIdx+1) silently as `ok: false`.
-  | { kind: "emitters/drop";
+  | {
+      kind: "emitters/drop";
       params:
-        | { mode: "reorder";  id: number; rootIndex: number }
-        | { mode: "reparent"; id: number; targetId: number; slot: "lifetime" | "death" }
+        | { mode: "reorder"; id: number; rootIndex: number }
+        | { mode: "reparent"; id: number; targetId: number; slot: "lifetime" | "death" };
     }
 
   // Emitter clipboard
@@ -1048,9 +1047,9 @@ export type Request =
   //     buffer as new root emitters. `afterId` (optional) names the
   //     root to insert after; omitted/null = append at the end of
   //     roots. Returns the new ids in insertion order.
-  | { kind: "emitters/copy";   params: { ids: number[] } }
-  | { kind: "emitters/cut";    params: { ids: number[] } }
-  | { kind: "emitters/paste";  params: { afterId?: number } }
+  | { kind: "emitters/copy"; params: { ids: number[] } }
+  | { kind: "emitters/cut"; params: { ids: number[] } }
+  | { kind: "emitters/paste"; params: { afterId?: number } }
 
   //   - `emitters/paste-as-child { parentId, slot }` deserialises the
   //     FIRST clipboard buffer and attaches it into the parent's
@@ -1061,12 +1060,15 @@ export type Request =
   | { kind: "emitters/paste-as-child"; params: { parentId: number; slot: "lifetime" | "death" } }
 
   // Per-emitter rescale (sub-dialog)
-  | { kind: "engine/action/rescale-emitter";  params: { id: number; durationScalePercent: number; sizeScalePercent: number } }
+  | {
+      kind: "engine/action/rescale-emitter";
+      params: { id: number; durationScalePercent: number; sizeScalePercent: number };
+    }
 
   // Link-group exempt-set CRUD
-  | { kind: "linkGroups/list-exempt-fields";   params: { groupId: number } }
-  | { kind: "linkGroups/set-exempt-fields";    params: { groupId: number; fields: string[] } }
-  | { kind: "linkGroups/reset-exempt-fields";  params: { groupId: number } }
+  | { kind: "linkGroups/list-exempt-fields"; params: { groupId: number } }
+  | { kind: "linkGroups/set-exempt-fields"; params: { groupId: number; fields: string[] } }
+  | { kind: "linkGroups/reset-exempt-fields"; params: { groupId: number } }
 
   // Join-conflict preview (read-only). Given the SAME params
   // `set-membership` would receive, return — per joining emitter — the
@@ -1077,18 +1079,18 @@ export type Request =
   // group) the canonical is the first id and the exempt set is defaults;
   // for `0`/`null` (leave) there's nothing to overwrite → no conflicts.
   // Pure read — no mutation, no undo capture, no events.
-  | { kind: "linkGroups/diff-membership";      params: { ids: number[]; groupId: number | null } }
+  | { kind: "linkGroups/diff-membership"; params: { ids: number[]; groupId: number | null } }
 
   // Read-only preview for the settings dialog: given a PROPOSED exempt set
   // for an existing group, which members would be overwritten to the
   // canonical (first-in-tree-order) value when a now-exempt field becomes
   // shared. Drives the inline disagreement warning before set-exempt-fields
   // resolves it. Pure read — no mutation, no undo, no events.
-  | { kind: "linkGroups/diff-exempt-change";   params: { groupId: number; exempt: string[] } }
+  | { kind: "linkGroups/diff-exempt-change"; params: { groupId: number; exempt: string[] } }
 
   // Undo / spawner / layout / accelerators
-  | { kind: "undo/perform";               params: { direction: "undo" | "redo" } }
-  | { kind: "layout/viewport-rect";       params: { x: number; y: number; w: number; h: number } }
+  | { kind: "undo/perform"; params: { direction: "undo" | "redo" } }
+  | { kind: "layout/viewport-rect"; params: { x: number; y: number; w: number; h: number } }
   // Under the popup-spans-window architecture
   // (popup HWND occupies the WebView's main-row area at all times),
   // splitter drag no longer resizes the popup. Instead, the centre-
@@ -1105,7 +1107,7 @@ export type Request =
   // now updates only on window resize, not splitter drag).
   // Coords in MAIN-HWND-CLIENT space (DPR-multiplied), same as
   // layout/viewport-rect.
-  | { kind: "layout/scene-rect";          params: { x: number; y: number; w: number; h: number } }
+  | { kind: "layout/scene-rect"; params: { x: number; y: number; w: number; h: number } }
   // Dock-slide viewport stutter: ONE-SHOT dock-slide animation.
   // The per-frame layout/scene-rect stream is clumpy/gappy on the emit side,
   // and the uncapped host render loop samples it at irregular Δt → the
@@ -1139,7 +1141,7 @@ export type Request =
   // the host parses both and ignores anything it can't parse. Sent on
   // first paint and on every theme change. No-op in browser (MockBridge)
   // mode.
-  | { kind: "host/backing-color";         params: { color: string } }
+  | { kind: "host/backing-color"; params: { color: string } }
   // Capture the current engine viewport as a base64-encoded
   // PNG. React's Modal calls this on open to grab a frozen snapshot
   // of the engine output, renders the PNG as an <img> portaled into
@@ -1149,7 +1151,7 @@ export type Request =
   // its cached pre-stamp DIB, encodes via GDI+, and returns base64;
   // the host's "no frame yet" path returns an empty string + zero
   // dims so the caller can short-circuit.
-  | { kind: "viewport/capture-snapshot";  params: Record<string, never> }
+  | { kind: "viewport/capture-snapshot"; params: Record<string, never> }
   // Renderer-side DOM events on the in-DOM <canvas>
   // are forwarded to the host, which synthesizes the corresponding
   // Win32 message and PostMessages it to the (hidden) viewport popup
@@ -1162,19 +1164,19 @@ export type Request =
   // Win32 virtual-key code (e.g. VK_SHIFT=16). `blur` corresponds to
   // window.blur — the host posts WM_KILLFOCUS so the engine's
   // defensive cursor-bound-spawn cleanup runs on Alt-Tab.
-  | { kind: "viewport/input";             params: ViewportInputEvent }
-  | { kind: "spawner/start";              params: SpawnerParamsDto }
-  | { kind: "spawner/trigger";            params: Record<string, never> }
-  | { kind: "spawner/stop";               params: Record<string, never> }
+  | { kind: "viewport/input"; params: ViewportInputEvent }
+  | { kind: "spawner/start"; params: SpawnerParamsDto }
+  | { kind: "spawner/trigger"; params: Record<string, never> }
+  | { kind: "spawner/stop"; params: Record<string, never> }
   // Host quit. Posts WM_CLOSE to the main HostWindow
   // which falls through DefWindowProc → DestroyWindow → the existing
   // WM_DESTROY cleanup chain. React's File → Exit menu item is the
   // sole caller and gates on the dirty-prompt before dispatching.
-  | { kind: "app/quit";                   params: Record<string, never> }
+  | { kind: "app/quit"; params: Record<string, never> }
   // Opens one fixed https address in the default browser. Unknown names reject;
   // capture, automation and --test-host runs launch nothing and return
   // opened: false.
-  | { kind: "app/open-external";          params: { target: "guide" | "repository" } }
+  | { kind: "app/open-external"; params: { target: "guide" | "repository" } }
   // Cascade reset for the View → Reset View Settings
   // menu. Pushes engine defaults for background, ground, bloom,
   // skydome, and lighting in one host-side action (one emit of
@@ -1190,12 +1192,12 @@ export type Request =
   // the on-disk Mods\ directories — returns the same shape as `mods/list` so
   // the caller can replace its local cache atomically. `mods/set-layers`
   // replaces the whole content-layer stack (see below).
-  | { kind: "mods/list";                  params: Record<string, never> }
-  | { kind: "mods/refresh";               params: Record<string, never> }
+  | { kind: "mods/list"; params: Record<string, never> }
+  | { kind: "mods/refresh"; params: Record<string, never> }
   // Set the ordered content-layer stack (absolute paths, front = highest;
   // [] = Unmodded). Replaces mods/select + mods/set-submods. Emits engine/state/changed
   // and persists to HKCU\Software\AloParticleEditor\LastLayers.
-  | { kind: "mods/set-layers";            params: { paths: string[] } }
+  | { kind: "mods/set-layers"; params: { paths: string[] } }
 
   // Autosave crash-recovery. React-initiated on mount (no host→React
   // startup event, so there's no fire-before-subscribe race): `check-recovery`
@@ -1203,8 +1205,8 @@ export type Request =
   // (or null — also null under --test-host / when a CLI file was given);
   // `recover` applies the user's choice (restore a tier, or discard) and
   // consumes the orphan either way.
-  | { kind: "autosave/check-recovery";    params: Record<string, never> }
-  | { kind: "autosave/recover";           params: { choice: "recent" | "stable" | "discard" } }
+  | { kind: "autosave/check-recovery"; params: Record<string, never> }
+  | { kind: "autosave/recover"; params: { choice: "recent" | "stable" | "discard" } }
 
   // Interactive timeline (design section 11). While a session is open the
   // host's replay controller is the only thing that advances the simulation,
@@ -1213,18 +1215,17 @@ export type Request =
   // reject while no session is open. Free-run pause / step, Clear and the
   // spawner kinds reject while one is open. Every response is the session's
   // state; `timeline/state` pushes it during play and after host-side replays.
-  | { kind: "timeline/begin";             params: Record<string, never> }
-  | { kind: "timeline/end";               params: Record<string, never> }
+  | { kind: "timeline/begin"; params: Record<string, never> }
+  | { kind: "timeline/end"; params: Record<string, never> }
   // Clamped to [0, maxFrames]. Previous / next send frame -/+ 1; reset and
   // jump-to-start send 0; jump-to-end sends maxFrames.
-  | { kind: "timeline/seek";              params: { frame: number } }
+  | { kind: "timeline/seek"; params: { frame: number } }
   // An absent field is left unchanged.
-  | { kind: "timeline/set";               params: { playing?: boolean; loop?: boolean } }
+  | { kind: "timeline/set"; params: { playing?: boolean; loop?: boolean } }
   // A new seed (from the OS, never the particle stream), replayed at the
   // current frame.
-  | { kind: "timeline/new-variation";     params: Record<string, never> }
-
-  | { kind: "register-accelerators";      params: { combos: string[] } };
+  | { kind: "timeline/new-variation"; params: Record<string, never> }
+  | { kind: "register-accelerators"; params: { combos: string[] } };
 
 // One response shape per Request kind, keyed by kind. An interface (not a
 // conditional-type chain) so a kind missing here is a compile error at
@@ -1241,20 +1242,16 @@ export interface ResponseMap {
   "textures/browse": { filename: string };
 
   // Texture palette
-  "textures/palette/list":
-    { hasMod: boolean; filter: "color" | "bump"; pins: PaletteEntry[]; recents: PaletteEntry[] };
-  "textures/palette/thumbnail":
-    { dataUri: string | null; status: "ok" | "missing" | "broken" };
+  "textures/palette/list": { hasMod: boolean; filter: "color" | "bump"; pins: PaletteEntry[]; recents: PaletteEntry[] };
+  "textures/palette/thumbnail": { dataUri: string | null; status: "ok" | "missing" | "broken" };
   "textures/get-preview":
     // discriminated on status so illegal states are unrepresentable
     | { status: "ok"; dataUri: string; srcW: number; srcH: number } // srcW/H = ORIGINAL DDS dims (pre-downsample)
     | { status: "pending" }
     | { status: "missing" }
     | { status: "broken" };
-  "textures/palette/toggle-pin":
-    { ok: true; pinned: boolean } | { ok: false; reason: "pins-full" };
-  "textures/palette/touch-recent":
-    { ok: true };
+  "textures/palette/toggle-pin": { ok: true; pinned: boolean } | { ok: false; reason: "pins-full" };
+  "textures/palette/touch-recent": { ok: true };
 
   // Mods
   "mods/list": { mods: ModDescriptor[]; layers: LayerRef[]; stack: string[]; activePath: string | null };
@@ -1344,9 +1341,7 @@ export interface ResponseMap {
   "emitters/list": EmitterTreeDto;
   "emitters/select": Record<string, never>;
   "emitters/import-from-file": { ok: true; imported: number };
-  "emitters/preview-from-file":
-    | { ok: true; tree: EmitterTreeNode }
-    | { ok: false; error: string };
+  "emitters/preview-from-file": { ok: true; tree: EmitterTreeNode } | { ok: false; error: string };
 
   // Track read. Always returns 7 tracks in
   // TRACK_NAMES order; an unknown id yields 7 empty tracks rather than
@@ -1375,12 +1370,8 @@ export interface ResponseMap {
   "emitters/add-track-keys": { keys: TrackKey[] };
 
   // Emitter mutations
-  "emitters/duplicate":
-    | { ok: true; newId: number }
-    | { ok: false; error: string };
-  "emitters/duplicate-many":
-    | { ok: true; newIds: number[] }
-    | { ok: false; error: string };
+  "emitters/duplicate": { ok: true; newId: number } | { ok: false; error: string };
+  "emitters/duplicate-many": { ok: true; newIds: number[] } | { ok: false; error: string };
   "emitters/delete": Record<string, never>;
   "emitters/delete-many": Record<string, never>;
   "emitters/rename": Record<string, never>;
@@ -1393,17 +1384,13 @@ export interface ResponseMap {
   "emitters/add-root": { newId: number };
   "emitters/move": Record<string, never>;
   "emitters/move-many": { newIds: number[] };
-  "emitters/reorder-many":
-    | { ok: true; newIds: number[] }
-    | { ok: false; error: string };
+  "emitters/reorder-many": { ok: true; newIds: number[] } | { ok: false; error: string };
   "emitters/set-visible": Record<string, never>;
   "emitters/set-all-visible": Record<string, never>;
   "linkGroups/set-membership": Record<string, never>;
 
   // Emitter drag/drop
-  "emitters/drop":
-    | { ok: true }
-    | { ok: false; error: string };
+  "emitters/drop": { ok: true } | { ok: false; error: string };
 
   // Emitter clipboard
   "emitters/copy": Record<string, never>;
@@ -1466,13 +1453,16 @@ export function isRefusal(r: unknown): r is { ok: false; error?: string } {
 
 export type Event =
   // Persistent host-session failure: replayed on app/ready after page reloads.
-  | { kind: "viewport/unavailable";   payload: { reason: string } }
-  | { kind: "engine/state/changed";   payload: EngineStateDto }
-  | { kind: "emitters/tree/changed";  payload: EmitterTreeDto }
-  | { kind: "emitters/selected";      payload: { id: number | null } }
+  | { kind: "viewport/unavailable"; payload: { reason: string } }
+  | { kind: "engine/state/changed"; payload: EngineStateDto }
+  | { kind: "emitters/tree/changed"; payload: EmitterTreeDto }
+  | { kind: "emitters/selected"; payload: { id: number | null } }
   // `overload`: latched preview overload — engine is suppressing spawning
   // because the live particle/instance budget was exceeded.
-  | { kind: "stats/tick";             payload: { fps: number; emitters: number; particles: number; instances: number; overload: boolean } }
+  | {
+      kind: "stats/tick";
+      payload: { fps: number; emitters: number; particles: number; instances: number; overload: boolean };
+    }
   // [hard-guard] One-shot event emitted when the preemptive estimate gate
   // refuses a spawn. Polled by the dispatcher's 4 Hz stats path and used
   // to drive a transient (~5 s) refusal banner in the UI.
@@ -1481,20 +1471,20 @@ export type Event =
   // frozen=true, StatusBar clears its local state so the cells
   // render `—` placeholders. Used by a11y spec beforeEach for
   // deterministic UIA goldens.
-  | { kind: "stats/frozen-changed";   payload: { frozen: boolean } }
-  | { kind: "dirty/changed";          payload: { dirty: boolean } }
-  | { kind: "recent/changed";         payload: { paths: string[] } }
+  | { kind: "stats/frozen-changed"; payload: { frozen: boolean } }
+  | { kind: "dirty/changed"; payload: { dirty: boolean } }
+  | { kind: "recent/changed"; payload: { paths: string[] } }
   // Async texture preview completion. A matching get-preview refetch after
   // this event is expected to be a synchronous cache hit in the host.
   | { kind: "textures/preview-ready"; payload: { filename: string; flattenAlpha: boolean; status: "ok" | "broken" } }
   // Host emits this when the native frame-X / Alt-F4 is hit on a
   // dirty doc, so the app pops the same Save/Discard/Cancel prompt File→Exit
   // uses (the host can't render the React prompt itself).
-  | { kind: "app/close-requested";    payload: Record<string, never> }
+  | { kind: "app/close-requested"; payload: Record<string, never> }
   // Frameless title bar: host emits on WM_SIZE (SIZE_MAXIMIZED / SIZE_RESTORED)
   // so the TitleBar swaps the maximize↔restore glyph + applies the maximized
   // overhang padding. MockBridge never emits it (browser mode has no window).
-  | { kind: "window/state";           payload: { maximized: boolean } }
+  | { kind: "window/state"; payload: { maximized: boolean } }
   // Autosave health. `healthy:false` means the last
   // autosave write FAILED, so the crash-recovery net is stale — the newest
   // recoverable state is older than what is on screen. Emitted only on a
@@ -1504,27 +1494,38 @@ export type Event =
   // a write succeeds. The UI must therefore surface it as durable state (a
   // status-bar indicator), not a toast that expires while autosave is still
   // broken — a warning that disappears on its own would understate it.
-  | { kind: "autosave/health";        payload: { healthy: boolean } }
-  | { kind: "undo/changed";           payload: { canUndo: boolean; canRedo: boolean; label?: string } }
-  | { kind: "accelerator/pressed";    payload: { combo: string } }
-  | { kind: "spawner/active-count";   payload: { count: number } }
+  | { kind: "autosave/health"; payload: { healthy: boolean } }
+  | { kind: "undo/changed"; payload: { canUndo: boolean; canRedo: boolean; label?: string } }
+  | { kind: "accelerator/pressed"; payload: { combo: string } }
+  | { kind: "spawner/active-count"; payload: { count: number } }
   // The timeline session's state: at most ~15 Hz during play, after a
   // host-side replay (an edit, undo, settings push or camera move while the
   // timeline is open), and when the session ends.
-  | { kind: "timeline/state";         payload: TimelineStateDto }
+  | { kind: "timeline/state"; payload: TimelineStateDto }
   // Viewport mouse cursor's intersection with the
   // ground plane in world coords. Host throttles to ~30 Hz so the
   // status bar update doesn't saturate the bridge.
-  | { kind: "cursor/position-3d";     payload: { x: number; y: number; z: number } }
+  | { kind: "cursor/position-3d"; payload: { x: number; y: number; z: number } }
   // In-drag readout: host emits at ~30 Hz while a reference-object
   // gizmo is being dragged. `nx`/`ny` are NORMALIZED [0,1] viewport coords
   // (origin top-left) for the projected gizmo origin; the React pill floats
   // up-right of it and hides on active:false / visible:false. MockBridge
   // never emits this (no engine in browser-mode).
-  | { kind: "engine/manipulator/drag"; payload:
-      | { active: false }
-      | { active: true; kind: "translate" | "plane" | "rotate"; nx: number; ny: number;
-          visible: boolean; labels: string[]; values: number[]; decimals: number } };
+  | {
+      kind: "engine/manipulator/drag";
+      payload:
+        | { active: false }
+        | {
+            active: true;
+            kind: "translate" | "plane" | "rotate";
+            nx: number;
+            ny: number;
+            visible: boolean;
+            labels: string[];
+            values: number[];
+            decimals: number;
+          };
+    };
 
 export type EventKind = Event["kind"];
 export type EventOf<K extends EventKind> = Extract<Event, { kind: K }>;

@@ -45,14 +45,14 @@ test("clicking a row updates snapshot.selectedEmitterId", async () => {
 
     // Fetch the list to find a valid id (host's seed is id=0 for the
     // root). We pick the first child of the synthetic root.
-    const list = await bridge.request({ kind: "emitters/list", params: {} }) as {
+    const list = (await bridge.request({ kind: "emitters/list", params: {} })) as {
       root: { children: { id: number }[] };
     };
     const firstId = list.root.children[0]?.id ?? null;
     if (firstId === null) return { error: "no emitters in tree" };
 
     await bridge.request({ kind: "emitters/select", params: { id: firstId } });
-    const after = await bridge.request({ kind: "engine/state/snapshot", params: {} }) as {
+    const after = (await bridge.request({ kind: "engine/state/snapshot", params: {} })) as {
       selectedEmitterId: number | null;
     };
     return { selectedAfter: after.selectedEmitterId, expected: firstId };
@@ -70,7 +70,7 @@ test("emitters/list nodes carry spawn params", async () => {
     const bridge = window.bridge;
     if (!bridge) return { error: "bridge missing" };
 
-    const list = await bridge.request({ kind: "emitters/list", params: {} }) as {
+    const list = (await bridge.request({ kind: "emitters/list", params: {} })) as {
       root: { children: { spawn?: unknown }[] };
     };
     const first = list.root.children[0];

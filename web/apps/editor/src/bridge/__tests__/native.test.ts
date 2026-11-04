@@ -42,16 +42,12 @@ describe("NativeBridge G12 — request lifecycle does not leak pending entries",
       throw new Error("postMessage boom");
     });
     const b = new NativeBridge();
-    await expect(
-      b.request({ kind: "emitters/list", params: {} } as never),
-    ).rejects.toThrow(/boom/);
+    await expect(b.request({ kind: "emitters/list", params: {} } as never)).rejects.toThrow(/boom/);
     // The entry registered before the throw must be cleaned up — no leak.
     expect(pendingSize(b)).toBe(0);
     // Still usable: a second request also rejects cleanly (processed, not
     // hung) and leaves no leaked entry.
-    await expect(
-      b.request({ kind: "emitters/list", params: {} } as never),
-    ).rejects.toThrow(/boom/);
+    await expect(b.request({ kind: "emitters/list", params: {} } as never)).rejects.toThrow(/boom/);
     expect(pendingSize(b)).toBe(0);
   });
 
@@ -67,9 +63,7 @@ describe("NativeBridge G12 — request lifecycle does not leak pending entries",
     await expect(p2).rejects.toThrow(/disposed|disconnect/i);
     expect(pendingSize(b)).toBe(0);
     // A request after dispose rejects immediately (fails closed).
-    await expect(b.request({ kind: "emitters/list", params: {} } as never)).rejects.toThrow(
-      /disposed|disconnect/i,
-    );
+    await expect(b.request({ kind: "emitters/list", params: {} } as never)).rejects.toThrow(/disposed|disconnect/i);
   });
 
   it("dispose() closes perf spans for outstanding requests", async () => {

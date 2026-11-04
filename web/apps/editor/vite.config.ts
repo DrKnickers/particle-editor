@@ -9,9 +9,7 @@ import { readAppVersion } from "./app-version";
 // C header src/version.h (PE_VERSION_STR), shared with the binary's
 // VS_VERSION_INFO — so the React About always matches the download.
 // vitest.config.ts mirrors this via the same parser.
-const APP_VERSION = readAppVersion(
-  path.resolve(__dirname, "../../../src/version.h"),
-);
+const APP_VERSION = readAppVersion(path.resolve(__dirname, "../../../src/version.h"));
 
 // BUILD_DATE: the committer date of HEAD in YYYY-MM-DD form. Stable
 // across rebuilds of the same commit, so the About dialog's
@@ -44,7 +42,7 @@ export default defineConfig({
   },
   base: "./",
   server: {
-    port: 5174,        // Must match kDevServerPort in src/host/HostWindowImpl.h
+    port: 5174, // Must match kDevServerPort in src/host/HostWindowImpl.h
     strictPort: true,
   },
   build: { outDir: "dist", emptyOutDir: true },

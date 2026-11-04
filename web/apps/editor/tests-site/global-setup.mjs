@@ -27,11 +27,27 @@ export default function () {
   const tmpClip = resolve(MEDIA, ".placeholder-clip.tmp.mp4");
   const tmpPoster = resolve(MEDIA, ".placeholder-poster.tmp.jpg");
   try {
-    execFileSync("ffmpeg", ["-y", "-f", "lavfi", "-i", "testsrc=duration=1:size=1280x960:rate=30", "-pix_fmt", "yuv420p", "-movflags", "+faststart", tmpClip], { stdio: "ignore" });
+    execFileSync(
+      "ffmpeg",
+      [
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc=duration=1:size=1280x960:rate=30",
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+        tmpClip,
+      ],
+      { stdio: "ignore" },
+    );
     execFileSync("ffmpeg", ["-y", "-i", tmpClip, "-frames:v", "1", tmpPoster], { stdio: "ignore" });
     for (const f of missing) copyFileSync(f.endsWith(".mp4") ? tmpClip : tmpPoster, resolve(MEDIA, f));
   } catch (e) {
-    if (process.env.CI) throw new Error("Landing smoke requires ffmpeg to generate placeholder media in CI: " + e.message);
+    if (process.env.CI)
+      throw new Error("Landing smoke requires ffmpeg to generate placeholder media in CI: " + e.message);
     console.warn("[landing-smoke] ffmpeg unavailable — playback/pause tests will skip locally");
   } finally {
     rmSync(tmpClip, { force: true });

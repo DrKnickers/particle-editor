@@ -48,16 +48,14 @@ export function emitClockCalibration(sampleId = "startup"): void {
 export function makePerfSpanId(prefix: string, ...parts: Array<string | number | boolean | null | undefined>): string {
   const safePrefix = prefix.replace(/[^a-zA-Z0-9_.-]+/g, "_");
   const safeParts = parts.map((part) =>
-    String(part ?? "none").replace(/[^a-zA-Z0-9_.-]+/g, "_").slice(0, 80),
+    String(part ?? "none")
+      .replace(/[^a-zA-Z0-9_.-]+/g, "_")
+      .slice(0, 80),
   );
   return [safePrefix, ...safeParts, performance.now().toFixed(3)].join(":");
 }
 
-export function traceBridgeRequestStart(
-  bridgeKind: string,
-  requestId: string,
-  bridgeMode: "async" | "sync"
-): number {
+export function traceBridgeRequestStart(bridgeKind: string, requestId: string, bridgeMode: "async" | "sync"): number {
   if (!isPerfTraceEnabled()) return -1;
   const startMs = performance.now();
   emitPerfTrace({
@@ -78,7 +76,7 @@ export function traceBridgeRequestEnd(
   bridgeMode: "async" | "sync",
   startMs: number,
   status: "ok" | "error",
-  error?: string
+  error?: string,
 ): void {
   if (startMs < 0 || !isPerfTraceEnabled()) return;
   const endMs = performance.now();

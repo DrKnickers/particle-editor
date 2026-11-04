@@ -62,10 +62,13 @@ export const AtlasFrameGrid = memo(function AtlasFrameGrid({
 
   // Store the canvas on BOTH the local ref (draw/hit-test) and the parent's
   // gridRef (focus + scroll-into-view live in the parent).
-  const setCanvas = useCallback((el: HTMLCanvasElement | null) => {
-    canvasRef.current = el;
-    gridRef.current = el;
-  }, [gridRef]);
+  const setCanvas = useCallback(
+    (el: HTMLCanvasElement | null) => {
+      canvasRef.current = el;
+      gridRef.current = el;
+    },
+    [gridRef],
+  );
 
   // The canvas samples tokens via getComputedStyle at draw time,
   // so a theme flip would leave it painted in the OLD palette. Watch
@@ -97,7 +100,14 @@ export const AtlasFrameGrid = memo(function AtlasFrameGrid({
     const canvas = canvasRef.current;
     if (!canvas) return;
     drawGrid(canvas, imageReady ? imageRef.current : null, {
-      cols, cell, side, totalCells, highlight, rovingTarget, deadCells, focusVisible: focused,
+      cols,
+      cell,
+      side,
+      totalCells,
+      highlight,
+      rovingTarget,
+      deadCells,
+      focusVisible: focused,
     });
   }, [imageReady, okPreview, cols, cell, side, totalCells, highlight, rovingTarget, deadCells, focused, themeRev]);
 
@@ -131,7 +141,10 @@ export const AtlasFrameGrid = memo(function AtlasFrameGrid({
     // Opacity (not display) so the highlight fades via the
     // .atlas-hover-fade transition instead of popping; the position jump
     // between cells stays instant (only opacity transitions).
-    if (k === null || deadCells.has(k)) { ov.style.opacity = "0"; return; }
+    if (k === null || deadCells.has(k)) {
+      ov.style.opacity = "0";
+      return;
+    }
     const step = cell + GRID_GAP;
     ov.style.opacity = "1";
     ov.style.left = `${(k % cols) * step}px`;
@@ -172,8 +185,14 @@ export const AtlasFrameGrid = memo(function AtlasFrameGrid({
         data-render-count={renderCount}
         className="block h-full w-full rounded-[var(--radius-sm)] bg-bg-2 focus-ring"
         onKeyDown={onGridKeyDown}
-        onFocus={() => { setFocused(true); onFocusCapture(); }}
-        onBlur={(e) => { setFocused(false); onBlurCapture(e); }}
+        onFocus={() => {
+          setFocused(true);
+          onFocusCapture();
+        }}
+        onBlur={(e) => {
+          setFocused(false);
+          onBlurCapture(e);
+        }}
         onClick={handleClick}
         onMouseMove={handleMove}
         onMouseLeave={handleLeave}

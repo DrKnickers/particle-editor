@@ -15,18 +15,24 @@ import type { FlatRow, DropIndicator } from "./types";
  *  behaviour wiring this batch. */
 function roleGlyph(role: EmitterTreeNode["role"]): string {
   switch (role) {
-    case "root":     return "●";
-    case "lifetime": return "↻";
-    case "death":    return "✕";
+    case "root":
+      return "●";
+    case "lifetime":
+      return "↻";
+    case "death":
+      return "✕";
   }
 }
 
 /** Aria label for the role glyph; assistive tech reads this. */
 function roleLabel(role: EmitterTreeNode["role"]): string {
   switch (role) {
-    case "root":     return "root emitter";
-    case "lifetime": return "lifetime child";
-    case "death":    return "death child";
+    case "root":
+      return "root emitter";
+    case "lifetime":
+      return "lifetime child";
+    case "death":
+      return "death child";
   }
 }
 
@@ -73,10 +79,26 @@ type RowProps = {
 };
 
 export function EmitterRow({
-  row, primaryId, selectedIds, orderedIds, onRowClick, bridge,
-  draggingId, draggingIds, indicator, startDrag,
-  editing, beginEdit, setEditValue, handleRenameInputKeyDown, handleRenameInputBlur,
-  linkHover, onHoverLinkGroup, onDissolveLinkGroup, onSelectLinkGroup, chainWarning,
+  row,
+  primaryId,
+  selectedIds,
+  orderedIds,
+  onRowClick,
+  bridge,
+  draggingId,
+  draggingIds,
+  indicator,
+  startDrag,
+  editing,
+  beginEdit,
+  setEditValue,
+  handleRenameInputKeyDown,
+  handleRenameInputBlur,
+  linkHover,
+  onHoverLinkGroup,
+  onDissolveLinkGroup,
+  onSelectLinkGroup,
+  chainWarning,
   entering,
 }: RowProps) {
   const { node, depth, siblings } = row;
@@ -129,22 +151,14 @@ export function EmitterRow({
   // Reparent target visual: tint the row + ring when this row is the
   // single-drag "onto" target. (Reorder uses the make-room gap, not a ring.)
   const reparentTintClass =
-    indicator?.kind === "onto" && indicator.targetId === node.id
-      ? "bg-accent-soft ring-1 ring-accent"
-      : "";
+    indicator?.kind === "onto" && indicator.targetId === node.id ? "bg-accent-soft ring-1 ring-accent" : "";
 
   // Selected-row styling:
   //   - primary       : strong sky-500 left border + sky-500/15 bg
   //   - non-primary   : softer sky-400/50 left border + sky-500/15 bg
   //   - unselected    : transparent border + hover bg
-  const borderClass = isPrimary
-    ? "border-accent"
-    : isSelected
-      ? "border-accent/50"
-      : "border-transparent";
-  const rowBgClass = isSelected
-    ? "bg-accent-soft text-text"
-    : "text-text-2 hover:bg-bg-2/40";
+  const borderClass = isPrimary ? "border-accent" : isSelected ? "border-accent/50" : "border-transparent";
+  const rowBgClass = isSelected ? "bg-accent-soft text-text" : "text-text-2 hover:bg-bg-2/40";
   const fontClass = isPrimary ? "font-medium" : "";
 
   return (
@@ -257,9 +271,7 @@ export function EmitterRow({
               // Eye auto-places into column 1.
               // warned rows append a 16px col 4 for the chain-load
               // glyph; unwarned rows keep the 3-column template.
-              gridTemplateColumns: chainWarning !== null
-                ? "18px 18px 1fr 16px"
-                : "18px 18px 1fr",
+              gridTemplateColumns: chainWarning !== null ? "18px 18px 1fr 16px" : "18px 18px 1fr",
               // Spine: override the left-border colour to the group hue on
               // linked, unselected rows. Selected rows keep the accent border
               // (selection wins). Tint: soft full-row wash on the same rows —
@@ -282,10 +294,7 @@ export function EmitterRow({
                 the row's own activation handler doesn't double-fire. Roving:
                 tabbable only on the primary row (one extra stop past the
                 row itself keeps the visibility control keyboard-reachable). */}
-            <Tip
-              content={node.visible ? "Hide emitter" : "Show emitter"}
-              side="right"
-            >
+            <Tip content={node.visible ? "Hide emitter" : "Show emitter"} side="right">
               <button
                 type="button"
                 tabIndex={isPrimary ? 0 : -1}
@@ -302,19 +311,14 @@ export function EmitterRow({
                 aria-label={node.visible ? "Hide emitter" : "Show emitter"}
                 className="grid place-items-center w-4 h-4 shrink-0 rounded text-text-3 transition-colors motion-reduce:transition-none hover:bg-panel-2 hover:text-text cursor-pointer focus-ring"
               >
-                {node.visible
-                  ? <Eye className="size-3" />
-                  : <EyeOff className="size-3" />}
+                {node.visible ? <Eye className="size-3" /> : <EyeOff className="size-3" />}
               </button>
             </Tip>
             {/* Name cell (col 3): the label (or inline-rename input) with the
                 link dot appended INLINE at its right end on linked rows.
                 Wrapping name + dot in one flex cell lets the dot sit at the
                 END of the name text and reclaims the old reserved dot column. */}
-            <div
-              style={{ gridColumn: 3, gridRow: 1, minWidth: 0 }}
-              className="flex items-center gap-1.5"
-            >
+            <div style={{ gridColumn: 3, gridRow: 1, minWidth: 0 }} className="flex items-center gap-1.5">
               {isEditing ? (
                 // Inline-rename input. Stops click + drag propagation so
                 // typing doesn't accidentally re-trigger row selection /
@@ -355,10 +359,7 @@ export function EmitterRow({
                   even when the name truncates. Clicking selects the whole
                   group. */}
               {isLinked && (
-                <Tip
-                  content={`Select link group ${node.linkGroup}`}
-                  side="right"
-                >
+                <Tip content={`Select link group ${node.linkGroup}`} side="right">
                   <span
                     aria-hidden
                     data-testid={`emitter-link-badge-${node.id}`}
@@ -407,10 +408,7 @@ export function EmitterRow({
                 breakdown for screen readers. side="right" so
                 tree tooltips open toward the viewport. */}
             {chainWarning !== null && (
-              <Tip
-                content={<ChainWarningTip warning={chainWarning} />}
-                side="right"
-              >
+              <Tip content={<ChainWarningTip warning={chainWarning} />} side="right">
                 <span
                   style={{ gridColumn: 4, gridRow: 1 }}
                   data-testid={`emitter-chain-warning-${node.id}`}
@@ -442,10 +440,7 @@ export function EmitterRow({
           Width 8px stays inside the gutter (eye toggle begins at
           paddingLeft ≥ 8px) so it never overlaps content. */}
       {isLinked && (
-        <Tip
-          content={`Select link group ${node.linkGroup}`}
-          side="right"
-        >
+        <Tip content={`Select link group ${node.linkGroup}`} side="right">
           <span
             aria-hidden
             data-testid={`emitter-link-spine-${node.id}`}

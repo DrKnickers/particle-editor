@@ -73,7 +73,8 @@ export const StaticChannelLayer = memo(function StaticChannelLayer({
     [interp, points],
   );
   const linearPoints = useMemo(
-    () => (points.length >= 2 && interp === "linear" ? points.map((p) => String(p.x) + "," + String(p.y)).join(" ") : ""),
+    () =>
+      points.length >= 2 && interp === "linear" ? points.map((p) => String(p.x) + "," + String(p.y)).join(" ") : "",
     [interp, points],
   );
   const layerOpacity = focusEnabled ? 0.4 : 1;
@@ -128,17 +129,8 @@ type FocusChannelLayerProps = {
   hidden: boolean;
   height: number;
   onKeyClick?: (time: number, event: React.MouseEvent | React.PointerEvent) => void;
-  onKeyContextMenu?: (
-    time: number,
-    isBorder: boolean,
-    clientX: number,
-    clientY: number,
-  ) => void;
-  startDrag: (
-    event: ReactPointerEvent<SVGCircleElement>,
-    keyTime: number,
-    keyValue: number,
-  ) => void;
+  onKeyContextMenu?: (time: number, isBorder: boolean, clientX: number, clientY: number) => void;
+  startDrag: (event: ReactPointerEvent<SVGCircleElement>, keyTime: number, keyValue: number) => void;
   dragRef: MutableRefObject<CurveDragState | null>;
   dragConsumedClickRef: MutableRefObject<boolean>;
 };
@@ -174,7 +166,10 @@ export const FocusChannelLayer = memo(function FocusChannelLayer({
     [interp, renderPoints],
   );
   const linearPoints = useMemo(
-    () => (renderPoints.length >= 2 && interp === "linear" ? renderPoints.map((p) => String(p.x) + "," + String(p.y)).join(" ") : ""),
+    () =>
+      renderPoints.length >= 2 && interp === "linear"
+        ? renderPoints.map((p) => String(p.x) + "," + String(p.y)).join(" ")
+        : "",
     [interp, renderPoints],
   );
   return (
@@ -194,16 +189,48 @@ export const FocusChannelLayer = memo(function FocusChannelLayer({
         </linearGradient>
       </defs>
       {fillPath !== "" && (
-        <path data-testid="curve-fill" fill={"url(#" + fillGradId + ")"} stroke="none" d={fillPath} pointerEvents="none" />
+        <path
+          data-testid="curve-fill"
+          fill={"url(#" + fillGradId + ")"}
+          stroke="none"
+          d={fillPath}
+          pointerEvents="none"
+        />
       )}
       {smoothPath !== "" && (
-        <path data-testid="curve-path" fill="none" stroke={channel.color} strokeWidth={3} strokeDasharray={focusReadOnly ? READONLY_DASH : undefined} d={smoothPath} pointerEvents="none" />
+        <path
+          data-testid="curve-path"
+          fill="none"
+          stroke={channel.color}
+          strokeWidth={3}
+          strokeDasharray={focusReadOnly ? READONLY_DASH : undefined}
+          d={smoothPath}
+          pointerEvents="none"
+        />
       )}
       {stepPoints !== "" && (
-        <polyline data-testid="curve-polyline" data-interpolation="step" fill="none" stroke={channel.color} strokeWidth={3} strokeDasharray={focusReadOnly ? READONLY_DASH : undefined} points={stepPoints} pointerEvents="none" />
+        <polyline
+          data-testid="curve-polyline"
+          data-interpolation="step"
+          fill="none"
+          stroke={channel.color}
+          strokeWidth={3}
+          strokeDasharray={focusReadOnly ? READONLY_DASH : undefined}
+          points={stepPoints}
+          pointerEvents="none"
+        />
       )}
       {linearPoints !== "" && (
-        <polyline data-testid="curve-polyline" data-interpolation="linear" fill="none" stroke={channel.color} strokeWidth={3} strokeDasharray={focusReadOnly ? READONLY_DASH : undefined} points={linearPoints} pointerEvents="none" />
+        <polyline
+          data-testid="curve-polyline"
+          data-interpolation="linear"
+          fill="none"
+          stroke={channel.color}
+          strokeWidth={3}
+          strokeDasharray={focusReadOnly ? READONLY_DASH : undefined}
+          points={linearPoints}
+          pointerEvents="none"
+        />
       )}
       {renderPoints.map((p, i) => {
         const selected = selectedKeyTimes?.has(p.time) ?? false;

@@ -1,4 +1,13 @@
-import type { Bridge, Request, ResponseFor, Event, EventKind, EventOf, WireMessage, RequestId } from "@particle-editor/bridge-schema";
+import type {
+  Bridge,
+  Request,
+  ResponseFor,
+  Event,
+  EventKind,
+  EventOf,
+  WireMessage,
+  RequestId,
+} from "@particle-editor/bridge-schema";
 import { traceBridgeRequestEnd, traceBridgeRequestStart } from "@/lib/perf-trace";
 import { EventHub } from "./event-hub";
 import { parseWireMessage, responseError } from "./wire";
@@ -106,7 +115,14 @@ export class NativeBridge implements Bridge {
         // promise + map entry.
         if (timer !== undefined) clearTimeout(timer);
         this.pending.delete(id);
-        traceBridgeRequestEnd(req.kind, id, "async", startMs, "error", err instanceof Error ? err.message : String(err));
+        traceBridgeRequestEnd(
+          req.kind,
+          id,
+          "async",
+          startMs,
+          "error",
+          err instanceof Error ? err.message : String(err),
+        );
         reject(err instanceof Error ? err : new Error(String(err)));
       }
     });
@@ -116,8 +132,7 @@ export class NativeBridge implements Bridge {
     const unsubscribe = this.events.on(kind, handler);
     // A layout reset remounts the viewport without another app/ready. Replay
     // this persistent condition to late subscribers as well as on page reload.
-    if (kind === "viewport/unavailable" && this.viewportUnavailable)
-      handler(this.viewportUnavailable as EventOf<K>);
+    if (kind === "viewport/unavailable" && this.viewportUnavailable) handler(this.viewportUnavailable as EventOf<K>);
     return unsubscribe;
   }
 

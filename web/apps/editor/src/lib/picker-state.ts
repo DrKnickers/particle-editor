@@ -28,13 +28,8 @@ function readStorage(): PickerState {
     const o = JSON.parse(raw) as Partial<PickerState>;
     return {
       faction: typeof o.faction === "string" ? o.faction : null,
-      collapsed: Array.isArray(o.collapsed)
-        ? o.collapsed.filter((x): x is string => typeof x === "string")
-        : [],
-      scrollTop:
-        typeof o.scrollTop === "number" && Number.isFinite(o.scrollTop) && o.scrollTop >= 0
-          ? o.scrollTop
-          : 0,
+      collapsed: Array.isArray(o.collapsed) ? o.collapsed.filter((x): x is string => typeof x === "string") : [],
+      scrollTop: typeof o.scrollTop === "number" && Number.isFinite(o.scrollTop) && o.scrollTop >= 0 ? o.scrollTop : 0,
     };
   } catch {
     return { ...DEFAULTS };

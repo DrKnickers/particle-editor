@@ -97,20 +97,26 @@ describe("reorderManyEmitters", () => {
     // untouched member must FOLLOW its emitter (id 2), not stick on the stale
     // id 1 (which now denotes a different emitter) — and must not be dropped.
     const node = (id: number, stableId: number, children: any[] = []) => ({
-      id, stableId, name: `n${stableId}`, role: "root", linkGroup: 0, visible: true, children,
+      id,
+      stableId,
+      name: `n${stableId}`,
+      role: "root",
+      linkGroup: 0,
+      visible: true,
+      children,
     });
     // Pre-reorder tree: Smoke(0)[embers(1),puff(2)], Sparks(3)[trail(4)], Flash(5).
-    const preTree = { root: node(-1, 0, [
-      node(0, 100, [node(1, 101), node(2, 102)]),
-      node(3, 103, [node(4, 104)]),
-      node(5, 105),
-    ]) };
+    const preTree = {
+      root: node(-1, 0, [node(0, 100, [node(1, 101), node(2, 102)]), node(3, 103, [node(4, 104)]), node(5, 105)]),
+    };
     // Post-reorder tree: Flash to the front → ids reassigned, stableIds kept.
-    const postTree = { root: node(-1, 0, [
-      node(0, 105),                                  // Flash, was id 5
-      node(1, 100, [node(2, 101), node(3, 102)]),    // Smoke; embers now id 2
-      node(4, 103, [node(5, 104)]),                  // Sparks
-    ]) };
+    const postTree = {
+      root: node(-1, 0, [
+        node(0, 105), // Flash, was id 5
+        node(1, 100, [node(2, 101), node(3, 102)]), // Smoke; embers now id 2
+        node(4, 103, [node(5, 104)]), // Sparks
+      ]),
+    };
     let listCall = 0;
     const bridge = {
       request: vi.fn((req: { kind: string }) => {

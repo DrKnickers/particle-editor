@@ -18,10 +18,7 @@ import { basename } from "@/lib/paths";
 export const APP_NAME = "Particle Editor";
 export const UNTITLED_DOC = "Untitled.alo";
 
-export function formatWindowTitle(
-  currentFilePath: string | null,
-  dirty: boolean,
-): string {
+export function formatWindowTitle(currentFilePath: string | null, dirty: boolean): string {
   const doc = currentFilePath ? basename(currentFilePath) : UNTITLED_DOC;
   return `${dirty ? "● " : ""}${doc} — ${APP_NAME}`;
 }

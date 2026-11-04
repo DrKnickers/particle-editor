@@ -12,9 +12,7 @@ import { LinkGroupSettingsDialog } from "../LinkGroupSettingsDialog";
 import { useTreeContextStore } from "@/lib/tree/tree-context";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
-function makeStubBridge(opts?: {
-  conflicts?: { id: number; fields: string[] }[];
-}): Bridge & {
+function makeStubBridge(opts?: { conflicts?: { id: number; fields: string[] }[] }): Bridge & {
   request: ReturnType<typeof vi.fn>;
 } {
   return {

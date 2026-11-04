@@ -15,9 +15,7 @@ import type { RgbColor } from "@/primitives/palette-store";
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="mb-8">
-      <h2 className="mb-3 border-b border-border pb-1 text-sm font-semibold text-text-2">
-        {title}
-      </h2>
+      <h2 className="mb-3 border-b border-border pb-1 text-sm font-semibold text-text-2">{title}</h2>
       <div className="space-y-4">{children}</div>
     </section>
   );
@@ -100,12 +98,7 @@ export function PrimitivesGallery() {
             </span>
           </Row>
           <Row label="Tight density">
-            <ColorButton
-              value={color2}
-              onChange={setColor2}
-              density="tight"
-              aria-label="Demo color 2"
-            />
+            <ColorButton value={color2} onChange={setColor2} density="tight" aria-label="Demo color 2" />
             <span className="mt-0.5 text-3xs text-text-3">
               rgb({color2.r}, {color2.g}, {color2.b})
             </span>
@@ -119,7 +112,6 @@ export function PrimitivesGallery() {
             />
           </Row>
         </Section>
-
       </main>
     </div>
   );

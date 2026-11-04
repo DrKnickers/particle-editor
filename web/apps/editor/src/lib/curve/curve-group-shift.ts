@@ -38,17 +38,23 @@ export function clampGroupTimeShift(
   const eps = epsFor(sortedKeyTimes);
 
   let maxRight = Infinity; // how far the selection can move right (≥ 0)
-  let maxLeft = Infinity;  // how far it can move left (≥ 0)
+  let maxLeft = Infinity; // how far it can move left (≥ 0)
   for (const k of movable) {
     // Nearest wall to the right / left — skip other movable keys (they move together).
     let rightWall = Infinity;
     for (const t of sortedKeyTimes) {
-      if (t > k && !isMovable(t)) { rightWall = t; break; }
+      if (t > k && !isMovable(t)) {
+        rightWall = t;
+        break;
+      }
     }
     let leftWall = -Infinity;
     for (let i = sortedKeyTimes.length - 1; i >= 0; i--) {
       const t = sortedKeyTimes[i]!;
-      if (t < k && !isMovable(t)) { leftWall = t; break; }
+      if (t < k && !isMovable(t)) {
+        leftWall = t;
+        break;
+      }
     }
     maxRight = Math.min(maxRight, rightWall - k - eps);
     maxLeft = Math.min(maxLeft, k - leftWall - eps);

@@ -27,21 +27,49 @@ import type { SpinnerDensity } from "./Spinner";
 // Win32 ChooseColor basic colors — 32 entries (4 rows × 8 columns).
 // Colors chosen to match the standard Windows CHOOSECOLOR palette.
 const BASIC_COLORS: readonly RgbColor[] = [
-  { r: 255, g: 128, b: 128 }, { r: 255, g: 255, b: 128 }, { r: 128, g: 255, b: 128 }, { r: 0,   g: 255, b: 128 },
-  { r: 128, g: 255, b: 255 }, { r: 0,   g: 128, b: 255 }, { r: 255, g: 128, b: 192 }, { r: 255, g: 128, b: 255 },
-  { r: 255, g: 0,   b: 0   }, { r: 255, g: 255, b: 0   }, { r: 128, g: 255, b: 0   }, { r: 0,   g: 255, b: 64  },
-  { r: 0,   g: 255, b: 255 }, { r: 0,   g: 128, b: 192 }, { r: 128, g: 128, b: 192 }, { r: 255, g: 0,   b: 255 },
-  { r: 128, g: 64,  b: 64  }, { r: 255, g: 128, b: 64  }, { r: 0,   g: 255, b: 0   }, { r: 0,   g: 128, b: 128 },
-  { r: 0,   g: 64,  b: 128 }, { r: 128, g: 128, b: 255 }, { r: 128, g: 0,   b: 64  }, { r: 255, g: 0,   b: 128 },
-  { r: 128, g: 0,   b: 0   }, { r: 255, g: 128, b: 0   }, { r: 0,   g: 128, b: 0   }, { r: 0,   g: 128, b: 64  },
-  { r: 0,   g: 0,   b: 255 }, { r: 0,   g: 0,   b: 160 }, { r: 128, g: 0,   b: 128 }, { r: 128, g: 0,   b: 255 },
+  { r: 255, g: 128, b: 128 },
+  { r: 255, g: 255, b: 128 },
+  { r: 128, g: 255, b: 128 },
+  { r: 0, g: 255, b: 128 },
+  { r: 128, g: 255, b: 255 },
+  { r: 0, g: 128, b: 255 },
+  { r: 255, g: 128, b: 192 },
+  { r: 255, g: 128, b: 255 },
+  { r: 255, g: 0, b: 0 },
+  { r: 255, g: 255, b: 0 },
+  { r: 128, g: 255, b: 0 },
+  { r: 0, g: 255, b: 64 },
+  { r: 0, g: 255, b: 255 },
+  { r: 0, g: 128, b: 192 },
+  { r: 128, g: 128, b: 192 },
+  { r: 255, g: 0, b: 255 },
+  { r: 128, g: 64, b: 64 },
+  { r: 255, g: 128, b: 64 },
+  { r: 0, g: 255, b: 0 },
+  { r: 0, g: 128, b: 128 },
+  { r: 0, g: 64, b: 128 },
+  { r: 128, g: 128, b: 255 },
+  { r: 128, g: 0, b: 64 },
+  { r: 255, g: 0, b: 128 },
+  { r: 128, g: 0, b: 0 },
+  { r: 255, g: 128, b: 0 },
+  { r: 0, g: 128, b: 0 },
+  { r: 0, g: 128, b: 64 },
+  { r: 0, g: 0, b: 255 },
+  { r: 0, g: 0, b: 160 },
+  { r: 128, g: 0, b: 128 },
+  { r: 128, g: 0, b: 255 },
 ] as const;
 
 function rgbToHex({ r, g, b }: RgbColor): string {
   return (
     "#" +
     [r, g, b]
-      .map((c) => Math.round(Math.max(0, Math.min(255, c))).toString(16).padStart(2, "0"))
+      .map((c) =>
+        Math.round(Math.max(0, Math.min(255, c)))
+          .toString(16)
+          .padStart(2, "0"),
+      )
       .join("")
   );
 }
@@ -91,11 +119,14 @@ export function ColorButton({
 
   const swatchStyle = { backgroundColor: rgbToHex(value) };
 
-  const handleSelectColor = useCallback((color: RgbColor) => {
-    setPickerColor(color);
-    setHexText(rgbToHex(color).slice(1).toUpperCase());
-    onChange(color);
-  }, [onChange]);
+  const handleSelectColor = useCallback(
+    (color: RgbColor) => {
+      setPickerColor(color);
+      setHexText(rgbToHex(color).slice(1).toUpperCase());
+      onChange(color);
+    },
+    [onChange],
+  );
 
   const handleHexChange = (raw: string) => {
     setHexText(raw.toUpperCase());
@@ -212,10 +243,17 @@ export function ColorButton({
                 <Tip key={i} content={color ? rgbToHex(color).toUpperCase() : "Empty"}>
                   <button
                     type="button"
-                    aria-label={color ? `Custom color ${rgbToHex(color).toUpperCase()}` : `Custom slot ${i + 1} (empty)`}
+                    aria-label={
+                      color ? `Custom color ${rgbToHex(color).toUpperCase()}` : `Custom slot ${i + 1} (empty)`
+                    }
                     {...customRoving.itemProps(i)}
-                    onClick={() => { if (color) handleSelectColor(color); }}
-                    onContextMenu={(e) => { e.preventDefault(); setSlot(i, null); }}
+                    onClick={() => {
+                      if (color) handleSelectColor(color);
+                    }}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setSlot(i, null);
+                    }}
                     className={cn(
                       "size-5 rounded-sm border hover:border-text-3 focus-ring",
                       color ? "border-border-2" : "border-dashed border-border-2",
@@ -235,7 +273,12 @@ export function ColorButton({
               value={hexText}
               onChange={(e) => handleHexChange(e.target.value)}
               onBlur={handleHexCommit}
-              onKeyDown={(e) => { if (e.key === "Enter") { handleHexCommit(); setOpen(false); } }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  handleHexCommit();
+                  setOpen(false);
+                }
+              }}
               maxLength={6}
               className="w-20 rounded border border-border-2 bg-panel-2 px-2 py-0.5 font-mono text-xs text-text outline-none transition-colors motion-reduce:transition-none focus:border-accent"
               aria-label="Hex color input"
@@ -302,7 +345,10 @@ export function ColorButton({
             <div className="ml-auto flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => { handleCancel(); setOpen(false); }}
+                onClick={() => {
+                  handleCancel();
+                  setOpen(false);
+                }}
                 className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-3xs text-text-2 hover:bg-panel-3 hover:text-text focus-ring"
               >
                 Cancel

@@ -39,7 +39,7 @@ test("every control drives the session", async ({ page }) => {
 
   await panel.getByRole("button", { name: "Next frame" }).click();
   await expect(readout).toContainText("Frame 1 / 600");
-  await page.getByRole("button", { name: "Step 10" }).click();  // the toolbar reroutes too
+  await page.getByRole("button", { name: "Step 10" }).click(); // the toolbar reroutes too
   await expect(readout).toContainText("Frame 11 / 600");
   await panel.getByRole("button", { name: "Previous frame" }).click();
   await expect(readout).toContainText("Frame 10 / 600");

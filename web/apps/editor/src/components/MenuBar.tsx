@@ -8,10 +8,7 @@
 import { useState } from "react";
 import * as Menubar from "@radix-ui/react-menubar";
 import { Check, ChevronRight } from "lucide-react";
-import type {
-  Bridge,
-  EmitterTreeNode,
-} from "@particle-editor/bridge-schema";
+import type { Bridge, EmitterTreeNode } from "@particle-editor/bridge-schema";
 import { promptSaveChanges, useFileState } from "@/lib/file-state";
 import { replaceDocument, runFileOp } from "@/lib/file-op";
 import { useEngineField } from "@/lib/use-engine-snapshot";
@@ -25,10 +22,7 @@ import {
   useEmitterSelectionIds,
   getEmitterSelectionSnapshot,
 } from "@/lib/tree/emitter-selection";
-import {
-  markEmittersCopied,
-  useEmitterClipboardHasContent,
-} from "@/lib/tree/emitter-clipboard";
+import { markEmittersCopied, useEmitterClipboardHasContent } from "@/lib/tree/emitter-clipboard";
 import { useTreeContextStore } from "@/lib/tree/tree-context";
 import { requestEmitterRename } from "@/lib/tree/tree-action";
 import { toggleDock } from "@/lib/right-dock";
@@ -98,10 +92,14 @@ export function MenuBar({
   const [menuValue, setMenuValue] = useState("");
 
   const handleOpenGuide = async () => {
-    const result = await fireAndReport(bridge, {
-      kind: "app/open-external",
-      params: { target: "guide" },
-    }, "Open User Guide");
+    const result = await fireAndReport(
+      bridge,
+      {
+        kind: "app/open-external",
+        params: { target: "guide" },
+      },
+      "Open User Guide",
+    );
     if (!result?.opened) {
       useStatusFeedback.getState().announce("Could not open User Guide. Copy the guide address into your browser.");
       setGuideOpen(true);
@@ -149,11 +147,9 @@ export function MenuBar({
   const hasSelection = selectedIds.length > 0;
   const hasClipboard = useEmitterClipboardHasContent();
 
-  const send =
-    (req: Parameters<Bridge["request"]>[0]) =>
-    () => {
-      void bridge.request(req);
-    };
+  const send = (req: Parameters<Bridge["request"]>[0]) => () => {
+    void bridge.request(req);
+  };
 
   // ── File menu handlers ───────────────────────────────────────────
   // All destructive ops (New / Open / Recent) route through
@@ -202,18 +198,24 @@ export function MenuBar({
 
   const handleAddLifetimeChild = () => {
     if (primaryEmitterId === null) return;
-    announceWhenOk(bridge.request({
-      kind: "emitters/add-lifetime-child",
-      params: { parentId: primaryEmitterId },
-    }), "Added lifetime child — Ctrl+Z to undo");
+    announceWhenOk(
+      bridge.request({
+        kind: "emitters/add-lifetime-child",
+        params: { parentId: primaryEmitterId },
+      }),
+      "Added lifetime child — Ctrl+Z to undo",
+    );
   };
 
   const handleAddDeathChild = () => {
     if (primaryEmitterId === null) return;
-    announceWhenOk(bridge.request({
-      kind: "emitters/add-death-child",
-      params: { parentId: primaryEmitterId },
-    }), "Added death child — Ctrl+Z to undo");
+    announceWhenOk(
+      bridge.request({
+        kind: "emitters/add-death-child",
+        params: { parentId: primaryEmitterId },
+      }),
+      "Added death child — Ctrl+Z to undo",
+    );
   };
 
   const handleRenameEmitter = () => {
@@ -238,7 +240,10 @@ export function MenuBar({
   const handleCut = () => {
     const ids = getEmitterSelectionSnapshot().ids;
     if (ids.length === 0) return;
-    announceWhenOk(bridge.request({ kind: "emitters/cut", params: { ids } }), `Cut ${ids.length === 1 ? "emitter" : `${ids.length} emitters`} — Ctrl+Z to undo`);
+    announceWhenOk(
+      bridge.request({ kind: "emitters/cut", params: { ids } }),
+      `Cut ${ids.length === 1 ? "emitter" : `${ids.length} emitters`} — Ctrl+Z to undo`,
+    );
     markEmittersCopied();
   };
   const handlePaste = () => {
@@ -274,485 +279,396 @@ export function MenuBar({
 
   return (
     <>
-    <Menubar.Root className="flex items-center gap-0.5" value={menuValue} onValueChange={setMenuValue}>
-      {/* ─── File ─── */}
-      <Menubar.Menu value="file">
-        <Menubar.Trigger className={TRIGGER}>File</Menubar.Trigger>
-        <Menubar.Portal>
-          <Menubar.Content
-            className={CONTENT}
-            align="start"
-            sideOffset={4}
-          >
-            <Menubar.Item className={ITEM} onSelect={handleNew}>
-              New<Hint>Ctrl+N</Hint>
-            </Menubar.Item>
-            <Menubar.Item className={ITEM} onSelect={handleOpen}>
-              Open…<Hint>Ctrl+O</Hint>
-            </Menubar.Item>
-            <Menubar.Item className={ITEM} onSelect={handleSave}>
-              Save<Hint>Ctrl+S</Hint>
-            </Menubar.Item>
-            <Menubar.Item className={ITEM} onSelect={handleSaveAs}>
-              Save As…
-            </Menubar.Item>
-            <Menubar.Separator className={SEPARATOR} />
-            <Menubar.Item
-              className={ITEM}
-              onSelect={() => onOpenImportEmittersDialog()}
-            >
-              Import Emitters…
-            </Menubar.Item>
-            <Menubar.Separator className={SEPARATOR} />
-            <Menubar.Sub>
-              <Menubar.SubTrigger className={ITEM}>
-                Recent Files
-                <ChevronRight className="ml-auto size-3.5" />
-              </Menubar.SubTrigger>
-              <Menubar.Portal>
-                <Menubar.SubContent
-                  className={CONTENT}
-                  sideOffset={2}
-                  alignOffset={-4}
-                >
-                  {recentFiles.length === 0 ? (
-                    <Menubar.Item className={ITEM} disabled>
-                      (none)
-                    </Menubar.Item>
-                  ) : (
-                    recentFiles.map((path) => (
-                      <Menubar.Item
-                        key={path}
-                        className={ITEM}
-                        onSelect={() => handleOpenRecent(path)}
-                      >
-                        {basename(path)}
+      <Menubar.Root className="flex items-center gap-0.5" value={menuValue} onValueChange={setMenuValue}>
+        {/* ─── File ─── */}
+        <Menubar.Menu value="file">
+          <Menubar.Trigger className={TRIGGER}>File</Menubar.Trigger>
+          <Menubar.Portal>
+            <Menubar.Content className={CONTENT} align="start" sideOffset={4}>
+              <Menubar.Item className={ITEM} onSelect={handleNew}>
+                New<Hint>Ctrl+N</Hint>
+              </Menubar.Item>
+              <Menubar.Item className={ITEM} onSelect={handleOpen}>
+                Open…<Hint>Ctrl+O</Hint>
+              </Menubar.Item>
+              <Menubar.Item className={ITEM} onSelect={handleSave}>
+                Save<Hint>Ctrl+S</Hint>
+              </Menubar.Item>
+              <Menubar.Item className={ITEM} onSelect={handleSaveAs}>
+                Save As…
+              </Menubar.Item>
+              <Menubar.Separator className={SEPARATOR} />
+              <Menubar.Item className={ITEM} onSelect={() => onOpenImportEmittersDialog()}>
+                Import Emitters…
+              </Menubar.Item>
+              <Menubar.Separator className={SEPARATOR} />
+              <Menubar.Sub>
+                <Menubar.SubTrigger className={ITEM}>
+                  Recent Files
+                  <ChevronRight className="ml-auto size-3.5" />
+                </Menubar.SubTrigger>
+                <Menubar.Portal>
+                  <Menubar.SubContent className={CONTENT} sideOffset={2} alignOffset={-4}>
+                    {recentFiles.length === 0 ? (
+                      <Menubar.Item className={ITEM} disabled>
+                        (none)
                       </Menubar.Item>
-                    ))
-                  )}
-                </Menubar.SubContent>
-              </Menubar.Portal>
-            </Menubar.Sub>
-            <Menubar.Separator className={SEPARATOR} />
-            <Menubar.Item className={ITEM} onSelect={handleExit}>
-              Exit<Hint>Alt+F4</Hint>
-            </Menubar.Item>
-          </Menubar.Content>
-        </Menubar.Portal>
-      </Menubar.Menu>
+                    ) : (
+                      recentFiles.map((path) => (
+                        <Menubar.Item key={path} className={ITEM} onSelect={() => handleOpenRecent(path)}>
+                          {basename(path)}
+                        </Menubar.Item>
+                      ))
+                    )}
+                  </Menubar.SubContent>
+                </Menubar.Portal>
+              </Menubar.Sub>
+              <Menubar.Separator className={SEPARATOR} />
+              <Menubar.Item className={ITEM} onSelect={handleExit}>
+                Exit<Hint>Alt+F4</Hint>
+              </Menubar.Item>
+            </Menubar.Content>
+          </Menubar.Portal>
+        </Menubar.Menu>
 
-      {/* ─── Edit ─── */}
-      <Menubar.Menu value="edit">
-        <Menubar.Trigger className={TRIGGER}>Edit</Menubar.Trigger>
-        <Menubar.Portal>
-          <Menubar.Content
-            className={CONTENT}
-            align="start"
-            sideOffset={4}
-          >
-            <Menubar.Item
-              className={ITEM}
-              disabled={!canUndo}
-              onSelect={send({
-                kind: "undo/perform",
-                params: { direction: "undo" },
-              })}
-            >
-              Undo<Hint>Ctrl+Z</Hint>
-            </Menubar.Item>
-            <Menubar.Item
-              className={ITEM}
-              disabled={!canRedo}
-              onSelect={send({
-                kind: "undo/perform",
-                params: { direction: "redo" },
-              })}
-            >
-              Redo<Hint>Ctrl+Shift+Z</Hint>
-            </Menubar.Item>
-            <Menubar.Separator className={SEPARATOR} />
-            <Menubar.Item
-              className={ITEM}
-              disabled={!hasSelection}
-              onSelect={handleCut}
-            >
-              Cut<Hint>Ctrl+X</Hint>
-            </Menubar.Item>
-            <Menubar.Item
-              className={ITEM}
-              disabled={!hasSelection}
-              onSelect={handleCopy}
-            >
-              Copy<Hint>Ctrl+C</Hint>
-            </Menubar.Item>
-            <Menubar.Item
-              className={ITEM}
-              disabled={!hasClipboard}
-              onSelect={handlePaste}
-            >
-              Paste<Hint>Ctrl+V</Hint>
-            </Menubar.Item>
-            <Menubar.Item
-              className={ITEM}
-              disabled={!hasSelection}
-              onSelect={handleDeleteSelection}
-            >
-              Delete<Hint>Del</Hint>
-            </Menubar.Item>
-            <Menubar.Separator className={SEPARATOR} />
-            <Menubar.Item className={ITEM} onSelect={() => onOpenRescaleDialog()}>
-              Rescale…
-            </Menubar.Item>
-            <Menubar.Item
-              className={ITEM}
-              disabled={timelineActive}
-              onSelect={send({
-                kind: "engine/action/clear",
-                params: {},
-              })}
-            >
-              Clear All Particles<Hint>Ctrl+Del</Hint>
-            </Menubar.Item>
-            <Menubar.Separator className={SEPARATOR} />
-            <Menubar.Item className={ITEM} onSelect={() => setPrefsOpen(true)}>
-              Preferences…
-            </Menubar.Item>
-          </Menubar.Content>
-        </Menubar.Portal>
-      </Menubar.Menu>
+        {/* ─── Edit ─── */}
+        <Menubar.Menu value="edit">
+          <Menubar.Trigger className={TRIGGER}>Edit</Menubar.Trigger>
+          <Menubar.Portal>
+            <Menubar.Content className={CONTENT} align="start" sideOffset={4}>
+              <Menubar.Item
+                className={ITEM}
+                disabled={!canUndo}
+                onSelect={send({
+                  kind: "undo/perform",
+                  params: { direction: "undo" },
+                })}
+              >
+                Undo<Hint>Ctrl+Z</Hint>
+              </Menubar.Item>
+              <Menubar.Item
+                className={ITEM}
+                disabled={!canRedo}
+                onSelect={send({
+                  kind: "undo/perform",
+                  params: { direction: "redo" },
+                })}
+              >
+                Redo<Hint>Ctrl+Shift+Z</Hint>
+              </Menubar.Item>
+              <Menubar.Separator className={SEPARATOR} />
+              <Menubar.Item className={ITEM} disabled={!hasSelection} onSelect={handleCut}>
+                Cut<Hint>Ctrl+X</Hint>
+              </Menubar.Item>
+              <Menubar.Item className={ITEM} disabled={!hasSelection} onSelect={handleCopy}>
+                Copy<Hint>Ctrl+C</Hint>
+              </Menubar.Item>
+              <Menubar.Item className={ITEM} disabled={!hasClipboard} onSelect={handlePaste}>
+                Paste<Hint>Ctrl+V</Hint>
+              </Menubar.Item>
+              <Menubar.Item className={ITEM} disabled={!hasSelection} onSelect={handleDeleteSelection}>
+                Delete<Hint>Del</Hint>
+              </Menubar.Item>
+              <Menubar.Separator className={SEPARATOR} />
+              <Menubar.Item className={ITEM} onSelect={() => onOpenRescaleDialog()}>
+                Rescale…
+              </Menubar.Item>
+              <Menubar.Item
+                className={ITEM}
+                disabled={timelineActive}
+                onSelect={send({
+                  kind: "engine/action/clear",
+                  params: {},
+                })}
+              >
+                Clear All Particles<Hint>Ctrl+Del</Hint>
+              </Menubar.Item>
+              <Menubar.Separator className={SEPARATOR} />
+              <Menubar.Item className={ITEM} onSelect={() => setPrefsOpen(true)}>
+                Preferences…
+              </Menubar.Item>
+            </Menubar.Content>
+          </Menubar.Portal>
+        </Menubar.Menu>
 
-      {/* ─── Emitters ─── */}
-      <Menubar.Menu value="emitters">
-        <Menubar.Trigger className={TRIGGER}>Emitters</Menubar.Trigger>
-        <Menubar.Portal>
-          <Menubar.Content
-            className={CONTENT}
-            align="start"
-            sideOffset={4}
-          >
-            <Menubar.Sub>
-              <Menubar.SubTrigger className={ITEM}>
-                New Emitter
-                <ChevronRight className="ml-auto size-3.5" />
-              </Menubar.SubTrigger>
-              <Menubar.Portal>
-                <Menubar.SubContent
-                  className={CONTENT}
-                  sideOffset={2}
-                  alignOffset={-4}
-                >
-                  <Menubar.Item className={ITEM} onSelect={handleAddRoot}>
-                    Root Emitter
-                  </Menubar.Item>
-                  <Menubar.Item
-                    className={ITEM}
-                    disabled={!hasPrimary}
-                    onSelect={handleAddLifetimeChild}
-                  >
-                    Lifetime Child
-                  </Menubar.Item>
-                  <Menubar.Item
-                    className={ITEM}
-                    disabled={!hasPrimary}
-                    onSelect={handleAddDeathChild}
-                  >
-                    Death Child
-                  </Menubar.Item>
-                </Menubar.SubContent>
-              </Menubar.Portal>
-            </Menubar.Sub>
-            <Menubar.Item
-              className={ITEM}
-              disabled={!hasPrimary}
-              onSelect={handleRenameEmitter}
-            >
-              Rename Emitter<Hint>F2</Hint>
-            </Menubar.Item>
-            <Menubar.Item
-              className={ITEM}
-              disabled={!hasPrimary}
-              onSelect={handleRescaleEmitter}
-            >
-              Rescale Emitter…
-            </Menubar.Item>
-            <Menubar.Separator className={SEPARATOR} />
-            {/* Toggle Visibility acts on the primary selection (reads
+        {/* ─── Emitters ─── */}
+        <Menubar.Menu value="emitters">
+          <Menubar.Trigger className={TRIGGER}>Emitters</Menubar.Trigger>
+          <Menubar.Portal>
+            <Menubar.Content className={CONTENT} align="start" sideOffset={4}>
+              <Menubar.Sub>
+                <Menubar.SubTrigger className={ITEM}>
+                  New Emitter
+                  <ChevronRight className="ml-auto size-3.5" />
+                </Menubar.SubTrigger>
+                <Menubar.Portal>
+                  <Menubar.SubContent className={CONTENT} sideOffset={2} alignOffset={-4}>
+                    <Menubar.Item className={ITEM} onSelect={handleAddRoot}>
+                      Root Emitter
+                    </Menubar.Item>
+                    <Menubar.Item className={ITEM} disabled={!hasPrimary} onSelect={handleAddLifetimeChild}>
+                      Lifetime Child
+                    </Menubar.Item>
+                    <Menubar.Item className={ITEM} disabled={!hasPrimary} onSelect={handleAddDeathChild}>
+                      Death Child
+                    </Menubar.Item>
+                  </Menubar.SubContent>
+                </Menubar.Portal>
+              </Menubar.Sub>
+              <Menubar.Item className={ITEM} disabled={!hasPrimary} onSelect={handleRenameEmitter}>
+                Rename Emitter<Hint>F2</Hint>
+              </Menubar.Item>
+              <Menubar.Item className={ITEM} disabled={!hasPrimary} onSelect={handleRescaleEmitter}>
+                Rescale Emitter…
+              </Menubar.Item>
+              <Menubar.Separator className={SEPARATOR} />
+              {/* Toggle Visibility acts on the primary selection (reads
                 its current `visible` via a one-shot list); Show/Hide All use
                 set-all-visible. The per-row eye affordance covers per-row
                 toggling; these mirror the legacy Emitters-menu commands. */}
-            <Menubar.Item
-              className={ITEM}
-              disabled={!hasPrimary}
-              onSelect={handleToggleVisibility}
-            >
-              Toggle Visibility
-            </Menubar.Item>
-            <Menubar.Item className={ITEM} onSelect={handleShowAll}>
-              Show All Emitters
-            </Menubar.Item>
-            <Menubar.Item className={ITEM} onSelect={handleHideAll}>
-              Hide All Emitters
-            </Menubar.Item>
-            <Menubar.Separator className={SEPARATOR} />
-            <Menubar.Item className={ITEM} onSelect={() => toggleDock("spawner")}>
-              Spawner<Hint>F7</Hint>
-            </Menubar.Item>
-          </Menubar.Content>
-        </Menubar.Portal>
-      </Menubar.Menu>
+              <Menubar.Item className={ITEM} disabled={!hasPrimary} onSelect={handleToggleVisibility}>
+                Toggle Visibility
+              </Menubar.Item>
+              <Menubar.Item className={ITEM} onSelect={handleShowAll}>
+                Show All Emitters
+              </Menubar.Item>
+              <Menubar.Item className={ITEM} onSelect={handleHideAll}>
+                Hide All Emitters
+              </Menubar.Item>
+              <Menubar.Separator className={SEPARATOR} />
+              <Menubar.Item className={ITEM} onSelect={() => toggleDock("spawner")}>
+                Spawner<Hint>F7</Hint>
+              </Menubar.Item>
+            </Menubar.Content>
+          </Menubar.Portal>
+        </Menubar.Menu>
 
-      <ModsMenu bridge={bridge} onMenuValueChange={setMenuValue} />
+        <ModsMenu bridge={bridge} onMenuValueChange={setMenuValue} />
 
-      {/* ─── View ─── */}
-      <Menubar.Menu value="view">
-        <Menubar.Trigger className={TRIGGER}>View</Menubar.Trigger>
-        <Menubar.Portal>
-          <Menubar.Content
-            className={CONTENT}
-            align="start"
-            sideOffset={4}
-          >
-            <Menubar.Item
-              className={ITEM}
-              onSelect={send({
-                kind: "engine/set/ground",
-                params: { enabled: !ground },
-              })}
-            >
-              <CheckSlot active={ground} />
-              Ground
-            </Menubar.Item>
-            <Menubar.Item
-              className={ITEM}
-              onSelect={send({
-                kind: "engine/set/grid-visible",
-                params: { visible: !gridVisible },
-              })}
-            >
-              <CheckSlot active={gridVisible} />
-              Grid
-            </Menubar.Item>
-            <Menubar.Item
-              className={ITEM}
-              disabled={!hasRefObject}
-              onSelect={send({
-                kind: "engine/set/reference-object-lock",
-                params: { locked: !refLocked },
-              })}
-            >
-              <CheckSlot active={refLocked} />
-              Lock reference object
-            </Menubar.Item>
-            {/* Lighting opens the docked right-dock pane (shared with the
+        {/* ─── View ─── */}
+        <Menubar.Menu value="view">
+          <Menubar.Trigger className={TRIGGER}>View</Menubar.Trigger>
+          <Menubar.Portal>
+            <Menubar.Content className={CONTENT} align="start" sideOffset={4}>
+              <Menubar.Item
+                className={ITEM}
+                onSelect={send({
+                  kind: "engine/set/ground",
+                  params: { enabled: !ground },
+                })}
+              >
+                <CheckSlot active={ground} />
+                Ground
+              </Menubar.Item>
+              <Menubar.Item
+                className={ITEM}
+                onSelect={send({
+                  kind: "engine/set/grid-visible",
+                  params: { visible: !gridVisible },
+                })}
+              >
+                <CheckSlot active={gridVisible} />
+                Grid
+              </Menubar.Item>
+              <Menubar.Item
+                className={ITEM}
+                disabled={!hasRefObject}
+                onSelect={send({
+                  kind: "engine/set/reference-object-lock",
+                  params: { locked: !refLocked },
+                })}
+              >
+                <CheckSlot active={refLocked} />
+                Lock reference object
+              </Menubar.Item>
+              {/* Lighting opens the docked right-dock pane (shared with the
                 Spawner). Bloom is fully handled elsewhere:
                 its settings live as a section inside the Lighting pane, and its
                 on/off toggle is in the viewport display-options overlay (it
                 moved off the toolbar) — so the former View-menu "Bloom" +
                 "Bloom Settings…" items stay retired. */}
-            <Menubar.Item
-              className={ITEM}
-              onSelect={() => toggleDock("lighting")}
-            >
-              <CheckSlot active={false} />
-              Lighting…
-            </Menubar.Item>
-            <Menubar.Item
-              className={ITEM}
-              onSelect={() => toggleDock("atlas")}
-            >
-              <CheckSlot active={false} />
-              Atlas Frame Picker…
-            </Menubar.Item>
-            <Menubar.Separator className={SEPARATOR} />
-            <Menubar.Item
-              className={ITEM}
-              data-testid="menu-view-timeline"
-              onSelect={() => { void toggleTimeline(bridge); }}
-            >
-              <CheckSlot active={timelineActive} />
-              Timeline
-            </Menubar.Item>
-            <Menubar.Item
-              className={ITEM}
-              onSelect={timelineActive
-                ? () => { void setTimelinePlaying(bridge, !timelinePlaying); }
-                : send({
-                  kind: "engine/set/paused",
-                  params: { paused: !paused },
-                })}
-            >
-              <CheckSlot active={timelineActive ? !timelinePlaying : paused} />
-              Pause<Hint>F8</Hint>
-            </Menubar.Item>
-            <Menubar.Item
-              className={ITEM}
-              disabled={timelineActive ? timelinePlaying : !paused}
-              onSelect={timelineActive
-                ? () => stepTimeline(bridge, 1)
-                : send({
-                  kind: "engine/action/step-frames",
-                  params: { frames: 1 },
-                })}
-            >
-              <CheckSlot active={false} />
-              Step Forward
-            </Menubar.Item>
-            {/* Dispatches engine/set/camera with the legacy
+              <Menubar.Item className={ITEM} onSelect={() => toggleDock("lighting")}>
+                <CheckSlot active={false} />
+                Lighting…
+              </Menubar.Item>
+              <Menubar.Item className={ITEM} onSelect={() => toggleDock("atlas")}>
+                <CheckSlot active={false} />
+                Atlas Frame Picker…
+              </Menubar.Item>
+              <Menubar.Separator className={SEPARATOR} />
+              <Menubar.Item
+                className={ITEM}
+                data-testid="menu-view-timeline"
+                onSelect={() => {
+                  void toggleTimeline(bridge);
+                }}
+              >
+                <CheckSlot active={timelineActive} />
+                Timeline
+              </Menubar.Item>
+              <Menubar.Item
+                className={ITEM}
+                onSelect={
+                  timelineActive
+                    ? () => {
+                        void setTimelinePlaying(bridge, !timelinePlaying);
+                      }
+                    : send({
+                        kind: "engine/set/paused",
+                        params: { paused: !paused },
+                      })
+                }
+              >
+                <CheckSlot active={timelineActive ? !timelinePlaying : paused} />
+                Pause<Hint>F8</Hint>
+              </Menubar.Item>
+              <Menubar.Item
+                className={ITEM}
+                disabled={timelineActive ? timelinePlaying : !paused}
+                onSelect={
+                  timelineActive
+                    ? () => stepTimeline(bridge, 1)
+                    : send({
+                        kind: "engine/action/step-frames",
+                        params: { frames: 1 },
+                      })
+                }
+              >
+                <CheckSlot active={false} />
+                Step Forward
+              </Menubar.Item>
+              {/* Dispatches engine/set/camera with the legacy
                 default vectors. Shares RESET_CAMERA with the Ctrl+Home
                 accelerator (lib/reset-camera.ts) so the two can't drift —
                 no new bridge kind required, the camera setter already exists. */}
-            <Menubar.Item
-              className={ITEM}
-              onSelect={send({
-                kind: "engine/set/camera",
-                params: RESET_CAMERA,
-              })}
-            >
-              <CheckSlot active={false} />
-              Reset Camera
-            </Menubar.Item>
-            <Menubar.Separator className={SEPARATOR} />
-            <Menubar.Item
-              className={ITEM}
-              onSelect={send({
-                kind: "engine/action/reload-shaders",
-                params: {},
-              })}
-            >
-              <CheckSlot active={false} />
-              Reload Shaders
-            </Menubar.Item>
-            <Menubar.Item
-              className={ITEM}
-              onSelect={() => {
-                void bridge
-                  .request({ kind: "engine/action/reload-textures", params: {} })
-                  .then(() => bumpTextureEpoch()) // re-fetch atlas previews with fresh content
-                  .catch(() => {}); // host-side reload failure shouldn't surface as an unhandled rejection
-              }}
-            >
-              <CheckSlot active={false} />
-              Reload Textures
-            </Menubar.Item>
-            <Menubar.Separator className={SEPARATOR} />
-            <Menubar.Item
-              className={ITEM}
-              onSelect={send({
-                kind: "engine/set/heat-debug",
-                params: { enabled: !heatDebug },
-              })}
-            >
-              <CheckSlot active={heatDebug} />
-              Heat Debug
-            </Menubar.Item>
-            {/* Pop the confirm modal; the modal's
+              <Menubar.Item
+                className={ITEM}
+                onSelect={send({
+                  kind: "engine/set/camera",
+                  params: RESET_CAMERA,
+                })}
+              >
+                <CheckSlot active={false} />
+                Reset Camera
+              </Menubar.Item>
+              <Menubar.Separator className={SEPARATOR} />
+              <Menubar.Item
+                className={ITEM}
+                onSelect={send({
+                  kind: "engine/action/reload-shaders",
+                  params: {},
+                })}
+              >
+                <CheckSlot active={false} />
+                Reload Shaders
+              </Menubar.Item>
+              <Menubar.Item
+                className={ITEM}
+                onSelect={() => {
+                  void bridge
+                    .request({ kind: "engine/action/reload-textures", params: {} })
+                    .then(() => bumpTextureEpoch()) // re-fetch atlas previews with fresh content
+                    .catch(() => {}); // host-side reload failure shouldn't surface as an unhandled rejection
+                }}
+              >
+                <CheckSlot active={false} />
+                Reload Textures
+              </Menubar.Item>
+              <Menubar.Separator className={SEPARATOR} />
+              <Menubar.Item
+                className={ITEM}
+                onSelect={send({
+                  kind: "engine/set/heat-debug",
+                  params: { enabled: !heatDebug },
+                })}
+              >
+                <CheckSlot active={heatDebug} />
+                Heat Debug
+              </Menubar.Item>
+              {/* Pop the confirm modal; the modal's
                 Reset button fires engine/action/reset-view-settings
                 which cascades background / ground / bloom / skydome
                 back to defaults in one host-side action. Lighting
                 reset rides separately. */}
-            <Menubar.Item
-              className={ITEM}
-              onSelect={() => setResetViewOpen(true)}
-            >
-              <CheckSlot active={false} />
-              Reset View Settings
-            </Menubar.Item>
-            <Menubar.Separator className={SEPARATOR} />
-            {/* Clears the four alo:layout:* localStorage keys
+              <Menubar.Item className={ITEM} onSelect={() => setResetViewOpen(true)}>
+                <CheckSlot active={false} />
+                Reset View Settings
+              </Menubar.Item>
+              <Menubar.Separator className={SEPARATOR} />
+              {/* Clears the four alo:layout:* localStorage keys
                 and remounts PanelLayout (via an epoch bump in App.tsx)
                 so every Group reads in-code defaults on next mount. No
                 confirm prompt — the gesture is cheap to recover from
                 (just drag the splitters back). */}
-            <Menubar.Item
-              className={ITEM}
-              onSelect={() => onResetPanelLayout()}
-            >
-              <CheckSlot active={false} />
-              Reset panel layout
-            </Menubar.Item>
-          </Menubar.Content>
-        </Menubar.Portal>
-      </Menubar.Menu>
+              <Menubar.Item className={ITEM} onSelect={() => onResetPanelLayout()}>
+                <CheckSlot active={false} />
+                Reset panel layout
+              </Menubar.Item>
+            </Menubar.Content>
+          </Menubar.Portal>
+        </Menubar.Menu>
 
-      {/* ─── Help ─── */}
-      <Menubar.Menu value="help">
-        <Menubar.Trigger className={TRIGGER}>Help</Menubar.Trigger>
-        <Menubar.Portal>
-          <Menubar.Content
-            className={CONTENT}
-            align="start"
-            sideOffset={4}
-          >
-            <Menubar.Item
-              className={ITEM}
-              data-testid="menu-help-guide"
-              onSelect={() => void handleOpenGuide()}
-            >
-              User Guide
-            </Menubar.Item>
-            <Menubar.Item
-              className={ITEM}
-              data-testid="menu-help-shortcuts"
-              onSelect={() => setShortcutsOpen(true)}
-            >
-              Keyboard Shortcuts&#8230;
-            </Menubar.Item>
-            <Menubar.Item className={ITEM} onSelect={() => onOpenAboutDialog()}>
-              About
-            </Menubar.Item>
-          </Menubar.Content>
-        </Menubar.Portal>
-      </Menubar.Menu>
-    </Menubar.Root>
+        {/* ─── Help ─── */}
+        <Menubar.Menu value="help">
+          <Menubar.Trigger className={TRIGGER}>Help</Menubar.Trigger>
+          <Menubar.Portal>
+            <Menubar.Content className={CONTENT} align="start" sideOffset={4}>
+              <Menubar.Item className={ITEM} data-testid="menu-help-guide" onSelect={() => void handleOpenGuide()}>
+                User Guide
+              </Menubar.Item>
+              <Menubar.Item className={ITEM} data-testid="menu-help-shortcuts" onSelect={() => setShortcutsOpen(true)}>
+                Keyboard Shortcuts&#8230;
+              </Menubar.Item>
+              <Menubar.Item className={ITEM} onSelect={() => onOpenAboutDialog()}>
+                About
+              </Menubar.Item>
+            </Menubar.Content>
+          </Menubar.Portal>
+        </Menubar.Menu>
+      </Menubar.Root>
 
-    <PreferencesDialog bridge={bridge} open={prefsOpen} onOpenChange={setPrefsOpen} />
+      <PreferencesDialog bridge={bridge} open={prefsOpen} onOpenChange={setPrefsOpen} />
 
-    {/* Help -> Keyboard Shortcuts... */}
-    <ShortcutsDialog bridge={bridge} open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      {/* Help -> Keyboard Shortcuts... */}
+      <ShortcutsDialog bridge={bridge} open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
 
-    <Modal bridge={bridge} open={guideOpen} onOpenChange={setGuideOpen} title="User Guide" size="md">
-      <Modal.Body>
-        <p className="mb-3 text-sm text-text-2">
-          Could not open the browser. Copy this address into your browser to read the User Guide.
-        </p>
-        <label className="flex flex-col gap-1 text-xs text-text-2">
-          Guide address
-          <input
-            className="text-input w-full select-text"
-            readOnly
-            value={EXTERNAL_LINKS.guide}
-            onFocus={(e) => e.currentTarget.select()}
-          />
-        </label>
-      </Modal.Body>
-      <Modal.Footer>
-        <Modal.OkButton onClick={() => setGuideOpen(false)}>Close</Modal.OkButton>
-      </Modal.Footer>
-    </Modal>
+      <Modal bridge={bridge} open={guideOpen} onOpenChange={setGuideOpen} title="User Guide" size="md">
+        <Modal.Body>
+          <p className="mb-3 text-sm text-text-2">
+            Could not open the browser. Copy this address into your browser to read the User Guide.
+          </p>
+          <label className="flex flex-col gap-1 text-xs text-text-2">
+            Guide address
+            <input
+              className="text-input w-full select-text"
+              readOnly
+              value={EXTERNAL_LINKS.guide}
+              onFocus={(e) => e.currentTarget.select()}
+            />
+          </label>
+        </Modal.Body>
+        <Modal.Footer>
+          <Modal.OkButton onClick={() => setGuideOpen(false)}>Close</Modal.OkButton>
+        </Modal.Footer>
+      </Modal>
 
-    {/* Confirm prompt for View → Reset View Settings.
+      {/* Confirm prompt for View → Reset View Settings.
         Body copy preserves the established reset-settings wording.
         Sits as a sibling of Menubar.Root rather than inside it so
         Radix's child-list semantics for keyboard nav aren't disturbed.
         Modal manages its own portal, so DOM position doesn't matter. */}
-    <Modal
-      bridge={bridge}
-      open={resetViewOpen}
-      onOpenChange={setResetViewOpen}
-      title="Reset View Settings"
-      size="sm"
-    >
-      <Modal.Body>
-        <p className="text-sm text-text-2">
-          Reset background color, ground plane visibility, ground texture,
-          ground Z offset, skydome, and bloom to defaults?
-        </p>
-      </Modal.Body>
-      <Modal.Footer>
-        <Modal.CancelButton>Cancel</Modal.CancelButton>
-        <Modal.OkButton onClick={() => void handleResetViewConfirm()}>Reset</Modal.OkButton>
-      </Modal.Footer>
-    </Modal>
+      <Modal bridge={bridge} open={resetViewOpen} onOpenChange={setResetViewOpen} title="Reset View Settings" size="sm">
+        <Modal.Body>
+          <p className="text-sm text-text-2">
+            Reset background color, ground plane visibility, ground texture, ground Z offset, skydome, and bloom to
+            defaults?
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Modal.CancelButton>Cancel</Modal.CancelButton>
+          <Modal.OkButton onClick={() => void handleResetViewConfirm()}>Reset</Modal.OkButton>
+        </Modal.Footer>
+      </Modal>
     </>
   );
 }

@@ -21,10 +21,7 @@ export const DRAG_FEEL = {
 /** Rows present in BOTH maps whose position changed: stableId → (prev - next),
  *  i.e. the translateY that visually puts the row back where it was. Rows
  *  only in `next` (newly created) or only in `prev` (deleted) don't glide. */
-export function computeFlipDeltas(
-  prev: FlipPositions,
-  next: FlipPositions,
-): Map<number, number> {
+export function computeFlipDeltas(prev: FlipPositions, next: FlipPositions): Map<number, number> {
   const deltas = new Map<number, number>();
   for (const [stableId, top] of next) {
     const was = prev.get(stableId);

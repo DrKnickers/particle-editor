@@ -13,7 +13,7 @@ import type { ViewportInputEvent } from "@particle-editor/bridge-schema";
 // doesn't have to import platform headers.
 export const MK_LBUTTON = 0x0001;
 export const MK_RBUTTON = 0x0002;
-export const MK_SHIFT   = 0x0004;
+export const MK_SHIFT = 0x0004;
 export const MK_CONTROL = 0x0008;
 export const MK_MBUTTON = 0x0010;
 
@@ -28,15 +28,13 @@ export const WHEEL_DELTA = 120;
 // DOM `event.buttons` is a separate bitmask from MK_*:
 //   bit 0 (=1) → LMB held, bit 1 (=2) → RMB held, bit 2 (=4) → MMB held
 // `shiftKey` / `ctrlKey` come from the same event's modifier flags.
-export function encodeMkButtons(
-  e: MouseEvent | PointerEvent | WheelEvent,
-): number {
+export function encodeMkButtons(e: MouseEvent | PointerEvent | WheelEvent): number {
   let m = 0;
   if (e.buttons & 1) m |= MK_LBUTTON;
   if (e.buttons & 2) m |= MK_RBUTTON;
   if (e.buttons & 4) m |= MK_MBUTTON;
-  if (e.shiftKey)    m |= MK_SHIFT;
-  if (e.ctrlKey)     m |= MK_CONTROL;
+  if (e.shiftKey) m |= MK_SHIFT;
+  if (e.ctrlKey) m |= MK_CONTROL;
   return m;
 }
 
@@ -59,10 +57,7 @@ export function quantiseWheelDelta(domDeltaY: number): number {
 // at the same DPR — we just multiply by devicePixelRatio at event
 // time (no caching: DPR can change mid-session per the
 // `matchMedia('(resolution)')` listener in ViewportSlot).
-export function toPopupClientCoords(
-  clientX: number,
-  clientY: number,
-): { x: number; y: number } {
+export function toPopupClientCoords(clientX: number, clientY: number): { x: number; y: number } {
   const dpr = window.devicePixelRatio || 1;
   return { x: Math.round(clientX * dpr), y: Math.round(clientY * dpr) };
 }
@@ -70,11 +65,7 @@ export function toPopupClientCoords(
 // Tag names whose focus suppresses global keyboard forwarding. Matches
 // the CurveEditorPanel.tsx pattern so a user typing in a property
 // field doesn't accidentally drive engine input.
-export const TYPING_TAGS: ReadonlySet<string> = new Set([
-  "INPUT",
-  "TEXTAREA",
-  "SELECT",
-]);
+export const TYPING_TAGS: ReadonlySet<string> = new Set(["INPUT", "TEXTAREA", "SELECT"]);
 
 export function isTypingTarget(target: EventTarget | null): boolean {
   if (target === null) return false;
@@ -98,16 +89,11 @@ export function makeMouseEvent(
   const { x, y } = toPopupClientCoords(clientX, clientY);
   const buttons = encodeMkButtons(e);
   if (type === "mousemove") return { type, x, y, buttons };
-  const button: "left" | "right" | "middle" =
-    e.button === 2 ? "right" : e.button === 1 ? "middle" : "left";
+  const button: "left" | "right" | "middle" = e.button === 2 ? "right" : e.button === 1 ? "middle" : "left";
   return { type, button, x, y, buttons };
 }
 
-export function makeWheelEvent(
-  e: WheelEvent,
-  clientX: number,
-  clientY: number,
-): ViewportInputEvent {
+export function makeWheelEvent(e: WheelEvent, clientX: number, clientY: number): ViewportInputEvent {
   const { x, y } = toPopupClientCoords(clientX, clientY);
   return {
     type: "wheel",
@@ -118,10 +104,7 @@ export function makeWheelEvent(
   };
 }
 
-export function makeKeyEvent(
-  type: "keydown" | "keyup",
-  e: KeyboardEvent,
-): ViewportInputEvent {
+export function makeKeyEvent(type: "keydown" | "keyup", e: KeyboardEvent): ViewportInputEvent {
   return { type, vk: e.keyCode, repeat: e.repeat };
 }
 

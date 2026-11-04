@@ -31,7 +31,9 @@ import { __resetStatusFeedbackForTests, useStatusFeedback } from "@/lib/status-f
 // Tooltip.Provider App.tsx supplies in production — this wrapper stands in
 // for it (precedent: renderWithTooltips in EmitterTree.test.tsx).
 const TipProvider = ({ children }: { children: ReactNode }) => (
-  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>
+    {children}
+  </Tooltip.Provider>
 );
 const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
@@ -51,10 +53,7 @@ beforeEach(() => {
   });
 });
 
-function renderMenuBar(
-  bridge: Bridge,
-  overrides: Partial<{ onResetPanelLayout: () => void }> = {},
-) {
+function renderMenuBar(bridge: Bridge, overrides: Partial<{ onResetPanelLayout: () => void }> = {}) {
   return render(
     <MenuBar
       bridge={bridge}
@@ -74,12 +73,14 @@ describe("MenuBar — User Guide", () => {
     const user = userEvent.setup();
     const open = vi.spyOn(window, "open").mockReturnValue(null);
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    const bridge = makeBridgeStub({ responses: {
-      "app/open-external": () => {
-        if (mode === "rejected") throw new Error("offline");
-        return { opened: mode === "opened" };
+    const bridge = makeBridgeStub({
+      responses: {
+        "app/open-external": () => {
+          if (mode === "rejected") throw new Error("offline");
+          return { opened: mode === "opened" };
+        },
       },
-    } });
+    });
     renderMenuBar(bridge);
     const trigger = screen.getByRole("menuitem", { name: "Help" });
     fireEvent.pointerDown(trigger, { button: 0, pointerType: "mouse" });
@@ -89,8 +90,9 @@ describe("MenuBar — User Guide", () => {
     expect(guide.compareDocumentPosition(shortcuts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.click(guide);
     await waitFor(() => {
-      expect(bridge.request.mock.calls.filter(([req]) => req.kind === "app/open-external"))
-        .toEqual([[{ kind: "app/open-external", params: { target: "guide" } }]]);
+      expect(bridge.request.mock.calls.filter(([req]) => req.kind === "app/open-external")).toEqual([
+        [{ kind: "app/open-external", params: { target: "guide" } }],
+      ]);
     });
     expect(open).not.toHaveBeenCalled();
     if (mode === "opened") {
@@ -180,9 +182,7 @@ describe("MenuBar — top-level structure", () => {
     // of the [role="menubar"] root.
     const root = container.querySelector('[role="menubar"]');
     expect(root).not.toBeNull();
-    const triggers = Array.from(
-      root!.querySelectorAll(':scope > button'),
-    ).map((b) => b.textContent?.trim());
+    const triggers = Array.from(root!.querySelectorAll(":scope > button")).map((b) => b.textContent?.trim());
     expect(triggers).toEqual(["File", "Edit", "Emitters", "Mods", "View", "Help"]);
   });
 
@@ -190,9 +190,7 @@ describe("MenuBar — top-level structure", () => {
     const bridge = makeStubBridge();
     const { container } = renderMenuBar(bridge);
     const root = container.querySelector('[role="menubar"]');
-    const triggers = Array.from(
-      root!.querySelectorAll(':scope > button'),
-    ).map((b) => b.textContent?.trim());
+    const triggers = Array.from(root!.querySelectorAll(":scope > button")).map((b) => b.textContent?.trim());
     expect(triggers).not.toContain("Tools");
   });
 
@@ -248,13 +246,9 @@ describe("MenuBar — top-level structure", () => {
     fireEvent.pointerDown(trigger, { button: 0, pointerType: "mouse" });
     fireEvent.click(trigger);
     await waitFor(() => {
-      expect(
-        screen.getByRole("menuitem", { name: /Reset panel layout/ }),
-      ).toBeTruthy();
+      expect(screen.getByRole("menuitem", { name: /Reset panel layout/ })).toBeTruthy();
     });
-    fireEvent.click(
-      screen.getByRole("menuitem", { name: /Reset panel layout/ }),
-    );
+    fireEvent.click(screen.getByRole("menuitem", { name: /Reset panel layout/ }));
     await waitFor(() => {
       expect(onResetPanelLayout).toHaveBeenCalledTimes(1);
     });
@@ -306,13 +300,27 @@ describe("MenuBar — top-level structure", () => {
 describe("MenuBar — Mods menu (layer stacking)", () => {
   const fixtureMods = [
     { path: "C:/test/corruption/Mods/Alpha", folderName: "Alpha", nickname: "", isFoC: true, rootHasArt: true },
-    { path: "C:/test/GameData/Mods/Beta",    folderName: "Beta",  nickname: "Beta Mod", isFoC: false, rootHasArt: true },
+    { path: "C:/test/GameData/Mods/Beta", folderName: "Beta", nickname: "Beta Mod", isFoC: false, rootHasArt: true },
   ];
   const fixtureLayers = [
-    { path: "C:/test/corruption/Mods/Alpha",          label: "Alpha",    isFoC: true,  kind: "mod" as const },
-    { path: "C:/test/corruption/Mods/Alpha/Bravo",     label: "Bravo",     parentLabel: "Alpha", parentPath: "C:/test/corruption/Mods/Alpha", isFoC: true, kind: "nested" as const },
-    { path: "C:/test/corruption/Mods/Alpha/Core", label: "Core", parentLabel: "Alpha", parentPath: "C:/test/corruption/Mods/Alpha", isFoC: true, kind: "nested" as const },
-    { path: "C:/test/GameData/Mods/Beta",             label: "Beta Mod", isFoC: false, kind: "mod" as const },
+    { path: "C:/test/corruption/Mods/Alpha", label: "Alpha", isFoC: true, kind: "mod" as const },
+    {
+      path: "C:/test/corruption/Mods/Alpha/Bravo",
+      label: "Bravo",
+      parentLabel: "Alpha",
+      parentPath: "C:/test/corruption/Mods/Alpha",
+      isFoC: true,
+      kind: "nested" as const,
+    },
+    {
+      path: "C:/test/corruption/Mods/Alpha/Core",
+      label: "Core",
+      parentLabel: "Alpha",
+      parentPath: "C:/test/corruption/Mods/Alpha",
+      isFoC: true,
+      kind: "nested" as const,
+    },
+    { path: "C:/test/GameData/Mods/Beta", label: "Beta Mod", isFoC: false, kind: "mod" as const },
   ];
   function makeModsStubBridge(opts: { stack?: string[] } = {}): Bridge & { request: ReturnType<typeof vi.fn> } {
     const stack = opts.stack ?? [];
@@ -324,13 +332,17 @@ describe("MenuBar — Mods menu (layer stacking)", () => {
       if (req.kind === "mods/set-layers") return Promise.resolve({ ok: true, stack: [] });
       return Promise.resolve({});
     });
-    return { request, on: vi.fn().mockReturnValue(() => {}) } as unknown as Bridge & { request: ReturnType<typeof vi.fn> };
+    return { request, on: vi.fn().mockReturnValue(() => {}) } as unknown as Bridge & {
+      request: ReturnType<typeof vi.fn>;
+    };
   }
   async function openModsMenu() {
     const trigger = screen.getByRole("menuitem", { name: "Mods" });
     fireEvent.pointerDown(trigger, { button: 0, pointerType: "mouse" });
     fireEvent.click(trigger);
-    await waitFor(() => { expect(screen.getByRole("menuitem", { name: "Refresh Mod List" })).toBeTruthy(); });
+    await waitFor(() => {
+      expect(screen.getByRole("menuitem", { name: "Refresh Mod List" })).toBeTruthy();
+    });
   }
 
   // Open the Add mod… flyout (catalog + search lives there now).
@@ -355,7 +367,9 @@ describe("MenuBar — Mods menu (layer stacking)", () => {
   it("tags each active-stack row with a positional stack-row testid", async () => {
     renderMenuBar(makeModsStubBridge({ stack: ["C:/test/corruption/Mods/Alpha", "C:/test/GameData/Mods/Beta"] }));
     await openModsMenu();
-    await waitFor(() => { expect(document.querySelector('[data-testid="stack-row:0"]')).toBeTruthy(); });
+    await waitFor(() => {
+      expect(document.querySelector('[data-testid="stack-row:0"]')).toBeTruthy();
+    });
     expect(document.querySelector('[data-testid="stack-row:1"]')).toBeTruthy();
     expect(document.querySelector('[data-testid="stack-row:2"]')).toBeNull(); // only two rows
   });
@@ -367,10 +381,15 @@ describe("MenuBar — Mods menu (layer stacking)", () => {
     renderMenuBar(bridge);
     await openModsMenu();
     await openAddMod();
-    await waitFor(() => { expect(screen.getByRole("menuitem", { name: "Beta Mod" })).toBeTruthy(); });
+    await waitFor(() => {
+      expect(screen.getByRole("menuitem", { name: "Beta Mod" })).toBeTruthy();
+    });
     fireEvent.click(screen.getByRole("menuitem", { name: "Beta Mod" }));
     await waitFor(() => {
-      expect(bridge.request).toHaveBeenCalledWith({ kind: "mods/set-layers", params: { paths: ["C:/test/GameData/Mods/Beta"] } });
+      expect(bridge.request).toHaveBeenCalledWith({
+        kind: "mods/set-layers",
+        params: { paths: ["C:/test/GameData/Mods/Beta"] },
+      });
     });
   });
 
@@ -380,7 +399,9 @@ describe("MenuBar — Mods menu (layer stacking)", () => {
     renderMenuBar(bridge);
     await openModsMenu();
     await openAddMod();
-    await waitFor(() => { expect(screen.getByRole("menuitem", { name: "Beta Mod" })).toBeTruthy(); });
+    await waitFor(() => {
+      expect(screen.getByRole("menuitem", { name: "Beta Mod" })).toBeTruthy();
+    });
     fireEvent.click(screen.getByRole("menuitem", { name: "Beta Mod" }));
     await waitFor(() => {
       expect(bridge.request).toHaveBeenCalledWith({
@@ -396,12 +417,17 @@ describe("MenuBar — Mods menu (layer stacking)", () => {
     renderMenuBar(bridge);
     await openModsMenu();
     await openAddMod();
-    await waitFor(() => { expect(screen.getByRole("menuitem", { name: "Bravo" })).toBeTruthy(); });
+    await waitFor(() => {
+      expect(screen.getByRole("menuitem", { name: "Bravo" })).toBeTruthy();
+    });
     expect(screen.getByRole("menuitem", { name: "Core" })).toBeTruthy();
     expect(screen.getByRole("menuitem", { name: "Alpha" })).toBeTruthy(); // root-art layer (rootHasArt:true)
     fireEvent.click(screen.getByRole("menuitem", { name: "Bravo" }));
     await waitFor(() => {
-      expect(bridge.request).toHaveBeenCalledWith({ kind: "mods/set-layers", params: { paths: ["C:/test/corruption/Mods/Alpha/Bravo"] } });
+      expect(bridge.request).toHaveBeenCalledWith({
+        kind: "mods/set-layers",
+        params: { paths: ["C:/test/corruption/Mods/Alpha/Bravo"] },
+      });
     });
   });
 
@@ -410,7 +436,9 @@ describe("MenuBar — Mods menu (layer stacking)", () => {
     renderMenuBar(makeModsStubBridge({ stack: ["C:/test/GameData/Mods/Beta"] }));
     await openModsMenu();
     await openAddMod();
-    await waitFor(() => { expect(screen.getByText(/in stack/)).toBeTruthy(); });
+    await waitFor(() => {
+      expect(screen.getByText(/in stack/)).toBeTruthy();
+    });
     expect(screen.queryByRole("menuitem", { name: "Beta Mod" })).toBeNull(); // not an add item
   });
 
@@ -426,7 +454,9 @@ describe("MenuBar — Mods menu (layer stacking)", () => {
 
   // The active-stack block (role=list "Active load order") shows the ordered layers.
   it("renders the active load-order list with each layer", async () => {
-    renderMenuBar(makeModsStubBridge({ stack: ["C:/test/corruption/Mods/Alpha/Bravo", "C:/test/corruption/Mods/Alpha"] }));
+    renderMenuBar(
+      makeModsStubBridge({ stack: ["C:/test/corruption/Mods/Alpha/Bravo", "C:/test/corruption/Mods/Alpha"] }),
+    );
     await openModsMenu();
     const list = screen.getByRole("list", { name: "Active load order" });
     expect(list.textContent).toContain("Bravo");
@@ -435,12 +465,17 @@ describe("MenuBar — Mods menu (layer stacking)", () => {
 
   // Each active-stack row has a × that removes that layer (dispatches without it).
   it("removing a layer from the active stack dispatches set-layers without it", async () => {
-    const bridge = makeModsStubBridge({ stack: ["C:/test/corruption/Mods/Alpha/Bravo", "C:/test/corruption/Mods/Alpha"] });
+    const bridge = makeModsStubBridge({
+      stack: ["C:/test/corruption/Mods/Alpha/Bravo", "C:/test/corruption/Mods/Alpha"],
+    });
     renderMenuBar(bridge);
     await openModsMenu();
     fireEvent.click(screen.getByRole("button", { name: /Remove Bravo from stack/ }));
     await waitFor(() => {
-      expect(bridge.request).toHaveBeenCalledWith({ kind: "mods/set-layers", params: { paths: ["C:/test/corruption/Mods/Alpha"] } });
+      expect(bridge.request).toHaveBeenCalledWith({
+        kind: "mods/set-layers",
+        params: { paths: ["C:/test/corruption/Mods/Alpha"] },
+      });
     });
   });
 
@@ -449,9 +484,15 @@ describe("MenuBar — Mods menu (layer stacking)", () => {
   it("surfaces a failed mods/set-layers via the error store and still re-fetches mods/list", async () => {
     const bridge = makeModsStubBridge({ stack: ["C:/test/corruption/Mods/Alpha"] });
     bridge.request.mockImplementation((req: { kind: string }) => {
-      if (req.kind === "engine/state/snapshot") return Promise.resolve({ activeModPath: null, ground: false, bloom: false, paused: false });
+      if (req.kind === "engine/state/snapshot")
+        return Promise.resolve({ activeModPath: null, ground: false, bloom: false, paused: false });
       if (req.kind === "mods/list" || req.kind === "mods/refresh")
-        return Promise.resolve({ mods: fixtureMods, layers: fixtureLayers, stack: ["C:/test/corruption/Mods/Alpha"], activePath: "C:/test/corruption/Mods/Alpha" });
+        return Promise.resolve({
+          mods: fixtureMods,
+          layers: fixtureLayers,
+          stack: ["C:/test/corruption/Mods/Alpha"],
+          activePath: "C:/test/corruption/Mods/Alpha",
+        });
       if (req.kind === "mods/set-layers") return Promise.resolve({ ok: false, error: "mod shaders failed" });
       return Promise.resolve({});
     });
@@ -479,16 +520,23 @@ describe("MenuBar — Mods menu (layer stacking)", () => {
     const origR = globalThis.requestIdleCallback;
     const origC = globalThis.cancelIdleCallback;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (globalThis as any).requestIdleCallback = (cb: () => void) => { idleQ.push(cb); return idleQ.length; };
+    (globalThis as any).requestIdleCallback = (cb: () => void) => {
+      idleQ.push(cb);
+      return idleQ.length;
+    };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (globalThis as any).cancelIdleCallback = (id: number) => { idleQ[id - 1] = () => {}; };
+    (globalThis as any).cancelIdleCallback = (id: number) => {
+      idleQ[id - 1] = () => {};
+    };
     try {
       const bridge = makeModsStubBridge();
       renderMenuBar(bridge);
       // The eager snapshot fetch fires; the mods/list seed is queued, not yet fired.
       await waitFor(() => expect(bridge.request).toHaveBeenCalledWith({ kind: "engine/state/snapshot", params: {} }));
       expect(bridge.request).not.toHaveBeenCalledWith({ kind: "mods/list", params: {} });
-      await act(async () => { idleQ.splice(0).forEach((fn) => fn()); });
+      await act(async () => {
+        idleQ.splice(0).forEach((fn) => fn());
+      });
       await waitFor(() => expect(bridge.request).toHaveBeenCalledWith({ kind: "mods/list", params: {} }));
     } finally {
       globalThis.requestIdleCallback = origR;
@@ -501,7 +549,9 @@ describe("MenuBar — Mods menu (layer stacking)", () => {
     renderMenuBar(bridge);
     await openModsMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "Refresh Mod List" }));
-    await waitFor(() => { expect(bridge.request).toHaveBeenCalledWith({ kind: "mods/refresh", params: {} }); });
+    await waitFor(() => {
+      expect(bridge.request).toHaveBeenCalledWith({ kind: "mods/refresh", params: {} });
+    });
   });
 
   // Expand → opens the full Load Order modal (the demoted fallback + keyboard/AT path).
@@ -509,25 +559,37 @@ describe("MenuBar — Mods menu (layer stacking)", () => {
     renderMenuBar(makeModsStubBridge({ stack: ["C:/test/corruption/Mods/Alpha"] }));
     await openModsMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "Expand to full editor" }));
-    await waitFor(() => { expect(screen.getByRole("list", { name: "Load order" })).toBeTruthy(); });
+    await waitFor(() => {
+      expect(screen.getByRole("list", { name: "Load order" })).toBeTruthy();
+    });
   });
 
   // rootHasArt:false → no root-art add item (only the nested layers are addable).
   it("Add mod…: a rootHasArt:false mod shows only its nested layers (no root-art item)", async () => {
     const layers = [
-      { path: "C:/test/corruption/Mods/Gamma/Skin", label: "Skin", parentLabel: "Gamma", parentPath: "C:/test/corruption/Mods/Gamma", isFoC: true, kind: "nested" as const },
+      {
+        path: "C:/test/corruption/Mods/Gamma/Skin",
+        label: "Skin",
+        parentLabel: "Gamma",
+        parentPath: "C:/test/corruption/Mods/Gamma",
+        isFoC: true,
+        kind: "nested" as const,
+      },
     ];
     const snapshot = { activeModPath: null, ground: false, bloom: false, paused: false };
     const request = vi.fn().mockImplementation((req: { kind: string }) => {
       if (req.kind === "engine/state/snapshot") return Promise.resolve(snapshot);
-      if (req.kind === "mods/list" || req.kind === "mods/refresh") return Promise.resolve({ mods: [], layers, stack: [], activePath: null });
+      if (req.kind === "mods/list" || req.kind === "mods/refresh")
+        return Promise.resolve({ mods: [], layers, stack: [], activePath: null });
       return Promise.resolve({});
     });
     const bridge = { request, on: vi.fn().mockReturnValue(() => {}) } as unknown as Bridge;
     renderMenuBar(bridge);
     await openModsMenu();
     await openAddMod();
-    await waitFor(() => { expect(screen.getByRole("menuitem", { name: "Skin" })).toBeTruthy(); });
+    await waitFor(() => {
+      expect(screen.getByRole("menuitem", { name: "Skin" })).toBeTruthy();
+    });
     expect(screen.queryByRole("menuitem", { name: "Gamma" })).toBeNull(); // no root-art layer
   });
 
@@ -535,32 +597,62 @@ describe("MenuBar — Mods menu (layer stacking)", () => {
   // appear in the flyout under their own parent group, no cross-pollination.
   it("Add mod…: duplicate-label mods keep their own nested layers (parentPath)", async () => {
     const layers = [
-      { path: "C:/test/corruption/Mods/Dup/FocLayer",  label: "FocLayer",  parentLabel: "Dup", parentPath: "C:/test/corruption/Mods/Dup", isFoC: true,  kind: "nested" as const },
-      { path: "C:/test/GameData/Mods/Dup/BaseLayer",   label: "BaseLayer", parentLabel: "Dup", parentPath: "C:/test/GameData/Mods/Dup",   isFoC: false, kind: "nested" as const },
+      {
+        path: "C:/test/corruption/Mods/Dup/FocLayer",
+        label: "FocLayer",
+        parentLabel: "Dup",
+        parentPath: "C:/test/corruption/Mods/Dup",
+        isFoC: true,
+        kind: "nested" as const,
+      },
+      {
+        path: "C:/test/GameData/Mods/Dup/BaseLayer",
+        label: "BaseLayer",
+        parentLabel: "Dup",
+        parentPath: "C:/test/GameData/Mods/Dup",
+        isFoC: false,
+        kind: "nested" as const,
+      },
     ];
     const snapshot = { activeModPath: null, ground: false, bloom: false, paused: false };
     const request = vi.fn().mockImplementation((req: { kind: string }) => {
       if (req.kind === "engine/state/snapshot") return Promise.resolve(snapshot);
-      if (req.kind === "mods/list" || req.kind === "mods/refresh") return Promise.resolve({ mods: [], layers, stack: [], activePath: null });
+      if (req.kind === "mods/list" || req.kind === "mods/refresh")
+        return Promise.resolve({ mods: [], layers, stack: [], activePath: null });
       return Promise.resolve({});
     });
-    const bridge = { request, on: vi.fn().mockReturnValue(() => {}) } as unknown as Bridge & { request: ReturnType<typeof vi.fn> };
+    const bridge = { request, on: vi.fn().mockReturnValue(() => {}) } as unknown as Bridge & {
+      request: ReturnType<typeof vi.fn>;
+    };
     renderMenuBar(bridge);
     await openModsMenu();
     await openAddMod();
-    await waitFor(() => { expect(screen.getByRole("menuitem", { name: "FocLayer" })).toBeTruthy(); });
+    await waitFor(() => {
+      expect(screen.getByRole("menuitem", { name: "FocLayer" })).toBeTruthy();
+    });
     expect(screen.getByRole("menuitem", { name: "BaseLayer" })).toBeTruthy(); // both present, separate parent groups
     fireEvent.click(screen.getByRole("menuitem", { name: "FocLayer" }));
     await waitFor(() => {
-      expect(bridge.request).toHaveBeenCalledWith({ kind: "mods/set-layers", params: { paths: ["C:/test/corruption/Mods/Dup/FocLayer"] } });
+      expect(bridge.request).toHaveBeenCalledWith({
+        kind: "mods/set-layers",
+        params: { paths: ["C:/test/corruption/Mods/Dup/FocLayer"] },
+      });
     });
   });
 
   it("a partial mods/list (missing layers/stack) does not crash the menu", async () => {
-    const bridge = { request: vi.fn().mockImplementation((r: { kind: string }) =>
-      r.kind === "engine/state/snapshot" ? Promise.resolve({ activeModPath: null })
-      : r.kind === "mods/list" || r.kind === "mods/refresh" ? Promise.resolve({ mods: fixtureMods })
-      : Promise.resolve({})), on: vi.fn().mockReturnValue(() => {}) } as unknown as Bridge;
+    const bridge = {
+      request: vi
+        .fn()
+        .mockImplementation((r: { kind: string }) =>
+          r.kind === "engine/state/snapshot"
+            ? Promise.resolve({ activeModPath: null })
+            : r.kind === "mods/list" || r.kind === "mods/refresh"
+              ? Promise.resolve({ mods: fixtureMods })
+              : Promise.resolve({}),
+        ),
+      on: vi.fn().mockReturnValue(() => {}),
+    } as unknown as Bridge;
     renderMenuBar(bridge);
     await openModsMenu();
     expect(screen.getByRole("menuitem", { name: "Refresh Mod List" })).toBeTruthy();
@@ -568,9 +660,7 @@ describe("MenuBar — Mods menu (layer stacking)", () => {
 });
 
 describe("MenuBar — View menu Grid item", () => {
-  function makeViewStubBridge(
-    gridVisible: boolean,
-  ): Bridge & { request: ReturnType<typeof vi.fn> } {
+  function makeViewStubBridge(gridVisible: boolean): Bridge & { request: ReturnType<typeof vi.fn> } {
     const snapshot = { ground: false, gridVisible, bloom: false, paused: false };
     const request = vi.fn().mockImplementation((req: { kind: string }) => {
       if (req.kind === "engine/state/snapshot") return Promise.resolve(snapshot);

@@ -15,10 +15,7 @@ declare global {
 // source of truth build-guide.mjs renders the sidebar from — so this spec can't silently
 // drift when a page is added or removed (as it once did, going from 15 to 19 pages).
 const NAV = JSON.parse(
-  readFileSync(
-    resolve(dirname(fileURLToPath(import.meta.url)), "../../../../site/guide-src/nav.json"),
-    "utf8",
-  ),
+  readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../../../site/guide-src/nav.json"), "utf8"),
 ) as { sections: { pages: { slug: string; publish?: boolean }[] }[] };
 const ALL_GUIDE_PAGES = NAV.sections.flatMap((s) => s.pages);
 const GUIDE_SLUGS = ALL_GUIDE_PAGES.filter((p) => p.publish !== false).map((p) => p.slug);
@@ -38,47 +35,74 @@ const SECTION_COUNT = NAV.sections.filter((s) => s.pages.some((p) => p.publish !
 // responses are unplayable as <video> sources in every browser.)
 const DEFAULT_MEDIA_ATTR = "../media/";
 const GUIDE_MEDIA = new Map([
-  ["coming-from-the-old-glyphx-editor", {
-    clips: [
-      "ref-curve-visibility.mp4",
-      "ref-render-order.mp4",
-      "tutorial-05-sparks-children.mp4",
-      "f04.mp4",
-      "faith.mp4",
-      "tutorial-03-spawner-direction.mp4",
-    ],
-    stills: [
-      "returning-ui-legacy.png",
-      "returning-ui-current.png",
-      "ref-returning-import-emitters.png",
-      "ref-returning-texture-palette.png",
-      "ref-returning-atlas-frame-picker.png",
-      "ref-returning-skydome-picker.png",
-      "ref-returning-reference-gizmo.png",
-    ],
-    manualComment: 0,
-  }],
-  ["01-make-a-hardpoint-damage-effect-obvious", {
-    clips: ["tutorial-01-open-override.mp4", "tutorial-01-green-color-edit.mp4", "tutorial-01-save-override.mp4"],
-    stills: ["tutorial-01-opening-result.png"],
-    manualComment: 1,
-  }],
-  ["03-build-a-laser-shot-and-muzzle-flash", {
-    clips: ["tutorial-03-opening-result.mp4", "tutorial-03-projectile-core.mp4", "tutorial-03-inherit-parent-speed.mp4",
-      "tutorial-03-spawner-direction.mp4", "tutorial-03-muzzle-flash.mp4", "tutorial-03-no-parent-speed.mp4", "tutorial-03-final-preview.mp4"],
-    stills: ["tutorial-03-glow-layers.png", "tutorial-03-muzzle-glow-props.png"],
-    manualComment: 0,
-  }],
-  ["05-build-an-explosion", {
-    // §4 shows BOTH fireball constructions: -index is Option A (flipbook), -layered is Option B
-    // (layered additive). §9 ends by showing the finished explosion BOTH ways: -final-preview
-    // (flipbook) then -final-preview-layered (layered).
-    clips: ["tutorial-05-opening-result.mp4", "tutorial-05-flash-burst.mp4", "tutorial-05-smoke-render-order.mp4",
-      "tutorial-05-fireball-build.mp4", "tutorial-05-fireball-index.mp4", "tutorial-05-fireball-layered.mp4",
-      "tutorial-05-sparks-children.mp4", "tutorial-05-final-preview.mp4", "tutorial-05-final-preview-layered.mp4"],
-    stills: [],
-    manualComment: 0,
-  }],
+  [
+    "coming-from-the-old-glyphx-editor",
+    {
+      clips: [
+        "ref-curve-visibility.mp4",
+        "ref-render-order.mp4",
+        "tutorial-05-sparks-children.mp4",
+        "f04.mp4",
+        "faith.mp4",
+        "tutorial-03-spawner-direction.mp4",
+      ],
+      stills: [
+        "returning-ui-legacy.png",
+        "returning-ui-current.png",
+        "ref-returning-import-emitters.png",
+        "ref-returning-texture-palette.png",
+        "ref-returning-atlas-frame-picker.png",
+        "ref-returning-skydome-picker.png",
+        "ref-returning-reference-gizmo.png",
+      ],
+      manualComment: 0,
+    },
+  ],
+  [
+    "01-make-a-hardpoint-damage-effect-obvious",
+    {
+      clips: ["tutorial-01-open-override.mp4", "tutorial-01-green-color-edit.mp4", "tutorial-01-save-override.mp4"],
+      stills: ["tutorial-01-opening-result.png"],
+      manualComment: 1,
+    },
+  ],
+  [
+    "03-build-a-laser-shot-and-muzzle-flash",
+    {
+      clips: [
+        "tutorial-03-opening-result.mp4",
+        "tutorial-03-projectile-core.mp4",
+        "tutorial-03-inherit-parent-speed.mp4",
+        "tutorial-03-spawner-direction.mp4",
+        "tutorial-03-muzzle-flash.mp4",
+        "tutorial-03-no-parent-speed.mp4",
+        "tutorial-03-final-preview.mp4",
+      ],
+      stills: ["tutorial-03-glow-layers.png", "tutorial-03-muzzle-glow-props.png"],
+      manualComment: 0,
+    },
+  ],
+  [
+    "05-build-an-explosion",
+    {
+      // §4 shows BOTH fireball constructions: -index is Option A (flipbook), -layered is Option B
+      // (layered additive). §9 ends by showing the finished explosion BOTH ways: -final-preview
+      // (flipbook) then -final-preview-layered (layered).
+      clips: [
+        "tutorial-05-opening-result.mp4",
+        "tutorial-05-flash-burst.mp4",
+        "tutorial-05-smoke-render-order.mp4",
+        "tutorial-05-fireball-build.mp4",
+        "tutorial-05-fireball-index.mp4",
+        "tutorial-05-fireball-layered.mp4",
+        "tutorial-05-sparks-children.mp4",
+        "tutorial-05-final-preview.mp4",
+        "tutorial-05-final-preview-layered.mp4",
+      ],
+      stills: [],
+      manualComment: 0,
+    },
+  ],
 ]);
 
 function guidePath(slug: string): string {
@@ -106,8 +130,7 @@ test("guide structure: pages, sidebar, active nav, kicker, toc", async ({ page }
     expect(new URL(currentHref ?? "", page.url()).pathname, slug + " active sidebar link").toBe(path);
 
     await expect(page.locator(".guide-kicker")).toHaveCount(1);
-    if (await page.locator("h2").count())
-      await expect(page.locator(".toc")).toHaveCount(1);
+    if (await page.locator("h2").count()) await expect(page.locator(".toc")).toHaveCount(1);
   }
 });
 
@@ -117,15 +140,13 @@ test("guide links: same-origin links resolve and fragment anchors exist", async 
   for (const slug of GUIDE_SLUGS) {
     await page.goto(guidePath(slug));
     const pageOrigin = new URL(page.url()).origin;
-    const hrefs = await page.locator("a[href]").evaluateAll((els) =>
-      els.map((el) => el.getAttribute("href") || ""));
+    const hrefs = await page.locator("a[href]").evaluateAll((els) => els.map((el) => el.getAttribute("href") || ""));
 
     for (const href of hrefs) {
       if (href.startsWith("#")) {
         const id = decodeURIComponent(href.slice(1));
         expect(id, slug + " has an empty fragment link").not.toBe("");
-        const hasTarget = await page.evaluate((targetId) =>
-          Boolean(document.getElementById(targetId)), id);
+        const hasTarget = await page.evaluate((targetId) => Boolean(document.getElementById(targetId)), id);
         expect(hasTarget, slug + " missing anchor target " + href).toBe(true);
         continue;
       }
@@ -148,16 +169,16 @@ test("guide links: same-origin links resolve and fragment anchors exist", async 
 test("guide pager: first, middle, and final pages expose expected directions", async ({ page }) => {
   await page.goto("/guide/home.html");
   await expect(page.locator(".guide-pager .pager-prev")).toHaveCount(0);
-  await expect(page.locator(".guide-pager .pager-next"))
-    .toHaveAttribute("href", "./coming-from-the-old-glyphx-editor.html");
+  await expect(page.locator(".guide-pager .pager-next")).toHaveAttribute(
+    "href",
+    "./coming-from-the-old-glyphx-editor.html",
+  );
 
   // Returning GlyphX users get their own Start Here route immediately after Guide Home,
   // before the course setup and beginner material.
   await page.goto("/guide/coming-from-the-old-glyphx-editor.html");
-  await expect(page.locator(".guide-pager .pager-prev"))
-    .toHaveAttribute("href", "./home.html");
-  await expect(page.locator(".guide-pager .pager-next"))
-    .toHaveAttribute("href", "./setup.html");
+  await expect(page.locator(".guide-pager .pager-prev")).toHaveAttribute("href", "./home.html");
+  await expect(page.locator(".guide-pager .pager-next")).toHaveAttribute("href", "./setup.html");
 
   // game-concepts-glossary is the last page in reading order (final entry of Reference),
   // so it exposes a prev but no next.
@@ -167,41 +188,41 @@ test("guide pager: first, middle, and final pages expose expected directions", a
 
   // The bridge follows the first published tutorial and precedes the first from-scratch build.
   await page.goto("/guide/concepts-before-you-build.html");
-  await expect(page.locator(".guide-pager .pager-prev"))
-    .toHaveAttribute("href", "./01-make-a-hardpoint-damage-effect-obvious.html");
-  await expect(page.locator(".guide-pager .pager-next"))
-    .toHaveAttribute("href", "./03-build-a-laser-shot-and-muzzle-flash.html");
+  await expect(page.locator(".guide-pager .pager-prev")).toHaveAttribute(
+    "href",
+    "./01-make-a-hardpoint-damage-effect-obvious.html",
+  );
+  await expect(page.locator(".guide-pager .pager-next")).toHaveAttribute(
+    "href",
+    "./03-build-a-laser-shot-and-muzzle-flash.html",
+  );
 
   await page.goto("/guide/03-build-a-laser-shot-and-muzzle-flash.html");
-  await expect(page.locator(".guide-pager .pager-prev"))
-    .toHaveAttribute("href", "./concepts-before-you-build.html");
-  await expect(page.locator(".guide-pager .pager-next"))
-    .toHaveAttribute("href", "./05-build-an-explosion.html");
+  await expect(page.locator(".guide-pager .pager-prev")).toHaveAttribute("href", "./concepts-before-you-build.html");
+  await expect(page.locator(".guide-pager .pager-next")).toHaveAttribute("href", "./05-build-an-explosion.html");
 
   // basic-controls now lives mid-"Start Here" (setup → basic-controls → primer). Assert its
   // pager wiring so a regression that drops the newly-promoted page from reading order is caught.
   await page.goto("/guide/basic-controls.html");
-  await expect(page.locator(".guide-pager .pager-prev"))
-    .toHaveAttribute("href", "./setup.html");
-  await expect(page.locator(".guide-pager .pager-next"))
-    .toHaveAttribute("href", "./particle-authoring-primer.html");
+  await expect(page.locator(".guide-pager .pager-prev")).toHaveAttribute("href", "./setup.html");
+  await expect(page.locator(".guide-pager .pager-next")).toHaveAttribute("href", "./particle-authoring-primer.html");
 });
 
 test("unpublished tutorial drafts stay in source but not in the public guide", async ({ page, request }) => {
-  expect(UNPUBLISHED_SLUGS).toEqual([
-    "02-polish-hardpoint-damage-smoke",
-    "04-recolor-and-orient-a-shield-impact",
-  ]);
+  expect(UNPUBLISHED_SLUGS).toEqual(["02-polish-hardpoint-damage-smoke", "04-recolor-and-orient-a-shield-impact"]);
 
   await page.goto(guidePath("home"));
   for (const slug of UNPUBLISHED_SLUGS) {
     const source = resolve(dirname(fileURLToPath(import.meta.url)), `../../../../site/guide-src/${slug}.md`);
     expect(existsSync(source), slug + " Markdown draft is retained").toBe(true);
     expect((await request.get(guidePath(slug))).status(), slug + " has no public route").toBe(404);
-    await expect(page.locator(`.guide-sidebar a[href="./${slug}.html"]`), slug + " is absent from sidebar")
-      .toHaveCount(0);
-    await expect(page.locator(`.guide-article a[href="./${slug}.html"]`), slug + " is absent from guide home")
-      .toHaveCount(0);
+    await expect(page.locator(`.guide-sidebar a[href="./${slug}.html"]`), slug + " is absent from sidebar").toHaveCount(
+      0,
+    );
+    await expect(
+      page.locator(`.guide-article a[href="./${slug}.html"]`),
+      slug + " is absent from guide home",
+    ).toHaveCount(0);
   }
   await expect(page.locator(".guide-sidebar .side-pending")).toHaveCount(0);
 });
@@ -211,12 +232,14 @@ test("guide home tables: structured tables with body links", async ({ page }) =>
   const tables = page.locator("table");
   await expect(tables).toHaveCount(2);
 
-  for (let i = 0; i < await tables.count(); i++) {
+  for (let i = 0; i < (await tables.count()); i++) {
     const table = tables.nth(i);
     await expect(table.locator("thead")).toHaveCount(1);
     await expect(table.locator("tbody")).toHaveCount(1);
-    expect(await table.locator("tbody td a").count(), "table " + (i + 1) + " should contain body links")
-      .toBeGreaterThan(0);
+    expect(
+      await table.locator("tbody td a").count(),
+      "table " + (i + 1) + " should contain body links",
+    ).toBeGreaterThan(0);
   }
 });
 
@@ -226,12 +249,14 @@ test("guide media: anchors expand to the exact manifest clips/stills, in order",
 
     // Exact ordered data-clip filenames — locks id, order, AND count in one assertion, so a
     // duplicated or swapped anchor (which would still pass a bare count) is caught.
-    const clips = await page.locator("video.clip-video")
+    const clips = await page
+      .locator("video.clip-video")
       .evaluateAll((els) => els.map((el) => el.getAttribute("data-clip")));
     expect(clips, slug + " ordered clip filenames").toEqual(want.clips);
 
     // Exact ordered still data-poster filenames (same reasoning; empty on page 03).
-    const stills = await page.locator("img.clip-img")
+    const stills = await page
+      .locator("img.clip-img")
       .evaluateAll((els) => els.map((el) => el.getAttribute("data-poster")));
     expect(stills, slug + " ordered still filenames").toEqual(want.stills);
 
@@ -247,26 +272,28 @@ test("guide media: anchors expand to the exact manifest clips/stills, in order",
     // No raw anchor survives un-expanded; the manual shot alone stays a comment.
     const html = await (await page.request.get(guidePath(slug))).text();
     expect(html.includes("<!-- Media:"), slug + " has an un-expanded anchor").toBe(false);
-    expect(html.match(/<!-- Media \(manual/g)?.length ?? 0, slug + " manual comment count")
-      .toBe(want.manualComment);
+    expect(html.match(/<!-- Media \(manual/g)?.length ?? 0, slug + " manual comment count").toBe(want.manualComment);
   }
 });
 
 test("guide media resolver: clips and stills join MEDIA_BASE at runtime", async ({ page }) => {
-  await page.addInitScript(() => { window.__MEDIA_BASE__ = "/media-local/"; });
+  await page.addInitScript(() => {
+    window.__MEDIA_BASE__ = "/media-local/";
+  });
   await page.goto(guidePath("01-make-a-hardpoint-damage-effect-obvious"));
 
   // Posters/still src are set synchronously from data-poster for the whole page.
   const firstVideo = page.locator("video.clip-video").first();
-  await expect.poll(() => firstVideo.evaluate((el: HTMLVideoElement) => el.poster))
-    .toContain("/media-local/");
+  await expect.poll(() => firstVideo.evaluate((el: HTMLVideoElement) => el.poster)).toContain("/media-local/");
   const firstStill = page.locator("img.clip-img").first();
-  await expect.poll(() => firstStill.evaluate((el: HTMLImageElement) => el.getAttribute("src") || ""))
+  await expect
+    .poll(() => firstStill.evaluate((el: HTMLImageElement) => el.getAttribute("src") || ""))
     .toContain("/media-local/tutorial-01-opening-result.png");
 
   // The in-view clip lazily loads its src from MEDIA_BASE (guide-media.js IntersectionObserver).
   await firstVideo.scrollIntoViewIfNeeded();
-  await expect.poll(() => firstVideo.evaluate((el: HTMLVideoElement) => el.getAttribute("src") || ""))
+  await expect
+    .poll(() => firstVideo.evaluate((el: HTMLVideoElement) => el.getAttribute("src") || ""))
     .toContain("/media-local/tutorial-01-open-override.mp4");
 });
 
@@ -278,10 +305,22 @@ test("guide media resolver: falls back to the site's media/ mirror by default", 
   // attachment disposition browsers refuse to stream.
   await page.goto(guidePath("01-make-a-hardpoint-damage-effect-obvious"));
   // el.poster reflects the RESOLVED URL: /guide/x.html + ../media/ → /media/ at site root.
-  await expect.poll(() => page.locator("video.clip-video").first().evaluate((el: HTMLVideoElement) => el.poster))
+  await expect
+    .poll(() =>
+      page
+        .locator("video.clip-video")
+        .first()
+        .evaluate((el: HTMLVideoElement) => el.poster),
+    )
     .toMatch(/\/media\/[^/]+$/);
   // The raw attribute keeps the shipped relative literal.
-  await expect.poll(() => page.locator("img.clip-img").first().evaluate((el: HTMLImageElement) => el.getAttribute("src") || ""))
+  await expect
+    .poll(() =>
+      page
+        .locator("img.clip-img")
+        .first()
+        .evaluate((el: HTMLImageElement) => el.getAttribute("src") || ""),
+    )
     .toContain(DEFAULT_MEDIA_ATTR);
 });
 
@@ -344,8 +383,7 @@ test("guide setup responsive layout: rails step down before they crush the artic
     firstChildClass: document.querySelector(".guide-layout")!.firstElementChild?.className,
   }));
   expect(mobile.scrollWidth).toBeLessThanOrEqual(mobile.clientWidth + 1);
-  expect(gridTrackCount(mobile.columns) === 1 || mobile.tocDisplay === "none", mobile.columns)
-    .toBe(true);
+  expect(gridTrackCount(mobile.columns) === 1 || mobile.tocDisplay === "none", mobile.columns).toBe(true);
   expect(mobile.firstChildClass, "article is first in DOM and reading order").toContain("guide-main");
   expect(mobile.mainTop, "article appears before the full guide index").toBeLessThan(mobile.sidebarTop);
 });
@@ -390,13 +428,11 @@ test("guide returning GlyphX users: old-to-new workflows and verified departures
   await expect(page.locator("h1")).toHaveText("Coming from the Old GlyphX Editor?");
   await expect(page.locator(".guide-article")).toContainText("Mike.NL's GlyphX Particle Editor v1.5");
   const opening = page.locator(".guide-article > p").filter({ hasText: "Each workflow starts" });
-  await expect(opening.getByRole("link", { name: "Setup", exact: true })).toHaveAttribute(
-    "href",
-    "./setup.html",
-  );
+  await expect(opening.getByRole("link", { name: "Setup", exact: true })).toHaveAttribute("href", "./setup.html");
 
-  const h2Ids = await page.locator(".guide-article h2").evaluateAll((headings) =>
-    headings.map((heading) => heading.id));
+  const h2Ids = await page
+    .locator(".guide-article h2")
+    .evaluateAll((headings) => headings.map((heading) => heading.id));
   expect(h2Ids).toEqual([
     "same-particle-rebuilt-workspace",
     "key-workflow-changes",
@@ -409,8 +445,9 @@ test("guide returning GlyphX users: old-to-new workflows and verified departures
     "where-to-go-next",
   ]);
 
-  const h3Ids = await page.locator(".guide-article h3").evaluateAll((headings) =>
-    headings.map((heading) => heading.id));
+  const h3Ids = await page
+    .locator(".guide-article h3")
+    .evaluateAll((headings) => headings.map((heading) => heading.id));
   expect(h3Ids).toEqual([
     "curves-one-canvas-visibility-checkboxes",
     "organize-emitters-in-the-tree",
@@ -463,22 +500,45 @@ test("guide returning GlyphX users: old-to-new workflows and verified departures
   const rows = departureTable.locator("tbody tr");
   await expect(rows).toHaveCount(DEPARTURE_ROWS.length);
   const cells = await rows.evaluateAll((trs) =>
-    trs.map((tr) => [...tr.querySelectorAll("td")].map((td) => td.textContent!.trim())));
+    trs.map((tr) => [...tr.querySelectorAll("td")].map((td) => td.textContent!.trim())),
+  );
   expect(cells).toEqual(DEPARTURE_ROWS);
-  const labels = await rows.first().locator("td").evaluateAll((tds) =>
-    tds.map((td) => td.getAttribute("data-label")));
+  const labels = await rows
+    .first()
+    .locator("td")
+    .evaluateAll((tds) => tds.map((td) => td.getAttribute("data-label")));
   expect(labels).toEqual(departureHeaders);
 
   const workflows = [
-    ["curves-one-canvas-visibility-checkboxes", ["Curve channels", "Snap to grid", "Scale"], ["ref-curve-visibility.mp4"]],
+    [
+      "curves-one-canvas-visibility-checkboxes",
+      ["Curve channels", "Snap to grid", "Scale"],
+      ["ref-curve-visibility.mp4"],
+    ],
     ["organize-emitters-in-the-tree", ["multi-select", "reparent", "subtree"], ["ref-render-order.mp4"]],
-    ["duplicate-and-link-repeated-variants", ["Increment Index", "Set Link Group", "shared"], ["tutorial-05-sparks-children.mp4"]],
-    ["import-emitters-from-another-particle", ["Import Emitters", "Windows clipboard"], ["ref-returning-import-emitters.png"]],
+    [
+      "duplicate-and-link-repeated-variants",
+      ["Increment Index", "Set Link Group", "shared"],
+      ["tutorial-05-sparks-children.mp4"],
+    ],
+    [
+      "import-emitters-from-another-particle",
+      ["Import Emitters", "Windows clipboard"],
+      ["ref-returning-import-emitters.png"],
+    ],
     ["load-assets-from-your-mod-stack", ["Active load order", "top layer", "MODPATH"], ["f04.mp4"]],
-    ["reuse-frequently-used-textures", ["Frequently-used textures", "Pinned", "Recent"], ["ref-returning-texture-palette.png"]],
+    [
+      "reuse-frequently-used-textures",
+      ["Frequently-used textures", "Pinned", "Recent"],
+      ["ref-returning-texture-palette.png"],
+    ],
     ["pick-atlas-frames-visually", ["Atlas Frames", "Index"], ["ref-returning-atlas-frame-picker.png"]],
     ["choose-a-skydome-ground-and-lighting", ["Game dome", "Ground", "Lighting"], ["ref-returning-skydome-picker.png"]],
-    ["place-and-move-a-reference-object", ["gizmo", "Lock object", "Snap to grid"], ["faith.mp4", "ref-returning-reference-gizmo.png"]],
+    [
+      "place-and-move-a-reference-object",
+      ["gizmo", "Lock object", "Snap to grid"],
+      ["faith.mp4", "ref-returning-reference-gizmo.png"],
+    ],
     ["launch-effects-with-the-spawner", ["Spawner", "Manual", "Auto"], ["tutorial-03-spawner-direction.mp4"]],
     ["pause-and-step-the-preview", ["Pause", "Step", "Step 10"], []],
     ["undo-recover-and-catch-overloads", ["Undo", "autosave", "overload"], []],
@@ -509,8 +569,7 @@ test("guide returning GlyphX users: old-to-new workflows and verified departures
     expect(section.firstTexts[0], `${id} starts with the old workflow`).toMatch(/^Old editor:/);
     expect(section.firstTexts[1], `${id} follows with the current workflow`).toMatch(/^This editor:/);
     expect(section.firstTexts[2], `${id} gives the exact current location`).toMatch(/^Where to find it:/);
-    for (const term of expectedTerms)
-      expect(section.text, `${id} covers ${term}`).toContain(term);
+    for (const term of expectedTerms) expect(section.text, `${id} covers ${term}`).toContain(term);
     expect(section.figureCount, `${id} has the intended visual count`).toBe(expectedMedia.length);
     expect(section.figureMedia, `${id} uses its intended visual`).toEqual(expectedMedia);
   }
@@ -535,8 +594,7 @@ test("guide returning GlyphX users: old-to-new workflows and verified departures
   expect(safetyText).toContain("Restore recent");
   expect(safetyText).toContain("Restore stable");
 
-  const conveniences = page.locator("#everyday-conveniences")
-    .locator("xpath=following-sibling::ul[1]");
+  const conveniences = page.locator("#everyday-conveniences").locator("xpath=following-sibling::ul[1]");
   await expect(conveniences.locator(":scope > li")).toHaveCount(3);
   await expect(conveniences).toContainText("Help → Keyboard Shortcuts…");
   await expect(page.locator(".guide-article table")).toHaveCount(1);
@@ -564,13 +622,16 @@ test("guide returning GlyphX users: old-to-new workflows and verified departures
 });
 
 test("guide returning-user reveal shares one accessible comparison state", async ({ page }) => {
-  await page.addInitScript(() => { window.__MEDIA_BASE__ = "/media-local/"; });
+  await page.addInitScript(() => {
+    window.__MEDIA_BASE__ = "/media-local/";
+  });
   const transparentPng = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
     "base64",
   );
   await page.route("**/returning-ui-*.png", (route) =>
-    route.fulfill({ status: 200, contentType: "image/png", body: transparentPng }));
+    route.fulfill({ status: 200, contentType: "image/png", body: transparentPng }),
+  );
   await page.goto("/guide/coming-from-the-old-glyphx-editor.html");
   const comparison = page.locator("[data-ui-compare]");
   await expect(comparison).toHaveCount(1);
@@ -579,11 +640,11 @@ test("guide returning-user reveal shares one accessible comparison state", async
 
   const images = comparison.locator("img.clip-img");
   await expect(images).toHaveCount(2);
-  await expect.poll(() => images.nth(0).evaluate((image) => getComputedStyle(image).objectFit))
-    .toBe("contain");
+  await expect.poll(() => images.nth(0).evaluate((image) => getComputedStyle(image).objectFit)).toBe("contain");
   await expect(images.nth(0)).toHaveAttribute("data-poster", "returning-ui-legacy.png");
   await expect(images.nth(1)).toHaveAttribute("data-poster", "returning-ui-current.png");
-  await expect.poll(() => images.nth(0).evaluate((img: HTMLImageElement) => img.src))
+  await expect
+    .poll(() => images.nth(0).evaluate((img: HTMLImageElement) => img.src))
     .toContain("/media-local/returning-ui-legacy.png");
 
   const range = comparison.getByRole("slider", {
@@ -614,7 +675,7 @@ test("guide returning-user reveal shares one accessible comparison state", async
 
   const rangeBox = await range.boundingBox();
   expect(rangeBox).not.toBeNull();
-  await page.mouse.click(rangeBox!.x + rangeBox!.width * .75, rangeBox!.y + rangeBox!.height / 2);
+  await page.mouse.click(rangeBox!.x + rangeBox!.width * 0.75, rangeBox!.y + rangeBox!.height / 2);
   expect(Number(await range.inputValue())).toBeGreaterThan(70);
 
   await images.nth(0).evaluate((img) => img.dispatchEvent(new Event("error")));
@@ -662,24 +723,23 @@ test("guide returning-user comparison remains two labeled images without JavaScr
     "GlyphX Particle Editor v1.5",
     "Particle Editor — current interface",
   ]);
-  for (const image of await comparison.locator("img").all())
-    await expect(image).toBeVisible();
+  for (const image of await comparison.locator("img").all()) await expect(image).toBeVisible();
 
-  const measureFallback = () => comparison.evaluate((element) => {
-    const stage = element.querySelector(".ui-compare-stage")!.getBoundingClientRect();
-    const figures = Array.from(element.querySelectorAll("figure"), (figure) =>
-      figure.getBoundingClientRect());
-    return {
-      stage: { right: stage.right, bottom: stage.bottom },
-      figures: figures.map((figure) => ({
-        left: figure.left,
-        top: figure.top,
-        right: figure.right,
-        bottom: figure.bottom,
-      })),
-      viewport: document.documentElement.clientWidth,
-    };
-  });
+  const measureFallback = () =>
+    comparison.evaluate((element) => {
+      const stage = element.querySelector(".ui-compare-stage")!.getBoundingClientRect();
+      const figures = Array.from(element.querySelectorAll("figure"), (figure) => figure.getBoundingClientRect());
+      return {
+        stage: { right: stage.right, bottom: stage.bottom },
+        figures: figures.map((figure) => ({
+          left: figure.left,
+          top: figure.top,
+          right: figure.right,
+          bottom: figure.bottom,
+        })),
+        viewport: document.documentElement.clientWidth,
+      };
+    });
 
   const desktop = await measureFallback();
   expect(desktop.figures[1].left).toBeGreaterThan(desktop.figures[0].left);
@@ -692,8 +752,7 @@ test("guide returning-user comparison remains two labeled images without JavaScr
   const mobile = await measureFallback();
   expect(mobile.figures[1].top).toBeGreaterThan(mobile.figures[0].top);
   expect(mobile.stage.right).toBeLessThanOrEqual(mobile.viewport + 1);
-  for (const figure of mobile.figures)
-    expect(figure.bottom).toBeLessThanOrEqual(mobile.stage.bottom + 1);
+  for (const figure of mobile.figures) expect(figure.bottom).toBeLessThanOrEqual(mobile.stage.bottom + 1);
   await context.close();
 });
 
@@ -706,7 +765,8 @@ for (const failedLayer of ["legacy", "current"] as const) {
     const survivingLayer = failedLayer === "legacy" ? "current" : "legacy";
     await page.route(`**/returning-ui-${failedLayer}.png`, (route) => route.abort("failed"));
     await page.route(`**/returning-ui-${survivingLayer}.png`, (route) =>
-      route.fulfill({ status: 200, contentType: "image/png", body: transparentPng }));
+      route.fulfill({ status: 200, contentType: "image/png", body: transparentPng }),
+    );
     await page.goto("/guide/coming-from-the-old-glyphx-editor.html");
     const comparison = page.locator("[data-ui-compare]");
     await expect(comparison).toHaveClass(new RegExp(`has-${failedLayer}-error`));
@@ -717,8 +777,7 @@ for (const failedLayer of ["legacy", "current"] as const) {
 
 test("guide home points returning modders at their Start Here page", async ({ page }) => {
   await page.goto("/guide/home.html");
-  const pointer = page.locator(
-    '.guide-article a[href="./coming-from-the-old-glyphx-editor.html"]');
+  const pointer = page.locator('.guide-article a[href="./coming-from-the-old-glyphx-editor.html"]');
   await expect(pointer).toHaveCount(1);
   await expect(pointer.locator("xpath=parent::p")).toContainText(
     "If the editor and your mod stack already work, use Coming from the Old GlyphX Editor? as your migration map",
@@ -736,12 +795,12 @@ test("a11y: no critical/serious axe violations in the returning-users article", 
   await page.goto("/guide/coming-from-the-old-glyphx-editor.html");
   // Wait out the guide-up entrance fade (guide.css animates .guide-layout > * from opacity 0)
   // or axe measures opacity-blended colors and reports phantom contrast failures.
-  await page.waitForFunction(() =>
-    [...document.querySelectorAll(".guide-layout > *")]
-      .every((el) => getComputedStyle(el).opacity === "1"),
-    null, { timeout: 5000 });
-  const results = await new AxeBuilder({ page }).include(".guide-article")
-    .withTags(["wcag2a", "wcag2aa"]).analyze();
+  await page.waitForFunction(
+    () => [...document.querySelectorAll(".guide-layout > *")].every((el) => getComputedStyle(el).opacity === "1"),
+    null,
+    { timeout: 5000 },
+  );
+  const results = await new AxeBuilder({ page }).include(".guide-article").withTags(["wcag2a", "wcag2aa"]).analyze();
   const bad = results.violations.filter((v) => ["critical", "serious"].includes(v.impact ?? ""));
   expect(bad, JSON.stringify(bad.map((v) => v.id))).toHaveLength(0);
 });

@@ -15,18 +15,26 @@ import { estimateSystemLoad } from "../chain-load";
 const spawn = (s: Partial<SpawnParamsDto>): SpawnParamsDto => ({ ...ZERO_SPAWN, ...s });
 
 let nextId = 100;
-const node = (
-  name: string,
-  s: Partial<SpawnParamsDto>,
-  children: EmitterTreeNode[] = [],
-): EmitterTreeNode => ({
-  id: nextId, stableId: nextId++, name, role: "root",
-  linkGroup: 0, visible: true, spawn: spawn(s), children,
+const node = (name: string, s: Partial<SpawnParamsDto>, children: EmitterTreeNode[] = []): EmitterTreeNode => ({
+  id: nextId,
+  stableId: nextId++,
+  name,
+  role: "root",
+  linkGroup: 0,
+  visible: true,
+  spawn: spawn(s),
+  children,
 });
 
 const syntheticRoot = (children: EmitterTreeNode[]): EmitterTreeNode => ({
-  id: -1, stableId: 0, name: "", role: "root",
-  linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children,
+  id: -1,
+  stableId: 0,
+  name: "",
+  role: "root",
+  linkGroup: 0,
+  visible: true,
+  spawn: ZERO_SPAWN,
+  children,
 });
 
 // ---------------------------------------------------------------------------
@@ -41,7 +49,9 @@ function makeBridge() {
 // Tests
 // ---------------------------------------------------------------------------
 
-beforeEach(() => { nextId = 100; });
+beforeEach(() => {
+  nextId = 100;
+});
 
 describe("useEstimatedLoadPush", () => {
   it("pushes engine/set/estimated-load once on mount with the computed perInstance", () => {
@@ -62,8 +72,7 @@ describe("useEstimatedLoadPush", () => {
   it("does NOT push a second time when re-rendered with a tree whose estimate is within epsilon", () => {
     const bridge = makeBridge();
     // Build two trees with the exact same spawn params → same estimate
-    const makeTree = () =>
-      syntheticRoot([node("a", { nParticlesPerSecond: 10, lifetime: 2 })]);
+    const makeTree = () => syntheticRoot([node("a", { nParticlesPerSecond: 10, lifetime: 2 })]);
 
     const tree1 = { root: makeTree() };
     const tree2 = { root: makeTree() };
@@ -71,8 +80,7 @@ describe("useEstimatedLoadPush", () => {
     expect(estimateSystemLoad(tree1.root)).toBeCloseTo(estimateSystemLoad(tree2.root), 6);
 
     const { rerender } = renderHook(
-      ({ tree }: { tree: { root: EmitterTreeNode } }) =>
-        useEstimatedLoadPush(bridge as never, tree),
+      ({ tree }: { tree: { root: EmitterTreeNode } }) => useEstimatedLoadPush(bridge as never, tree),
       { initialProps: { tree: tree1 } },
     );
 
@@ -91,8 +99,7 @@ describe("useEstimatedLoadPush", () => {
     const largeRoot = syntheticRoot([node("b", { nParticlesPerSecond: 200, lifetime: 5 })]);
 
     const { rerender } = renderHook(
-      ({ tree }: { tree: { root: EmitterTreeNode } }) =>
-        useEstimatedLoadPush(bridge as never, tree),
+      ({ tree }: { tree: { root: EmitterTreeNode } }) => useEstimatedLoadPush(bridge as never, tree),
       { initialProps: { tree: { root: smallRoot } } },
     );
 

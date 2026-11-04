@@ -46,26 +46,20 @@ describe("TestHostBridge requests", () => {
   it("an ok:false reply with no error string rejects with a message naming the request", async () => {
     dispatchRequest.mockResolvedValue(JSON.stringify({ type: "res", ok: false }));
     const b = new TestHostBridge();
-    await expect(b.request({ kind: "undo/perform", params: { direction: "undo" } })).rejects.toThrow(
-      /undo\/perform/,
-    );
+    await expect(b.request({ kind: "undo/perform", params: { direction: "undo" } })).rejects.toThrow(/undo\/perform/);
   });
 
   it("surfaces the host's diagnostic from an id:null error envelope", async () => {
     // BridgeDispatcher's parse-error / dispatch-exception envelopes carry id: null.
     dispatchRequest.mockResolvedValue(JSON.stringify({ type: "res", id: null, ok: false, error: "parse error: x" }));
     const b = new TestHostBridge();
-    await expect(b.request({ kind: "undo/perform", params: { direction: "undo" } })).rejects.toThrow(
-      "parse error: x",
-    );
+    await expect(b.request({ kind: "undo/perform", params: { direction: "undo" } })).rejects.toThrow("parse error: x");
   });
 
   it("rejects a reply that is not a response envelope", async () => {
     dispatchRequest.mockResolvedValue(JSON.stringify({ hello: "world" }));
     const b = new TestHostBridge();
-    await expect(b.request({ kind: "undo/perform", params: { direction: "undo" } })).rejects.toThrow(
-      /undo\/perform/,
-    );
+    await expect(b.request({ kind: "undo/perform", params: { direction: "undo" } })).rejects.toThrow(/undo\/perform/);
   });
 });
 
@@ -74,9 +68,13 @@ describe("TestHostBridge events", () => {
     const b = new TestHostBridge();
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     const seen: unknown[] = [];
-    b.on("dirty/changed", () => { throw new Error("subscriber bug"); });
+    b.on("dirty/changed", () => {
+      throw new Error("subscriber bug");
+    });
     b.on("dirty/changed", (e) => seen.push(e));
-    expect(() => messageHandler!({ data: { type: "evt", kind: "dirty/changed", payload: { dirty: true } } })).not.toThrow();
+    expect(() =>
+      messageHandler!({ data: { type: "evt", kind: "dirty/changed", payload: { dirty: true } } }),
+    ).not.toThrow();
     expect(seen).toEqual([{ kind: "dirty/changed", payload: { dirty: true } }]);
     expect(err).toHaveBeenCalled();
     err.mockRestore();

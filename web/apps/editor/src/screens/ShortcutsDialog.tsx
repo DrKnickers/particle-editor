@@ -42,7 +42,10 @@ const SECTIONS: readonly Section[] = [
       { keys: ["F8"], does: "Pause / resume" },
       { keys: ["F9"], does: "Step one frame" },
       { keys: ["F10"], does: "Step ten frames" },
-      { keys: ["Shift"], does: "Hold to spawn an instance at the cursor — only while the pointer is over the viewport" },
+      {
+        keys: ["Shift"],
+        does: "Hold to spawn an instance at the cursor — only while the pointer is over the viewport",
+      },
       { keys: ["Ctrl+Space"], does: "Trigger a spawner burst" },
       { keys: ["Ctrl+Home"], does: "Reset the camera" },
     ],
@@ -117,9 +120,7 @@ export function ShortcutsDialog({
         <div className="flex flex-col gap-4">
           {SECTIONS.map((s) => (
             <section key={s.title}>
-              <div className="mb-1.5 text-2xs font-semibold uppercase tracking-[0.04em] text-text-2">
-                {s.title}
-              </div>
+              <div className="mb-1.5 text-2xs font-semibold uppercase tracking-[0.04em] text-text-2">{s.title}</div>
               <div className="grid grid-cols-[minmax(120px,auto)_1fr] items-baseline gap-x-4 gap-y-1.5">
                 {s.rows.map((r) => (
                   <Fragment key={r.does}>

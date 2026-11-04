@@ -1,9 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import {
-  readModelShadows,
-  writeModelShadows,
-  applyModelShadows,
-} from "@/lib/model-shadows";
+import { readModelShadows, writeModelShadows, applyModelShadows } from "@/lib/model-shadows";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
 describe("model-shadows preference", () => {

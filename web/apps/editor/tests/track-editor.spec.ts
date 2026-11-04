@@ -54,9 +54,7 @@ test("CurveEditorPanel is always mounted; placeholder shows when no emitter is s
 
   // Channel list is present even with no emitter — 7 rows.
   for (const id of ["scale", "red", "green", "blue", "alpha", "rotation", "index"]) {
-    await expect(
-      panel.locator(`[data-testid="curve-channel-row-${id}"]`),
-    ).toBeVisible();
+    await expect(panel.locator(`[data-testid="curve-channel-row-${id}"]`)).toBeVisible();
   }
 });
 
@@ -64,7 +62,7 @@ test("selecting an emitter swaps the placeholder for the multi-channel CurveEdit
   await page.evaluate(async () => {
     const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
-    const list = await bridge.request({ kind: "emitters/list", params: {} }) as {
+    const list = (await bridge.request({ kind: "emitters/list", params: {} })) as {
       root: { children: { id: number }[] };
     };
     const firstId = list.root.children[0]?.id;
@@ -78,8 +76,7 @@ test("selecting an emitter swaps the placeholder for the multi-channel CurveEdit
   // SVG is visible; placeholder is gone.
   const svg = panel.locator('[data-testid="curve-editor-svg"]');
   await expect(svg).toBeVisible({ timeout: 5_000 });
-  await expect(panel.locator('[data-testid="curve-editor-placeholder"]'))
-    .toHaveCount(0, { timeout: 5_000 });
+  await expect(panel.locator('[data-testid="curve-editor-placeholder"]')).toHaveCount(0, { timeout: 5_000 });
   // It's the multi-channel variant.
   await expect(svg).toHaveAttribute("data-multi-channel", "true");
 
@@ -111,7 +108,7 @@ test("channel checkboxes default to R / G / B ON; Scale / Alpha / Rotation / Ind
 test("emitters/add-track-key via the bridge adds a key (host round-trip unchanged)", async () => {
   const selectedId = await page.evaluate(async () => {
     const bridge = window.bridge;
-    const list = await bridge!.request({ kind: "emitters/list", params: {} }) as {
+    const list = (await bridge!.request({ kind: "emitters/list", params: {} })) as {
       root: { children: { id: number }[] };
     };
     const firstId = list.root.children[0]?.id;
@@ -123,14 +120,14 @@ test("emitters/add-track-key via the bridge adds a key (host round-trip unchange
   // Add a key, fetch the tracks, and assert the new key is present.
   const result = await page.evaluate(async (id) => {
     const bridge = window.bridge;
-    const r = await bridge!.request({
+    const r = (await bridge!.request({
       kind: "emitters/add-track-key",
       params: { id, track: "green", time: 33.3, value: 0.42 },
-    }) as { time: number; value: number };
-    const tracks = await bridge!.request({
+    })) as { time: number; value: number };
+    const tracks = (await bridge!.request({
       kind: "emitters/get-tracks",
       params: { id },
-    }) as { tracks: { name: string; keys: { time: number; value: number }[] }[] };
+    })) as { tracks: { name: string; keys: { time: number; value: number }[] }[] };
     return {
       ack: r,
       keys: tracks.tracks.find((t) => t.name === "green")?.keys ?? [],
@@ -156,7 +153,7 @@ test("emitters/add-track-key via the bridge adds a key (host round-trip unchange
 test("emitters/set-track-key via the bridge moves a key (host round-trip unchanged)", async () => {
   const selectedId = await page.evaluate(async () => {
     const bridge = window.bridge;
-    const list = await bridge!.request({ kind: "emitters/list", params: {} }) as {
+    const list = (await bridge!.request({ kind: "emitters/list", params: {} })) as {
       root: { children: { id: number }[] };
     };
     const firstId = list.root.children[0]?.id;
@@ -183,10 +180,10 @@ test("emitters/set-track-key via the bridge moves a key (host round-trip unchang
       kind: "emitters/set-track-key",
       params: { id, track: "red", oldTime: 50, newTime: 40, newValue: 0.75 },
     });
-    const tracks = await bridge!.request({
+    const tracks = (await bridge!.request({
       kind: "emitters/get-tracks",
       params: { id },
-    }) as { tracks: { name: string; keys: { time: number; value: number }[] }[] };
+    })) as { tracks: { name: string; keys: { time: number; value: number }[] }[] };
     return tracks.tracks.find((t) => t.name === "red")?.keys ?? [];
   }, selectedId);
 
@@ -223,7 +220,7 @@ test("clicking a channel row sets focus + only that channel renders interactive 
   await page.evaluate(async () => {
     const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
-    const list = await bridge.request({ kind: "emitters/list", params: {} }) as {
+    const list = (await bridge.request({ kind: "emitters/list", params: {} })) as {
       root: { children: { id: number }[] };
     };
     const firstId = list.root.children[0]?.id;
@@ -234,14 +231,12 @@ test("clicking a channel row sets focus + only that channel renders interactive 
   const panel = page.locator('[data-testid="curve-editor-panel"]');
   // Default focus is Red (the first channel visible by default).
   await expect(panel).toHaveAttribute("data-focus-channel", "red", { timeout: 5_000 });
-  await expect(panel.locator('[data-testid="curve-channel-row-red"]'))
-    .toHaveAttribute("data-focus", "true");
+  await expect(panel.locator('[data-testid="curve-channel-row-red"]')).toHaveAttribute("data-focus", "true");
 
   // Click Green row — focus moves; data-focus-channel updates.
   await panel.locator('[data-testid="curve-channel-row-green"]').click();
   await expect(panel).toHaveAttribute("data-focus-channel", "green", { timeout: 5_000 });
-  await expect(panel.locator('[data-testid="curve-channel-row-green"]'))
-    .toHaveAttribute("data-focus", "true");
+  await expect(panel.locator('[data-testid="curve-channel-row-green"]')).toHaveAttribute("data-focus", "true");
 
   // Tear down.
   await page.evaluate(async () => {
@@ -266,7 +261,7 @@ test("clicking the Smooth interpolation button fires set-track-interpolation via
   // Pick an emitter.
   const selectedId = await page.evaluate(async () => {
     const bridge = window.bridge;
-    const list = await bridge!.request({ kind: "emitters/list", params: {} }) as {
+    const list = (await bridge!.request({ kind: "emitters/list", params: {} })) as {
       root: { children: { id: number }[] };
     };
     const firstId = list.root.children[0]?.id;
@@ -287,10 +282,10 @@ test("clicking the Smooth interpolation button fires set-track-interpolation via
   await page.waitForTimeout(200);
   const interp = await page.evaluate(async (id) => {
     const bridge = window.bridge;
-    const tracks = await bridge!.request({
+    const tracks = (await bridge!.request({
       kind: "emitters/get-tracks",
       params: { id },
-    }) as { tracks: { name: string; interpolation: string }[] };
+    })) as { tracks: { name: string; interpolation: string }[] };
     return tracks.tracks.find((t) => t.name === "red")?.interpolation;
   }, selectedId);
   expect(interp).toBe("smooth");

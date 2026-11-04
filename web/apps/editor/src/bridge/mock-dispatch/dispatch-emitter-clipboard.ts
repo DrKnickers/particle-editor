@@ -1,8 +1,6 @@
 // Mock counterpart of src/host/BridgeDispatch_EmitterClipboard.cpp.
 
-import type {
-  Request,
-} from "@particle-editor/bridge-schema";
+import type { Request } from "@particle-editor/bridge-schema";
 import {
   copyEmittersToClipboard,
   deleteEmitter,
@@ -15,17 +13,12 @@ import {
 } from "../mock-state";
 import type { MockDispatchHost } from "./host";
 
-type EmitterClipboardKind =
-  | "emitters/copy"
-  | "emitters/cut"
-  | "emitters/paste"
-  | "emitters/paste-as-child";
+type EmitterClipboardKind = "emitters/copy" | "emitters/cut" | "emitters/paste" | "emitters/paste-as-child";
 
 type EmitterClipboardRequest = Extract<Request, { kind: EmitterClipboardKind }>;
 
 export function dispatchEmitterClipboard(this: MockDispatchHost, req: EmitterClipboardRequest): unknown {
   switch (req.kind) {
-
     // ---------------- emitters/copy / cut / paste
     //
     // Process-local clipboard mirrors the native host's
@@ -86,12 +79,7 @@ export function dispatchEmitterClipboard(this: MockDispatchHost, req: EmitterCli
     case "emitters/paste-as-child": {
       const cur = useMockEmitterTree.getState().tree;
       const buf = useMockEmitterClipboard.getState().buffer;
-      const result = pasteAsChildFromClipboard(
-        cur,
-        buf,
-        req.params.parentId,
-        req.params.slot,
-      );
+      const result = pasteAsChildFromClipboard(cur, buf, req.params.parentId, req.params.slot);
       if (result === null) {
         // Empty clipboard or occupied slot — emit nothing, no dirty flip.
         return { newId: -1 };

@@ -49,58 +49,56 @@ type EmitterSelectionStore = {
   setIds: (ids: number[], primary: number | null) => void;
 };
 
-export const useEmitterSelectionStore = create<EmitterSelectionStore>(
-  (set, get) => ({
-    ids: [],
-    primary: null,
-    anchor: null,
-    setSingle: (id) => set({ ids: [id], primary: id, anchor: id }),
-    toggle: (id) => {
-      const { ids, primary } = get();
-      const idx = ids.indexOf(id);
-      if (idx === -1) {
-        // Add. Becomes the new primary AND the new shift anchor.
-        set({ ids: [...ids, id], primary: id, anchor: id });
-      } else {
-        // Remove. Primary stays unless we just removed it.
-        const nextIds = ids.filter((x) => x !== id);
-        let nextPrimary: number | null = primary;
-        if (primary === id) {
-          // Move primary to the previous id (matches the visual order),
-          // falling back to null when the set is now empty.
-          nextPrimary = nextIds.length > 0 ? nextIds[nextIds.length - 1]! : null;
-        }
-        set({ ids: nextIds, primary: nextPrimary, anchor: nextPrimary });
+export const useEmitterSelectionStore = create<EmitterSelectionStore>((set, get) => ({
+  ids: [],
+  primary: null,
+  anchor: null,
+  setSingle: (id) => set({ ids: [id], primary: id, anchor: id }),
+  toggle: (id) => {
+    const { ids, primary } = get();
+    const idx = ids.indexOf(id);
+    if (idx === -1) {
+      // Add. Becomes the new primary AND the new shift anchor.
+      set({ ids: [...ids, id], primary: id, anchor: id });
+    } else {
+      // Remove. Primary stays unless we just removed it.
+      const nextIds = ids.filter((x) => x !== id);
+      let nextPrimary: number | null = primary;
+      if (primary === id) {
+        // Move primary to the previous id (matches the visual order),
+        // falling back to null when the set is now empty.
+        nextPrimary = nextIds.length > 0 ? nextIds[nextIds.length - 1]! : null;
       }
-    },
-    range: (toId, orderedIds) => {
-      // Pivot from the stable anchor (fall back to primary, then toId) so
-      // repeated shift-clicks all extend from the same origin row. primary
-      // moves to toId (the focus row); anchor is left UNTOUCHED.
-      const { anchor, primary } = get();
-      const pivot = anchor ?? primary;
-      if (pivot === null) {
-        set({ ids: [toId], primary: toId, anchor: toId });
-        return;
-      }
-      const fromIdx = orderedIds.indexOf(pivot);
-      const toIdx   = orderedIds.indexOf(toId);
-      if (fromIdx === -1 || toIdx === -1) {
-        // One of the endpoints isn't in the rendered tree (mid-mutation
-        // race?). Fall back to a single-row selection so the UI stays
-        // consistent.
-        set({ ids: [toId], primary: toId, anchor: toId });
-        return;
-      }
-      const lo = Math.min(fromIdx, toIdx);
-      const hi = Math.max(fromIdx, toIdx);
-      const slice = orderedIds.slice(lo, hi + 1);
-      set({ ids: slice, primary: toId }); // anchor unchanged
-    },
-    clear: () => set({ ids: [], primary: null, anchor: null }),
-    setIds: (ids, primary) => set({ ids: [...ids], primary, anchor: primary }),
-  }),
-);
+      set({ ids: nextIds, primary: nextPrimary, anchor: nextPrimary });
+    }
+  },
+  range: (toId, orderedIds) => {
+    // Pivot from the stable anchor (fall back to primary, then toId) so
+    // repeated shift-clicks all extend from the same origin row. primary
+    // moves to toId (the focus row); anchor is left UNTOUCHED.
+    const { anchor, primary } = get();
+    const pivot = anchor ?? primary;
+    if (pivot === null) {
+      set({ ids: [toId], primary: toId, anchor: toId });
+      return;
+    }
+    const fromIdx = orderedIds.indexOf(pivot);
+    const toIdx = orderedIds.indexOf(toId);
+    if (fromIdx === -1 || toIdx === -1) {
+      // One of the endpoints isn't in the rendered tree (mid-mutation
+      // race?). Fall back to a single-row selection so the UI stays
+      // consistent.
+      set({ ids: [toId], primary: toId, anchor: toId });
+      return;
+    }
+    const lo = Math.min(fromIdx, toIdx);
+    const hi = Math.max(fromIdx, toIdx);
+    const slice = orderedIds.slice(lo, hi + 1);
+    set({ ids: slice, primary: toId }); // anchor unchanged
+  },
+  clear: () => set({ ids: [], primary: null, anchor: null }),
+  setIds: (ids, primary) => set({ ids: [...ids], primary, anchor: primary }),
+}));
 
 // ─── Scalar selector hooks (Zustand v5 fresh-object rule)
 //

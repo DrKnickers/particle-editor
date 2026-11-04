@@ -16,9 +16,7 @@ test("All 6 menu triggers render in the menubar in legacy order [File, Edit, Emi
     if (!bar) return [];
     // Radix puts each Menubar.Trigger as a direct child <button> of the
     // menubar root (no intermediate div). Just collect direct-child buttons.
-    return Array.from(bar.querySelectorAll(':scope > button')).map(
-      (b) => b.textContent?.trim()
-    );
+    return Array.from(bar.querySelectorAll(":scope > button")).map((b) => b.textContent?.trim());
   });
   expect(triggers).toEqual(["File", "Edit", "Emitters", "Mods", "View", "Help"]);
   // Tools menu is removed.
@@ -128,18 +126,14 @@ test("Emitters > New Emitter > Root Emitter dispatches emitters/add-root", async
 test("File menu opens to reveal items in the DOM", async () => {
   // Click the File trigger in the menubar. Radix renders triggers as
   // role="menuitem" inside role="menubar".
-  const fileTrigger = page
-    .locator('[role="menubar"] >> text=File')
-    .first();
+  const fileTrigger = page.locator('[role="menubar"] >> text=File').first();
   await fileTrigger.click();
 
   // Radix portals the content into the document body; wait for it.
   await page.waitForSelector('[role="menu"]', { timeout: 2000 });
 
   // Verify a known item is present.
-  const visible = await page
-    .locator('[role="menuitem"]:has-text("Import Emitters")')
-    .isVisible();
+  const visible = await page.locator('[role="menuitem"]:has-text("Import Emitters")').isVisible();
   expect(visible).toBe(true);
 
   // Close the menu cleanly so subsequent tests start with a closed bar.

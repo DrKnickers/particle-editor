@@ -22,10 +22,21 @@
 //   one label.
 
 import {
-  FilePlus, FolderOpen, Save, SaveAll,
-  Undo2, Redo2,
-  Play, Pause, ChevronRight, ChevronsRight, Film,
-  Sparkles, CirclePlus, Lightbulb, LayoutGrid,
+  FilePlus,
+  FolderOpen,
+  Save,
+  SaveAll,
+  Undo2,
+  Redo2,
+  Play,
+  Pause,
+  ChevronRight,
+  ChevronsRight,
+  Film,
+  Sparkles,
+  CirclePlus,
+  Lightbulb,
+  LayoutGrid,
 } from "lucide-react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { BackgroundPopover } from "@/components/BackgroundPopover";
@@ -81,10 +92,20 @@ export function Toolbar({ bridge }: Props) {
         >
           <FolderOpen {...ICON} />
         </IconButton>
-        <IconButton label="Save" onClick={() => { void runFileOp(bridge, { kind: "file/save", params: {} }); }}>
+        <IconButton
+          label="Save"
+          onClick={() => {
+            void runFileOp(bridge, { kind: "file/save", params: {} });
+          }}
+        >
           <Save {...ICON} />
         </IconButton>
-        <IconButton label="Save As" onClick={() => { void runFileOp(bridge, { kind: "file/save-as", params: {} }); }}>
+        <IconButton
+          label="Save As"
+          onClick={() => {
+            void runFileOp(bridge, { kind: "file/save-as", params: {} });
+          }}
+        >
           <SaveAll {...ICON} />
         </IconButton>
       </div>
@@ -98,14 +119,18 @@ export function Toolbar({ bridge }: Props) {
         <IconButton
           label="Undo"
           disabled={!canUndo}
-          onClick={() => { void fireAndReport(bridge, { kind: "undo/perform", params: { direction: "undo" } }, "Undo"); }}
+          onClick={() => {
+            void fireAndReport(bridge, { kind: "undo/perform", params: { direction: "undo" } }, "Undo");
+          }}
         >
           <Undo2 {...ICON} />
         </IconButton>
         <IconButton
           label="Redo"
           disabled={!canRedo}
-          onClick={() => { void fireAndReport(bridge, { kind: "undo/perform", params: { direction: "redo" } }, "Redo"); }}
+          onClick={() => {
+            void fireAndReport(bridge, { kind: "undo/perform", params: { direction: "redo" } }, "Redo");
+          }}
         >
           <Redo2 {...ICON} />
         </IconButton>
@@ -120,7 +145,12 @@ export function Toolbar({ bridge }: Props) {
           pressed={playing}
           onClick={() => {
             if (timelineActive) void setTimelinePlaying(bridge, !timelinePlaying);
-            else void fireAndReport(bridge, { kind: "engine/set/paused", params: { paused: !paused } }, paused ? "Play" : "Pause");
+            else
+              void fireAndReport(
+                bridge,
+                { kind: "engine/set/paused", params: { paused: !paused } },
+                paused ? "Play" : "Pause",
+              );
           }}
         >
           {playing ? <Pause {...ICON} /> : <Play {...ICON} />}
@@ -149,7 +179,9 @@ export function Toolbar({ bridge }: Props) {
           label="Toggle timeline"
           tip="Timeline: replay the effect frame by frame"
           pressed={timelineActive}
-          onClick={() => { void toggleTimeline(bridge); }}
+          onClick={() => {
+            void toggleTimeline(bridge);
+          }}
         >
           <Film {...ICON} />
         </IconButton>
@@ -164,7 +196,13 @@ export function Toolbar({ bridge }: Props) {
         <IconButton
           label="Leave particles after instance death"
           pressed={leaveParticles}
-          onClick={() => { void fireAndReport(bridge, { kind: "engine/set/leave-particles", params: { enabled: !leaveParticles } }, "Leave particles"); }}
+          onClick={() => {
+            void fireAndReport(
+              bridge,
+              { kind: "engine/set/leave-particles", params: { enabled: !leaveParticles } },
+              "Leave particles",
+            );
+          }}
         >
           <Sparkles {...ICON} />
         </IconButton>

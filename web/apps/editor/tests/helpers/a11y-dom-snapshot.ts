@@ -59,9 +59,7 @@ async function settleBeforeSnapshot(
     // in-page evaluation error is a different failure with its own diagnostic —
     // rethrow it untouched rather than mislabeling it as an animation that
     // never settled (and wrongly advising against a golden refresh).
-    const isTimeout =
-      err instanceof Error &&
-      (err.name === "TimeoutError" || /Timeout.*exceeded/i.test(err.message));
+    const isTimeout = err instanceof Error && (err.name === "TimeoutError" || /Timeout.*exceeded/i.test(err.message));
     if (!isTimeout) throw err;
     throw new Error(
       `a11y snapshot settle timed out after ${A11Y_SETTLE_TIMEOUT_MS}ms: ` +

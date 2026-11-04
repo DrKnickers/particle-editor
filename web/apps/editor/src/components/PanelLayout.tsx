@@ -110,15 +110,12 @@ export function resetPanelLayoutStorage(): void {
 /** Persisted-layout reader. Pure for unit-testability. */
 export function loadLayout(key: string, defaults: Layout): Layout {
   try {
-    const raw =
-      (typeof localStorage !== "undefined") ? localStorage.getItem(key) : null;
+    const raw = typeof localStorage !== "undefined" ? localStorage.getItem(key) : null;
     if (!raw) return defaults;
     const parsed = JSON.parse(raw) as unknown;
     if (parsed === null || typeof parsed !== "object") return defaults;
     const m = parsed as Record<string, unknown>;
-    const allKeysMatch = Object.keys(defaults).every(
-      (k) => typeof m[k] === "number" && Number.isFinite(m[k]),
-    );
+    const allKeysMatch = Object.keys(defaults).every((k) => typeof m[k] === "number" && Number.isFinite(m[k]));
     if (!allKeysMatch) return defaults;
     const sum = Object.keys(defaults).reduce((a, k) => a + (m[k] as number), 0);
     if (Math.abs(sum - 100) > 0.5) return defaults;
@@ -246,9 +243,7 @@ export function PanelLayout({ bridge }: Props) {
   // latest dock width.
   const onOuterLayoutChanged = useCallback(
     (l: Layout) => {
-      const share = dockVisible
-        ? 0
-        : loadLayout("alo:layout:outer:3col", OUTER_3COL_DEFAULTS).spawner ?? 0;
+      const share = dockVisible ? 0 : (loadLayout("alo:layout:outer:3col", OUTER_3COL_DEFAULTS).spawner ?? 0);
       saveLayout("alo:layout:outer:3col", mergeOuterLayout(l, dockVisible, share));
     },
     [dockVisible],
@@ -294,8 +289,8 @@ export function PanelLayout({ bridge }: Props) {
     // a settled-open dock (the only residual is a first-open immediately
     // re-closed mid-transition, which the authoritative settle send corrects).
     const dockWidthCss = dockVisible
-      ? lastDockWidthCssRef.current ?? DOCK_MIN_PX
-      : lastDockWidthCssRef.current ?? p.getSize().inPixels;
+      ? (lastDockWidthCssRef.current ?? DOCK_MIN_PX)
+      : (lastDockWidthCssRef.current ?? p.getSize().inPixels);
 
     // [dock-mount fix] expand() restores the library's remembered
     // pre-collapse size (`expandToSize`), falling back to minSize when
@@ -328,8 +323,7 @@ export function PanelLayout({ bridge }: Props) {
     };
 
     const reducedMotion =
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     const animate = vpEl !== null && dockWidthCss > 0 && !reducedMotion;
     if (animate) useDockAnim.getState().setAnimating(true);
@@ -365,9 +359,7 @@ export function PanelLayout({ bridge }: Props) {
         const settledDockW = p.getSize().inPixels;
         if (settledDockW > 0) lastDockWidthCssRef.current = settledDockW;
         if (vpEl) {
-          void bridge
-            .request({ kind: "layout/scene-rect", params: computeSceneRect(vpEl) })
-            .catch(() => {});
+          void bridge.request({ kind: "layout/scene-rect", params: computeSceneRect(vpEl) }).catch(() => {});
         }
       }, 260);
     };
@@ -399,9 +391,7 @@ export function PanelLayout({ bridge }: Props) {
     // DOM before the tween (see below). Tracked here so cleanup can tear them down.
     let readySub: (() => void) | null = null;
     let readyTimeout = 0;
-    let atlasGate:
-      | { ended: boolean; spanId: string; startMs: number; dock: string }
-      | null = null;
+    let atlasGate: { ended: boolean; spanId: string; startMs: number; dock: string } | null = null;
     if (dockVisible && dock === "atlas") {
       const gateStartMs = performance.now();
       const gateSpanId = makePerfSpanId("atlas.dock_gate", dock);
@@ -423,7 +413,10 @@ export function PanelLayout({ bridge }: Props) {
       // starts the slide regardless, so a grid that never mounts can't hang it.
       const fire = (reason: "already_ready" | "ready" | "timeout" = "ready") => {
         if (raf) return; // already started (edge + timeout race, or re-entry)
-        if (readyTimeout) { clearTimeout(readyTimeout); readyTimeout = 0; }
+        if (readyTimeout) {
+          clearTimeout(readyTimeout);
+          readyTimeout = 0;
+        }
         const gateEndMs = performance.now();
         emitPerfTrace({
           eventName: "atlas.dock_gate",
@@ -453,7 +446,11 @@ export function PanelLayout({ bridge }: Props) {
       } else {
         useDockAnim.getState().setAtlasTerminalFirstPaint(false); // defensive: clear stale
         readySub = useDockAnim.subscribe((s) => {
-          if (s.atlasTerminalFirstPaint) { readySub?.(); readySub = null; fire(); }
+          if (s.atlasTerminalFirstPaint) {
+            readySub?.();
+            readySub = null;
+            fire();
+          }
         });
         // Fallback: never let the slide HANG if the grid never mounts. This is a
         // pathological-case net (a real grid mounts in well under this), so its
@@ -461,7 +458,9 @@ export function PanelLayout({ bridge }: Props) {
         // opens and the flags still clear. The normal cold-open path is the
         // false→true edge above, which fires the moment the grid renders.
         readyTimeout = window.setTimeout(() => {
-          readySub?.(); readySub = null; fire("timeout");
+          readySub?.();
+          readySub = null;
+          fire("timeout");
         }, 280);
       }
     } else if (dockVisible) {
@@ -576,12 +575,7 @@ export function PanelLayout({ bridge }: Props) {
           columns. (Long *checkbox* labels are handled separately by the
           `.form-row-check` grid, which frees the column the checkbox
           otherwise wasted.) maxSize stays a % so a wide window caps it. */}
-      <Panel
-        id="left"
-        defaultSize={`${outerDefaultLayout.left}%`}
-        minSize={330}
-        maxSize="40%"
-      >
+      <Panel id="left" defaultSize={`${outerDefaultLayout.left}%`} minSize={330} maxSize="40%">
         <div className="panel panel-flush-right h-full w-full">
           <div className="panel-header">
             <span>Particle System</span>
@@ -594,11 +588,7 @@ export function PanelLayout({ bridge }: Props) {
               resizeTargetMinimumSize={RESIZE_HIT_MIN}
               style={{ flex: 1, minHeight: 0 }}
             >
-              <Panel
-                id="tree"
-                defaultSize={`${left.defaultLayout.tree}%`}
-                minSize="10%"
-              >
+              <Panel id="tree" defaultSize={`${left.defaultLayout.tree}%`} minSize="10%">
                 <aside
                   data-testid="quadrant-emitter-tree"
                   className="h-full w-full min-h-0 overflow-hidden flex flex-col p-3 text-sm"
@@ -618,15 +608,8 @@ export function PanelLayout({ bridge }: Props) {
                 </aside>
               </Panel>
               <Separator className="ce-splitter ce-splitter-h" />
-              <Panel
-                id="tabs"
-                defaultSize={`${left.defaultLayout.tabs}%`}
-                minSize="20%"
-              >
-                <div
-                  data-testid="quadrant-property-tabs"
-                  className="h-full w-full min-h-0"
-                >
+              <Panel id="tabs" defaultSize={`${left.defaultLayout.tabs}%`} minSize="20%">
+                <div data-testid="quadrant-property-tabs" className="h-full w-full min-h-0">
                   <EmitterPropertyTabs bridge={bridge} />
                 </div>
               </Panel>
@@ -637,11 +620,7 @@ export function PanelLayout({ bridge }: Props) {
 
       <Separator className="ce-splitter ce-splitter-v" />
 
-      <Panel
-        id="center"
-        defaultSize={`${outerDefaultLayout.center}%`}
-        minSize="30%"
-      >
+      <Panel id="center" defaultSize={`${outerDefaultLayout.center}%`} minSize="30%">
         <Group
           orientation="vertical"
           defaultLayout={center.defaultLayout}
@@ -649,19 +628,12 @@ export function PanelLayout({ bridge }: Props) {
           resizeTargetMinimumSize={RESIZE_HIT_MIN}
           style={{ flex: 1, minHeight: 0, width: "100%" }}
         >
-          <Panel
-            id="viewport"
-            defaultSize={`${center.defaultLayout.viewport}%`}
-            minSize="30%"
-          >
+          <Panel id="viewport" defaultSize={`${center.defaultLayout.viewport}%`} minSize="30%">
             {/* The timeline row sits under the viewport rect, outside
                 quadrant-viewport, so that testid keeps matching the
                 viewport pixels exactly; opening it shrinks the scene rect. */}
             <div className="flex h-full w-full min-h-0 flex-col">
-              <div
-                data-testid="quadrant-viewport"
-                className="relative min-h-0 w-full flex-1"
-              >
+              <div data-testid="quadrant-viewport" className="relative min-h-0 w-full flex-1">
                 <ViewportSlot bridge={bridge} />
                 {/* Preview spawn-overload banner (overload guard) — a
                     sibling of ViewportSlot inside this `relative`
@@ -676,15 +648,8 @@ export function PanelLayout({ bridge }: Props) {
             </div>
           </Panel>
           <Separator className="ce-splitter ce-splitter-h" />
-          <Panel
-            id="curve"
-            defaultSize={`${center.defaultLayout.curve}%`}
-            minSize="10%"
-          >
-            <div
-              data-testid="quadrant-curve-editor"
-              className="h-full w-full min-h-0 border-t border-border"
-            >
+          <Panel id="curve" defaultSize={`${center.defaultLayout.curve}%`} minSize="10%">
+            <div data-testid="quadrant-curve-editor" className="h-full w-full min-h-0 border-t border-border">
               {import.meta.env.DEV ? (
                 <Profiler
                   id="CurveEditorPanel"
@@ -735,11 +700,7 @@ export function PanelLayout({ bridge }: Props) {
         minSize={DOCK_MIN_PX}
         maxSize="40%"
       >
-        <aside
-          data-testid="quadrant-spawner"
-          className="h-full w-full overflow-hidden"
-          inert={dockClosing}
-        >
+        <aside data-testid="quadrant-spawner" className="h-full w-full overflow-hidden" inert={dockClosing}>
           {/* Keyed by the DISPLAYED panel so swapping tools in the open dock
               (Spawner ↔ Atlas ↔ Lighting) remounts this wrapper and replays
               the entrance fade — the swap used to hard-cut.
@@ -748,26 +709,26 @@ export function PanelLayout({ bridge }: Props) {
               only while a panel is displayed, preserving the closed dock's
               empty-slot DOM contract. */}
           {displayDock !== null && (
-          <div key={displayDock} className="h-full w-full fade-in-fast">
-          {displayDock === "spawner" ? (
-            <SpawnerPane bridge={bridge} />
-          ) : displayDock === "lighting" ? (
-            <LightingPane bridge={bridge} onClose={() => setDock(null)} closing={dockClosing} />
-          ) : displayDock === "atlas" ? (
-            import.meta.env.DEV ? (
-              <Profiler
-                id="AtlasPickerPane"
-                onRender={(id, phase, actualDuration, baseDuration, startTime, commitTime) =>
-                  window.__profilerAudit?.record(id, phase, actualDuration, baseDuration, startTime, commitTime)
-                }
-              >
-                <AtlasPickerPane bridge={bridge} onClose={() => setDock(null)} closing={dockClosing} />
-              </Profiler>
-            ) : (
-              <AtlasPickerPane bridge={bridge} onClose={() => setDock(null)} closing={dockClosing} />
-            )
-          ) : null}
-          </div>
+            <div key={displayDock} className="h-full w-full fade-in-fast">
+              {displayDock === "spawner" ? (
+                <SpawnerPane bridge={bridge} />
+              ) : displayDock === "lighting" ? (
+                <LightingPane bridge={bridge} onClose={() => setDock(null)} closing={dockClosing} />
+              ) : displayDock === "atlas" ? (
+                import.meta.env.DEV ? (
+                  <Profiler
+                    id="AtlasPickerPane"
+                    onRender={(id, phase, actualDuration, baseDuration, startTime, commitTime) =>
+                      window.__profilerAudit?.record(id, phase, actualDuration, baseDuration, startTime, commitTime)
+                    }
+                  >
+                    <AtlasPickerPane bridge={bridge} onClose={() => setDock(null)} closing={dockClosing} />
+                  </Profiler>
+                ) : (
+                  <AtlasPickerPane bridge={bridge} onClose={() => setDock(null)} closing={dockClosing} />
+                )
+              ) : null}
+            </div>
           )}
         </aside>
       </Panel>

@@ -68,11 +68,10 @@ export function PhysicsTab({
   const bouncinessEnabled = nonWeather && properties.groundBehavior === GROUND_BEHAVIOR_BOUNCE;
   // Reasons come from the same flags that disable the controls, so an
   // enabled field never carries an explanation for being unavailable.
-  const weatherHelp = nonWeather
-    ? undefined
-    : "Unavailable when Weather particle is selected in Basic → Generation.";
-  const bouncinessHelp = weatherHelp
-    ?? (bouncinessEnabled ? undefined : "Choose Bounce in Ground interaction → Behavior to edit bounciness.");
+  const weatherHelp = nonWeather ? undefined : "Unavailable when Weather particle is selected in Basic → Generation.";
+  const bouncinessHelp =
+    weatherHelp ??
+    (bouncinessEnabled ? undefined : "Choose Bounce in Ground interaction → Behavior to edit bounciness.");
   const accelerationDescriptionId = useId();
 
   const updateAcceleration = (idx: 0 | 1 | 2, v: number) => {
@@ -94,8 +93,8 @@ export function PhysicsTab({
     <div className="inspector">
       {!nonWeather && (
         <p className="text-xs text-text-2">
-          Weather particle in Basic → Generation disables Parent speed inherit, Acceleration X/Y/Z,
-          Gravity acceleration, Inward acceleration, Object space acceleration, Behavior and Bounciness.
+          Weather particle in Basic → Generation disables Parent speed inherit, Acceleration X/Y/Z, Gravity
+          acceleration, Inward acceleration, Object space acceleration, Behavior and Bounciness.
         </p>
       )}
       <Section title="Initial position" unit="units">
@@ -155,7 +154,11 @@ export function PhysicsTab({
               X / Y / Z:
             </span>
           </Tip>
-          {weatherHelp && <span id={accelerationDescriptionId} hidden>{weatherHelp}</span>}
+          {weatherHelp && (
+            <span id={accelerationDescriptionId} hidden>
+              {weatherHelp}
+            </span>
+          )}
           <div className="grid grid-cols-3 gap-1">
             <div className="axis-cell">
               <span className="axis-lbl">X</span>

@@ -23,8 +23,8 @@ describe("MockBridge contract — file/*, recent/*, mods/*", () => {
     expect(list.stack).toEqual([]);
     expect(list.activePath).toBe(null);
 
-    const a = list.layers[0].path;  // "C:/mock/corruption/Mods/FoCMod"
-    const c = list.layers[1].path;  // a nested layer
+    const a = list.layers[0].path; // "C:/mock/corruption/Mods/FoCMod"
+    const c = list.layers[1].path; // a nested layer
     const r = await b.request({ kind: "mods/set-layers", params: { paths: [c, a] } });
     expect(r).toMatchObject({ ok: true, stack: [c, a] });
     list = await b.request({ kind: "mods/list", params: {} });
@@ -51,14 +51,15 @@ describe("MockBridge contract — file/*, recent/*, mods/*", () => {
   it("file/new round-trips, resets state, and re-selects the default root (legacy parity)", async () => {
     const b = new MockBridge();
     let lastSelected: { id: number | null } | null = null;
-    b.on("emitters/selected", (e) => { lastSelected = e.payload; });
+    b.on("emitters/selected", (e) => {
+      lastSelected = e.payload;
+    });
 
     // Pre-dirty + move selection OFF the default root, so file/new's reset to 0
     // is observable (not a coincidence of the default).
     await b.request({ kind: "engine/set/ground-z", params: { z: 12 } });
     await b.request({ kind: "emitters/select", params: { id: 1 } });
-    expect((await b.request({ kind: "engine/state/snapshot", params: {} })).dirty)
-      .toBe(true);
+    expect((await b.request({ kind: "engine/state/snapshot", params: {} })).dirty).toBe(true);
 
     // Like the native host, a dirty document is only replaced once the user
     // chose Don't Save.
@@ -71,7 +72,7 @@ describe("MockBridge contract — file/*, recent/*, mods/*", () => {
     const snap = await b.request({ kind: "engine/state/snapshot", params: {} });
     expect(snap.dirty).toBe(false);
     expect(snap.currentFilePath).toBeNull();
-    expect(snap.groundZ).toBe(0);  // reset to default
+    expect(snap.groundZ).toBe(0); // reset to default
     // Legacy parity: file/new re-selects the seeded root (id 0) AND announces it
     // via emitters/selected (so the EmitterTree's selection atom updates live).
     expect(snap.selectedEmitterId).toBe(0);
@@ -90,7 +91,9 @@ describe("MockBridge contract — file/*, recent/*, mods/*", () => {
 
   it("recent/changed event fires when file/save adds a new path", async () => {
     let last: { paths: string[] } | null = null;
-    const { b, off } = makeMockBridgeWithListener("recent/changed", (e) => { last = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("recent/changed", (e) => {
+      last = e.payload;
+    });
 
     await b.request({ kind: "file/save", params: { path: "C:/foo/bar.alo" } });
 
@@ -105,19 +108,25 @@ describe("MockBridge contract — file/*, recent/*, mods/*", () => {
 
   it("file/open of an .alo over unsaved work is refused until the discard is confirmed", async () => {
     const b = new MockBridge();
-    await b.request({ kind: "engine/set/ground-z", params: { z: 3 } });   // dirty
-    expect(await b.request({ kind: "file/open", params: { path: "C:/a.alo" } }))
-      .toEqual({ ok: false, error: "unsaved-changes" });
+    await b.request({ kind: "engine/set/ground-z", params: { z: 3 } }); // dirty
+    expect(await b.request({ kind: "file/open", params: { path: "C:/a.alo" } })).toEqual({
+      ok: false,
+      error: "unsaved-changes",
+    });
     let snap = await b.request({ kind: "engine/state/snapshot", params: {} });
     expect(snap.dirty).toBe(true);
     expect(snap.currentFilePath).toBeNull();
 
     // Texture pickers never touch the document, so they are never refused.
-    expect(await b.request({ kind: "file/open", params: { filter: "skydome" } }))
-      .toEqual({ ok: false, error: "browser-mode" });
+    expect(await b.request({ kind: "file/open", params: { filter: "skydome" } })).toEqual({
+      ok: false,
+      error: "browser-mode",
+    });
 
-    expect(await b.request({ kind: "file/open", params: { path: "C:/a.alo", discardUnsaved: true } }))
-      .toEqual({ ok: true, path: "C:/a.alo" });
+    expect(await b.request({ kind: "file/open", params: { path: "C:/a.alo", discardUnsaved: true } })).toEqual({
+      ok: true,
+      path: "C:/a.alo",
+    });
     snap = await b.request({ kind: "engine/state/snapshot", params: {} });
     expect(snap.dirty).toBe(false);
     expect(snap.currentFilePath).toBe("C:/a.alo");

@@ -57,22 +57,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { readBooleanPref, writeBooleanPref } from "@/lib/boolean-pref";
-import type {
-  Bridge,
-  InterpolationType,
-  TrackDto,
-  TrackName,
-} from "@particle-editor/bridge-schema";
+import type { Bridge, InterpolationType, TrackDto, TrackName } from "@particle-editor/bridge-schema";
 import { CurveEditor, type CurveKeyboardNavAction, type CurveMarqueeHandle } from "@/screens/curve-editor/CurveEditor";
 import { computeGroupMoves, valueRangeForTrack } from "@/lib/curve/curve-model";
 import type { SuppressedMove } from "@/lib/curve/use-curve-morph";
 import { isTypingTarget } from "@/lib/viewport-input";
 import { useModalOpen } from "@/lib/modal-open";
 import { useHostMessage } from "@/lib/use-host-message";
-import {
-  getCurveKeysClipboard,
-  setCurveKeysClipboard,
-} from "@/lib/curve/curve-key-clipboard";
+import { getCurveKeysClipboard, setCurveKeysClipboard } from "@/lib/curve/curve-key-clipboard";
 import { isAtlasEligible, frameCount, wrapFrame } from "@/lib/atlas/atlas-grid";
 import { publishAtlasContext } from "@/lib/atlas/atlas-context";
 import { useAtlasAutoOpen } from "@/lib/atlas/use-atlas-autoopen";
@@ -80,7 +72,14 @@ import { CurveChannelList } from "./CurveChannelList";
 import { CurveEditorToolbar, type CurveEditMode } from "./CurveEditorToolbar";
 import { CurveKeyContextMenu, type CurveKeyContextMenuHandle } from "./CurveKeyContextMenu";
 
-import { CHANNELS, EXCLUSIVE_CHANNELS, SNAP_PREF_KEY, LOCK_TO_OPTIONS, defaultVisibility, spinnerBoundsForTrack } from "./channels";
+import {
+  CHANNELS,
+  EXCLUSIVE_CHANNELS,
+  SNAP_PREF_KEY,
+  LOCK_TO_OPTIONS,
+  defaultVisibility,
+  spinnerBoundsForTrack,
+} from "./channels";
 import { CanvasWithAxisLabels } from "./CanvasWithAxisLabels";
 
 export { CHANNELS } from "./channels";
@@ -107,9 +106,7 @@ export function CurveEditorPanel({ bridge }: Props) {
   const [mode, setMode] = useState<EditMode>("select");
   // Snap-to-grid toggle. Default OFF; persisted to localStorage via the
   // shared boolean-pref helper (same mechanism as the shadow render prefs).
-  const [snapEnabled, setSnapEnabled] = useState<boolean>(() =>
-    readBooleanPref(SNAP_PREF_KEY, false),
-  );
+  const [snapEnabled, setSnapEnabled] = useState<boolean>(() => readBooleanPref(SNAP_PREF_KEY, false));
   const toggleSnap = useCallback(() => {
     setSnapEnabled((prev) => {
       const next = !prev;
@@ -132,13 +129,9 @@ export function CurveEditorPanel({ bridge }: Props) {
   const morphSuppressRef = useRef<SuppressedMove>(null);
   // Selection state — keyed by key TIME (not array index). Per focus
   // channel; cleared on focus change.
-  const [selectedKeyTimes, setSelectedKeyTimes] = useState<Set<number>>(
-    () => new Set(),
-  );
+  const [selectedKeyTimes, setSelectedKeyTimes] = useState<Set<number>>(() => new Set());
   // Sticky optimistic override.
-  const [optimisticSelected, setOptimisticSelected] = useState<
-    { time: number; value: number } | null
-  >(null);
+  const [optimisticSelected, setOptimisticSelected] = useState<{ time: number; value: number } | null>(null);
   // Live-drag state: populated on every pointer-move during an
   // active key drag (once movement crosses DRAG_SLOP in the
   // renderer). Cleared by `handleKeyDragEnd` (when the drag commits)
@@ -146,9 +139,7 @@ export function CurveEditorPanel({ bridge }: Props) {
   // Time / Value spinners prefer this over the committed selection
   // value, so the user sees the key's in-flight position update
   // continuously as they drag.
-  const [liveDrag, setLiveDrag] = useState<
-    { keyTime: number; time: number; value: number } | null
-  >(null);
+  const [liveDrag, setLiveDrag] = useState<{ keyTime: number; time: number; value: number } | null>(null);
   // Live group-drag delta — set on every group-drag move so the
   // multi-select AVERAGE spinners track the shift in real time (the
   // group analogue of `liveDrag`). Null when no group drag is active.
@@ -165,9 +156,7 @@ export function CurveEditorPanel({ bridge }: Props) {
   // and the curve now update at frame cadence — tight, not laggy. `undefined`
   // means "nothing pending"; a stashed value is always non-null.
   const liveDragRaf = useRef<number | null>(null);
-  const pendingLiveDrag = useRef<
-    { keyTime: number; time: number; value: number } | undefined
-  >(undefined);
+  const pendingLiveDrag = useRef<{ keyTime: number; time: number; value: number } | undefined>(undefined);
   const pendingLiveGroup = useRef<{ dTime: number; dValue: number } | undefined>(undefined);
   const flushLive = useCallback(() => {
     liveDragRaf.current = null;
@@ -182,7 +171,10 @@ export function CurveEditorPanel({ bridge }: Props) {
   }, []);
   const scheduleLiveFlush = useCallback(() => {
     if (liveDragRaf.current !== null) return; // a frame is already queued
-    if (typeof requestAnimationFrame !== "function") { flushLive(); return; }
+    if (typeof requestAnimationFrame !== "function") {
+      flushLive();
+      return;
+    }
     liveDragRaf.current = requestAnimationFrame(flushLive);
   }, [flushLive]);
   // Drop any queued flush so a pending frame can't resurrect a stale live value
@@ -195,11 +187,14 @@ export function CurveEditorPanel({ bridge }: Props) {
     pendingLiveDrag.current = undefined;
     pendingLiveGroup.current = undefined;
   }, []);
-  useEffect(() => () => {
-    if (liveDragRaf.current !== null && typeof cancelAnimationFrame === "function") {
-      cancelAnimationFrame(liveDragRaf.current);
-    }
-  }, []);
+  useEffect(
+    () => () => {
+      if (liveDragRaf.current !== null && typeof cancelAnimationFrame === "function") {
+        cancelAnimationFrame(liveDragRaf.current);
+      }
+    },
+    [],
+  );
   const keyMenuRef = useRef<CurveKeyContextMenuHandle>(null);
 
   // ── Selection and track loading ─────────────────────────────
@@ -238,8 +233,12 @@ export function CurveEditorPanel({ bridge }: Props) {
         if (cancelled) return;
         setSelectedId(snap.selectedEmitterId);
       })
-      .catch(() => { /* ignore — placeholder branch covers it */ });
-    return () => { cancelled = true; };
+      .catch(() => {
+        /* ignore — placeholder branch covers it */
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [bridge]);
 
   useEffect(() => {
@@ -286,8 +285,7 @@ export function CurveEditorPanel({ bridge }: Props) {
           // focusedChannel is stale (the effect doesn't re-run on focus change).
           const track = res.tracks.find((t) => t.name === liveScopeRef.current.track);
           setOptimisticSelected((cur) =>
-            cur === null ||
-            track?.keys.some((k) => k.time === cur.time && Math.fround(k.value) === cur.value)
+            cur === null || track?.keys.some((k) => k.time === cur.time && Math.fround(k.value) === cur.value)
               ? cur
               : null,
           );
@@ -301,9 +299,9 @@ export function CurveEditorPanel({ bridge }: Props) {
           setOptimisticSelected(null); // no track left for the override to describe
         });
     };
-    fetchTracks(selectedId, /*guarded=*/false); // authoritative selection load
+    fetchTracks(selectedId, /*guarded=*/ false); // authoritative selection load
     const off = bridge.on("emitters/tree/changed", () => {
-      if (selectedId !== null) fetchTracks(selectedId, /*guarded=*/true); // edit echo
+      if (selectedId !== null) fetchTracks(selectedId, /*guarded=*/ true); // edit echo
     });
     return () => {
       cancelled = true;
@@ -312,10 +310,7 @@ export function CurveEditorPanel({ bridge }: Props) {
   }, [bridge, selectedId]);
 
   // Resolve the focus channel's track + range.
-  const focusedChannel = useMemo(
-    () => CHANNELS.find((c) => c.id === focusChannel) ?? CHANNELS[0]!,
-    [focusChannel],
-  );
+  const focusedChannel = useMemo(() => CHANNELS.find((c) => c.id === focusChannel) ?? CHANNELS[0]!, [focusChannel]);
   const focusedTrack = useMemo<TrackDto | null>(() => {
     if (tracks === null) return null;
     return tracks.find((t) => t.name === focusedChannel.trackName) ?? null;
@@ -344,9 +339,10 @@ export function CurveEditorPanel({ bridge }: Props) {
   useEffect(() => {
     liveScopeRef.current = { id: selectedId, track: focusedChannel.trackName };
   }, [selectedId, focusedChannel.trackName]);
-  const stillScoped = useCallback((id: number, track: TrackName) => (
-    liveScopeRef.current.id === id && liveScopeRef.current.track === track
-  ), []);
+  const stillScoped = useCallback(
+    (id: number, track: TrackName) => liveScopeRef.current.id === id && liveScopeRef.current.track === track,
+    [],
+  );
 
   // ── Texture size and atlas context ─────────────────────────────
   // Atlas eligibility: the picker only auto-opens when the emitter's
@@ -356,13 +352,22 @@ export function CurveEditorPanel({ bridge }: Props) {
   // unanswered fetch leaves it ineligible so the controller stays inert.
   const [textureSize, setTextureSize] = useState<number>(1);
   useEffect(() => {
-    if (selectedId === null) { setTextureSize(1); return; }
+    if (selectedId === null) {
+      setTextureSize(1);
+      return;
+    }
     let live = true;
     bridge
       .request({ kind: "emitters/get-properties", params: { id: selectedId } })
-      .then((res) => { if (live) setTextureSize(res.properties.textureSize); })
-      .catch(() => { /* leave at default (ineligible) */ });
-    return () => { live = false; };
+      .then((res) => {
+        if (live) setTextureSize(res.properties.textureSize);
+      })
+      .catch(() => {
+        /* leave at default (ineligible) */
+      });
+    return () => {
+      live = false;
+    };
   }, [bridge, selectedId]);
   const atlasEligible = isAtlasEligible(textureSize);
 
@@ -374,9 +379,7 @@ export function CurveEditorPanel({ bridge }: Props) {
   // so stale selections from a previous emitter can never leak into the picker.
   const lastKeyTimesRef = useRef<number[]>([]);
   useEffect(() => {
-    const resolved = [...selectedKeyTimes].filter(
-      (t) => focusedTrack?.keys.some((k) => k.time === t),
-    );
+    const resolved = [...selectedKeyTimes].filter((t) => focusedTrack?.keys.some((k) => k.time === t));
     // Wrap out-of-range index values modulo the atlas element count so the picker
     // highlights the same cell the engine samples (index N on an N-frame atlas
     // shows frame 0 — see wrapFrame / EmitterInstance.cpp). Non-atlas emitters
@@ -391,8 +394,7 @@ export function CurveEditorPanel({ bridge }: Props) {
     // are identical so atlas-context consumers don't re-render unnecessarily
     // on every tree/changed refetch that produces a fresh focusedTrack object.
     const prev = lastKeyTimesRef.current;
-    const same =
-      prev.length === resolved.length && prev.every((v, i) => v === resolved[i]);
+    const same = prev.length === resolved.length && prev.every((v, i) => v === resolved[i]);
     const resolvedStable = same ? prev : resolved;
     lastKeyTimesRef.current = resolvedStable;
     publishAtlasContext({
@@ -491,7 +493,6 @@ export function CurveEditorPanel({ bridge }: Props) {
     [focusedTrack],
   );
 
-
   // Border keys on the focus track (first + last in time order).
   const borderKeyTimes = useMemo<ReadonlySet<number>>(() => {
     if (focusedTrack === null || focusedTrack.keys.length === 0) return new Set();
@@ -565,9 +566,7 @@ export function CurveEditorPanel({ bridge }: Props) {
   // a valid rect whose center is clipped by .curve-list, making the cursor look
   // as though it clicked the status bar instead of the channel.
   useEffect(() => {
-    const row = document.querySelector<HTMLElement>(
-      `[data-testid="curve-channel-row-${focusChannel}"]`,
-    );
+    const row = document.querySelector<HTMLElement>(`[data-testid="curve-channel-row-${focusChannel}"]`);
     row?.scrollIntoView?.({ block: "nearest" });
   }, [focusChannel]);
 
@@ -605,43 +604,37 @@ export function CurveEditorPanel({ bridge }: Props) {
 
   // ── Curve interactions ────────────────────────────────────────────
 
-  const handleKeyClick = useCallback(
-    (time: number, event: React.MouseEvent | React.PointerEvent) => {
-      const additive = event.ctrlKey || event.metaKey;
-      setOptimisticSelected(null);
-      setSelectedKeyTimes((prev) => {
-        if (additive) {
-          const next = new Set(prev);
-          if (next.has(time)) next.delete(time);
-          else next.add(time);
-          return next;
-        }
-        return new Set([time]);
-      });
-    },
-    [],
-  );
+  const handleKeyClick = useCallback((time: number, event: React.MouseEvent | React.PointerEvent) => {
+    const additive = event.ctrlKey || event.metaKey;
+    setOptimisticSelected(null);
+    setSelectedKeyTimes((prev) => {
+      if (additive) {
+        const next = new Set(prev);
+        if (next.has(time)) next.delete(time);
+        else next.add(time);
+        return next;
+      }
+      return new Set([time]);
+    });
+  }, []);
 
   const handleCanvasClick = useCallback(() => {
     setOptimisticSelected(null);
     setSelectedKeyTimes((prev) => (prev.size === 0 ? prev : new Set()));
   }, []);
 
-  const handleCanvasMarqueeSelect = useCallback(
-    (times: number[], shift: boolean) => {
-      setOptimisticSelected(null);
-      setSelectedKeyTimes((prev) => {
-        if (shift) {
-          if (times.length === 0) return prev;
-          const next = new Set(prev);
-          for (const t of times) next.add(t);
-          return next;
-        }
-        return new Set(times);
-      });
-    },
-    [],
-  );
+  const handleCanvasMarqueeSelect = useCallback((times: number[], shift: boolean) => {
+    setOptimisticSelected(null);
+    setSelectedKeyTimes((prev) => {
+      if (shift) {
+        if (times.length === 0) return prev;
+        const next = new Set(prev);
+        for (const t of times) next.add(t);
+        return next;
+      }
+      return new Set(times);
+    });
+  }, []);
 
   const handleKeyDragEnd = useCallback(
     (keyTime: number, newTime: number, newValue: number) => {
@@ -688,16 +681,20 @@ export function CurveEditorPanel({ bridge }: Props) {
           return { ...t, keys };
         });
       });
-      void bridge.request({
-        kind: "emitters/set-track-key",
-        params: {
-          id,
-          track,
-          oldTime: keyTime,
-          newTime,
-          newValue,
-        },
-      }).catch(() => { /* silent — re-fetch on tree/changed */ });
+      void bridge
+        .request({
+          kind: "emitters/set-track-key",
+          params: {
+            id,
+            track,
+            oldTime: keyTime,
+            newTime,
+            newValue,
+          },
+        })
+        .catch(() => {
+          /* silent — re-fetch on tree/changed */
+        });
     },
     [bridge, focusedTrack, focusLocked, stillScoped, cancelLiveFlush],
   );
@@ -714,9 +711,7 @@ export function CurveEditorPanel({ bridge }: Props) {
       // pull stale spinner values over the incoming live-drag data.
       // Keep a multi-selection intact when the grabbed key is one of
       // its members — that's the start of a group drag, not a re-select.
-      setSelectedKeyTimes((prev) =>
-        prev.has(keyTime) && prev.size > 1 ? prev : new Set([keyTime]),
-      );
+      setSelectedKeyTimes((prev) => (prev.has(keyTime) && prev.size > 1 ? prev : new Set([keyTime])));
       setOptimisticSelected(null);
       // Pin the curve this drag belongs to; handleKeyDragEnd commits to it.
       dragScopeRef.current = { id: selectedId, track: focusedChannel.trackName };
@@ -753,16 +748,21 @@ export function CurveEditorPanel({ bridge }: Props) {
   const handleCanvasAdd = useCallback(
     (time: number, value: number) => {
       if (selectedId === null || focusLocked) return;
-      void bridge.request({
-        kind: "emitters/add-track-key",
-        params: { id: selectedId, track: focusedChannel.trackName, time, value },
-      }).then((res) => {
-        if (!stillScoped(selectedId, focusedChannel.trackName)) return; // mutation-scope guard
-        const insertedTime = res.time ?? time;
-        const insertedValue = res.value ?? value;
-        setSelectedKeyTimes(new Set([insertedTime]));
-        setOptimisticSelected({ time: insertedTime, value: insertedValue });
-      }).catch(() => { /* silent */ });
+      void bridge
+        .request({
+          kind: "emitters/add-track-key",
+          params: { id: selectedId, track: focusedChannel.trackName, time, value },
+        })
+        .then((res) => {
+          if (!stillScoped(selectedId, focusedChannel.trackName)) return; // mutation-scope guard
+          const insertedTime = res.time ?? time;
+          const insertedValue = res.value ?? value;
+          setSelectedKeyTimes(new Set([insertedTime]));
+          setOptimisticSelected({ time: insertedTime, value: insertedValue });
+        })
+        .catch(() => {
+          /* silent */
+        });
     },
     [bridge, selectedId, focusLocked, focusedChannel.trackName],
   );
@@ -775,24 +775,33 @@ export function CurveEditorPanel({ bridge }: Props) {
       if (!borderKeyTimes.has(t)) candidates.push(t);
     }
     if (candidates.length === 0) return;
-    void bridge.request({
-      kind: "emitters/delete-track-keys",
-      params: { id: selectedId, track: focusedChannel.trackName, times: candidates },
-    }).then(() => {
-      if (!stillScoped(selectedId, focusedChannel.trackName)) return; // mutation-scope guard
-      setSelectedKeyTimes(new Set());
-      setOptimisticSelected(null);
-    }).catch(() => { /* silent */ });
+    void bridge
+      .request({
+        kind: "emitters/delete-track-keys",
+        params: { id: selectedId, track: focusedChannel.trackName, times: candidates },
+      })
+      .then(() => {
+        if (!stillScoped(selectedId, focusedChannel.trackName)) return; // mutation-scope guard
+        setSelectedKeyTimes(new Set());
+        setOptimisticSelected(null);
+      })
+      .catch(() => {
+        /* silent */
+      });
   }, [bridge, selectedId, focusLocked, focusedChannel.trackName, selectedKeyTimes, borderKeyTimes]);
 
   const handleInterpolationClick = useCallback(
     (kind: InterpolationType) => {
       if (selectedId === null || focusedTrack === null) return;
       if (focusedTrack.interpolation === kind) return;
-      void bridge.request({
-        kind: "emitters/set-track-interpolation",
-        params: { id: selectedId, track: focusedChannel.trackName, interpolation: kind },
-      }).catch(() => { /* silent */ });
+      void bridge
+        .request({
+          kind: "emitters/set-track-interpolation",
+          params: { id: selectedId, track: focusedChannel.trackName, interpolation: kind },
+        })
+        .catch(() => {
+          /* silent */
+        });
     },
     [bridge, selectedId, focusedChannel.trackName, focusedTrack],
   );
@@ -839,9 +848,12 @@ export function CurveEditorPanel({ bridge }: Props) {
   // (borders included), Time is editable as long as ≥1 interior
   // (non-border) key is selected, and a Time shift moves only the
   // interior keys (borders are pinned in time but DO shift in value).
-  const multiSelected = useMemo<
-    { keys: { time: number; value: number }[]; avgTime: number; avgValue: number; editable: boolean } | null
-  >(() => {
+  const multiSelected = useMemo<{
+    keys: { time: number; value: number }[];
+    avgTime: number;
+    avgValue: number;
+    editable: boolean;
+  } | null>(() => {
     if (selectedKeyTimes.size <= 1 || focusedTrack === null) return null;
     const keys = focusedTrack.keys.filter((k) => selectedKeyTimes.has(k.time));
     if (keys.length <= 1) return null;
@@ -856,8 +868,11 @@ export function CurveEditorPanel({ bridge }: Props) {
     const positions =
       liveGroup !== null
         ? computeGroupMoves(
-            focusedTrack.keys, selectedKeyTimes, borderKeyTimes,
-            liveGroup.dTime, liveGroup.dValue,
+            focusedTrack.keys,
+            selectedKeyTimes,
+            borderKeyTimes,
+            liveGroup.dTime,
+            liveGroup.dValue,
             // liveGroup is set only during a canvas drag → display bounds, so the
             // spinner average matches the on-canvas preview.
             focusDisplayRange,
@@ -908,9 +923,7 @@ export function CurveEditorPanel({ bridge }: Props) {
       // raw double into the morph-suppress and then GLIDED when the authoritative
       // float32 refetch failed movesMatch. Commit the fround'd
       // value everywhere — wire, suppress, optimistic — so all four agree.
-      const moves = computeGroupMoves(
-        keys, selectedKeyTimes, borderKeyTimes, dTime, dValue, valueBounds,
-      ).map((m) => ({
+      const moves = computeGroupMoves(keys, selectedKeyTimes, borderKeyTimes, dTime, dValue, valueBounds).map((m) => ({
         oldTime: m.oldTime,
         engineTime: Math.fround(m.newTime),
         engineValue: Math.fround(m.newValue),
@@ -950,9 +963,7 @@ export function CurveEditorPanel({ bridge }: Props) {
       );
       setSelectedKeyTimes(new Set(moves.map((m) => m.engineTime)));
       setOptimisticSelected(null);
-      const ordered = [...moves].sort((a, b) =>
-        dTime > 0 ? b.oldTime - a.oldTime : a.oldTime - b.oldTime,
-      );
+      const ordered = [...moves].sort((a, b) => (dTime > 0 ? b.oldTime - a.oldTime : a.oldTime - b.oldTime));
       for (const m of ordered) {
         void bridge
           .request({
@@ -969,7 +980,9 @@ export function CurveEditorPanel({ bridge }: Props) {
               newValue: m.engineValue,
             },
           })
-          .catch(() => { /* silent — re-fetch on tree/changed */ });
+          .catch(() => {
+            /* silent — re-fetch on tree/changed */
+          });
       }
     },
     [bridge, selectedId, focusedTrack, focusedChannel.trackName, focusedChannel.id, selectedKeyTimes, borderKeyTimes],
@@ -988,8 +1001,11 @@ export function CurveEditorPanel({ bridge }: Props) {
       const scope = dragScopeRef.current;
       dragScopeRef.current = null;
       if (
-        scope === null || scope.id === null || !stillScoped(scope.id, scope.track) ||
-        focusLocked || (dTime === 0 && dValue === 0)
+        scope === null ||
+        scope.id === null ||
+        !stillScoped(scope.id, scope.track) ||
+        focusLocked ||
+        (dTime === 0 && dValue === 0)
       ) {
         // No commit → no optimistic track change to snap. Drop any suppress the
         // canvas onPointerUp recorded for this gesture (a border-only or
@@ -1011,15 +1027,10 @@ export function CurveEditorPanel({ bridge }: Props) {
   // multi-select when no interior key is selected (all-borders).
   const spinnerTimeValue = singleSelected?.time ?? multiSelected?.avgTime ?? 0;
   const spinnerValueValue = singleSelected?.value ?? multiSelected?.avgValue ?? 0;
-  const spinnersDisabled =
-    selectedId === null || (singleSelected === null && multiSelected === null) || focusLocked;
+  const spinnersDisabled = selectedId === null || (singleSelected === null && multiSelected === null) || focusLocked;
   const timeSpinnerDisabled =
     spinnersDisabled ||
-    (singleSelected !== null
-      ? singleSelected.isBorder
-      : multiSelected !== null
-        ? !multiSelected.editable
-        : true);
+    (singleSelected !== null ? singleSelected.isBorder : multiSelected !== null ? !multiSelected.editable : true);
 
   const handleTimeSpinner = useCallback(
     (nextTime: number) => {
@@ -1042,10 +1053,7 @@ export function CurveEditorPanel({ bridge }: Props) {
       let clampedTime = nextTime;
       if (idx > 0 && idx < keys.length - 1) {
         const eps = 1e-4;
-        clampedTime = Math.max(
-          keys[idx - 1]!.time + eps,
-          Math.min(keys[idx + 1]!.time - eps, clampedTime),
-        );
+        clampedTime = Math.max(keys[idx - 1]!.time + eps, Math.min(keys[idx + 1]!.time - eps, clampedTime));
       }
       // Snap (don't glide) this edit: record the morph-suppress + apply the
       // track change OPTIMISTICALLY, exactly as a canvas drag-commit does.
@@ -1068,27 +1076,37 @@ export function CurveEditorPanel({ bridge }: Props) {
                 : {
                     ...t,
                     keys: t.keys
-                      .map((k) =>
-                        k.time === oldTime
-                          ? { time: engineTime, value: singleSelected.value }
-                          : k,
-                      )
+                      .map((k) => (k.time === oldTime ? { time: engineTime, value: singleSelected.value } : k))
                       .sort((a, b) => a.time - b.time),
                   },
             ),
       );
-      void bridge.request({
-        kind: "emitters/set-track-key",
-        params: {
-          id: selectedId,
-          track: focusedChannel.trackName,
-          oldTime,
-          newTime: clampedTime,
-          newValue: singleSelected.value,
-        },
-      }).catch(() => { /* silent */ });
+      void bridge
+        .request({
+          kind: "emitters/set-track-key",
+          params: {
+            id: selectedId,
+            track: focusedChannel.trackName,
+            oldTime,
+            newTime: clampedTime,
+            newValue: singleSelected.value,
+          },
+        })
+        .catch(() => {
+          /* silent */
+        });
     },
-    [multiSelected, applyGroupShift, singleSelected, bridge, selectedId, focusLocked, focusedChannel.trackName, focusedChannel.id, focusedTrack],
+    [
+      multiSelected,
+      applyGroupShift,
+      singleSelected,
+      bridge,
+      selectedId,
+      focusLocked,
+      focusedChannel.trackName,
+      focusedChannel.id,
+      focusedTrack,
+    ],
   );
 
   const handleValueSpinner = useCallback(
@@ -1137,24 +1155,35 @@ export function CurveEditorPanel({ bridge }: Props) {
                 ? tr
                 : {
                     ...tr,
-                    keys: tr.keys.map((k) =>
-                      k.time === t ? { time: k.time, value: engineValue } : k,
-                    ),
+                    keys: tr.keys.map((k) => (k.time === t ? { time: k.time, value: engineValue } : k)),
                   },
             ),
       );
-      void bridge.request({
-        kind: "emitters/set-track-key",
-        params: {
-          id: selectedId,
-          track: focusedChannel.trackName,
-          oldTime: t,
-          newTime: t,
-          newValue: nextValue,
-        },
-      }).catch(() => { /* silent */ });
+      void bridge
+        .request({
+          kind: "emitters/set-track-key",
+          params: {
+            id: selectedId,
+            track: focusedChannel.trackName,
+            oldTime: t,
+            newTime: t,
+            newValue: nextValue,
+          },
+        })
+        .catch(() => {
+          /* silent */
+        });
     },
-    [multiSelected, applyGroupShift, singleSelected, bridge, selectedId, focusLocked, focusedChannel.trackName, focusedChannel.id],
+    [
+      multiSelected,
+      applyGroupShift,
+      singleSelected,
+      bridge,
+      selectedId,
+      focusLocked,
+      focusedChannel.trackName,
+      focusedChannel.id,
+    ],
   );
 
   // Keyboard actions from the plot SVG. Selection mirrors
@@ -1174,10 +1203,7 @@ export function CurveEditorPanel({ bridge }: Props) {
           if (action.kind === "select-edge") {
             idx = action.edge === "first" ? 0 : keys.length - 1;
           } else {
-            const cur =
-              singleSelected !== null
-                ? keys.findIndex((k) => k.time === singleSelected.time)
-                : -1;
+            const cur = singleSelected !== null ? keys.findIndex((k) => k.time === singleSelected.time) : -1;
             idx =
               cur === -1
                 ? action.dir === 1
@@ -1193,26 +1219,19 @@ export function CurveEditorPanel({ bridge }: Props) {
           const rows = CHANNELS.filter((c) => visible[c.id] ?? c.defaultOn);
           if (rows.length === 0) return;
           const cur = rows.findIndex((c) => c.id === focusChannel);
-          const next =
-            rows[(cur === -1 ? 0 : cur + action.dir + rows.length) % rows.length]!;
+          const next = rows[(cur === -1 ? 0 : cur + action.dir + rows.length) % rows.length]!;
           if (next.id !== focusChannel) handleRowClick(next.id);
           return;
         }
         case "nudge-time": {
-          const base =
-            multiSelected !== null
-              ? multiSelected.avgTime
-              : singleSelected?.time ?? null;
+          const base = multiSelected !== null ? multiSelected.avgTime : (singleSelected?.time ?? null);
           if (base === null) return;
           // Matches the Time spinner's 0.1 step (legacy parity).
           handleTimeSpinner(base + action.dir * 0.1);
           return;
         }
         case "nudge-value": {
-          const base =
-            multiSelected !== null
-              ? multiSelected.avgValue
-              : singleSelected?.value ?? null;
+          const base = multiSelected !== null ? multiSelected.avgValue : (singleSelected?.value ?? null);
           if (base === null) return;
           const sb = spinnerBoundsForTrack(focusedChannel.trackName);
           const next = Math.max(sb.min, Math.min(sb.max, base + action.dir * sb.step));
@@ -1254,7 +1273,9 @@ export function CurveEditorPanel({ bridge }: Props) {
       handleDelete();
     };
     window.addEventListener("keydown", onKeyDown);
-    return () => { window.removeEventListener("keydown", onKeyDown); };
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
   }, [handleDelete, selectedKeyTimes]);
 
   // Lock-to options.
@@ -1278,25 +1299,26 @@ export function CurveEditorPanel({ bridge }: Props) {
   // and "None" → null. The C++ host validates further (only RGBA
   // channels, only earlier-channel targets); invalid choices land as
   // an unlock per the dispatcher.
-  const handleLockToChange = useCallback((next: string) => {
-    if (selectedId === null) return;
-    if (next === lockToValue) return; // no-op
-    const lockTo: TrackName | null = next === "None"
-      ? null
-      : (next.toLowerCase() as TrackName);
-    void bridge.request({
-      kind: "emitters/set-track-lock",
-      params: {
-        id: selectedId,
-        channel: focusedChannel.trackName,
-        lockTo,
-      },
-    });
-    // Selection makes no sense while a track is locked; clear it so
-    // unlock doesn't snap back to a phantom previous selection.
-    setSelectedKeyTimes(new Set());
-    setOptimisticSelected(null);
-  }, [bridge, selectedId, focusedChannel.trackName, lockToValue]);
+  const handleLockToChange = useCallback(
+    (next: string) => {
+      if (selectedId === null) return;
+      if (next === lockToValue) return; // no-op
+      const lockTo: TrackName | null = next === "None" ? null : (next.toLowerCase() as TrackName);
+      void bridge.request({
+        kind: "emitters/set-track-lock",
+        params: {
+          id: selectedId,
+          channel: focusedChannel.trackName,
+          lockTo,
+        },
+      });
+      // Selection makes no sense while a track is locked; clear it so
+      // unlock doesn't snap back to a phantom previous selection.
+      setSelectedKeyTimes(new Set());
+      setOptimisticSelected(null);
+    },
+    [bridge, selectedId, focusedChannel.trackName, lockToValue],
+  );
 
   // Delete-button disabled state for the toolbar.
   const deletableCount = useMemo(() => {
@@ -1358,12 +1380,12 @@ export function CurveEditorPanel({ bridge }: Props) {
         // Fall back to the requested times when the response carries none,
         // mirroring the singular handler's `res.time ?? k.time`.
         const echoed = (res as { keys?: { time: number }[] }).keys;
-        const times = echoed && echoed.length > 0
-          ? echoed.map((k) => k.time)
-          : clip.map((k) => k.time);
+        const times = echoed && echoed.length > 0 ? echoed.map((k) => k.time) : clip.map((k) => k.time);
         setSelectedKeyTimes(new Set(times));
       })
-      .catch(() => { /* refused paste leaves the selection cleared */ });
+      .catch(() => {
+        /* refused paste leaves the selection cleared */
+      });
   }, [bridge, selectedId, focusLocked, focusedChannel.trackName]);
 
   // Window-scoped Ctrl/Cmd + C / X / V. Window-scoped (not panel-focus-
@@ -1398,7 +1420,9 @@ export function CurveEditorPanel({ bridge }: Props) {
       }
     };
     window.addEventListener("keydown", onKeyDown);
-    return () => { window.removeEventListener("keydown", onKeyDown); };
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
   }, [handleCopyKeys, handleCutKeys, handlePasteKeys, selectedKeyTimes]);
 
   // Per-key menu → Delete. Same guards as the toolbar Delete: never on a
@@ -1406,25 +1430,28 @@ export function CurveEditorPanel({ bridge }: Props) {
   const handleKeyMenuDelete = (t: number) => {
     if (selectedId === null || focusLocked) return;
     if (borderKeyTimes.has(t)) return;
-    void bridge.request({
-      kind: "emitters/delete-track-keys",
-      params: {
-        id: selectedId,
-        track: focusedChannel.trackName,
-        times: [t],
-      },
-    }).then(() => {
-      if (!stillScoped(selectedId, focusedChannel.trackName)) return; // mutation-scope guard
-      setOptimisticSelected((prev) =>
-        prev !== null && prev.time === t ? null : prev,
-      );
-      setSelectedKeyTimes((prev) => {
-        if (!prev.has(t)) return prev;
-        const next = new Set(prev);
-        next.delete(t);
-        return next;
+    void bridge
+      .request({
+        kind: "emitters/delete-track-keys",
+        params: {
+          id: selectedId,
+          track: focusedChannel.trackName,
+          times: [t],
+        },
+      })
+      .then(() => {
+        if (!stillScoped(selectedId, focusedChannel.trackName)) return; // mutation-scope guard
+        setOptimisticSelected((prev) => (prev !== null && prev.time === t ? null : prev));
+        setSelectedKeyTimes((prev) => {
+          if (!prev.has(t)) return prev;
+          const next = new Set(prev);
+          next.delete(t);
+          return next;
+        });
+      })
+      .catch(() => {
+        /* silent */
       });
-    }).catch(() => { /* silent */ });
   };
 
   // ── Render ─────────────────────────────

@@ -40,12 +40,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Square, X } from "lucide-react";
-import type {
-  Bridge,
-  SpawnerParamsDto,
-  SpawnerMode,
-  Vec3,
-} from "@particle-editor/bridge-schema";
+import type { Bridge, SpawnerParamsDto, SpawnerMode, Vec3 } from "@particle-editor/bridge-schema";
 import { Button } from "@/primitives/Button";
 import { Checkbox } from "@/primitives/Checkbox";
 import { Spinner } from "@/primitives/Spinner";
@@ -89,9 +84,7 @@ export function SpawnerPane({ bridge }: Props) {
   // Cache the spawner config locally — fed by snapshot + state/changed.
   // Defaults to the same struct the engine ships with so the panel never
   // renders empty Spinners (which would clamp to NaN on first commit).
-  const [config, setConfig] = useState<SpawnerParamsDto>(() =>
-    makeDefaultSpawnerParams(),
-  );
+  const [config, setConfig] = useState<SpawnerParamsDto>(() => makeDefaultSpawnerParams());
   const [activeCount, setActiveCount] = useState(0);
 
   // Track the "last config we committed" so we don't echo our own
@@ -127,10 +120,7 @@ export function SpawnerPane({ bridge }: Props) {
       const inbound = e.payload?.spawner;
       if (!inbound) return; // same shape guard as the seed above
       changedSeen = true;
-      if (
-        lastCommitted.current &&
-        JSON.stringify(lastCommitted.current) === JSON.stringify(inbound)
-      ) {
+      if (lastCommitted.current && JSON.stringify(lastCommitted.current) === JSON.stringify(inbound)) {
         return;
       }
       setConfig(inbound);
@@ -156,46 +146,24 @@ export function SpawnerPane({ bridge }: Props) {
     void bridge.request({ kind: "spawner/start", params: next });
   };
 
-  const setMode = (mode: SpawnerMode) =>
-    commit(patchSpawner(config, "mode", mode));
-  const setEnabled = (enabled: boolean) =>
-    commit(patchSpawner(config, "enabled", enabled));
-  const setBurstSize = (v: number) =>
-    commit(patchSpawner(config, "burstSize", Math.round(v)));
-  const setSpacingSec = (v: number) =>
-    commit(patchSpawner(config, "spacingSec", v));
-  const setIntervalSec = (v: number) =>
-    commit(patchSpawner(config, "intervalSec", v));
+  const setMode = (mode: SpawnerMode) => commit(patchSpawner(config, "mode", mode));
+  const setEnabled = (enabled: boolean) => commit(patchSpawner(config, "enabled", enabled));
+  const setBurstSize = (v: number) => commit(patchSpawner(config, "burstSize", Math.round(v)));
+  const setSpacingSec = (v: number) => commit(patchSpawner(config, "spacingSec", v));
+  const setIntervalSec = (v: number) => commit(patchSpawner(config, "intervalSec", v));
   const setPositionAxis = (idx: 0 | 1 | 2, v: number) =>
     commit(patchSpawner(config, "position", patchVec(config.position, idx, v)));
   const setVelocityAxis = (idx: 0 | 1 | 2, v: number) =>
     commit(patchSpawner(config, "velocity", patchVec(config.velocity, idx, v)));
-  const setMaxLifetimeSec = (v: number) =>
-    commit(patchSpawner(config, "maxLifetimeSec", v));
+  const setMaxLifetimeSec = (v: number) => commit(patchSpawner(config, "maxLifetimeSec", v));
   const setJitterPosAxis = (idx: 0 | 1 | 2, v: number) =>
-    commit(
-      patchSpawner(
-        config,
-        "jitterPosition",
-        patchVec(config.jitterPosition, idx, v),
-      ),
-    );
+    commit(patchSpawner(config, "jitterPosition", patchVec(config.jitterPosition, idx, v)));
   const setAccelAxis = (idx: 0 | 1 | 2, v: number) =>
-    commit(
-      patchSpawner(config, "acceleration", patchVec(config.acceleration, idx, v)),
-    );
+    commit(patchSpawner(config, "acceleration", patchVec(config.acceleration, idx, v)));
   const setSquiggleAmpAxis = (idx: 0 | 1 | 2, v: number) =>
-    commit(
-      patchSpawner(
-        config,
-        "squiggleAmplitude",
-        patchVec(config.squiggleAmplitude, idx, v),
-      ),
-    );
-  const setSquiggleFreq = (v: number) =>
-    commit(patchSpawner(config, "squiggleFrequency", v));
-  const setMatchProjectile = (on: boolean) =>
-    commit(patchSpawner(config, "matchProjectile", on));
+    commit(patchSpawner(config, "squiggleAmplitude", patchVec(config.squiggleAmplitude, idx, v)));
+  const setSquiggleFreq = (v: number) => commit(patchSpawner(config, "squiggleFrequency", v));
+  const setMatchProjectile = (on: boolean) => commit(patchSpawner(config, "matchProjectile", on));
   const target = config.targetPosition ?? [0, 0, 0];
   const setTargetAxis = (idx: 0 | 1 | 2, v: number) =>
     commit(patchSpawner(config, "targetPosition", patchVec(target, idx, v)));
@@ -241,366 +209,356 @@ export function SpawnerPane({ bridge }: Props) {
           >
             <Square className="size-3" />
           </button>
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label="Close Spawner"
-            onClick={() => setDock(null)}
-          >
+          <button type="button" className="icon-btn" aria-label="Close Spawner" onClick={() => setDock(null)}>
             <X className="size-3.5" />
           </button>
         </div>
       </div>
       <div className="panel-body p-3">
-      {timelineActive && (
-        <p data-testid="spawner-timeline-note" className="mb-2 text-2xs text-text-3">
-          The spawner is paused while the timeline is open.
-        </p>
-      )}
-      {/* role="none": the fieldset only carries `disabled`; it is no group. */}
-      <fieldset role="none" disabled={timelineActive} className="m-0 min-w-0 border-0 p-0">
-      <ToolPanel.Section title="Mode" alwaysOpen>
-        {/* Native radios under a role="radiogroup" wrapper — keyboard
+        {timelineActive && (
+          <p data-testid="spawner-timeline-note" className="mb-2 text-2xs text-text-3">
+            The spawner is paused while the timeline is open.
+          </p>
+        )}
+        {/* role="none": the fieldset only carries `disabled`; it is no group. */}
+        <fieldset role="none" disabled={timelineActive} className="m-0 min-w-0 border-0 p-0">
+          <ToolPanel.Section title="Mode" alwaysOpen>
+            {/* Native radios under a role="radiogroup" wrapper — keyboard
             arrows + tab navigation come from the browser, and the
             Vitest jsdom harness can drive them with a plain click()
             without needing Radix's pointer-capture shim. */}
-        <div role="radiogroup" aria-label="Spawner mode" className="flex gap-3">
-          <label className="flex items-center gap-2 text-xs text-text">
-            <input
-              type="radio"
-              name="spawner-mode"
-              value="manual"
-              checked={config.mode === "manual"}
-              onChange={() => setMode("manual")}
-              aria-label="Manual mode"
-              className="size-3 accent-[var(--accent-strong)]"
-            />
-            <span>Manual</span>
-          </label>
-          <label className="flex items-center gap-2 text-xs text-text">
-            <input
-              type="radio"
-              name="spawner-mode"
-              value="auto"
-              checked={config.mode === "auto"}
-              onChange={() => setMode("auto")}
-              aria-label="Auto mode"
-              className="size-3 accent-[var(--accent-strong)]"
-            />
-            <span>Auto</span>
-          </label>
-        </div>
+            <div role="radiogroup" aria-label="Spawner mode" className="flex gap-3">
+              <label className="flex items-center gap-2 text-xs text-text">
+                <input
+                  type="radio"
+                  name="spawner-mode"
+                  value="manual"
+                  checked={config.mode === "manual"}
+                  onChange={() => setMode("manual")}
+                  aria-label="Manual mode"
+                  className="size-3 accent-[var(--accent-strong)]"
+                />
+                <span>Manual</span>
+              </label>
+              <label className="flex items-center gap-2 text-xs text-text">
+                <input
+                  type="radio"
+                  name="spawner-mode"
+                  value="auto"
+                  checked={config.mode === "auto"}
+                  onChange={() => setMode("auto")}
+                  aria-label="Auto mode"
+                  className="size-3 accent-[var(--accent-strong)]"
+                />
+                <span>Auto</span>
+              </label>
+            </div>
 
-        {isAuto && (
-          <label className="mt-2 flex items-center gap-2 text-xs text-text">
-            <Checkbox
-              checked={config.enabled}
-              onChange={(e) => setEnabled(e.target.checked)}
-              aria-label="Enable spawner"
-            />
-            <span>Enabled</span>
-          </label>
-        )}
+            {isAuto && (
+              <label className="mt-2 flex items-center gap-2 text-xs text-text">
+                <Checkbox
+                  checked={config.enabled}
+                  onChange={(e) => setEnabled(e.target.checked)}
+                  aria-label="Enable spawner"
+                />
+                <span>Enabled</span>
+              </label>
+            )}
 
-        {!isAuto && (
-          <Button
-            onClick={handleTrigger}
-            aria-label="Spawn now"
-            data-testid="spawner-spawn-now"
-            className="mt-2"
-          >
-            Spawn now
-          </Button>
-        )}
-      </ToolPanel.Section>
+            {!isAuto && (
+              <Button onClick={handleTrigger} aria-label="Spawn now" data-testid="spawner-spawn-now" className="mt-2">
+                Spawn now
+              </Button>
+            )}
+          </ToolPanel.Section>
 
-      {projectile && (
-        <ToolPanel.Section title="Projectile" alwaysOpen>
-          <label className="flex items-center gap-2 text-xs text-text">
-            <Checkbox
-              checked={config.matchProjectile === true}
-              disabled={!projectile.flyable}
-              onChange={(e) => setMatchProjectile(e.target.checked)}
-              aria-label="Fly like the projectile"
-            />
-            <span>Fly like the projectile</span>
-          </label>
-          <p data-testid="spawner-projectile-flight" className="mt-1 text-2xs text-text-3">
-            {projectile.flyable
-              ? `In game: ${Math.round(projectile.speed)} units/s for ${Math.round(projectile.range)} units (${projectile.flightSec.toFixed(2)} s). Velocity sets the direction.`
-              : "This projectile has no usable Max_Speed, so it can't be matched."}
-          </p>
-          {projectile.flyable && !projectile.pathEmulated && (
-            <p data-testid="spawner-projectile-curved" className="mt-1 text-2xs text-text-3">
-              In game a {projectile.category} shot doesn't fly straight; the preview flies it straight.
-            </p>
-          )}
-          {matching && projectile.usesTarget && (
-            <>
-              <ToolPanel.Row label="Target">
-                <div className="grid grid-cols-3 gap-1">
-                  {(["X", "Y", "Z"] as const).map((axis, idx) => (
-                    <div className="axis-cell" key={axis}>
-                      <span className="axis-lbl">{axis}</span>
-                      <Spinner
-                        value={target[idx]}
-                        onChange={(v) => setTargetAxis(idx as 0 | 1 | 2, v)}
-                        step={1}
-                        aria-label={`Target ${axis}`}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </ToolPanel.Row>
-              <p data-testid="spawner-projectile-target" className="mt-1 text-2xs text-text-3">
-                Missiles home on the target, rockets curve onto it, grenades lob onto it, cluster bombs launch toward it.
+          {projectile && (
+            <ToolPanel.Section title="Projectile" alwaysOpen>
+              <label className="flex items-center gap-2 text-xs text-text">
+                <Checkbox
+                  checked={config.matchProjectile === true}
+                  disabled={!projectile.flyable}
+                  onChange={(e) => setMatchProjectile(e.target.checked)}
+                  aria-label="Fly like the projectile"
+                />
+                <span>Fly like the projectile</span>
+              </label>
+              <p data-testid="spawner-projectile-flight" className="mt-1 text-2xs text-text-3">
+                {projectile.flyable
+                  ? `In game: ${Math.round(projectile.speed)} units/s for ${Math.round(projectile.range)} units (${projectile.flightSec.toFixed(2)} s). Velocity sets the direction.`
+                  : "This projectile has no usable Max_Speed, so it can't be matched."}
               </p>
-              {config.projectileOutOfReach === true && (
-                <p data-testid="spawner-projectile-out-of-reach" className="mt-1 text-2xs text-warning-fg">
-                  The target is out of lob range: the game wouldn&apos;t fire, so no shot spawns.
+              {projectile.flyable && !projectile.pathEmulated && (
+                <p data-testid="spawner-projectile-curved" className="mt-1 text-2xs text-text-3">
+                  In game a {projectile.category} shot doesn't fly straight; the preview flies it straight.
                 </p>
               )}
-            </>
+              {matching && projectile.usesTarget && (
+                <>
+                  <ToolPanel.Row label="Target">
+                    <div className="grid grid-cols-3 gap-1">
+                      {(["X", "Y", "Z"] as const).map((axis, idx) => (
+                        <div className="axis-cell" key={axis}>
+                          <span className="axis-lbl">{axis}</span>
+                          <Spinner
+                            value={target[idx]}
+                            onChange={(v) => setTargetAxis(idx as 0 | 1 | 2, v)}
+                            step={1}
+                            aria-label={`Target ${axis}`}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </ToolPanel.Row>
+                  <p data-testid="spawner-projectile-target" className="mt-1 text-2xs text-text-3">
+                    Missiles home on the target, rockets curve onto it, grenades lob onto it, cluster bombs launch
+                    toward it.
+                  </p>
+                  {config.projectileOutOfReach === true && (
+                    <p data-testid="spawner-projectile-out-of-reach" className="mt-1 text-2xs text-warning-fg">
+                      The target is out of lob range: the game wouldn&apos;t fire, so no shot spawns.
+                    </p>
+                  )}
+                </>
+              )}
+            </ToolPanel.Section>
           )}
-        </ToolPanel.Section>
-      )}
 
-      <ToolPanel.Section title="Burst" defaultOpen>
-        <ToolPanel.Row label="Burst size">
-          <Spinner
-            value={config.burstSize}
-            onChange={setBurstSize}
-            min={1}
-            max={MAX_BURST_SIZE}
-            step={1}
-            decimals={0}
-            aria-label="Burst size"
-          />
-        </ToolPanel.Row>
-        <ToolPanel.Row label="Spacing">
-          <Spinner
-            value={config.spacingSec}
-            onChange={setSpacingSec}
-            min={0}
-            max={MAX_SPACING_SEC}
-            step={0.05}
-            decimals={2}
-            unit="s"
-            aria-label="Burst spacing"
-          />
-        </ToolPanel.Row>
-        {isAuto && (
-          <ToolPanel.Row label="Interval">
-            <Spinner
-              value={config.intervalSec}
-              onChange={setIntervalSec}
-              min={0}
-              max={MAX_INTERVAL_SEC}
-              step={0.5}
-              decimals={2}
-              unit="s"
-              aria-label="Burst interval"
-            />
-          </ToolPanel.Row>
-        )}
-      </ToolPanel.Section>
+          <ToolPanel.Section title="Burst" defaultOpen>
+            <ToolPanel.Row label="Burst size">
+              <Spinner
+                value={config.burstSize}
+                onChange={setBurstSize}
+                min={1}
+                max={MAX_BURST_SIZE}
+                step={1}
+                decimals={0}
+                aria-label="Burst size"
+              />
+            </ToolPanel.Row>
+            <ToolPanel.Row label="Spacing">
+              <Spinner
+                value={config.spacingSec}
+                onChange={setSpacingSec}
+                min={0}
+                max={MAX_SPACING_SEC}
+                step={0.05}
+                decimals={2}
+                unit="s"
+                aria-label="Burst spacing"
+              />
+            </ToolPanel.Row>
+            {isAuto && (
+              <ToolPanel.Row label="Interval">
+                <Spinner
+                  value={config.intervalSec}
+                  onChange={setIntervalSec}
+                  min={0}
+                  max={MAX_INTERVAL_SEC}
+                  step={0.5}
+                  decimals={2}
+                  unit="s"
+                  aria-label="Burst interval"
+                />
+              </ToolPanel.Row>
+            )}
+          </ToolPanel.Section>
 
-      <ToolPanel.Section title="Position" unit="units" defaultOpen>
-        <div className="grid grid-cols-3 gap-1">
-          <div className="axis-cell">
-            <span className="axis-lbl">X</span>
-            <Spinner
-              value={config.position[0]}
-              onChange={(v) => setPositionAxis(0, v)}
-              step={0.1}
-              aria-label="Position X"
-            />
-          </div>
-          <div className="axis-cell">
-            <span className="axis-lbl">Y</span>
-            <Spinner
-              value={config.position[1]}
-              onChange={(v) => setPositionAxis(1, v)}
-              step={0.1}
-              aria-label="Position Y"
-            />
-          </div>
-          <div className="axis-cell">
-            <span className="axis-lbl">Z</span>
-            <Spinner
-              value={config.position[2]}
-              onChange={(v) => setPositionAxis(2, v)}
-              step={0.1}
-              aria-label="Position Z"
-            />
-          </div>
-        </div>
-      </ToolPanel.Section>
+          <ToolPanel.Section title="Position" unit="units" defaultOpen>
+            <div className="grid grid-cols-3 gap-1">
+              <div className="axis-cell">
+                <span className="axis-lbl">X</span>
+                <Spinner
+                  value={config.position[0]}
+                  onChange={(v) => setPositionAxis(0, v)}
+                  step={0.1}
+                  aria-label="Position X"
+                />
+              </div>
+              <div className="axis-cell">
+                <span className="axis-lbl">Y</span>
+                <Spinner
+                  value={config.position[1]}
+                  onChange={(v) => setPositionAxis(1, v)}
+                  step={0.1}
+                  aria-label="Position Y"
+                />
+              </div>
+              <div className="axis-cell">
+                <span className="axis-lbl">Z</span>
+                <Spinner
+                  value={config.position[2]}
+                  onChange={(v) => setPositionAxis(2, v)}
+                  step={0.1}
+                  aria-label="Position Z"
+                />
+              </div>
+            </div>
+          </ToolPanel.Section>
 
-      <ToolPanel.Section title="Velocity" unit="units/s" defaultOpen>
-        <div className="grid grid-cols-3 gap-1">
-          <div className="axis-cell">
-            <span className="axis-lbl">X</span>
-            <Spinner
-              value={config.velocity[0]}
-              onChange={(v) => setVelocityAxis(0, v)}
-              step={0.1}
-              aria-label="Velocity X"
-            />
-          </div>
-          <div className="axis-cell">
-            <span className="axis-lbl">Y</span>
-            <Spinner
-              value={config.velocity[1]}
-              onChange={(v) => setVelocityAxis(1, v)}
-              step={0.1}
-              aria-label="Velocity Y"
-            />
-          </div>
-          <div className="axis-cell">
-            <span className="axis-lbl">Z</span>
-            <Spinner
-              value={config.velocity[2]}
-              onChange={(v) => setVelocityAxis(2, v)}
-              step={0.1}
-              aria-label="Velocity Z"
-            />
-          </div>
-        </div>
-      </ToolPanel.Section>
+          <ToolPanel.Section title="Velocity" unit="units/s" defaultOpen>
+            <div className="grid grid-cols-3 gap-1">
+              <div className="axis-cell">
+                <span className="axis-lbl">X</span>
+                <Spinner
+                  value={config.velocity[0]}
+                  onChange={(v) => setVelocityAxis(0, v)}
+                  step={0.1}
+                  aria-label="Velocity X"
+                />
+              </div>
+              <div className="axis-cell">
+                <span className="axis-lbl">Y</span>
+                <Spinner
+                  value={config.velocity[1]}
+                  onChange={(v) => setVelocityAxis(1, v)}
+                  step={0.1}
+                  aria-label="Velocity Y"
+                />
+              </div>
+              <div className="axis-cell">
+                <span className="axis-lbl">Z</span>
+                <Spinner
+                  value={config.velocity[2]}
+                  onChange={(v) => setVelocityAxis(2, v)}
+                  step={0.1}
+                  aria-label="Velocity Z"
+                />
+              </div>
+            </div>
+          </ToolPanel.Section>
 
-      {/* role="none": only carries `disabled` while the shot flies like the projectile. */}
-      <fieldset role="none" disabled={matching} className="m-0 min-w-0 border-0 p-0">
-      <ToolPanel.Section title="Lifetime" alwaysOpen>
-        <ToolPanel.Row label="Max lifetime">
-          <Spinner
-            value={config.maxLifetimeSec}
-            onChange={setMaxLifetimeSec}
-            min={0}
-            max={MAX_LIFETIME_SEC}
-            step={0.5}
-            decimals={2}
-            unit="s"
-            aria-label="Max lifetime"
-          />
-        </ToolPanel.Row>
-      </ToolPanel.Section>
-      </fieldset>
+          {/* role="none": only carries `disabled` while the shot flies like the projectile. */}
+          <fieldset role="none" disabled={matching} className="m-0 min-w-0 border-0 p-0">
+            <ToolPanel.Section title="Lifetime" alwaysOpen>
+              <ToolPanel.Row label="Max lifetime">
+                <Spinner
+                  value={config.maxLifetimeSec}
+                  onChange={setMaxLifetimeSec}
+                  min={0}
+                  max={MAX_LIFETIME_SEC}
+                  step={0.5}
+                  decimals={2}
+                  unit="s"
+                  aria-label="Max lifetime"
+                />
+              </ToolPanel.Row>
+            </ToolPanel.Section>
+          </fieldset>
 
-      <ToolPanel.Section title="Jitter position" unit="units">
-        <div className="grid grid-cols-3 gap-1">
-          <div className="axis-cell">
-            <span className="axis-lbl">X</span>
-            <Spinner
-              value={config.jitterPosition[0]}
-              onChange={(v) => setJitterPosAxis(0, v)}
-              step={0.05}
-              aria-label="Jitter position X"
-            />
-          </div>
-          <div className="axis-cell">
-            <span className="axis-lbl">Y</span>
-            <Spinner
-              value={config.jitterPosition[1]}
-              onChange={(v) => setJitterPosAxis(1, v)}
-              step={0.05}
-              aria-label="Jitter position Y"
-            />
-          </div>
-          <div className="axis-cell">
-            <span className="axis-lbl">Z</span>
-            <Spinner
-              value={config.jitterPosition[2]}
-              onChange={(v) => setJitterPosAxis(2, v)}
-              step={0.05}
-              aria-label="Jitter position Z"
-            />
-          </div>
-        </div>
-      </ToolPanel.Section>
+          <ToolPanel.Section title="Jitter position" unit="units">
+            <div className="grid grid-cols-3 gap-1">
+              <div className="axis-cell">
+                <span className="axis-lbl">X</span>
+                <Spinner
+                  value={config.jitterPosition[0]}
+                  onChange={(v) => setJitterPosAxis(0, v)}
+                  step={0.05}
+                  aria-label="Jitter position X"
+                />
+              </div>
+              <div className="axis-cell">
+                <span className="axis-lbl">Y</span>
+                <Spinner
+                  value={config.jitterPosition[1]}
+                  onChange={(v) => setJitterPosAxis(1, v)}
+                  step={0.05}
+                  aria-label="Jitter position Y"
+                />
+              </div>
+              <div className="axis-cell">
+                <span className="axis-lbl">Z</span>
+                <Spinner
+                  value={config.jitterPosition[2]}
+                  onChange={(v) => setJitterPosAxis(2, v)}
+                  step={0.05}
+                  aria-label="Jitter position Z"
+                />
+              </div>
+            </div>
+          </ToolPanel.Section>
 
-      <fieldset role="none" disabled={matching} className="m-0 min-w-0 border-0 p-0">
-      <ToolPanel.Section title="Acceleration (arc)" unit="units/s²">
-        <div className="grid grid-cols-3 gap-1">
-          <div className="axis-cell">
-            <span className="axis-lbl">X</span>
-            <Spinner
-              value={config.acceleration[0]}
-              onChange={(v) => setAccelAxis(0, v)}
-              step={0.1}
-              aria-label="Acceleration X"
-            />
-          </div>
-          <div className="axis-cell">
-            <span className="axis-lbl">Y</span>
-            <Spinner
-              value={config.acceleration[1]}
-              onChange={(v) => setAccelAxis(1, v)}
-              step={0.1}
-              aria-label="Acceleration Y"
-            />
-          </div>
-          <div className="axis-cell">
-            <span className="axis-lbl">Z</span>
-            <Spinner
-              value={config.acceleration[2]}
-              onChange={(v) => setAccelAxis(2, v)}
-              step={0.1}
-              aria-label="Acceleration Z"
-            />
-          </div>
-        </div>
-      </ToolPanel.Section>
+          <fieldset role="none" disabled={matching} className="m-0 min-w-0 border-0 p-0">
+            <ToolPanel.Section title="Acceleration (arc)" unit="units/s²">
+              <div className="grid grid-cols-3 gap-1">
+                <div className="axis-cell">
+                  <span className="axis-lbl">X</span>
+                  <Spinner
+                    value={config.acceleration[0]}
+                    onChange={(v) => setAccelAxis(0, v)}
+                    step={0.1}
+                    aria-label="Acceleration X"
+                  />
+                </div>
+                <div className="axis-cell">
+                  <span className="axis-lbl">Y</span>
+                  <Spinner
+                    value={config.acceleration[1]}
+                    onChange={(v) => setAccelAxis(1, v)}
+                    step={0.1}
+                    aria-label="Acceleration Y"
+                  />
+                </div>
+                <div className="axis-cell">
+                  <span className="axis-lbl">Z</span>
+                  <Spinner
+                    value={config.acceleration[2]}
+                    onChange={(v) => setAccelAxis(2, v)}
+                    step={0.1}
+                    aria-label="Acceleration Z"
+                  />
+                </div>
+              </div>
+            </ToolPanel.Section>
 
-      <ToolPanel.Section title="Squiggle amplitude" unit="units">
-        <div className="grid grid-cols-3 gap-1">
-          <div className="axis-cell">
-            <span className="axis-lbl">X</span>
-            <Spinner
-              value={config.squiggleAmplitude[0]}
-              onChange={(v) => setSquiggleAmpAxis(0, v)}
-              step={0.05}
-              aria-label="Squiggle amplitude X"
-            />
-          </div>
-          <div className="axis-cell">
-            <span className="axis-lbl">Y</span>
-            <Spinner
-              value={config.squiggleAmplitude[1]}
-              onChange={(v) => setSquiggleAmpAxis(1, v)}
-              step={0.05}
-              aria-label="Squiggle amplitude Y"
-            />
-          </div>
-          <div className="axis-cell">
-            <span className="axis-lbl">Z</span>
-            <Spinner
-              value={config.squiggleAmplitude[2]}
-              onChange={(v) => setSquiggleAmpAxis(2, v)}
-              step={0.05}
-              aria-label="Squiggle amplitude Z"
-            />
-          </div>
-        </div>
-      </ToolPanel.Section>
+            <ToolPanel.Section title="Squiggle amplitude" unit="units">
+              <div className="grid grid-cols-3 gap-1">
+                <div className="axis-cell">
+                  <span className="axis-lbl">X</span>
+                  <Spinner
+                    value={config.squiggleAmplitude[0]}
+                    onChange={(v) => setSquiggleAmpAxis(0, v)}
+                    step={0.05}
+                    aria-label="Squiggle amplitude X"
+                  />
+                </div>
+                <div className="axis-cell">
+                  <span className="axis-lbl">Y</span>
+                  <Spinner
+                    value={config.squiggleAmplitude[1]}
+                    onChange={(v) => setSquiggleAmpAxis(1, v)}
+                    step={0.05}
+                    aria-label="Squiggle amplitude Y"
+                  />
+                </div>
+                <div className="axis-cell">
+                  <span className="axis-lbl">Z</span>
+                  <Spinner
+                    value={config.squiggleAmplitude[2]}
+                    onChange={(v) => setSquiggleAmpAxis(2, v)}
+                    step={0.05}
+                    aria-label="Squiggle amplitude Z"
+                  />
+                </div>
+              </div>
+            </ToolPanel.Section>
 
-      <ToolPanel.Section title="Squiggle frequency">
-        <ToolPanel.Row label="Frequency">
-          <Spinner
-            value={config.squiggleFrequency}
-            onChange={setSquiggleFreq}
-            min={0}
-            max={SQUIGGLE_FREQ_MAX}
-            step={0.1}
-            decimals={2}
-            unit="Hz"
-            aria-label="Squiggle frequency"
-          />
-        </ToolPanel.Row>
-      </ToolPanel.Section>
-      </fieldset>
-      </fieldset>
-
+            <ToolPanel.Section title="Squiggle frequency">
+              <ToolPanel.Row label="Frequency">
+                <Spinner
+                  value={config.squiggleFrequency}
+                  onChange={setSquiggleFreq}
+                  min={0}
+                  max={SQUIGGLE_FREQ_MAX}
+                  step={0.1}
+                  decimals={2}
+                  unit="Hz"
+                  aria-label="Squiggle frequency"
+                />
+              </ToolPanel.Row>
+            </ToolPanel.Section>
+          </fieldset>
+        </fieldset>
       </div>
     </div>
   );

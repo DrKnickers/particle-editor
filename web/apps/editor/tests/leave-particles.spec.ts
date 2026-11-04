@@ -13,10 +13,8 @@ test.beforeAll(async ({ cdpPage }) => {
 const state = () => bridgeRequest(page, { kind: "engine/state/snapshot", params: {} });
 const setLeaveParticles = (enabled: boolean) =>
   bridgeRequest(page, { kind: "engine/set/leave-particles", params: { enabled } });
-const undo = () =>
-  bridgeRequest(page, { kind: "undo/perform", params: { direction: "undo" } });
-const redo = () =>
-  bridgeRequest(page, { kind: "undo/perform", params: { direction: "redo" } });
+const undo = () => bridgeRequest(page, { kind: "undo/perform", params: { direction: "undo" } });
+const redo = () => bridgeRequest(page, { kind: "undo/perform", params: { direction: "redo" } });
 
 test("leave-particles undo/redo restores exact values while paused stays view-only", async () => {
   const pausedBefore = (await state()).paused;

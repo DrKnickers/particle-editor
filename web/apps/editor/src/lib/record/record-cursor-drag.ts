@@ -76,7 +76,13 @@ export interface RecordDragCursor {
 
 const POINTER_ID = 1;
 
-function makePointerEvent(type: string, buttons: number, button: number, clientX: number, clientY: number): PointerEvent {
+function makePointerEvent(
+  type: string,
+  buttons: number,
+  button: number,
+  clientX: number,
+  clientY: number,
+): PointerEvent {
   return new PointerEvent(type, {
     pointerId: POINTER_ID,
     pointerType: "mouse",

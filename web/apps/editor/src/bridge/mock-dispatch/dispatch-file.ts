@@ -1,14 +1,7 @@
 // Mock counterpart of src/host/BridgeDispatch_File.cpp.
 
-import type {
-  Request,
-} from "@particle-editor/bridge-schema";
-import {
-  makeDefaultEngineState,
-  useMockEngineState,
-  useMockRecentFiles,
-  snapshotEngineState,
-} from "../mock-state";
+import type { Request } from "@particle-editor/bridge-schema";
+import { makeDefaultEngineState, useMockEngineState, useMockRecentFiles, snapshotEngineState } from "../mock-state";
 import type { MockDispatchHost } from "./host";
 
 type FileKind =
@@ -25,7 +18,6 @@ type FileRequest = Extract<Request, { kind: FileKind }>;
 
 export function dispatchFile(this: MockDispatchHost, req: FileRequest): unknown {
   switch (req.kind) {
-
     // ---------------- autosave crash-recovery ----------------
     case "autosave/check-recovery":
       // Mock: no %TEMP% scan in browser mode — always "no orphan", so the
@@ -94,8 +86,7 @@ export function dispatchFile(this: MockDispatchHost, req: FileRequest): unknown 
       //
       // Opening an .alo replaces the document, so the native host's
       // data-loss guard applies first (texture filters never touch it).
-      if ((req.params?.filter ?? "alo") === "alo" &&
-          snapshotEngineState().dirty && !req.params?.discardUnsaved) {
+      if ((req.params?.filter ?? "alo") === "alo" && snapshotEngineState().dirty && !req.params?.discardUnsaved) {
         return { ok: false, error: "unsaved-changes" };
       }
       const explicit = req.params?.path;

@@ -87,12 +87,12 @@ describe("runFileOp", () => {
 
   it("surfaces a REJECTED request and re-throws (release-audit #11)", async () => {
     const bridge: Bridge = {
-      request: async () => { throw new Error("bridge offline"); },
+      request: async () => {
+        throw new Error("bridge offline");
+      },
       on: () => () => {},
     } as Bridge;
-    await expect(
-      runFileOp(bridge, { kind: "file/save", params: {} }),
-    ).rejects.toThrow("bridge offline");
+    await expect(runFileOp(bridge, { kind: "file/save", params: {} })).rejects.toThrow("bridge offline");
     // The rejection is surfaced in the SAME error store (not swallowed), so the
     // caller can keep its prompt open instead of silently abandoning the op.
     expect(useFileOpErrorStore.getState().message).toContain("Couldn't save the file");
@@ -134,7 +134,7 @@ describe("replaceDocument (New / Open over unsaved work)", () => {
     replaceDocument(bridge, { kind: "file/open", params: { path: "C:/x.alo" } });
     const pending = useFileStateStore.getState().pendingAction;
     expect(pending).toBeTypeOf("function");
-    expect(calls).toHaveLength(0);                 // parked behind the prompt
+    expect(calls).toHaveLength(0); // parked behind the prompt
     useFileStateStore.getState().setPendingAction(null);
     await pending!({ discardUnsaved: true });
     expect(calls[0]).toEqual({ kind: "file/open", params: { path: "C:/x.alo", discardUnsaved: true } });

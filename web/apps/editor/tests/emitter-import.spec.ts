@@ -56,8 +56,7 @@ test("full import re-nests the imported subtree (shape, not just count)", async 
       (node?.children ?? []).reduce((n, c) => n + 1 + countNodes(c), 0);
     const collectIds = (node: TreeNode | undefined): number[] =>
       (node?.children ?? []).flatMap((c) => [c.id, ...collectIds(c)]);
-    const topIds = (root: TreeNode | undefined): Set<number> =>
-      new Set((root?.children ?? []).map((c) => c.id));
+    const topIds = (root: TreeNode | undefined): Set<number> => new Set((root?.children ?? []).map((c) => c.id));
     const bridge = window.bridge!;
     const list = async () => (await bridge.request({ kind: "emitters/list", params: {} })).root;
 
@@ -111,8 +110,7 @@ test("full import re-nests the imported subtree (shape, not just count)", async 
 test("partial import (root only) drops the non-picked child links", async () => {
   const result = await page.evaluate(async (path) => {
     type TreeNode = { id: number; name: string; role?: string; children?: TreeNode[] };
-    const topIds = (root: TreeNode | undefined): Set<number> =>
-      new Set((root?.children ?? []).map((c) => c.id));
+    const topIds = (root: TreeNode | undefined): Set<number> => new Set((root?.children ?? []).map((c) => c.id));
     const bridge = window.bridge!;
     const list = async () => (await bridge.request({ kind: "emitters/list", params: {} })).root;
 
@@ -150,40 +148,43 @@ test("partial import (root only) drops the non-picked child links", async () => 
 });
 
 test("a failed import rejects, mutates nothing, and pushes no undo entry", async () => {
-  const result = await page.evaluate(async ({ path, badPath }) => {
-    type TreeNode = { id: number; children?: TreeNode[] };
-    const countNodes = (node: TreeNode | undefined): number =>
-      (node?.children ?? []).reduce((n, c) => n + 1 + countNodes(c), 0);
-    const collectIds = (node: TreeNode | undefined): number[] =>
-      (node?.children ?? []).flatMap((c) => [c.id, ...collectIds(c)]);
-    const bridge = window.bridge!;
-    const count = async () => countNodes((await bridge.request({ kind: "emitters/list", params: {} })).root);
+  const result = await page.evaluate(
+    async ({ path, badPath }) => {
+      type TreeNode = { id: number; children?: TreeNode[] };
+      const countNodes = (node: TreeNode | undefined): number =>
+        (node?.children ?? []).reduce((n, c) => n + 1 + countNodes(c), 0);
+      const collectIds = (node: TreeNode | undefined): number[] =>
+        (node?.children ?? []).flatMap((c) => [c.id, ...collectIds(c)]);
+      const bridge = window.bridge!;
+      const count = async () => countNodes((await bridge.request({ kind: "emitters/list", params: {} })).root);
 
-    const baseline = await count();
+      const baseline = await count();
 
-    // A valid import first (so there's a known undoable mutation on the stack).
-    const preview = await bridge.request({ kind: "emitters/preview-from-file", params: { path } });
-    const selected = preview.ok ? collectIds(preview.tree) : [];
-    await bridge.request({ kind: "emitters/import-from-file", params: { path, selected } });
-    const afterImport = await count();
+      // A valid import first (so there's a known undoable mutation on the stack).
+      const preview = await bridge.request({ kind: "emitters/preview-from-file", params: { path } });
+      const selected = preview.ok ? collectIds(preview.tree) : [];
+      await bridge.request({ kind: "emitters/import-from-file", params: { path, selected } });
+      const afterImport = await count();
 
-    // Now a FAILED import (non-existent path) — must reject (sendErr) and mutate nothing.
-    let threw = false;
-    try {
-      await bridge.request({ kind: "emitters/import-from-file", params: { path: badPath, selected: [0] } });
-    } catch {
-      threw = true;
-    }
-    const afterFail = await count();
+      // Now a FAILED import (non-existent path) — must reject (sendErr) and mutate nothing.
+      let threw = false;
+      try {
+        await bridge.request({ kind: "emitters/import-from-file", params: { path: badPath, selected: [0] } });
+      } catch {
+        threw = true;
+      }
+      const afterFail = await count();
 
-    // ONE undo. If the failed import pushed NO undo entry, this reverts the
-    // VALID import → back to baseline. A stray entry from the failure would
-    // make this undo a no-op and leave the valid import in place.
-    await bridge.request({ kind: "undo/perform", params: { direction: "undo" } });
-    const afterUndo = await count();
+      // ONE undo. If the failed import pushed NO undo entry, this reverts the
+      // VALID import → back to baseline. A stray entry from the failure would
+      // make this undo a no-op and leave the valid import in place.
+      await bridge.request({ kind: "undo/perform", params: { direction: "undo" } });
+      const afterUndo = await count();
 
-    return { baseline, selectedLen: selected.length, afterImport, threw, afterFail, afterUndo };
-  }, { path: SOURCE_ALO, badPath: BAD_ALO });
+      return { baseline, selectedLen: selected.length, afterImport, threw, afterFail, afterUndo };
+    },
+    { path: SOURCE_ALO, badPath: BAD_ALO },
+  );
 
   expect(result.threw).toBe(true); // sendErr → envelope ok:false → promise rejects
   expect(result.afterImport).toBe(result.baseline + result.selectedLen);

@@ -38,12 +38,21 @@ export function SegmentedControl<T extends string>({
     let next: number;
     switch (e.key) {
       case "ArrowRight":
-      case "ArrowDown": next = (current + 1) % options.length; break;
+      case "ArrowDown":
+        next = (current + 1) % options.length;
+        break;
       case "ArrowLeft":
-      case "ArrowUp": next = (current - 1 + options.length) % options.length; break;
-      case "Home": next = 0; break;
-      case "End": next = options.length - 1; break;
-      default: return;
+      case "ArrowUp":
+        next = (current - 1 + options.length) % options.length;
+        break;
+      case "Home":
+        next = 0;
+        break;
+      case "End":
+        next = options.length - 1;
+        break;
+      default:
+        return;
     }
     e.preventDefault();
     onValueChange(options[next]!.value);
@@ -61,7 +70,9 @@ export function SegmentedControl<T extends string>({
         return (
           <button
             key={o.value}
-            ref={(el) => { refs.current[i] = el; }}
+            ref={(el) => {
+              refs.current[i] = el;
+            }}
             type="button"
             role="radio"
             aria-checked={checked}

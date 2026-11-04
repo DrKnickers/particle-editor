@@ -16,7 +16,9 @@ export class EventHub<M extends Record<string, unknown>> {
       this.buckets.set(key, bucket);
     }
     bucket.add(handler as (value: never) => void);
-    return () => { bucket?.delete(handler as (value: never) => void); };
+    return () => {
+      bucket?.delete(handler as (value: never) => void);
+    };
   }
 
   /** Live subscriber count for `key` (diagnostics, e.g. the profiler audit spec). */

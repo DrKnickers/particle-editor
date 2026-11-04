@@ -16,7 +16,9 @@ import { ImportEmittersDialog } from "../ImportEmittersDialog";
 // Tooltip.Provider App.tsx supplies in production — this wrapper stands in
 // for it (precedent: renderWithTooltips in EmitterTree.test.tsx).
 const TipProvider = ({ children }: { children: ReactNode }) => (
-  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>
+    {children}
+  </Tooltip.Provider>
 );
 const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
@@ -51,9 +53,7 @@ function makeTreeBridge(): Bridge & { request: ReturnType<typeof vi.fn> } {
 
 /** Bridge resolving to a nested tree: Parent(1)→Child(3), plus Sibling(2). */
 function makeNestedBridge(): Bridge & { request: ReturnType<typeof vi.fn> } {
-  return makeBridgeFor(
-    node(0, "(root)", [node(1, "Parent", [node(3, "Child")]), node(2, "Sibling")]),
-  );
+  return makeBridgeFor(node(0, "(root)", [node(1, "Parent", [node(3, "Child")]), node(2, "Sibling")]));
 }
 
 function makeBridgeFor(tree: EmitterTreeNode): Bridge & { request: ReturnType<typeof vi.fn> } {
@@ -95,10 +95,7 @@ function makeImportBridge(imported: number): Bridge & { request: ReturnType<type
 }
 
 /** Render the dialog, load the preview tree, select both emitters. Returns OK. */
-async function renderAndSelectAll(
-  bridge: Bridge,
-  onOpenChange: (open: boolean) => void,
-): Promise<HTMLElement> {
+async function renderAndSelectAll(bridge: Bridge, onOpenChange: (open: boolean) => void): Promise<HTMLElement> {
   render(<ImportEmittersDialog bridge={bridge} open onOpenChange={onOpenChange} />);
   fireEvent.click(screen.getByRole("button", { name: /Browse/ }));
   await waitFor(() => expect(screen.getByRole("treeitem", { name: "Alpha" })).toBeInTheDocument());
@@ -308,9 +305,7 @@ describe("ImportEmittersDialog", () => {
     render(<ImportEmittersDialog bridge={bridge} open onOpenChange={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: /Browse/ }));
 
-    await waitFor(() =>
-      expect(screen.getByText(/No particle emitters in this file/i)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(/No particle emitters in this file/i)).toBeInTheDocument());
     expect(screen.queryByRole("tree")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Import$/ })).toBeDisabled();
   });
@@ -381,7 +376,9 @@ describe("ImportEmittersDialog", () => {
   it("ignores a second OK click while an import is in flight", async () => {
     const tree = node(0, "(root)", [node(1, "Alpha"), node(2, "Beta")]);
     let resolveImport: (v: { imported: number }) => void = () => {};
-    const importPromise = new Promise<{ imported: number }>((res) => { resolveImport = res; });
+    const importPromise = new Promise<{ imported: number }>((res) => {
+      resolveImport = res;
+    });
     const bridge = {
       request: vi.fn().mockImplementation((req: { kind: string }) => {
         if (req.kind === "file/pick-open") return Promise.resolve({ ok: true, path: "C:/x.alo" });

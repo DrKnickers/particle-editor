@@ -8,12 +8,7 @@ import type {
   ReferenceProjectileDto,
   SkydomeSlotStatus,
 } from "@particle-editor/bridge-schema";
-import {
-  makeDefaultEngineState,
-  useMockEmitterTree,
-  useMockEngineState,
-  snapshotEngineState,
-} from "../mock-state";
+import { makeDefaultEngineState, useMockEmitterTree, useMockEngineState, snapshotEngineState } from "../mock-state";
 import type { MockDispatchHost } from "./host";
 
 type EngineKind =
@@ -76,9 +71,33 @@ const MOCK_SKINNED_REFS = new Set<string>(["Stormtrooper_Squad"]);
 // <Max_Speed> / <Projectile_Max_Flight_Distance>): 30 x Max_Speed u/s, and
 // ceil(range / Max_Speed) logic frames of flight.
 const MOCK_PROJECTILE_FLIGHT: Record<string, ReferenceProjectileDto> = {
-  Proj_Ground_Blaster_Red:    { flyable: true, speed: 330, range: 500, flightSec: 46 / 30, category: "Laser", pathEmulated: true, usesTarget: false },
-  Proj_Ship_Turbolaser_Green: { flyable: true, speed: 600, range: 1500, flightSec: 75 / 30, category: "Laser", pathEmulated: true, usesTarget: false },
-  Proj_Proton_Torpedo:        { flyable: true, speed: 240, range: 2000, flightSec: 250 / 30, category: "MISSILE", pathEmulated: true, usesTarget: true },
+  Proj_Ground_Blaster_Red: {
+    flyable: true,
+    speed: 330,
+    range: 500,
+    flightSec: 46 / 30,
+    category: "Laser",
+    pathEmulated: true,
+    usesTarget: false,
+  },
+  Proj_Ship_Turbolaser_Green: {
+    flyable: true,
+    speed: 600,
+    range: 1500,
+    flightSec: 75 / 30,
+    category: "Laser",
+    pathEmulated: true,
+    usesTarget: false,
+  },
+  Proj_Proton_Torpedo: {
+    flyable: true,
+    speed: 240,
+    range: 2000,
+    flightSec: 250 / 30,
+    category: "MISSILE",
+    pathEmulated: true,
+    usesTarget: true,
+  },
 };
 
 // Names that resolve in the catalog but whose model file is absent from the
@@ -128,9 +147,7 @@ export function dispatchEngine(this: MockDispatchHost, req: EngineRequest): unkn
       const inRange = requestedSlot >= 0 && requestedSlot < before.groundSlotCustomPaths.length;
       // Browser mode treats built-in slots 0..4 as available. Custom slots
       // mirror the native engine and require a path before selection.
-      const available =
-        inRange &&
-        (requestedSlot <= 4 || (before.groundSlotCustomPaths[requestedSlot] ?? "") !== "");
+      const available = inRange && (requestedSlot <= 4 || (before.groundSlotCustomPaths[requestedSlot] ?? "") !== "");
       if (available) {
         this.patchAndBroadcast({
           groundTexture: requestedSlot,
@@ -168,8 +185,7 @@ export function dispatchEngine(this: MockDispatchHost, req: EngineRequest): unkn
       const requestedSlot = req.params.slot;
       const before = snapshotEngineState();
       const inRange = requestedSlot >= 0 && requestedSlot < 12;
-      const customPath =
-        requestedSlot >= 9 ? (before.skydomeCustomPaths[requestedSlot - 9] ?? "") : "";
+      const customPath = requestedSlot >= 9 ? (before.skydomeCustomPaths[requestedSlot - 9] ?? "") : "";
       const applied = inRange && (requestedSlot < 9 || customPath !== "");
       // The native setter falls back to Off when a valid custom slot cannot
       // load. Invalid indices leave the prior slot untouched.
@@ -211,10 +227,13 @@ export function dispatchEngine(this: MockDispatchHost, req: EngineRequest): unkn
     case "engine/set/reference-object": {
       const name = req.params.name;
       const status: ReferenceObjectStatus =
-        name === ""                      ? "none"
-        : MOCK_MISSING_MODELS.has(name)  ? "model-missing"
-        : MOCK_SKINNED_REFS.has(name)    ? "skinned"
-        :                                  "ok";
+        name === ""
+          ? "none"
+          : MOCK_MISSING_MODELS.has(name)
+            ? "model-missing"
+            : MOCK_SKINNED_REFS.has(name)
+              ? "skinned"
+              : "ok";
       this.patchAndBroadcast({
         referenceObjectName: name,
         referenceObjectStatus: status,
@@ -365,15 +384,15 @@ export function dispatchEngine(this: MockDispatchHost, req: EngineRequest): unkn
     case "engine/action/reset-view-settings": {
       const defaults = makeDefaultEngineState();
       useMockEngineState.getState().applyPatch({
-        background:    defaults.background,
-        ground:        defaults.ground,
-        groundZ:       defaults.groundZ,
+        background: defaults.background,
+        ground: defaults.ground,
+        groundZ: defaults.groundZ,
         groundTexture: defaults.groundTexture,
-        skydomeSlot:   defaults.skydomeSlot,
-        bloom:         defaults.bloom,
+        skydomeSlot: defaults.skydomeSlot,
+        bloom: defaults.bloom,
         bloomStrength: defaults.bloomStrength,
-        bloomCutoff:   defaults.bloomCutoff,
-        bloomSize:     defaults.bloomSize,
+        bloomCutoff: defaults.bloomCutoff,
+        bloomSize: defaults.bloomSize,
       });
       this.emit({ kind: "engine/state/changed", payload: snapshotEngineState() });
       return {};
@@ -384,10 +403,7 @@ export function dispatchEngine(this: MockDispatchHost, req: EngineRequest): unkn
     // call (so Vitest can assert on it via a spy) and emits the standard
     // post-action state/changed cue. Returns {} per schema.
     case "engine/action/rescale-system":
-      console.log(
-        "[MockBridge] engine/action/rescale-system",
-        req.params,
-      );
+      console.log("[MockBridge] engine/action/rescale-system", req.params);
       this.emit({ kind: "engine/state/changed", payload: snapshotEngineState() });
       return {};
 
@@ -401,8 +417,8 @@ export function dispatchEngine(this: MockDispatchHost, req: EngineRequest): unkn
       // colour (slot 4), or has a user custom path. Game-sourced slots 1..3
       // (grass/sand/snow) have NO bundled resource, so they read empty here even
       // though they render from the game install -- availability is a separate query.
-      const hasBuiltin = slot === 0 || slot === 4;  // dirt + procedural solid only
-      const hasCustom  = slot >= 0 && slot < paths.length && (paths[slot] ?? "") !== "";
+      const hasBuiltin = slot === 0 || slot === 4; // dirt + procedural solid only
+      const hasCustom = slot >= 0 && slot < paths.length && (paths[slot] ?? "") !== "";
       return !(hasBuiltin || hasCustom);
     }
 
@@ -454,13 +470,31 @@ export function dispatchEngine(this: MockDispatchHost, req: EngineRequest): unkn
           { name: "AT_ST_Walker", domain: "Ground", role: "Unit", bucket: "Vehicle", affiliation: "Empire" },
           { name: "Stormtrooper_Squad", domain: "Ground", role: "Unit", bucket: "Infantry", affiliation: "Empire" }, // MOCK_SKINNED_REFS
           { name: "Rebel_Barracks", domain: "Ground", role: "Structure", bucket: "Structure", affiliation: "Rebel" },
-          { name: "Empire_Anti_Aircraft_Turret", domain: "Ground", role: "Structure", bucket: "Structure", affiliation: "Empire" },
-          { name: "Sensor_Array_NoModel", domain: "Ground", role: "Structure", bucket: "Structure", affiliation: "Rebel" }, // MOCK_MISSING_MODELS
+          {
+            name: "Empire_Anti_Aircraft_Turret",
+            domain: "Ground",
+            role: "Structure",
+            bucket: "Structure",
+            affiliation: "Empire",
+          },
+          {
+            name: "Sensor_Array_NoModel",
+            domain: "Ground",
+            role: "Structure",
+            bucket: "Structure",
+            affiliation: "Rebel",
+          }, // MOCK_MISSING_MODELS
           { name: "Imperial_Bunker_Capturable", domain: "Ground", role: "Unit", bucket: "Other", affiliation: "" }, // no affiliation -> only under "All"
           { name: "Star_Destroyer", domain: "Space", role: "Unit", bucket: "Capital", affiliation: "Empire" },
           { name: "Nebulon_B_Frigate", domain: "Space", role: "Unit", bucket: "Frigate", affiliation: "Rebel, Empire" }, // multi-faction
           { name: "TIE_Fighter", domain: "Space", role: "Unit", bucket: "Fighter", affiliation: "Empire" },
-          { name: "Imperial_Star_Base", domain: "Space", role: "Structure", bucket: "Structure", affiliation: "Empire" },
+          {
+            name: "Imperial_Star_Base",
+            domain: "Space",
+            role: "Structure",
+            bucket: "Structure",
+            affiliation: "Empire",
+          },
           { name: "Darth_Vader", domain: "Ground", role: "Hero", bucket: "Hero", affiliation: "Empire" },
           { name: "Emperor_Palpatine", domain: "Space", role: "Hero", bucket: "Hero", affiliation: "Empire" },
           // Props + templates: their own flat sections, exempt from the fieldable gate.
@@ -470,7 +504,14 @@ export function dispatchEngine(this: MockDispatchHost, req: EngineRequest): unkn
           // Projectiles: one section sub-grouped Ground / Space; a dual-model shot lists in both.
           { name: "Proj_Ground_Blaster_Red", domain: "Ground", role: "Projectile", bucket: "Other", affiliation: "" },
           { name: "Proj_Ship_Turbolaser_Green", domain: "Space", role: "Projectile", bucket: "Other", affiliation: "" },
-          { name: "Proj_Proton_Torpedo", domain: "Ground", role: "Projectile", bucket: "Other", dualEnv: true, affiliation: "" },
+          {
+            name: "Proj_Proton_Torpedo",
+            domain: "Ground",
+            role: "Projectile",
+            bucket: "Other",
+            dualEnv: true,
+            affiliation: "",
+          },
         ],
       };
 
@@ -488,10 +529,7 @@ export function dispatchEngine(this: MockDispatchHost, req: EngineRequest): unkn
     // the handler is a logging stub; the dirty-bit ride-along via
     // isMutating still fires, matching the native host's contract.
     case "engine/action/rescale-emitter": {
-      console.log(
-        "[MockBridge] engine/action/rescale-emitter",
-        req.params,
-      );
+      console.log("[MockBridge] engine/action/rescale-emitter", req.params);
       this.emit({ kind: "engine/state/changed", payload: snapshotEngineState() });
       // The rescale changes per-emitter scalars but not the tree's
       // structural shape; still emit tree/changed so future inspector

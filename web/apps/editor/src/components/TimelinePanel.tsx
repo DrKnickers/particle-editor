@@ -11,13 +11,28 @@
 
 import { useEffect, useState } from "react";
 import {
-  ChevronLeft, ChevronRight, Pause, Play, Repeat, RotateCcw, SkipBack, SkipForward, Shuffle, X,
+  ChevronLeft,
+  ChevronRight,
+  Pause,
+  Play,
+  Repeat,
+  RotateCcw,
+  SkipBack,
+  SkipForward,
+  Shuffle,
+  X,
 } from "lucide-react";
 import type { Bridge, TimelineStateDto } from "@particle-editor/bridge-schema";
 import { IconButton } from "@/primitives/IconButton";
 import {
-  closeTimeline, newTimelineVariation, resetTimeline, seekTimeline, setTimelineLoop, setTimelinePlaying,
-  stepTimeline, useTimeline,
+  closeTimeline,
+  newTimelineVariation,
+  resetTimeline,
+  seekTimeline,
+  setTimelineLoop,
+  setTimelinePlaying,
+  stepTimeline,
+  useTimeline,
 } from "@/lib/timeline";
 
 type Props = { bridge: Bridge };
@@ -65,7 +80,13 @@ function OpenTimeline({ bridge }: Props) {
     >
       <div className="flex items-center gap-2">
         <div className="flex items-center gap-0.5" role="group" aria-label="Transport">
-          <IconButton variant="ghost" label="Jump to start" onClick={() => { void seekTimeline(bridge, 0); }}>
+          <IconButton
+            variant="ghost"
+            label="Jump to start"
+            onClick={() => {
+              void seekTimeline(bridge, 0);
+            }}
+          >
             <SkipBack {...ICON} />
           </IconButton>
           <IconButton variant="ghost" label="Previous frame" onClick={() => stepTimeline(bridge, -1)}>
@@ -75,32 +96,48 @@ function OpenTimeline({ bridge }: Props) {
             variant="ghost"
             label={playing ? "Pause" : "Play"}
             pressed={playing}
-            onClick={() => { void setTimelinePlaying(bridge, !playing); }}
+            onClick={() => {
+              void setTimelinePlaying(bridge, !playing);
+            }}
           >
             {playing ? <Pause {...ICON} /> : <Play {...ICON} />}
           </IconButton>
           <IconButton variant="ghost" label="Next frame" onClick={() => stepTimeline(bridge, 1)}>
             <ChevronRight {...ICON} />
           </IconButton>
-          <IconButton variant="ghost" label="Jump to end" onClick={() => { void seekTimeline(bridge, maxFrames); }}>
+          <IconButton
+            variant="ghost"
+            label="Jump to end"
+            onClick={() => {
+              void seekTimeline(bridge, maxFrames);
+            }}
+          >
             <SkipForward {...ICON} />
           </IconButton>
-          <IconButton variant="ghost" label="Reset" tip="Stop and return to frame 0" onClick={() => resetTimeline(bridge)}>
+          <IconButton
+            variant="ghost"
+            label="Reset"
+            tip="Stop and return to frame 0"
+            onClick={() => resetTimeline(bridge)}
+          >
             <RotateCcw {...ICON} />
           </IconButton>
           <IconButton
             variant="toggle"
             label="Loop"
             pressed={loop}
-            onClick={() => { void setTimelineLoop(bridge, !loop); }}
+            onClick={() => {
+              void setTimelineLoop(bridge, !loop);
+            }}
           >
             <Repeat {...ICON} />
           </IconButton>
         </div>
 
         <span data-testid="timeline-readout" className="shrink-0 font-mono tabular-nums text-text">
-          <span className="text-text-3">Time since spawn </span>{timeSeconds.toFixed(3)} s
-          <span className="text-text-3"> · Frame </span>{frame}
+          <span className="text-text-3">Time since spawn </span>
+          {timeSeconds.toFixed(3)} s<span className="text-text-3"> · Frame </span>
+          {frame}
           <span className="text-text-3"> / {maxFrames}</span>
         </span>
 
@@ -123,7 +160,9 @@ function OpenTimeline({ bridge }: Props) {
           <span className="text-text-3">Variation: Locked</span>
           <button
             type="button"
-            onClick={() => { void newTimelineVariation(bridge); }}
+            onClick={() => {
+              void newTimelineVariation(bridge);
+            }}
             className="flex items-center gap-1 rounded border border-border-2 bg-bg-2 px-1.5 py-0.5 text-text-2 transition-colors motion-reduce:transition-none hover:bg-panel-2 hover:text-text focus-ring"
           >
             <Shuffle className="size-3" />
@@ -131,18 +170,30 @@ function OpenTimeline({ bridge }: Props) {
           </button>
           <details className="text-text-3">
             <summary className="cursor-pointer select-none">Seed</summary>
-            <span data-testid="timeline-seed" className="font-mono text-text-2">{seed}</span>
+            <span data-testid="timeline-seed" className="font-mono text-text-2">
+              {seed}
+            </span>
           </details>
         </div>
 
-        <IconButton variant="ghost" label="Close timeline" onClick={() => { void closeTimeline(bridge); }}>
+        <IconButton
+          variant="ghost"
+          label="Close timeline"
+          onClick={() => {
+            void closeTimeline(bridge);
+          }}
+        >
           <X {...ICON} />
         </IconButton>
       </div>
 
       <p className="text-text-3">
         Plays the effect from a single spawn at the origin. Opening the timeline clears placed instances.
-        {notice && <span data-testid="timeline-notice" role="status" className="ml-2 text-warning">{notice}</span>}
+        {notice && (
+          <span data-testid="timeline-notice" role="status" className="ml-2 text-warning">
+            {notice}
+          </span>
+        )}
       </p>
     </section>
   );

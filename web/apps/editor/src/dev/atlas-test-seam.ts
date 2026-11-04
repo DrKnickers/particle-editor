@@ -17,11 +17,7 @@ import { setDock } from "@/lib/right-dock";
 export type AtlasTestApi = {
   /** Seed an emitter with a real atlas, publish it as the index-channel selection,
    *  and open the Atlas Picker dock. Defaults to an 8×8 (64-cell) atlas. */
-  seedAtlas: (opts?: {
-    textureSize?: number;
-    colorTexture?: string;
-    emitterId?: number;
-  }) => void;
+  seedAtlas: (opts?: { textureSize?: number; colorTexture?: string; emitterId?: number }) => void;
 };
 
 declare global {

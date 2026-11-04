@@ -4,9 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { requestTreeRefetch } from "../tree-refetch";
 
 function makeBridge() {
-  const request = vi.fn(<R extends Request>(req: R) =>
-    Promise.resolve({ request: req } as unknown as ResponseFor<R>),
-  );
+  const request = vi.fn(<R extends Request>(req: R) => Promise.resolve({ request: req } as unknown as ResponseFor<R>));
   const bridge = {
     request,
     on: vi.fn(),

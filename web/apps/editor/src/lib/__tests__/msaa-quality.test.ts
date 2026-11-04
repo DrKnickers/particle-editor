@@ -1,10 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import {
-  readMsaaLevel,
-  writeMsaaLevel,
-  applyMsaaLevel,
-  queryMsaaLevels,
-} from "../msaa-quality";
+import { readMsaaLevel, writeMsaaLevel, applyMsaaLevel, queryMsaaLevels } from "../msaa-quality";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
 describe("msaa-quality", () => {

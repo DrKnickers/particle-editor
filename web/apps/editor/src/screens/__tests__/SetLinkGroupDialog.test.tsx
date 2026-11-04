@@ -16,7 +16,13 @@ import { useEmitterSelectionStore } from "@/lib/tree/emitter-selection";
 function fixtureTree(): EmitterTreeDto {
   return {
     root: {
-      id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
+      id: -1,
+      stableId: 0,
+      name: "",
+      role: "root",
+      linkGroup: 0,
+      visible: true,
+      spawn: ZERO_SPAWN,
       children: [
         { id: 0, stableId: 100, name: "A", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
         { id: 1, stableId: 101, name: "B", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
@@ -102,10 +108,34 @@ describe("SetLinkGroupDialog", () => {
     // Joining ONE emitter to an existing group is valid (>= 2 members result).
     const tree: EmitterTreeDto = {
       root: {
-        id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
+        id: -1,
+        stableId: 0,
+        name: "",
+        role: "root",
+        linkGroup: 0,
+        visible: true,
+        spawn: ZERO_SPAWN,
         children: [
-          { id: 0, stableId: 100, name: "A", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
-          { id: 1, stableId: 101, name: "B", role: "root", linkGroup: 3, visible: true, spawn: ZERO_SPAWN, children: [] },
+          {
+            id: 0,
+            stableId: 100,
+            name: "A",
+            role: "root",
+            linkGroup: 0,
+            visible: true,
+            spawn: ZERO_SPAWN,
+            children: [],
+          },
+          {
+            id: 1,
+            stableId: 101,
+            name: "B",
+            role: "root",
+            linkGroup: 3,
+            visible: true,
+            spawn: ZERO_SPAWN,
+            children: [],
+          },
         ],
       },
     };
@@ -130,8 +160,7 @@ describe("SetLinkGroupDialog", () => {
     return {
       request: vi.fn().mockImplementation((req: { kind: string }) => {
         if (req.kind === "emitters/list") return Promise.resolve(tree);
-        if (req.kind === "linkGroups/diff-membership")
-          return Promise.resolve({ conflicts });
+        if (req.kind === "linkGroups/diff-membership") return Promise.resolve({ conflicts });
         return Promise.resolve({});
       }),
       on: vi.fn().mockReturnValue(() => {}),
@@ -139,9 +168,7 @@ describe("SetLinkGroupDialog", () => {
   }
 
   it("shows an INLINE note listing the fields a join would overwrite (no separate confirm)", async () => {
-    const bridge = makeConflictBridge(fixtureTree(), [
-      { id: 1, fields: ["lifetime", "gravity"] },
-    ]);
+    const bridge = makeConflictBridge(fixtureTree(), [{ id: 1, fields: ["lifetime", "gravity"] }]);
     useEmitterSelectionStore.getState().setIds([0, 1], 0);
     useTreeContextStore.getState().openDialog("set-link-group", 0);
     render(<SetLinkGroupDialog bridge={bridge} />);
@@ -161,9 +188,7 @@ describe("SetLinkGroupDialog", () => {
   });
 
   it("OK joins in a SINGLE click even when fields disagree", async () => {
-    const bridge = makeConflictBridge(fixtureTree(), [
-      { id: 1, fields: ["lifetime"] },
-    ]);
+    const bridge = makeConflictBridge(fixtureTree(), [{ id: 1, fields: ["lifetime"] }]);
     useEmitterSelectionStore.getState().setIds([0, 1], 0);
     useTreeContextStore.getState().openDialog("set-link-group", 0);
     render(<SetLinkGroupDialog bridge={bridge} />);

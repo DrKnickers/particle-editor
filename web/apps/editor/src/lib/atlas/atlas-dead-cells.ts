@@ -81,7 +81,8 @@ export async function computeDeadCells(dataUri: string, side: number): Promise<S
   try {
     if (side < 1 || typeof document === "undefined") return new Set();
     const img = await loadImage(dataUri);
-    const w = img.naturalWidth, h = img.naturalHeight;
+    const w = img.naturalWidth,
+      h = img.naturalHeight;
     if (w < 1 || h < 1) return new Set();
     const canvas = document.createElement("canvas");
     canvas.width = w;

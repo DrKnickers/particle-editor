@@ -60,20 +60,8 @@
 // `afterId` — not surfaced through the keyboard path; only the future
 // "Paste below selection" menu would supply it).
 
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  Fragment,
-  useState,
-} from "react";
-import type {
-  Bridge,
-  EmitterTreeDto,
-  EmitterTreeNode,
-} from "@particle-editor/bridge-schema";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, Fragment, useState } from "react";
+import type { Bridge, EmitterTreeDto, EmitterTreeNode } from "@particle-editor/bridge-schema";
 import { useTreeActionStore } from "@/lib/tree/tree-action";
 import {
   useEmitterSelectionIds,
@@ -127,10 +115,7 @@ type Props = {
 function flattenTree(tree: EmitterTreeDto | null): FlatRow[] {
   if (tree === null) return [];
   const rows: FlatRow[] = [];
-  const walk = (
-    siblings: EmitterTreeNode[],
-    depth: number,
-  ) => {
+  const walk = (siblings: EmitterTreeNode[], depth: number) => {
     siblings.forEach((node, idx) => {
       rows.push({ node, depth, siblings, indexInSiblings: idx });
       walk(node.children, depth + 1);
@@ -167,10 +152,7 @@ export function EmitterTree({ bridge }: Props) {
   // walk useEstimatedLoadPush(bridge, tree) runs for the engine push below;
   // recomputing the pure O(nodes) walk here is cheaper than widening the
   // hook's signature.
-  const systemLoad = useMemo(
-    () => (tree !== null ? estimateSystemLoad(tree.root) : 0),
-    [tree],
-  );
+  const systemLoad = useMemo(() => (tree !== null ? estimateSystemLoad(tree.root) : 0), [tree]);
 
   // [hard-guard] Push the system-total alive estimate to the engine on
   // every tree update (same source as the ⚠ glyph — gate and glyph agree
@@ -235,21 +217,13 @@ export function EmitterTree({ bridge }: Props) {
   // tree owns both the focus target (each row's button) and the input
   // (mounted inside the row). One row at a time; null = no edit in
   // progress.
-  const {
-    editing,
-    editingRef,
-    beginEdit,
-    setEditValue,
-    handleRenameInputKeyDown,
-    handleRenameInputBlur,
-  } = useEmitterRename({
-    bridge,
-    restoreFocus: (id) => {
-      treeContainerRef.current
-        ?.querySelector<HTMLElement>(`[data-emitter-id="${id}"]`)
-        ?.focus();
-    },
-  });
+  const { editing, editingRef, beginEdit, setEditValue, handleRenameInputKeyDown, handleRenameInputBlur } =
+    useEmitterRename({
+      bridge,
+      restoreFocus: (id) => {
+        treeContainerRef.current?.querySelector<HTMLElement>(`[data-emitter-id="${id}"]`)?.focus();
+      },
+    });
 
   // Fetch the full tree from the host. Pulled into a callback so the
   // tree-changed subscription can re-trigger it.
@@ -264,7 +238,9 @@ export function EmitterTree({ bridge }: Props) {
         if (!cancelled && (t as EmitterTreeDto | null)?.root) setTree(t, bridge);
       })
       .catch((err) => console.warn("[EmitterTree] emitters/list failed:", err));
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [bridge]);
 
   // Initial fetch + tree-changed subscription.
@@ -328,7 +304,7 @@ export function EmitterTree({ bridge }: Props) {
 
   // Flatten the tree once per change. The flat list drives both
   // render and the shift-click range computation.
-  const flatRows  = useMemo(() => flattenTree(tree), [tree]);
+  const flatRows = useMemo(() => flattenTree(tree), [tree]);
   const orderedIds = useMemo(() => flatRows.map((r) => r.node.id), [flatRows]);
 
   // [glide] FLIP pass: whenever the rendered layout changes — a reorder
@@ -359,9 +335,8 @@ export function EmitterTree({ bridge }: Props) {
     if (document.activeElement !== document.body) return;
     const container = treeContainerRef.current;
     if (container === null) return;
-    const primaryBtn = primaryId !== null
-      ? container.querySelector<HTMLElement>(`[data-emitter-id="${primaryId}"]`)
-      : null;
+    const primaryBtn =
+      primaryId !== null ? container.querySelector<HTMLElement>(`[data-emitter-id="${primaryId}"]`) : null;
     (primaryBtn ?? container).focus();
   }, [flatRows, primaryId]);
 
@@ -408,7 +383,9 @@ export function EmitterTree({ bridge }: Props) {
   const ghostTimersRef = useRef<Set<number>>(new Set());
   useEffect(() => {
     const timers = ghostTimersRef.current;
-    return () => { for (const t of timers) window.clearTimeout(t); };
+    return () => {
+      for (const t of timers) window.clearTimeout(t);
+    };
   }, []);
 
   const flipPositionsRef = useRef<FlipPositions>(new Map());
@@ -428,8 +405,7 @@ export function EmitterTree({ bridge }: Props) {
 
     // Exit ghosts: detect removals against the snapshot we just replaced.
     const reduceMotion =
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (!recording && !reduceMotion && draggingId === null && indicator === null) {
       let surviving = 0;
       for (const id of next.keys()) if (prev.has(id)) surviving += 1;
@@ -446,10 +422,7 @@ export function EmitterTree({ bridge }: Props) {
         }
         if (removed.length > 0 && removed.length <= 8) {
           const ids = removed.map((g) => g.stableId);
-          setExitGhosts((gs) => [
-            ...gs.filter((g) => !ids.includes(g.stableId)),
-            ...removed,
-          ]);
+          setExitGhosts((gs) => [...gs.filter((g) => !ids.includes(g.stableId)), ...removed]);
           ghostTimersRef.current.add(
             window.setTimeout(() => {
               setExitGhosts((gs) => gs.filter((g) => !ids.includes(g.stableId)));
@@ -458,9 +431,7 @@ export function EmitterTree({ bridge }: Props) {
         }
       }
     }
-    prevRowMetaRef.current = new Map(
-      flatRows.map((r) => [r.node.stableId, { name: r.node.name, depth: r.depth }]),
-    );
+    prevRowMetaRef.current = new Map(flatRows.map((r) => [r.node.stableId, { name: r.node.name, depth: r.depth }]));
     // prefers-reduced-motion skips the glide — EXCEPT under --record, where the
     // glide must render into the captured clip regardless of the host's setting.
     if (
@@ -482,8 +453,7 @@ export function EmitterTree({ bridge }: Props) {
       // In-flight residual: if a previous glide is still running, its
       // computed transform holds the row's current visual offset — start the
       // new glide from there so interruptions don't teleport.
-      const m = /matrix\([^,]+,[^,]+,[^,]+,[^,]+,[^,]+,\s*(-?[\d.]+)\)/
-        .exec(getComputedStyle(el).transform);
+      const m = /matrix\([^,]+,[^,]+,[^,]+,[^,]+,[^,]+,\s*(-?[\d.]+)\)/.exec(getComputedStyle(el).transform);
       const total = dy + (m !== null ? parseFloat(m[1]!) : 0);
       if (total === 0) continue;
       el.style.transition = "none";
@@ -510,13 +480,13 @@ export function EmitterTree({ bridge }: Props) {
   }, [renameRequest, flatRows, beginEdit]);
 
   const handleRowClick = useCallback(
-    (
-      id: number,
-      mods: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean },
-    ) => {
+    (id: number, mods: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) => {
       // Suppress the synthetic click that follows a pointer-drag's pointerup
       // (down+up on the same row) so a drag doesn't also re-select the row.
-      if (draggedRef.current) { draggedRef.current = false; return; }
+      if (draggedRef.current) {
+        draggedRef.current = false;
+        return;
+      }
       const sel = useEmitterSelectionStore.getState();
       if (mods.shiftKey) {
         sel.range(id, orderedIds);
@@ -552,8 +522,8 @@ export function EmitterTree({ bridge }: Props) {
   // drag-start — safe because a tree/changed aborts the gesture (armed or
   // active) via activeDragCancelRef.
   const startDrag = (source: EmitterTreeNode, e: React.PointerEvent) => {
-    if (e.button !== 0) return;               // primary button only
-    if (editingRef.current !== null) return;  // not while inline-renaming
+    if (e.button !== 0) return; // primary button only
+    if (editingRef.current !== null) return; // not while inline-renaming
     // One tree drag at a time — a second pointerdown (second mouse,
     // pen) while a drag is live must not arm a duplicate controller over the
     // shared component state.
@@ -565,7 +535,11 @@ export function EmitterTree({ bridge }: Props) {
     // and so the gesture only reacts to ITS pointer. jsdom has no
     // setPointerCapture; guard so unit tests are unaffected.
     const captureTarget = e.currentTarget as HTMLElement;
-    try { captureTarget.setPointerCapture?.(pointerId); } catch { /* jsdom / lost pointer */ }
+    try {
+      captureTarget.setPointerCapture?.(pointerId);
+    } catch {
+      /* jsdom / lost pointer */
+    }
     draggedRef.current = false;
     const startX = e.clientX;
     const startY = e.clientY;
@@ -584,16 +558,12 @@ export function EmitterTree({ bridge }: Props) {
     const selIds = useEmitterSelectionStore.getState().ids;
     const multi = isMultiDrag(source.id, selIds, curRoots);
     const sourceIsRoot = curRoots.some((c) => c.id === source.id);
-    const blockIds = multi
-      ? selectedRootIdsInOrder(selIds, curRoots)
-      : sourceIsRoot ? [source.id] : [];
+    const blockIds = multi ? selectedRootIdsInOrder(selIds, curRoots) : sourceIsRoot ? [source.id] : [];
     const blockRootIdxs = blockIds.map((id) => curRoots.findIndex((c) => c.id === id)); // ascending
     const srcRootIdx = sourceIsRoot ? curRoots.findIndex((c) => c.id === source.id) : -1;
     // Chip name list (tree order): one name for a single-root drag, all for a
     // multi; empty for a single CHILD (reparent has no chip).
-    const chipNames = blockIds
-      .map((id) => curRows.find((r) => r.node.id === id)?.node.name ?? "")
-      .filter(Boolean);
+    const chipNames = blockIds.map((id) => curRows.find((r) => r.node.id === id)?.node.name ?? "").filter(Boolean);
     const hasChip = chipNames.length > 0;
     // The dim set: every dragged root's WHOLE subtree (children ride along on
     // a reorder, so they lift visually too). Single-drag dims its subtree for
@@ -606,8 +576,8 @@ export function EmitterTree({ bridge }: Props) {
       : collectSubtreeIds(source);
     let lastReorderGap: number | null = null;
     let active = false;
-    let lastParams: DropParams | null = null;  // single-drag reparent, when resolved
-    let ontoTarget: number | null = null;      // row id currently showing the onto ring
+    let lastParams: DropParams | null = null; // single-drag reparent, when resolved
+    let ontoTarget: number | null = null; // row id currently showing the onto ring
     let rafId: number | null = null;
     const THRESHOLD = 4;
     // Geometry snapshots (captured at activation, resting layout) + the lifted
@@ -621,8 +591,7 @@ export function EmitterTree({ bridge }: Props) {
     // toward the active gap) instead of teleporting.
     const chipPos = { x: startX + 12, y: startY + 12 };
     const reduceMotion =
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     // Pointer client-Y → scroll-content space (the snapshot's frame).
     const toContentY = (clientY: number, sc: HTMLElement): number =>
@@ -659,9 +628,14 @@ export function EmitterTree({ bridge }: Props) {
         return resolveDropIntent(source, tnode, tRootIdx, "onto", curTree, curRoots);
       };
       const res = resolveSingleRootDrop(
-        geom, rowGeom, srcRootIdx, source.id,
+        geom,
+        rowGeom,
+        srcRootIdx,
+        source.id,
         (id) => reparentParamsFor(id) !== null,
-        toContentY(clientY, sc), lastReorderGap, liftedH,
+        toContentY(clientY, sc),
+        lastReorderGap,
+        liftedH,
       );
       if (res !== "noop" && res.kind === "onto") {
         const params = reparentParamsFor(res.targetId);
@@ -688,8 +662,7 @@ export function EmitterTree({ bridge }: Props) {
       setReorderGap(res !== "noop" && sourceIsRoot ? res.rootIndex : null);
     };
 
-    const updateTarget = (clientY: number) =>
-      multi ? updateMultiTarget(clientY) : updateSingleTarget(clientY);
+    const updateTarget = (clientY: number) => (multi ? updateMultiTarget(clientY) : updateSingleTarget(clientY));
 
     // Advance the chip one spring step toward its target and render it. Called
     // per pointermove AND per rAF tick (so it keeps gliding between moves);
@@ -701,9 +674,7 @@ export function EmitterTree({ bridge }: Props) {
       const sc = treeScrollRef.current;
       let gapCenter: number | null = null;
       if (sc !== null && geom !== null && lastReorderGap !== null) {
-        gapCenter =
-          gapContentY(geom, lastReorderGap) - sc.scrollTop +
-          sc.getBoundingClientRect().top + liftedH / 2;
+        gapCenter = gapContentY(geom, lastReorderGap) - sc.scrollTop + sc.getBoundingClientRect().top + liftedH / 2;
       }
       const target = computeChipTarget(lastX, lastY, gapCenter, CHIP_PULL);
       if (reduceMotion) {
@@ -752,12 +723,10 @@ export function EmitterTree({ bridge }: Props) {
         // INCLUDES live FLIP transforms, so a re-grab within the ~200ms glide
         // window would otherwise capture mid-animation positions and corrupt
         // every gap/onto resolution for the whole gesture.
-        treeScrollRef.current
-          ?.querySelectorAll<HTMLElement>("li[data-stable-id]")
-          .forEach((li) => {
-            li.style.transition = "none";
-            li.style.transform = "";
-          });
+        treeScrollRef.current?.querySelectorAll<HTMLElement>("li[data-stable-id]").forEach((li) => {
+          li.style.transition = "none";
+          li.style.transform = "";
+        });
         // Both snapshots against the now-resting layout: block extents
         // (reorder gaps) + row extents (single-drag onto hit-test).
         geom = captureRootBlockGeometry(treeScrollRef.current, curRoots);
@@ -791,7 +760,11 @@ export function EmitterTree({ bridge }: Props) {
       // release the captured pointer.
       dragPointerRef.current = null;
       activeDragCancelRef.current = null;
-      try { captureTarget.releasePointerCapture?.(pointerId); } catch { /* already released */ }
+      try {
+        captureTarget.releasePointerCapture?.(pointerId);
+      } catch {
+        /* already released */
+      }
       if (rafId !== null) {
         cancelAnimationFrame(rafId);
         rafId = null;
@@ -834,7 +807,9 @@ export function EmitterTree({ bridge }: Props) {
       // clear it on the next macrotask instead of letting it eat the user's
       // next, unrelated click on some other row.
       draggedRef.current = true;
-      window.setTimeout(() => { draggedRef.current = false; }, 0);
+      window.setTimeout(() => {
+        draggedRef.current = false;
+      }, 0);
       if (commit) {
         // A single-drag reparent goes through emitters/drop (the host
         // re-selects the moved emitter so the highlight follows). Every reorder
@@ -847,14 +822,22 @@ export function EmitterTree({ bridge }: Props) {
         }
       }
     };
-    const onUp = (ev: PointerEvent) => { if (ev.pointerId !== pointerId) return; finish(true); };
-    const onCancel = (ev: PointerEvent) => { if (ev.pointerId !== pointerId) return; finish(false); };
+    const onUp = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      finish(true);
+    };
+    const onCancel = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      finish(false);
+    };
     // Focus loss can swallow the pointerup entirely (the up happens
     // off-window, or the OS steals the pointer). Without these the gesture
     // would stay armed — dims/gap/chip frozen, rAF looping, the next stray
     // click committing the abandoned drop. visibilitychange covers tab hide.
     const onBlur = () => finish(false);
-    const onVis = () => { if (document.visibilityState === "hidden") finish(false); };
+    const onVis = () => {
+      if (document.visibilityState === "hidden") finish(false);
+    };
     // Capture-phase so we win over the row's Radix context menu and
     // the tree's own key handler; stopPropagation keeps the menu from opening.
     const onKey = (ev: KeyboardEvent) => {
@@ -894,9 +877,7 @@ export function EmitterTree({ bridge }: Props) {
   const handleDissolveLinkGroup = useCallback(
     (groupId: number) => {
       if (groupId === 0) return;
-      const ids = flatRows
-        .filter((r) => r.node.linkGroup === groupId)
-        .map((r) => r.node.id);
+      const ids = flatRows.filter((r) => r.node.linkGroup === groupId).map((r) => r.node.id);
       if (ids.length === 0) return;
       void bridge.request({
         kind: "linkGroups/set-membership",
@@ -912,9 +893,7 @@ export function EmitterTree({ bridge }: Props) {
   const handleSelectLinkGroup = useCallback(
     (groupId: number) => {
       if (groupId === 0) return;
-      const ids = flatRows
-        .filter((r) => r.node.linkGroup === groupId)
-        .map((r) => r.node.id);
+      const ids = flatRows.filter((r) => r.node.linkGroup === groupId).map((r) => r.node.id);
       if (ids.length === 0) return;
       useEmitterSelectionStore.getState().setIds(ids, ids[0]);
       void bridge.request({ kind: "emitters/select", params: { id: ids[0] } });
@@ -990,7 +969,9 @@ export function EmitterTree({ bridge }: Props) {
       // [glide] focus-restore bookkeeping (see treeHadFocusRef): removal of a
       // focused element fires no blur, so this flag is the only record that
       // the tree owned focus when a remount dropped it.
-      onFocusCapture={() => { treeHadFocusRef.current = true; }}
+      onFocusCapture={() => {
+        treeHadFocusRef.current = true;
+      }}
       onBlurCapture={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
           treeHadFocusRef.current = false;
@@ -1020,8 +1001,7 @@ export function EmitterTree({ bridge }: Props) {
         >
           <span className="text-sm text-text-2">No emitters yet</span>
           <span className="text-xs text-text-3">
-            Add one with the + button below, or right-click a row later to
-            duplicate, link, and reorder.
+            Add one with the + button below, or right-click a row later to duplicate, link, and reorder.
           </span>
           {exitGhostNodes}
         </div>
@@ -1037,78 +1017,71 @@ export function EmitterTree({ bridge }: Props) {
           onPointerDown={handleScrollPointerDown}
           className="emitter-tree-scroll relative flex flex-1 min-h-0 overflow-y-auto"
         >
-          <ul
-            role="tree"
-            aria-label="Emitters"
-            className="m-0 flex-1 list-none p-0"
-          >
-          {flatRows.map((row) => {
-            // "make room" gap: a flow spacer (the lifted block's measured
-            // height) at the resolved root gap, so the rows shift to reveal
-            // where the dragged emitter(s) will land. Used by BOTH single-root
-            // and multi reorder. Gap g renders before root g's row; the end gap
-            // (g = N) renders after the whole list (below this map).
-            const showGap =
-              indicator?.kind === "gap" &&
-              indicator.gapIndex < rootChildren.length &&
-              rootChildren[indicator.gapIndex]!.id === row.node.id;
-            const gap = showGap ? (
+          <ul role="tree" aria-label="Emitters" className="m-0 flex-1 list-none p-0">
+            {flatRows.map((row) => {
+              // "make room" gap: a flow spacer (the lifted block's measured
+              // height) at the resolved root gap, so the rows shift to reveal
+              // where the dragged emitter(s) will land. Used by BOTH single-root
+              // and multi reorder. Gap g renders before root g's row; the end gap
+              // (g = N) renders after the whole list (below this map).
+              const showGap =
+                indicator?.kind === "gap" &&
+                indicator.gapIndex < rootChildren.length &&
+                rootChildren[indicator.gapIndex]!.id === row.node.id;
+              const gap = showGap ? (
+                <li
+                  aria-hidden
+                  role="presentation"
+                  data-testid={`drop-gap-at-${indicator.gapIndex}`}
+                  // ring-inset: render the ring INSIDE the element so it isn't
+                  // clipped by the scroll container's overflow at the very top /
+                  // bottom edge of the list.
+                  className="pointer-events-none mx-0.5 rounded bg-accent-soft ring-1 ring-inset ring-accent"
+                  style={{ height: `${indicator.gapHeight}px` }}
+                />
+              ) : null;
+              return (
+                // [glide] keyed by stableId so a reorder MOVES row elements
+                // (FLIP can animate them) instead of remounting per-position.
+                <Fragment key={row.node.stableId}>
+                  {gap}
+                  <EmitterRow
+                    row={row}
+                    primaryId={primaryId}
+                    selectedIds={selectedIds}
+                    orderedIds={orderedIds}
+                    onRowClick={handleRowClick}
+                    bridge={bridge}
+                    draggingId={draggingId}
+                    draggingIds={draggingIds}
+                    indicator={indicator}
+                    startDrag={startDrag}
+                    editing={editing}
+                    beginEdit={beginEdit}
+                    setEditValue={setEditValue}
+                    handleRenameInputKeyDown={handleRenameInputKeyDown}
+                    handleRenameInputBlur={handleRenameInputBlur}
+                    linkHover={hoveredLinkGroup !== null && row.node.linkGroup === hoveredLinkGroup}
+                    onHoverLinkGroup={setHoveredLinkGroup}
+                    onDissolveLinkGroup={handleDissolveLinkGroup}
+                    onSelectLinkGroup={handleSelectLinkGroup}
+                    chainWarning={chainWarnings.get(row.node.stableId) ?? null}
+                    entering={enteringIds.has(row.node.stableId)}
+                  />
+                </Fragment>
+              );
+            })}
+            {/* end gap (g = N): after the LAST root's whole subtree — the very
+              bottom of the list. */}
+            {indicator?.kind === "gap" && indicator.gapIndex === rootChildren.length && (
               <li
                 aria-hidden
                 role="presentation"
                 data-testid={`drop-gap-at-${indicator.gapIndex}`}
-                // ring-inset: render the ring INSIDE the element so it isn't
-                // clipped by the scroll container's overflow at the very top /
-                // bottom edge of the list.
                 className="pointer-events-none mx-0.5 rounded bg-accent-soft ring-1 ring-inset ring-accent"
                 style={{ height: `${indicator.gapHeight}px` }}
               />
-            ) : null;
-            return (
-              // [glide] keyed by stableId so a reorder MOVES row elements
-              // (FLIP can animate them) instead of remounting per-position.
-              <Fragment key={row.node.stableId}>
-                {gap}
-                <EmitterRow
-                  row={row}
-                  primaryId={primaryId}
-                  selectedIds={selectedIds}
-                  orderedIds={orderedIds}
-                  onRowClick={handleRowClick}
-                  bridge={bridge}
-                  draggingId={draggingId}
-                  draggingIds={draggingIds}
-                  indicator={indicator}
-                  startDrag={startDrag}
-                  editing={editing}
-                  beginEdit={beginEdit}
-                  setEditValue={setEditValue}
-                  handleRenameInputKeyDown={handleRenameInputKeyDown}
-                  handleRenameInputBlur={handleRenameInputBlur}
-                  linkHover={
-                    hoveredLinkGroup !== null &&
-                    row.node.linkGroup === hoveredLinkGroup
-                  }
-                  onHoverLinkGroup={setHoveredLinkGroup}
-                  onDissolveLinkGroup={handleDissolveLinkGroup}
-                  onSelectLinkGroup={handleSelectLinkGroup}
-                  chainWarning={chainWarnings.get(row.node.stableId) ?? null}
-                  entering={enteringIds.has(row.node.stableId)}
-                />
-              </Fragment>
-            );
-          })}
-          {/* end gap (g = N): after the LAST root's whole subtree — the very
-              bottom of the list. */}
-          {indicator?.kind === "gap" && indicator.gapIndex === rootChildren.length && (
-            <li
-              aria-hidden
-              role="presentation"
-              data-testid={`drop-gap-at-${indicator.gapIndex}`}
-              className="pointer-events-none mx-0.5 rounded bg-accent-soft ring-1 ring-inset ring-accent"
-              style={{ height: `${indicator.gapHeight}px` }}
-            />
-          )}
+            )}
           </ul>
           {/* Exit ghosts (shared nodes — also rendered by the emptied-
               tree branch below, whose deletes have no scroll container). */}
@@ -1154,8 +1127,7 @@ export function EmitterTree({ bridge }: Props) {
                   top: 0,
                   opacity: 0,
                   transform: "translate3d(" + dragChip.exit.x + "px, " + dragChip.exit.y + "px, 0) scale(0.85)",
-                  transition:
-                    "transform " + CHIP_EXIT_MS + "ms ease-in, opacity " + CHIP_EXIT_MS + "ms ease-in",
+                  transition: "transform " + CHIP_EXIT_MS + "ms ease-in, opacity " + CHIP_EXIT_MS + "ms ease-in",
                 }
               : { left: 0, top: 0 }
           }
@@ -1166,9 +1138,7 @@ export function EmitterTree({ bridge }: Props) {
             </div>
           ))}
           {dragChip.names.length > 4 && (
-            <div className="px-2 leading-5 text-text-3">
-              +{dragChip.names.length - 4} more
-            </div>
+            <div className="px-2 leading-5 text-text-3">+{dragChip.names.length - 4} more</div>
           )}
         </div>
       )}

@@ -148,11 +148,7 @@ try {
   const page = ctx.pages()[0] ?? (await ctx.waitForEvent("page"));
   // WebView2 navigation is async vs. host launch; wait until App.tsx attaches
   // window.bridge (the TestHostBridge) before driving it.
-  await page.waitForFunction(
-    () => typeof window.bridge !== "undefined",
-    null,
-    { timeout: 15000 },
-  );
+  await page.waitForFunction(() => typeof window.bridge !== "undefined", null, { timeout: 15000 });
 
   if (openAlo) {
     const aloPath = resolve(openAlo);
@@ -162,14 +158,9 @@ try {
     // throw. request() resolves to the inner data, so we must inspect it ourselves
     // and fail loudly -- otherwise we'd capture the WRONG (unloaded) scene and
     // report a false success.
-    const r = await page.evaluate(
-      (p) => window.bridge.request({ kind: "file/open", params: { path: p } }),
-      aloPath,
-    );
+    const r = await page.evaluate((p) => window.bridge.request({ kind: "file/open", params: { path: p } }), aloPath);
     if (!r || r.ok === false) {
-      throw new Error(
-        `file/open failed for ${aloPath}: ${(r && r.error) ? r.error : "unknown"}`,
-      );
+      throw new Error(`file/open failed for ${aloPath}: ${r && r.error ? r.error : "unknown"}`);
     }
     console.error(`snap-composed: file/open -> ${JSON.stringify(r)}`);
   }
@@ -180,8 +171,7 @@ try {
   // applied; both values are load-bearing for a capture.
   if (skydomeSlot !== undefined) {
     const r = await page.evaluate(
-      (slot) =>
-        window.bridge.request({ kind: "engine/set/skydome-slot", params: { slot } }),
+      (slot) => window.bridge.request({ kind: "engine/set/skydome-slot", params: { slot } }),
       skydomeSlot,
     );
     // Exact-match success is the overreach control: applied:true at the
@@ -195,18 +185,13 @@ try {
   }
   if (backgroundRgb !== undefined) {
     const r = await page.evaluate(
-      (rgb) =>
-        window.bridge.request({ kind: "engine/set/background", params: { rgb } }),
+      (rgb) => window.bridge.request({ kind: "engine/set/background", params: { rgb } }),
       backgroundRgb,
     );
     if (r && r.ok === false) {
-      throw new Error(
-        `engine/set/background failed: ${r.error ? r.error : "unknown"}`,
-      );
+      throw new Error(`engine/set/background failed: ${r.error ? r.error : "unknown"}`);
     }
-    console.error(
-      `snap-composed: background 0x${backgroundRgb.toString(16).toUpperCase()} -> ${JSON.stringify(r)}`,
-    );
+    console.error(`snap-composed: background 0x${backgroundRgb.toString(16).toUpperCase()} -> ${JSON.stringify(r)}`);
   }
 
   await sleep(settleMs);

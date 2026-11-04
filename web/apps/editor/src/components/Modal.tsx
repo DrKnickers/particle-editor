@@ -53,14 +53,7 @@ type ModalProps = {
   children: ReactNode;
 };
 
-export function Modal({
-  bridge,
-  open,
-  onOpenChange,
-  title,
-  size = "md",
-  children,
-}: ModalProps) {
+export function Modal({ bridge, open, onOpenChange, title, size = "md", children }: ModalProps) {
   // Frosted-glass modal backdrop via engine-snapshot capture.
   // The engine renders into a DComp visual UNDER the transparent
   // WebView2 — its pixels can't be reached by CSS effects
@@ -197,22 +190,24 @@ export function Modal({
           render guard skips when the host returns an empty image
           (MockBridge, fresh engine, just-reset device). the host
           encodes the backdrop as JPEG (blurred → lossy is invisible). */}
-      {open && viewportEl && snapshot && snapshot.imageBase64 ? createPortal(
-        <img
-          data-testid="modal-backdrop-snapshot"
-          src={`data:image/jpeg;base64,${snapshot.imageBase64}`}
-          alt=""
-          aria-hidden
-          style={{
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
-            pointerEvents: "none",
-          }}
-        />,
-        viewportEl,
-      ) : null}
+      {open && viewportEl && snapshot && snapshot.imageBase64
+        ? createPortal(
+            <img
+              data-testid="modal-backdrop-snapshot"
+              src={`data:image/jpeg;base64,${snapshot.imageBase64}`}
+              alt=""
+              aria-hidden
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                pointerEvents: "none",
+              }}
+            />,
+            viewportEl,
+          )
+        : null}
 
       <Dialog.Root open={open && snapshotReady} onOpenChange={onOpenChange}>
         <Dialog.Portal>
@@ -234,9 +229,7 @@ export function Modal({
           >
             {/* Header */}
             <div className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-bg-2 px-4">
-              <Dialog.Title className="text-sm font-semibold text-text">
-                {title}
-              </Dialog.Title>
+              <Dialog.Title className="text-sm font-semibold text-text">{title}</Dialog.Title>
               <Dialog.Close asChild>
                 <IconButton label="Close" tip={null} variant="ghost">
                   <X className="size-4" />

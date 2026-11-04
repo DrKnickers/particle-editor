@@ -93,9 +93,7 @@ test("production auto-cap preserves the PRE + LIVE pair at the byte frontier", a
     expect(state.totalBytes).toBeGreaterThan(state.maxTotalBytes);
 
     // The test override itself is guarded against altering a live history.
-    await expect(setUndoBudget(2)).rejects.toThrow(
-      "stack must be empty and synchronized",
-    );
+    await expect(setUndoBudget(2)).rejects.toThrow("stack must be empty and synchronized");
 
     expect(await undo()).toEqual({ applied: true });
     expect(await getLifetime(id)).toBeCloseTo(p0, 4);
@@ -148,10 +146,10 @@ test("undo after a redo steps back to the pre-edit state (no spurious auto-cap)"
   const target = Number((p0 + 7).toFixed(3));
 
   await setLifetime(id, target); // edit
-  await undo();                  // -> p0
+  await undo(); // -> p0
   expect(await getLifetime(id)).toBeCloseTo(p0, 4);
 
-  await redo();                  // -> target (cursor back at tip)
+  await redo(); // -> target (cursor back at tip)
   expect(await getLifetime(id)).toBeCloseTo(target, 4);
 
   // THE REGRESSION: this undo must return to p0, not stay at target.
@@ -264,7 +262,10 @@ async function getTrackKeyValue(id: number, trackName: string, time: number): Pr
 // Value-only move (newTime == oldTime): mirrors handleValueSpinner, keeps
 // oldTime stable across ticks. time defaults to the t=0 border key.
 const setTrackKeyValue = (id: number, track: TrackName, time: number, newValue: number) =>
-  bridgeRequest(page, { kind: "emitters/set-track-key", params: { id, track, oldTime: time, newTime: time, newValue } });
+  bridgeRequest(page, {
+    kind: "emitters/set-track-key",
+    params: { id, track, oldTime: time, newTime: time, newValue },
+  });
 const addTrackKey = (id: number, track: TrackName, time: number, value: number) =>
   bridgeRequest(page, { kind: "emitters/add-track-key", params: { id, track, time, value } });
 
@@ -314,9 +315,9 @@ test("a structural add-track-key between two value edits breaks the fold", async
   await bridgeRequest(page, { kind: "emitters/select", params: { id } });
   const s0 = await getTrackKeyValue(id, "scale", 0);
 
-  await setTrackKeyValue(id, "scale", 0, s0 + 2);  // edit 1
-  await addTrackKey(id, "scale", 50, 30);          // structural (key=0, never folds)
-  await setTrackKeyValue(id, "scale", 0, s0 + 4);  // edit 2
+  await setTrackKeyValue(id, "scale", 0, s0 + 2); // edit 1
+  await addTrackKey(id, "scale", 50, 30); // structural (key=0, never folds)
+  await setTrackKeyValue(id, "scale", 0, s0 + 4); // edit 2
   expect(await getTrackKeyValue(id, "scale", 0)).toBeCloseTo(s0 + 4, 3);
 
   // Undo edit 2 -> s0+2; the added key is still present.
@@ -325,8 +326,7 @@ test("a structural add-track-key between two value edits breaks the fold", async
 
   // Undo the structural add -> the t=50 key is gone.
   await undo();
-  expect((await getTrackKeys(id, "scale")).find((k) => Math.abs(k.time - 50) < 1e-3))
-    .toBeUndefined();
+  expect((await getTrackKeys(id, "scale")).find((k) => Math.abs(k.time - 50) < 1e-3)).toBeUndefined();
 
   // Undo edit 1 -> baseline.
   await undo();
@@ -338,17 +338,17 @@ test("a same-track edit after an undo PUSHES (no mid-redo-branch coalesce)", asy
   await bridgeRequest(page, { kind: "emitters/select", params: { id } });
   const s0 = await getTrackKeyValue(id, "scale", 0);
 
-  await setTrackKeyValue(id, "scale", 0, s0 + 3);  // edit A
-  await undo();                                     // -> s0 (cursor below tip)
+  await setTrackKeyValue(id, "scale", 0, s0 + 3); // edit A
+  await undo(); // -> s0 (cursor below tip)
   expect(await getTrackKeyValue(id, "scale", 0)).toBeCloseTo(s0, 3);
 
-  await setTrackKeyValue(id, "scale", 0, s0 + 8);  // edit B must PUSH, truncating redo
+  await setTrackKeyValue(id, "scale", 0, s0 + 8); // edit B must PUSH, truncating redo
   expect(await getTrackKeyValue(id, "scale", 0)).toBeCloseTo(s0 + 8, 3);
 
-  await redo();                                     // branch truncated -> no-op
+  await redo(); // branch truncated -> no-op
   expect(await getTrackKeyValue(id, "scale", 0)).toBeCloseTo(s0 + 8, 3);
 
-  await undo();                                     // reverts B -> s0
+  await undo(); // reverts B -> s0
   expect(await getTrackKeyValue(id, "scale", 0)).toBeCloseTo(s0, 3);
 });
 
@@ -357,9 +357,9 @@ test("two same-track edits MORE than the window apart are SEPARATE undo steps", 
   await bridgeRequest(page, { kind: "emitters/select", params: { id } });
   const s0 = await getTrackKeyValue(id, "scale", 0);
 
-  await setTrackKeyValue(id, "scale", 0, s0 + 3);  // edit 1
-  await page.waitForTimeout(1600);                 // exceed COALESCE_WINDOW_MS (1500)
-  await setTrackKeyValue(id, "scale", 0, s0 + 6);  // edit 2 — window expired -> new step
+  await setTrackKeyValue(id, "scale", 0, s0 + 3); // edit 1
+  await page.waitForTimeout(1600); // exceed COALESCE_WINDOW_MS (1500)
+  await setTrackKeyValue(id, "scale", 0, s0 + 6); // edit 2 — window expired -> new step
 
   await undo();
   expect(await getTrackKeyValue(id, "scale", 0)).toBeCloseTo(s0 + 3, 3);
@@ -392,7 +392,7 @@ test("a whole-system rescale is its own undo step and does not swallow the prior
   const seeded = Number((p0 + 5).toFixed(3));
   await setLifetime(id, seeded);
   expect(await getLifetime(id)).toBeCloseTo(seeded, 4);
-  await page.waitForTimeout(1600);   // exceed COALESCE_WINDOW_MS so the rescale can't fold in
+  await page.waitForTimeout(1600); // exceed COALESCE_WINDOW_MS so the rescale can't fold in
 
   // DoRescaleEmitter does `emitter->lifetime *= timeScale` (src/Rescale.cpp),
   // so a 200% duration scale doubles it. sizeScale stays 1.0 to keep the

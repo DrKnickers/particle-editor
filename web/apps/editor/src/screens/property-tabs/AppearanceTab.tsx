@@ -1,14 +1,7 @@
 import type { Bridge, EmitterPropertiesDto, Vec4 } from "@particle-editor/bridge-schema";
 import { Section } from "@/components/Section";
 import { Spinner } from "@/primitives/Spinner";
-import {
-  BLEND_BUMP,
-  BLEND_MODE_OPTIONS,
-  FieldCheckbox,
-  FieldSelect,
-  FieldSpinner,
-  TexturePickerField,
-} from "./fields";
+import { BLEND_BUMP, BLEND_MODE_OPTIONS, FieldCheckbox, FieldSelect, FieldSpinner, TexturePickerField } from "./fields";
 
 // Exported for direct testing — Radix Tabs in jsdom doesn't reliably
 // switch via fireEvent (the known pointer-event flake noted in the

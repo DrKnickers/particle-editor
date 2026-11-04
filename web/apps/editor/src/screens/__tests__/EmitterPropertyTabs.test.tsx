@@ -17,10 +17,7 @@ import { fireEvent, render as rtlRender, screen, waitFor, within } from "@testin
 import userEvent from "@testing-library/user-event";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import type { ReactElement, ReactNode } from "react";
-import type {
-  Bridge,
-  EmitterPropertiesDto,
-} from "@particle-editor/bridge-schema";
+import type { Bridge, EmitterPropertiesDto } from "@particle-editor/bridge-schema";
 import { EmitterPropertyTabs, AppearanceTab, PhysicsTab } from "../EmitterPropertyTabs";
 import { makeDefaultEngineState, makeFixtureProperties } from "@/bridge/mock-state";
 import { makeBridgeStub } from "@/test/bridge-stub";
@@ -34,16 +31,15 @@ const stubBridge = makeBridgeStub();
 // this wrapper stands in for it (precedent: renderWithTooltips in
 // EmitterTree.test.tsx).
 const TipProvider = ({ children }: { children: ReactNode }) => (
-  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>
+    {children}
+  </Tooltip.Provider>
 );
 const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
 type SelectionListener = (e: { payload: { id: number | null } }) => void;
 
-function makeStubBridge(
-  initialSelectedId: number | null,
-  propsOverride?: Partial<EmitterPropertiesDto>,
-) {
+function makeStubBridge(initialSelectedId: number | null, propsOverride?: Partial<EmitterPropertiesDto>) {
   const listeners: SelectionListener[] = [];
   let properties: EmitterPropertiesDto = {
     ...makeFixtureProperties(initialSelectedId ?? 0),
@@ -92,13 +88,9 @@ describe("EmitterPropertyTabs", () => {
     const { bridge } = makeStubBridge(null);
     render(<EmitterPropertyTabs bridge={bridge} />);
     await waitFor(() => {
-      expect(
-        screen.getByTestId("emitter-property-tabs-placeholder"),
-      ).toBeInTheDocument();
+      expect(screen.getByTestId("emitter-property-tabs-placeholder")).toBeInTheDocument();
     });
-    expect(
-      screen.getByText(/Select an emitter to edit its properties/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Select an emitter to edit its properties/)).toBeInTheDocument();
     // Strip is mounted (was previously absent on the no-selection branch).
     expect(screen.getByTestId("emitter-property-tabs")).toBeInTheDocument();
     // All three triggers are present so the user can pre-pick a tab.
@@ -292,16 +284,16 @@ describe("EmitterPropertyTabs", () => {
   it("PhysicsTab renders four section headers in order: Initial position, Initial speed, Acceleration, Ground interaction", () => {
     const props = makeFixtureProperties(0);
     render(<PhysicsTab properties={props} onCommit={() => {}} />);
-    const pos      = screen.getByTestId("section-initial-position");
-    const speed    = screen.getByTestId("section-initial-speed");
-    const accel    = screen.getByTestId("section-acceleration");
-    const ground   = screen.getByTestId("section-ground-interaction");
+    const pos = screen.getByTestId("section-initial-position");
+    const speed = screen.getByTestId("section-initial-speed");
+    const accel = screen.getByTestId("section-acceleration");
+    const ground = screen.getByTestId("section-ground-interaction");
     expect(pos).toBeInTheDocument();
     expect(speed).toBeInTheDocument();
     expect(accel).toBeInTheDocument();
     expect(ground).toBeInTheDocument();
     // DOM order matches the original editor's Physics panel.
-    expect(pos.compareDocumentPosition(speed)   & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(pos.compareDocumentPosition(speed) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(speed.compareDocumentPosition(accel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(accel.compareDocumentPosition(ground) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -317,9 +309,9 @@ describe("EmitterPropertyTabs", () => {
     expect(within(screen.getByTestId("section-acceleration")).getByText("units/s²")).toBeInTheDocument();
     // The section header carries the unit ONCE — the speed/accel fields below it no
     // longer repeat it, so each compound unit appears exactly once (its header).
-    expect(screen.getAllByText("units/s")).toHaveLength(1);   // Initial speed header only (not Inward speed)
-    expect(screen.getAllByText("units/s²")).toHaveLength(1);  // Acceleration header only (not Gravity/Inward)
-    expect(screen.getByText("%")).toBeInTheDocument();        // Parent speed inherit — "otherwise indicated"
+    expect(screen.getAllByText("units/s")).toHaveLength(1); // Initial speed header only (not Inward speed)
+    expect(screen.getAllByText("units/s²")).toHaveLength(1); // Acceleration header only (not Gravity/Inward)
+    expect(screen.getByText("%")).toBeInTheDocument(); // Parent speed inherit — "otherwise indicated"
   });
 
   it("PhysicsTab: removed fields are not rendered (Emit From Mesh*, Weather*, weather fadeout)", () => {
@@ -368,7 +360,10 @@ describe("EmitterPropertyTabs", () => {
     // is statically defined — assert via the source-of-truth constant
     // list by inspecting the underlying select primitive once opened.
     // Fallback: render with each value and assert the trigger label.
-    for (const [value, label] of [[2, "Bounce"], [3, "Stick"]] as const) {
+    for (const [value, label] of [
+      [2, "Bounce"],
+      [3, "Stick"],
+    ] as const) {
       const altProps = { ...props, groundBehavior: value };
       const { unmount } = render(<PhysicsTab properties={altProps} onCommit={() => {}} />);
       const altTriggers = screen.getAllByTestId("physics-ground-behavior-trigger");
@@ -410,8 +405,15 @@ describe("EmitterPropertyTabs", () => {
     const props = { ...makeFixtureProperties(0), isWeatherParticle: true };
     render(<PhysicsTab properties={props} onCommit={onCommit} />);
     const labels = [
-      "Parent speed inherit:", "Acceleration X", "Acceleration Y", "Acceleration Z",
-      "Gravity acceleration:", "Inward acceleration:", "Object space acceleration", "Behavior:", "Bounciness:",
+      "Parent speed inherit:",
+      "Acceleration X",
+      "Acceleration Y",
+      "Acceleration Z",
+      "Gravity acceleration:",
+      "Inward acceleration:",
+      "Object space acceleration",
+      "Behavior:",
+      "Bounciness:",
     ];
     const ids = labels.map((label) => {
       const control = screen.getByLabelText(label);
@@ -419,13 +421,22 @@ describe("EmitterPropertyTabs", () => {
       const id = control.getAttribute("aria-describedby");
       expect(id).toBeTruthy();
       expect(document.getElementById(id!)).toHaveAttribute("hidden");
-      expect(document.getElementById(id!)).toHaveTextContent("Unavailable when Weather particle is selected in Basic → Generation.");
+      expect(document.getElementById(id!)).toHaveTextContent(
+        "Unavailable when Weather particle is selected in Basic → Generation.",
+      );
       return id;
     });
     expect(ids[1]).toBe(ids[2]);
     expect(ids[2]).toBe(ids[3]);
     expect(new Set(ids).size).toBe(7);
-    for (const label of ["Parent speed inherit:", "Gravity acceleration:", "Inward acceleration:", "Object space acceleration", "Behavior:", "Bounciness:"]) {
+    for (const label of [
+      "Parent speed inherit:",
+      "Gravity acceleration:",
+      "Inward acceleration:",
+      "Object space acceleration",
+      "Behavior:",
+      "Bounciness:",
+    ]) {
       expect(screen.getByText(label)).toHaveAttribute("tabindex", "0");
     }
     expect(screen.getByLabelText("Inward speed:")).toBeEnabled();
@@ -472,7 +483,13 @@ describe("EmitterPropertyTabs", () => {
     }
     expect(screen.getByText("X / Y / Z:")).not.toHaveAttribute("tabindex");
     expect(screen.getByText("X / Y / Z:")).not.toHaveAttribute("aria-describedby");
-    for (const label of ["Parent speed inherit:", "Gravity acceleration:", "Inward acceleration:", "Object space acceleration", "Behavior:"]) {
+    for (const label of [
+      "Parent speed inherit:",
+      "Gravity acceleration:",
+      "Inward acceleration:",
+      "Object space acceleration",
+      "Behavior:",
+    ]) {
       expect(screen.getByLabelText(label)).not.toHaveAttribute("aria-describedby");
     }
     expect(screen.queryByText(/Weather particle in Basic/)).toBeNull();
@@ -485,7 +502,9 @@ describe("EmitterPropertyTabs", () => {
     const id = control.getAttribute("aria-describedby");
     expect(control).toBeDisabled();
     expect(id).toBeTruthy();
-    expect(document.getElementById(id!)).toHaveTextContent("Choose Bounce in Ground interaction → Behavior to edit bounciness.");
+    expect(document.getElementById(id!)).toHaveTextContent(
+      "Choose Bounce in Ground interaction → Behavior to edit bounciness.",
+    );
     expect(screen.getByText("Bounciness:")).toHaveAttribute("tabindex", "0");
   });
 
@@ -548,9 +567,7 @@ describe("EmitterPropertyTabs", () => {
     const groups = base.groups.map((g, i) =>
       // sphereEdge nonzero → the Constrain-to-surface checkbox is checked
       // (the engine treats sphereEdge as a surface-constraint boolean).
-      i === 0
-        ? { ...g, type: 3, sphereRadius: 1.5, sphereEdge: 8 }
-        : g,
+      i === 0 ? { ...g, type: 3, sphereRadius: 1.5, sphereEdge: 8 } : g,
     );
     render(<PhysicsTab properties={{ ...base, groups }} onCommit={() => {}} />);
     expect(screen.getByLabelText("Radius:")).toBeInTheDocument();
@@ -566,9 +583,7 @@ describe("EmitterPropertyTabs", () => {
   it("PhysicsTab: GT_CYLINDER renders Radius + Height (one row) + Constrain-to-surface; cylinderEdge=0 → unchecked", () => {
     const base = makeFixtureProperties(0);
     const groups = base.groups.map((g, i) =>
-      i === 0
-        ? { ...g, type: 4, cylinderRadius: 2, cylinderHeight: 3, cylinderEdge: 0 }
-        : g,
+      i === 0 ? { ...g, type: 4, cylinderRadius: 2, cylinderHeight: 3, cylinderEdge: 0 } : g,
     );
     render(<PhysicsTab properties={{ ...base, groups }} onCommit={() => {}} />);
     expect(screen.getByLabelText("Cylinder radius")).toBeInTheDocument();
@@ -602,7 +617,7 @@ describe("EmitterPropertyTabs", () => {
     expect(screen.getByTestId("section-generation")).toBeInTheDocument();
     expect(screen.getByTestId("section-connection")).toBeInTheDocument();
     // DOM order: Emitter Timing first, then Generation, then Connection.
-    const timing     = screen.getByTestId("section-emitter-timing");
+    const timing = screen.getByTestId("section-emitter-timing");
     const generation = screen.getByTestId("section-generation");
     const connection = screen.getByTestId("section-connection");
     expect(timing.compareDocumentPosition(generation) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -628,10 +643,7 @@ describe("EmitterPropertyTabs", () => {
     fireEvent.click(header);
     expect(header).toHaveAttribute("aria-expanded", "false");
     const section = header.closest(".panel-section");
-    expect(section?.querySelector(".collapse-anim")).toHaveAttribute(
-      "data-open",
-      "false",
-    );
+    expect(section?.querySelector(".collapse-anim")).toHaveAttribute("data-open", "false");
   });
 
   it("Name row uses the .name-row modifier class for its custom grid", async () => {
@@ -642,7 +654,7 @@ describe("EmitterPropertyTabs", () => {
     });
     // The Name field's <input> is inside a div with the .name-row modifier class.
     const nameInput = screen.getByLabelText("Name");
-    const row = nameInput.closest('div.form-row') as HTMLElement | null;
+    const row = nameInput.closest("div.form-row") as HTMLElement | null;
     expect(row).not.toBeNull();
     expect(row!.classList.contains("name-row")).toBe(true);
   });
@@ -663,9 +675,7 @@ describe("EmitterPropertyTabs", () => {
     fireEvent.blur(lifetimeInput);
     await waitFor(() => {
       const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls;
-      const match = calls.find(
-        (call) => (call[0] as { kind: string }).kind === "emitters/set-properties",
-      );
+      const match = calls.find((call) => (call[0] as { kind: string }).kind === "emitters/set-properties");
       expect(match).toBeDefined();
       expect(match![0]).toMatchObject({
         kind: "emitters/set-properties",

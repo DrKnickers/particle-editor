@@ -35,4 +35,3 @@ export function colorForGroup(group: number): string | null {
   const idx = (group - 1) % BRACKET_PALETTE_SIZE;
   return BRACKET_PALETTE[idx] ?? null;
 }
-

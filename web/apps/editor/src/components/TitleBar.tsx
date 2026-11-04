@@ -111,12 +111,28 @@ export function TitleBar({ bridge, currentFilePath, dirty }: TitleBarProps): Rea
           </WinButton>
           <WinButton label={maximized ? "Restore" : "Maximize"} onClick={() => win("window/maximize")}>
             {maximized ? (
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1" aria-hidden="true">
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 10 10"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1"
+                aria-hidden="true"
+              >
                 <rect x="0.5" y="2.5" width="7" height="7" />
                 <path d="M2.5 2.5 V0.5 H9.5 V7.5 H7.5" />
               </svg>
             ) : (
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1" aria-hidden="true">
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 10 10"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1"
+                aria-hidden="true"
+              >
                 <rect x="0.5" y="0.5" width="9" height="9" />
               </svg>
             )}

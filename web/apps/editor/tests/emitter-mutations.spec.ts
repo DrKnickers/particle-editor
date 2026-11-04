@@ -36,9 +36,7 @@ test("right-click an emitter row opens the context menu", async () => {
   // Wait for the tree to populate.
   const treeContainer = page.locator('[data-testid="emitter-tree"]');
   await expect(treeContainer).toBeVisible();
-  const firstRow = treeContainer
-    .locator("[data-emitter-id]")
-    .first();
+  const firstRow = treeContainer.locator("[data-emitter-id]").first();
   await expect(firstRow).toBeVisible({ timeout: 5_000 });
 
   // Dismiss any leftover open menu from a prior test.
@@ -73,10 +71,10 @@ test("delete via the context menu removes the emitter from the tree", async () =
   const newId = await page.evaluate(async () => {
     const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
-    const list = await bridge.request({
+    const list = (await bridge.request({
       kind: "emitters/list",
       params: {},
-    }) as { root: { children: { id: number }[] } };
+    })) as { root: { children: { id: number }[] } };
     const firstId = list.root.children[0]?.id;
     if (firstId === undefined) throw new Error("no emitter in tree");
     const dup = await bridge.request({
@@ -120,12 +118,14 @@ test("emitters/duplicate-with-index-increment via the bridge appends a new emitt
     if (!bridge) throw new Error("bridge missing");
 
     let treeEvents = 0;
-    const off = bridge.on("emitters/tree/changed", () => { treeEvents++; });
+    const off = bridge.on("emitters/tree/changed", () => {
+      treeEvents++;
+    });
 
-    const before = await bridge.request({
+    const before = (await bridge.request({
       kind: "emitters/list",
       params: {},
-    }) as { root: { children: unknown[] } };
+    })) as { root: { children: unknown[] } };
     const firstId = (before.root.children[0] as { id?: number })?.id;
     if (firstId === undefined) throw new Error("no emitter");
 
@@ -146,10 +146,10 @@ test("emitters/duplicate-with-index-increment via the bridge appends a new emitt
     });
     off();
 
-    const after = await bridge.request({
+    const after = (await bridge.request({
       kind: "emitters/list",
       params: {},
-    }) as { root: { children: unknown[] } };
+    })) as { root: { children: unknown[] } };
 
     return {
       newId: r.newId,
@@ -178,12 +178,14 @@ test("emitters/duplicate-with-index-increment-many chains N copies in one call a
     if (!bridge) throw new Error("bridge missing");
 
     let treeEvents = 0;
-    const off = bridge.on("emitters/tree/changed", () => { treeEvents++; });
+    const off = bridge.on("emitters/tree/changed", () => {
+      treeEvents++;
+    });
 
-    const before = await bridge.request({
+    const before = (await bridge.request({
       kind: "emitters/list",
       params: {},
-    }) as { root: { children: unknown[] } };
+    })) as { root: { children: unknown[] } };
     const firstId = (before.root.children[0] as { id?: number })?.id;
     if (firstId === undefined) throw new Error("no emitter");
 
@@ -208,10 +210,10 @@ test("emitters/duplicate-with-index-increment-many chains N copies in one call a
     await new Promise((resolve) => setTimeout(resolve, 150));
     off();
 
-    const after = await bridge.request({
+    const after = (await bridge.request({
       kind: "emitters/list",
       params: {},
-    }) as { root: { children: unknown[] } };
+    })) as { root: { children: unknown[] } };
 
     return {
       newIds: r.newIds ?? [],
@@ -222,7 +224,7 @@ test("emitters/duplicate-with-index-increment-many chains N copies in one call a
   });
 
   expect(result.newIds).toHaveLength(3);
-  expect(new Set(result.newIds).size).toBe(3);   // three distinct copies
+  expect(new Set(result.newIds).size).toBe(3); // three distinct copies
   expect(result.treeEvents).toBe(1); // exactly one burst for the batch, not one-per-copy
   expect(result.afterCount).toBe(result.beforeCount + 3);
 
@@ -255,9 +257,7 @@ test("linkGroups/list-exempt-fields returns the v1 default exempt set for a fres
   });
   // v1 defaults exempt textures + atlas-index curve (mirrors
   // LinkExemptFlags() default ctor + the host's wire-name table).
-  expect(fields).toEqual(expect.arrayContaining([
-    "colorTexture", "normalTexture", "trackIndex",
-  ]));
+  expect(fields).toEqual(expect.arrayContaining(["colorTexture", "normalTexture", "trackIndex"]));
 });
 
 // ── 5. Engine-side single-member link-group enforcement ───────
@@ -305,11 +305,9 @@ test("leaving a 2-member link group demotes the survivor to linkGroup=0", async 
       params: {},
     });
     const midFirst = mid.root?.children.find((c) => c.id === firstId);
-    const midDup   = mid.root?.children.find((c) => c.id === dupId);
+    const midDup = mid.root?.children.find((c) => c.id === dupId);
     if (midFirst?.linkGroup !== 42 || midDup?.linkGroup !== 42) {
-      throw new Error(
-        `setup failed — first=${midFirst?.linkGroup} dup=${midDup?.linkGroup}`,
-      );
+      throw new Error(`setup failed — first=${midFirst?.linkGroup} dup=${midDup?.linkGroup}`);
     }
 
     // Leave the duplicate (groupId=null). Group 42 now has 1 member
@@ -324,7 +322,7 @@ test("leaving a 2-member link group demotes the survivor to linkGroup=0", async 
       params: {},
     });
     const afterFirst = after.root?.children.find((c) => c.id === firstId);
-    const afterDup   = after.root?.children.find((c) => c.id === dupId);
+    const afterDup = after.root?.children.find((c) => c.id === dupId);
 
     // Cleanup before returning so a failing assertion still leaves a
     // tidy tree for subsequent specs.
@@ -332,7 +330,7 @@ test("leaving a 2-member link group demotes the survivor to linkGroup=0", async 
 
     return {
       firstLinkGroup: afterFirst?.linkGroup,
-      dupLinkGroup:   afterDup?.linkGroup,
+      dupLinkGroup: afterDup?.linkGroup,
     };
   });
 
@@ -391,7 +389,7 @@ test("undo restores the pre-mutation linkGroups (atomicity of capture + sweep)",
       params: {},
     });
     const preFirst = preDelete.root?.children.find((c) => c.id === firstId);
-    const preDup   = preDelete.root?.children.find((c) => c.id === dupId);
+    const preDup = preDelete.root?.children.find((c) => c.id === dupId);
     if (preFirst?.linkGroup !== 99 || preDup?.linkGroup !== 99) {
       throw new Error(`setup failed — first=${preFirst?.linkGroup} dup=${preDup?.linkGroup}`);
     }
@@ -425,7 +423,7 @@ test("undo restores the pre-mutation linkGroups (atomicity of capture + sweep)",
       params: {},
     });
     const undoFirst = postUndo.root?.children.find((c) => c.id === firstId);
-    const undoDup   = postUndo.root?.children.find((c) => c.id === dupId);
+    const undoDup = postUndo.root?.children.find((c) => c.id === dupId);
 
     // Cleanup before returning so a failing assertion still leaves a
     // tidy tree for subsequent specs. Belt-and-suspenders — if undo
@@ -594,7 +592,11 @@ test("adding a root emitter reaches an already-placed instance", async () => {
 
     // A previous spec may have left a cursor-bound preview attached;
     // preview/attach refuses when one exists. Best-effort clear.
-    try { await b.request({ kind: "preview/kill", params: {} }); } catch { /* none attached */ }
+    try {
+      await b.request({ kind: "preview/kill", params: {} });
+    } catch {
+      /* none attached */
+    }
 
     // file/new gives a clean system with one root emitter AND clears the
     // engine's instance list, so the counts below start from a known floor.
@@ -614,8 +616,8 @@ test("adding a root emitter reaches an already-placed instance", async () => {
     return { before, after, newId: added.newId };
   });
 
-  expect(result.newId).toBeGreaterThanOrEqual(0);     // the authored add succeeded
-  expect(result.before.instances).toBeGreaterThanOrEqual(1);  // something was placed
+  expect(result.newId).toBeGreaterThanOrEqual(0); // the authored add succeeded
+  expect(result.before.instances).toBeGreaterThanOrEqual(1); // something was placed
   // The instance itself must NOT be recreated — this is a topology sync, not a
   // respawn (a respawn would restart the placed effect from zero).
   expect(result.after.instances).toBe(result.before.instances);
@@ -640,7 +642,11 @@ test("reparenting a root removes only its stale root instance from an already-pl
   const result = await page.evaluate(async () => {
     const b = window.bridge!;
 
-    try { await b.request({ kind: "preview/kill", params: {} }); } catch { /* none attached */ }
+    try {
+      await b.request({ kind: "preview/kill", params: {} });
+    } catch {
+      /* none attached */
+    }
     await b.request({ kind: "file/new", params: {} });
 
     const initial = await b.request({ kind: "emitters/list", params: {} });
@@ -681,12 +687,8 @@ test("reparenting a root removes only its stale root instance from an already-pl
       });
       const after = await b.request({ kind: "engine/query/live-instances", params: {} });
       const tree = await b.request({ kind: "emitters/list", params: {} });
-      const targetNode = tree.root?.children?.find(
-        (e: { id: number }) => e.id === target.newId,
-      );
-      const child = targetNode?.children?.find(
-        (e: { id: number }) => e.id === source.newId,
-      );
+      const targetNode = tree.root?.children?.find((e: { id: number }) => e.id === target.newId);
+      const child = targetNode?.children?.find((e: { id: number }) => e.id === source.newId);
 
       return {
         before,
@@ -755,7 +757,7 @@ test("file/open resets the selection instead of inheriting the previous document
     return { beforeSel: before.selectedEmitterId, afterSel: after.selectedEmitterId, announced };
   }, fixturePath);
 
-  expect(result.beforeSel).toBeGreaterThan(0);   // we really did select a non-root
+  expect(result.beforeSel).toBeGreaterThan(0); // we really did select a non-root
   // THE REGRESSION: without the reset this stays on the stale positional id.
   expect(result.afterSel).toBe(0);
   // And React must be told, or its selection atom keeps the old row highlighted
@@ -848,16 +850,16 @@ function expectedLiveState(
 }
 
 async function waitForLiveState(expected: ExpectedLiveState): Promise<void> {
-  await expect.poll(
-    async () => normalizeLiveState(
-      await bridgeRequest(page, { kind: "engine/query/live-instances", params: {} }),
-    ),
-    {
-      message: "waiting for the native render path to publish its cached live samples",
-      timeout: 5_000,
-      intervals: [16, 32, 64, 100],
-    },
-  ).toEqual(expected);
+  await expect
+    .poll(
+      async () => normalizeLiveState(await bridgeRequest(page, { kind: "engine/query/live-instances", params: {} })),
+      {
+        message: "waiting for the native render path to publish its cached live samples",
+        timeout: 5_000,
+        intervals: [16, 32, 64, 100],
+      },
+    )
+    .toEqual(expected);
 }
 
 async function resetLiveInvalidationFixture(): Promise<void> {
@@ -994,21 +996,23 @@ async function spawnLiveState(): Promise<SpawnLiveState> {
 async function expectSpawnLiveState(
   expected: Pick<SpawnLiveState, "instances" | "emitters" | "particles">,
 ): Promise<SpawnLiveState> {
-  await expect.poll(
-    async () => {
-      const state = await spawnLiveState();
-      return {
-        instances: state.instances,
-        emitters: state.emitters,
-        particles: state.particles,
-      };
-    },
-    {
-      timeout: 5_000,
-      intervals: [16, 32, 64, 100],
-      message: "waiting for the native stepped clock to publish exact live counts",
-    },
-  ).toEqual(expected);
+  await expect
+    .poll(
+      async () => {
+        const state = await spawnLiveState();
+        return {
+          instances: state.instances,
+          emitters: state.emitters,
+          particles: state.particles,
+        };
+      },
+      {
+        timeout: 5_000,
+        intervals: [16, 32, 64, 100],
+        message: "waiting for the native stepped clock to publish exact live counts",
+      },
+    )
+    .toEqual(expected);
   return spawnLiveState();
 }
 
@@ -1022,10 +1026,7 @@ async function cleanupSpawnScheduleFixture(): Promise<void> {
   await bridgeRequest(page, { kind: "engine/set/paused", params: { paused: false } }).catch(() => {});
 }
 
-async function seedSpawnScheduleFixture(
-  initialDelay: number,
-  particlesPerSecond: number,
-): Promise<number> {
+async function seedSpawnScheduleFixture(initialDelay: number, particlesPerSecond: number): Promise<number> {
   await resetSpawnScheduleFixture();
   await bridgeRequest(page, { kind: "engine/set/paused", params: { paused: true } });
 

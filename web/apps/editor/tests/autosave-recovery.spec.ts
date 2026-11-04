@@ -9,17 +9,7 @@
 //      retention/retry, and explicit discard without touching user autosaves.
 
 import { test, expect, type Page } from "./helpers/cdp";
-import {
-  access,
-  copyFile,
-  mkdir,
-  readFile,
-  readdir,
-  rm,
-  rmdir,
-  stat,
-  utimes,
-} from "node:fs/promises";
+import { access, copyFile, mkdir, readFile, readdir, rm, rmdir, stat, utimes } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -79,20 +69,12 @@ async function emitterCount() {
     const b = window.bridge!;
     const list = await b.request({ kind: "emitters/list", params: {} });
     const count = (nodes: Array<{ children?: unknown[] }>): number =>
-      nodes.reduce(
-        (sum, node) =>
-          sum + 1 + count((node.children ?? []) as Array<{ children?: unknown[] }>),
-        0,
-      );
+      nodes.reduce((sum, node) => sum + 1 + count((node.children ?? []) as Array<{ children?: unknown[] }>), 0);
     return count(list.root.children);
   });
 }
 
-function differentCreationToken(
-  currentHex: string,
-  offset: bigint,
-  excludedHex: string[] = [],
-) {
+function differentCreationToken(currentHex: string, offset: bigint, excludedHex: string[] = []) {
   const current = BigInt(`0x${currentHex}`);
   const mask = (1n << 64n) - 1n;
   let candidate = (current + offset) & mask;
@@ -116,10 +98,7 @@ test("real recovery establishes a verified session handoff before old-tier delet
   });
 
   const deadPid = 4294967294;
-  const firstOld = path.join(
-    AUTOSAVE_TEST_DIR,
-    `autosave-${deadPid}-0000000000000001-recent.alo`,
-  );
+  const firstOld = path.join(AUTOSAVE_TEST_DIR, `autosave-${deadPid}-0000000000000001-recent.alo`);
   let blockedDestination: string | null = null;
 
   try {
@@ -143,15 +122,11 @@ test("real recovery establishes a verified session handoff before old-tier delet
     expect(await emitterCount()).toBe(3); // fixture A: root + lifetime + death
 
     const afterFirst = await readdir(AUTOSAVE_TEST_DIR);
-    const replacementName = afterFirst.find((name) =>
-      /^autosave-\d+-[0-9a-f]{16}-recent\.alo$/i.test(name),
-    );
+    const replacementName = afterFirst.find((name) => /^autosave-\d+-[0-9a-f]{16}-recent\.alo$/i.test(name));
     expect(replacementName).toBeDefined();
     if (!replacementName) return;
 
-    const parsed = /^autosave-(\d+)-([0-9a-f]{16})-recent\.alo$/i.exec(
-      replacementName,
-    );
+    const parsed = /^autosave-(\d+)-([0-9a-f]{16})-recent\.alo$/i.exec(replacementName);
     expect(parsed).not.toBeNull();
     if (!parsed) return;
     const [, livePid, liveCreation] = parsed;
@@ -161,10 +136,7 @@ test("real recovery establishes a verified session handoff before old-tier delet
     // Simulate PID reuse directly: same currently-live PID, different creation
     // FILETIME. PID-only liveness suppresses this exact orphan.
     const reusedCreation = differentCreationToken(liveCreation, 1n);
-    const secondOld = path.join(
-      AUTOSAVE_TEST_DIR,
-      `autosave-${livePid}-${reusedCreation}-recent.alo`,
-    );
+    const secondOld = path.join(AUTOSAVE_TEST_DIR, `autosave-${livePid}-${reusedCreation}-recent.alo`);
     await plantAutosave(FIXTURE_B, secondOld);
     const secondCheck = await page.evaluate(async () => {
       return await window.bridge!.request({
@@ -197,8 +169,7 @@ test("real recovery establishes a verified session handoff before old-tier delet
     expect(await pathExists(secondOld)).toBe(true);
     expect(await readFile(replacementPath)).toEqual(currentBeforeVerificationFault);
     expect(await emitterCount()).toBe(3);
-    expect((await readdir(AUTOSAVE_TEST_DIR)).some((name) => name.endsWith(".tmp")))
-      .toBe(false);
+    expect((await readdir(AUTOSAVE_TEST_DIR)).some((name) => name.endsWith(".tmp"))).toBe(false);
 
     // A directory at the exact destination lets the candidate serialize and
     // parse, then forces MoveFileExW to fail. The old orphan and fixture A in
@@ -218,8 +189,7 @@ test("real recovery establishes a verified session handoff before old-tier delet
     });
     expect(await pathExists(secondOld)).toBe(true);
     expect(await emitterCount()).toBe(3);
-    expect((await readdir(AUTOSAVE_TEST_DIR)).some((name) => name.endsWith(".tmp")))
-      .toBe(false);
+    expect((await readdir(AUTOSAVE_TEST_DIR)).some((name) => name.endsWith(".tmp"))).toBe(false);
 
     await rmdir(replacementPath);
     blockedDestination = null;
@@ -236,12 +206,8 @@ test("real recovery establishes a verified session handoff before old-tier delet
 
     // Explicit discard remains the intentional no-handoff delete path, and it
     // cannot consume the already-established current-session replacement.
-    const discardCreation =
-      differentCreationToken(liveCreation, 2n, [reusedCreation]);
-    const discardOld = path.join(
-      AUTOSAVE_TEST_DIR,
-      `autosave-${livePid}-${discardCreation}-recent.alo`,
-    );
+    const discardCreation = differentCreationToken(liveCreation, 2n, [reusedCreation]);
+    const discardOld = path.join(AUTOSAVE_TEST_DIR, `autosave-${livePid}-${discardCreation}-recent.alo`);
     await plantAutosave(FIXTURE_A, discardOld);
     const discardCheck = await page.evaluate(async () => {
       return await window.bridge!.request({
@@ -263,8 +229,10 @@ test("real recovery establishes a verified session handoff before old-tier delet
     if (blockedDestination) {
       await rmdir(blockedDestination).catch(() => {});
     }
-    await page.evaluate(async () => {
-      await window.bridge!.request({ kind: "file/new", params: {} });
-    }).catch(() => {});
+    await page
+      .evaluate(async () => {
+        await window.bridge!.request({ kind: "file/new", params: {} });
+      })
+      .catch(() => {});
   }
 });

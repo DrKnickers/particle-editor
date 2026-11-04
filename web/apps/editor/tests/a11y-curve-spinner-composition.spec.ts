@@ -35,15 +35,12 @@ test.beforeEach(async () => {
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
   await page.mouse.move(0, 0);
-  await page.evaluate(
-    async (fixturePath) => {
-      const bridge = window.bridge!;
-      await bridge.request({ kind: "file/open", params: { path: fixturePath } });
-      await bridge.request({ kind: "engine/set/paused", params: { paused: true } });
-      await bridge.request({ kind: "stats/set-frozen", params: { frozen: true } });
-    },
-    FIXTURE_PATH
-  );
+  await page.evaluate(async (fixturePath) => {
+    const bridge = window.bridge!;
+    await bridge.request({ kind: "file/open", params: { path: fixturePath } });
+    await bridge.request({ kind: "engine/set/paused", params: { paused: true } });
+    await bridge.request({ kind: "stats/set-frozen", params: { frozen: true } });
+  }, FIXTURE_PATH);
 });
 
 test.describe("a11y/curve-spinner [composition]", () => {
@@ -52,9 +49,7 @@ test.describe("a11y/curve-spinner [composition]", () => {
       try {
         await surface.setup(page);
         const snap = await captureDomA11y(page, surface.scope(page));
-        expect(snap).toMatchJSONGolden(
-          `a11y-goldens/${surface.id}.composition.golden.yaml`
-        );
+        expect(snap).toMatchJSONGolden(`a11y-goldens/${surface.id}.composition.golden.yaml`);
       } finally {
         await surface.teardown(page);
       }

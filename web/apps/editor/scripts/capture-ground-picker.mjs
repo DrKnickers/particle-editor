@@ -23,22 +23,37 @@ function arg(name, def) {
 const exe = resolve(arg("--exe", defaultExe));
 let out = arg("--out");
 const gameDir = arg("--game");
-if (!out) { console.error("capture-ground-picker: --out <png> required"); process.exit(2); }
+if (!out) {
+  console.error("capture-ground-picker: --out <png> required");
+  process.exit(2);
+}
 out = resolve(out);
-if (!existsSync(exe)) { console.error(`capture-ground-picker: exe not found: ${exe}`); process.exit(2); }
+if (!existsSync(exe)) {
+  console.error(`capture-ground-picker: exe not found: ${exe}`);
+  process.exit(2);
+}
 
 const CDP = "http://localhost:9222";
-const probeCdp = async () => { try { return (await fetch(`${CDP}/json/version`)).ok; } catch { return false; } };
+const probeCdp = async () => {
+  try {
+    return (await fetch(`${CDP}/json/version`)).ok;
+  } catch {
+    return false;
+  }
+};
 function killTestHost() {
   return new Promise((res) => {
     const cmd =
       "Get-CimInstance Win32_Process -Filter \"Name='ParticleEditor.exe'\" | " +
       "Where-Object { $_.CommandLine -like '*--test-host*' } | " +
       "ForEach-Object { Stop-Process -Id $_.ProcessId -Force }";
-    const p = spawn("powershell.exe",
+    const p = spawn(
+      "powershell.exe",
       ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", cmd],
-      { stdio: "ignore", shell: false });
-    p.on("exit", () => res()); p.on("error", () => res());
+      { stdio: "ignore", shell: false },
+    );
+    p.on("exit", () => res());
+    p.on("error", () => res());
   });
 }
 
@@ -47,14 +62,19 @@ await sleep(300);
 const spawnArgs = gameDir ? ["--test-host", gameDir] : ["--test-host"];
 const child = spawn(exe, spawnArgs, { cwd: repoRoot, stdio: ["ignore", "ignore", "ignore"], detached: false });
 let childExited = false;
-child.on("exit", () => { childExited = true; });
+child.on("exit", () => {
+  childExited = true;
+});
 
 let browser;
 try {
   let ready = false;
   for (let i = 0; i < 60; i++) {
     if (childExited) throw new Error("Host (--test-host) exited before CDP came up");
-    if (await probeCdp()) { ready = true; break; }
+    if (await probeCdp()) {
+      ready = true;
+      break;
+    }
     await sleep(500);
   }
   if (!ready) throw new Error("CDP :9222 did not come up within 30s");
@@ -80,8 +100,16 @@ try {
   console.error(`capture-ground-picker: FAILED: ${e.message}`);
   process.exitCode = 1;
 } finally {
-  try { await browser?.close(); } catch { /* ignore */ }
-  try { child.kill(); } catch { /* ignore */ }
+  try {
+    await browser?.close();
+  } catch {
+    /* ignore */
+  }
+  try {
+    child.kill();
+  } catch {
+    /* ignore */
+  }
   await sleep(300);
   await killTestHost();
 }

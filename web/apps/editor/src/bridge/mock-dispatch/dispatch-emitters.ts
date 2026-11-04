@@ -1,11 +1,6 @@
 // Mock counterpart of src/host/BridgeDispatch_Emitters.cpp.
 
-import type {
-  Request,
-  EmitterTreeDto,
-  EmitterTreeNode,
-  SpawnParamsDto,
-} from "@particle-editor/bridge-schema";
+import type { Request, EmitterTreeDto, EmitterTreeNode, SpawnParamsDto } from "@particle-editor/bridge-schema";
 import {
   addDeathChildEmitter,
   addLifetimeChildEmitter,
@@ -81,7 +76,6 @@ export function decorateSpawn(node: EmitterTreeNode): EmitterTreeNode {
 
 export function dispatchEmitters(this: MockDispatchHost, req: EmittersRequest): unknown {
   switch (req.kind) {
-
     // ---------------- emitters/preview-from-file
     //
     // Returns a fixed 3-emitter mock tree regardless of path. Lets the
@@ -99,11 +93,14 @@ export function dispatchEmitters(this: MockDispatchHost, req: EmittersRequest): 
           stableId: 0,
           name: "root",
           children: [
-            { id: 1, stableId: 9001, name: "Smoke",  children: [
-              { id: 4, stableId: 9004, name: "Smoke embers", children: [] },
-            ] },
+            {
+              id: 1,
+              stableId: 9001,
+              name: "Smoke",
+              children: [{ id: 4, stableId: 9004, name: "Smoke embers", children: [] }],
+            },
             { id: 2, stableId: 9002, name: "Sparks", children: [] },
-            { id: 3, stableId: 9003, name: "Flash",  children: [] },
+            { id: 3, stableId: 9003, name: "Flash", children: [] },
           ],
         },
       };
@@ -117,9 +114,7 @@ export function dispatchEmitters(this: MockDispatchHost, req: EmittersRequest): 
     // `engine/state/changed` so subscribers picking up either channel
     // see the change. Selection of an unknown id resets to null.
     case "emitters/list": {
-      const cloned = JSON.parse(
-        JSON.stringify(useMockEmitterTree.getState().tree),
-      ) as EmitterTreeDto;
+      const cloned = JSON.parse(JSON.stringify(useMockEmitterTree.getState().tree)) as EmitterTreeDto;
       // decorate the clone with live spawn values (see decorateSpawn).
       return { root: decorateSpawn(cloned.root) };
     }
@@ -127,9 +122,7 @@ export function dispatchEmitters(this: MockDispatchHost, req: EmittersRequest): 
     case "emitters/select": {
       const reqId = req.params.id;
       const tree = useMockEmitterTree.getState().tree;
-      const valid = reqId !== null && findEmitterNode(tree, reqId) !== null
-        ? reqId
-        : null;
+      const valid = reqId !== null && findEmitterNode(tree, reqId) !== null ? reqId : null;
       useMockEngineState.getState().applyPatch({ selectedEmitterId: valid });
       this.emit({ kind: "emitters/selected", payload: { id: valid } });
       this.emit({ kind: "engine/state/changed", payload: snapshotEngineState() });
@@ -262,8 +255,7 @@ export function dispatchEmitters(this: MockDispatchHost, req: EmittersRequest): 
 
     case "emitters/duplicate-with-index-increment-many": {
       const cur = useMockEmitterTree.getState().tree;
-      const result = duplicateWithIndexIncrementMany(
-        cur, req.params.id, req.params.delta, req.params.count);
+      const result = duplicateWithIndexIncrementMany(cur, req.params.id, req.params.delta, req.params.count);
       if (result === null) {
         // Mirror the host's error path (SendErr): no copies made.
         this.emit({ kind: "emitters/tree/changed", payload: cur });
@@ -349,8 +341,7 @@ export function dispatchEmitters(this: MockDispatchHost, req: EmittersRequest): 
       const sel = new Set(req.params.ids);
       const order = tree.root.children.map((c) => c.id);
       const movable: number[] = [];
-      const edgePinned =
-        order.length > 0 && sel.has(dir === "up" ? order[0]! : order[order.length - 1]!);
+      const edgePinned = order.length > 0 && sel.has(dir === "up" ? order[0]! : order[order.length - 1]!);
       if (!edgePinned) {
         if (dir === "up") {
           for (let i = 0; i < order.length; i++) if (sel.has(order[i]!)) movable.push(order[i]!);
@@ -436,12 +427,7 @@ export function dispatchEmitters(this: MockDispatchHost, req: EmittersRequest): 
         return { ok: true };
       }
       // mode === "reparent"
-      const next = reparentEmitterInTree(
-        cur,
-        req.params.id,
-        req.params.targetId,
-        req.params.slot,
-      );
+      const next = reparentEmitterInTree(cur, req.params.id, req.params.targetId, req.params.slot);
       if (next === null) {
         return { ok: false, error: "reparent refused" };
       }

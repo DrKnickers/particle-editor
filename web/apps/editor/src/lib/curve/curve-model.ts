@@ -46,7 +46,10 @@ export function computeGroupMoves(
 ): Array<{ oldTime: number; newTime: number; newValue: number }> {
   if (trackKeys.length === 0) return [];
   const clampedDTime = clampGroupTimeShift(
-    trackKeys.map((k) => k.time), selectedTimes, borderTimes, dTime,
+    trackKeys.map((k) => k.time),
+    selectedTimes,
+    borderTimes,
+    dTime,
   );
   const out: Array<{ oldTime: number; newTime: number; newValue: number }> = [];
   for (const k of trackKeys) {

@@ -31,13 +31,11 @@ test("emitters/add-lifetime-child via the bridge adds a lifetime child to the pa
     // the first root; if it already has a lifetime child we delete
     // the duplicate later for cleanup. Most host seeds start with at
     // least one bare root.
-    const listBefore = await bridge.request({
+    const listBefore = (await bridge.request({
       kind: "emitters/list",
       params: {},
-    }) as { root: { children: { id: number; children: { role: string }[] }[] } };
-    const parent = listBefore.root.children.find(
-      (c) => !c.children.some((kid) => kid.role === "lifetime"),
-    );
+    })) as { root: { children: { id: number; children: { role: string }[] }[] } };
+    const parent = listBefore.root.children.find((c) => !c.children.some((kid) => kid.role === "lifetime"));
     if (!parent) {
       // All roots already have lifetime children — fall back to the
       // first root and accept the no-op semantics from the host.
@@ -48,10 +46,10 @@ test("emitters/add-lifetime-child via the bridge adds a lifetime child to the pa
       kind: "emitters/add-lifetime-child",
       params: { parentId: parent.id },
     });
-    const listAfter = await bridge.request({
+    const listAfter = (await bridge.request({
       kind: "emitters/list",
       params: {},
-    }) as { root: { children: { id: number; children: { id: number; role: string }[] }[] } };
+    })) as { root: { children: { id: number; children: { id: number; role: string }[] }[] } };
     const parentAfter = listAfter.root.children.find((c) => c.id === parent.id)!;
     const lifetime = parentAfter.children.find((c) => c.role === "lifetime");
 
@@ -90,20 +88,20 @@ test("emitters/move via the bridge swaps adjacent roots", async () => {
     // Seed: most host particle systems have just one root, so duplicate
     // it first to give us two adjacent roots. The duplicate lands
     // directly after the original via insertEmitterAfter.
-    const before0 = await bridge.request({
+    const before0 = (await bridge.request({
       kind: "emitters/list",
       params: {},
-    }) as { root: { children: { id: number; name: string }[] } };
+    })) as { root: { children: { id: number; name: string }[] } };
     const firstId = before0.root.children[0]!.id;
     await bridge.request({
       kind: "emitters/duplicate",
       params: { id: firstId },
     });
 
-    const before = await bridge.request({
+    const before = (await bridge.request({
       kind: "emitters/list",
       params: {},
-    }) as { root: { children: { id: number; name: string }[] } };
+    })) as { root: { children: { id: number; name: string }[] } };
     const beforeNames = before.root.children.map((c) => c.name);
     // Identify the duplicate by its auto-suffixed name (`<base>_1`
     // etc.) — `_<digits>` suffix is the legacy convention.
@@ -117,10 +115,10 @@ test("emitters/move via the bridge swaps adjacent roots", async () => {
       kind: "emitters/move",
       params: { id: dupId, direction: "up" },
     });
-    const after = await bridge.request({
+    const after = (await bridge.request({
       kind: "emitters/list",
       params: {},
-    }) as { root: { children: { id: number; name: string }[] } };
+    })) as { root: { children: { id: number; name: string }[] } };
     const afterNames = after.root.children.map((c) => c.name);
     // Find the duplicate by its name in the post-move tree.
     const newIdx = afterNames.findIndex((n) => /_\d+$/.test(n));
@@ -158,16 +156,16 @@ test("Ctrl+click on a second emitter row updates data-selected-count to 2", asyn
   const seededId = await page.evaluate(async () => {
     const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
-    const list = await bridge.request({
+    const list = (await bridge.request({
       kind: "emitters/list",
       params: {},
-    }) as { root: { children: { id: number }[] } };
+    })) as { root: { children: { id: number }[] } };
     if (list.root.children.length >= 2) return -1;
     const firstId = list.root.children[0]!.id;
-    const dup = await bridge.request({
+    const dup = (await bridge.request({
       kind: "emitters/duplicate",
       params: { id: firstId },
-    }) as { newId?: number };
+    })) as { newId?: number };
     return dup.newId ?? -1;
   });
 
@@ -179,7 +177,7 @@ test("Ctrl+click on a second emitter row updates data-selected-count to 2", asyn
   });
 
   const rows = treeContainer.locator("[data-emitter-id]");
-  const firstRow  = rows.nth(0);
+  const firstRow = rows.nth(0);
   const secondRow = rows.nth(1);
 
   // Plain-click first row to seed selection.
@@ -215,18 +213,16 @@ test("emitters/paste-as-child via the bridge attaches a lifetime child", async (
     const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
 
-    const before = await bridge.request({
+    const before = (await bridge.request({
       kind: "emitters/list",
       params: {},
-    }) as { root: { children: { id: number; name: string; children: { role: string }[] }[] } };
+    })) as { root: { children: { id: number; name: string; children: { role: string }[] }[] } };
 
     const srcId = before.root.children[0]?.id ?? -1;
     if (srcId < 0) return { skipped: true as const };
     const srcName = before.root.children[0]!.name;
     // A parent whose lifetime slot is free (legacy gate: spawnDuringLife == -1).
-    const parent = before.root.children.find(
-      (c) => !c.children.some((kid) => kid.role === "lifetime"),
-    );
+    const parent = before.root.children.find((c) => !c.children.some((kid) => kid.role === "lifetime"));
     if (!parent) return { skipped: true as const };
 
     await bridge.request({ kind: "emitters/copy", params: { ids: [srcId] } });
@@ -235,10 +231,10 @@ test("emitters/paste-as-child via the bridge attaches a lifetime child", async (
       params: { parentId: parent.id, slot: "lifetime" },
     });
 
-    const after = await bridge.request({
+    const after = (await bridge.request({
       kind: "emitters/list",
       params: {},
-    }) as { root: { children: { id: number; children: { id: number; name: string; role: string }[] }[] } };
+    })) as { root: { children: { id: number; children: { id: number; name: string; role: string }[] }[] } };
     const parentAfter = after.root.children.find((c) => c.id === parent.id)!;
     const lifetime = parentAfter.children.find((c) => c.role === "lifetime");
 

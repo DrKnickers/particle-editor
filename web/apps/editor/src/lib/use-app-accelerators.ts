@@ -89,12 +89,24 @@ export function useAppAccelerators(bridge: Bridge): void {
       // drive it, and Clear and Spawn are unavailable (the host refuses them).
       const timeline = getTimelineState();
       if (timeline.active) {
-        if (combo === "F8") { void setTimelinePlaying(bridge, !timeline.playing); return; }
-        if (combo === "F9") { stepTimeline(bridge, 1); return; }
-        if (combo === "F10") { stepTimeline(bridge, 10); return; }
+        if (combo === "F8") {
+          void setTimelinePlaying(bridge, !timeline.playing);
+          return;
+        }
+        if (combo === "F9") {
+          stepTimeline(bridge, 1);
+          return;
+        }
+        if (combo === "F10") {
+          stepTimeline(bridge, 10);
+          return;
+        }
         if (combo === "Ctrl+Del" || combo === "Ctrl+Space") {
-          useStatusFeedback.getState().announce(
-            `${combo === "Ctrl+Del" ? "Clear particles" : "Spawn"} is unavailable while the timeline is open`);
+          useStatusFeedback
+            .getState()
+            .announce(
+              `${combo === "Ctrl+Del" ? "Clear particles" : "Spawn"} is unavailable while the timeline is open`,
+            );
           return;
         }
       }
@@ -129,11 +141,7 @@ export function useAppAccelerators(bridge: Bridge): void {
         case "Alt+Up":
         case "Alt+Down": {
           // Move the whole selection as a block; the highlight follows.
-          void moveEmitters(
-            bridge,
-            useEmitterSelectionStore.getState().ids,
-            combo === "Alt+Up" ? "up" : "down",
-          );
+          void moveEmitters(bridge, useEmitterSelectionStore.getState().ids, combo === "Alt+Up" ? "up" : "down");
           break;
         }
         case "Ctrl+Space":
@@ -141,31 +149,47 @@ export function useAppAccelerators(bridge: Bridge): void {
           break;
         // ── View (toggles read live state) ──
         case "Ctrl+G":
-          void fireAndReport(bridge, {
-            kind: "engine/set/ground",
-            params: { enabled: !(st?.ground ?? false) },
-          }, "Toggle ground");
+          void fireAndReport(
+            bridge,
+            {
+              kind: "engine/set/ground",
+              params: { enabled: !(st?.ground ?? false) },
+            },
+            "Toggle ground",
+          );
           break;
         case "Ctrl+H":
-          void fireAndReport(bridge, {
-            kind: "engine/set/heat-debug",
-            params: { enabled: !(st?.heatDebug ?? false) },
-          }, "Toggle heat debug");
+          void fireAndReport(
+            bridge,
+            {
+              kind: "engine/set/heat-debug",
+              params: { enabled: !(st?.heatDebug ?? false) },
+            },
+            "Toggle heat debug",
+          );
           break;
         case "Ctrl+L":
           // Toggle the reference-object lock — only meaningful when one is loaded.
           if ((st?.referenceObjectName ?? "") !== "") {
-            void fireAndReport(bridge, {
-              kind: "engine/set/reference-object-lock",
-              params: { locked: !(st?.referenceObjectLocked ?? false) },
-            }, "Toggle reference lock");
+            void fireAndReport(
+              bridge,
+              {
+                kind: "engine/set/reference-object-lock",
+                params: { locked: !(st?.referenceObjectLocked ?? false) },
+              },
+              "Toggle reference lock",
+            );
           }
           break;
         case "F8":
-          void fireAndReport(bridge, {
-            kind: "engine/set/paused",
-            params: { paused: !(st?.paused ?? false) },
-          }, st?.paused ? "Play" : "Pause");
+          void fireAndReport(
+            bridge,
+            {
+              kind: "engine/set/paused",
+              params: { paused: !(st?.paused ?? false) },
+            },
+            st?.paused ? "Play" : "Pause",
+          );
           break;
         case "F9":
           void fireAndReport(bridge, { kind: "engine/action/step-frames", params: { frames: 1 } }, "Step");
@@ -180,8 +204,11 @@ export function useAppAccelerators(bridge: Bridge): void {
           void fireAndReport(bridge, { kind: "engine/set/camera", params: RESET_CAMERA }, "Reset camera");
           break;
         case "F5":
-          void fireAndReport(bridge, { kind: "engine/action/reload-textures", params: {} }, "Reload textures")
-            .then((r) => { if (r !== undefined) bumpTextureEpoch(); }); // re-fetch atlas previews with fresh content
+          void fireAndReport(bridge, { kind: "engine/action/reload-textures", params: {} }, "Reload textures").then(
+            (r) => {
+              if (r !== undefined) bumpTextureEpoch();
+            },
+          ); // re-fetch atlas previews with fresh content
           break;
         case "F6":
           void fireAndReport(bridge, { kind: "engine/action/reload-shaders", params: {} }, "Reload shaders");

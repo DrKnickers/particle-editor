@@ -57,15 +57,12 @@ test("mean engine FPS over 10s exceeds the regression floor under composition mo
       new Promise<number[]>((resolve) => {
         const collected: number[] = [];
         const b = window.bridge!;
-        const unsubscribe = b.on(
-          "stats/tick",
-          (e: { payload?: { fps?: number } }) => {
-            const fps = e.payload?.fps;
-            if (typeof fps === "number" && fps > 0) {
-              collected.push(fps);
-            }
-          },
-        );
+        const unsubscribe = b.on("stats/tick", (e: { payload?: { fps?: number } }) => {
+          const fps = e.payload?.fps;
+          if (typeof fps === "number" && fps > 0) {
+            collected.push(fps);
+          }
+        });
         setTimeout(() => {
           unsubscribe();
           resolve(collected);
@@ -81,7 +78,7 @@ test("mean engine FPS over 10s exceeds the regression floor under composition mo
   expect(
     samples.length,
     `Only ${samples.length} stats/tick samples received over ${SAMPLE_DURATION_MS}ms ` +
-    `(expected ~40 at 4 Hz). stats/tick event wiring may have regressed.`,
+      `(expected ~40 at 4 Hz). stats/tick event wiring may have regressed.`,
   ).toBeGreaterThanOrEqual(20);
 
   // Mean FPS across the sample window.
@@ -93,10 +90,10 @@ test("mean engine FPS over 10s exceeds the regression floor under composition mo
   if (mean < MEAN_FPS_FLOOR) {
     throw new Error(
       `Mean engine FPS ${mean.toFixed(1)} (over ${samples.length} samples, ` +
-      `min=${min.toFixed(1)}, max=${max.toFixed(1)}) is below the regression ` +
-      `floor of ${MEAN_FPS_FLOOR}. CompositeEngineFrame or WaitEndFrameQuery ` +
-      `may have regressed; check host.log for [COMP-engine-fail] or "D3D9 sync ` +
-      `query never signalled after 100k spins" entries.`,
+        `min=${min.toFixed(1)}, max=${max.toFixed(1)}) is below the regression ` +
+        `floor of ${MEAN_FPS_FLOOR}. CompositeEngineFrame or WaitEndFrameQuery ` +
+        `may have regressed; check host.log for [COMP-engine-fail] or "D3D9 sync ` +
+        `query never signalled after 100k spins" entries.`,
     );
   }
   expect(mean).toBeGreaterThanOrEqual(MEAN_FPS_FLOOR);
@@ -106,6 +103,6 @@ test("mean engine FPS over 10s exceeds the regression floor under composition mo
   // drift over time even when the gate is comfortably met).
   console.log(
     `[dxgi-perf] composition-mode mean FPS = ${mean.toFixed(1)} ` +
-    `(min=${min.toFixed(1)}, max=${max.toFixed(1)}, n=${samples.length})`,
+      `(min=${min.toFixed(1)}, max=${max.toFixed(1)}, n=${samples.length})`,
   );
 });

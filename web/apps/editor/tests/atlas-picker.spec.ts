@@ -54,7 +54,7 @@ async function selectFirstEmitter(): Promise<number> {
   return page.evaluate(async () => {
     const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
-    const list = await bridge.request({ kind: "emitters/list", params: {} }) as {
+    const list = (await bridge.request({ kind: "emitters/list", params: {} })) as {
       root: { children: { id: number }[] };
     };
     const id = list.root.children[0]?.id;
@@ -116,28 +116,34 @@ async function seedTexturePreviewStatus(): Promise<string> {
 // (mirrors the track-editor.spec.ts seeding pattern) and return the
 // actually-inserted time (the host epsilon-bumps duplicates).
 async function addIndexKey(id: number, time: number, value: number): Promise<number> {
-  return page.evaluate(async (args: { id: number; time: number; value: number }) => {
-    const bridge = window.bridge;
-    const r = await bridge!.request({
-      kind: "emitters/add-track-key",
-      params: { id: args.id, track: "index", time: args.time, value: args.value },
-    }) as { time: number };
-    return r.time;
-  }, { id, time, value });
+  return page.evaluate(
+    async (args: { id: number; time: number; value: number }) => {
+      const bridge = window.bridge;
+      const r = (await bridge!.request({
+        kind: "emitters/add-track-key",
+        params: { id: args.id, track: "index", time: args.time, value: args.value },
+      })) as { time: number };
+      return r.time;
+    },
+    { id, time, value },
+  );
 }
 
 // Helper — read the index-track key value at (approximately) `time`.
 async function indexKeyValueAt(id: number, time: number): Promise<number | null> {
-  return page.evaluate(async (args: { id: number; time: number }) => {
-    const bridge = window.bridge;
-    const tracks = await bridge!.request({
-      kind: "emitters/get-tracks",
-      params: { id: args.id },
-    }) as { tracks: { name: string; keys: { time: number; value: number }[] }[] };
-    const idx = tracks.tracks.find((t) => t.name === "index");
-    const key = idx?.keys.find((k) => Math.abs(k.time - args.time) < 1e-3);
-    return key ? key.value : null;
-  }, { id, time });
+  return page.evaluate(
+    async (args: { id: number; time: number }) => {
+      const bridge = window.bridge;
+      const tracks = (await bridge!.request({
+        kind: "emitters/get-tracks",
+        params: { id: args.id },
+      })) as { tracks: { name: string; keys: { time: number; value: number }[] }[] };
+      const idx = tracks.tracks.find((t) => t.name === "index");
+      const key = idx?.keys.find((k) => Math.abs(k.time - args.time) < 1e-3);
+      return key ? key.value : null;
+    },
+    { id, time },
+  );
 }
 
 // Helper — focus the Index channel with a FRESH focus edge: the
@@ -159,13 +165,16 @@ async function focusIndexChannelFresh() {
 // Red (fires the reducer's focusOther → restore command, sliding the
 // auto-opened dock back to whatever it displaced), and deselect.
 async function cleanup(id: number, times: number[]) {
-  await page.evaluate(async (args: { id: number; times: number[] }) => {
-    const bridge = window.bridge;
-    await bridge!.request({
-      kind: "emitters/delete-track-keys",
-      params: { id: args.id, track: "index", times: args.times },
-    });
-  }, { id, times });
+  await page.evaluate(
+    async (args: { id: number; times: number[] }) => {
+      const bridge = window.bridge;
+      await bridge!.request({
+        kind: "emitters/delete-track-keys",
+        params: { id: args.id, track: "index", times: args.times },
+      });
+    },
+    { id, times },
+  );
   const panel = page.locator('[data-testid="curve-editor-panel"]');
   await panel.locator('[data-testid="curve-channel-row-red"]').click();
   await expect(panel).toHaveAttribute("data-focus-channel", "red", { timeout: 5_000 });
@@ -210,9 +219,7 @@ test("selecting an index key on an atlas-eligible emitter auto-opens the picker;
 
     // Clicking the key is the selection rising edge that fires the
     // reducer's keySelected → open command.
-    const key = panel.locator(
-      `[data-testid="curve-key"][data-channel-id="index"][data-key-time="${keyTime}"]`,
-    );
+    const key = panel.locator(`[data-testid="curve-key"][data-channel-id="index"][data-key-time="${keyTime}"]`);
     await expect(key).toBeVisible({ timeout: 5_000 });
     await key.click();
 
@@ -223,9 +230,7 @@ test("selecting an index key on an atlas-eligible emitter auto-opens the picker;
     // key → selection.frame is non-null → direct commit, no confirm).
     await clickAtlasFrame(atlas, 3);
 
-    await expect
-      .poll(() => indexKeyValueAt(firstId, keyTime), { timeout: 5_000 })
-      .toBe(3);
+    await expect.poll(() => indexKeyValueAt(firstId, keyTime), { timeout: 5_000 }).toBe(3);
   } finally {
     await cleanup(firstId, [keyTime]);
   }
@@ -249,18 +254,14 @@ test("two selected index keys with differing frames surface AtlasConfirmDialog; 
 
     // Select the first key (auto-open fires on this rising edge), then
     // Ctrl+click the second to grow the selection additively.
-    const key1 = panel.locator(
-      `[data-testid="curve-key"][data-channel-id="index"][data-key-time="${t1}"]`,
-    );
+    const key1 = panel.locator(`[data-testid="curve-key"][data-channel-id="index"][data-key-time="${t1}"]`);
     await expect(key1).toBeVisible({ timeout: 5_000 });
     await key1.click();
 
     const atlas = page.locator(ATLAS_PANEL);
     await expect(atlas).toBeVisible({ timeout: 5_000 });
 
-    const key2 = panel.locator(
-      `[data-testid="curve-key"][data-channel-id="index"][data-key-time="${t2}"]`,
-    );
+    const key2 = panel.locator(`[data-testid="curve-key"][data-channel-id="index"][data-key-time="${t2}"]`);
     await expect(key2).toBeVisible({ timeout: 5_000 });
     await key2.click({ modifiers: ["Control"] });
 
@@ -281,10 +282,7 @@ test("two selected index keys with differing frames surface AtlasConfirmDialog; 
     await modal.getByRole("button", { name: "Set all" }).click();
     await expect(modal).toHaveCount(0);
     await expect
-      .poll(async () => [
-        await indexKeyValueAt(firstId, t1),
-        await indexKeyValueAt(firstId, t2),
-      ], { timeout: 5_000 })
+      .poll(async () => [await indexKeyValueAt(firstId, t1), await indexKeyValueAt(firstId, t2)], { timeout: 5_000 })
       .toEqual([5, 5]);
   } finally {
     await cleanup(firstId, [t1, t2]);

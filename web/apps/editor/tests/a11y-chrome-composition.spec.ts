@@ -47,19 +47,16 @@ test.beforeEach(async () => {
   await page.mouse.move(0, 0);
   // Load deterministic base state from fixture. Absolute path resolves from
   // this spec's __dirname (see FIXTURE_PATH comment above).
-  await page.evaluate(
-    async (fixturePath) => {
-      const bridge = window.bridge!;
-      await bridge.request({ kind: "file/open", params: { path: fixturePath } });
-      // Pause the particle simulation so live values don't leak into the
-      // snapshot. See a11y-chrome.spec.ts (HWND lane) for full reasoning.
-      await bridge.request({ kind: "engine/set/paused", params: { paused: true } });
-      // Freeze the StatusBar's 4 Hz stats stream so cells
-      // render `—` placeholders deterministically.
-      await bridge.request({ kind: "stats/set-frozen", params: { frozen: true } });
-    },
-    FIXTURE_PATH
-  );
+  await page.evaluate(async (fixturePath) => {
+    const bridge = window.bridge!;
+    await bridge.request({ kind: "file/open", params: { path: fixturePath } });
+    // Pause the particle simulation so live values don't leak into the
+    // snapshot. See a11y-chrome.spec.ts (HWND lane) for full reasoning.
+    await bridge.request({ kind: "engine/set/paused", params: { paused: true } });
+    // Freeze the StatusBar's 4 Hz stats stream so cells
+    // render `—` placeholders deterministically.
+    await bridge.request({ kind: "stats/set-frozen", params: { frozen: true } });
+  }, FIXTURE_PATH);
 });
 
 test.describe("a11y/chrome [composition]", () => {
@@ -68,9 +65,7 @@ test.describe("a11y/chrome [composition]", () => {
       try {
         await surface.setup(page);
         const snap = await captureDomA11y(page, surface.scope(page));
-        expect(snap).toMatchJSONGolden(
-          `a11y-goldens/${surface.id}.composition.golden.yaml`
-        );
+        expect(snap).toMatchJSONGolden(`a11y-goldens/${surface.id}.composition.golden.yaml`);
       } finally {
         await surface.teardown(page);
       }

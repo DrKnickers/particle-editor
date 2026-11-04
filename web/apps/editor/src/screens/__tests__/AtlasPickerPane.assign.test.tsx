@@ -43,20 +43,34 @@ describe("AtlasPickerPane assignment", () => {
   it("single key: clicking a cell sets that key's value (no confirm)", async () => {
     const bridge = mk();
     const spy = vi.spyOn(bridge, "request");
-    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [0.3] } });
+    publishAtlasContext({
+      emitterId: 1,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: 5, keyTimes: [0.3] },
+    });
     render(<AtlasPickerPane bridge={bridge} onClose={() => {}} />);
     await screen.findByRole("listbox", { name: /atlas frames/i });
     clickFrame(9);
-    await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.objectContaining({
-      kind: "emitters/set-track-key",
-      params: expect.objectContaining({ id: 1, track: "index", oldTime: 0.3, newTime: 0.3, newValue: 9 }),
-    })));
+    await waitFor(() =>
+      expect(spy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "emitters/set-track-key",
+          params: expect.objectContaining({ id: 1, track: "index", oldTime: 0.3, newTime: 0.3, newValue: 9 }),
+        }),
+      ),
+    );
   });
 
   it("multi-same: clicking sets ALL selected keys, no confirm", async () => {
     const bridge = mk();
     const spy = vi.spyOn(bridge, "request");
-    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [0.2, 0.6] } });
+    publishAtlasContext({
+      emitterId: 1,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: 5, keyTimes: [0.2, 0.6] },
+    });
     render(<AtlasPickerPane bridge={bridge} onClose={() => {}} />);
     await screen.findByRole("listbox", { name: /atlas frames/i });
     clickFrame(3);
@@ -70,7 +84,12 @@ describe("AtlasPickerPane assignment", () => {
   it("multi-diff: clicking shows a confirm; assigns all only on OK", async () => {
     const bridge = mk();
     const spy = vi.spyOn(bridge, "request");
-    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: null, keyTimes: [0.2, 0.6] } });
+    publishAtlasContext({
+      emitterId: 1,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: null, keyTimes: [0.2, 0.6] },
+    });
     render(<AtlasPickerPane bridge={bridge} onClose={() => {}} />);
     await screen.findByRole("listbox", { name: /atlas frames/i });
     clickFrame(7);
@@ -86,7 +105,12 @@ describe("AtlasPickerPane assignment", () => {
   it("no-key: clicking is a no-op", async () => {
     const bridge = mk();
     const spy = vi.spyOn(bridge, "request");
-    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: null, keyTimes: [] } });
+    publishAtlasContext({
+      emitterId: 1,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: null, keyTimes: [] },
+    });
     render(<AtlasPickerPane bridge={bridge} onClose={() => {}} />);
     await screen.findByRole("listbox", { name: /atlas frames/i });
     clickFrame(2);
@@ -100,25 +124,40 @@ describe("AtlasPickerPane assignment", () => {
     const live = () => document.querySelector('[aria-live="polite"]')!;
     // keyTimes match a real fixture index key (time 33) so the assign actually
     // mutates the overlay — not just a fulfilled no-op.
-    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [33] } });
+    publishAtlasContext({
+      emitterId: 1,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: 5, keyTimes: [33] },
+    });
     const view = render(<AtlasPickerPane bridge={bridge} onClose={() => {}} />);
     await screen.findByRole("listbox", { name: /atlas frames/i });
     clickFrame(9);
     // the correct set-track-key command was dispatched...
-    await waitFor(() => expect(req).toHaveBeenCalledWith(expect.objectContaining({
-      kind: "emitters/set-track-key",
-      params: expect.objectContaining({ id: 1, track: "index", oldTime: 33, newValue: 9 }),
-    })));
+    await waitFor(() =>
+      expect(req).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "emitters/set-track-key",
+          params: expect.objectContaining({ id: 1, track: "index", oldTime: 33, newValue: 9 }),
+        }),
+      ),
+    );
     // ...the overlay actually changed (read back through get-tracks)...
     const tracks = await bridge.request({ kind: "emitters/get-tracks", params: { id: 1 } });
-    const idx = (tracks as { tracks: Array<{ name: string; keys: Array<{ time: number; value: number }> }> })
-      .tracks.find((t) => t.name === "index")!;
+    const idx = (
+      tracks as { tracks: Array<{ name: string; keys: Array<{ time: number; value: number }> }> }
+    ).tracks.find((t) => t.name === "index")!;
     expect(idx.keys.find((k) => k.time === 33)!.value).toBe(9);
     // ...and we announced it
     await waitFor(() => expect(live().textContent).toMatch(/assigned frame 9/i));
     // zero-key no-op: announcement must be UNCHANGED (snapshot-compare, not one-sided)
     const before = live().textContent;
-    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: null, keyTimes: [] } });
+    publishAtlasContext({
+      emitterId: 1,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: null, keyTimes: [] },
+    });
     view.rerender(<AtlasPickerPane bridge={bridge} onClose={() => {}} />);
     await screen.findByRole("listbox", { name: /atlas frames/i });
     clickFrame(2);
@@ -128,7 +167,12 @@ describe("AtlasPickerPane assignment", () => {
 
   it("restores focus to the grid after the confirm modal closes", async () => {
     const bridge = mk();
-    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: null, keyTimes: [0.2, 0.6] } });
+    publishAtlasContext({
+      emitterId: 1,
+      focusedTrack: "index",
+      interpolation: "step",
+      selection: { frame: null, keyTimes: [0.2, 0.6] },
+    });
     render(<AtlasPickerPane bridge={bridge} onClose={() => {}} />);
     const canvas = await screen.findByRole("listbox", { name: /atlas frames/i });
     // Focus re-homes onto the single canvas listbox (the whole grid is one

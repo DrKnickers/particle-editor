@@ -52,10 +52,7 @@ export function readOverloadGuard(): OverloadGuardConfig {
 }
 
 export function writeOverloadGuard(c: OverloadGuardConfig): void {
-  writeStoredPref(
-    KEY,
-    JSON.stringify({ enabled: c.enabled, maxParticles: clampMaxParticles(c.maxParticles) }),
-  );
+  writeStoredPref(KEY, JSON.stringify({ enabled: c.enabled, maxParticles: clampMaxParticles(c.maxParticles) }));
   window.dispatchEvent(new CustomEvent(OVERLOAD_GUARD_CHANGED_EVENT));
 }
 

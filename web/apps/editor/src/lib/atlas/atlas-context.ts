@@ -13,9 +13,9 @@ export interface AtlasSelection {
 }
 
 export interface AtlasContext {
-  emitterId: number | null;                  // matches EmitterDto.id (number)
-  focusedTrack: TrackName | null;            // consumers gate on === "index"
-  interpolation: InterpolationType | null;   // for the header badge
+  emitterId: number | null; // matches EmitterDto.id (number)
+  focusedTrack: TrackName | null; // consumers gate on === "index"
+  interpolation: InterpolationType | null; // for the header badge
   selection: AtlasSelection;
 }
 
@@ -44,9 +44,7 @@ export function getAtlasContext(): AtlasContext {
  *  where a reactive selector would create a self-feedback re-render loop (see
  *  use-atlas-autoopen.ts). `publishAtlasContext` builds a fresh object on every
  *  call, so every publish notifies. Returns the unsubscribe fn. */
-export function subscribeAtlasContext(
-  listener: (ctx: AtlasContext, prevCtx: AtlasContext) => void,
-): () => void {
+export function subscribeAtlasContext(listener: (ctx: AtlasContext, prevCtx: AtlasContext) => void): () => void {
   return useStore.subscribe(listener);
 }
 

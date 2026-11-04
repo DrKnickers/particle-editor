@@ -22,13 +22,13 @@ import type { ChannelDef } from "./CurveEditor";
 // atlas sub-frame is read on its own integer scale, like Scale, so
 // it's not meaningful to overlay it with the colour curves.
 export const CHANNELS: readonly ChannelDef[] = [
-  { id: "red",      label: "Red",      color: "var(--x-axis)",  defaultOn: true,  trackName: "red" },
-  { id: "green",    label: "Green",    color: "var(--y-axis)",  defaultOn: true,  trackName: "green" },
-  { id: "blue",     label: "Blue",     color: "var(--z-axis)",  defaultOn: true,  trackName: "blue" },
-  { id: "alpha",    label: "Alpha",    color: "var(--text-2)",  defaultOn: false, trackName: "alpha" },
-  { id: "scale",    label: "Scale",    color: "var(--warning)", defaultOn: false, trackName: "scale" },
-  { id: "index",    label: "Index",    color: "var(--text)",    defaultOn: false, trackName: "index" },
-  { id: "rotation", label: "Rotation", color: "var(--accent)",  defaultOn: false, trackName: "rotationSpeed" },
+  { id: "red", label: "Red", color: "var(--x-axis)", defaultOn: true, trackName: "red" },
+  { id: "green", label: "Green", color: "var(--y-axis)", defaultOn: true, trackName: "green" },
+  { id: "blue", label: "Blue", color: "var(--z-axis)", defaultOn: true, trackName: "blue" },
+  { id: "alpha", label: "Alpha", color: "var(--text-2)", defaultOn: false, trackName: "alpha" },
+  { id: "scale", label: "Scale", color: "var(--warning)", defaultOn: false, trackName: "scale" },
+  { id: "index", label: "Index", color: "var(--text)", defaultOn: false, trackName: "index" },
+  { id: "rotation", label: "Rotation", color: "var(--accent)", defaultOn: false, trackName: "rotationSpeed" },
 ] as const;
 
 // Channels that are mutually exclusive with all others: turning one on
@@ -45,12 +45,12 @@ export const SNAP_PREF_KEY = "curveEditor.snapToGrid";
  *  track-editor table. The leading "None" option is
  *  always present; "only None" disables the combo. */
 export const LOCK_TO_OPTIONS: Record<TrackName, readonly string[]> = {
-  red:           ["None"],
-  green:         ["None", "Red"],
-  blue:          ["None", "Red", "Green"],
-  alpha:         ["None", "Red", "Green", "Blue"],
-  scale:         ["None"],
-  index:         ["None"],
+  red: ["None"],
+  green: ["None", "Red"],
+  blue: ["None", "Red", "Green"],
+  alpha: ["None", "Red", "Green", "Blue"],
+  scale: ["None"],
+  index: ["None"],
   rotationSpeed: ["None"],
 };
 
@@ -97,4 +97,3 @@ export function spinnerBoundsForTrack(name: TrackName): {
       return { min: -1e6, max: 1e6, step: 0.1 };
   }
 }
-

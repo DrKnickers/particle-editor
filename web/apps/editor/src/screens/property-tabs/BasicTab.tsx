@@ -33,12 +33,18 @@ export function BasicTab({
 
   const setMode = (next: GenerationMode) => {
     switch (next) {
-      case "bursts":     onCommit({ useBursts: true, isWeatherParticle: false }); break;
-      case "continuous": onCommit({ useBursts: false, isWeatherParticle: false }); break;
+      case "bursts":
+        onCommit({ useBursts: true, isWeatherParticle: false });
+        break;
+      case "continuous":
+        onCommit({ useBursts: false, isWeatherParticle: false });
+        break;
       // Weather only sets isWeatherParticle — useBursts is preserved so
       // toggling weather off returns the user to whichever non-weather
       // mode they came from, as the original editor's Weather radio button did.
-      case "weather":    onCommit({ isWeatherParticle: true }); break;
+      case "weather":
+        onCommit({ isWeatherParticle: true });
+        break;
     }
   };
 
@@ -231,7 +237,6 @@ export function BasicTab({
           unit="%"
           onCommit={(v) => onCommit({ randomLifetimePerc: v })}
         />
-
       </Section>
 
       <Section title="Connection">

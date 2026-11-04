@@ -24,9 +24,7 @@ import type { Bridge } from "@particle-editor/bridge-schema";
  *  environment doesn't resolve custom properties (e.g. jsdom without a
  *  stub) — callers should skip the push in that case. */
 export function readBackingColor(): string {
-  return getComputedStyle(document.documentElement)
-    .getPropertyValue("--bg")
-    .trim();
+  return getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
 }
 
 export function useBackingColorSync(bridge: Bridge): void {
@@ -36,11 +34,9 @@ export function useBackingColorSync(bridge: Bridge): void {
     const push = () => {
       const color = readBackingColor();
       if (!color) return; // nothing resolved yet — skip (next change re-pushes)
-      void bridge
-        .request({ kind: "host/backing-color", params: { color } })
-        .catch(() => {
-          /* MockBridge ignores the kind — fire-and-forget */
-        });
+      void bridge.request({ kind: "host/backing-color", params: { color } }).catch(() => {
+        /* MockBridge ignores the kind — fire-and-forget */
+      });
     };
 
     push(); // first paint

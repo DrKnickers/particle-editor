@@ -714,7 +714,7 @@ export function runHoudiniLane({
 const LANES = [
   {
     name: "lint",
-    run: () => (runCmdLine("pnpm run lint", editorDir) === 0 ? pass : fail("tsc -b && eslint")),
+    run: () => (runCmdLine("pnpm run lint", editorDir) === 0 ? pass : fail("tsc -b && eslint && prettier --check")),
   },
   {
     name: "vitest",

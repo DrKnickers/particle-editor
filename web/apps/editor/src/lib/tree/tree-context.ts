@@ -21,12 +21,7 @@
 
 import { create } from "zustand";
 
-export type TreeContextDialog =
-  | "increment"
-  | "rescale"
-  | "link-group"
-  | "set-link-group"
-  | null;
+export type TreeContextDialog = "increment" | "rescale" | "link-group" | "set-link-group" | null;
 
 type TreeContextStore = {
   open: TreeContextDialog;
@@ -36,11 +31,7 @@ type TreeContextStore = {
   targetLinkGroupId: number | null;
   /** Open a dialog with a specific target. Closes any currently-open
    *  dialog (only one of the four can be open at a time). */
-  openDialog: (
-    open: Exclude<TreeContextDialog, null>,
-    emitterId: number,
-    linkGroupId?: number,
-  ) => void;
+  openDialog: (open: Exclude<TreeContextDialog, null>, emitterId: number, linkGroupId?: number) => void;
   /** Close whichever dialog is open. */
   close: () => void;
 };

@@ -24,12 +24,7 @@ import {
 // Helper: build a partial MouseEvent shape that satisfies the
 // encoder's read pattern (only `buttons`, `shiftKey`, `ctrlKey`,
 // `button`).
-function fakeMouse(opts: {
-  buttons?: number;
-  shiftKey?: boolean;
-  ctrlKey?: boolean;
-  button?: number;
-}): MouseEvent {
+function fakeMouse(opts: { buttons?: number; shiftKey?: boolean; ctrlKey?: boolean; button?: number }): MouseEvent {
   return {
     buttons: opts.buttons ?? 0,
     shiftKey: opts.shiftKey ?? false,
@@ -66,9 +61,7 @@ describe("encodeMkButtons", () => {
   });
 
   it("combines all bits when all flags + buttons are set", () => {
-    const m = encodeMkButtons(
-      fakeMouse({ buttons: 7, shiftKey: true, ctrlKey: true }),
-    );
+    const m = encodeMkButtons(fakeMouse({ buttons: 7, shiftKey: true, ctrlKey: true }));
     expect(m).toBe(MK_LBUTTON | MK_RBUTTON | MK_MBUTTON | MK_SHIFT | MK_CONTROL);
   });
 });
@@ -193,12 +186,7 @@ describe("makeMouseEvent", () => {
   });
 
   it("carries MK_SHIFT through for Shift+LMB (cursor-bound-spawn combo)", () => {
-    const evt = makeMouseEvent(
-      "mousedown",
-      fakeMouse({ button: 0, buttons: 1, shiftKey: true }),
-      50,
-      60,
-    );
+    const evt = makeMouseEvent("mousedown", fakeMouse({ button: 0, buttons: 1, shiftKey: true }), 50, 60);
     expect(evt).toMatchObject({
       type: "mousedown",
       button: "left",
@@ -220,7 +208,7 @@ describe("makeWheelEvent", () => {
       type: "wheel",
       x: 10,
       y: 20,
-      deltaY: -WHEEL_DELTA,  // sign-flipped per the convention
+      deltaY: -WHEEL_DELTA, // sign-flipped per the convention
       buttons: 0,
     });
   });

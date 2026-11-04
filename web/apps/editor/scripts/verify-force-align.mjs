@@ -51,26 +51,41 @@ function regRead() {
   }
 }
 function regWrite(v) {
-  execFileSync("reg", ["add", REG_KEY, "/v", REG_VAL, "/t", "REG_DWORD",
-    "/d", String(v), "/f"], { stdio: "ignore" });
+  execFileSync("reg", ["add", REG_KEY, "/v", REG_VAL, "/t", "REG_DWORD", "/d", String(v), "/f"], { stdio: "ignore" });
 }
 function regDelete() {
-  try { execFileSync("reg", ["delete", REG_KEY, "/v", REG_VAL, "/f"], { stdio: "ignore" }); }
-  catch { /* already absent */ }
+  try {
+    execFileSync("reg", ["delete", REG_KEY, "/v", REG_VAL, "/f"], { stdio: "ignore" });
+  } catch {
+    /* already absent */
+  }
 }
 
 function killTestHost() {
   try {
-    execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
-      "Get-CimInstance Win32_Process -Filter \"Name='ParticleEditor.exe'\" | " +
-      "Where-Object { $_.CommandLine -like '*--test-host*' } | " +
-      "ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"], { stdio: "ignore" });
-  } catch { /* nothing to kill */ }
+    execFileSync(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "Get-CimInstance Win32_Process -Filter \"Name='ParticleEditor.exe'\" | " +
+          "Where-Object { $_.CommandLine -like '*--test-host*' } | " +
+          "ForEach-Object { Stop-Process -Id $_.ProcessId -Force }",
+      ],
+      { stdio: "ignore" },
+    );
+  } catch {
+    /* nothing to kill */
+  }
 }
 
 async function probeCdp() {
-  try { return (await fetch("http://127.0.0.1:9222/json/version")).ok; }
-  catch { return false; }
+  try {
+    return (await fetch("http://127.0.0.1:9222/json/version")).ok;
+  } catch {
+    return false;
+  }
 }
 
 const checks = [];
@@ -99,13 +114,18 @@ async function main() {
       env: { ...process.env, ALO_SETTINGS_LIVE: "1" },
     });
     let exited = false;
-    child.on("exit", () => { exited = true; });
+    child.on("exit", () => {
+      exited = true;
+    });
 
     const deadline = Date.now() + 30_000;
     let up = false;
     while (Date.now() < deadline) {
       if (exited) throw new Error("host exited before CDP came up");
-      if (await probeCdp()) { up = true; break; }
+      if (await probeCdp()) {
+        up = true;
+        break;
+      }
       await sleep(500);
     }
     if (!up) throw new Error("CDP did not come up at 127.0.0.1:9222 within 30s");
@@ -113,16 +133,20 @@ async function main() {
     browser = await chromium.connectOverCDP(CDP);
     const ctx = browser.contexts()[0];
     const page = ctx.pages()[0] ?? (await ctx.waitForEvent("page"));
-    await page.waitForFunction(
-      () => typeof (window).bridge !== "undefined", null, { timeout: 15_000 });
+    await page.waitForFunction(() => typeof window.bridge !== "undefined", null, { timeout: 15_000 });
 
     // Cross-check the dispatcher DTO directly (live registry under the seam).
-    const dto = await page.evaluate(async () =>
-      (window).bridge.request({ kind: "settings/lighting", params: {} }));
-    check("bridge settings/lighting reads live registry (forceAlign=true)",
-      dto.forceAlign === true, `forceAlign=${dto.forceAlign}`);
-    check("bridge DTO carries the RAW sun intensity split (0.5, not folded 1)",
-      Math.abs(dto.sun.intensity - 0.5) < 1e-6, `sun.intensity=${dto.sun.intensity}`);
+    const dto = await page.evaluate(async () => window.bridge.request({ kind: "settings/lighting", params: {} }));
+    check(
+      "bridge settings/lighting reads live registry (forceAlign=true)",
+      dto.forceAlign === true,
+      `forceAlign=${dto.forceAlign}`,
+    );
+    check(
+      "bridge DTO carries the RAW sun intensity split (0.5, not folded 1)",
+      Math.abs(dto.sun.intensity - 0.5) < 1e-6,
+      `sun.intensity=${dto.sun.intensity}`,
+    );
 
     // Open the Lighting pane via the new toolbar button.
     await page.getByRole("button", { name: "Toggle Lighting panel" }).click();
@@ -130,27 +154,45 @@ async function main() {
     await checkbox.waitFor({ state: "visible", timeout: 5_000 });
 
     // (1) READ path — checkbox reflects registry = 1.
-    check("checkbox reflects registry flag = 1 (rendered checked)",
-      await checkbox.isChecked() === true);
+    check("checkbox reflects registry flag = 1 (rendered checked)", (await checkbox.isChecked()) === true);
 
     // (2) DISPLAY (Part 2) — Sun intensity shows the raw 0.5, not folded 1.
     const intensityStr = await page.getByLabel("Sun intensity").inputValue();
     const intensity = parseFloat(intensityStr);
-    check("Sun intensity spinner shows the RAW saved value (0.5, not folded 1)",
-      Math.abs(intensity - 0.5) < 1e-6, `displayed="${intensityStr}"`);
+    check(
+      "Sun intensity spinner shows the RAW saved value (0.5, not folded 1)",
+      Math.abs(intensity - 0.5) < 1e-6,
+      `displayed="${intensityStr}"`,
+    );
 
     // (3) WRITE path — toggling the checkbox writes the registry.
     await checkbox.click();
     await sleep(400); // let the fire-and-forget set round-trip to the host
     const after = regRead();
-    check("clicking the checkbox wrote LightingForceFillAlignment = 0",
-      after === 0, `registry now = ${after === null ? "(absent)" : after}`);
+    check(
+      "clicking the checkbox wrote LightingForceFillAlignment = 0",
+      after === 0,
+      `registry now = ${after === null ? "(absent)" : after}`,
+    );
   } finally {
-    if (browser) { try { await browser.close(); } catch { /* ignore */ } }
-    if (child) { try { child.kill(); } catch { /* ignore */ } }
+    if (browser) {
+      try {
+        await browser.close();
+      } catch {
+        /* ignore */
+      }
+    }
+    if (child) {
+      try {
+        child.kill();
+      } catch {
+        /* ignore */
+      }
+    }
     killTestHost();
     // Restore the user's original registry state exactly.
-    if (original === null) regDelete(); else regWrite(original);
+    if (original === null) regDelete();
+    else regWrite(original);
     console.log(`[verify-force-align] restored ${REG_VAL} = ${original === null ? "(absent)" : original}`);
   }
 

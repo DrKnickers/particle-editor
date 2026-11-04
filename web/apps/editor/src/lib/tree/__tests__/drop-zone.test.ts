@@ -17,20 +17,11 @@
 import { describe, it, expect } from "vitest";
 import type { EmitterRole, EmitterTreeNode } from "@particle-editor/bridge-schema";
 import { ZERO_SPAWN } from "@particle-editor/bridge-schema";
-import {
-  computeDropZone,
-  isDescendant,
-  resolveReparentSlot,
-  computeRootGapIndex,
-} from "../drop-zone";
+import { computeDropZone, isDescendant, resolveReparentSlot, computeRootGapIndex } from "../drop-zone";
 
 /** Minimal EmitterTreeNode fixture. Only id / role / children matter to
  *  the helpers under test; the rest satisfies the DTO shape. */
-function node(
-  id: number,
-  role: EmitterRole = "root",
-  children: EmitterTreeNode[] = [],
-): EmitterTreeNode {
+function node(id: number, role: EmitterRole = "root", children: EmitterTreeNode[] = []): EmitterTreeNode {
   return {
     id,
     stableId: 1000 + id,
@@ -102,10 +93,7 @@ describe("isDescendant", () => {
   //          4
   //          |
   //          5
-  const deep = node(1, "root", [
-    node(2, "lifetime"),
-    node(3, "death", [node(4, "lifetime", [node(5, "lifetime")])]),
-  ]);
+  const deep = node(1, "root", [node(2, "lifetime"), node(3, "death", [node(4, "lifetime", [node(5, "lifetime")])])]);
 
   it("returns true for the source itself (self-cycle guard)", () => {
     expect(isDescendant(deep, 1)).toBe(true);

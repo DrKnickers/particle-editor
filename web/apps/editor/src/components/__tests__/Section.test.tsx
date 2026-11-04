@@ -4,7 +4,11 @@ import { Section } from "../Section";
 
 describe("Section", () => {
   it("renders open by default with children visible", () => {
-    render(<Section title="Emitter Timing"><div>child</div></Section>);
+    render(
+      <Section title="Emitter Timing">
+        <div>child</div>
+      </Section>,
+    );
     expect(screen.getByText("Emitter Timing")).toBeInTheDocument();
     expect(screen.getByText("child")).toBeInTheDocument();
   });
@@ -14,7 +18,11 @@ describe("Section", () => {
     // .collapse-anim grid + CSS visibility (jsdom can't see the CSS hide,
     // so we assert the state attribute that drives it). Content presence
     // is no longer the collapse signal.
-    const { container } = render(<Section title="Generation"><div>child</div></Section>);
+    const { container } = render(
+      <Section title="Generation">
+        <div>child</div>
+      </Section>,
+    );
     const header = screen.getByTestId("section-generation");
     const anim = container.querySelector(".collapse-anim");
     expect(anim).toHaveAttribute("data-open", "true");
@@ -24,7 +32,11 @@ describe("Section", () => {
   });
 
   it("clicking again expands the section back", () => {
-    render(<Section title="Forces"><div>child</div></Section>);
+    render(
+      <Section title="Forces">
+        <div>child</div>
+      </Section>,
+    );
     const header = screen.getByTestId("section-forces");
     fireEvent.click(header);
     fireEvent.click(header);
@@ -32,7 +44,11 @@ describe("Section", () => {
   });
 
   it("pressing Enter on the focused header toggles", () => {
-    render(<Section title="Render"><div>child</div></Section>);
+    render(
+      <Section title="Render">
+        <div>child</div>
+      </Section>,
+    );
     const header = screen.getByTestId("section-render");
     expect(header).toHaveAttribute("aria-expanded", "true");
     fireEvent.keyDown(header, { key: "Enter" });
@@ -40,7 +56,11 @@ describe("Section", () => {
   });
 
   it("pressing Space on the focused header toggles", () => {
-    render(<Section title="Texture"><div>child</div></Section>);
+    render(
+      <Section title="Texture">
+        <div>child</div>
+      </Section>,
+    );
     const header = screen.getByTestId("section-texture");
     expect(header).toHaveAttribute("aria-expanded", "true");
     fireEvent.keyDown(header, { key: " " });
@@ -48,7 +68,11 @@ describe("Section", () => {
   });
 
   it("aria-expanded reflects open/closed state", () => {
-    render(<Section title="Color"><div>child</div></Section>);
+    render(
+      <Section title="Color">
+        <div>child</div>
+      </Section>,
+    );
     const header = screen.getByTestId("section-color");
     expect(header).toHaveAttribute("aria-expanded", "true");
     fireEvent.click(header);
@@ -59,7 +83,11 @@ describe("Section", () => {
     // Rotation is driven by `[data-open="false"]` on .panel-section
     // (matching the `:not([open])` selector for native <details> in the
     // shared CSS). The .collapsed modifier class is gone.
-    const { container } = render(<Section title="Collision"><div>child</div></Section>);
+    const { container } = render(
+      <Section title="Collision">
+        <div>child</div>
+      </Section>,
+    );
     const section = container.querySelector(".panel-section");
     expect(section).toHaveAttribute("data-open", "true");
     const header = screen.getByTestId("section-collision");
@@ -69,7 +97,9 @@ describe("Section", () => {
 
   it("respects defaultOpen=false", () => {
     const { container } = render(
-      <Section title="Turbulence" defaultOpen={false}><div>child</div></Section>,
+      <Section title="Turbulence" defaultOpen={false}>
+        <div>child</div>
+      </Section>,
     );
     const header = screen.getByTestId("section-turbulence");
     expect(header).toHaveAttribute("aria-expanded", "false");

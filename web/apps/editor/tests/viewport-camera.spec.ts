@@ -35,8 +35,8 @@ test("engine/set/camera round-trips through the engine snapshot", async () => {
       kind: "engine/set/camera",
       params: {
         position: [10, 0, 0],
-        target:   [0, 0, 0],
-        up:       [0, 0, 1],
+        target: [0, 0, 0],
+        up: [0, 0, 1],
       },
     });
 
@@ -54,8 +54,8 @@ test("engine/set/camera round-trips through the engine snapshot", async () => {
   const eps = 1e-4;
 
   expect(Math.abs(cam.position[0] - 10)).toBeLessThan(eps);
-  expect(Math.abs(cam.position[1] -  0)).toBeLessThan(eps);
-  expect(Math.abs(cam.position[2] -  0)).toBeLessThan(eps);
+  expect(Math.abs(cam.position[1] - 0)).toBeLessThan(eps);
+  expect(Math.abs(cam.position[2] - 0)).toBeLessThan(eps);
 
   expect(Math.abs(cam.target[0] - 0)).toBeLessThan(eps);
   expect(Math.abs(cam.target[1] - 0)).toBeLessThan(eps);
@@ -79,10 +79,10 @@ test("engine/set/camera refuses a degenerate camera and leaves the engine camera
     });
 
     const bad = [
-      { position: [5, 5, 5], target: [5, 5, 5], up: [0, 0, 1] },   // coincident
-      { position: [10, 0, 0], target: [0, 0, 0], up: [0, 0, 0] },  // zero up
-      { position: [0, 0, 10], target: [0, 0, 0], up: [0, 0, 1] },  // up parallel to view
-      { target: [0, 0, 0], up: [0, 0, 1] },                        // missing position
+      { position: [5, 5, 5], target: [5, 5, 5], up: [0, 0, 1] }, // coincident
+      { position: [10, 0, 0], target: [0, 0, 0], up: [0, 0, 0] }, // zero up
+      { position: [0, 0, 10], target: [0, 0, 0], up: [0, 0, 1] }, // up parallel to view
+      { target: [0, 0, 0], up: [0, 0, 1] }, // missing position
     ];
     const rejected: boolean[] = [];
     for (const params of bad) {

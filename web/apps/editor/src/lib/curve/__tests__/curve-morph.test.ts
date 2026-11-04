@@ -1,9 +1,16 @@
 import { describe, it, expect } from "vitest";
 import type { TrackDto } from "@particle-editor/bridge-schema";
 import {
-  sampleTrackY, buildMorphGrid, sampleTrackPx, resampleOntoGrid,
-  classifyTrackChange, matchKeys, buildSwitchKeyGlides, easeOutCubic,
-  MORPH_MS, KEY_MATCH_EPS,
+  sampleTrackY,
+  buildMorphGrid,
+  sampleTrackPx,
+  resampleOntoGrid,
+  classifyTrackChange,
+  matchKeys,
+  buildSwitchKeyGlides,
+  easeOutCubic,
+  MORPH_MS,
+  KEY_MATCH_EPS,
 } from "../curve-morph";
 import { movesMatch } from "../use-curve-morph";
 
@@ -14,7 +21,11 @@ const track = (
 ): TrackDto => ({ name: "red", keys, interpolation, lockedTo });
 
 describe("sampleTrackY", () => {
-  const keys = [{ time: 0, value: 0 }, { time: 50, value: 1 }, { time: 100, value: 0.5 }];
+  const keys = [
+    { time: 0, value: 0 },
+    { time: 50, value: 1 },
+    { time: 100, value: 0.5 },
+  ];
 
   it("linear: exact lerp", () => {
     expect(sampleTrackY(keys, "linear", 25)).toBeCloseTo(0.5, 10);
@@ -23,7 +34,7 @@ describe("sampleTrackY", () => {
 
   it("step: left-key plateau, including exactly at a key", () => {
     expect(sampleTrackY(keys, "step", 49.999)).toBe(0);
-    expect(sampleTrackY(keys, "step", 50)).toBe(1);     // at the key, the key's own value
+    expect(sampleTrackY(keys, "step", 50)).toBe(1); // at the key, the key's own value
     expect(sampleTrackY(keys, "step", 50.001)).toBe(1);
   });
 
@@ -36,7 +47,11 @@ describe("sampleTrackY", () => {
   });
 
   it("smooth: Newton converges on adversarial segment widths", () => {
-    const tiny = [{ time: 0, value: 0 }, { time: 1e-3, value: 1 }, { time: 100, value: 0 }];
+    const tiny = [
+      { time: 0, value: 0 },
+      { time: 1e-3, value: 1 },
+      { time: 100, value: 0 },
+    ];
     for (const x of [0, 2.5e-4, 5e-4, 1e-3, 50, 99.9]) {
       const y = sampleTrackY(tiny, "smooth", x);
       expect(Number.isFinite(y)).toBe(true);
@@ -70,8 +85,16 @@ describe("sampleTrackY", () => {
 
 describe("buildMorphGrid", () => {
   it("contains uniform samples plus epsilon pairs around every key time of both tracks, sorted, within range", () => {
-    const a = track([{ time: 0, value: 0 }, { time: 30, value: 1 }, { time: 100, value: 0 }]);
-    const b = track([{ time: 0, value: 0 }, { time: 62, value: 1 }, { time: 100, value: 0 }]);
+    const a = track([
+      { time: 0, value: 0 },
+      { time: 30, value: 1 },
+      { time: 100, value: 0 },
+    ]);
+    const b = track([
+      { time: 0, value: 0 },
+      { time: 62, value: 1 },
+      { time: 100, value: 0 },
+    ]);
     const g = buildMorphGrid(a, b, 0, 100, 160);
     expect(g.length).toBeGreaterThanOrEqual(161);
     for (let i = 1; i < g.length; i++) expect(g[i]!).toBeGreaterThanOrEqual(g[i - 1]!);
@@ -89,7 +112,14 @@ describe("buildMorphGrid", () => {
   });
 
   it("step jump renders as a true vertical: the epsilon pair samples both plateau values", () => {
-    const s = track([{ time: 0, value: 0 }, { time: 50, value: 1 }, { time: 100, value: 1 }], "step");
+    const s = track(
+      [
+        { time: 0, value: 0 },
+        { time: 50, value: 1 },
+        { time: 100, value: 1 },
+      ],
+      "step",
+    );
     const g = buildMorphGrid(s, s, 0, 100, 160);
     const ys = sampleTrackPx(s, g, { vMin: 0, vMax: 1, height: 100 });
     // find the epsilon pair around 50: y jumps from 100 (v=0 → bottom) to 0 (v=1 → top)
@@ -103,7 +133,10 @@ describe("buildMorphGrid", () => {
 
 describe("sampleTrackPx / resampleOntoGrid", () => {
   it("projects with y-inversion (bigger value = smaller pixel y)", () => {
-    const t = track([{ time: 0, value: 0 }, { time: 100, value: 1 }]);
+    const t = track([
+      { time: 0, value: 0 },
+      { time: 100, value: 1 },
+    ]);
     const g = buildMorphGrid(t, t, 0, 100, 4);
     const ys = sampleTrackPx(t, g, { vMin: 0, vMax: 1, height: 300 });
     expect(ys[0]).toBeCloseTo(300, 6);
@@ -118,11 +151,7 @@ describe("sampleTrackPx / resampleOntoGrid", () => {
   });
 
   it("resampleOntoGrid: empty xsOld → all-zero output of the right length", () => {
-    const out = resampleOntoGrid(
-      new Float64Array(0),
-      new Float64Array(0),
-      new Float64Array([0, 25, 50, 75, 100]),
-    );
+    const out = resampleOntoGrid(new Float64Array(0), new Float64Array(0), new Float64Array([0, 25, 50, 75, 100]));
     expect(out.length).toBe(5);
     expect(Array.from(out)).toEqual([0, 0, 0, 0, 0]);
   });
@@ -139,19 +168,37 @@ describe("sampleTrackPx / resampleOntoGrid", () => {
 });
 
 describe("classifyTrackChange", () => {
-  const base = track([{ time: 0, value: 0 }, { time: 50, value: 0.5 }, { time: 100, value: 1 }]);
+  const base = track([
+    { time: 0, value: 0 },
+    { time: 50, value: 0.5 },
+    { time: 100, value: 1 },
+  ]);
   it("none for identical", () => {
     expect(classifyTrackChange(base, track(base.keys.map((k) => ({ ...k }))))).toBe("none");
   });
   it("moved for value-only deltas", () => {
-    const next = track([{ time: 0, value: 0 }, { time: 50, value: 0.9 }, { time: 100, value: 1 }]);
+    const next = track([
+      { time: 0, value: 0 },
+      { time: 50, value: 0.9 },
+      { time: 100, value: 1 },
+    ]);
     expect(classifyTrackChange(base, next)).toBe("moved");
   });
   it("structural for add / delete / time-move / interp flip", () => {
-    expect(classifyTrackChange(base, track([...base.keys, { time: 75, value: 0.2 }]
-      .sort((a, b) => a.time - b.time)))).toBe("structural");
+    expect(
+      classifyTrackChange(base, track([...base.keys, { time: 75, value: 0.2 }].sort((a, b) => a.time - b.time))),
+    ).toBe("structural");
     expect(classifyTrackChange(base, track([base.keys[0]!, base.keys[2]!]))).toBe("structural");
-    expect(classifyTrackChange(base, track([{ time: 0, value: 0 }, { time: 60, value: 0.5 }, { time: 100, value: 1 }]))).toBe("structural");
+    expect(
+      classifyTrackChange(
+        base,
+        track([
+          { time: 0, value: 0 },
+          { time: 60, value: 0.5 },
+          { time: 100, value: 1 },
+        ]),
+      ),
+    ).toBe("structural");
     expect(classifyTrackChange(base, track(base.keys, "step"))).toBe("structural");
   });
   it("lockedTo alone is NOT a shape change", () => {
@@ -161,8 +208,16 @@ describe("classifyTrackChange", () => {
 
 describe("matchKeys", () => {
   it("partitions moved/added/removed by time within EPS", () => {
-    const prev = track([{ time: 0, value: 0 }, { time: 50, value: 0.5 }, { time: 100, value: 1 }]);
-    const next = track([{ time: 0, value: 0.2 }, { time: 75, value: 0.9 }, { time: 100, value: 1 }]);
+    const prev = track([
+      { time: 0, value: 0 },
+      { time: 50, value: 0.5 },
+      { time: 100, value: 1 },
+    ]);
+    const next = track([
+      { time: 0, value: 0.2 },
+      { time: 75, value: 0.9 },
+      { time: 100, value: 1 },
+    ]);
     const m = matchKeys(prev, next);
     expect(m.moved.map((p) => p.to.time)).toEqual([0, 100]);
     expect(m.added.map((k) => k.time)).toEqual([75]);
@@ -175,25 +230,38 @@ describe("buildSwitchKeyGlides", () => {
     // Old curve = a straight descending line 1→0 across t=0..100 with NO interior
     // key. New curve adds an interior key at t=50. A time/ordinal match would pop
     // the t=50 key; ride-the-line glides it from the old line's value at 50 (=0.5).
-    const prev = track([{ time: 0, value: 1 }, { time: 100, value: 0 }]);
-    const next = track([{ time: 0, value: 1 }, { time: 50, value: 0.2 }, { time: 100, value: 0 }]);
+    const prev = track([
+      { time: 0, value: 1 },
+      { time: 100, value: 0 },
+    ]);
+    const next = track([
+      { time: 0, value: 1 },
+      { time: 50, value: 0.2 },
+      { time: 100, value: 0 },
+    ]);
     const g = buildSwitchKeyGlides(prev, next);
-    expect(g.map((x) => x.time)).toEqual([0, 50, 100]);     // one glide per NEW key
+    expect(g.map((x) => x.time)).toEqual([0, 50, 100]); // one glide per NEW key
     expect(g.map((x) => x.toValue)).toEqual([1, 0.2, 0]);
-    expect(g[1]!.fromValue).toBeCloseTo(0.5, 5);            // emerges from the old line, not a pop
+    expect(g[1]!.fromValue).toBeCloseTo(0.5, 5); // emerges from the old line, not a pop
     expect(g[0]!.fromValue).toBeCloseTo(1, 5);
     expect(g[2]!.fromValue).toBeCloseTo(0, 5);
   });
 
   it("returns one glide per NEW key even when the old curve has FEWER keys", () => {
-    const prev = track([{ time: 0, value: 0 }, { time: 100, value: 1 }]); // ascending line, 2 keys
+    const prev = track([
+      { time: 0, value: 0 },
+      { time: 100, value: 1 },
+    ]); // ascending line, 2 keys
     const next = track([
-      { time: 0, value: 0 }, { time: 25, value: 0.9 }, { time: 60, value: 0.3 }, { time: 100, value: 1 },
+      { time: 0, value: 0 },
+      { time: 25, value: 0.9 },
+      { time: 60, value: 0.3 },
+      { time: 100, value: 1 },
     ]);
     const g = buildSwitchKeyGlides(prev, next);
-    expect(g).toHaveLength(4);                  // 4 new keys → 4 glides, none "added"/popped
+    expect(g).toHaveLength(4); // 4 new keys → 4 glides, none "added"/popped
     expect(g[1]!.fromValue).toBeCloseTo(0.25, 5); // old line value at t=25
-    expect(g[2]!.fromValue).toBeCloseTo(0.6, 5);  // old line value at t=60
+    expect(g[2]!.fromValue).toBeCloseTo(0.6, 5); // old line value at t=60
   });
 });
 
@@ -218,8 +286,16 @@ describe("movesMatch", () => {
   });
 
   it("single move, in-order → true", () => {
-    const prev = mk([{ time: 0, value: 0 }, { time: 50, value: 0.5 }, { time: 100, value: 1 }]);
-    const next = mk([{ time: 0, value: 0 }, { time: 70, value: 0.7 }, { time: 100, value: 1 }]);
+    const prev = mk([
+      { time: 0, value: 0 },
+      { time: 50, value: 0.5 },
+      { time: 100, value: 1 },
+    ]);
+    const next = mk([
+      { time: 0, value: 0 },
+      { time: 70, value: 0.7 },
+      { time: 100, value: 1 },
+    ]);
     const moves = [{ oldTime: 50, newTime: 70, newValue: 0.7 }];
     expect(movesMatch(prev, next, moves)).toBe(true);
   });
@@ -245,7 +321,11 @@ describe("movesMatch", () => {
   });
 
   it("unexplained extra structural change (an added key) → false", () => {
-    const prev = mk([{ time: 0, value: 0 }, { time: 50, value: 0.5 }, { time: 100, value: 1 }]);
+    const prev = mk([
+      { time: 0, value: 0 },
+      { time: 50, value: 0.5 },
+      { time: 100, value: 1 },
+    ]);
     // next has 4 keys — count mismatch
     const next = mk([
       { time: 0, value: 0 },
@@ -258,22 +338,44 @@ describe("movesMatch", () => {
   });
 
   it("move whose oldTime matches no prev key → false", () => {
-    const prev = mk([{ time: 0, value: 0 }, { time: 50, value: 0.5 }, { time: 100, value: 1 }]);
-    const next = mk([{ time: 0, value: 0 }, { time: 50, value: 0.5 }, { time: 100, value: 1 }]);
+    const prev = mk([
+      { time: 0, value: 0 },
+      { time: 50, value: 0.5 },
+      { time: 100, value: 1 },
+    ]);
+    const next = mk([
+      { time: 0, value: 0 },
+      { time: 50, value: 0.5 },
+      { time: 100, value: 1 },
+    ]);
     // oldTime: 999 doesn't exist in prev
     const moves = [{ oldTime: 999, newTime: 50, newValue: 0.5 }];
     expect(movesMatch(prev, next, moves)).toBe(false);
   });
 
   it("unchanged track with no moves → true", () => {
-    const prev = mk([{ time: 0, value: 0 }, { time: 50, value: 0.5 }]);
-    const next = mk([{ time: 0, value: 0 }, { time: 50, value: 0.5 }]);
+    const prev = mk([
+      { time: 0, value: 0 },
+      { time: 50, value: 0.5 },
+    ]);
+    const next = mk([
+      { time: 0, value: 0 },
+      { time: 50, value: 0.5 },
+    ]);
     expect(movesMatch(prev, next, [])).toBe(true);
   });
 
   it("next key value diverges from recorded move's newValue → false", () => {
-    const prev = mk([{ time: 0, value: 0 }, { time: 50, value: 0.5 }, { time: 100, value: 1 }]);
-    const next = mk([{ time: 0, value: 0 }, { time: 70, value: 0.9 }, { time: 100, value: 1 }]);
+    const prev = mk([
+      { time: 0, value: 0 },
+      { time: 50, value: 0.5 },
+      { time: 100, value: 1 },
+    ]);
+    const next = mk([
+      { time: 0, value: 0 },
+      { time: 70, value: 0.9 },
+      { time: 100, value: 1 },
+    ]);
     // Move says newValue=0.7 but next key landed at 0.9
     const moves = [{ oldTime: 50, newTime: 70, newValue: 0.7 }];
     expect(movesMatch(prev, next, moves)).toBe(false);

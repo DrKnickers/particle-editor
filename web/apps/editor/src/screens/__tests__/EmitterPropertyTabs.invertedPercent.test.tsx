@@ -12,37 +12,23 @@ import { FieldSpinner } from "../EmitterPropertyTabs";
 // which requires the app-level Tooltip.Provider — wrapper stands in for it
 // (precedent: renderWithTooltips in EmitterTree.test.tsx).
 const TipProvider = ({ children }: { children: ReactNode }) => (
-  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>
+    {children}
+  </Tooltip.Provider>
 );
 const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
 describe("FieldSpinner displayInvertedPercent", () => {
   it("displays 100 - value*100 rounded to integer", () => {
     const onCommit = vi.fn();
-    render(
-      <FieldSpinner
-        label="Minimum lifetime"
-        value={0.25}
-        displayInvertedPercent
-        unit="%"
-        onCommit={onCommit}
-      />,
-    );
+    render(<FieldSpinner label="Minimum lifetime" value={0.25} displayInvertedPercent unit="%" onCommit={onCommit} />);
     const input = screen.getByLabelText("Minimum lifetime") as HTMLInputElement;
     expect(input.value).toBe("75");
   });
 
   it("commits (100 - displayed) / 100 on change", () => {
     const onCommit = vi.fn();
-    render(
-      <FieldSpinner
-        label="Minimum scale"
-        value={0.5}
-        displayInvertedPercent
-        unit="%"
-        onCommit={onCommit}
-      />,
-    );
+    render(<FieldSpinner label="Minimum scale" value={0.5} displayInvertedPercent unit="%" onCommit={onCommit} />);
     const input = screen.getByLabelText("Minimum scale") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "30" } });
     fireEvent.blur(input);
@@ -52,24 +38,10 @@ describe("FieldSpinner displayInvertedPercent", () => {
   it("round-trips boundary values 0 / 100", () => {
     const onCommit = vi.fn();
     const { rerender } = render(
-      <FieldSpinner
-        label="Field"
-        value={0}
-        displayInvertedPercent
-        unit="%"
-        onCommit={onCommit}
-      />,
+      <FieldSpinner label="Field" value={0} displayInvertedPercent unit="%" onCommit={onCommit} />,
     );
     expect((screen.getByLabelText("Field") as HTMLInputElement).value).toBe("100");
-    rerender(
-      <FieldSpinner
-        label="Field"
-        value={1}
-        displayInvertedPercent
-        unit="%"
-        onCommit={onCommit}
-      />,
-    );
+    rerender(<FieldSpinner label="Field" value={1} displayInvertedPercent unit="%" onCommit={onCommit} />);
     expect((screen.getByLabelText("Field") as HTMLInputElement).value).toBe("0");
   });
 });

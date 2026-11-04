@@ -15,7 +15,14 @@ import { ZERO_SPAWN } from "@particle-editor/bridge-schema";
 import type { EmitterTreeNode } from "@particle-editor/bridge-schema";
 
 const roots: EmitterTreeNode[] = [0, 1, 2, 3].map((id) => ({
-  id, stableId: 100 + id, name: String(id), role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [],
+  id,
+  stableId: 100 + id,
+  name: String(id),
+  role: "root",
+  linkGroup: 0,
+  visible: true,
+  spawn: ZERO_SPAWN,
+  children: [],
 }));
 
 describe("selectedRootIdsInOrder", () => {
@@ -33,15 +40,45 @@ describe("isMultiDrag", () => {
 describe("collectSubtreeIds", () => {
   it("returns the node's id plus every descendant id, depth-first", () => {
     const node: EmitterTreeNode = {
-      id: 0, stableId: 100, name: "A", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
+      id: 0,
+      stableId: 100,
+      name: "A",
+      role: "root",
+      linkGroup: 0,
+      visible: true,
+      spawn: ZERO_SPAWN,
       children: [
         {
-          id: 1, stableId: 101, name: "A1", role: "lifetime", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
+          id: 1,
+          stableId: 101,
+          name: "A1",
+          role: "lifetime",
+          linkGroup: 0,
+          visible: true,
+          spawn: ZERO_SPAWN,
           children: [
-            { id: 2, stableId: 102, name: "A1a", role: "death", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
+            {
+              id: 2,
+              stableId: 102,
+              name: "A1a",
+              role: "death",
+              linkGroup: 0,
+              visible: true,
+              spawn: ZERO_SPAWN,
+              children: [],
+            },
           ],
         },
-        { id: 4, stableId: 104, name: "A2", role: "lifetime", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
+        {
+          id: 4,
+          stableId: 104,
+          name: "A2",
+          role: "lifetime",
+          linkGroup: 0,
+          visible: true,
+          spawn: ZERO_SPAWN,
+          children: [],
+        },
       ],
     };
     expect(collectSubtreeIds(node)).toEqual([0, 1, 2, 4]);
@@ -58,7 +95,7 @@ describe("collectSubtreeIds", () => {
 // 4 root blocks in content space: block 1 is TALL (root + 2 children, 72px);
 // the rest are single 24px rows. mids: 12, 60, 108, 132.
 const geom: RootBlockGeometry = {
-  tops:    [0, 24, 96, 120],
+  tops: [0, 24, 96, 120],
   bottoms: [24, 96, 120, 144],
 };
 
@@ -71,8 +108,8 @@ describe("resolveGapFromGeometry", () => {
   });
   it("the contiguous block's own footprint resolves to 'noop'", () => {
     // blocks [1,2] → noop for gaps 1..3
-    expect(resolveGapFromGeometry(geom, [1, 2], 70, null, 96)).toBe("noop");   // g=2
-    expect(resolveGapFromGeometry(geom, [1, 2], 20, null, 96)).toBe("noop");   // g=1
+    expect(resolveGapFromGeometry(geom, [1, 2], 70, null, 96)).toBe("noop"); // g=2
+    expect(resolveGapFromGeometry(geom, [1, 2], 20, null, 96)).toBe("noop"); // g=1
     expect(resolveGapFromGeometry(geom, [1, 2], 5, null, 96)).toEqual({ rootIndex: 0 });
     expect(resolveGapFromGeometry(geom, [1, 2], 143, null, 96)).toEqual({ rootIndex: 4 });
   });
@@ -94,15 +131,19 @@ describe("resolveGapFromGeometry", () => {
     // — on-screen-consistent at every step), but it must never cycle, and
     // wherever the gap lands must be stable for a stationary pointer. That
     // last clause is the anti-flicker guarantee.
-    const blocks = [[0, 1], [1, 2], [2, 3], [0, 2]]; // contiguous + non-contiguous
+    const blocks = [
+      [0, 1],
+      [1, 2],
+      [2, 3],
+      [0, 2],
+    ]; // contiguous + non-contiguous
     for (const blk of blocks) {
       const H = liftedBlockHeight(geom, blk);
       const first = blk[0]!;
       const last = blk[blk.length - 1]!;
       const contiguous = last - first + 1 === blk.length;
       const inFootprint = (g: number) => contiguous && g >= first && g <= last + 1;
-      const reachable: Array<number | null> =
-        [null, ...[0, 1, 2, 3, 4].filter((g) => !inFootprint(g))];
+      const reachable: Array<number | null> = [null, ...[0, 1, 2, 3, 4].filter((g) => !inFootprint(g))];
       for (let p = -10; p <= 250; p += 1) {
         for (const g0 of reachable) {
           let state: number | null = g0;
@@ -131,16 +172,16 @@ describe("geometry helpers", () => {
     expect(gapContentY(geom, 4)).toBe(144);
   });
   it("liftedBlockHeight sums the dragged blocks' measured extents", () => {
-    expect(liftedBlockHeight(geom, [1, 2])).toBe(96);  // 72 + 24
-    expect(liftedBlockHeight(geom, [0, 3])).toBe(48);  // 24 + 24
+    expect(liftedBlockHeight(geom, [1, 2])).toBe(96); // 72 + 24
+    expect(liftedBlockHeight(geom, [0, 3])).toBe(48); // 24 + 24
   });
 });
 
 // --- Single-root drag resolver (gap+chip+onto for single drag) ---
 // Layout: roots a=0, b=1 (child c=2), d=3. Root blocks group the subtree.
 const sRows: RowGeometry = {
-  ids:     [0, 1, 2, 3],
-  tops:    [0, 24, 48, 72],
+  ids: [0, 1, 2, 3],
+  tops: [0, 24, 48, 72],
   bottoms: [24, 48, 72, 96],
 };
 // root blocks: a=[0,24], b=[24,72] (root+child), d=[72,96]. mids 12,48,84.
@@ -150,19 +191,27 @@ const allReparentOk = () => true;
 describe("resolveSingleRootDrop", () => {
   it("upper/lower third of a root → reorder gap (size-1 block, midpoint rule)", () => {
     // drag d (rootIdx 2); pointer in a's upper area → gap 0
-    expect(resolveSingleRootDrop(sBlock, sRows, 2, 3, allReparentOk, 5, null, 24))
-      .toEqual({ kind: "reorder", rootIndex: 0 });
+    expect(resolveSingleRootDrop(sBlock, sRows, 2, 3, allReparentOk, 5, null, 24)).toEqual({
+      kind: "reorder",
+      rootIndex: 0,
+    });
     // pointer past a's mid (12), before b's mid (48) → gap 1
-    expect(resolveSingleRootDrop(sBlock, sRows, 2, 3, allReparentOk, 30, null, 24))
-      .toEqual({ kind: "reorder", rootIndex: 1 });
+    expect(resolveSingleRootDrop(sBlock, sRows, 2, 3, allReparentOk, 30, null, 24)).toEqual({
+      kind: "reorder",
+      rootIndex: 1,
+    });
   });
   it("middle third of a row → reparent onto that row", () => {
     // y=36 is in root b's row [24,48], middle third [32,40) → onto b
-    expect(resolveSingleRootDrop(sBlock, sRows, 2, 3, allReparentOk, 36, null, 24))
-      .toEqual({ kind: "onto", targetId: 1 });
+    expect(resolveSingleRootDrop(sBlock, sRows, 2, 3, allReparentOk, 36, null, 24)).toEqual({
+      kind: "onto",
+      targetId: 1,
+    });
     // onto a child row too (y=60 in child c [48,72], middle [56,64))
-    expect(resolveSingleRootDrop(sBlock, sRows, 2, 3, allReparentOk, 60, null, 24))
-      .toEqual({ kind: "onto", targetId: 2 });
+    expect(resolveSingleRootDrop(sBlock, sRows, 2, 3, allReparentOk, 60, null, 24)).toEqual({
+      kind: "onto",
+      targetId: 2,
+    });
   });
   it("never reparents onto itself, and falls back to reorder when reparent is refused", () => {
     // drag a (rootIdx 0, id 0); hovering a's own middle → not onto self → reorder
@@ -186,10 +235,10 @@ describe("resolveSingleRootDrop", () => {
     ];
     for (const { srcRootIdx, sourceId } of sources) {
       const H = liftedBlockHeight(sBlock, [srcRootIdx]);
-      const first = srcRootIdx, last = srcRootIdx;
+      const first = srcRootIdx,
+        last = srcRootIdx;
       const inFootprint = (g: number) => g >= first && g <= last + 1;
-      const reachable: Array<number | null> =
-        [null, ...[0, 1, 2, 3].filter((g) => !inFootprint(g))];
+      const reachable: Array<number | null> = [null, ...[0, 1, 2, 3].filter((g) => !inFootprint(g))];
       for (let p = -10; p <= 130; p += 1) {
         for (const g0 of reachable) {
           let state: number | null = g0;

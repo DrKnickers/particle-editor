@@ -1,12 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { Bridge, ViewportInputEvent } from "@particle-editor/bridge-schema";
-import {
-  blurEvent,
-  isTypingTarget,
-  makeKeyEvent,
-  makeMouseEvent,
-  makeWheelEvent,
-} from "../lib/viewport-input";
+import { blurEvent, isTypingTarget, makeKeyEvent, makeMouseEvent, makeWheelEvent } from "../lib/viewport-input";
 import { computeSceneRect } from "../lib/scene-rect";
 import { useDockAnim } from "../lib/dock-anim";
 import { useModalOpen } from "../lib/modal-open";
@@ -42,7 +36,10 @@ export function ViewportSlot({ bridge }: Props) {
   // latest value without re-subscribing on every change.
   const animatingRef = useRef(useDockAnim.getState().animating);
   useEffect(
-    () => useDockAnim.subscribe((s) => { animatingRef.current = s.animating; }),
+    () =>
+      useDockAnim.subscribe((s) => {
+        animatingRef.current = s.animating;
+      }),
     [],
   );
 
@@ -69,7 +66,7 @@ export function ViewportSlot({ bridge }: Props) {
       void bridge.request({ kind: "layout/scene-rect", params: { x, y, w, h } }).catch(() => {});
     };
 
-    send();  // mount — always raw (the dock-anim signal is irrelevant on first paint)
+    send(); // mount — always raw (the dock-anim signal is irrelevant on first paint)
     // RO is the ONLY source suppressed during a dock slide: the host owns the
     // viewport rect for the slide's duration, so a flood of RO scene-rects would
     // fight its smooth interpolation. scroll / resize / DPR stay raw below so a
@@ -191,19 +188,31 @@ export function ViewportSlot({ bridge }: Props) {
     };
 
     const onPointerDown = (e: PointerEvent) => {
-      try { canvas.setPointerCapture(e.pointerId); } catch { /* not supported */ }
+      try {
+        canvas.setPointerCapture(e.pointerId);
+      } catch {
+        /* not supported */
+      }
       send(makeMouseEvent("mousedown", e, e.clientX, e.clientY));
     };
     const onPointerMove = (e: PointerEvent) => {
       sendOrBufferMouseMove(makeMouseEvent("mousemove", e, e.clientX, e.clientY));
     };
     const onPointerUp = (e: PointerEvent) => {
-      try { canvas.releasePointerCapture(e.pointerId); } catch { /* not held */ }
+      try {
+        canvas.releasePointerCapture(e.pointerId);
+      } catch {
+        /* not held */
+      }
       flushPendingMouseMove();
       send(makeMouseEvent("mouseup", e, e.clientX, e.clientY));
     };
     const onPointerCancel = (e: PointerEvent) => {
-      try { canvas.releasePointerCapture(e.pointerId); } catch { /* not held */ }
+      try {
+        canvas.releasePointerCapture(e.pointerId);
+      } catch {
+        /* not held */
+      }
       flushPendingMouseMove();
       // pointercancel → synthesize a mouseup so the engine's drag state
       // unwinds (matches the WM_CAPTURECHANGED defensive cleanup in
@@ -216,7 +225,9 @@ export function ViewportSlot({ bridge }: Props) {
     // Disable the default browser context menu over the canvas so RMB-
     // drag isn't interrupted by a popup. The right-click event still
     // dispatches as pointerdown / pointerup with button=right.
-    const onContextMenu = (e: Event) => { e.preventDefault(); };
+    const onContextMenu = (e: Event) => {
+      e.preventDefault();
+    };
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -322,11 +333,7 @@ export function ViewportSlot({ bridge }: Props) {
           DComp visual beneath the WebView2, not the DOM. The data-testid
           is preserved for backward compatibility with existing vitest +
           Playwright specs that look up the input target by this name. */}
-      <canvas
-        ref={canvasRef}
-        data-testid="viewport-canvas"
-        className="absolute inset-0 w-full h-full"
-      />
+      <canvas ref={canvasRef} data-testid="viewport-canvas" className="absolute inset-0 w-full h-full" />
       {/* Post-deletion empty-state hint. A fresh
           Untitled always has one host-created default emitter, so this shows
           only after the user deletes everything — the biggest region of the

@@ -304,12 +304,7 @@ export function TexturePickerField({
             Radix-blessed nesting; a Tip wrapped around the button here
             would sit under Popover.Trigger asChild and swallow the
             trigger props (Tip doesn't forward unknown props). */}
-        <TexturePalettePopover
-          bridge={bridge}
-          slot={slot}
-          onApply={commit}
-          tip="Frequently-used textures"
-        >
+        <TexturePalettePopover bridge={bridge} slot={slot} onApply={commit} tip="Frequently-used textures">
           <button
             type="button"
             className="btn-texture-browse"
@@ -358,7 +353,11 @@ function FieldLabel({
           {label}
         </span>
       </Tip>
-      {help && <span id={descriptionId} hidden>{help}</span>}
+      {help && (
+        <span id={descriptionId} hidden>
+          {help}
+        </span>
+      )}
     </>
   );
 }
@@ -568,11 +567,7 @@ export function GroupBody({
   group: GroupDto;
   onChange: (patch: Partial<GroupDto>) => void;
 }) {
-  const updateVec3 = (
-    key: "min" | "max" | "val",
-    axis: 0 | 1 | 2,
-    v: number,
-  ) => {
+  const updateVec3 = (key: "min" | "max" | "val", axis: 0 | 1 | 2, v: number) => {
     const cur = group[key];
     const next: [number, number, number] = [cur[0], cur[1], cur[2]];
     next[axis] = v;
@@ -709,30 +704,15 @@ export function Vec3Row({
       <div className="grid grid-cols-3 gap-1">
         <div className="axis-cell">
           <span className="axis-lbl">X</span>
-          <Spinner
-            value={value[0]}
-            step={step}
-            onChange={(v) => onChange(0, v)}
-            aria-label={`${ariaPrefix} X`}
-          />
+          <Spinner value={value[0]} step={step} onChange={(v) => onChange(0, v)} aria-label={`${ariaPrefix} X`} />
         </div>
         <div className="axis-cell">
           <span className="axis-lbl">Y</span>
-          <Spinner
-            value={value[1]}
-            step={step}
-            onChange={(v) => onChange(1, v)}
-            aria-label={`${ariaPrefix} Y`}
-          />
+          <Spinner value={value[1]} step={step} onChange={(v) => onChange(1, v)} aria-label={`${ariaPrefix} Y`} />
         </div>
         <div className="axis-cell">
           <span className="axis-lbl">Z</span>
-          <Spinner
-            value={value[2]}
-            step={step}
-            onChange={(v) => onChange(2, v)}
-            aria-label={`${ariaPrefix} Z`}
-          />
+          <Spinner value={value[2]} step={step} onChange={(v) => onChange(2, v)} aria-label={`${ariaPrefix} Z`} />
         </div>
       </div>
     </div>

@@ -129,7 +129,7 @@ describe("MockBridge contract — emitters track ops", () => {
         id: 0,
         track: "alpha",
         oldTime: 0,
-        newTime: 5,           // would change the border key's time
+        newTime: 5, // would change the border key's time
         newValue: 0.25,
       },
     });
@@ -138,7 +138,7 @@ describe("MockBridge contract — emitters track ops", () => {
       params: { id: 0 },
     });
     const alpha2 = after2.tracks.find((t) => t.name === "alpha");
-    expect(alpha2?.keys[0]?.time).toBe(0);    // time unchanged
+    expect(alpha2?.keys[0]?.time).toBe(0); // time unchanged
     expect(alpha2?.keys[0]?.value).toBe(0.25); // value moved
   });
 
@@ -219,7 +219,7 @@ describe("emitters/set-track-lock — read aliasing (native parity)", () => {
     });
     const r = await b.request({ kind: "emitters/get-tracks", params: { id: 1 } });
     const green = r.tracks.find((t) => t.name === "green");
-    const red   = r.tracks.find((t) => t.name === "red");
+    const red = r.tracks.find((t) => t.name === "red");
     expect(green?.lockedTo).toBe("red");
     // green must mirror red's current keys exactly.
     expect(green?.keys).toEqual(red?.keys);

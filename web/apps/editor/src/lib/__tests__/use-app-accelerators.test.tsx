@@ -219,7 +219,9 @@ describe("useAppAccelerators — uncovered dispatch + guard paths", () => {
     let resolveSnapshot: (s: unknown) => void = () => {};
     b.request.mockImplementation((req: { kind: string }) => {
       if (req.kind === "engine/state/snapshot") {
-        return new Promise((resolve) => { resolveSnapshot = resolve as (s: unknown) => void; });
+        return new Promise((resolve) => {
+          resolveSnapshot = resolve as (s: unknown) => void;
+        });
       }
       return Promise.resolve({});
     });

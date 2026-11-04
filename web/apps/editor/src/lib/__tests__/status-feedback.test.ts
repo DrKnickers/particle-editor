@@ -1,12 +1,7 @@
 // Unit tests for the status-feedback store + announceWhenOk (F4) + fireAndReport.
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { isRefusal, type Bridge } from "@particle-editor/bridge-schema";
-import {
-  announceWhenOk,
-  fireAndReport,
-  useStatusFeedback,
-  __resetStatusFeedbackForTests,
-} from "../status-feedback";
+import { announceWhenOk, fireAndReport, useStatusFeedback, __resetStatusFeedbackForTests } from "../status-feedback";
 
 beforeEach(() => {
   __resetStatusFeedbackForTests();
@@ -86,8 +81,12 @@ describe("fireAndReport", () => {
     await expect(fireAndReport(ok, { kind: "undo/perform", params: { direction: "redo" } }, "Redo")).resolves.toEqual({
       applied: true,
     });
-    const bad = bridgeReturning(() => { throw new Error("sync throw"); });
-    await expect(fireAndReport(bad, { kind: "undo/perform", params: { direction: "redo" } }, "Redo")).resolves.toBeUndefined();
+    const bad = bridgeReturning(() => {
+      throw new Error("sync throw");
+    });
+    await expect(
+      fireAndReport(bad, { kind: "undo/perform", params: { direction: "redo" } }, "Redo"),
+    ).resolves.toBeUndefined();
     expect(useStatusFeedback.getState().message).toBe("Redo failed: sync throw");
     vi.restoreAllMocks();
   });

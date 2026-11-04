@@ -137,8 +137,8 @@ test("setter burst: coalesced state events still deliver the final value (B1)", 
   });
 
   expect(result.events).toBeGreaterThanOrEqual(1); // leading edge intact
-  expect(result.events).toBeLessThanOrEqual(21);   // sanity: ≤ N + trailing
-  expect(result.sawFinal).toBe(true);              // trailing emit never lost
+  expect(result.events).toBeLessThanOrEqual(21); // sanity: ≤ N + trailing
+  expect(result.sawFinal).toBe(true); // trailing emit never lost
 });
 
 test("engine/set/background round-trips a COLORREF", async () => {

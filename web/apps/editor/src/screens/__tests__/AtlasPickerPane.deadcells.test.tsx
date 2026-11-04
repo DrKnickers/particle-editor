@@ -73,9 +73,17 @@ function renderWithTreeChanged(blendAlphaGated: boolean) {
     return realOn(kind, cb as never);
   });
   useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds", blendAlphaGated });
-  publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [0.3] } });
+  publishAtlasContext({
+    emitterId: 1,
+    focusedTrack: "index",
+    interpolation: "step",
+    selection: { frame: 5, keyTimes: [0.3] },
+  });
   render(<AtlasPickerPane bridge={bridge} onClose={() => {}} />);
-  const fireChanged = () => act(() => { handlers.forEach((h) => h({ kind: "emitters/tree/changed" })); });
+  const fireChanged = () =>
+    act(() => {
+      handlers.forEach((h) => h({ kind: "emitters/tree/changed" }));
+    });
   return { fireChanged };
 }
 
@@ -139,13 +147,19 @@ describe("AtlasPickerPane — dead cells", () => {
     // assign). Hold the sample pending so the click lands while frame 4 is still "live"; resolve
     // it dead AFTER the modal opens, then confirm → the commit-time recheck blocks it.
     let resolveDead!: (s: Set<number>) => void;
-    vi.mocked(computeDeadCells).mockReturnValue(new Promise<Set<number>>((r) => { resolveDead = r; }));
+    vi.mocked(computeDeadCells).mockReturnValue(
+      new Promise<Set<number>>((r) => {
+        resolveDead = r;
+      }),
+    );
     setup({ frame: null, keyTimes: [0.3, 0.7] });
     await screen.findByRole("listbox", { name: /atlas frames/i });
     await waitFor(() => expect(computeDeadCells).toHaveBeenCalled()); // effect fired, sample pending
-    clickFrame(4);                                                    // deadCells empty → modal opens
+    clickFrame(4); // deadCells empty → modal opens
     await waitFor(() => expect(screen.getByText(/set all to frame 4/i)).toBeTruthy());
-    await act(async () => { resolveDead(new Set([4])); });           // frame 4 dies mid-modal
+    await act(async () => {
+      resolveDead(new Set([4]));
+    }); // frame 4 dies mid-modal
     fireEvent.click(screen.getByRole("button", { name: /set all/i }));
     await waitFor(() => expect(screen.getByText(/frame 4 is empty/i)).toBeTruthy());
     expect(screen.queryByText(/assigned frame 4/i)).toBeNull();

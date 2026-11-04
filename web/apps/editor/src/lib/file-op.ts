@@ -26,13 +26,9 @@ export const useFileOpErrorStore = create<FileOpErrorStore>((set) => ({
 // Shown after opening an .alo that holds no particle emitters — a model file
 // loads into an empty editor, so without this the user gets no signal that the
 // file simply has nothing to edit.
-export const NO_EMITTERS_NOTICE =
-  "This .alo has no particle emitters — it looks like a model, not a particle effect.";
+export const NO_EMITTERS_NOTICE = "This .alo has no particle emitters — it looks like a model, not a particle effect.";
 
-export type FileOpReq = Extract<
-  Request,
-  { kind: "file/open" | "file/save" | "file/save-as" }
->;
+export type FileOpReq = Extract<Request, { kind: "file/open" | "file/save" | "file/save-as" }>;
 
 const PREFIX: Record<FileOpReq["kind"], string> = {
   "file/open": "Couldn't open the file.",
@@ -52,10 +48,7 @@ export function messageFor(kind: FileOpReq["kind"], error: string): string {
   return generic ? PREFIX[kind] : `${PREFIX[kind]}\n\n${error}`;
 }
 
-export async function runFileOp(
-  bridge: Bridge,
-  req: FileOpReq,
-): Promise<ResponseFor<FileOpReq>> {
+export async function runFileOp(bridge: Bridge, req: FileOpReq): Promise<ResponseFor<FileOpReq>> {
   let r: ResponseFor<FileOpReq>;
   try {
     r = await bridge.request(req);
@@ -68,8 +61,7 @@ export async function runFileOp(
     throw err;
   }
   if (!r.ok && r.error !== "user-cancelled") {
-    if (r.error !== UNSAVED_CHANGES)
-      useFileOpErrorStore.getState().show(messageFor(req.kind, r.error));
+    if (r.error !== UNSAVED_CHANGES) useFileOpErrorStore.getState().show(messageFor(req.kind, r.error));
     return r;
   }
   // After a successful Open, surface a notice if the .alo holds no particle
@@ -80,9 +72,7 @@ export async function runFileOp(
     try {
       const dto = await bridge.request({ kind: "emitters/list", params: {} });
       if (dto.root.children.length === 0) {
-        useFileOpErrorStore
-          .getState()
-          .show(NO_EMITTERS_NOTICE, "No particle emitters");
+        useFileOpErrorStore.getState().show(NO_EMITTERS_NOTICE, "No particle emitters");
       }
     } catch {
       /* non-fatal — skip the notice if the list can't be read */
@@ -97,16 +87,13 @@ export async function runFileOp(
 // still refuses with "unsaved-changes" (an edit landed after the prompt's clean
 // check), the prompt reopens for the same action instead of an error modal.
 export type DocumentReplaceReq =
-  | { kind: "file/new"; params: Record<string, never> }
-  | { kind: "file/open"; params: { path?: string } };
+  { kind: "file/new"; params: Record<string, never> } | { kind: "file/open"; params: { path?: string } };
 
 export function replaceDocument(bridge: Bridge, req: DocumentReplaceReq): void {
   const action: PendingActionFn = async ({ discardUnsaved }) => {
     let refused: boolean;
     if (req.kind === "file/new") {
-      const r = await bridge.request(
-        discardUnsaved ? { kind: "file/new", params: { discardUnsaved: true } } : req,
-      );
+      const r = await bridge.request(discardUnsaved ? { kind: "file/new", params: { discardUnsaved: true } } : req);
       refused = "ok" in r && !r.ok && r.error === UNSAVED_CHANGES;
     } else {
       const r = await runFileOp(

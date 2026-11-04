@@ -63,24 +63,21 @@ export function AutosaveRecoveryView({ bridge, orphan, nowMs, onChoose, onDismis
   const now = nowMs ?? Date.now();
   const hasRecent = orphan != null && orphan.recentMtimeMs != null;
   const hasStable = orphan != null && orphan.stableMtimeMs != null;
-  const original =
-    orphan == null || orphan.originalFilename === ""
-      ? "Unsaved new file"
-      : orphan.originalFilename;
+  const original = orphan == null || orphan.originalFilename === "" ? "Unsaved new file" : orphan.originalFilename;
 
   return (
     <Modal
       bridge={bridge}
       open={orphan != null}
-      onOpenChange={(o) => { if (!o) onDismiss(); }}
+      onOpenChange={(o) => {
+        if (!o) onDismiss();
+      }}
       title="Recover unsaved changes?"
       size="md"
     >
       <Modal.Body>
         <div className="flex flex-col gap-3 text-sm text-text">
-          <p className="leading-relaxed">
-            Unsaved changes from a previous session were found.
-          </p>
+          <p className="leading-relaxed">Unsaved changes from a previous session were found.</p>
           <p className="text-text-2">
             Original:{" "}
             {/* Long mod paths have no spaces in their segments; break-all lets
@@ -93,17 +90,13 @@ export function AutosaveRecoveryView({ bridge, orphan, nowMs, onChoose, onDismis
               {hasRecent && (
                 <li>
                   Most recent autosave —{" "}
-                  <span data-testid="autosave-recent-age">
-                    {formatAutosaveAge(orphan.recentMtimeMs!, now)}
-                  </span>
+                  <span data-testid="autosave-recent-age">{formatAutosaveAge(orphan.recentMtimeMs!, now)}</span>
                 </li>
               )}
               {hasStable && (
                 <li>
                   Stable backup —{" "}
-                  <span data-testid="autosave-stable-age">
-                    {formatAutosaveAge(orphan.stableMtimeMs!, now)}
-                  </span>
+                  <span data-testid="autosave-stable-age">{formatAutosaveAge(orphan.stableMtimeMs!, now)}</span>
                 </li>
               )}
             </ul>
@@ -119,27 +112,16 @@ export function AutosaveRecoveryView({ bridge, orphan, nowMs, onChoose, onDismis
         </div>
       </Modal.Body>
       <Modal.Footer>
-        <Modal.OkButton
-          variant="secondary"
-          onClick={() => onChoose("discard")}
-          data-testid="autosave-discard"
-        >
+        <Modal.OkButton variant="secondary" onClick={() => onChoose("discard")} data-testid="autosave-discard">
           Discard
         </Modal.OkButton>
         {hasStable && (
-          <Modal.OkButton
-            variant="secondary"
-            onClick={() => onChoose("stable")}
-            data-testid="autosave-restore-stable"
-          >
+          <Modal.OkButton variant="secondary" onClick={() => onChoose("stable")} data-testid="autosave-restore-stable">
             Restore stable
           </Modal.OkButton>
         )}
         {hasRecent && (
-          <Modal.OkButton
-            onClick={() => onChoose("recent")}
-            data-testid="autosave-restore-recent"
-          >
+          <Modal.OkButton onClick={() => onChoose("recent")} data-testid="autosave-restore-recent">
             Restore recent
           </Modal.OkButton>
         )}
@@ -162,9 +144,15 @@ export function AutosaveRecoveryDialog({ bridge }: Props) {
     let cancelled = false;
     void bridge
       .request({ kind: "autosave/check-recovery", params: {} })
-      .then((r) => { if (!cancelled && r.orphan) setOrphan(r.orphan); })
-      .catch(() => { /* best-effort — no recovery prompt on failure */ });
-    return () => { cancelled = true; };
+      .then((r) => {
+        if (!cancelled && r.orphan) setOrphan(r.orphan);
+      })
+      .catch(() => {
+        /* best-effort — no recovery prompt on failure */
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [bridge]);
 
   const [recoverError, setRecoverError] = useState<string | null>(null);
@@ -197,5 +185,7 @@ export function AutosaveRecoveryDialog({ bridge }: Props) {
   // for next launch.
   const dismiss = () => setOrphan(null);
 
-  return <AutosaveRecoveryView bridge={bridge} orphan={orphan} onChoose={choose} onDismiss={dismiss} error={recoverError} />;
+  return (
+    <AutosaveRecoveryView bridge={bridge} orphan={orphan} onChoose={choose} onDismiss={dismiss} error={recoverError} />
+  );
 }

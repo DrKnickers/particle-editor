@@ -35,7 +35,9 @@ export function AtlasConfirmDialog({
     <Modal
       bridge={bridge}
       open={open}
-      onOpenChange={(o) => { if (!o) onCancel(); }}
+      onOpenChange={(o) => {
+        if (!o) onCancel();
+      }}
       title="Set frame for all selected keys"
       size="sm"
     >

@@ -43,8 +43,7 @@ export function SystemLoadChip({
   }, [bridge]);
   // A zero-load effect (no emitters yet, or all disabled) has nothing to warn about.
   const projected = (instances + 1) * systemLoad;
-  const visible =
-    guard.enabled && systemLoad > 0 && projected > guard.maxParticles;
+  const visible = guard.enabled && systemLoad > 0 && projected > guard.maxParticles;
   // Presence fade: the chip used to pop in/out; usePresence keeps
   // it mounted through the .fade-animate exit so the warning eases away.
   const presence = usePresence(visible, SLOW_EXIT_MS);
@@ -60,9 +59,13 @@ export function SystemLoadChip({
       <TriangleAlert className="size-3.5 shrink-0 text-warning-fg" aria-hidden />
       <span className="tabular-nums">
         {instances === 0 ? (
-          <>This effect ≈ {fmtCount(systemLoad)} particles — over the {fmtCount(guard.maxParticles)} preview limit</>
+          <>
+            This effect ≈ {fmtCount(systemLoad)} particles — over the {fmtCount(guard.maxParticles)} preview limit
+          </>
         ) : (
-          <>Another instance would exceed the preview limit (≈ {fmtCount(projected)} of {fmtCount(guard.maxParticles)})</>
+          <>
+            Another instance would exceed the preview limit (≈ {fmtCount(projected)} of {fmtCount(guard.maxParticles)})
+          </>
         )}
       </span>
     </div>

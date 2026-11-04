@@ -19,7 +19,11 @@ import { makeDefaultEngineState } from "@/bridge/mock-state";
 import { makeBridgeStub, type BridgeStub } from "@/test/bridge-stub";
 
 const open = (patch: Partial<TimelineStateDto> = {}): TimelineStateDto => ({
-  ...CLOSED_TIMELINE, active: true, status: "paused", frame: 40, ...patch,
+  ...CLOSED_TIMELINE,
+  active: true,
+  status: "paused",
+  frame: 40,
+  ...patch,
 });
 
 const flush = () => act(() => new Promise((r) => setTimeout(r, 0)));
@@ -47,7 +51,11 @@ beforeEach(() => {
 
 describe("Toolbar while the timeline is open", () => {
   const renderToolbar = (bridge: Bridge) =>
-    render(<Tooltip.Provider delayDuration={0}><Toolbar bridge={bridge} /></Tooltip.Provider>);
+    render(
+      <Tooltip.Provider delayDuration={0}>
+        <Toolbar bridge={bridge} />
+      </Tooltip.Provider>,
+    );
 
   it("the timeline toggle opens the session", async () => {
     const bridge = makeBridge();
@@ -162,8 +170,13 @@ describe("the View menu while the timeline is open", () => {
     const noop = () => {};
     render(
       <Tooltip.Provider delayDuration={0}>
-        <MenuBar bridge={bridge} onOpenImportEmittersDialog={noop} onOpenAboutDialog={noop}
-          onOpenRescaleDialog={noop} onResetPanelLayout={noop} />
+        <MenuBar
+          bridge={bridge}
+          onOpenImportEmittersDialog={noop}
+          onOpenAboutDialog={noop}
+          onOpenRescaleDialog={noop}
+          onResetPanelLayout={noop}
+        />
       </Tooltip.Provider>,
     );
     await flush();

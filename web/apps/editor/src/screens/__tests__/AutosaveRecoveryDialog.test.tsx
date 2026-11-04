@@ -6,11 +6,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { AutosaveOrphan, Bridge } from "@particle-editor/bridge-schema";
-import {
-  AutosaveRecoveryView,
-  AutosaveRecoveryDialog,
-  formatAutosaveAge,
-} from "../AutosaveRecoveryDialog";
+import { AutosaveRecoveryView, AutosaveRecoveryDialog, formatAutosaveAge } from "../AutosaveRecoveryDialog";
 import { makeBridgeStub } from "@/test/bridge-stub";
 
 // Only the dialog backdrop snapshot reaches the bridge, and only with a
@@ -21,8 +17,8 @@ const NOW = 1_700_000_000_000;
 function orphan(p: Partial<AutosaveOrphan> = {}): AutosaveOrphan {
   return {
     originalFilename: "fire.alo",
-    recentMtimeMs: NOW - 45_000,        // 45 seconds ago
-    stableMtimeMs: NOW - 8 * 60_000,    // 8 minutes ago
+    recentMtimeMs: NOW - 45_000, // 45 seconds ago
+    stableMtimeMs: NOW - 8 * 60_000, // 8 minutes ago
     ...p,
   };
 }
@@ -52,7 +48,8 @@ describe("AutosaveRecoveryView", () => {
 
   it("recent only → no Restore stable button", () => {
     render(
-      <AutosaveRecoveryView bridge={viewBridge}
+      <AutosaveRecoveryView
+        bridge={viewBridge}
         orphan={orphan({ stableMtimeMs: null })}
         nowMs={NOW}
         onChoose={vi.fn()}
@@ -65,7 +62,8 @@ describe("AutosaveRecoveryView", () => {
 
   it("stable only → no Restore recent button", () => {
     render(
-      <AutosaveRecoveryView bridge={viewBridge}
+      <AutosaveRecoveryView
+        bridge={viewBridge}
         orphan={orphan({ recentMtimeMs: null })}
         nowMs={NOW}
         onChoose={vi.fn()}
@@ -78,7 +76,8 @@ describe("AutosaveRecoveryView", () => {
 
   it("empty originalFilename → 'Unsaved new file'", () => {
     render(
-      <AutosaveRecoveryView bridge={viewBridge}
+      <AutosaveRecoveryView
+        bridge={viewBridge}
         orphan={orphan({ originalFilename: "" })}
         nowMs={NOW}
         onChoose={vi.fn()}
@@ -96,7 +95,13 @@ describe("AutosaveRecoveryView", () => {
   it("each button fires onChoose with its choice", () => {
     const onChoose = vi.fn();
     render(
-      <AutosaveRecoveryView bridge={viewBridge} orphan={orphan()} nowMs={NOW} onChoose={onChoose} onDismiss={vi.fn()} />,
+      <AutosaveRecoveryView
+        bridge={viewBridge}
+        orphan={orphan()}
+        nowMs={NOW}
+        onChoose={onChoose}
+        onDismiss={vi.fn()}
+      />,
     );
     fireEvent.click(screen.getByTestId("autosave-restore-recent"));
     fireEvent.click(screen.getByTestId("autosave-restore-stable"));

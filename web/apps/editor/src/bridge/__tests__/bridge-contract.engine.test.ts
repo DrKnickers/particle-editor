@@ -6,12 +6,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { MockBridge } from "../mock";
 import { makeMockBridgeWithListener } from "@/test/mock-bridge";
-import {
-  useMockEngineState,
-} from "../mock-state";
-import type {
-  EngineStateDto,
-} from "@particle-editor/bridge-schema";
+import { useMockEngineState } from "../mock-state";
+import type { EngineStateDto } from "@particle-editor/bridge-schema";
 import { resetMockState } from "@/test/mock-state";
 
 // Reset the shared mock stores between tests so state mutations don't leak.
@@ -20,7 +16,9 @@ beforeEach(resetMockState);
 describe("MockBridge contract — engine/* and settings/*", () => {
   it("engine/set/ground-z patches state and fires state/changed", async () => {
     let last: EngineStateDto | null = null;
-    const { b, off } = makeMockBridgeWithListener("engine/state/changed", (e) => { last = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("engine/state/changed", (e) => {
+      last = e.payload;
+    });
 
     await b.request({ kind: "engine/set/ground-z", params: { z: 12.5 } });
 
@@ -113,18 +111,18 @@ describe("MockBridge contract — engine/* and settings/*", () => {
   // light record / Vec3 / Camera) so a regression in any single arm of
   // the dispatch surfaces here.
   it.each([
-    ["engine/set/ground",             { enabled: false },            "ground",           false],
-    ["engine/set/ground-z",           { z: 42 },                      "groundZ",          42],
-    ["engine/set/ground-texture",     { slot: 3 },                    "groundTexture",    3],
-    ["engine/set/ground-solid-color", { rgb: 0x00ff8800 },            "groundSolidColor", 0x00ff8800],
-    ["engine/set/skydome-slot",       { slot: 5 },                    "skydomeSlot",      5],
-    ["engine/set/background",         { rgb: 0x00112233 },            "background",       0x00112233],
-    ["engine/set/bloom",              { enabled: true },              "bloom",            true],
-    ["engine/set/bloom-strength",     { v: 2.5 },                     "bloomStrength",    2.5],
-    ["engine/set/bloom-cutoff",       { v: 0.5 },                     "bloomCutoff",      0.5],
-    ["engine/set/bloom-size",         { v: 0.25 },                    "bloomSize",        0.25],
-    ["engine/set/heat-debug",         { enabled: true },              "heatDebug",        true],
-    ["engine/set/paused",             { paused: true },               "paused",           true],
+    ["engine/set/ground", { enabled: false }, "ground", false],
+    ["engine/set/ground-z", { z: 42 }, "groundZ", 42],
+    ["engine/set/ground-texture", { slot: 3 }, "groundTexture", 3],
+    ["engine/set/ground-solid-color", { rgb: 0x00ff8800 }, "groundSolidColor", 0x00ff8800],
+    ["engine/set/skydome-slot", { slot: 5 }, "skydomeSlot", 5],
+    ["engine/set/background", { rgb: 0x00112233 }, "background", 0x00112233],
+    ["engine/set/bloom", { enabled: true }, "bloom", true],
+    ["engine/set/bloom-strength", { v: 2.5 }, "bloomStrength", 2.5],
+    ["engine/set/bloom-cutoff", { v: 0.5 }, "bloomCutoff", 0.5],
+    ["engine/set/bloom-size", { v: 0.25 }, "bloomSize", 0.25],
+    ["engine/set/heat-debug", { enabled: true }, "heatDebug", true],
+    ["engine/set/paused", { paused: true }, "paused", true],
   ] as const)("%s mutates the snapshot", async (kind, params, field, expected) => {
     const b = new MockBridge();
     await b.request({ kind, params } as any);
@@ -140,7 +138,7 @@ describe("MockBridge contract — engine/* and settings/*", () => {
     });
     const s = await b.request({ kind: "engine/state/snapshot", params: {} });
     expect(s.groundSlotCustomPaths[5]).toBe("C:/textures/foo.tga");
-    expect(s.groundSlotCustomPaths[0]).toBe("");  // others untouched
+    expect(s.groundSlotCustomPaths[0]).toBe(""); // others untouched
   });
 
   it("engine/set/skydome-custom-path writes the 9..11 slot via custom-array index", async () => {
@@ -150,7 +148,7 @@ describe("MockBridge contract — engine/* and settings/*", () => {
       params: { slot: 10, path: "C:/sky/foo.dds" },
     });
     const s = await b.request({ kind: "engine/state/snapshot", params: {} });
-    expect(s.skydomeCustomPaths[1]).toBe("C:/sky/foo.dds");  // 10 - 9 = 1
+    expect(s.skydomeCustomPaths[1]).toBe("C:/sky/foo.dds"); // 10 - 9 = 1
     expect(s.skydomeCustomPaths[0]).toBe("");
     expect(s.skydomeCustomPaths[2]).toBe("");
   });
@@ -173,21 +171,21 @@ describe("MockBridge contract — engine/* and settings/*", () => {
       kind: "engine/set/light",
       params: {
         which: "sun",
-        diffuse:   [1, 0.5, 0.25, 1],
-        specular:  [0, 0, 0, 0],
-        position:  [10, 0, 0, 0],
+        diffuse: [1, 0.5, 0.25, 1],
+        specular: [0, 0, 0, 0],
+        position: [10, 0, 0, 0],
         direction: [-1, 0, 0, 0],
       },
     });
     const s = await b.request({ kind: "engine/state/snapshot", params: {} });
     expect(s.lights.sun.diffuse).toEqual([1, 0.5, 0.25, 1]);
-    expect(s.lights.fill1.diffuse).toEqual([0, 0, 0, 0]);  // untouched
+    expect(s.lights.fill1.diffuse).toEqual([0, 0, 0, 0]); // untouched
   });
 
   it("engine/set/ambient and engine/set/shadow swap the Vec4 in-place", async () => {
     const b = new MockBridge();
     await b.request({ kind: "engine/set/ambient", params: { color: [0.1, 0.2, 0.3, 1.0] } });
-    await b.request({ kind: "engine/set/shadow",  params: { color: [0.4, 0.4, 0.4, 1.0] } });
+    await b.request({ kind: "engine/set/shadow", params: { color: [0.4, 0.4, 0.4, 1.0] } });
     const s = await b.request({ kind: "engine/state/snapshot", params: {} });
     expect(s.ambient).toEqual([0.1, 0.2, 0.3, 1.0]);
     expect(s.shadow).toEqual([0.4, 0.4, 0.4, 1.0]);
@@ -237,7 +235,9 @@ describe("MockBridge contract — engine/* and settings/*", () => {
   // game-dome environment: setter mutates the snapshot and emits state.
   it("engine/set/skydome-environment patches context + the two Names and fires state/changed", async () => {
     let last: EngineStateDto | null = null;
-    const { b, off } = makeMockBridgeWithListener("engine/state/changed", (e) => { last = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("engine/state/changed", (e) => {
+      last = e.payload;
+    });
     await b.request({
       kind: "engine/set/skydome-environment",
       params: { context: "land", primaryName: "Day_Blue_Sky", secondaryName: "Planet_Rings00" },
@@ -271,7 +271,9 @@ describe("MockBridge contract — engine/* and settings/*", () => {
   // state/changed; the skinned canned Name drives the "skinned" status.
   it("engine/set/reference-object patches name + status and fires state/changed", async () => {
     let last: EngineStateDto | null = null;
-    const { b, off } = makeMockBridgeWithListener("engine/state/changed", (e) => { last = e.payload; });
+    const { b, off } = makeMockBridgeWithListener("engine/state/changed", (e) => {
+      last = e.payload;
+    });
     await b.request({ kind: "engine/set/reference-object", params: { name: "AT_AT_Walker" } });
     expect(last).not.toBeNull();
     expect(last!.referenceObjectName).toBe("AT_AT_Walker");
@@ -324,7 +326,9 @@ describe("MockBridge contract — engine/* and settings/*", () => {
 
   it("engine/action/rescale-system round-trips with empty body and fires state/changed", async () => {
     let count = 0;
-    const { b, off } = makeMockBridgeWithListener("engine/state/changed", () => { count++; });
+    const { b, off } = makeMockBridgeWithListener("engine/state/changed", () => {
+      count++;
+    });
     const r = await b.request({
       kind: "engine/action/rescale-system",
       params: { durationScalePercent: 150, sizeScalePercent: 200 },
@@ -336,7 +340,9 @@ describe("MockBridge contract — engine/* and settings/*", () => {
 
   it("engine/action/clear fires state/changed without mutating fields", async () => {
     let count = 0;
-    const { b, off } = makeMockBridgeWithListener("engine/state/changed", () => { count++; });
+    const { b, off } = makeMockBridgeWithListener("engine/state/changed", () => {
+      count++;
+    });
     await b.request({ kind: "engine/action/clear", params: {} });
     expect(count).toBe(1);
     off();
@@ -403,7 +409,9 @@ describe("MockBridge contract — engine/* and settings/*", () => {
 
   it("engine/action/rescale-emitter round-trips with empty body and fires state/changed", async () => {
     let stateChanges = 0;
-    const { b, off } = makeMockBridgeWithListener("engine/state/changed", () => { stateChanges += 1; });
+    const { b, off } = makeMockBridgeWithListener("engine/state/changed", () => {
+      stateChanges += 1;
+    });
 
     const r = await b.request({
       kind: "engine/action/rescale-emitter",
@@ -435,11 +443,11 @@ describe("MockBridge contract — engine/* and settings/*", () => {
     const b = new MockBridge();
     const rgb = (r: number, g: number, bl: number) => r | (g << 8) | (bl << 16);
     const dto = {
-      sun:   { intensity: 0.8, az: 30, alt: 60, diffuse: rgb(10, 20, 30), specular: rgb(40, 50, 60) },
-      fill1: { intensity: 0.3, az: 90, alt: -5, diffuse: rgb(1, 2, 3),    specular: 0 },
-      fill2: { intensity: 0.2, az: 270, alt: -5, diffuse: rgb(4, 5, 6),   specular: 0 },
+      sun: { intensity: 0.8, az: 30, alt: 60, diffuse: rgb(10, 20, 30), specular: rgb(40, 50, 60) },
+      fill1: { intensity: 0.3, az: 90, alt: -5, diffuse: rgb(1, 2, 3), specular: 0 },
+      fill2: { intensity: 0.2, az: 270, alt: -5, diffuse: rgb(4, 5, 6), specular: 0 },
       ambient: rgb(7, 8, 9),
-      shadow:  rgb(11, 12, 13),
+      shadow: rgb(11, 12, 13),
       forceAlign: false,
     };
     const setRes = await b.request({ kind: "settings/lighting/set", params: dto });

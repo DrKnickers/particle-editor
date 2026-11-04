@@ -30,20 +30,20 @@ test("emitters/drop reorder via the bridge swaps adjacent root positions", async
 
     // Seed: duplicate the first root so we have two adjacent roots to
     // shuffle. Most host particle systems load with just one root.
-    const before0 = await bridge.request({
+    const before0 = (await bridge.request({
       kind: "emitters/list",
       params: {},
-    }) as { root: { children: { id: number; name: string }[] } };
+    })) as { root: { children: { id: number; name: string }[] } };
     const firstId = before0.root.children[0]!.id;
     await bridge.request({
       kind: "emitters/duplicate",
       params: { id: firstId },
     });
 
-    const before = await bridge.request({
+    const before = (await bridge.request({
       kind: "emitters/list",
       params: {},
-    }) as { root: { children: { id: number; name: string }[] } };
+    })) as { root: { children: { id: number; name: string }[] } };
     const beforeNames = before.root.children.map((c) => c.name);
     // Identify the duplicate by its auto-suffixed `_<digits>` name.
     const dupIdx = beforeNames.findIndex((n) => /_\d+$/.test(n));
@@ -54,15 +54,15 @@ test("emitters/drop reorder via the bridge swaps adjacent root positions", async
     // moveEmitterToRootIndex no-op-detects gaps [sourceIdx,
     // sourceIdx+1], so the move to gap 0 is meaningful when the dup
     // is at idx 1 (or higher).
-    const r = await bridge.request({
+    const r = (await bridge.request({
       kind: "emitters/drop",
       params: { mode: "reorder", id: dupId, rootIndex: 0 },
-    }) as { ok: boolean };
+    })) as { ok: boolean };
 
-    const after = await bridge.request({
+    const after = (await bridge.request({
       kind: "emitters/list",
       params: {},
-    }) as { root: { children: { id: number; name: string }[] } };
+    })) as { root: { children: { id: number; name: string }[] } };
     const afterNames = after.root.children.map((c) => c.name);
     const newDupIdx = afterNames.findIndex((n) => /_\d+$/.test(n));
     // Resolve the duplicate's new id for cleanup (a successful move
@@ -107,15 +107,15 @@ test("emitters/drop reparent via the bridge attaches the source as a child of ta
     // target pair. The target needs at least one free slot — if the
     // host seed already has a packed root, the duplicate (a fresh
     // empty copy) gives us a clean target.
-    const before0 = await bridge.request({
+    const before0 = (await bridge.request({
       kind: "emitters/list",
       params: {},
-    }) as { root: { children: { id: number; name: string; children: { role: string }[] }[] } };
+    })) as { root: { children: { id: number; name: string; children: { role: string }[] }[] } };
     const firstId = before0.root.children[0]!.id;
-    const dupResult = await bridge.request({
+    const dupResult = (await bridge.request({
       kind: "emitters/duplicate",
       params: { id: firstId },
-    }) as { ok: boolean; newId?: number };
+    })) as { ok: boolean; newId?: number };
     if (!dupResult.ok || typeof dupResult.newId !== "number") {
       return { error: "duplicate failed" };
     }
@@ -123,27 +123,27 @@ test("emitters/drop reparent via the bridge attaches the source as a child of ta
 
     // Pick a target: the original first root. Find a free slot via
     // its current children's roles.
-    const after = await bridge.request({
+    const after = (await bridge.request({
       kind: "emitters/list",
       params: {},
-    }) as { root: { children: { id: number; name: string; children: { role: string }[] }[] } };
+    })) as { root: { children: { id: number; name: string; children: { role: string }[] }[] } };
     const target = after.root.children.find((c) => c.id === firstId);
     if (!target) return { error: "target not found post-duplicate" };
     const hasLifetime = target.children.some((c) => c.role === "lifetime");
-    const hasDeath    = target.children.some((c) => c.role === "death");
+    const hasDeath = target.children.some((c) => c.role === "death");
     if (hasLifetime && hasDeath) return { skipped: true };
     const slot: "lifetime" | "death" = !hasLifetime ? "lifetime" : "death";
 
     // Reparent: drop the duplicate under the original in the named slot.
-    const r = await bridge.request({
+    const r = (await bridge.request({
       kind: "emitters/drop",
       params: { mode: "reparent", id: dupId, targetId: firstId, slot },
-    }) as { ok: boolean; error?: string };
+    })) as { ok: boolean; error?: string };
 
-    const final = await bridge.request({
+    const final = (await bridge.request({
       kind: "emitters/list",
       params: {},
-    }) as { root: { children: { id: number; children: { id: number; role: string }[] }[] } };
+    })) as { root: { children: { id: number; children: { id: number; role: string }[] }[] } };
 
     const targetAfter = final.root.children.find((c) => c.id === firstId);
     const childUnderTarget = targetAfter?.children.find((c) => c.id === dupId);

@@ -117,4 +117,3 @@ export function eventToViewBox(
   const y = ((clientY - rect.top) / rect.height) * height;
   return { x, y };
 }
-

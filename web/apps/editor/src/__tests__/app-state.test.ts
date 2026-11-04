@@ -50,14 +50,21 @@ describe("resetAppState", () => {
 
     expect(useEmitterTreeStore.getState()).toMatchObject({ tree: null, bridge: null });
     expect(useEmitterSelectionStore.getState()).toMatchObject({ ids: [], primary: null, anchor: null });
-    expect(useTreeContextStore.getState()).toMatchObject({ open: null, targetEmitterId: null, targetLinkGroupId: null });
+    expect(useTreeContextStore.getState()).toMatchObject({
+      open: null,
+      targetEmitterId: null,
+      targetLinkGroupId: null,
+    });
     expect(useTreeActionStore.getState().renameRequest).toBeNull();
     expect(useEmitterClipboardStore.getState().hasContent).toBe(false);
     expect(getCurveKeysClipboard()).toEqual([]);
     expect(useDeleteConfirmStore.getState().pending).toBeNull();
     expect(useFileOpErrorStore.getState().message).toBeNull();
     expect(useFileStateStore.getState()).toMatchObject({
-      currentFilePath: null, dirty: false, recentFiles: [], pendingAction: null,
+      currentFilePath: null,
+      dirty: false,
+      recentFiles: [],
+      pendingAction: null,
     });
     expect(useModalOpen.getState().count).toBe(0);
     expect(useDockAnim.getState().animating).toBe(false);

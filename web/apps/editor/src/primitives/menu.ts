@@ -6,8 +6,7 @@
 // drift apart again.
 
 /** Floating-panel chrome shared by menus and select listboxes (no motion). */
-const MENU_SURFACE =
-  "z-50 rounded-md border border-border-2 bg-bg-2 p-1 shadow-[var(--shadow-soft)]";
+const MENU_SURFACE = "z-50 rounded-md border border-border-2 bg-bg-2 p-1 shadow-[var(--shadow-soft)]";
 
 /** Menu / submenu content (Menubar, ContextMenu): entrance + exit fade. */
 export const MENU_CONTENT = `${MENU_SURFACE} popover-animate`;

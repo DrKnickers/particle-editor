@@ -9,21 +9,28 @@ import type { Bridge } from "@particle-editor/bridge-schema";
 // Tooltip.Provider App.tsx supplies in production — this wrapper stands in
 // for it (precedent: renderWithTooltips in EmitterTree.test.tsx).
 const TipProvider = ({ children }: { children: ReactNode }) => (
-  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>
+    {children}
+  </Tooltip.Provider>
 );
 const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
 const LAYERS = [
-  { path: "C:/m/Alpha",          label: "Alpha",    isFoC: true,  kind: "mod" as const },
-  { path: "C:/m/Alpha/Bravo",     label: "Bravo",     parentLabel: "Alpha", isFoC: true, kind: "nested" as const },
+  { path: "C:/m/Alpha", label: "Alpha", isFoC: true, kind: "mod" as const },
+  { path: "C:/m/Alpha/Bravo", label: "Bravo", parentLabel: "Alpha", isFoC: true, kind: "nested" as const },
   { path: "C:/m/Alpha/Core", label: "Core", parentLabel: "Alpha", isFoC: true, kind: "nested" as const },
 ];
 function makeBridge(stack: string[]) {
-  const request = vi.fn().mockImplementation((req: { kind: string }) =>
-    req.kind === "mods/list"
-      ? Promise.resolve({ mods: [], layers: LAYERS, stack, activePath: stack[0] ?? null })
-      : Promise.resolve({ ok: true, stack: [] }));
-  return { request, on: vi.fn().mockReturnValue(() => {}) } as unknown as Bridge & { request: ReturnType<typeof vi.fn> };
+  const request = vi
+    .fn()
+    .mockImplementation((req: { kind: string }) =>
+      req.kind === "mods/list"
+        ? Promise.resolve({ mods: [], layers: LAYERS, stack, activePath: stack[0] ?? null })
+        : Promise.resolve({ ok: true, stack: [] }),
+    );
+  return { request, on: vi.fn().mockReturnValue(() => {}) } as unknown as Bridge & {
+    request: ReturnType<typeof vi.fn>;
+  };
 }
 
 describe("LoadOrderDialog", () => {
@@ -40,9 +47,12 @@ describe("LoadOrderDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => screen.getByRole("button", { name: "Remove Offline" }));
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
-    await waitFor(() => expect(bridge.request).toHaveBeenCalledWith({
-      kind: "mods/set-layers", params: { paths: ["C:/m/Offline", "C:/m/Alpha/Bravo"] },
-    }));
+    await waitFor(() =>
+      expect(bridge.request).toHaveBeenCalledWith({
+        kind: "mods/set-layers",
+        params: { paths: ["C:/m/Offline", "C:/m/Alpha/Bravo"] },
+      }),
+    );
   });
 
   it("distinguishes loading from a successfully empty catalog", async () => {
@@ -61,7 +71,10 @@ describe("LoadOrderDialog", () => {
   it.each(["resolve", "reject"] as const)("ignores a catalog request that %ss after close/reopen", async (settle) => {
     let resolve!: (value: unknown) => void;
     let reject!: (error: Error) => void;
-    const old = new Promise((yes, no) => { resolve = yes; reject = no; });
+    const old = new Promise((yes, no) => {
+      resolve = yes;
+      reject = no;
+    });
     const bridge = makeBridge(["C:/m/Alpha/Bravo"]);
     bridge.request.mockReturnValueOnce(old);
     const view = render(<LoadOrderDialog bridge={bridge} open onOpenChange={() => {}} />);
@@ -91,9 +104,12 @@ describe("LoadOrderDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => screen.getByRole("button", { name: "Remove Offline" }));
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
-    await waitFor(() => expect(second.request).toHaveBeenCalledWith({
-      kind: "mods/set-layers", params: { paths: ["C:/m/Offline"] },
-    }));
+    await waitFor(() =>
+      expect(second.request).toHaveBeenCalledWith({
+        kind: "mods/set-layers",
+        params: { paths: ["C:/m/Offline"] },
+      }),
+    );
   });
 
   it("does not expose the previous stack when reopening fails to load", async () => {
@@ -122,13 +138,19 @@ describe("LoadOrderDialog", () => {
     expect(screen.getByRole("button", { name: "Move Offline up" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     await waitFor(() => expect(close).toHaveBeenCalledWith(false));
-    expect(bridge.request).toHaveBeenLastCalledWith({ kind: "mods/set-layers", params: { paths: ["C:/m/Offline", "C:/m/Alpha/Bravo"] } });
+    expect(bridge.request).toHaveBeenLastCalledWith({
+      kind: "mods/set-layers",
+      params: { paths: ["C:/m/Offline", "C:/m/Alpha/Bravo"] },
+    });
   });
 
   it.each(["resolve", "reject"] as const)("ignores a catalog request that %ss after unmount", async (settle) => {
     let resolve!: (value: unknown) => void;
     let reject!: (error: Error) => void;
-    const pending = new Promise((yes, no) => { resolve = yes; reject = no; });
+    const pending = new Promise((yes, no) => {
+      resolve = yes;
+      reject = no;
+    });
     const bridge = makeBridge([]);
     bridge.request.mockReturnValueOnce(pending);
     const view = render(<LoadOrderDialog bridge={bridge} open onOpenChange={() => {}} />);
@@ -147,11 +169,20 @@ describe("LoadOrderDialog", () => {
   });
 
   it("initialises the load order from the current stack, numbered", async () => {
-    render(<LoadOrderDialog bridge={makeBridge(["C:/m/Alpha/Bravo", "C:/m/Alpha/Core"])} open onOpenChange={() => {}} onApplied={() => {}} />);
+    render(
+      <LoadOrderDialog
+        bridge={makeBridge(["C:/m/Alpha/Bravo", "C:/m/Alpha/Core"])}
+        open
+        onOpenChange={() => {}}
+        onApplied={() => {}}
+      />,
+    );
     await waitFor(() => expect(screen.getByRole("list", { name: "Load order" })).toBeTruthy());
     // Scope to the Load-order list (role=list "Load order") — it's the only list.
     const orderList = screen.getByRole("list", { name: "Load order" });
-    const items = within(orderList).getAllByRole("listitem").map((li) => li.textContent ?? "");
+    const items = within(orderList)
+      .getAllByRole("listitem")
+      .map((li) => li.textContent ?? "");
     expect(items[0]).toContain("Bravo");
     expect(items[1]).toContain("Core");
   });
@@ -171,7 +202,10 @@ describe("LoadOrderDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Move Core up" }));
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     await waitFor(() => {
-      expect(bridge.request).toHaveBeenCalledWith({ kind: "mods/set-layers", params: { paths: ["C:/m/Alpha/Core", "C:/m/Alpha/Bravo"] } });
+      expect(bridge.request).toHaveBeenCalledWith({
+        kind: "mods/set-layers",
+        params: { paths: ["C:/m/Alpha/Core", "C:/m/Alpha/Bravo"] },
+      });
     });
     expect(onApplied).toHaveBeenCalled();
   });
@@ -179,8 +213,14 @@ describe("LoadOrderDialog", () => {
   it("a FAILED apply ({ok:false}) keeps the dialog open and does not call onApplied (#5)", async () => {
     const request = vi.fn().mockImplementation((req: { kind: string }) =>
       req.kind === "mods/list"
-        ? Promise.resolve({ mods: [], layers: LAYERS, stack: ["C:/m/Alpha/Bravo", "C:/m/Alpha/Core"], activePath: "C:/m/Alpha/Bravo" })
-        : Promise.resolve({ ok: false, error: "shader reload failed" }));
+        ? Promise.resolve({
+            mods: [],
+            layers: LAYERS,
+            stack: ["C:/m/Alpha/Bravo", "C:/m/Alpha/Core"],
+            activePath: "C:/m/Alpha/Bravo",
+          })
+        : Promise.resolve({ ok: false, error: "shader reload failed" }),
+    );
     const bridge = { request, on: vi.fn().mockReturnValue(() => {}) } as unknown as Bridge;
     const onApplied = vi.fn();
     const onOpenChange = vi.fn();
@@ -215,7 +255,9 @@ describe("LoadOrderDialog", () => {
     render(<LoadOrderDialog bridge={bridge} open onOpenChange={() => {}} onApplied={onApplied} />);
     await waitFor(() => expect(screen.getByRole("list", { name: "Load order" })).toBeTruthy());
     const orderList = screen.getByRole("list", { name: "Load order" });
-    const items = within(orderList).getAllByRole("listitem").map((li) => li.textContent ?? "");
+    const items = within(orderList)
+      .getAllByRole("listitem")
+      .map((li) => li.textContent ?? "");
     // The non-catalog root survives, labelled by its basename ("GrayMod" — NOT in LAYERS).
     expect(items.some((t) => t.includes("GrayMod"))).toBe(true);
     expect(items.some((t) => t.includes("Bravo"))).toBe(true);
@@ -272,8 +314,8 @@ describe("LoadOrderDialog", () => {
     const rows = within(list).getAllByRole("listitem");
     const rect = (top: number): DOMRect =>
       ({ top, height: 26, bottom: top + 26, left: 0, right: 0, width: 0, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
-    rows[0].getBoundingClientRect = () => rect(0);   // Bravo    y 0–26  (mid 13)
-    rows[1].getBoundingClientRect = () => rect(26);  // Core y 26–52 (mid 39)
+    rows[0].getBoundingClientRect = () => rect(0); // Bravo    y 0–26  (mid 13)
+    rows[1].getBoundingClientRect = () => rect(26); // Core y 26–52 (mid 39)
     // Grab Bravo (row 0) and drag below Core's midpoint → append (index 2).
     fireEvent.pointerDown(rows[0], { button: 0, pointerId: 1, clientY: 13 });
     fireEvent.pointerMove(rows[0], { pointerId: 1, clientY: 50 });
@@ -318,11 +360,11 @@ describe("LoadOrderDialog", () => {
     render(<LoadOrderDialog bridge={bridge} open onOpenChange={() => {}} onApplied={() => {}} />);
     await waitFor(() => screen.getByRole("list", { name: "Load order" }));
     const rows = within(screen.getByRole("list", { name: "Load order" })).getAllByRole("listitem");
-    rows[0].getBoundingClientRect = () => ROWRECT(0);   // Bravo    y 0–26
-    rows[1].getBoundingClientRect = () => ROWRECT(26);  // Core y 26–52
+    rows[0].getBoundingClientRect = () => ROWRECT(0); // Bravo    y 0–26
+    rows[1].getBoundingClientRect = () => ROWRECT(26); // Core y 26–52
     fireEvent.pointerDown(rows[0], { button: 0, pointerId: 1, clientY: 13 });
     fireEvent.pointerMove(rows[0], { pointerId: 1, clientY: 50 }); // cross threshold → activate
-    expect(screen.getByTestId("stack-drag-chip")).toBeTruthy();   // positive control
+    expect(screen.getByTestId("stack-drag-chip")).toBeTruthy(); // positive control
     return rows;
   }
   async function expectUnchangedOrderOnApply(bridge: ReturnType<typeof makeBridge>) {
@@ -401,8 +443,8 @@ describe("LoadOrderDialog", () => {
     rows[1].getBoundingClientRect = () => ROWRECT(26);
     fireEvent.pointerDown(rows[0], { button: 0, pointerId: 1, clientY: 13 });
     fireEvent.pointerMove(rows[0], { pointerId: 1, clientY: 50 }); // activate → rAF + listeners
-    expect(screen.getByTestId("stack-drag-chip")).toBeTruthy();    // positive control
-    unmount();  // the hook's unmount-effect must abort the live gesture
+    expect(screen.getByTestId("stack-drag-chip")).toBeTruthy(); // positive control
+    unmount(); // the hook's unmount-effect must abort the live gesture
     expect(cancelRaf).toHaveBeenCalled();
     expect(removeListener).toHaveBeenCalledWith("pointermove", expect.any(Function));
     cancelRaf.mockRestore();

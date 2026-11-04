@@ -11,7 +11,13 @@ import { CLOSED_TIMELINE, resetTimelineStoreForTests, useTimelineStore } from "@
 import { makeBridgeStub, type BridgeStub } from "@/test/bridge-stub";
 
 const open = (patch: Partial<TimelineStateDto> = {}): TimelineStateDto => ({
-  ...CLOSED_TIMELINE, active: true, status: "paused", frame: 32, timeSeconds: 32 / 60, seed: 1234, ...patch,
+  ...CLOSED_TIMELINE,
+  active: true,
+  status: "paused",
+  frame: 32,
+  timeSeconds: 32 / 60,
+  seed: 1234,
+  ...patch,
 });
 
 function renderPanel(bridge: BridgeStub) {

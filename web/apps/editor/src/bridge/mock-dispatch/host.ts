@@ -1,11 +1,6 @@
 // Shared instance state for the mock counterparts of the native bridge handlers.
 
-import type {
-  Event,
-  EngineStateDto,
-  LightingSettingsDto,
-  TimelineStateDto,
-} from "@particle-editor/bridge-schema";
+import type { Event, EngineStateDto, LightingSettingsDto, TimelineStateDto } from "@particle-editor/bridge-schema";
 
 export interface MockDispatchHost {
   emit(e: Event): void;

@@ -35,13 +35,7 @@ import type { Bridge } from "@particle-editor/bridge-schema";
 import { useAtlasContext } from "@/lib/atlas/atlas-context";
 import { ToolPanel } from "@/components/ToolPanel";
 import { AtlasConfirmDialog } from "@/components/AtlasConfirmDialog";
-import {
-  gridSide,
-  frameCount,
-  isAtlasTooLarge,
-  resolveFrame,
-  fitGridLayout,
-} from "@/lib/atlas/atlas-grid";
+import { gridSide, frameCount, isAtlasTooLarge, resolveFrame, fitGridLayout } from "@/lib/atlas/atlas-grid";
 import { useDockAnim } from "@/lib/dock-anim";
 import { runWhenIdle } from "@/lib/run-after-paint";
 
@@ -106,47 +100,58 @@ export function AtlasPickerPane({
   onClose: () => void;
   closing?: boolean;
 }) {
-  const emitterId     = useAtlasContext((c) => c.emitterId);
-  const focusedTrack  = useAtlasContext((c) => c.focusedTrack);
+  const emitterId = useAtlasContext((c) => c.emitterId);
+  const focusedTrack = useAtlasContext((c) => c.focusedTrack);
   const interpolation = useAtlasContext((c) => c.interpolation);
-  const frame         = useAtlasContext((c) => c.selection.frame);
-  const keyTimes      = useAtlasContext((c) => c.selection.keyTimes);
-  const stack         = useModStack((s) => s.stack);
-  const stackKey      = stack.join("|");
-  const textureEpoch  = useTextureEpoch((s) => s.epoch); // re-fetch preview on a texture reload
+  const frame = useAtlasContext((c) => c.selection.frame);
+  const keyTimes = useAtlasContext((c) => c.selection.keyTimes);
+  const stack = useModStack((s) => s.stack);
+  const stackKey = stack.join("|");
+  const textureEpoch = useTextureEpoch((s) => s.epoch); // re-fetch preview on a texture reload
 
   // Seed from the module-level cache when it matches the CURRENT emitter, so a
   // RE-OPEN renders the grid synchronously on the first frame (before the dock
   // slide) instead of waiting on the get-properties round-trip. A FIRST open of
   // an emitter (no matching cache) falls back to the defaults and the grid
   // renders once the fetch resolves.
-  const [textureSize, setTextureSize]   = useState(() =>
-    atlasPanelCache.emitterProps && atlasPanelCache.emitterProps.id === emitterId ? atlasPanelCache.emitterProps.textureSize : 1);
+  const [textureSize, setTextureSize] = useState(() =>
+    atlasPanelCache.emitterProps && atlasPanelCache.emitterProps.id === emitterId
+      ? atlasPanelCache.emitterProps.textureSize
+      : 1,
+  );
   const [colorTexture, setColorTexture] = useState(() =>
-    atlasPanelCache.emitterProps && atlasPanelCache.emitterProps.id === emitterId ? atlasPanelCache.emitterProps.colorTexture : "");
+    atlasPanelCache.emitterProps && atlasPanelCache.emitterProps.id === emitterId
+      ? atlasPanelCache.emitterProps.colorTexture
+      : "",
+  );
   // Both alpha modes are prefetched and held independently so a blend-mode change
   // is a synchronous swap — no per-change bridge round-trip and no loading flash
   // (that uncached host re-decode was the reported ~3s lag). The displayed
   // `preview` is derived from these two + blendAlphaGated (below).
-  const [flatPrev, setFlatPrev]         = useState<PreviewState>({ kind: "loading" }); // alpha OFF (color channel)
-  const [rawPrev,  setRawPrev]          = useState<PreviewState>({ kind: "loading" }); // alpha ON  (real alpha)
+  const [flatPrev, setFlatPrev] = useState<PreviewState>({ kind: "loading" }); // alpha OFF (color channel)
+  const [rawPrev, setRawPrev] = useState<PreviewState>({ kind: "loading" }); // alpha ON  (real alpha)
   // "Effectively empty" frames (max alpha ≈ 0) — they render invisible particles yet preview
   // fine (the picker shows RGB), so the grid dims + disables them. Sampled from rawPrev (the
   // alpha-mode preview, which carries real transparency). ADVISORY + async: empty until the
   // sample resolves, so a frame picked during the load window is still honored — the guards
   // in onCellClick / the confirm modal re-check this set at commit time.
-  const [deadCells, setDeadCells]       = useState<ReadonlySet<number>>(EMPTY_DEAD_CELLS);
+  const [deadCells, setDeadCells] = useState<ReadonlySet<number>>(EMPTY_DEAD_CELLS);
   // Whether the emitter's blend mode gates visible output on alpha — host-derived
   // (ParticleSystem::blendModeIsAlphaGated), shipped in the emitter-properties DTO.
   // Drives BOTH the displayed preview (alpha vs flat) and dead-cell dimming. Seeded
   // from the module cache so a re-open renders correctly on the first frame.
   const [blendAlphaGated, setBlendAlphaGated] = useState<boolean>(() =>
-    atlasPanelCache.emitterProps && atlasPanelCache.emitterProps.id === emitterId ? atlasPanelCache.emitterProps.blendAlphaGated : false);
-  const hoverRef                        = useRef<number | null>(null);
-  const hoverPreviewRedrawRef             = useRef<(() => void) | null>(null);
-  const hoverPreviewRafRef                = useRef<number | null>(null);
-  const [focusIndex, setFocusIndex]     = useState<number | null>(null); // keyboard cursor
-  const [confirmTarget, setConfirmTarget] = useState<{ frame: number; emitterId: number; keyTimes: number[] } | null>(null);
+    atlasPanelCache.emitterProps && atlasPanelCache.emitterProps.id === emitterId
+      ? atlasPanelCache.emitterProps.blendAlphaGated
+      : false,
+  );
+  const hoverRef = useRef<number | null>(null);
+  const hoverPreviewRedrawRef = useRef<(() => void) | null>(null);
+  const hoverPreviewRafRef = useRef<number | null>(null);
+  const [focusIndex, setFocusIndex] = useState<number | null>(null); // keyboard cursor
+  const [confirmTarget, setConfirmTarget] = useState<{ frame: number; emitterId: number; keyTimes: number[] } | null>(
+    null,
+  );
   const [announcement, setAnnouncement] = useState("");
   const [pulse, setPulse] = useState(false);
   // Measured content width the responsive grid sizes from. Seeded from the
@@ -160,8 +165,8 @@ export function AtlasPickerPane({
   // keyboard nav can scroll the roving cell into view (adjust scrollTop).
   const scrollElRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLCanvasElement | null>(null); // the listbox <canvas>
-  const focusInGridRef = useRef(false);   // does the grid canvas currently hold focus?
-  const restoreFocusRef = useRef(false);  // re-home focus after an atlas change?
+  const focusInGridRef = useRef(false); // does the grid canvas currently hold focus?
+  const restoreFocusRef = useRef(false); // re-home focus after an atlas change?
   const kbFocusPendingRef = useRef<number | null>(null); // cell to scroll into view after a keyboard move
   const roRef = useRef<ResizeObserver | null>(null);
   const lastMeasureRef = useRef<(() => void) | null>(null); // latest measure fn, called at slide settle
@@ -182,11 +187,21 @@ export function AtlasPickerPane({
   }, []);
   bridgeRef.current = bridge;
   stackRef.current = stack;
-  useEffect(() => { emitterIdRef.current = emitterId; }, [emitterId]);
-  useEffect(() => () => {
-    if (hoverPreviewRafRef.current !== null) window.cancelAnimationFrame(hoverPreviewRafRef.current);
-  }, []);
-  useEffect(() => () => { if (pulseTimer.current) clearTimeout(pulseTimer.current); }, []);
+  useEffect(() => {
+    emitterIdRef.current = emitterId;
+  }, [emitterId]);
+  useEffect(
+    () => () => {
+      if (hoverPreviewRafRef.current !== null) window.cancelAnimationFrame(hoverPreviewRafRef.current);
+    },
+    [],
+  );
+  useEffect(
+    () => () => {
+      if (pulseTimer.current) clearTimeout(pulseTimer.current);
+    },
+    [],
+  );
   useEffect(() => () => roRef.current?.disconnect(), []);
 
   // Measure the scroll region's content width so the grid reflows to fill the
@@ -211,7 +226,10 @@ export function AtlasPickerPane({
       // mid-slide width (that collapse-then-snap is the bug this guards).
       if (useDockAnim.getState().animating) return;
       const w = Math.max(0, el.clientWidth - SCROLL_PAD);
-      if (w > 0) { setGridW(w); atlasPanelCache.gridW = w; } // cache the settled width for the next open
+      if (w > 0) {
+        setGridW(w);
+        atlasPanelCache.gridW = w;
+      } // cache the settled width for the next open
     };
     lastMeasureRef.current = measure;
     measure(); // initial fit at attach (suppressed if mounting mid-slide → keeps the cached init)
@@ -248,7 +266,10 @@ export function AtlasPickerPane({
     let inFlight = false;
     let again = false;
     const fetchProps = (coalesceTreeRefetch = false) => {
-      if (inFlight) { again = true; return; } // coalesce an event burst into one round-trip
+      if (inFlight) {
+        again = true;
+        return;
+      } // coalesce an event burst into one round-trip
       inFlight = true;
       const startMs = performance.now();
       const spanId = makePerfSpanId("atlas.fetch_props", emitterId);
@@ -282,8 +303,16 @@ export function AtlasPickerPane({
           setBlendAlphaGated(r.properties.blendAlphaGated);
           // Cache for the next RE-OPEN's synchronous first-render seed (above).
           if (emitterId !== null)
-            atlasPanelCache.emitterProps = { id: emitterId, textureSize: r.properties.textureSize, colorTexture: r.properties.colorTexture, blendAlphaGated: r.properties.blendAlphaGated };
-          if (again) { again = false; fetchProps(); } // trailing fetch for events that arrived mid-flight
+            atlasPanelCache.emitterProps = {
+              id: emitterId,
+              textureSize: r.properties.textureSize,
+              colorTexture: r.properties.colorTexture,
+              blendAlphaGated: r.properties.blendAlphaGated,
+            };
+          if (again) {
+            again = false;
+            fetchProps();
+          } // trailing fetch for events that arrived mid-flight
         })
         .catch((err) => {
           inFlight = false;
@@ -318,7 +347,7 @@ export function AtlasPickerPane({
 
   // ── fetch texture preview ─────────────────────────────────────────────────
 
-  const side     = gridSide(textureSize);
+  const side = gridSide(textureSize);
   const tooLarge = isAtlasTooLarge(textureSize);
   const eligible = side >= 2;
 
@@ -328,9 +357,10 @@ export function AtlasPickerPane({
   // (instant, no fetch). blendAlphaGated is read here only to PRIORITISE the active
   // mode's fetch for first paint, and is intentionally absent from the deps so a
   // blend-mode change never re-runs this effect (no ESLint here, so no exhaustive-deps note).
-  const previewInputKey = eligible && !tooLarge && colorTexture
-    ? `${emitterId ?? "none"}::${textureEpoch}::${stackKey}::${colorTexture}`
-    : null;
+  const previewInputKey =
+    eligible && !tooLarge && colorTexture
+      ? `${emitterId ?? "none"}::${textureEpoch}::${stackKey}::${colorTexture}`
+      : null;
 
   useEffect(() => {
     if (!eligible || tooLarge || !colorTexture) {
@@ -399,18 +429,23 @@ export function AtlasPickerPane({
       )
         .then((r) => {
           if (!live) return;
-          set(r.status === "ok"
-            ? { kind: "ok", dataUri: r.dataUri, srcW: r.srcW, srcH: r.srcH }
-            : r.status === "pending"
-              ? { kind: "loading" }
-              : { kind: r.status });
+          set(
+            r.status === "ok"
+              ? { kind: "ok", dataUri: r.dataUri, srcW: r.srcW, srcH: r.srcH }
+              : r.status === "pending"
+                ? { kind: "loading" }
+                : { kind: r.status },
+          );
         })
         .catch((err) => {
           // Log the failing mode — the two modes resolve independently and only
           // the ACTIVE mode's status reaches the placeholder cascade, so an
           // inactive-mode failure is otherwise invisible until the user toggles
           // into it. (Mirrors assignAll's console.warn for partial failures.)
-          console.warn(`[atlas] preview fetch failed (${flattenAlpha ? "color" : "alpha"} mode) for ${colorTexture}:`, err);
+          console.warn(
+            `[atlas] preview fetch failed (${flattenAlpha ? "color" : "alpha"} mode) for ${colorTexture}:`,
+            err,
+          );
           if (live) set({ kind: "broken" });
         });
     // Active mode first (synchronous) so first paint isn't gated behind the other
@@ -424,13 +459,20 @@ export function AtlasPickerPane({
     // previews already cached), so the preview flips with no re-fetch.
     let cancelInactive = () => {};
     if (blendAlphaGated) {
-      void load(false, setRawPrev);                                          // active: raw
-      cancelInactive = runWhenIdle(() => { void load(true, setFlatPrev); });  // inactive: flat
+      void load(false, setRawPrev); // active: raw
+      cancelInactive = runWhenIdle(() => {
+        void load(true, setFlatPrev);
+      }); // inactive: flat
     } else {
-      void load(true, setFlatPrev);                                          // active: flat
-      cancelInactive = runWhenIdle(() => { void load(false, setRawPrev); });  // inactive: raw
+      void load(true, setFlatPrev); // active: flat
+      cancelInactive = runWhenIdle(() => {
+        void load(false, setRawPrev);
+      }); // inactive: raw
     }
-    return () => { live = false; cancelInactive(); };
+    return () => {
+      live = false;
+      cancelInactive();
+    };
   }, [colorTexture, eligible, previewInputKey, tooLarge]);
 
   // Dead-cell detection: once the alpha-mode preview (rawPrev) resolves, sample it off an
@@ -442,12 +484,17 @@ export function AtlasPickerPane({
   // additive/inverse/none modes show the RGB, so an "empty-alpha" frame is NOT dead there.
   const rawUri = rawPrev.kind === "ok" ? rawPrev.dataUri : null;
   useEffect(() => {
-    if (!blendAlphaGated || !rawUri || side < 2) { setDeadCells(EMPTY_DEAD_CELLS); return; }
+    if (!blendAlphaGated || !rawUri || side < 2) {
+      setDeadCells(EMPTY_DEAD_CELLS);
+      return;
+    }
     let live = true;
     void computeDeadCells(rawUri, side).then((d) => {
       if (live) setDeadCells(d.size ? d : EMPTY_DEAD_CELLS);
     });
-    return () => { live = false; };
+    return () => {
+      live = false;
+    };
   }, [blendAlphaGated, rawUri, side]);
 
   // The displayed preview follows the emitter's blend mode: alpha-gated modes show
@@ -529,7 +576,7 @@ export function AtlasPickerPane({
 
   // ── derived display values ────────────────────────────────────────────────
 
-  const offIndex     = focusedTrack !== "index";
+  const offIndex = focusedTrack !== "index";
 
   // ── cold-start slide readiness ─────────────────────────────────────────────
   // gridMounted: whether the cell grid is actually mounted — the EXACT condition
@@ -547,8 +594,7 @@ export function AtlasPickerPane({
   // state too, so those placeholder cases are folded in explicitly. The dock gate
   // releases on THIS so a placeholder/error open no longer waits for a full grid
   // mount.
-  const terminalFirstPaint =
-    !colorTexture || tooLarge || !eligible || offIndex || preview.kind !== "loading";
+  const terminalFirstPaint = !colorTexture || tooLarge || !eligible || offIndex || preview.kind !== "loading";
   useEffect(() => {
     if (gridMounted) {
       emitPerfTrace({
@@ -565,10 +611,13 @@ export function AtlasPickerPane({
   useEffect(() => {
     useDockAnim.getState().setAtlasTerminalFirstPaint(terminalFirstPaint);
   }, [terminalFirstPaint]);
-  useEffect(() => () => {
-    useDockAnim.getState().setAtlasGridMounted(false);
-    useDockAnim.getState().setAtlasTerminalFirstPaint(false);
-  }, []);
+  useEffect(
+    () => () => {
+      useDockAnim.getState().setAtlasGridMounted(false);
+      useDockAnim.getState().setAtlasTerminalFirstPaint(false);
+    },
+    [],
+  );
 
   // ── click-to-assign ──────────────────────────────────────────────────────
 
@@ -583,8 +632,7 @@ export function AtlasPickerPane({
       ),
     );
     const ok = results.every((r) => r.status === "fulfilled");
-    if (!ok)
-      console.warn("[atlas] some index frames could not be set; grid reflects the committed state.");
+    if (!ok) console.warn("[atlas] some index frames could not be set; grid reflects the committed state.");
     // Highlight follows committed data via tree/changed → CurveEditorPanel republish.
     return ok;
   }
@@ -613,7 +661,10 @@ export function AtlasPickerPane({
     if (offIndex || keyTimes.length === 0) return;
     // Effectively-empty frame: block assignment (mouse AND keyboard route through here) and
     // announce, so a keyboard/screen-reader user isn't left with a silent no-op.
-    if (deadCells.has(k)) { setAnnouncement(`Frame ${k} is empty — nothing to assign`); return; }
+    if (deadCells.has(k)) {
+      setAnnouncement(`Frame ${k} is empty — nothing to assign`);
+      return;
+    }
     if (frame === null && keyTimes.length > 1) {
       if (emitterId !== null) setConfirmTarget({ frame: k, emitterId, keyTimes });
       return;
@@ -628,24 +679,28 @@ export function AtlasPickerPane({
   onCellClickRef.current = onCellClick;
   const stableCellClick = useRef((k: number) => onCellClickRef.current(k)).current;
 
-  const totalCells   = side * side;
-  const fc           = frameCount(textureSize);
+  const totalCells = side * side;
+  const fc = frameCount(textureSize);
   // Show "M of N" only when the atlas has unused cells (frameCount < textureSize).
-  const meta         = totalCells === Math.max(1, Math.floor(Number.isFinite(textureSize) ? textureSize : 1))
-    ? `${side}×${side} · ${fc}`
-    : `${side}×${side} · ${fc} of ${textureSize}`;
-  const highlight    = frame === null ? null : resolveFrame(frame, side);
+  const meta =
+    totalCells === Math.max(1, Math.floor(Number.isFinite(textureSize) ? textureSize : 1))
+      ? `${side}×${side} · ${fc}`
+      : `${side}×${side} · ${fc} of ${textureSize}`;
+  const highlight = frame === null ? null : resolveFrame(frame, side);
   // Clamp the keyboard cursor against the live grid (backstop for the stale-index reset).
-  const safeFocus    = focusIndex !== null && focusIndex < totalCells ? focusIndex : null;
+  const safeFocus = focusIndex !== null && focusIndex < totalCells ? focusIndex : null;
   // The single tabbable cell: cursor, else the assigned frame, else 0 (never null).
   const rovingTarget = safeFocus ?? highlight ?? 0;
   const previewFrame = safeFocus ?? highlight; // hover is drawn imperatively from hoverRef
-  const setHoverPreview = useCallback((next: number | null) => {
-    const safeNext = next !== null && next >= 0 && next < totalCells ? next : null;
-    if (hoverRef.current === safeNext) return;
-    hoverRef.current = safeNext;
-    scheduleHoverPreviewRedraw();
-  }, [scheduleHoverPreviewRedraw, totalCells]);
+  const setHoverPreview = useCallback(
+    (next: number | null) => {
+      const safeNext = next !== null && next >= 0 && next < totalCells ? next : null;
+      if (hoverRef.current === safeNext) return;
+      hoverRef.current = safeNext;
+      scheduleHoverPreviewRedraw();
+    },
+    [scheduleHoverPreviewRedraw, totalCells],
+  );
   useEffect(() => {
     if (hoverRef.current !== null && hoverRef.current >= totalCells) {
       hoverRef.current = null;
@@ -731,12 +786,24 @@ export function AtlasPickerPane({
     const cols = layout.cols;
     let next: number | null = null;
     switch (e.key) {
-      case "ArrowLeft":  next = Math.max(0, cur - 1); break;
-      case "ArrowRight": next = Math.min(totalCells - 1, cur + 1); break;
-      case "ArrowUp":    next = cur - cols >= 0 ? cur - cols : null; break;
-      case "ArrowDown":  next = cur + cols < totalCells ? cur + cols : null; break;
-      case "Home":       next = 0; break;
-      case "End":        next = totalCells - 1; break;
+      case "ArrowLeft":
+        next = Math.max(0, cur - 1);
+        break;
+      case "ArrowRight":
+        next = Math.min(totalCells - 1, cur + 1);
+        break;
+      case "ArrowUp":
+        next = cur - cols >= 0 ? cur - cols : null;
+        break;
+      case "ArrowDown":
+        next = cur + cols < totalCells ? cur + cols : null;
+        break;
+      case "Home":
+        next = 0;
+        break;
+      case "End":
+        next = totalCells - 1;
+        break;
       case "Enter":
       case " ":
         e.preventDefault();
@@ -757,17 +824,21 @@ export function AtlasPickerPane({
     // Teaching empty state: name the fix, not just the fact.
     body = <Placeholder>No color texture set. Choose one under Appearance → Textures.</Placeholder>;
   } else if (tooLarge) {
-    body = <Placeholder>Atlas too large to display ({side}×{side}).</Placeholder>;
+    body = (
+      <Placeholder>
+        Atlas too large to display ({side}×{side}).
+      </Placeholder>
+    );
   } else if (!eligible) {
     body = <Placeholder>Single frame — no atlas to pick from.</Placeholder>;
   } else if (preview.kind === "missing") {
     body = <Placeholder>Texture “{colorTexture}” not found. Choose another under Appearance → Textures.</Placeholder>;
   } else if (preview.kind === "broken") {
-    body = <Placeholder>Texture “{colorTexture}” could not be read. Choose another under Appearance → Textures.</Placeholder>;
-  } else if (offIndex) {
     body = (
-      <Placeholder>Select keys on the index channel to assign frames.</Placeholder>
+      <Placeholder>Texture “{colorTexture}” could not be read. Choose another under Appearance → Textures.</Placeholder>
     );
+  } else if (offIndex) {
+    body = <Placeholder>Select keys on the index channel to assign frames.</Placeholder>;
   } else {
     // The hero renders ONE frame via a <canvas> crop (no giant CSS raster). The
     // cell grid is ONE <canvas> that draws every frame in a single paint and
@@ -826,7 +897,9 @@ export function AtlasPickerPane({
             deadCells={deadCells}
             layout={layout}
             onGridKeyDown={onGridKeyDown}
-            onFocusCapture={() => { focusInGridRef.current = true; }}
+            onFocusCapture={() => {
+              focusInGridRef.current = true;
+            }}
             onBlurCapture={(e) => {
               // Clear only on a deliberate move to another real element; a blur
               // to nothing (relatedTarget null) keeps the flag so the restore
@@ -857,11 +930,7 @@ export function AtlasPickerPane({
             <span data-testid="atlas-meta" className="min-w-0 flex-1 truncate">
               {meta}
             </span>
-            {interpolation && (
-              <span className="shrink-0 rounded border border-border px-1">
-                {interpolation}
-              </span>
-            )}
+            {interpolation && <span className="shrink-0 rounded border border-border px-1">{interpolation}</span>}
           </div>
         )}
         {body}
@@ -889,7 +958,9 @@ export function AtlasPickerPane({
           if (t) focusCell(t.frame); // return focus to the interacted cell, not <body>
         }}
       />
-      <div aria-live="polite" className="sr-only">{announcement}</div>
+      <div aria-live="polite" className="sr-only">
+        {announcement}
+      </div>
     </ToolPanel>
   );
 }
@@ -897,11 +968,7 @@ export function AtlasPickerPane({
 // ─── sub-components ───────────────────────────────────────────────────────────
 
 function Placeholder({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex flex-1 items-center justify-center p-6 text-center text-xs text-text-3">
-      {children}
-    </div>
-  );
+  return <div className="flex flex-1 items-center justify-center p-6 text-center text-xs text-text-3">{children}</div>;
 }
 
 function PreviewBox({
@@ -930,9 +997,10 @@ function PreviewBox({
   const dataUri = preview.kind === "ok" ? preview.dataUri : null;
   const { imageRef: imgRef, imageReady: imgReady } = useDecodedImage(dataUri);
   const displayFrame = hoverFrameRef.current ?? frame;
-  const placeholderText = rawFrame === null
-    ? "Hover or select a frame"
-    : `Frame ${rawFrame} — outside the ${side}×${side} atlas (in-game sampling is off-grid)`;
+  const placeholderText =
+    rawFrame === null
+      ? "Hover or select a frame"
+      : `Frame ${rawFrame} — outside the ${side}×${side} atlas (in-game sampling is off-grid)`;
 
   const paintDisplay = useCallback(() => {
     const nextFrame = hoverFrameRef.current ?? frame;
@@ -977,7 +1045,10 @@ function PreviewBox({
   }, [paintDisplay]);
 
   const pulseStyle: React.CSSProperties = pulse
-    ? { boxShadow: "0 0 0 2px var(--atlas-selected), 0 0 16px color-mix(in srgb, var(--atlas-selected) 60%, transparent)" }
+    ? {
+        boxShadow:
+          "0 0 0 2px var(--atlas-selected), 0 0 16px color-mix(in srgb, var(--atlas-selected) 60%, transparent)",
+      }
     : {};
   const hasDisplayFrame = displayFrame !== null;
 

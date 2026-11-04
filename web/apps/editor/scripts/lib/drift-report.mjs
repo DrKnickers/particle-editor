@@ -31,9 +31,7 @@ export function stableDrift(firstChanged, secondChanged) {
   const a = new Set(firstChanged);
   const b = new Set(secondChanged);
   const stable = [...a].filter((p) => b.has(p)).sort();
-  const noisy = [...new Set([...a, ...b])]
-    .filter((p) => !(a.has(p) && b.has(p)))
-    .sort();
+  const noisy = [...new Set([...a, ...b])].filter((p) => !(a.has(p) && b.has(p))).sort();
   return { stable, noisy };
 }
 
@@ -45,9 +43,8 @@ export function stableDrift(firstChanged, secondChanged) {
  */
 export function verdict({ stable, noisy }) {
   if (stable.length > 0) {
-    const noisyNote = noisy.length > 0
-      ? `\nA11Y-DRIFT: also nondeterministic (normalizer gap)\n${noisy.join("\n")}`
-      : "";
+    const noisyNote =
+      noisy.length > 0 ? `\nA11Y-DRIFT: also nondeterministic (normalizer gap)\n${noisy.join("\n")}` : "";
     return {
       kind: "drift",
       exitCode: 2,

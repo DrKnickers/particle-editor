@@ -1,8 +1,6 @@
 // Mock counterpart of src/host/BridgeDispatch_EmitterProperties.cpp.
 
-import type {
-  Request,
-} from "@particle-editor/bridge-schema";
+import type { Request } from "@particle-editor/bridge-schema";
 import {
   findEmitterNode,
   makeFixtureProperties,
@@ -13,15 +11,12 @@ import {
 } from "../mock-state";
 import type { MockDispatchHost } from "./host";
 
-type EmitterPropertiesKind =
-  | "emitters/get-properties"
-  | "emitters/set-properties";
+type EmitterPropertiesKind = "emitters/get-properties" | "emitters/set-properties";
 
 type EmitterPropertiesRequest = Extract<Request, { kind: EmitterPropertiesKind }>;
 
 export function dispatchEmitterProperties(this: MockDispatchHost, req: EmitterPropertiesRequest): unknown {
   switch (req.kind) {
-
     // ---------------- emitters/get-properties ----
     //
     // Returns the merged fixture+overlay DTO for `id`. Unknown ids
@@ -77,9 +72,7 @@ export function dispatchEmitterProperties(this: MockDispatchHost, req: EmitterPr
       // the EmitterTree label updates without an extra `emitters/rename`
       // round-trip.
       if (typeof req.params.patch.name === "string") {
-        useMockEmitterTree.getState().setTree(
-          renameEmitter(cur, node.id, req.params.patch.name),
-        );
+        useMockEmitterTree.getState().setTree(renameEmitter(cur, node.id, req.params.patch.name));
       }
       this.emit({
         kind: "emitters/tree/changed",

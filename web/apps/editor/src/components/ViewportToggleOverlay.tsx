@@ -17,13 +17,7 @@ const ICON = { size: 16, strokeWidth: 2, "aria-hidden": true } as const;
 
 type ViewportToggleState = Pick<
   EngineStateDto,
-  | "ground"
-  | "gridVisible"
-  | "bloom"
-  | "referenceObjectLocked"
-  | "referenceObjectName"
-  | "groundColor"
-  | "background"
+  "ground" | "gridVisible" | "bloom" | "referenceObjectLocked" | "referenceObjectName" | "groundColor" | "background"
 >;
 
 const selectViewportToggleState = (s: EngineStateDto): ViewportToggleState => ({
@@ -63,11 +57,7 @@ function ToggleButton(props: {
       <span className="inline-flex">
         <button
           type="button"
-          className={cn(
-            "vp-overlay-btn",
-            active && "vp-overlay-btn--active",
-            lock && active && "vp-overlay-btn--lock",
-          )}
+          className={cn("vp-overlay-btn", active && "vp-overlay-btn--active", lock && active && "vp-overlay-btn--lock")}
           aria-label={label}
           aria-pressed={active}
           disabled={disabled}

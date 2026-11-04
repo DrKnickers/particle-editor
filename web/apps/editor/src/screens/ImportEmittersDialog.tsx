@@ -26,10 +26,7 @@
 // caught and shown the same way. Only a full import closes the modal.
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import type {
-  Bridge,
-  EmitterTreeNode,
-} from "@particle-editor/bridge-schema";
+import type { Bridge, EmitterTreeNode } from "@particle-editor/bridge-schema";
 import { Check, ChevronRight, File, Minus } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { basename } from "@/lib/paths";
@@ -85,9 +82,7 @@ function visibleRows(tree: EmitterTreeNode | null, collapsed: Set<number>): Visi
   return out;
 }
 
-const ARROW_KEYS = new Set([
-  "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End", " ", "Enter",
-]);
+const ARROW_KEYS = new Set(["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End", " ", "Enter"]);
 
 export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
   const [sourcePath, setSourcePath] = useState<string | null>(null);
@@ -231,9 +226,7 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
         // clone threw (corrupt emitter data). Keep the modal open with
         // the tree intact so the user can pick a different source.
         console.warn(`[ImportEmitters] imported 0 of ${requested}`);
-        setError(
-          "No emitters were imported. The source file may contain unreadable emitter data.",
-        );
+        setError("No emitters were imported. The source file may contain unreadable emitter data.");
       } else {
         // Partial import — some landed, some didn't. The host re-loads the
         // same source the preview read and imports every in-range pick, so a
@@ -292,11 +285,13 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
         if (idx > 0) focusRow(rows[idx - 1]!.node.id);
         break;
       case "ArrowRight":
-        if (hasKids && collapsed.has(node.id)) toggleCollapse(node.id); // expand
+        if (hasKids && collapsed.has(node.id))
+          toggleCollapse(node.id); // expand
         else if (hasKids) focusRow(node.children[0]!.id); // → first child
         break;
       case "ArrowLeft":
-        if (hasKids && !collapsed.has(node.id)) toggleCollapse(node.id); // collapse
+        if (hasKids && !collapsed.has(node.id))
+          toggleCollapse(node.id); // collapse
         else if (rows[idx]!.parentId !== null) focusRow(rows[idx]!.parentId!); // → parent
         break;
       case "Home":
@@ -323,8 +318,7 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
     const state = branchState(node, picks);
     const hasChildren = node.children.length > 0;
     const isCollapsed = collapsed.has(node.id);
-    const ariaChecked: boolean | "mixed" =
-      state === "all" ? true : state === "partial" ? "mixed" : false;
+    const ariaChecked: boolean | "mixed" = state === "all" ? true : state === "partial" ? "mixed" : false;
     return (
       <div
         key={node.id}
@@ -336,7 +330,11 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
         data-selstate={state}
         ref={setRowRef(node.id)}
         tabIndex={node.id === activeRowId ? 0 : -1}
-        onClick={(e) => { e.stopPropagation(); setActiveId(node.id); toggleNode(node); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          setActiveId(node.id);
+          toggleNode(node);
+        }}
         onKeyDown={(e) => onTreeKeyDown(e, node)}
         className="flex flex-col rounded outline-none focus-ring"
       >
@@ -388,16 +386,10 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
           </span>
           {/* The full name for a truncated row. */}
           <Tip content={node.name}>
-            <span className="min-w-0 flex-1 truncate text-text">
-              {node.name}
-            </span>
+            <span className="min-w-0 flex-1 truncate text-text">{node.name}</span>
           </Tip>
         </div>
-        {hasChildren && !isCollapsed && (
-          <div role="group">
-            {node.children.map((c) => renderNode(c, depth + 1))}
-          </div>
-        )}
+        {hasChildren && !isCollapsed && <div role="group">{node.children.map((c) => renderNode(c, depth + 1))}</div>}
       </div>
     );
   };
@@ -409,13 +401,7 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
   const emptyTree = tree !== null && tree.children.length === 0;
 
   return (
-    <Modal
-      bridge={bridge}
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Import Emitters"
-      size="md"
-    >
+    <Modal bridge={bridge} open={open} onOpenChange={onOpenChange} title="Import Emitters" size="md">
       <Modal.Body>
         <div className="space-y-3">
           {/* Source file row */}
@@ -449,9 +435,7 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
               is still loaded; that message renders as a banner INSIDE the card
               below (not here) so the selection stays editable for a retry. */}
           {!loading && error && !tree && (
-            <div className="min-h-[160px] rounded border border-border bg-bg p-3 text-xs text-danger-fg">
-              {error}
-            </div>
+            <div className="min-h-[160px] rounded border border-border bg-bg p-3 text-xs text-danger-fg">{error}</div>
           )}
           {!loading && !error && !tree && (
             <div className="flex min-h-[160px] items-center justify-center rounded border border-border bg-bg p-3 text-center text-xs text-text-3">
@@ -497,11 +481,7 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
               </div>
               {/* Import outcome (0 / partial / reject) — a banner above the
                   tree body so the selection stays visible for a retry. */}
-              {error && (
-                <div className="border-b border-border bg-bg px-3 py-2 text-xs text-warning-fg">
-                  {error}
-                </div>
-              )}
+              {error && <div className="border-b border-border bg-bg px-3 py-2 text-xs text-warning-fg">{error}</div>}
               {/* Tree body — WAI-ARIA multi-select tree (roving tabindex). */}
               <div
                 role="tree"
@@ -509,7 +489,6 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
                 aria-label="Emitters"
                 className="max-h-[260px] overflow-y-auto bg-bg p-1"
               >
-
                 {/* Skip the synthetic root; render its children directly. */}
                 {tree.children.map((c) => renderNode(c, 0))}
               </div>
@@ -519,15 +498,8 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
       </Modal.Body>
       <Modal.Footer>
         <Modal.CancelButton>Cancel</Modal.CancelButton>
-        <Modal.OkButton
-          onClick={() => void handleOk()}
-          disabled={picks.size === 0 || importing}
-        >
-          {importing
-            ? "Importing…"
-            : picks.size > 0
-              ? `Import ${picks.size} selected`
-              : "Import"}
+        <Modal.OkButton onClick={() => void handleOk()} disabled={picks.size === 0 || importing}>
+          {importing ? "Importing…" : picks.size > 0 ? `Import ${picks.size} selected` : "Import"}
         </Modal.OkButton>
       </Modal.Footer>
     </Modal>

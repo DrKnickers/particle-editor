@@ -23,7 +23,9 @@ import type { Bridge } from "@particle-editor/bridge-schema";
 // Tooltip.Provider App.tsx supplies in production — this wrapper stands in
 // for it (precedent: renderWithTooltips in EmitterTree.test.tsx).
 const TipProvider = ({ children }: { children: ReactNode }) => (
-  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>
+    {children}
+  </Tooltip.Provider>
 );
 const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
@@ -81,9 +83,7 @@ function makeStubBridge(
       return Promise.reject(opts.groundSlotPathError);
     }
     if (req.kind === "engine/set/ground-texture") {
-      return Promise.resolve(
-        opts.groundTextureResult ?? { slot: req.params?.slot as number, applied: true },
-      );
+      return Promise.resolve(opts.groundTextureResult ?? { slot: req.params?.slot as number, applied: true });
     }
     return Promise.resolve({});
   });
@@ -146,7 +146,7 @@ describe("GroundPopoverBody", () => {
     expect(setGrid.params.visible).toBe(true);
   });
 
-  it("clicking an empty Custom slot dispatches file/pick-open with filter:\"ground\"", async () => {
+  it('clicking an empty Custom slot dispatches file/pick-open with filter:"ground"', async () => {
     const bridge = makeStubBridge({ fileOpen: { ok: false, error: "browser-mode" } });
     render(<GroundPopoverBody bridge={bridge} />);
     await waitFor(() => {
@@ -198,9 +198,7 @@ describe("GroundPopoverBody", () => {
       groundSlotPathError: new Error("ground slot path rejected"),
     });
     render(<GroundPopoverBody bridge={bridge} />);
-    fireEvent.click(
-      await screen.findByRole("button", { name: /Custom slot 1 \(empty\)/ }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: /Custom slot 1 \(empty\)/ }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Couldn't use that ground texture. Choose a local DDS or TGA file.",
@@ -208,10 +206,7 @@ describe("GroundPopoverBody", () => {
     const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0].kind);
     expect(calls).toContain("engine/set/ground-slot-custom-path");
     expect(calls).not.toContain("engine/set/ground-texture");
-    expect(warn).toHaveBeenCalledWith(
-      "[GroundPopoverBody] custom texture failed:",
-      expect.any(Error),
-    );
+    expect(warn).toHaveBeenCalledWith("[GroundPopoverBody] custom texture failed:", expect.any(Error));
     warn.mockRestore();
   });
 
@@ -224,33 +219,28 @@ describe("GroundPopoverBody", () => {
       groundTextureResult: { slot: 0, applied: true },
       failure: "actual slot 0 instead of requested slot 5",
     },
-  ])(
-    "reports a resolved custom-texture activation with $failure",
-    async ({ groundTextureResult }) => {
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-      const bridge = makeStubBridge({
-        fileOpen: { ok: true, path: "C:/textures/corrupt.dds" },
-        groundTextureResult,
-      });
-      render(<GroundPopoverBody bridge={bridge} />);
-      fireEvent.click(
-        await screen.findByRole("button", { name: /Custom slot 1 \(empty\)/ }),
-      );
+  ])("reports a resolved custom-texture activation with $failure", async ({ groundTextureResult }) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const bridge = makeStubBridge({
+      fileOpen: { ok: true, path: "C:/textures/corrupt.dds" },
+      groundTextureResult,
+    });
+    render(<GroundPopoverBody bridge={bridge} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Custom slot 1 \(empty\)/ }));
 
-      expect(await screen.findByRole("alert")).toHaveTextContent(
-        "Couldn't use that ground texture. Choose a local DDS or TGA file.",
-      );
-      expect(warn).toHaveBeenCalledWith(
-        "[GroundPopoverBody] custom texture failed:",
-        expect.objectContaining({
-          message: expect.stringContaining(
-            `actual slot ${groundTextureResult.slot}, applied ${groundTextureResult.applied}`,
-          ),
-        }),
-      );
-      warn.mockRestore();
-    },
-  );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't use that ground texture. Choose a local DDS or TGA file.",
+    );
+    expect(warn).toHaveBeenCalledWith(
+      "[GroundPopoverBody] custom texture failed:",
+      expect.objectContaining({
+        message: expect.stringContaining(
+          `actual slot ${groundTextureResult.slot}, applied ${groundTextureResult.applied}`,
+        ),
+      }),
+    );
+    warn.mockRestore();
+  });
 
   it("changing the Height spinner dispatches engine/set/ground-z", () => {
     const bridge = makeStubBridge();

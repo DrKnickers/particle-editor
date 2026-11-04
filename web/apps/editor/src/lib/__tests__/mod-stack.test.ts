@@ -41,7 +41,10 @@ function makeFakeBridge(initialStack: string[] = ["A", "B"]) {
       handlers.set(kind, bucket);
       return () => {
         const b = handlers.get(kind) ?? [];
-        handlers.set(kind, b.filter((h) => h !== handler));
+        handlers.set(
+          kind,
+          b.filter((h) => h !== handler),
+        );
       };
     }),
     /** Test helper — fire a fake engine/state/changed event. */

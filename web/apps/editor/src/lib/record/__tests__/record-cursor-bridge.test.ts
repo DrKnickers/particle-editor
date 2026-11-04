@@ -3,12 +3,17 @@ import { parseCursorMessage, postFrameAcked, isRecordHeadlessMessage, commitAndA
 
 describe("record-cursor-bridge", () => {
   it("parses a ui/cursor message (object form)", () => {
-    expect(parseCursorMessage({ type: "ui/cursor", x: 10, y: 20, visible: true, pressed: false }))
-      .toEqual({ x: 10, y: 20, visible: true, pressed: false });
+    expect(parseCursorMessage({ type: "ui/cursor", x: 10, y: 20, visible: true, pressed: false })).toEqual({
+      x: 10,
+      y: 20,
+      visible: true,
+      pressed: false,
+    });
   });
   it("parses a ui/cursor message (string form)", () => {
-    expect(parseCursorMessage(JSON.stringify({ type: "ui/cursor", x: 1, y: 2, visible: false, pressed: true })))
-      .toEqual({ x: 1, y: 2, visible: false, pressed: true });
+    expect(
+      parseCursorMessage(JSON.stringify({ type: "ui/cursor", x: 1, y: 2, visible: false, pressed: true })),
+    ).toEqual({ x: 1, y: 2, visible: false, pressed: true });
   });
   it("ignores non-cursor messages", () => {
     expect(parseCursorMessage({ type: "engine/state/changed" })).toBeNull();
@@ -36,14 +41,26 @@ describe("record-cursor-bridge", () => {
       });
     });
     afterEach(() => vi.unstubAllGlobals());
-    const drainRaf = () => { const q = rafQueue; rafQueue = []; q.forEach((cb) => cb(0)); };
+    const drainRaf = () => {
+      const q = rafQueue;
+      rafQueue = [];
+      q.forEach((cb) => cb(0));
+    };
     const passthroughFlush = (fn: () => void) => fn();
 
     it("headless: flushSyncs the frame and posts the ack SYNCHRONOUSLY (no rAF)", () => {
       const order: string[] = [];
       const applyFrame = () => order.push("apply");
       const post = () => order.push("post");
-      commitAndAck({ headless: true, applyFrame, post, flushSync: (fn) => { order.push("flush"); fn(); } });
+      commitAndAck({
+        headless: true,
+        applyFrame,
+        post,
+        flushSync: (fn) => {
+          order.push("flush");
+          fn();
+        },
+      });
       // Ack is posted immediately, before any rAF has been given a chance to run.
       expect(order).toEqual(["flush", "apply", "post"]);
       expect(rafQueue.length).toBe(0);
@@ -52,8 +69,15 @@ describe("record-cursor-bridge", () => {
     it("headless: withholds the ack (fail loud) when flushSync THROWS", () => {
       const post = vi.fn();
       const err = vi.spyOn(console, "error").mockImplementation(() => {});
-      commitAndAck({ headless: true, applyFrame: () => {}, post, flushSync: () => { throw new Error("commit failed"); } });
-      expect(post).not.toHaveBeenCalled();   // no false-good frame
+      commitAndAck({
+        headless: true,
+        applyFrame: () => {},
+        post,
+        flushSync: () => {
+          throw new Error("commit failed");
+        },
+      });
+      expect(post).not.toHaveBeenCalled(); // no false-good frame
       expect(err).toHaveBeenCalled();
       err.mockRestore();
     });
@@ -63,10 +87,10 @@ describe("record-cursor-bridge", () => {
       const applyFrame = vi.fn();
       commitAndAck({ headless: false, applyFrame, post, flushSync: passthroughFlush });
       expect(applyFrame).toHaveBeenCalledTimes(1);
-      expect(post).not.toHaveBeenCalled();   // not yet — waiting on rAF
-      drainRaf();                            // first rAF -> schedules the second
+      expect(post).not.toHaveBeenCalled(); // not yet — waiting on rAF
+      drainRaf(); // first rAF -> schedules the second
       expect(post).not.toHaveBeenCalled();
-      drainRaf();                            // second rAF -> posts
+      drainRaf(); // second rAF -> posts
       expect(post).toHaveBeenCalledTimes(1);
     });
 

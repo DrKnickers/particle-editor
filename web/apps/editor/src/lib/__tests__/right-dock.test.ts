@@ -1,10 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  __resetRightDockForTests,
-  setDock,
-  toggleDock,
-  getRightDockStoreForTests,
-} from "@/lib/right-dock";
+import { __resetRightDockForTests, setDock, toggleDock, getRightDockStoreForTests } from "@/lib/right-dock";
 
 // The store is module-level; clear localStorage and re-seed the in-memory
 // state from it before each test so cases don't leak into one another.

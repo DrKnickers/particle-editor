@@ -22,9 +22,7 @@ import { test, expect, type Page } from "./helpers/cdp";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const HOST_LOG_PATH = process.env.LOCALAPPDATA
-  ? join(process.env.LOCALAPPDATA, "AloParticleEditor", "host.log")
-  : "";
+const HOST_LOG_PATH = process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, "AloParticleEditor", "host.log") : "";
 
 let page: Page;
 
@@ -57,16 +55,14 @@ function countOccurrences(haystack: string, needle: string): number {
 }
 
 test("50 layout/viewport-rect cycles keep host responsive + Compositor recovers each time", async () => {
-  test.setTimeout(60_000);  // 50 cycles × ~500ms = ~25s plus margins
+  test.setTimeout(60_000); // 50 cycles × ~500ms = ~25s plus margins
 
   const before = readHostLog();
   const failsBefore = countOccurrences(before, "[COMP-engine-fail]");
   const resizesBefore = countOccurrences(before, "[COMP-engine-resize]");
   // Last composite count BEFORE the stress.
   const beforeMatches = [...before.matchAll(/\[COMP-engine-frame\] composite n=(\d+)/g)];
-  const compositeBefore = beforeMatches.length === 0
-    ? 0
-    : parseInt(beforeMatches[beforeMatches.length - 1][1], 10);
+  const compositeBefore = beforeMatches.length === 0 ? 0 : parseInt(beforeMatches[beforeMatches.length - 1][1], 10);
 
   // Drive resizes through a spread of sizes designed to actually
   // change the popup-client dimensions each cycle (no two consecutive
@@ -75,37 +71,38 @@ test("50 layout/viewport-rect cycles keep host responsive + Compositor recovers 
   // different aspect ratios to stress ResizeBuffers and CopyResource
   // size-matching.
   const sizes = [
-    { x: 0, y: 0, w: 640,  h: 480  },
-    { x: 0, y: 0, w: 1280, h: 720  },
+    { x: 0, y: 0, w: 640, h: 480 },
+    { x: 0, y: 0, w: 1280, h: 720 },
     { x: 0, y: 0, w: 1920, h: 1080 },
     { x: 0, y: 0, w: 2560, h: 1440 },
-    { x: 0, y: 0, w: 800,  h: 600  },
-    { x: 0, y: 0, w: 1024, h: 768  },
-    { x: 0, y: 0, w: 1366, h: 768  },
-    { x: 0, y: 0, w: 1600, h: 900  },
-    { x: 0, y: 0, w: 1440, h: 900  },
+    { x: 0, y: 0, w: 800, h: 600 },
+    { x: 0, y: 0, w: 1024, h: 768 },
+    { x: 0, y: 0, w: 1366, h: 768 },
+    { x: 0, y: 0, w: 1600, h: 900 },
+    { x: 0, y: 0, w: 1440, h: 900 },
     { x: 0, y: 0, w: 1920, h: 1200 },
   ];
 
-  const results: Array<{ snapshot: boolean; size: typeof sizes[0]; cycle: number; error?: string }> = await page.evaluate(async (sizes) => {
-    const b = window.bridge!;
-    const r: Array<{ snapshot: boolean; size: typeof sizes[0]; cycle: number; error?: string }> = [];
-    for (let i = 0; i < 50; i++) {
-      const s = sizes[i % sizes.length];
-      try {
-        await b.request({ kind: "layout/viewport-rect", params: s });
-        // Sleep a touch so the host's per-frame loop has a chance to
-        // detect the handle change and re-open. Without this, the
-        // bridge snapshot below might race the lazy re-open.
-        await new Promise((res) => setTimeout(res, 50));
-        const snap = await b.request({ kind: "engine/state/snapshot", params: {} });
-        r.push({ snapshot: snap != null, size: s, cycle: i });
-      } catch (err) {
-        r.push({ snapshot: false, size: s, cycle: i, error: (err as Error).message });
+  const results: Array<{ snapshot: boolean; size: (typeof sizes)[0]; cycle: number; error?: string }> =
+    await page.evaluate(async (sizes) => {
+      const b = window.bridge!;
+      const r: Array<{ snapshot: boolean; size: (typeof sizes)[0]; cycle: number; error?: string }> = [];
+      for (let i = 0; i < 50; i++) {
+        const s = sizes[i % sizes.length];
+        try {
+          await b.request({ kind: "layout/viewport-rect", params: s });
+          // Sleep a touch so the host's per-frame loop has a chance to
+          // detect the handle change and re-open. Without this, the
+          // bridge snapshot below might race the lazy re-open.
+          await new Promise((res) => setTimeout(res, 50));
+          const snap = await b.request({ kind: "engine/state/snapshot", params: {} });
+          r.push({ snapshot: snap != null, size: s, cycle: i });
+        } catch (err) {
+          r.push({ snapshot: false, size: s, cycle: i, error: (err as Error).message });
+        }
       }
-    }
-    return r;
-  }, sizes);
+      return r;
+    }, sizes);
 
   // Assertion 1: bridge stayed responsive through all 50 cycles.
   expect(results).toHaveLength(50);
@@ -113,10 +110,10 @@ test("50 layout/viewport-rect cycles keep host responsive + Compositor recovers 
   if (failedSnapshots.length > 0) {
     throw new Error(
       `${failedSnapshots.length} of 50 resize cycles had bridge failures:\n` +
-      failedSnapshots
-        .slice(0, 5)
-        .map((r) => `  cycle ${r.cycle} (${JSON.stringify(r.size)}): ${r.error ?? "snapshot returned null"}`)
-        .join("\n"),
+        failedSnapshots
+          .slice(0, 5)
+          .map((r) => `  cycle ${r.cycle} (${JSON.stringify(r.size)}): ${r.error ?? "snapshot returned null"}`)
+          .join("\n"),
     );
   }
 
@@ -128,9 +125,7 @@ test("50 layout/viewport-rect cycles keep host responsive + Compositor recovers 
   const failsAfter = countOccurrences(after, "[COMP-engine-fail]");
   const resizesAfter = countOccurrences(after, "[COMP-engine-resize]");
   const afterMatches = [...after.matchAll(/\[COMP-engine-frame\] composite n=(\d+)/g)];
-  const compositeAfter = afterMatches.length === 0
-    ? 0
-    : parseInt(afterMatches[afterMatches.length - 1][1], 10);
+  const compositeAfter = afterMatches.length === 0 ? 0 : parseInt(afterMatches[afterMatches.length - 1][1], 10);
 
   // Assertion 2: lazy detection actually fired. The 50 cycles cycled
   // through ≥10 distinct sizes, so at MINIMUM 10 handle changes were
@@ -141,8 +136,8 @@ test("50 layout/viewport-rect cycles keep host responsive + Compositor recovers 
   expect(
     newResizes,
     `Only ${newResizes} [COMP-engine-resize] events recorded after 50 size cycles ` +
-    `(spread across ${sizes.length} distinct sizes). Expected ≥ 5 — lazy detection in ` +
-    `CompositeEngineFrame may have regressed.`,
+      `(spread across ${sizes.length} distinct sizes). Expected ≥ 5 — lazy detection in ` +
+      `CompositeEngineFrame may have regressed.`,
   ).toBeGreaterThanOrEqual(5);
 
   // Assertion 3: no NEW [COMP-engine-fail] lines were added during
@@ -152,10 +147,8 @@ test("50 layout/viewport-rect cycles keep host responsive + Compositor recovers 
     const failLines = after
       .split("\n")
       .filter((l) => l.includes("[COMP-engine-fail]"))
-      .slice(-newFails);  // most-recent newFails entries
-    throw new Error(
-      `${newFails} new [COMP-engine-fail] lines added during stress:\n  ${failLines.join("\n  ")}`,
-    );
+      .slice(-newFails); // most-recent newFails entries
+    throw new Error(`${newFails} new [COMP-engine-fail] lines added during stress:\n  ${failLines.join("\n  ")}`);
   }
 
   // Assertion 4: composite count grew through the stress (per-frame
@@ -165,8 +158,8 @@ test("50 layout/viewport-rect cycles keep host responsive + Compositor recovers 
   expect(
     compositeAfter - compositeBefore,
     `Composite count only grew by ${compositeAfter - compositeBefore} during the stress ` +
-    `(before=${compositeBefore}, after=${compositeAfter}). Expected ≥ 10 — ` +
-    `CompositeEngineFrame may have stalled.`,
+      `(before=${compositeBefore}, after=${compositeAfter}). Expected ≥ 10 — ` +
+      `CompositeEngineFrame may have stalled.`,
   ).toBeGreaterThanOrEqual(10);
 });
 
@@ -177,13 +170,16 @@ test("layout/viewport-rect to known size produces an [COMP-engine-resize] line w
   const targetW = 1700;
   const targetH = 950;
 
-  await page.evaluate(async ({ w, h }) => {
-    const b = window.bridge!;
-    await b.request({ kind: "layout/viewport-rect", params: { x: 0, y: 0, w, h } });
-    // Let the host's per-frame loop tick at least once so the lazy
-    // detection runs.
-    await new Promise((res) => setTimeout(res, 200));
-  }, { w: targetW, h: targetH });
+  await page.evaluate(
+    async ({ w, h }) => {
+      const b = window.bridge!;
+      await b.request({ kind: "layout/viewport-rect", params: { x: 0, y: 0, w, h } });
+      // Let the host's per-frame loop tick at least once so the lazy
+      // detection runs.
+      await new Promise((res) => setTimeout(res, 200));
+    },
+    { w: targetW, h: targetH },
+  );
 
   const log = readHostLog();
   const matches = [...log.matchAll(/\[COMP-engine-resize\] handle [^\s]+ -> [^\s]+, size (\d+)x(\d+) -> (\d+)x(\d+)/g)];
@@ -195,6 +191,6 @@ test("layout/viewport-rect to known size produces an [COMP-engine-resize] line w
   expect(
     ourResize,
     `Expected at least one [COMP-engine-resize] line with new size ${targetW}x${targetH} ` +
-    `after layout/viewport-rect resize. Matches found: ${matches.length}`,
+      `after layout/viewport-rect resize. Matches found: ${matches.length}`,
   ).toBeDefined();
 });

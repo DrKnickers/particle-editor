@@ -35,9 +35,7 @@ test("Help → About opens the modal and displays /Version \\d+/", async () => {
   await page.keyboard.press("Escape").catch(() => {});
 
   // Click the Help trigger in the menubar.
-  const helpTrigger = page
-    .locator('[role="menubar"] >> text=Help')
-    .first();
+  const helpTrigger = page.locator('[role="menubar"] >> text=Help').first();
   await helpTrigger.click();
 
   // Radix portals the menu content; wait for it to mount.
@@ -50,11 +48,7 @@ test("Help → About opens the modal and displays /Version \\d+/", async () => {
   await page.waitForSelector(RADIX_DIALOG, { timeout: 2000 });
 
   // The body should contain a "Version N(.N)?" line.
-  const versionText = await page
-    .locator(RADIX_DIALOG)
-    .locator("text=/Version \\d+(\\.\\d+)?/")
-    .first()
-    .textContent();
+  const versionText = await page.locator(RADIX_DIALOG).locator("text=/Version \\d+(\\.\\d+)?/").first().textContent();
   expect(versionText).toBeTruthy();
   expect(versionText).toMatch(/Version \d+/);
 
@@ -111,8 +105,6 @@ test("engine/action/rescale-system dispatched directly fires engine/state/change
   });
 
   await page.waitForTimeout(150);
-  const afterCount = await page.evaluate(
-    () => window.__stateChangedCount
-  );
+  const afterCount = await page.evaluate(() => window.__stateChangedCount);
   expect(afterCount).toBeGreaterThanOrEqual(1);
 });

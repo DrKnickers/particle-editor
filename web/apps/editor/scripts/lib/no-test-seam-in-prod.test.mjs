@@ -18,9 +18,12 @@ const distMissing = !existsSync(distAssets);
 // minification); `atlas-test-seam` / `profiler-audit` would be the dynamic-import
 // chunk names if either DEV seam were ever emitted into the shipped bundle.
 const FORBIDDEN = [
-  "__atlasTest", "atlas-test-seam",
-  "__profilerAudit", "profiler-audit",
-  "__paletteTest", "palette-test-seam",
+  "__atlasTest",
+  "atlas-test-seam",
+  "__profilerAudit",
+  "profiler-audit",
+  "__paletteTest",
+  "palette-test-seam",
 ];
 
 test(

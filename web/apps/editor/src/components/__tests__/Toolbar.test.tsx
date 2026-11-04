@@ -88,7 +88,8 @@ describe("Toolbar — Particle Editor 2026 layout", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const b = makeBridge();
     b.request.mockImplementation((req: { kind: string }) => {
-      if (req.kind === "engine/state/snapshot") return Promise.resolve({ canUndo: true, canRedo: false, paused: false });
+      if (req.kind === "engine/state/snapshot")
+        return Promise.resolve({ canUndo: true, canRedo: false, paused: false });
       if (req.kind === "undo/perform") return Promise.reject(new Error("host gone"));
       return Promise.resolve({});
     });
@@ -164,9 +165,7 @@ describe("Toolbar — Particle Editor 2026 layout", () => {
     const b = makeBridge();
     renderToolbar(b);
     await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Leave particles after instance death" }),
-      ).toBeInTheDocument(),
+      expect(screen.getByRole("button", { name: "Leave particles after instance death" })).toBeInTheDocument(),
     );
     expect(screen.queryByRole("button", { name: "Show ground" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Show grid" })).toBeNull();
@@ -177,9 +176,10 @@ describe("Toolbar — Particle Editor 2026 layout", () => {
     const b = makeBridge();
     renderToolbar(b);
     await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Leave particles after instance death" }),
-      ).toHaveAttribute("aria-pressed", "true"),
+      expect(screen.getByRole("button", { name: "Leave particles after instance death" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      ),
     );
   });
 
@@ -221,9 +221,14 @@ describe("Toolbar — Particle Editor 2026 layout", () => {
     const b = makeBridgeStub({
       responses: {
         "engine/state/snapshot": {
-          paused: false, bloom: false, bloomAvailable: true,
-          ground: true, gridVisible: true, heatDebug: false,
-          canUndo: true, canRedo: false,
+          paused: false,
+          bloom: false,
+          bloomAvailable: true,
+          ground: true,
+          gridVisible: true,
+          heatDebug: false,
+          canUndo: true,
+          canRedo: false,
           selectedEmitterId: 1,
         },
       },

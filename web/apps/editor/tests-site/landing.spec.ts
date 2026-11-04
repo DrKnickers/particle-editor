@@ -19,21 +19,20 @@ const SITE = fileURLToPath(new URL("../../../../site", import.meta.url));
 const MEDIA = resolve(SITE, "media-local");
 const STEMS = ["hero", "faith", "f04", "spawner", "f02-reorder", "f02"];
 const STILLS = ["interface-theme-dark.jpg", "interface-theme-light.jpg"];
-const REQUIRED = [
-  ...STEMS.flatMap((s) => [`${s}.mp4`, `${s}-poster.jpg`]),
-  ...STILLS,
-].map((f) => resolve(MEDIA, f));
+const REQUIRED = [...STEMS.flatMap((s) => [`${s}.mp4`, `${s}-poster.jpg`]), ...STILLS].map((f) => resolve(MEDIA, f));
 const HAS_MEDIA = REQUIRED.every((p) => existsSync(p));
 
 // Point MEDIA_BASE at the locally-served placeholder media, before any page script runs.
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => { window.__MEDIA_BASE__ = "/media-local/"; });
+  await page.addInitScript(() => {
+    window.__MEDIA_BASE__ = "/media-local/";
+  });
 });
 
 test("structure: hero, 7 ordered features, footer; no uncaught JS errors", async ({ page }) => {
   const jsErrors: string[] = [];
   page.on("pageerror", (e) => jsErrors.push(String(e))); // uncaught JS only — resource
-                                                          // errors don't count
+  // errors don't count
   await page.goto("/");
   await expect(page.locator("h1")).toHaveText("Edit and preview Empire at War particle effects.");
   await expect(page.locator("section.feature")).toHaveCount(7);
@@ -46,9 +45,7 @@ test("structure: hero, 7 ordered features, footer; no uncaught JS errors", async
     "Atlas frame picker",
     "Other editing and recovery tools",
   ]);
-  await expect(page.locator("section.feature .section-number")).toHaveText([
-    "1", "2", "3", "4", "5", "6", "7",
-  ]);
+  await expect(page.locator("section.feature .section-number")).toHaveText(["1", "2", "3", "4", "5", "6", "7"]);
   await expect(page.locator("header.topbar")).toBeVisible();
   await expect(page.locator("footer.site-footer")).toBeVisible();
   expect(jsErrors, jsErrors.join("\n")).toHaveLength(0);
@@ -77,16 +74,18 @@ test("interface section provides an accessible dark and light comparison", async
   await page.goto("/");
   const section = page.locator("section.feature").first();
   await expect(section.locator(".section-label")).toContainText("Interface");
-  await expect(section).toContainText(
-    "The emitter tree, properties, curves, and live preview remain visible",
-  );
+  await expect(section).toContainText("The emitter tree, properties, curves, and live preview remain visible");
   const comparison = section.locator("[data-theme-compare]");
   await expect(comparison).toHaveCount(1);
   await expect(comparison).toHaveClass(/is-enhanced/);
-  await expect(comparison.locator('[data-theme-layer="dark"]'))
-    .toHaveAttribute("data-poster", "interface-theme-dark.jpg");
-  await expect(comparison.locator('[data-theme-layer="light"]'))
-    .toHaveAttribute("data-poster", "interface-theme-light.jpg");
+  await expect(comparison.locator('[data-theme-layer="dark"]')).toHaveAttribute(
+    "data-poster",
+    "interface-theme-dark.jpg",
+  );
+  await expect(comparison.locator('[data-theme-layer="light"]')).toHaveAttribute(
+    "data-poster",
+    "interface-theme-light.jpg",
+  );
   await expect(comparison).toHaveAttribute(
     "aria-label",
     "The same Particle Editor workspace in dark and light themes.",
@@ -103,26 +102,17 @@ test("interface section provides an accessible dark and light comparison", async
   await expect(range).toHaveValue("100");
   await expect(comparison).toHaveCSS("--theme-split", "100%");
   await expect(lightLayer).toHaveCSS("clip-path", "inset(0px 0px 0px 100%)");
-  await expect(range).toHaveAttribute(
-    "aria-valuetext",
-    "100% dark interface, 0% light interface",
-  );
+  await expect(range).toHaveAttribute("aria-valuetext", "100% dark interface, 0% light interface");
   await range.press("Home");
   await expect(range).toHaveValue("0");
   await expect(comparison).toHaveCSS("--theme-split", "0%");
   await expect(lightLayer).toHaveCSS("clip-path", "inset(0px 0px 0px 0%)");
-  await expect(range).toHaveAttribute(
-    "aria-valuetext",
-    "0% dark interface, 100% light interface",
-  );
+  await expect(range).toHaveAttribute("aria-valuetext", "0% dark interface, 100% light interface");
   await range.press("ArrowRight");
   await expect(range).toHaveValue("1");
   await expect(comparison).toHaveCSS("--theme-split", "1%");
   await expect(lightLayer).toHaveCSS("clip-path", "inset(0px 0px 0px 1%)");
-  await expect(range).toHaveAttribute(
-    "aria-valuetext",
-    "1% dark interface, 99% light interface",
-  );
+  await expect(range).toHaveAttribute("aria-valuetext", "1% dark interface, 99% light interface");
 
   const box = await range.boundingBox();
   expect(box).not.toBeNull();
@@ -131,10 +121,7 @@ test("interface section provides an accessible dark and light comparison", async
   const pointerValue = Number(await range.inputValue());
   expect(pointerValue).toBeGreaterThan(70);
   await expect(comparison).toHaveCSS("--theme-split", `${pointerValue}%`);
-  await expect(lightLayer).toHaveCSS(
-    "clip-path",
-    `inset(0px 0px 0px ${pointerValue}%)`,
-  );
+  await expect(lightLayer).toHaveCSS("clip-path", `inset(0px 0px 0px ${pointerValue}%)`);
   await expect(range).toHaveAttribute(
     "aria-valuetext",
     `${pointerValue}% dark interface, ${100 - pointerValue}% light interface`,
@@ -151,12 +138,12 @@ test("media version query cache-busts interface stills", async ({ page }) => {
   await page.goto("/?v=interface-overhaul-final");
   const comparison = page.locator("[data-theme-compare]");
   await comparison.scrollIntoViewIfNeeded();
-  await expect.poll(() => comparison.locator('[data-theme-layer="dark"]').evaluate(
-    (el: HTMLImageElement) => el.currentSrc,
-  )).toMatch(/interface-theme-dark\.jpg\?v=interface-overhaul-final$/);
-  await expect.poll(() => comparison.locator('[data-theme-layer="light"]').evaluate(
-    (el: HTMLImageElement) => el.currentSrc,
-  )).toMatch(/interface-theme-light\.jpg\?v=interface-overhaul-final$/);
+  await expect
+    .poll(() => comparison.locator('[data-theme-layer="dark"]').evaluate((el: HTMLImageElement) => el.currentSrc))
+    .toMatch(/interface-theme-dark\.jpg\?v=interface-overhaul-final$/);
+  await expect
+    .poll(() => comparison.locator('[data-theme-layer="light"]').evaluate((el: HTMLImageElement) => el.currentSrc))
+    .toMatch(/interface-theme-light\.jpg\?v=interface-overhaul-final$/);
 });
 
 test("interface comparison remains useful without JavaScript", async ({ browser }) => {
@@ -173,10 +160,12 @@ test("interface comparison remains useful without JavaScript", async ({ browser 
     const images = stage.locator("img");
     await expect(images).toHaveCount(2);
     const stageBox = await stage.boundingBox();
-    const imageBoxes = await images.evaluateAll((elements) => elements.map((element) => {
-      const box = element.getBoundingClientRect();
-      return { x: box.x, y: box.y, width: box.width, height: box.height };
-    }));
+    const imageBoxes = await images.evaluateAll((elements) =>
+      elements.map((element) => {
+        const box = element.getBoundingClientRect();
+        return { x: box.x, y: box.y, width: box.width, height: box.height };
+      }),
+    );
     expect(stageBox).not.toBeNull();
     expect(stageBox!.width / stageBox!.height).toBeCloseTo(4 / 3, 1);
     expect(imageBoxes).toEqual([
@@ -185,15 +174,17 @@ test("interface comparison remains useful without JavaScript", async ({ browser 
     ]);
     const lightLayer = stage.locator(".theme-compare-light");
     await expect(lightLayer).toHaveCSS("clip-path", "inset(0px 0px 0px 50%)");
-    const dividerOffset = await stage.locator(".theme-compare-divider").evaluate(
-      (element) => Number.parseFloat(getComputedStyle(element).left),
-    );
+    const dividerOffset = await stage
+      .locator(".theme-compare-divider")
+      .evaluate((element) => Number.parseFloat(getComputedStyle(element).left));
     expect(dividerOffset).toBeCloseTo(stageBox!.width / 2, 1);
     await expect(stage.getByText("Dark", { exact: true })).toBeVisible();
     await expect(stage.getByText("Light", { exact: true })).toBeVisible();
-    await expect(page.getByRole("slider", {
-      name: "Compare dark and light interface",
-    })).toHaveCount(0);
+    await expect(
+      page.getByRole("slider", {
+        name: "Compare dark and light interface",
+      }),
+    ).toHaveCount(0);
   } finally {
     await context.close();
   }
@@ -205,11 +196,12 @@ test("links: download + source resolve; internal links + anchors exist", async (
   for (const sel of ["header a.btn-primary", ".hero a.btn-primary", ".site-footer a.btn-primary"])
     await expect(page.locator(sel)).toHaveAttribute("href", /releases\/latest/);
   await expect(page.locator('header a[href="https://github.com/DrKnickers/particle-editor"]')).toHaveCount(1); // source
-  const hrefs = await page.locator("a[href]").evaluateAll((els) =>
-    els.map((e) => e.getAttribute("href") || ""));
+  const hrefs = await page.locator("a[href]").evaluateAll((els) => els.map((e) => e.getAttribute("href") || ""));
   for (const h of hrefs) {
-    if (h.startsWith("#")) await expect(page.locator(h)).toHaveCount(1); // anchor target exists
-    else if (/^https?:\/\//.test(h)) continue;                           // external — not fetched
+    if (h.startsWith("#"))
+      await expect(page.locator(h)).toHaveCount(1); // anchor target exists
+    else if (/^https?:\/\//.test(h))
+      continue; // external — not fetched
     else {
       // relative internal link (e.g. the Guide) must actually resolve on the served site
       const res = await page.request.get(new URL(h, page.url()).href);
@@ -221,10 +213,14 @@ test("links: download + source resolve; internal links + anchors exist", async (
 test("a11y: no critical/serious axe violations", async ({ page }) => {
   await page.goto("/");
   // wait for the CSS entrance stagger to finish so axe sees the settled page
-  await page.waitForFunction(() =>
-    [...document.querySelectorAll(".hero > *, .feature > *, .site-footer > *")]
-      .every((el) => getComputedStyle(el).opacity === "1"),
-    null, { timeout: 5000 });
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll(".hero > *, .feature > *, .site-footer > *")].every(
+        (el) => getComputedStyle(el).opacity === "1",
+      ),
+    null,
+    { timeout: 5000 },
+  );
   const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze();
   const bad = results.violations.filter((v) => ["critical", "serious"].includes(v.impact ?? ""));
   expect(bad, JSON.stringify(bad.map((v) => v.id))).toHaveLength(0);
@@ -234,9 +230,15 @@ test("hero clip actually plays (best-effort autoplay)", async ({ page }) => {
   test.skip(!HAS_MEDIA, "ffmpeg unavailable — cannot generate placeholder media");
   await page.goto("/");
   const hero = page.locator("figure.clip-hero video");
-  await expect.poll(() => hero.evaluate((v: HTMLVideoElement) =>
-    !v.paused && v.readyState >= 2 /* HAVE_CURRENT_DATA */ && v.currentTime > 0),
-    { timeout: 8000 }).toBe(true);
+  await expect
+    .poll(
+      () =>
+        hero.evaluate(
+          (v: HTMLVideoElement) => !v.paused && v.readyState >= 2 /* HAVE_CURRENT_DATA */ && v.currentTime > 0,
+        ),
+      { timeout: 8000 },
+    )
+    .toBe(true);
 });
 
 test("lazy loading: below-fold clips request nothing until scrolled in", async ({ page }) => {
@@ -256,7 +258,9 @@ test("lazy loading: below-fold clips request nothing until scrolled in", async (
 test("pause control: toggles playback, flips label, blocks lazy load while paused", async ({ page }) => {
   test.skip(!HAS_MEDIA, "ffmpeg unavailable");
   const lazyReqs: string[] = [];
-  page.on("request", (r) => { if (/\/f04[^/]*\.mp4(?:[?#]|$)/.test(r.url())) lazyReqs.push(r.url()); });
+  page.on("request", (r) => {
+    if (/\/f04[^/]*\.mp4(?:[?#]|$)/.test(r.url())) lazyReqs.push(r.url());
+  });
   await page.goto("/");
   const btn = page.locator("#motion-toggle");
   await expect(btn).toBeVisible();
@@ -281,10 +285,11 @@ test("pause control: toggles playback, flips label, blocks lazy load while pause
 test("reduced motion: no autoplay, no media request, fade-up off, control offers play", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   const media: string[] = [];
-  page.on("request", (r) => { if (r.url().endsWith(".mp4")) media.push(r.url()); });
+  page.on("request", (r) => {
+    if (r.url().endsWith(".mp4")) media.push(r.url());
+  });
   await page.goto("/");
-  for (const f of await page.locator("section.feature, footer").all())
-    await f.scrollIntoViewIfNeeded();
+  for (const f of await page.locator("section.feature, footer").all()) await f.scrollIntoViewIfNeeded();
   await page.waitForTimeout(500);
   const hero = page.locator("figure.clip-hero video");
   await expect(hero).toHaveJSProperty("paused", true);
@@ -298,7 +303,10 @@ test("reduced motion: no autoplay, no media request, fade-up off, control offers
 
 test("asset rule: no media binary tracked under site/", () => {
   const tracked = execFileSync("git", ["ls-files", "site/"], { cwd: SITE + "/.." })
-    .toString().trim().split("\n").filter(Boolean);
+    .toString()
+    .trim()
+    .split("\n")
+    .filter(Boolean);
   const leaked = tracked.filter((f) => /\.(mp4|webm|jpe?g|png|webp|gif)$/i.test(f));
   expect(leaked, `tracked media leaked: ${leaked.join(", ")}`).toHaveLength(0);
 });

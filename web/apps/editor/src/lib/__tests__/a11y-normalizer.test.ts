@@ -55,9 +55,7 @@ describe("a11y-normalizer", () => {
         {
           Name: "wrapper",
           ControlType: "WebView2Wrapper",
-          children: [
-            { Name: "MenuBar", ControlType: "MenuBar", children: [] },
-          ],
+          children: [{ Name: "MenuBar", ControlType: "MenuBar", children: [] }],
         },
       ],
     };
@@ -88,9 +86,7 @@ describe("a11y-normalizer", () => {
                   Name: "",
                   ControlType: "Pane",
                   ClassName: "NonClientView",
-                  children: [
-                    { Name: "MenuBar", ControlType: "MenuBar", AutomationId: "menubar", children: [] },
-                  ],
+                  children: [{ Name: "MenuBar", ControlType: "MenuBar", AutomationId: "menubar", children: [] }],
                 },
               ],
             },

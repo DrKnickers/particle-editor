@@ -24,7 +24,10 @@ test("interactive chrome carries hover/press transitions (no hard cuts)", async 
     const out: string[] = [];
     for (const sel of sels) {
       const el = document.querySelector(sel);
-      if (!el) { out.push(`${sel}: MISSING`); continue; }
+      if (!el) {
+        out.push(`${sel}: MISSING`);
+        continue;
+      }
       if (parseFloat(getComputedStyle(el).transitionDuration) === 0) out.push(`${sel}: no transition`);
     }
     // App-wide: enabled buttons with a hover: style change must transition.
@@ -96,7 +99,10 @@ test("reduced-motion makes the design-pass motion inert", async ({ page }) => {
   await page.click('[role="menubar"] [role="menuitem"]:has-text("File")');
   const anim = await page.locator('[role="menu"]').evaluate((el) => getComputedStyle(el).animationName);
   expect(anim).toBe("none");
-  const btn = await page.locator(".tb-btn").first().evaluate((el) => getComputedStyle(el).transitionDuration);
+  const btn = await page
+    .locator(".tb-btn")
+    .first()
+    .evaluate((el) => getComputedStyle(el).transitionDuration);
   expect(parseFloat(btn)).toBe(0);
   await page.keyboard.press("Escape");
 });

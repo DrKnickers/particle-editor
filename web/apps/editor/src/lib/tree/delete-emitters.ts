@@ -19,18 +19,18 @@ import { announceWhenOk } from "../status-feedback";
 
 export type DeleteImpact = {
   affectedCount: number; // deduped union of every selected id's subtree
-  primaryName: string;   // name of the first selected emitter ("" if unknown)
+  primaryName: string; // name of the first selected emitter ("" if unknown)
   isDestructive: boolean;
 };
 
-export function computeDeleteImpact(
-  ids: number[],
-  tree: EmitterTreeDto | null,
-): DeleteImpact {
+export function computeDeleteImpact(ids: number[], tree: EmitterTreeDto | null): DeleteImpact {
   if (ids.length === 0) return { affectedCount: 0, primaryName: "", isDestructive: false };
 
   const byId = new Map<number, EmitterTreeNode>();
-  const index = (n: EmitterTreeNode) => { byId.set(n.id, n); n.children.forEach(index); };
+  const index = (n: EmitterTreeNode) => {
+    byId.set(n.id, n);
+    n.children.forEach(index);
+  };
   if (tree) tree.root.children.forEach(index);
 
   const affected = new Set<number>();
@@ -43,7 +43,10 @@ export function computeDeleteImpact(
   let anyHasChildren = false;
   for (const id of ids) {
     const n = byId.get(id);
-    if (!n) { affected.add(id); continue; } // unknown id still counts as one
+    if (!n) {
+      affected.add(id);
+      continue;
+    } // unknown id still counts as one
     if (n.children.length > 0) anyHasChildren = true;
     addSubtree(n);
   }
@@ -114,10 +117,7 @@ export function performDelete(bridge: Bridge, ids: number[], tree: EmitterTreeDt
   });
   // StatusBar feedback once the delete resolves (F4) — a multi-root delete
   // is one gesture, so it announces once.
-  announceWhenOk(
-    request,
-    `Deleted ${roots.length === 1 ? "emitter" : `${roots.length} emitters`} — Ctrl+Z to undo`,
-  );
+  announceWhenOk(request, `Deleted ${roots.length === 1 ? "emitter" : `${roots.length} emitters`} — Ctrl+Z to undo`);
 }
 
 type DeleteConfirmStore = {
@@ -159,9 +159,9 @@ export function confirmPendingDelete(bridge: Bridge): void {
   if (pending.tree !== live) {
     // The tree changed since the confirm opened — the captured positional ids are
     // stale. Surface it (not a silent no-op) so the user re-selects (#8).
-    useFileOpErrorStore.getState().show(
-      "The emitter list changed — the delete was cancelled. Please re-select and try again.",
-    );
+    useFileOpErrorStore
+      .getState()
+      .show("The emitter list changed — the delete was cancelled. Please re-select and try again.");
     return;
   }
   performDelete(bridge, pending.ids, live);

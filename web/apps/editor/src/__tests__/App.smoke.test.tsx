@@ -94,10 +94,7 @@ describe("App — smoke render against the MockBridge", () => {
     });
     // file/recent/list seed landed too.
     await waitFor(() => {
-      expect(useFileStateStore.getState().recentFiles).toEqual([
-        "C:/mods/fire.alo",
-        "C:/mods/smoke.alo",
-      ]);
+      expect(useFileStateStore.getState().recentFiles).toEqual(["C:/mods/fire.alo", "C:/mods/smoke.alo"]);
     });
   });
 

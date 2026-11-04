@@ -67,11 +67,7 @@ function normalizeVolatile(s: string): string {
 }
 
 expect.extend({
-  toMatchJSONGolden(
-    received: unknown,
-    goldenPath: string,
-    options?: { rawForDebug?: unknown },
-  ): MatcherReturnType {
+  toMatchJSONGolden(received: unknown, goldenPath: string, options?: { rawForDebug?: unknown }): MatcherReturnType {
     // goldenPath is relative to tests/, e.g. "a11y-goldens/menubar.golden.json"
     // or "a11y-goldens/menubar.composition.golden.yaml" (composition lane).
     const absPath = path.resolve(__dirname, "..", goldenPath);
@@ -79,9 +75,12 @@ expect.extend({
     // object inputs (HWND lane, UIA tree) are JSON-stringified with 2-space
     // indent + trailing newline. Both end with "\n" so the golden file is
     // text-editor-friendly.
-    const serialized = typeof received === "string"
-      ? (received.endsWith("\n") ? received : received + "\n")
-      : JSON.stringify(received, null, 2) + "\n";
+    const serialized =
+      typeof received === "string"
+        ? received.endsWith("\n")
+          ? received
+          : received + "\n"
+        : JSON.stringify(received, null, 2) + "\n";
 
     if (UPDATE) {
       // A gate run must NEVER take this branch. Update mode overwrites the
@@ -113,9 +112,7 @@ expect.extend({
     if (!fs.existsSync(absPath)) {
       return {
         pass: false,
-        message: () =>
-          `A11y golden missing: ${goldenPath}\n` +
-          `  Hint: run \`pnpm a11y:update\` to create it.`,
+        message: () => `A11y golden missing: ${goldenPath}\n` + `  Hint: run \`pnpm a11y:update\` to create it.`,
       };
     }
 
@@ -144,9 +141,7 @@ expect.extend({
           `A11y golden mismatch: ${goldenPath}\n` +
           `  Expected (committed) vs Received (current run) differ.\n` +
           `  Hint: if intended, run \`pnpm a11y:update --grep "<surface>"\`\n` +
-          (options?.rawForDebug
-            ? `  Raw pre-normalization written to a11y-failures/${base}.raw.json\n`
-            : "")
+          (options?.rawForDebug ? `  Raw pre-normalization written to a11y-failures/${base}.raw.json\n` : "")
         );
       },
     };
@@ -161,10 +156,7 @@ expect.extend({
 declare global {
   namespace PlaywrightTest {
     interface Matchers<R> {
-      toMatchJSONGolden(
-        goldenPath: string,
-        options?: { rawForDebug?: unknown },
-      ): R;
+      toMatchJSONGolden(goldenPath: string, options?: { rawForDebug?: unknown }): R;
     }
   }
 }

@@ -56,11 +56,16 @@ export function drawGrid(canvas: HTMLCanvasElement, img: HTMLImageElement | null
   // 1) Frames.
   if (img) {
     ctx.imageSmoothingEnabled = true;
-    const iw = img.naturalWidth, ih = img.naturalHeight;
+    const iw = img.naturalWidth,
+      ih = img.naturalHeight;
     for (let k = 0; k < totalCells; k++) {
       const { x, y } = at(k);
       const r = cellRect(k, side, iw, ih);
-      try { ctx.drawImage(img, r.left, r.top, r.width, r.height, x, y, cell, cell); } catch { /* skip */ }
+      try {
+        ctx.drawImage(img, r.left, r.top, r.width, r.height, x, y, cell, cell);
+      } catch {
+        /* skip */
+      }
     }
   }
 
@@ -79,7 +84,10 @@ export function drawGrid(canvas: HTMLCanvasElement, img: HTMLImageElement | null
     }
     const label = String(k);
     const tw = Math.ceil(ctx.measureText(label).width);
-    const bw = tw + 6, bh = 12, bx = x + 2, by = y + cell - bh - 2;
+    const bw = tw + 6,
+      bh = 12,
+      bx = x + 2,
+      by = y + cell - bh - 2;
     ctx.fillStyle = selected ? amber : scrimBg;
     ctx.fillRect(bx, by, bw, bh);
     ctx.fillStyle = selected ? "#000000" : scrimFg;
@@ -109,12 +117,7 @@ export function drawGrid(canvas: HTMLCanvasElement, img: HTMLImageElement | null
  *  hero element's own bg-bg-2 shows through transparent frame pixels — matching
  *  the cells' uniform gray in both modes (no checkerboard).
  *  No-ops gracefully if there's no 2d context (jsdom) or no image yet. */
-export function drawHero(
-  canvas: HTMLCanvasElement,
-  img: HTMLImageElement,
-  frame: number,
-  side: number,
-) {
+export function drawHero(canvas: HTMLCanvasElement, img: HTMLImageElement, frame: number, side: number) {
   const ctx = canvas.getContext("2d");
   if (!ctx) return; // jsdom has no real 2d context — no-op
   const dpr = Math.min(window.devicePixelRatio || 1, 2);

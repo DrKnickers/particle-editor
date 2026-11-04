@@ -17,9 +17,14 @@ describe("captureDomA11y", () => {
 
   it("settles the page before snapshotting only the supplied surface", async () => {
     const calls: string[] = [];
-    const waitForFunction = vi.fn(async () => { calls.push("settle"); });
+    const waitForFunction = vi.fn(async () => {
+      calls.push("settle");
+    });
     const locator = vi.fn();
-    const ariaSnapshot = vi.fn(async () => { calls.push("surface"); return "dialog\n"; });
+    const ariaSnapshot = vi.fn(async () => {
+      calls.push("surface");
+      return "dialog\n";
+    });
     const page = { locator, waitForFunction } as unknown as Page;
     const scope = { ariaSnapshot } as unknown as Locator;
 
@@ -33,8 +38,7 @@ describe("captureDomA11y", () => {
     const page = { waitForFunction: vi.fn().mockRejectedValue(timeout) } as unknown as Page;
     const ariaSnapshot = vi.fn();
 
-    await expect(captureDomA11y(page, { ariaSnapshot } as unknown as Locator))
-      .rejects.toThrow(/stuck animation/);
+    await expect(captureDomA11y(page, { ariaSnapshot } as unknown as Locator)).rejects.toThrow(/stuck animation/);
     expect(ariaSnapshot).not.toHaveBeenCalled();
   });
 });

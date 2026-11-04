@@ -31,7 +31,9 @@ export function DeleteConfirmDialog({ bridge }: { bridge: Bridge }) {
     <Modal
       bridge={bridge}
       open={pending !== null}
-      onOpenChange={(o) => { if (!o) clear(); }}
+      onOpenChange={(o) => {
+        if (!o) clear();
+      }}
       title="Delete emitters?"
       size="sm"
     >
@@ -39,8 +41,12 @@ export function DeleteConfirmDialog({ bridge }: { bridge: Bridge }) {
         <p className="text-sm text-text-2">{pending ? bodyText(pending.ids, pending.impact) : ""}</p>
       </Modal.Body>
       <Modal.Footer>
-        <Modal.CancelButton autoFocus onClick={clear}>Cancel</Modal.CancelButton>
-        <Modal.OkButton variant="danger" onClick={onDelete}>Delete</Modal.OkButton>
+        <Modal.CancelButton autoFocus onClick={clear}>
+          Cancel
+        </Modal.CancelButton>
+        <Modal.OkButton variant="danger" onClick={onDelete}>
+          Delete
+        </Modal.OkButton>
       </Modal.Footer>
     </Modal>
   );

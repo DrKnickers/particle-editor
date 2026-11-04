@@ -39,7 +39,11 @@ import { latchRecordModeFromMessage, markHeadless, useRecording } from "@/lib/re
 import { TitleBar } from "@/components/TitleBar";
 import { evalRecordCursor } from "@/lib/record/record-cursor-eval";
 import { applyRecordDrag, createRecordDragState, resetRecordDrag } from "@/lib/record/record-cursor-drag";
-import { applyRecordActivation, createRecordActivateState, resetRecordActivation } from "@/lib/record/record-cursor-activate";
+import {
+  applyRecordActivation,
+  createRecordActivateState,
+  resetRecordActivation,
+} from "@/lib/record/record-cursor-activate";
 import type { RecordCursorKey } from "@/lib/record/record-cursor-track";
 import { useHostMessage } from "@/lib/use-host-message";
 
@@ -122,7 +126,9 @@ function AppShell() {
   useEffect(() => {
     applyMode(readStoredMode());
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = () => { if (readStoredMode() === "system") applyMode("system"); };
+    const onChange = () => {
+      if (readStoredMode() === "system") applyMode("system");
+    };
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
@@ -309,9 +315,20 @@ function AppShell() {
       headless: recordHeadlessRef.current,
       applyFrame: () => {
         setRecordCursor({ x: cursor.x, y: cursor.y, visible: cursor.vis, pressed: cursor.press });
-        applyRecordDrag({ x: cursor.x, y: cursor.y, press: cursor.press, ok: cursor.ok, activate: cursor.activate }, recordDragStateRef.current);
+        applyRecordDrag(
+          { x: cursor.x, y: cursor.y, press: cursor.press, ok: cursor.ok, activate: cursor.activate },
+          recordDragStateRef.current,
+        );
         applyRecordActivation(
-          { x: cursor.x, y: cursor.y, press: cursor.press, ok: cursor.ok, activate: cursor.activate, mods: cursor.mods, button: cursor.button },
+          {
+            x: cursor.x,
+            y: cursor.y,
+            press: cursor.press,
+            ok: cursor.ok,
+            activate: cursor.activate,
+            mods: cursor.mods,
+            button: cursor.button,
+          },
           recordActivateStateRef.current,
         );
       },
@@ -411,16 +428,8 @@ function AppShell() {
               triggers from anywhere can drive them and Radix portals don't
               fight clipping from intermediate scrollable parents. */}
           <AboutDialog bridge={bridge} open={aboutOpen} onOpenChange={setAboutOpen} />
-          <RescaleDialog
-            bridge={bridge}
-            open={rescaleOpen}
-            onOpenChange={setRescaleOpen}
-          />
-          <ImportEmittersDialog
-            bridge={bridge}
-            open={importEmittersOpen}
-            onOpenChange={setImportEmittersOpen}
-          />
+          <RescaleDialog bridge={bridge} open={rescaleOpen} onOpenChange={setRescaleOpen} />
+          <ImportEmittersDialog bridge={bridge} open={importEmittersOpen} onOpenChange={setImportEmittersOpen} />
           {/* Save-changes prompt. Open state lives in
               the file-state atom; this mount is invisible while the
               pendingAction slot is null. Driven from any destructive op
@@ -454,8 +463,8 @@ function AppShell() {
 const DEMO_AUTOSAVE_NOW_MS = 1_700_000_000_000;
 const DEMO_AUTOSAVE_ORPHAN = {
   originalFilename: "fire.alo",
-  recentMtimeMs: DEMO_AUTOSAVE_NOW_MS - 45_000,       // "45 seconds ago"
-  stableMtimeMs: DEMO_AUTOSAVE_NOW_MS - 8 * 60_000,   // "8 minutes ago"
+  recentMtimeMs: DEMO_AUTOSAVE_NOW_MS - 45_000, // "45 seconds ago"
+  stableMtimeMs: DEMO_AUTOSAVE_NOW_MS - 8 * 60_000, // "8 minutes ago"
 };
 function AutosaveRecoveryDemo() {
   // The view's Modal takes the bridge like every dialog; outside the App shell

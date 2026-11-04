@@ -36,14 +36,18 @@ export function CurveKeyContextMenu({ ref, onDelete }: Props) {
   // The key the menu acts on. Kept after close so the exit fade still renders
   // the item it faded from; replaced on the next open.
   const [target, setTarget] = useState<CurveKeyMenuTarget | null>(null);
-  useImperativeHandle(ref, () => ({
-    openAt(key, x, y) {
-      setTarget(key);
-      anchor.current?.dispatchEvent(
-        new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: x, clientY: y }),
-      );
-    },
-  }), []);
+  useImperativeHandle(
+    ref,
+    () => ({
+      openAt(key, x, y) {
+        setTarget(key);
+        anchor.current?.dispatchEvent(
+          new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: x, clientY: y }),
+        );
+      },
+    }),
+    [],
+  );
 
   return (
     <ContextMenu.Root modal={false}>
@@ -63,7 +67,9 @@ export function CurveKeyContextMenu({ ref, onDelete }: Props) {
             <ContextMenu.Item
               data-testid="ce-key-context-menu-delete"
               disabled={target === null || target.isBorder}
-              onSelect={() => { if (target !== null) onDelete(target.time); }}
+              onSelect={() => {
+                if (target !== null) onDelete(target.time);
+              }}
               className={MENU_ITEM}
             >
               Delete

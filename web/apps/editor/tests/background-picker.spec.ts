@@ -28,9 +28,7 @@ const ONE_PIXEL_BMP = Buffer.from(
 );
 // Uncompressed 1x1, 24-bit TGA (red BGR pixel). This is accepted by the
 // Ground picker, so the success control uses the same file class as a user.
-const ONE_PIXEL_TGA = Buffer.from([
-  0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 24, 0, 0, 0, 255,
-]);
+const ONE_PIXEL_TGA = Buffer.from([0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 24, 0, 0, 0, 255]);
 
 let page: Page;
 
@@ -54,7 +52,7 @@ test("Background popover opens from the toolbar dropdown trigger", async () => {
     if (!btn) return { clicked: false, popover: false, slots: 0, radios: 0 };
     btn.click();
     await new Promise((r) => setTimeout(r, 250));
-    const popover = document.querySelector('[data-radix-popper-content-wrapper]');
+    const popover = document.querySelector("[data-radix-popper-content-wrapper]");
     const slots = popover?.querySelectorAll("button[aria-pressed]").length ?? 0;
     const radios = popover?.querySelectorAll("[role=radiogroup] [role=radio]").length ?? 0;
     return { clicked: true, popover: !!popover, slots, radios };
@@ -73,10 +71,12 @@ test("engine/set/skydome-slot reports exact applied and actual slots for invalid
     const setSlot = (slot: number) =>
       b.request({ kind: "engine/set/skydome-slot", params: { slot } }) as Promise<SlotResult>;
     const getSlot = async () =>
-      ((await b.request({
-        kind: "engine/state/snapshot",
-        params: {},
-      })) as { skydomeSlot: number }).skydomeSlot;
+      (
+        (await b.request({
+          kind: "engine/state/snapshot",
+          params: {},
+        })) as { skydomeSlot: number }
+      ).skydomeSlot;
 
     try {
       // Overreach control: bundled slot 5 must still apply.
@@ -166,48 +166,51 @@ test("engine/set/skydome-custom-path persists across snapshots (slot 9)", async 
 test("custom slot paths accept local UNC hosts but still reject remote hosts", async () => {
   const localPath = "\\\\wsl.localhost\\Ubuntu\\textures\\ground.dds";
   const remotePath = "\\\\attacker\\share\\ground.dds";
-  const result = await page.evaluate(async ({ localPath, remotePath }) => {
-    const b = window.bridge;
-    if (!b) throw new Error("window.bridge not attached");
+  const result = await page.evaluate(
+    async ({ localPath, remotePath }) => {
+      const b = window.bridge;
+      if (!b) throw new Error("window.bridge not attached");
 
-    let localResolved = true;
-    try {
+      let localResolved = true;
+      try {
+        await b.request({
+          kind: "engine/set/skydome-custom-path",
+          params: { slot: 10, path: localPath },
+        });
+      } catch {
+        localResolved = false;
+      }
+      const afterLocal = (await b.request({
+        kind: "engine/state/snapshot",
+        params: {},
+      })) as { skydomeCustomPaths: string[] };
+
+      let remoteRejected = false;
+      try {
+        await b.request({
+          kind: "engine/set/skydome-custom-path",
+          params: { slot: 10, path: remotePath },
+        });
+      } catch {
+        remoteRejected = true;
+      }
+      const afterRemote = (await b.request({
+        kind: "engine/state/snapshot",
+        params: {},
+      })) as { skydomeCustomPaths: string[] };
       await b.request({
         kind: "engine/set/skydome-custom-path",
-        params: { slot: 10, path: localPath },
+        params: { slot: 10, path: "" },
       });
-    } catch {
-      localResolved = false;
-    }
-    const afterLocal = (await b.request({
-      kind: "engine/state/snapshot",
-      params: {},
-    })) as { skydomeCustomPaths: string[] };
-
-    let remoteRejected = false;
-    try {
-      await b.request({
-        kind: "engine/set/skydome-custom-path",
-        params: { slot: 10, path: remotePath },
-      });
-    } catch {
-      remoteRejected = true;
-    }
-    const afterRemote = (await b.request({
-      kind: "engine/state/snapshot",
-      params: {},
-    })) as { skydomeCustomPaths: string[] };
-    await b.request({
-      kind: "engine/set/skydome-custom-path",
-      params: { slot: 10, path: "" },
-    });
-    return {
-      localResolved,
-      localStored: afterLocal.skydomeCustomPaths[1],
-      remoteRejected,
-      afterRemote: afterRemote.skydomeCustomPaths[1],
-    };
-  }, { localPath, remotePath });
+      return {
+        localResolved,
+        localStored: afterLocal.skydomeCustomPaths[1],
+        remoteRejected,
+        afterRemote: afterRemote.skydomeCustomPaths[1],
+      };
+    },
+    { localPath, remotePath },
+  );
 
   expect(result.localResolved).toBe(true);
   expect(result.localStored).toBe(localPath);
@@ -222,47 +225,50 @@ test("ground custom-path setter accepts a local path and rejects remote UNC with
   await writeFile(localPath, ONE_PIXEL_TGA);
 
   try {
-    const result = await page.evaluate(async ({ localPath, remotePath }) => {
-      const b = window.bridge;
-      if (!b) throw new Error("window.bridge not attached");
+    const result = await page.evaluate(
+      async ({ localPath, remotePath }) => {
+        const b = window.bridge;
+        if (!b) throw new Error("window.bridge not attached");
 
-      try {
-        await b.request({ kind: "engine/set/ground-texture", params: { slot: 0 } });
-        await b.request({
-          kind: "engine/set/ground-slot-custom-path",
-          params: { slot: 6, path: localPath },
-        });
-        const afterLocal = (await b.request({
-          kind: "engine/state/snapshot",
-          params: {},
-        })) as { groundSlotCustomPaths: string[] };
-
-        let remoteRejected = false;
         try {
+          await b.request({ kind: "engine/set/ground-texture", params: { slot: 0 } });
           await b.request({
             kind: "engine/set/ground-slot-custom-path",
-            params: { slot: 6, path: remotePath },
+            params: { slot: 6, path: localPath },
           });
-        } catch {
-          remoteRejected = true;
+          const afterLocal = (await b.request({
+            kind: "engine/state/snapshot",
+            params: {},
+          })) as { groundSlotCustomPaths: string[] };
+
+          let remoteRejected = false;
+          try {
+            await b.request({
+              kind: "engine/set/ground-slot-custom-path",
+              params: { slot: 6, path: remotePath },
+            });
+          } catch {
+            remoteRejected = true;
+          }
+          const afterRemote = (await b.request({
+            kind: "engine/state/snapshot",
+            params: {},
+          })) as { groundSlotCustomPaths: string[] };
+          return {
+            localStored: afterLocal.groundSlotCustomPaths[6],
+            remoteRejected,
+            afterRemote: afterRemote.groundSlotCustomPaths[6],
+          };
+        } finally {
+          await b.request({ kind: "engine/set/ground-texture", params: { slot: 0 } });
+          await b.request({
+            kind: "engine/set/ground-slot-custom-path",
+            params: { slot: 6, path: "" },
+          });
         }
-        const afterRemote = (await b.request({
-          kind: "engine/state/snapshot",
-          params: {},
-        })) as { groundSlotCustomPaths: string[] };
-        return {
-          localStored: afterLocal.groundSlotCustomPaths[6],
-          remoteRejected,
-          afterRemote: afterRemote.groundSlotCustomPaths[6],
-        };
-      } finally {
-        await b.request({ kind: "engine/set/ground-texture", params: { slot: 0 } });
-        await b.request({
-          kind: "engine/set/ground-slot-custom-path",
-          params: { slot: 6, path: "" },
-        });
-      }
-    }, { localPath, remotePath });
+      },
+      { localPath, remotePath },
+    );
 
     // Exact guard values: the remote host is refused and the prior local path
     // remains byte-for-byte unchanged. The local assignment is the overreach
@@ -283,56 +289,59 @@ test("ground texture selection reports corrupt custom fallback without rejecting
   await writeFile(corruptPath, Buffer.from("not a texture", "utf8"));
 
   try {
-    const result = await page.evaluate(async ({ validPath, corruptPath }) => {
-      const b = window.bridge;
-      if (!b) throw new Error("window.bridge not attached");
-      type SlotResult = { slot: number; applied: boolean };
-      const setGroundSlot = (slot: number) =>
-        b.request({ kind: "engine/set/ground-texture", params: { slot } }) as Promise<SlotResult>;
-      const getGroundState = async () => {
-        const snapshot = (await b.request({
-          kind: "engine/state/snapshot",
-          params: {},
-        })) as { groundTexture: number; dirty: boolean };
-        return {
-          groundTexture: snapshot.groundTexture,
-          dirty: snapshot.dirty,
+    const result = await page.evaluate(
+      async ({ validPath, corruptPath }) => {
+        const b = window.bridge;
+        if (!b) throw new Error("window.bridge not attached");
+        type SlotResult = { slot: number; applied: boolean };
+        const setGroundSlot = (slot: number) =>
+          b.request({ kind: "engine/set/ground-texture", params: { slot } }) as Promise<SlotResult>;
+        const getGroundState = async () => {
+          const snapshot = (await b.request({
+            kind: "engine/state/snapshot",
+            params: {},
+          })) as { groundTexture: number; dirty: boolean };
+          return {
+            groundTexture: snapshot.groundTexture,
+            dirty: snapshot.dirty,
+          };
         };
-      };
 
-      try {
-        await setGroundSlot(0);
-        await b.request({
-          kind: "engine/set/ground-slot-custom-path",
-          params: { slot: 5, path: validPath },
-        });
-        const valid = await setGroundSlot(5);
-        const afterValid = await getGroundState();
+        try {
+          await setGroundSlot(0);
+          await b.request({
+            kind: "engine/set/ground-slot-custom-path",
+            params: { slot: 5, path: validPath },
+          });
+          const valid = await setGroundSlot(5);
+          const afterValid = await getGroundState();
 
-        await setGroundSlot(0);
-        await b.request({
-          kind: "engine/set/ground-slot-custom-path",
-          params: { slot: 5, path: corruptPath },
-        });
-        // Arrange a nonzero pre-call slot, then clear document dirtiness using
-        // the production file/new action. file/new clears live instances and
-        // the document baseline but deliberately preserves view/environment
-        // state, including ground slot 4 and slot-5's custom path.
-        await setGroundSlot(4);
-        await b.request({ kind: "file/new", params: {} });
-        const beforeCorrupt = await getGroundState();
-        const corrupt = await setGroundSlot(5);
-        const afterCorrupt = await getGroundState();
-        return { valid, afterValid, beforeCorrupt, corrupt, afterCorrupt };
-      } finally {
-        await setGroundSlot(0);
-        await b.request({
-          kind: "engine/set/ground-slot-custom-path",
-          params: { slot: 5, path: "" },
-        });
-        await b.request({ kind: "file/new", params: {} });
-      }
-    }, { validPath, corruptPath });
+          await setGroundSlot(0);
+          await b.request({
+            kind: "engine/set/ground-slot-custom-path",
+            params: { slot: 5, path: corruptPath },
+          });
+          // Arrange a nonzero pre-call slot, then clear document dirtiness using
+          // the production file/new action. file/new clears live instances and
+          // the document baseline but deliberately preserves view/environment
+          // state, including ground slot 4 and slot-5's custom path.
+          await setGroundSlot(4);
+          await b.request({ kind: "file/new", params: {} });
+          const beforeCorrupt = await getGroundState();
+          const corrupt = await setGroundSlot(5);
+          const afterCorrupt = await getGroundState();
+          return { valid, afterValid, beforeCorrupt, corrupt, afterCorrupt };
+        } finally {
+          await setGroundSlot(0);
+          await b.request({
+            kind: "engine/set/ground-slot-custom-path",
+            params: { slot: 5, path: "" },
+          });
+          await b.request({ kind: "file/new", params: {} });
+        }
+      },
+      { validPath, corruptPath },
+    );
 
     // Exact wrong values: a successful dirt fallback must not be reported as
     // slot 5/applied:true. The decodable local TGA is the overreach control.
@@ -354,63 +363,66 @@ test("clearing an active custom skydome path succeeds without hiding real load f
   await writeFile(texturePath, ONE_PIXEL_BMP);
 
   try {
-    const result = await page.evaluate(async ({ texturePath, missingPath }) => {
-      const b = window.bridge;
-      if (!b) throw new Error("window.bridge not attached");
+    const result = await page.evaluate(
+      async ({ texturePath, missingPath }) => {
+        const b = window.bridge;
+        if (!b) throw new Error("window.bridge not attached");
 
-      try {
-        await b.request({
-          kind: "engine/set/skydome-custom-path",
-          params: { slot: 9, path: texturePath },
-        });
-        await b.request({ kind: "engine/set/skydome-slot", params: { slot: 9 } });
-        const active = (await b.request({
-          kind: "engine/state/snapshot",
-          params: {},
-        })) as { skydomeSlot: number };
-
-        let missingRejected = false;
         try {
           await b.request({
             kind: "engine/set/skydome-custom-path",
-            params: { slot: 9, path: missingPath },
+            params: { slot: 9, path: texturePath },
           });
-        } catch {
-          missingRejected = true;
-        }
+          await b.request({ kind: "engine/set/skydome-slot", params: { slot: 9 } });
+          const active = (await b.request({
+            kind: "engine/state/snapshot",
+            params: {},
+          })) as { skydomeSlot: number };
 
-        // Recover the active texture before exercising the clear operation.
-        await b.request({
-          kind: "engine/set/skydome-custom-path",
-          params: { slot: 9, path: texturePath },
-        });
-        let clearResolved = true;
-        try {
+          let missingRejected = false;
+          try {
+            await b.request({
+              kind: "engine/set/skydome-custom-path",
+              params: { slot: 9, path: missingPath },
+            });
+          } catch {
+            missingRejected = true;
+          }
+
+          // Recover the active texture before exercising the clear operation.
+          await b.request({
+            kind: "engine/set/skydome-custom-path",
+            params: { slot: 9, path: texturePath },
+          });
+          let clearResolved = true;
+          try {
+            await b.request({
+              kind: "engine/set/skydome-custom-path",
+              params: { slot: 9, path: "" },
+            });
+          } catch {
+            clearResolved = false;
+          }
+          const cleared = (await b.request({
+            kind: "engine/state/snapshot",
+            params: {},
+          })) as { skydomeCustomPaths: string[] };
+          return {
+            activeSlot: active.skydomeSlot,
+            missingRejected,
+            clearResolved,
+            clearedPath: cleared.skydomeCustomPaths[0],
+          };
+        } finally {
+          await b.request({ kind: "engine/set/skydome-slot", params: { slot: 0 } });
           await b.request({
             kind: "engine/set/skydome-custom-path",
             params: { slot: 9, path: "" },
           });
-        } catch {
-          clearResolved = false;
         }
-        const cleared = (await b.request({
-          kind: "engine/state/snapshot",
-          params: {},
-        })) as { skydomeCustomPaths: string[] };
-        return {
-          activeSlot: active.skydomeSlot,
-          missingRejected,
-          clearResolved,
-          clearedPath: cleared.skydomeCustomPaths[0],
-        };
-      } finally {
-        await b.request({ kind: "engine/set/skydome-slot", params: { slot: 0 } });
-        await b.request({
-          kind: "engine/set/skydome-custom-path",
-          params: { slot: 9, path: "" },
-        });
-      }
-    }, { texturePath, missingPath });
+      },
+      { texturePath, missingPath },
+    );
 
     expect(result.activeSlot).toBe(9);
     expect(result.missingRejected).toBe(true);

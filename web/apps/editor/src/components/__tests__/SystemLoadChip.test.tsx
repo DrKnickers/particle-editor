@@ -14,7 +14,11 @@ function makeBridge() {
 }
 
 const tick = (instances: number) => ({
-  fps: 30, emitters: 1, particles: 0, instances, overload: false,
+  fps: 30,
+  emitters: 1,
+  particles: 0,
+  instances,
+  overload: false,
 });
 
 describe("SystemLoadChip", () => {
@@ -75,9 +79,7 @@ describe("SystemLoadChip", () => {
     });
     // usePresence keeps the chip mounted through its exit fade;
     // jsdom fires no animationend, so unmount lands on the timeout fallback.
-    await waitFor(() =>
-      expect(screen.queryByTestId("system-load-chip")).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.queryByTestId("system-load-chip")).not.toBeInTheDocument());
   });
 
   it("respects the strictly-greater boundary (systemLoad === cap is hidden, +1 shows)", () => {
@@ -99,8 +101,6 @@ describe("SystemLoadChip", () => {
     emit("stats/tick", tick(0));
     // Exit fade → unmount on usePresence's timeout fallback (no animationend
     // in jsdom).
-    await waitFor(() =>
-      expect(screen.queryByTestId("system-load-chip")).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.queryByTestId("system-load-chip")).not.toBeInTheDocument());
   });
 });

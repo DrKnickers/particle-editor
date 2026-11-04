@@ -43,13 +43,26 @@ export function useRovingIndex(
     const col = opts?.columns;
     let next: number;
     switch (e.key) {
-      case "ArrowRight": next = clamped + 1; break;
-      case "ArrowLeft":  next = clamped - 1; break;
-      case "ArrowDown":  next = clamped + (col ?? 1); break;
-      case "ArrowUp":    next = clamped - (col ?? 1); break;
-      case "Home":       next = 0; break;
-      case "End":        next = count - 1; break;
-      default: return;
+      case "ArrowRight":
+        next = clamped + 1;
+        break;
+      case "ArrowLeft":
+        next = clamped - 1;
+        break;
+      case "ArrowDown":
+        next = clamped + (col ?? 1);
+        break;
+      case "ArrowUp":
+        next = clamped - (col ?? 1);
+        break;
+      case "Home":
+        next = 0;
+        break;
+      case "End":
+        next = count - 1;
+        break;
+      default:
+        return;
     }
     e.preventDefault();
     move(next);
@@ -59,7 +72,9 @@ export function useRovingIndex(
     tabIndex: i === clamped ? 0 : -1,
     // Radix `asChild` triggers compose refs through Slot, so this callback
     // ref coexists with ContextMenu/Tooltip trigger refs.
-    ref: (el) => { refs.current[i] = el; },
+    ref: (el) => {
+      refs.current[i] = el;
+    },
     onKeyDown,
     onFocus: () => setActive(i),
   });

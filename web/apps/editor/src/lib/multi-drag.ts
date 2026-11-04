@@ -6,10 +6,7 @@ import type { EmitterTreeNode } from "@particle-editor/bridge-schema";
 import { computeDropZone } from "@/lib/tree/drop-zone";
 
 /** The selected ids that are CURRENTLY roots, in tree (top-to-bottom) order. */
-export function selectedRootIdsInOrder(
-  selectedIds: number[],
-  rootChildren: EmitterTreeNode[],
-): number[] {
+export function selectedRootIdsInOrder(selectedIds: number[], rootChildren: EmitterTreeNode[]): number[] {
   const sel = new Set(selectedIds);
   return rootChildren.filter((c) => sel.has(c.id)).map((c) => c.id);
 }
@@ -23,11 +20,7 @@ export function collectSubtreeIds(node: EmitterTreeNode): number[] {
 
 /** Whether a drag begun on `grabbedId` should move the whole selection: true
  *  iff the grabbed row is a root AND part of a multi-root selection. */
-export function isMultiDrag(
-  grabbedId: number,
-  selectedIds: number[],
-  rootChildren: EmitterTreeNode[],
-): boolean {
+export function isMultiDrag(grabbedId: number, selectedIds: number[], rootChildren: EmitterTreeNode[]): boolean {
   const roots = selectedRootIdsInOrder(selectedIds, rootChildren);
   return roots.length > 1 && roots.includes(grabbedId);
 }

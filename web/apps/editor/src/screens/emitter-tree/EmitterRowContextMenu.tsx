@@ -31,14 +31,7 @@ type Props = {
   onDissolveLinkGroup: (groupId: number) => void;
 };
 
-export function EmitterRowContextMenu({
-  node,
-  siblings,
-  selectedIds,
-  bridge,
-  beginEdit,
-  onDissolveLinkGroup,
-}: Props) {
+export function EmitterRowContextMenu({ node, siblings, selectedIds, bridge, beginEdit, onDissolveLinkGroup }: Props) {
   // Paste gates on session clipboard content.
   const hasClipboard = useEmitterClipboardHasContent();
   const isLinked = node.linkGroup !== 0;
@@ -48,7 +41,7 @@ export function EmitterRowContextMenu({
   // but children-by-role is equivalent: the slot is filled iff there's
   // a child of that role.
   const hasLifetimeChild = node.children.some((c) => c.role === "lifetime");
-  const hasDeathChild    = node.children.some((c) => c.role === "death");
+  const hasDeathChild = node.children.some((c) => c.role === "death");
   // Move is a root-only operation. The engine refuses non-root moves
   // (children of the same role can't be swapped — at most one of each).
   const isRoot = node.role === "root";
@@ -57,7 +50,7 @@ export function EmitterRowContextMenu({
   // uses the same preserve rule as move-many over that target set.
   const moveTargetIds = isRoot && selectedIds.includes(node.id) ? selectedIds : [node.id];
   const rootIdsInOrder = siblings.map((s) => s.id);
-  const canMoveUp   = isRoot && canMoveSelection(moveTargetIds, rootIdsInOrder, "up");
+  const canMoveUp = isRoot && canMoveSelection(moveTargetIds, rootIdsInOrder, "up");
   const canMoveDown = isRoot && canMoveSelection(moveTargetIds, rootIdsInOrder, "down");
 
   // Leave Link Group: enabled when at least one of the currently
@@ -123,7 +116,10 @@ export function EmitterRowContextMenu({
     // is in it, else just that row); the selection moves to the new copies.
     {
       const ids = resolveTargetIds();
-      announceWhenOk(duplicateEmitters(bridge, ids) as Promise<unknown>, `Duplicated ${ids.length === 1 ? "emitter" : `${ids.length} emitters`} — Ctrl+Z to undo`);
+      announceWhenOk(
+        duplicateEmitters(bridge, ids) as Promise<unknown>,
+        `Duplicated ${ids.length === 1 ? "emitter" : `${ids.length} emitters`} — Ctrl+Z to undo`,
+      );
     }
   };
   const handleDelete = () => {
@@ -155,7 +151,10 @@ export function EmitterRowContextMenu({
   };
   const handleContextCut = () => {
     const ids = resolveTargetIds();
-    announceWhenOk(bridge.request({ kind: "emitters/cut", params: { ids } }), `Cut ${ids.length === 1 ? "emitter" : `${ids.length} emitters`} — Ctrl+Z to undo`);
+    announceWhenOk(
+      bridge.request({ kind: "emitters/cut", params: { ids } }),
+      `Cut ${ids.length === 1 ? "emitter" : `${ids.length} emitters`} — Ctrl+Z to undo`,
+    );
     markEmittersCopied();
   };
   const handleContextPaste = () => {
@@ -214,10 +213,7 @@ export function EmitterRowContextMenu({
   };
 
   return (
-    <ContextMenu.Content
-      data-testid={`emitter-context-menu-${node.id}`}
-      className={cn(MENU_CONTENT, "min-w-[220px]")}
-    >
+    <ContextMenu.Content data-testid={`emitter-context-menu-${node.id}`} className={cn(MENU_CONTENT, "min-w-[220px]")}>
       <ContextMenu.Item onSelect={handleRename} className={MENU_ITEM}>
         Rename
       </ContextMenu.Item>
@@ -234,18 +230,11 @@ export function EmitterRowContextMenu({
       <ContextMenu.Item onSelect={handleContextCopy} className={MENU_ITEM}>
         Copy
       </ContextMenu.Item>
-      <ContextMenu.Item
-        onSelect={handleContextPaste}
-        disabled={!hasClipboard}
-        className={MENU_ITEM}
-      >
+      <ContextMenu.Item onSelect={handleContextPaste} disabled={!hasClipboard} className={MENU_ITEM}>
         Paste
       </ContextMenu.Item>
       <ContextMenu.Sub>
-        <ContextMenu.SubTrigger
-          disabled={!hasClipboard}
-          className={MENU_ITEM}
-        >
+        <ContextMenu.SubTrigger disabled={!hasClipboard} className={MENU_ITEM}>
           Paste As
         </ContextMenu.SubTrigger>
         <ContextMenu.Portal>
@@ -279,62 +268,30 @@ export function EmitterRowContextMenu({
       <ContextMenu.Item onSelect={handleNewRoot} className={MENU_ITEM}>
         New Root Emitter
       </ContextMenu.Item>
-      <ContextMenu.Item
-        onSelect={handleAddLifetimeChild}
-        disabled={hasLifetimeChild}
-        className={MENU_ITEM}
-      >
+      <ContextMenu.Item onSelect={handleAddLifetimeChild} disabled={hasLifetimeChild} className={MENU_ITEM}>
         Add Lifetime Child
       </ContextMenu.Item>
-      <ContextMenu.Item
-        onSelect={handleAddDeathChild}
-        disabled={hasDeathChild}
-        className={MENU_ITEM}
-      >
+      <ContextMenu.Item onSelect={handleAddDeathChild} disabled={hasDeathChild} className={MENU_ITEM}>
         Add Death Child
       </ContextMenu.Item>
       <ContextMenu.Separator className={MENU_SEPARATOR} />
-      <ContextMenu.Item
-        onSelect={handleMoveUp}
-        disabled={!canMoveUp}
-        className={MENU_ITEM}
-      >
+      <ContextMenu.Item onSelect={handleMoveUp} disabled={!canMoveUp} className={MENU_ITEM}>
         Move Up
       </ContextMenu.Item>
-      <ContextMenu.Item
-        onSelect={handleMoveDown}
-        disabled={!canMoveDown}
-        className={MENU_ITEM}
-      >
+      <ContextMenu.Item onSelect={handleMoveDown} disabled={!canMoveDown} className={MENU_ITEM}>
         Move Down
       </ContextMenu.Item>
       <ContextMenu.Separator className={MENU_SEPARATOR} />
-      <ContextMenu.Item
-        onSelect={handleSetLinkGroup}
-        className={MENU_ITEM}
-        data-testid="ctx-set-link-group"
-      >
+      <ContextMenu.Item onSelect={handleSetLinkGroup} className={MENU_ITEM} data-testid="ctx-set-link-group">
         Set Link Group…
       </ContextMenu.Item>
-      <ContextMenu.Item
-        onSelect={handleLeaveLinkGroup}
-        disabled={leaveLinkGroupDisabled}
-        className={MENU_ITEM}
-      >
+      <ContextMenu.Item onSelect={handleLeaveLinkGroup} disabled={leaveLinkGroupDisabled} className={MENU_ITEM}>
         Leave Link Group
       </ContextMenu.Item>
-      <ContextMenu.Item
-        onSelect={() => onDissolveLinkGroup(node.linkGroup)}
-        disabled={!isLinked}
-        className={MENU_ITEM}
-      >
+      <ContextMenu.Item onSelect={() => onDissolveLinkGroup(node.linkGroup)} disabled={!isLinked} className={MENU_ITEM}>
         Dissolve Link Group
       </ContextMenu.Item>
-      <ContextMenu.Item
-        onSelect={handleLinkGroupSettings}
-        disabled={!isLinked}
-        className={MENU_ITEM}
-      >
+      <ContextMenu.Item onSelect={handleLinkGroupSettings} disabled={!isLinked} className={MENU_ITEM}>
         Link Group Settings…
       </ContextMenu.Item>
     </ContextMenu.Content>

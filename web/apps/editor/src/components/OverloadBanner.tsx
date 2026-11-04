@@ -83,9 +83,11 @@ function OverloadBannerBody({
       // that replaced shadow-xl ring-1 ring-black/15.
       className="banner-animate pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2 select-none rounded-md bg-warning px-3 py-1.5 text-xs font-medium text-[#1a1200]"
     >
-      {refusal !== null
-        ? `Spawn blocked — this effect is estimated at ~${fmtCount(refusal.estimated)} particles, over the ${fmtCount(refusal.cap)} preview limit. Preview cleared.`
-        : <>Preview spawning limited — lower spawn rates to resume. ⚠ marks heavy emitters.</>}
+      {refusal !== null ? (
+        `Spawn blocked — this effect is estimated at ~${fmtCount(refusal.estimated)} particles, over the ${fmtCount(refusal.cap)} preview limit. Preview cleared.`
+      ) : (
+        <>Preview spawning limited — lower spawn rates to resume. ⚠ marks heavy emitters.</>
+      )}
     </div>
   );
 }
@@ -96,10 +98,7 @@ export function OverloadBanner({ bridge }: { bridge: Bridge }) {
   // Track the active refusal timeout so we can restart it on re-fire
   const refusalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(
-    () => bridge.on("stats/tick", (e) => setOverload(e.payload.overload)),
-    [bridge],
-  );
+  useEffect(() => bridge.on("stats/tick", (e) => setOverload(e.payload.overload)), [bridge]);
 
   useEffect(() => {
     const unsub = bridge.on("engine/overload/refused", (e) => {
@@ -145,11 +144,5 @@ export function OverloadBanner({ bridge }: { bridge: Bridge }) {
   const shownRefusal = visible ? refusal : lastShownRef.current;
   const { mounted, state, onAnimationEnd } = usePresence(visible, SLOW_EXIT_MS);
   if (!mounted) return null;
-  return (
-    <OverloadBannerBody
-      state={state}
-      onAnimationEnd={onAnimationEnd}
-      refusal={shownRefusal}
-    />
-  );
+  return <OverloadBannerBody state={state} onAnimationEnd={onAnimationEnd} refusal={shownRefusal} />;
 }

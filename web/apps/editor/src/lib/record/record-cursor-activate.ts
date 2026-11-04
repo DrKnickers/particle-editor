@@ -113,7 +113,12 @@ function buttonBits(button: "left" | "right" | undefined, held: boolean): { butt
 }
 
 function makeMouseEvent(
-  type: string, clientX: number, clientY: number, mods: EventMods, button: "left" | "right" | undefined, held: boolean,
+  type: string,
+  clientX: number,
+  clientY: number,
+  mods: EventMods,
+  button: "left" | "right" | undefined,
+  held: boolean,
 ): MouseEvent {
   return new MouseEvent(type, {
     bubbles: true,
@@ -127,7 +132,12 @@ function makeMouseEvent(
 }
 
 function makePointerEvent(
-  type: string, clientX: number, clientY: number, mods: EventMods, button: "left" | "right" | undefined, held: boolean,
+  type: string,
+  clientX: number,
+  clientY: number,
+  mods: EventMods,
+  button: "left" | "right" | undefined,
+  held: boolean,
 ): PointerEvent {
   return new PointerEvent(type, {
     bubbles: true,
@@ -168,14 +178,14 @@ export function applyRecordActivation(
     // pointerdown FIRST (real event order) — Radix Menubar triggers open here and
     // nowhere else. The drag module never arms on activate presses, so this is the
     // gesture's only pointerdown.
-    hit.dispatchEvent(makePointerEvent("pointerdown", clientX, clientY, mods, button, /*held*/true));
+    hit.dispatchEvent(makePointerEvent("pointerdown", clientX, clientY, mods, button, /*held*/ true));
     // mousedown precedes focus (its default action) — Radix Tabs et al. activate here.
-    hit.dispatchEvent(makeMouseEvent("mousedown", clientX, clientY, mods, button, /*held*/true));
+    hit.dispatchEvent(makeMouseEvent("mousedown", clientX, clientY, mods, button, /*held*/ true));
     // RIGHT press: `contextmenu` is what actually opens a context menu (Radix
     // ContextMenu listens for it, and it has no menubar/toolbar equivalent). Real
     // browsers fire it right after mousedown for button 2.
     if (button === "right") {
-      hit.dispatchEvent(makeMouseEvent("contextmenu", clientX, clientY, mods, button, /*held*/true));
+      hit.dispatchEvent(makeMouseEvent("contextmenu", clientX, clientY, mods, button, /*held*/ true));
     }
     // Focus-change next: blur a focused text-entry when the press lands outside
     // it (this is what commits FieldText drafts on "click elsewhere").
@@ -206,17 +216,23 @@ export function applyRecordActivation(
     // regardless of position, and skipping it would strand any gesture the
     // pointerdown armed (e.g. an EmitterTree row's reorder drag would keep its
     // document listeners + capture and silently eat every later gesture).
-    armed.dispatchEvent(makePointerEvent("pointerup", finite ? clientX : 0, finite ? clientY : 0, mods, button, /*held*/false));
+    armed.dispatchEvent(
+      makePointerEvent("pointerup", finite ? clientX : 0, finite ? clientY : 0, mods, button, /*held*/ false),
+    );
     // The CLICK (and its mouseup) stays containment-gated: a release elsewhere
     // is a cancel, like a real mouse. The click carries the press-time modifiers so
     // a modifier-aware handler (emitter-tree multi-select) branches correctly.
     const hit = finite ? doc.elementFromPoint(clientX, clientY) : null;
     if (!hit || !(armed.contains(hit) || hit.contains(armed))) return;
-    armed.dispatchEvent(makeMouseEvent("mouseup", finite ? clientX : 0, finite ? clientY : 0, mods, button, /*held*/false));
+    armed.dispatchEvent(
+      makeMouseEvent("mouseup", finite ? clientX : 0, finite ? clientY : 0, mods, button, /*held*/ false),
+    );
     // A RIGHT release fires NO click — real browsers only fire `click` for button 0.
     // The contextmenu already went out at press-down.
     if (button === "right") return;
-    armed.dispatchEvent(makeMouseEvent("click", finite ? clientX : 0, finite ? clientY : 0, mods, button, /*held*/false));
+    armed.dispatchEvent(
+      makeMouseEvent("click", finite ? clientX : 0, finite ? clientY : 0, mods, button, /*held*/ false),
+    );
   }
 }
 

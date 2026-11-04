@@ -18,19 +18,11 @@ export function rectFromPoints(ax: number, ay: number, bx: number, by: number): 
 
 /** Do two rects overlap? Edge-inclusive so a 1px sweep still hits. */
 export function rectsIntersect(a: Rect, b: Rect): boolean {
-  return (
-    a.left <= b.right &&
-    a.right >= b.left &&
-    a.top <= b.bottom &&
-    a.bottom >= b.top
-  );
+  return a.left <= b.right && a.right >= b.left && a.top <= b.bottom && a.bottom >= b.top;
 }
 
 /** Ids of rows whose rect intersects the marquee, in the given row order. */
-export function emittersInMarquee(
-  rows: { id: number; rect: Rect }[],
-  marquee: Rect,
-): number[] {
+export function emittersInMarquee(rows: { id: number; rect: Rect }[], marquee: Rect): number[] {
   return rows.filter((r) => rectsIntersect(r.rect, marquee)).map((r) => r.id);
 }
 
@@ -38,17 +30,9 @@ export function emittersInMarquee(
  *  de-duplicated, base first then newly-swept in row order. Returns the
  *  merged id list plus the primary (the last swept id, or the last of the
  *  merged set when nothing new was swept, or null when empty). */
-export function mergeMarqueeSelection(
-  base: number[],
-  swept: number[],
-): { ids: number[]; primary: number | null } {
+export function mergeMarqueeSelection(base: number[], swept: number[]): { ids: number[]; primary: number | null } {
   const ids = [...base];
   for (const id of swept) if (!ids.includes(id)) ids.push(id);
-  const primary =
-    swept.length > 0
-      ? swept[swept.length - 1]!
-      : ids.length > 0
-        ? ids[ids.length - 1]!
-        : null;
+  const primary = swept.length > 0 ? swept[swept.length - 1]! : ids.length > 0 ? ids[ids.length - 1]! : null;
   return { ids, primary };
 }

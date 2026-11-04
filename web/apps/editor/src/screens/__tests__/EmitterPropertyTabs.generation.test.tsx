@@ -22,7 +22,9 @@ import { makeFixtureProperties } from "@/bridge/mock-state";
 // which require the app-level Tooltip.Provider — wrapper stands in for it
 // (precedent: renderWithTooltips in EmitterTree.test.tsx).
 const TipProvider = ({ children }: { children: ReactNode }) => (
-  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>
+    {children}
+  </Tooltip.Provider>
 );
 const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
@@ -117,9 +119,18 @@ describe("BasicTab — tri-state Generation mutex", () => {
     renderWithMode(false, false);
     const descriptions = [
       ["Skip time:", "Pre-spawns non-weather particles from this many seconds earlier."],
-      ["Freeze time:", "Freezes emitter time after this many seconds, counting Skip time; 0 or a value below Skip time disables freezing."],
-      ["Minimum lifetime:", "Percent of maximum lifetime; each particle gets a random lifespan between that fraction and the maximum."],
-      ["Link particles to instance", "Makes already-spawned particles follow the effect instance's position, without rotating them."],
+      [
+        "Freeze time:",
+        "Freezes emitter time after this many seconds, counting Skip time; 0 or a value below Skip time disables freezing.",
+      ],
+      [
+        "Minimum lifetime:",
+        "Percent of maximum lifetime; each particle gets a random lifespan between that fraction and the maximum.",
+      ],
+      [
+        "Link particles to instance",
+        "Makes already-spawned particles follow the effect instance's position, without rotating them.",
+      ],
       ["Emit mode:", "Saved in the file. This preview does not use it."],
       ["Emit offset:", "Available when Emit mode is not Disable."],
     ] as const;
@@ -154,28 +165,31 @@ describe("BasicTab — tri-state Generation mutex", () => {
     expect(onCommit).not.toHaveBeenCalled();
   });
 
-  it.each([1, 2, 3])("enabled Emit offset describes preview behaviour and preserves its commit payload in Emit mode %s", (emitFromMesh) => {
-    const properties = { ...makeFixtureProperties(0), emitFromMesh };
-    render(<BasicTab properties={properties} onCommit={onCommit} />);
-    const ids = ["Emit mode:", "Emit offset:"].map((label) => {
-      const control = screen.getByLabelText(label);
-      const id = control.getAttribute("aria-describedby");
-      expect(control).toBeEnabled();
-      expect(id).toBeTruthy();
-      expect(document.getElementById(id!)).toHaveAttribute("hidden");
-      expect(document.getElementById(id!)).toHaveTextContent("Saved in the file. This preview does not use it.");
-      expect(document.getElementById(id!)).not.toHaveTextContent("Available when Emit mode is not Disable.");
-      expect(screen.getByText(label)).not.toHaveAttribute("tabindex");
-      return id;
-    });
-    expect(new Set(ids).size).toBe(2);
-    const control = screen.getByLabelText("Emit offset:");
-    fireEvent.focus(control);
-    fireEvent.change(control, { target: { value: "2.5" } });
-    fireEvent.blur(control);
-    expect(onCommit).toHaveBeenCalledTimes(1);
-    expect(onCommit).toHaveBeenCalledWith({ emitFromMeshOffset: 2.5 });
-  });
+  it.each([1, 2, 3])(
+    "enabled Emit offset describes preview behaviour and preserves its commit payload in Emit mode %s",
+    (emitFromMesh) => {
+      const properties = { ...makeFixtureProperties(0), emitFromMesh };
+      render(<BasicTab properties={properties} onCommit={onCommit} />);
+      const ids = ["Emit mode:", "Emit offset:"].map((label) => {
+        const control = screen.getByLabelText(label);
+        const id = control.getAttribute("aria-describedby");
+        expect(control).toBeEnabled();
+        expect(id).toBeTruthy();
+        expect(document.getElementById(id!)).toHaveAttribute("hidden");
+        expect(document.getElementById(id!)).toHaveTextContent("Saved in the file. This preview does not use it.");
+        expect(document.getElementById(id!)).not.toHaveTextContent("Available when Emit mode is not Disable.");
+        expect(screen.getByText(label)).not.toHaveAttribute("tabindex");
+        return id;
+      });
+      expect(new Set(ids).size).toBe(2);
+      const control = screen.getByLabelText("Emit offset:");
+      fireEvent.focus(control);
+      fireEvent.change(control, { target: { value: "2.5" } });
+      fireEvent.blur(control);
+      expect(onCommit).toHaveBeenCalledTimes(1);
+      expect(onCommit).toHaveBeenCalledWith({ emitFromMeshOffset: 2.5 });
+    },
+  );
 
   it("help preserves timing, minimum-lifetime and linking commit payloads", () => {
     renderWithMode(false, false);

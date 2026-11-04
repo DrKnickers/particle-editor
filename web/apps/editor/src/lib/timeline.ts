@@ -25,8 +25,16 @@ export const TIMELINE_MAX_FRAMES = 600;
 export const TIMELINE_FRAMES_PER_SECOND = 60;
 
 export const CLOSED_TIMELINE: TimelineStateDto = Object.freeze({
-  active: false, playing: false, loop: false, frame: 0, timeSeconds: 0,
-  maxFrames: TIMELINE_MAX_FRAMES, seed: 0, status: "closed", refused: false, revision: 0,
+  active: false,
+  playing: false,
+  loop: false,
+  frame: 0,
+  timeSeconds: 0,
+  maxFrames: TIMELINE_MAX_FRAMES,
+  seed: 0,
+  status: "closed",
+  refused: false,
+  revision: 0,
 });
 
 type TimelineStore = {
@@ -50,10 +58,7 @@ export function getTimelineState(): TimelineStateDto {
 
 /** Follow the host's `timeline/state` event. Mounted once, by the app shell. */
 export function useTimelineEvents(bridge: Bridge): void {
-  useEffect(
-    () => bridge.on("timeline/state", (e) => useTimelineStore.getState().apply(e.payload)),
-    [bridge],
-  );
+  useEffect(() => bridge.on("timeline/state", (e) => useTimelineStore.getState().apply(e.payload)), [bridge]);
 }
 
 function applyResponse(response: TimelineStateDto | undefined): void {
@@ -65,7 +70,7 @@ export function openTimeline(bridge: Bridge): Promise<void> {
 }
 
 export function closeTimeline(bridge: Bridge): Promise<void> {
-  pendingFrame = null;  // a seek queued now would land after the end
+  pendingFrame = null; // a seek queued now would land after the end
   return fireAndReport(bridge, { kind: "timeline/end", params: {} }, "Close timeline").then(applyResponse);
 }
 
@@ -74,8 +79,9 @@ export function toggleTimeline(bridge: Bridge): Promise<void> {
 }
 
 export function setTimelinePlaying(bridge: Bridge, playing: boolean): Promise<void> {
-  return fireAndReport(bridge, { kind: "timeline/set", params: { playing } }, playing ? "Play" : "Pause")
-    .then(applyResponse);
+  return fireAndReport(bridge, { kind: "timeline/set", params: { playing } }, playing ? "Play" : "Pause").then(
+    applyResponse,
+  );
 }
 
 export function setTimelineLoop(bridge: Bridge, loop: boolean): Promise<void> {
@@ -83,8 +89,7 @@ export function setTimelineLoop(bridge: Bridge, loop: boolean): Promise<void> {
 }
 
 export function newTimelineVariation(bridge: Bridge): Promise<void> {
-  return fireAndReport(bridge, { kind: "timeline/new-variation", params: {} }, "New variation")
-    .then(applyResponse);
+  return fireAndReport(bridge, { kind: "timeline/new-variation", params: {} }, "New variation").then(applyResponse);
 }
 
 // The frame of the one seek in flight, and the latest frame asked for while
@@ -123,8 +128,9 @@ export function stepTimeline(bridge: Bridge, frames: number): void {
 
 /** Reset: stop playing and return to frame 0. */
 export function resetTimeline(bridge: Bridge): void {
-  void (getTimelineState().playing ? setTimelinePlaying(bridge, false) : Promise.resolve())
-    .then(() => seekTimeline(bridge, 0));
+  void (getTimelineState().playing ? setTimelinePlaying(bridge, false) : Promise.resolve()).then(() =>
+    seekTimeline(bridge, 0),
+  );
 }
 
 /** Test seam: forget the seek queue and close the store. */

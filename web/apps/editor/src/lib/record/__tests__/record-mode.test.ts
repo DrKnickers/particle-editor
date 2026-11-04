@@ -1,10 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import {
-  useRecording,
-  markRecording,
-  latchRecordModeFromMessage,
-  __resetRecordModeForTests,
-} from "../record-mode";
+import { useRecording, markRecording, latchRecordModeFromMessage, __resetRecordModeForTests } from "../record-mode";
 import { parseUiMessage } from "@/bridge/ui-message";
 import { renderHook, act } from "@testing-library/react";
 

@@ -6,7 +6,9 @@ beforeEach(() => useEmitterTreeStore.setState({ tree: null, bridge: null }));
 
 describe("useEmitterTreeStore", () => {
   const bridge = {} as Bridge;
-  const tree = { root: { id: -1, name: "root", role: "root", visible: true, children: [] } } as unknown as EmitterTreeDto;
+  const tree = {
+    root: { id: -1, name: "root", role: "root", visible: true, children: [] },
+  } as unknown as EmitterTreeDto;
 
   it("holds and replaces the tree", () => {
     expect(getEmitterTree(bridge)).toBeNull();

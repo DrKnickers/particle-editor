@@ -34,9 +34,11 @@ test.beforeAll(async ({ cdpPage }) => {
 
 test.afterAll(async () => {
   // Restore the normal app route for subsequent test files.
-  await page.evaluate(() => {
-    window.location.href = window.location.href.split("?")[0];
-  }).catch(() => {});
+  await page
+    .evaluate(() => {
+      window.location.href = window.location.href.split("?")[0];
+    })
+    .catch(() => {});
   // That navigation is asynchronous. Wait for the normal app to be back
   // (the gallery route never renders app-shell) and for its bridge, or the
   // next spec file's first page.evaluate lands mid-navigation and fails with
@@ -51,9 +53,7 @@ test.afterAll(async () => {
 
 test("?demo=primitives renders the gallery with both sections", async () => {
   const sections = await page.evaluate(() => {
-    return Array.from(document.querySelectorAll("h2")).map(
-      (h) => h.textContent?.trim()
-    );
+    return Array.from(document.querySelectorAll("h2")).map((h) => h.textContent?.trim());
   });
   expect(sections).toContain("Spinner");
   expect(sections).toContain("ColorButton");
@@ -64,15 +64,11 @@ test("?demo=primitives renders the gallery with both sections", async () => {
 test("Spinner: scroll-wheel on the input changes the displayed value", async () => {
   const result = await page.evaluate(async () => {
     // Find the first Spinner input in the gallery.
-    const input = document.querySelector<HTMLInputElement>(
-      'input[type="text"][aria-label="Demo spinner 1"]'
-    );
+    const input = document.querySelector<HTMLInputElement>('input[type="text"][aria-label="Demo spinner 1"]');
     if (!input) return { found: false, before: "", after: "" };
     const before = input.value;
     // Dispatch a wheel event (deltaY < 0 = scroll up = increment).
-    input.dispatchEvent(
-      new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: -120 })
-    );
+    input.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: -120 }));
     await new Promise((r) => setTimeout(r, 50));
     return { found: true, before, after: input.value };
   });
@@ -85,14 +81,12 @@ test("Spinner: scroll-wheel on the input changes the displayed value", async () 
 
 test("ColorButton: clicking the swatch opens the color picker popover", async () => {
   const result = await page.evaluate(async () => {
-    const btn = document.querySelector<HTMLButtonElement>(
-      'button[aria-label="Demo color 1"]'
-    );
+    const btn = document.querySelector<HTMLButtonElement>('button[aria-label="Demo color 1"]');
     if (!btn) return { found: false, popoverVisible: false };
     btn.click();
     await new Promise((r) => setTimeout(r, 200));
     // The popover content contains "Basic colors" text.
-    const popover = document.body.querySelector('[data-radix-popper-content-wrapper]');
+    const popover = document.body.querySelector("[data-radix-popper-content-wrapper]");
     return { found: true, popoverVisible: !!popover };
   });
   expect(result.found).toBe(true);

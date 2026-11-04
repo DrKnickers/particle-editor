@@ -27,7 +27,9 @@ beforeEach(() => {
     idleQueue.push(cb);
     return idleQueue.length; // 1-based id
   };
-  (globalThis as any).cancelIdleCallback = (id: number) => { idleQueue[id - 1] = () => {}; };
+  (globalThis as any).cancelIdleCallback = (id: number) => {
+    idleQueue[id - 1] = () => {};
+  };
 });
 afterEach(() => {
   globalThis.requestIdleCallback = origRIC;
@@ -37,7 +39,10 @@ afterEach(() => {
 function recordingBridge(): Bridge & { kinds: string[] } {
   const kinds: string[] = [];
   const bridge = {
-    request: (req: { kind: string }) => { kinds.push(req.kind); return Promise.resolve({ stack: [], paths: [], currentFilePath: "", dirty: false }); },
+    request: (req: { kind: string }) => {
+      kinds.push(req.kind);
+      return Promise.resolve({ stack: [], paths: [], currentFilePath: "", dirty: false });
+    },
     on: () => () => {},
   } as unknown as Bridge & { kinds: string[] };
   bridge.kinds = kinds;
@@ -49,10 +54,10 @@ describe("runWhenIdle", () => {
     const ran: string[] = [];
     runWhenIdle(() => ran.push("a"));
     const cancel = runWhenIdle(() => ran.push("b"));
-    expect(ran).toEqual([]);        // nothing ran synchronously
-    cancel();                        // cancel "b"
+    expect(ran).toEqual([]); // nothing ran synchronously
+    cancel(); // cancel "b"
     flushIdle();
-    expect(ran).toEqual(["a"]);     // only "a" ran
+    expect(ran).toEqual(["a"]); // only "a" ran
   });
 });
 
@@ -60,9 +65,9 @@ describe("startup fan-out deferral (P1a)", () => {
   it("mod stack: mods/list is NOT requested before first paint, only after idle", () => {
     const bridge = recordingBridge();
     const stop = initModStack(bridge);
-    expect(bridge.kinds).not.toContain("mods/list");   // deferred
+    expect(bridge.kinds).not.toContain("mods/list"); // deferred
     flushIdle();
-    expect(bridge.kinds).toContain("mods/list");        // ran after idle
+    expect(bridge.kinds).toContain("mods/list"); // ran after idle
     stop();
   });
 

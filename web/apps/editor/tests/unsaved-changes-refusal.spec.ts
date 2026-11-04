@@ -8,10 +8,7 @@ import { fileURLToPath } from "node:url";
 import { bridgeRequest } from "./helpers/bridge-request";
 import { test, expect, type Page } from "./helpers/cdp";
 
-const fixturePath = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  "fixtures/singleton-emitter.alo",
-);
+const fixturePath = resolve(dirname(fileURLToPath(import.meta.url)), "fixtures/singleton-emitter.alo");
 let page: Page;
 
 test.beforeAll(async ({ cdpPage }) => {
@@ -32,7 +29,7 @@ async function documentSnapshot() {
   return page.evaluate(async () => {
     const b = window.bridge!;
     const tree = await b.request({ kind: "emitters/list", params: {} });
-    const nodes: typeof tree.root[] = [];
+    const nodes: (typeof tree.root)[] = [];
     const visit = (node: typeof tree.root) => {
       nodes.push(node);
       node.children.forEach(visit);
@@ -42,10 +39,12 @@ async function documentSnapshot() {
     const emitters = [];
     for (const node of nodes) {
       const { properties } = await b.request({
-        kind: "emitters/get-properties", params: { id: node.id },
+        kind: "emitters/get-properties",
+        params: { id: node.id },
       });
       const { tracks } = await b.request({
-        kind: "emitters/get-tracks", params: { id: node.id },
+        kind: "emitters/get-tracks",
+        params: { id: node.id },
       });
       emitters.push({ id: node.id, properties, tracks });
     }
@@ -71,9 +70,12 @@ for (const kind of ["file/new", "file/open"] as const) {
 
     // A real particle fixture supplies a non-null current file path. Direct
     // params.path avoids GetOpenFileNameW for both the refused and allowed Open.
-    expect(await bridgeRequest(page, {
-      kind: "file/open", params: { path: fixturePath },
-    })).toMatchObject({ ok: true });
+    expect(
+      await bridgeRequest(page, {
+        kind: "file/open",
+        params: { path: fixturePath },
+      }),
+    ).toMatchObject({ ok: true });
     const loaded = await documentSnapshot();
     expect(loaded.editor.dirty).toBe(false);
     expect(loaded.editor.currentFilePath).toBe(fixturePath);
@@ -103,21 +105,25 @@ for (const kind of ["file/new", "file/open"] as const) {
     const params = { __testRefuseUnsaved: true, path: fixturePath };
     // No discardUnsaved: the outer transport reply is successful, while its
     // nested result reports refusal. Exact equality guards that contract.
-    const refused = kind === "file/new"
-      ? await bridgeRequest(page, { kind, params: { __testRefuseUnsaved: true } })
-      : await bridgeRequest(page, { kind, params });
+    const refused =
+      kind === "file/new"
+        ? await bridgeRequest(page, { kind, params: { __testRefuseUnsaved: true } })
+        : await bridgeRequest(page, { kind, params });
     expect(refused).toEqual({ ok: false, error: "unsaved-changes" });
     // Read the host, not React's potentially trailing dirty bit. Includes the
     // stable tree identities, authored data, selection, file path and history.
     expect(await documentSnapshot()).toEqual(before);
 
-    const accepted = kind === "file/new"
-      ? await bridgeRequest(page, {
-          kind, params: { __testRefuseUnsaved: true, discardUnsaved: true },
-        })
-      : await bridgeRequest(page, {
-          kind, params: { ...params, discardUnsaved: true },
-        });
+    const accepted =
+      kind === "file/new"
+        ? await bridgeRequest(page, {
+            kind,
+            params: { __testRefuseUnsaved: true, discardUnsaved: true },
+          })
+        : await bridgeRequest(page, {
+            kind,
+            params: { ...params, discardUnsaved: true },
+          });
     expect(accepted).toEqual(kind === "file/new" ? {} : { ok: true, path: fixturePath });
 
     const after = await documentSnapshot();
@@ -128,14 +134,9 @@ for (const kind of ["file/new", "file/open"] as const) {
     });
     // New creates the default single root; Open reloads the pristine fixture.
     // Stable IDs are deliberately absent here because replacement renews them.
-    const authored = (list: typeof after.emitters) =>
-      list.map(({ properties, tracks }) => ({ properties, tracks }));
-    expect(authored(after.emitters)).toEqual(
-      authored(kind === "file/new" ? fresh.emitters : loaded.emitters),
-    );
-    expect(after.tree.root.children).toHaveLength(
-      kind === "file/new" ? 1 : loaded.tree.root.children.length,
-    );
+    const authored = (list: typeof after.emitters) => list.map(({ properties, tracks }) => ({ properties, tracks }));
+    expect(authored(after.emitters)).toEqual(authored(kind === "file/new" ? fresh.emitters : loaded.emitters));
+    expect(after.tree.root.children).toHaveLength(kind === "file/new" ? 1 : loaded.tree.root.children.length);
     expect(after.undo).toEqual(fresh.undo);
   });
 }

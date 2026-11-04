@@ -22,7 +22,11 @@ import { flatRootsTree, makeStubBridge as makeEmitterTreeStubBridge, stubRect } 
 // Tooltip.Provider that App.tsx supplies in production — this helper stands
 // in for it here (same precedent as EmitterTree.test.tsx).
 const renderWithTooltips = (ui: ReactElement) =>
-  render(<Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{ui}</Tooltip.Provider>);
+  render(
+    <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>
+      {ui}
+    </Tooltip.Provider>,
+  );
 
 const makeStubBridge = (tree: EmitterTreeDto = flatRootsTree()) => makeEmitterTreeStubBridge(tree);
 
@@ -47,8 +51,8 @@ describe("EmitterTree multi-drag preview", () => {
     // Stub the full row geometry — the multi-drag resolver snapshots every
     // root block's rect at activation and works in content space (the jsdom
     // scroll container's rect is all-zero, so content Y == stubbed rect Y).
-    const smokeBtn  = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
-    const flashBtn  = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
+    const smokeBtn = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
+    const flashBtn = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
     const sparksBtn = screen.getByText("Sparks").closest<HTMLElement>("[data-emitter-id]")!;
     stubRect(smokeBtn, 0, 24);
     stubRect(sparksBtn, 24, 24);
@@ -95,9 +99,9 @@ describe("EmitterTree multi-drag preview", () => {
     // same gap+chip affordance and the selection-following reorder-many path.
     fireEvent.click(screen.getByText("Flash"));
 
-    const smokeBtn  = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
+    const smokeBtn = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
     const sparksBtn = screen.getByText("Sparks").closest<HTMLElement>("[data-emitter-id]")!;
-    const flashBtn  = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
+    const flashBtn = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
     stubRect(smokeBtn, 0, 24);
     stubRect(sparksBtn, 24, 24);
     stubRect(flashBtn, 48, 24);
@@ -127,9 +131,9 @@ describe("EmitterTree multi-drag preview", () => {
     fireEvent.click(screen.getByText("Smoke"));
     fireEvent.click(screen.getByText("Sparks"), { ctrlKey: true });
 
-    const smokeBtn  = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
+    const smokeBtn = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
     const sparksBtn = screen.getByText("Sparks").closest<HTMLElement>("[data-emitter-id]")!;
-    const flashBtn  = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
+    const flashBtn = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
     stubRect(smokeBtn, 0, 24);
     stubRect(sparksBtn, 24, 24);
     stubRect(flashBtn, 48, 24);
@@ -155,9 +159,9 @@ describe("EmitterTree multi-drag preview", () => {
     fireEvent.click(screen.getByText("Smoke"));
     fireEvent.click(screen.getByText("Sparks"), { ctrlKey: true });
 
-    const smokeBtn  = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
+    const smokeBtn = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
     const sparksBtn = screen.getByText("Sparks").closest<HTMLElement>("[data-emitter-id]")!;
-    const flashBtn  = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
+    const flashBtn = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
     stubRect(smokeBtn, 0, 24);
     stubRect(sparksBtn, 24, 24);
     stubRect(flashBtn, 48, 24);
@@ -170,7 +174,8 @@ describe("EmitterTree multi-drag preview", () => {
 
     fireEvent.pointerUp(flashBtn, { button: 0, clientX: 40, clientY: 70 });
     const reorder = (bridge.request as ReturnType<typeof vi.fn>).mock.calls
-      .map((c) => c[0]).find((c) => c.kind === "emitters/reorder-many");
+      .map((c) => c[0])
+      .find((c) => c.kind === "emitters/reorder-many");
     expect(reorder.params).toEqual({ ids: [0, 3], rootIndex: 3 });
   });
 
@@ -180,16 +185,55 @@ describe("EmitterTree multi-drag preview", () => {
   function fixtureWithChildren(): EmitterTreeDto {
     return {
       root: {
-        id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
+        id: -1,
+        stableId: 0,
+        name: "",
+        role: "root",
+        linkGroup: 0,
+        visible: true,
+        spawn: ZERO_SPAWN,
         children: [
           {
-            id: 0, stableId: 100, name: "Smoke", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
+            id: 0,
+            stableId: 100,
+            name: "Smoke",
+            role: "root",
+            linkGroup: 0,
+            visible: true,
+            spawn: ZERO_SPAWN,
             children: [
-              { id: 1, stableId: 101, name: "SmokeLife", role: "lifetime", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
+              {
+                id: 1,
+                stableId: 101,
+                name: "SmokeLife",
+                role: "lifetime",
+                linkGroup: 0,
+                visible: true,
+                spawn: ZERO_SPAWN,
+                children: [],
+              },
             ],
           },
-          { id: 3, stableId: 103, name: "Sparks", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
-          { id: 5, stableId: 105, name: "Flash", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
+          {
+            id: 3,
+            stableId: 103,
+            name: "Sparks",
+            role: "root",
+            linkGroup: 0,
+            visible: true,
+            spawn: ZERO_SPAWN,
+            children: [],
+          },
+          {
+            id: 5,
+            stableId: 105,
+            name: "Flash",
+            role: "root",
+            linkGroup: 0,
+            visible: true,
+            spawn: ZERO_SPAWN,
+            children: [],
+          },
         ],
       },
     };
@@ -203,7 +247,7 @@ describe("EmitterTree multi-drag preview", () => {
     fireEvent.click(screen.getByText("Smoke"));
     fireEvent.click(screen.getByText("Flash"), { ctrlKey: true });
 
-    const smokeBtn  = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
+    const smokeBtn = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
     const sparksBtn = screen.getByText("Sparks").closest<HTMLElement>("[data-emitter-id]")!;
     stubRect(sparksBtn, 100, 30);
 
@@ -226,7 +270,7 @@ describe("EmitterTree multi-drag preview", () => {
     renderWithTooltips(<EmitterTree bridge={bridge} />);
     await waitFor(() => expect(screen.getByText("SmokeLife")).toBeInTheDocument());
 
-    const smokeBtn  = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
+    const smokeBtn = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
     const sparksBtn = screen.getByText("Sparks").closest<HTMLElement>("[data-emitter-id]")!;
     stubRect(sparksBtn, 100, 30);
 
@@ -235,9 +279,9 @@ describe("EmitterTree multi-drag preview", () => {
 
     // Query rows by id — the chip duplicates names, so getByText is ambiguous.
     const row = (id: number) => document.querySelector(`[data-emitter-id="${id}"]`)!;
-    expect(row(0)).toHaveAttribute("data-dragging", "true");   // Smoke (root)
-    expect(row(1)).toHaveAttribute("data-dragging", "true");   // SmokeLife (child)
-    expect(row(3)).toHaveAttribute("data-dragging", "false");  // Sparks (not dragged)
+    expect(row(0)).toHaveAttribute("data-dragging", "true"); // Smoke (root)
+    expect(row(1)).toHaveAttribute("data-dragging", "true"); // SmokeLife (child)
+    expect(row(3)).toHaveAttribute("data-dragging", "false"); // Sparks (not dragged)
 
     fireEvent.pointerUp(smokeBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 103 });
   });
@@ -271,9 +315,9 @@ describe("EmitterTree multi-drag preview", () => {
     await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
 
     fireEvent.click(screen.getByText("Flash"));
-    const smokeBtn  = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
+    const smokeBtn = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
     const sparksBtn = screen.getByText("Sparks").closest<HTMLElement>("[data-emitter-id]")!;
-    const flashBtn  = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
+    const flashBtn = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
     stubRect(smokeBtn, 0, 24);
     stubRect(sparksBtn, 24, 24);
     stubRect(flashBtn, 48, 24);
@@ -350,9 +394,9 @@ describe("EmitterTree multi-drag preview", () => {
       handlers.get("emitters/tree/changed")?.({ payload: null });
     });
 
-    const smokeBtn  = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
+    const smokeBtn = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
     const sparksBtn = screen.getByText("Sparks").closest<HTMLElement>("[data-emitter-id]")!;
-    const flashNow  = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
+    const flashNow = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
     stubRect(flashNow, 0, 24);
     stubRect(smokeBtn, 24, 24);
     stubRect(sparksBtn, 48, 24);
@@ -378,9 +422,9 @@ describe("EmitterTree multi-drag preview", () => {
       renderWithTooltips(<EmitterTree bridge={bridge} />);
       await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
       fireEvent.click(screen.getByText("Flash"));
-      const smokeBtn  = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
+      const smokeBtn = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
       const sparksBtn = screen.getByText("Sparks").closest<HTMLElement>("[data-emitter-id]")!;
-      const flashBtn  = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
+      const flashBtn = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
       stubRect(smokeBtn, 0, 24);
       stubRect(sparksBtn, 24, 24);
       stubRect(flashBtn, 48, 24);
@@ -421,7 +465,12 @@ describe("EmitterTree multi-drag preview", () => {
     const bridge = makeStubBridge();
     let renderCount = 0;
     renderWithTooltips(
-      <Profiler id="emitter-tree-reorder-drag" onRender={() => { renderCount += 1; }}>
+      <Profiler
+        id="emitter-tree-reorder-drag"
+        onRender={() => {
+          renderCount += 1;
+        }}
+      >
         <EmitterTree bridge={bridge} />
       </Profiler>,
     );
@@ -451,9 +500,22 @@ describe("EmitterTree multi-drag preview", () => {
   it("the cursor chip caps at 4 names + a '+k more' line for big selections", async () => {
     const manyRoots: EmitterTreeDto = {
       root: {
-        id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
+        id: -1,
+        stableId: 0,
+        name: "",
+        role: "root",
+        linkGroup: 0,
+        visible: true,
+        spawn: ZERO_SPAWN,
         children: [0, 1, 2, 3, 4, 5].map((i) => ({
-          id: i, stableId: 100 + i, name: `R${i}`, role: "root" as const, linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [],
+          id: i,
+          stableId: 100 + i,
+          name: `R${i}`,
+          role: "root" as const,
+          linkGroup: 0,
+          visible: true,
+          spawn: ZERO_SPAWN,
+          children: [],
         })),
       },
     };

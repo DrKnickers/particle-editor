@@ -56,7 +56,15 @@ test("begin opens at frame 0 and freezes the free-run clock; end restores it", a
     const end = await b.request({ kind: "timeline/end", params: {} });
     const after = await b.request({ kind: "engine/state/snapshot", params: {} });
     const endAgain = await b.request({ kind: "timeline/end", params: {} });
-    return { begin, again, duringPaused: during.paused, instances: live.instances, end, afterPaused: after.paused, endAgain };
+    return {
+      begin,
+      again,
+      duringPaused: during.paused,
+      instances: live.instances,
+      end,
+      afterPaused: after.paused,
+      endAgain,
+    };
   });
   expect(result.begin).toMatchObject({ active: true, frame: 0, status: "paused", maxFrames: 600 });
   expect(result.again).toEqual(result.begin);
@@ -92,8 +100,15 @@ test("the session keeps the user's view: camera, ground, skydome, bloom and MSAA
     const view = async () => {
       const s = await b.request({ kind: "engine/state/snapshot", params: {} });
       const msaa = await b.request({ kind: "engine/query/msaa-levels", params: {} });
-      return { camera: s.camera, ground: s.ground, skydomeSlot: s.skydomeSlot, skydomePrimaryName: s.skydomePrimaryName,
-        skydomeSecondaryName: s.skydomeSecondaryName, bloom: s.bloom, msaa: msaa.current };
+      return {
+        camera: s.camera,
+        ground: s.ground,
+        skydomeSlot: s.skydomeSlot,
+        skydomePrimaryName: s.skydomePrimaryName,
+        skydomeSecondaryName: s.skydomeSecondaryName,
+        bloom: s.bloom,
+        msaa: msaa.current,
+      };
     };
     const before = await view();
     await b.request({ kind: "timeline/begin", params: {} });
@@ -123,8 +138,12 @@ test("the session gate refuses free-run transport, Clear and the spawner", async
     ];
     const results: Record<string, string> = {};
     for (const [kind, attempt] of attempts) {
-      try { await attempt(); results[kind] = "ran"; }
-      catch (error) { results[kind] = String((error as Error).message ?? error); }
+      try {
+        await attempt();
+        results[kind] = "ran";
+      } catch (error) {
+        results[kind] = String((error as Error).message ?? error);
+      }
     }
     const live = await b.request({ kind: "engine/query/live-instances", params: {} });
     return { results, instances: live.instances };
@@ -140,7 +159,9 @@ test("play advances about 60 frames a second, pause holds the frame, seeks land 
     const b = window.bridge!;
     await b.request({ kind: "timeline/begin", params: {} });
     (window as unknown as { timelineEvents: TimelineStateDto[] }).timelineEvents = [];
-    b.on("timeline/state", (e) => (window as unknown as { timelineEvents: TimelineStateDto[] }).timelineEvents.push(e.payload));
+    b.on("timeline/state", (e) =>
+      (window as unknown as { timelineEvents: TimelineStateDto[] }).timelineEvents.push(e.payload),
+    );
     await b.request({ kind: "timeline/set", params: { playing: true } });
   });
   const started = Date.now();
@@ -152,7 +173,9 @@ test("play advances about 60 frames a second, pause holds the frame, seeks land 
   expect(playing.frame).toBeGreaterThan(45 * elapsed);
   expect(playing.frame).toBeLessThanOrEqual(Math.ceil(60 * elapsed) + 5);
   expect(playing.timeSeconds).toBeCloseTo(playing.frame / 60, 10);
-  const events = await page.evaluate(() => (window as unknown as { timelineEvents: TimelineStateDto[] }).timelineEvents);
+  const events = await page.evaluate(
+    () => (window as unknown as { timelineEvents: TimelineStateDto[] }).timelineEvents,
+  );
   expect(events.length).toBeGreaterThan(3);
   expect(events.every((e, i) => i === 0 || e.frame >= events[i - 1]!.frame)).toBe(true);
 
@@ -181,13 +204,17 @@ test("play advances about 60 frames a second, pause holds the frame, seeks land 
   expect(reseek).toEqual(held.live);
 
   for (const frame of [120, 7, 600, 0]) {
-    const landed = await page.evaluate((f) => window.bridge!.request({ kind: "timeline/seek", params: { frame: f } }), frame);
+    const landed = await page.evaluate(
+      (f) => window.bridge!.request({ kind: "timeline/seek", params: { frame: f } }),
+      frame,
+    );
     expect(landed).toMatchObject({ frame, timeSeconds: frame / 60, status: frame === 600 ? "ended" : "paused" });
   }
   const clamped = await page.evaluate(() => window.bridge!.request({ kind: "timeline/seek", params: { frame: 5000 } }));
   expect(clamped.frame).toBe(600);
-  await expect(page.evaluate(() => window.bridge!.request({ kind: "timeline/seek", params: { frame: 1.5 } })))
-    .rejects.toThrow(/frame must be an integer/);
+  await expect(
+    page.evaluate(() => window.bridge!.request({ kind: "timeline/seek", params: { frame: 1.5 } })),
+  ).rejects.toThrow(/frame must be an integer/);
 });
 
 test("play stops on the last frame without loop and wraps with loop", async () => {
@@ -204,7 +231,15 @@ test("play stops on the last frame without loop and wraps with loop", async () =
     await b.request({ kind: "timeline/seek", params: { frame: 590 } });
     await b.request({ kind: "timeline/set", params: { playing: true, loop: true } });
   });
-  await expect.poll(async () => { const s = await state(); return s.playing && s.frame < 590; }, { timeout: 5000 }).toBe(true);
+  await expect
+    .poll(
+      async () => {
+        const s = await state();
+        return s.playing && s.frame < 590;
+      },
+      { timeout: 5000 },
+    )
+    .toBe(true);
 });
 
 test("an edit while parked replays the frame as a new revision; a camera move only re-bakes it", async () => {
@@ -213,9 +248,12 @@ test("an edit while parked replays the frame as a new revision; a camera move on
     await b.request({ kind: "timeline/begin", params: {} });
     return b.request({ kind: "timeline/seek", params: { frame: 90 } });
   });
-  await page.evaluate(() => window.bridge!.request({
-    kind: "emitters/set-properties", params: { id: 0, patch: { lifetime: 3 } },
-  }));
+  await page.evaluate(() =>
+    window.bridge!.request({
+      kind: "emitters/set-properties",
+      params: { id: 0, patch: { lifetime: 3 } },
+    }),
+  );
   // The edit replays the frame; the web's estimate push that follows the
   // tree update is a second input change and may replay it again.
   await expect.poll(async () => (await state()).revision, { timeout: 3000 }).toBeGreaterThan(parked.revision);
@@ -231,9 +269,13 @@ test("an edit while parked replays the frame as a new revision; a camera move on
     const b = window.bridge!;
     const snapshot = await b.request({ kind: "engine/state/snapshot", params: {} });
     const camera = snapshot.camera;
-    await b.request({ kind: "engine/set/camera", params: {
-      ...camera, position: [camera.position[0] + 50, camera.position[1], camera.position[2]],
-    } });
+    await b.request({
+      kind: "engine/set/camera",
+      params: {
+        ...camera,
+        position: [camera.position[0] + 50, camera.position[1], camera.position[2]],
+      },
+    });
   });
   await page.waitForTimeout(300);
   const moved = await state();
@@ -298,9 +340,12 @@ test("the panel drives the host's session through the real UI", async () => {
   await expect.poll(async () => (await state()).frame).toBe(301);
 
   const before = await state();
-  await page.evaluate(() => window.bridge!.request({
-    kind: "emitters/set-properties", params: { id: 0, patch: { lifetime: 4 } },
-  }));
+  await page.evaluate(() =>
+    window.bridge!.request({
+      kind: "emitters/set-properties",
+      params: { id: 0, patch: { lifetime: 4 } },
+    }),
+  );
   await expect.poll(async () => (await state()).revision, { timeout: 3000 }).toBeGreaterThan(before.revision);
   expect((await state()).frame).toBe(301);
 
@@ -317,8 +362,18 @@ test("a page reload closes the host's session", async () => {
   await page.evaluate(() => window.bridge!.request({ kind: "timeline/begin", params: {} }));
   await page.reload();
   await page.waitForFunction(() => !!window.bridge);
-  await expect.poll(async () => page.evaluate(async () => {
-    try { await window.bridge!.request({ kind: "timeline/set", params: {} }); return "open"; }
-    catch (error) { return String((error as Error).message ?? error); }
-  }), { timeout: 10_000 }).toContain("the timeline is not open");
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(async () => {
+          try {
+            await window.bridge!.request({ kind: "timeline/set", params: {} });
+            return "open";
+          } catch (error) {
+            return String((error as Error).message ?? error);
+          }
+        }),
+      { timeout: 10_000 },
+    )
+    .toContain("the timeline is not open");
 });

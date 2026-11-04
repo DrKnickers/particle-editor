@@ -20,7 +20,7 @@ test("selecting an emitter shows property tabs (lower-left) + track editor (lowe
   await page.evaluate(async () => {
     const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
-    const list = await bridge.request({ kind: "emitters/list", params: {} }) as {
+    const list = (await bridge.request({ kind: "emitters/list", params: {} })) as {
       root: { children: { id: number }[] };
     };
     const firstId = list.root.children[0]?.id;
@@ -53,7 +53,7 @@ test("editing the Lifetime spinner in the Basic tab fires emitters/set-propertie
   const firstId = await page.evaluate(async () => {
     const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
-    const list = await bridge.request({ kind: "emitters/list", params: {} }) as {
+    const list = (await bridge.request({ kind: "emitters/list", params: {} })) as {
       root: { children: { id: number }[] };
     };
     const id = list.root.children[0]?.id;
@@ -88,13 +88,13 @@ test("editing the Lifetime spinner in the Basic tab fires emitters/set-propertie
   expect(response.skipped).toEqual(["unknownProperty"]);
 
   // Round-trip via get-properties.
-  const result = await page.evaluate(async (id: number) => {
+  const result = (await page.evaluate(async (id: number) => {
     const bridge = window.bridge;
     return await bridge!.request({
       kind: "emitters/get-properties",
       params: { id },
     });
-  }, firstId) as { properties: { lifetime: number } };
+  }, firstId)) as { properties: { lifetime: number } };
 
   expect(result.properties.lifetime).toBeCloseTo(7.5, 5);
   expect(result.properties).not.toHaveProperty("unknownProperty");
@@ -105,7 +105,7 @@ test("switching to Physics tab and changing gravity round-trips via get-properti
   const firstId = await page.evaluate(async () => {
     const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
-    const list = await bridge.request({ kind: "emitters/list", params: {} }) as {
+    const list = (await bridge.request({ kind: "emitters/list", params: {} })) as {
       root: { children: { id: number }[] };
     };
     const id = list.root.children[0]?.id;
@@ -134,13 +134,13 @@ test("switching to Physics tab and changing gravity round-trips via get-properti
     });
   }, firstId);
 
-  const result = await page.evaluate(async (id: number) => {
+  const result = (await page.evaluate(async (id: number) => {
     const bridge = window.bridge;
     return await bridge!.request({
       kind: "emitters/get-properties",
       params: { id },
     });
-  }, firstId) as { properties: { gravity: number } };
+  }, firstId)) as { properties: { gravity: number } };
 
   expect(result.properties.gravity).toBeCloseTo(-9.81, 5);
 });
@@ -149,7 +149,7 @@ test("Physics group type change round-trips via get-properties", async () => {
   const firstId = await page.evaluate(async () => {
     const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
-    const list = await bridge.request({ kind: "emitters/list", params: {} }) as {
+    const list = (await bridge.request({ kind: "emitters/list", params: {} })) as {
       root: { children: { id: number }[] };
     };
     const id = list.root.children[0]?.id;
@@ -175,9 +175,7 @@ test("Physics group type change round-trips via get-properties", async () => {
       kind: "emitters/get-properties",
       params: { id },
     });
-    const next = before.properties.groups.map((g, i) =>
-      i === 0 ? { ...g, type: 3 } : g,
-    );
+    const next = before.properties.groups.map((g, i) => (i === 0 ? { ...g, type: 3 } : g));
     await bridge!.request({
       kind: "emitters/set-properties",
       params: { id, patch: { groups: next } },
@@ -197,7 +195,7 @@ test("switching to Appearance tab and changing blendMode emits engine/state/chan
   const firstId = await page.evaluate(async () => {
     const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
-    const list = await bridge.request({ kind: "emitters/list", params: {} }) as {
+    const list = (await bridge.request({ kind: "emitters/list", params: {} })) as {
       root: { children: { id: number }[] };
     };
     const id = list.root.children[0]?.id;
@@ -229,13 +227,13 @@ test("switching to Appearance tab and changing blendMode emits engine/state/chan
     });
   }, firstId);
 
-  const result = await page.evaluate(async (id: number) => {
+  const result = (await page.evaluate(async (id: number) => {
     const bridge = window.bridge;
     return await bridge!.request({
       kind: "emitters/get-properties",
       params: { id },
     });
-  }, firstId) as { properties: { blendMode: number } };
+  }, firstId)) as { properties: { blendMode: number } };
 
   expect(result.properties.blendMode).toBe(11);
 });
@@ -257,7 +255,7 @@ test("Basic tab Generation radios commit via UI and round-trip; Minimum lifetime
   const firstId = await page.evaluate(async () => {
     const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
-    const list = await bridge.request({ kind: "emitters/list", params: {} }) as {
+    const list = (await bridge.request({ kind: "emitters/list", params: {} })) as {
       root: { children: { id: number }[] };
     };
     const id = list.root.children[0]?.id;
@@ -283,63 +281,67 @@ test("Basic tab Generation radios commit via UI and round-trip; Minimum lifetime
   // generation mode or lifetime perc into later specs of the shared
   // CDP session.
   try {
-  // UI-driven commit: clicking Bursts fires ONE atomic patch
-  // { useBursts: true, isWeatherParticle: false }. Radio rows are plain
-  // click targets (no Radix portal / keystroke delivery involved), so
-  // unlike the spinners we can drive this leg through the real UI.
-  await bursts.click();
-  await expect
-    .poll(async () =>
-      page.evaluate(async (id: number) => {
-        const bridge = window.bridge;
-        const r = await bridge!.request({
-          kind: "emitters/get-properties",
-          params: { id },
-        }) as { properties: { useBursts: boolean; isWeatherParticle: boolean } };
-        return r.properties.useBursts && !r.properties.isWeatherParticle;
-      }, firstId),
-    { timeout: 5_000 })
-    .toBe(true);
+    // UI-driven commit: clicking Bursts fires ONE atomic patch
+    // { useBursts: true, isWeatherParticle: false }. Radio rows are plain
+    // click targets (no Radix portal / keystroke delivery involved), so
+    // unlike the spinners we can drive this leg through the real UI.
+    await bursts.click();
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(async (id: number) => {
+            const bridge = window.bridge;
+            const r = (await bridge!.request({
+              kind: "emitters/get-properties",
+              params: { id },
+            })) as { properties: { useBursts: boolean; isWeatherParticle: boolean } };
+            return r.properties.useBursts && !r.properties.isWeatherParticle;
+          }, firstId),
+        { timeout: 5_000 },
+      )
+      .toBe(true);
 
-  // Flip back to Continuous — restores the seed default (useBursts=false).
-  await continuous.click();
-  await expect
-    .poll(async () =>
-      page.evaluate(async (id: number) => {
-        const bridge = window.bridge;
-        const r = await bridge!.request({
-          kind: "emitters/get-properties",
-          params: { id },
-        }) as { properties: { useBursts: boolean } };
-        return r.properties.useBursts;
-      }, firstId),
-    { timeout: 5_000 })
-    .toBe(false);
+    // Flip back to Continuous — restores the seed default (useBursts=false).
+    await continuous.click();
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(async (id: number) => {
+            const bridge = window.bridge;
+            const r = (await bridge!.request({
+              kind: "emitters/get-properties",
+              params: { id },
+            })) as { properties: { useBursts: boolean } };
+            return r.properties.useBursts;
+          }, firstId),
+        { timeout: 5_000 },
+      )
+      .toBe(false);
 
-  // Inverted-percent mapping: bridge stores raw 0.25 → UI displays
-  // 100 − 0.25*100 = 75. set-properties emits emitters/tree/changed,
-  // which triggers the panel's authoritative re-fetch, so the spinner
-  // updates without re-selecting.
-  await page.evaluate(async (id: number) => {
-    const bridge = window.bridge;
-    await bridge!.request({
-      kind: "emitters/set-properties",
-      params: { id, patch: { randomLifetimePerc: 0.25 } },
-    });
-  }, firstId);
-  const minLifetime = page.getByLabel("Minimum lifetime:", { exact: true });
-  await expect.poll(() => minLifetime.inputValue(), { timeout: 5_000 }).toBe("75");
+    // Inverted-percent mapping: bridge stores raw 0.25 → UI displays
+    // 100 − 0.25*100 = 75. set-properties emits emitters/tree/changed,
+    // which triggers the panel's authoritative re-fetch, so the spinner
+    // updates without re-selecting.
+    await page.evaluate(async (id: number) => {
+      const bridge = window.bridge;
+      await bridge!.request({
+        kind: "emitters/set-properties",
+        params: { id, patch: { randomLifetimePerc: 0.25 } },
+      });
+    }, firstId);
+    const minLifetime = page.getByLabel("Minimum lifetime:", { exact: true });
+    await expect.poll(() => minLifetime.inputValue(), { timeout: 5_000 }).toBe("75");
 
-  // The bridge keeps the RAW ratio, not the displayed integer.
-  const raw = await page.evaluate(async (id: number) => {
-    const bridge = window.bridge;
-    const r = await bridge!.request({
-      kind: "emitters/get-properties",
-      params: { id },
-    }) as { properties: { randomLifetimePerc: number } };
-    return r.properties.randomLifetimePerc;
-  }, firstId);
-  expect(raw).toBeCloseTo(0.25, 5);
+    // The bridge keeps the RAW ratio, not the displayed integer.
+    const raw = await page.evaluate(async (id: number) => {
+      const bridge = window.bridge;
+      const r = (await bridge!.request({
+        kind: "emitters/get-properties",
+        params: { id },
+      })) as { properties: { randomLifetimePerc: number } };
+      return r.properties.randomLifetimePerc;
+    }, firstId);
+    expect(raw).toBeCloseTo(0.25, 5);
   } finally {
     // Restore the seed defaults so later specs see a clean emitter.
     await page.evaluate(async (id: number) => {
@@ -371,7 +373,7 @@ test("Appearance tab Rotation/Scale: checkbox commits via UI; inverted + scaled 
   const firstId = await page.evaluate(async () => {
     const bridge = window.bridge;
     if (!bridge) throw new Error("bridge missing");
-    const list = await bridge.request({ kind: "emitters/list", params: {} }) as {
+    const list = (await bridge.request({ kind: "emitters/list", params: {} })) as {
       root: { children: { id: number }[] };
     };
     const id = list.root.children[0]?.id;
@@ -395,53 +397,55 @@ test("Appearance tab Rotation/Scale: checkbox commits via UI; inverted + scaled 
   // Restore in finally: a mid-test failure must not leak rotation/scale
   // state into later specs of the shared CDP session.
   try {
-  // Rotation cascade: Average/Variance disabled while randomRotation=false.
-  const fixedRotation = page.getByRole("checkbox", { name: "Fixed random rotation:" });
-  await expect(fixedRotation).toBeVisible({ timeout: 5_000 });
-  const rotationAvg = page.getByLabel("Rotation average:", { exact: true });
-  await expect(rotationAvg).toBeDisabled();
+    // Rotation cascade: Average/Variance disabled while randomRotation=false.
+    const fixedRotation = page.getByRole("checkbox", { name: "Fixed random rotation:" });
+    await expect(fixedRotation).toBeVisible({ timeout: 5_000 });
+    const rotationAvg = page.getByLabel("Rotation average:", { exact: true });
+    await expect(rotationAvg).toBeDisabled();
 
-  // UI-driven commit: the inspector checkbox is a native input — click it and
-  // assert the round-trip (mirrors the Generation radio leg above).
-  await fixedRotation.click();
-  await expect
-    .poll(async () =>
-      page.evaluate(async (id: number) => {
-        const bridge = window.bridge;
-        const r = await bridge!.request({
-          kind: "emitters/get-properties",
-          params: { id },
-        }) as { properties: { randomRotation: boolean } };
-        return r.properties.randomRotation;
-      }, firstId),
-    { timeout: 5_000 })
-    .toBe(true);
-  await expect(rotationAvg).toBeEnabled();
+    // UI-driven commit: the inspector checkbox is a native input — click it and
+    // assert the round-trip (mirrors the Generation radio leg above).
+    await fixedRotation.click();
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(async (id: number) => {
+            const bridge = window.bridge;
+            const r = (await bridge!.request({
+              kind: "emitters/get-properties",
+              params: { id },
+            })) as { properties: { randomRotation: boolean } };
+            return r.properties.randomRotation;
+          }, firstId),
+        { timeout: 5_000 },
+      )
+      .toBe(true);
+    await expect(rotationAvg).toBeEnabled();
 
-  // Inverted percent (Minimum scale): raw 0.25 ↔ display 75.
-  // displayScale ×360 (Rotation average): raw 0.25 ↔ display 90°.
-  await page.evaluate(async (id: number) => {
-    const bridge = window.bridge;
-    await bridge!.request({
-      kind: "emitters/set-properties",
-      params: { id, patch: { randomScalePerc: 0.25, randomRotationAverage: 0.25 } },
-    });
-  }, firstId);
-  const minScale = page.getByLabel("Minimum scale:", { exact: true });
-  await expect.poll(() => minScale.inputValue(), { timeout: 5_000 }).toBe("75");
-  await expect.poll(() => rotationAvg.inputValue(), { timeout: 5_000 }).toBe("90");
+    // Inverted percent (Minimum scale): raw 0.25 ↔ display 75.
+    // displayScale ×360 (Rotation average): raw 0.25 ↔ display 90°.
+    await page.evaluate(async (id: number) => {
+      const bridge = window.bridge;
+      await bridge!.request({
+        kind: "emitters/set-properties",
+        params: { id, patch: { randomScalePerc: 0.25, randomRotationAverage: 0.25 } },
+      });
+    }, firstId);
+    const minScale = page.getByLabel("Minimum scale:", { exact: true });
+    await expect.poll(() => minScale.inputValue(), { timeout: 5_000 }).toBe("75");
+    await expect.poll(() => rotationAvg.inputValue(), { timeout: 5_000 }).toBe("90");
 
-  // The bridge keeps the RAW ratios for both fields.
-  const raws = await page.evaluate(async (id: number) => {
-    const bridge = window.bridge;
-    const r = await bridge!.request({
-      kind: "emitters/get-properties",
-      params: { id },
-    }) as { properties: { randomScalePerc: number; randomRotationAverage: number } };
-    return [r.properties.randomScalePerc, r.properties.randomRotationAverage];
-  }, firstId);
-  expect(raws[0]).toBeCloseTo(0.25, 5);
-  expect(raws[1]).toBeCloseTo(0.25, 5);
+    // The bridge keeps the RAW ratios for both fields.
+    const raws = await page.evaluate(async (id: number) => {
+      const bridge = window.bridge;
+      const r = (await bridge!.request({
+        kind: "emitters/get-properties",
+        params: { id },
+      })) as { properties: { randomScalePerc: number; randomRotationAverage: number } };
+      return [r.properties.randomScalePerc, r.properties.randomRotationAverage];
+    }, firstId);
+    expect(raws[0]).toBeCloseTo(0.25, 5);
+    expect(raws[1]).toBeCloseTo(0.25, 5);
   } finally {
     // Restore the seed defaults.
     await page.evaluate(async (id: number) => {

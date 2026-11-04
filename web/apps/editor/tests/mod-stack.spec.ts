@@ -52,7 +52,10 @@ test.afterAll(async () => {
 });
 
 const endsWithDir = (p: string, dir: string) =>
-  p.replace(/[\\/]+$/, "").toLowerCase().endsWith(dir.toLowerCase());
+  p
+    .replace(/[\\/]+$/, "")
+    .toLowerCase()
+    .endsWith(dir.toLowerCase());
 
 test("set two fixture layers → stack reflects both, in order", async () => {
   const r = await setLayers([modAlpha, modBeta]);

@@ -24,9 +24,7 @@ beforeEach(resetMockState);
 describe("ViewportToggleOverlay", () => {
   it("renders the four toggles", async () => {
     setup();
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /show ground/i })).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByRole("button", { name: /show ground/i })).toBeInTheDocument());
     expect(screen.getByRole("button", { name: /show grid/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /toggle bloom/i })).toBeInTheDocument();
     // lock label is conditional; /lock/i matches both "Lock…" and "…to lock it"
@@ -39,9 +37,7 @@ describe("ViewportToggleOverlay", () => {
     const before = btn.getAttribute("aria-pressed");
     fireEvent.click(btn);
     await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: /show ground/i }).getAttribute("aria-pressed"),
-      ).not.toBe(before),
+      expect(screen.getByRole("button", { name: /show ground/i }).getAttribute("aria-pressed")).not.toBe(before),
     );
   });
 

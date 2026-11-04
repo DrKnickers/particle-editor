@@ -13,29 +13,18 @@ test.beforeAll(async ({ cdpPage }) => {
 
 test("Toolbar renders the 2026 button set", async () => {
   const labels = await page.evaluate(() => {
-    return Array.from(document.querySelectorAll('.toolbar button[aria-label]'))
+    return Array.from(document.querySelectorAll(".toolbar button[aria-label]"))
       .map((b) => b.getAttribute("aria-label"))
       .filter((l): l is string => l !== null);
   });
   // File group
-  expect(labels).toEqual(expect.arrayContaining([
-    "New",
-    "Open",
-    "Save",
-    "Save As",
-  ]));
+  expect(labels).toEqual(expect.arrayContaining(["New", "Open", "Save", "Save As"]));
   // Playback group — Pause/Play depending on current engine state.
   expect(labels.some((l) => /^(Pause|Play)$/.test(l))).toBe(true);
-  expect(labels).toEqual(expect.arrayContaining([
-    "Step",
-    "Step 10",
-    "Toggle Spawner panel",
-  ]));
+  expect(labels).toEqual(expect.arrayContaining(["Step", "Step 10", "Toggle Spawner panel"]));
   // ground/grid/bloom moved to the viewport display-options overlay; the
   // leave-particles toggle stays in the toolbar.
-  expect(labels).toEqual(expect.arrayContaining([
-    "Leave particles after instance death",
-  ]));
+  expect(labels).toEqual(expect.arrayContaining(["Leave particles after instance death"]));
   expect(labels).not.toContain("Show ground");
   expect(labels).not.toContain("Show grid");
   expect(labels).not.toContain("Toggle bloom");
@@ -48,8 +37,9 @@ test("engine/set/paused mutates state and flips Play/Pause button", async () => 
     await bridge.request({ kind: "engine/set/paused", params: { paused: true } });
     await new Promise((r) => setTimeout(r, 150));
     const snap = await bridge.request({ kind: "engine/state/snapshot", params: {} });
-    const btn = Array.from(document.querySelectorAll('.toolbar button[aria-label]'))
-      .find((b) => /^(Pause|Play)$/.test(b.getAttribute("aria-label")!));
+    const btn = Array.from(document.querySelectorAll(".toolbar button[aria-label]")).find((b) =>
+      /^(Pause|Play)$/.test(b.getAttribute("aria-label")!),
+    );
     return {
       paused: snap.paused,
       ariaLabel: btn?.getAttribute("aria-label") ?? null,
@@ -101,8 +91,9 @@ test("Spawner toggle button is present with default aria-pressed=true", async ()
   // been mutated by prior runs, so we accept either pressed state but
   // verify the button exists with the planned aria-label.
   const info = await page.evaluate(() => {
-    const btn = Array.from(document.querySelectorAll('.toolbar button[aria-label]'))
-      .find((b) => b.getAttribute("aria-label") === "Toggle Spawner panel") as HTMLButtonElement | undefined;
+    const btn = Array.from(document.querySelectorAll(".toolbar button[aria-label]")).find(
+      (b) => b.getAttribute("aria-label") === "Toggle Spawner panel",
+    ) as HTMLButtonElement | undefined;
     return {
       present: !!btn,
       text: btn?.textContent?.trim() ?? null,

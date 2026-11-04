@@ -8,8 +8,16 @@ describe("computeFlipDeltas", () => {
     // row 101 moved down 24 (was 0, now 24) → delta -? prev-next = -24?
     // delta is the INVERT transform: was-0 now-24 → translateY(-24) puts it
     // back at its old spot, then transitions to 0.
-    const prev = m([[101, 0], [102, 24], [103, 48]]);
-    const next = m([[101, 24], [102, 0], [103, 48]]);
+    const prev = m([
+      [101, 0],
+      [102, 24],
+      [103, 48],
+    ]);
+    const next = m([
+      [101, 24],
+      [102, 0],
+      [103, 48],
+    ]);
     const d = computeFlipDeltas(prev, next);
     expect(d.get(101)).toBe(-24);
     expect(d.get(102)).toBe(24);
