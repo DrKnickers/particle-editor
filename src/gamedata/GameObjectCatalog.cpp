@@ -136,6 +136,11 @@ namespace
         std::string    grenadeLobModRaw;  // <Projectile_Grenade_Gravity_Lob_Mod>
         std::string    grenadeSlowerRaw;  // <Projectile_Grenade_Can_Lob_Slower>
         std::string    maxLifetimeRaw;    // <Projectile_Max_Lifetime>, seconds
+        std::string    rocketStraightRaw; // <Projectile_Rocket_Straight_Distance>, world units
+        std::string    rocketCurveDistRaw;   // <Projectile_Rocket_Curve_Distance>, world units
+        std::string    rocketCurveOffsetRaw; // <Projectile_Rocket_Curve_Offset>, world units
+        std::string    explodesAtTargetRaw;  // <Explode_When_Reached_Target_Radius>
+        std::string    targetOnTerrainRaw;   // <Projectile_Target_Point_On_Terrain>
         // fieldable reference-graph SOURCE lists (this object references others).
         std::string    costRaw;          // <Build_Cost_Credits> (fallback <Required_Star_Base_Level>) -> buildable
         std::string    buildMenuRaw;     // <Tactical_Buildable_Objects_Campaign/_Multiplayer> -> names it builds
@@ -301,6 +306,11 @@ namespace
                 re.grenadeLobModRaw  = trim(WideToAnsi(childData(e, L"Projectile_Grenade_Gravity_Lob_Mod")));
                 re.grenadeSlowerRaw  = trim(WideToAnsi(childData(e, L"Projectile_Grenade_Can_Lob_Slower")));
                 re.maxLifetimeRaw    = trim(WideToAnsi(childData(e, L"Projectile_Max_Lifetime")));
+                re.rocketStraightRaw    = trim(WideToAnsi(childData(e, L"Projectile_Rocket_Straight_Distance")));
+                re.rocketCurveDistRaw   = trim(WideToAnsi(childData(e, L"Projectile_Rocket_Curve_Distance")));
+                re.rocketCurveOffsetRaw = trim(WideToAnsi(childData(e, L"Projectile_Rocket_Curve_Offset")));
+                re.explodesAtTargetRaw  = trim(WideToAnsi(childData(e, L"Explode_When_Reached_Target_Radius")));
+                re.targetOnTerrainRaw   = trim(WideToAnsi(childData(e, L"Projectile_Target_Point_On_Terrain")));
                 // fieldable source lists.
                 re.costRaw        = trim(WideToAnsi(childData(e, L"Build_Cost_Credits")));
                 if (re.costRaw.empty())
@@ -948,6 +958,11 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out)
             ref.projectileGrenadeLobMod    = nonNegative(&RawEntry::grenadeLobModRaw);
             ref.projectileMaxLifetimeSec   = nonNegative(&RawEntry::maxLifetimeRaw);
             ref.projectileGrenadeLobSlower = IsGameTrue(resolveRaw(kv.first, byName, &RawEntry::grenadeSlowerRaw));
+            ref.projectileRocketStraightDistance = nonNegative(&RawEntry::rocketStraightRaw);
+            ref.projectileRocketCurveDistance    = nonNegative(&RawEntry::rocketCurveDistRaw);
+            ref.projectileRocketCurveOffset      = nonNegative(&RawEntry::rocketCurveOffsetRaw);
+            ref.projectileExplodesAtTarget  = IsGameTrue(resolveRaw(kv.first, byName, &RawEntry::explodesAtTargetRaw));
+            ref.projectileTargetOnTerrain   = IsGameTrue(resolveRaw(kv.first, byName, &RawEntry::targetOnTerrainRaw));
         }
         // ref.fieldable / fieldSource filled by the fieldable pass below.
         out.objects.push_back(ref);

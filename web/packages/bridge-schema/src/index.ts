@@ -271,8 +271,8 @@ export type ReferenceProjectileDto = {
   range: number;         // world units
   flightSec: number;     // seconds until the game destroys the shot
   category: string;      // raw <Projectile_Category>
-  pathEmulated: boolean; // false for rockets and the lightsaber throw (the preview flies them straight)
-  usesTarget: boolean;   // missiles, grenades and cluster bombs aim at the spawner's target
+  pathEmulated: boolean; // false for the lightsaber throw (the preview flies it straight)
+  usesTarget: boolean;   // missiles, rockets, grenades and cluster bombs aim at the spawner's target
 };
 export type ReferenceObjectEntry = {
   name: string;

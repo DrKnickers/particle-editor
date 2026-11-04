@@ -10,7 +10,8 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ### Added
 
-- "Fly like the projectile" flies missiles, bombs and grenades on their in-game paths: missiles turn in on a Spawner target point (drawn as a cross in the viewport), bombs drop away along their heading, and grenades lob onto the target, with a warning when it's out of lob range; rockets still fly straight
+- "Fly like the projectile" flies rockets on their in-game paths: a straight start, then a randomly bent curve onto the Spawner target, so each shot in a burst takes its own line; land rockets keep their launch height above the ground
+- "Fly like the projectile" flies missiles, bombs and grenades on their in-game paths: missiles turn in on a Spawner target point (drawn as a cross in the viewport), bombs drop away along their heading, and grenades lob onto the target, with a warning when it's out of lob range
 - Projectiles drawn by particle effects (a particle-system model, or a skeleton of particle proxies, like turbolaser bolts and pulse cannon blasts) can be the reference object: the effect plays at the placement and restarts when it ends, and with "Fly like the projectile" each shot carries its own effects, which fade when the shot ends; mesh projectiles play their proxy effects too
 - With a projectile as the reference object, the Spawner's "Fly like the projectile" flies each instance at the shot's in-game speed and range, in a straight line, carrying the projectile model pointed along its flight; missiles, rockets, bombs and grenades are flagged because the game doesn't fly them straight
 - The reference-object picker lists projectiles in their own section, grouped Ground and Space, so an effect can be lined up against the shot it rides on; a projectile with both a land and a space model appears in both groups, and projectiles with nothing to draw are left out

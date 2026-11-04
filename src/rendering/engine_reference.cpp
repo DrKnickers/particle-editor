@@ -703,6 +703,12 @@ void Engine::RebuildReferenceObjectMesh()
                 m_referenceProjectile.grenadeLobMod       = r.projectileGrenadeLobMod;
                 m_referenceProjectile.grenadeCanLobSlower = r.projectileGrenadeLobSlower;
                 m_referenceProjectile.maxLifetimeSec      = r.projectileMaxLifetimeSec;
+                m_referenceProjectile.rocketStraightDistance = r.projectileRocketStraightDistance;
+                m_referenceProjectile.rocketCurveDistance    = r.projectileRocketCurveDistance;
+                m_referenceProjectile.rocketCurveOffset      = r.projectileRocketCurveOffset;
+                m_referenceProjectile.rocketExplodesAtTarget = r.projectileExplodesAtTarget;
+                m_referenceProjectile.rocketTargetOnTerrain  = r.projectileTargetOnTerrain;
+                m_referenceProjectile.inSpace                = (r.domain == ObjDomain::Space);
             }
 #ifndef NDEBUG
             fprintf(stderr, "[refscale] '%s' Scale_Factor=%.3f\n", r.name.c_str(), r.scaleFactor);

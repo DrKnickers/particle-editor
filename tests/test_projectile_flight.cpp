@@ -83,18 +83,21 @@ int main()
         CHECK(ProjectileFlightKindFor("BOMB")         == ProjectileFlightKind::Bomb,    "BOMB falls");
         CHECK(ProjectileFlightKindFor("Cluster_Bomb") == ProjectileFlightKind::Bomb,    "CLUSTER_BOMB falls");
         CHECK(ProjectileFlightKindFor("GRENADE")      == ProjectileFlightKind::Grenade, "GRENADE lobs");
-        CHECK(ProjectileFlightKindFor("ROCKET")       == ProjectileFlightKind::Direct,  "ROCKET not emulated yet");
+        CHECK(ProjectileFlightKindFor("ROCKET")       == ProjectileFlightKind::Rocket,  "ROCKET follows a spline");
+        CHECK(ProjectileFlightKindFor("MPTL_Rocket")  == ProjectileFlightKind::Rocket,  "MPTL_ROCKET follows a spline");
+        CHECK(ProjectileFlightKindFor("Light_Saber")  == ProjectileFlightKind::Direct,  "LIGHT_SABER not emulated");
         CHECK(ProjectileFlightKindFor("LASER")        == ProjectileFlightKind::Direct,  "LASER straight");
         CHECK(ProjectileFlightKindFor("")             == ProjectileFlightKind::Direct,  "no category straight");
         CHECK(IsProjectilePathEmulated("Laser") && IsProjectilePathEmulated("") && IsProjectilePathEmulated("MISSILE") &&
-              IsProjectilePathEmulated("cluster_bomb") && IsProjectilePathEmulated("GRENADE"),
-              "straight, missile, bomb and grenade paths are emulated");
-        CHECK(!IsProjectilePathEmulated("ROCKET") && !IsProjectilePathEmulated("MPTL_Rocket") &&
-              !IsProjectilePathEmulated("Light_Saber"), "rockets and the lightsaber throw are not yet");
+              IsProjectilePathEmulated("cluster_bomb") && IsProjectilePathEmulated("GRENADE") &&
+              IsProjectilePathEmulated("ROCKET") && IsProjectilePathEmulated("MPTL_Rocket"),
+              "straight, missile, bomb, grenade and rocket paths are emulated");
+        CHECK(!IsProjectilePathEmulated("Light_Saber"), "the lightsaber throw is not");
         CHECK(IsClusterBombCategory("Cluster_Bomb") && !IsClusterBombCategory("BOMB"), "cluster bomb told apart");
         CHECK(ProjectileUsesTarget("MISSILE") && ProjectileUsesTarget("Grenade") && ProjectileUsesTarget("CLUSTER_BOMB") &&
-              !ProjectileUsesTarget("BOMB") && !ProjectileUsesTarget("Laser") && !ProjectileUsesTarget("ROCKET"),
-              "missiles, grenades and cluster bombs aim at the target");
+              ProjectileUsesTarget("ROCKET") && !ProjectileUsesTarget("BOMB") && !ProjectileUsesTarget("Laser") &&
+              !ProjectileUsesTarget("Light_Saber"),
+              "missiles, grenades, rockets and cluster bombs aim at the target");
     }
 
     std::printf("[facing]\n");
@@ -225,6 +228,104 @@ int main()
               "past the end it rests on the last sample");
         std::vector<FlightSample> none;
         CHECK(!SampleFlightPath(none, 0.0f, pos, vel, face), "an empty path samples nothing");
+    }
+
+    std::printf("[rocket]\n");
+    {
+        int draws = 0;
+        auto noOffset  = [&draws](float lo, float) { ++draws; return lo; };
+        auto maxOffset = [](float lo, float hi) { return (lo == 0.0f && hi > 6.0f && hi < 6.3f) ? 1.0f : hi; };
+
+        ProjectileFlightParams p;
+        p.speedPerFrame          = 8.0f;
+        p.range                  = 2000.0f;
+        p.rocketStraightDistance = 100.0f;
+        p.rocketCurveDistance    = 50.0f;
+        p.rocketCurveOffset      = 15.0f;
+        p.rocketExplodesAtTarget = true;
+        p.inSpace                = true;
+        p.turnRateDegPerFrame    = 30.0f;
+        p.randomInRange          = noOffset;
+
+        const float launch[3] = { 0, 0, 0 }, target[3] = { 1000, 0, 0 }, aimX[3] = { 1, 0, 0 };
+        float dir[3] = { 1, 0, 0 };
+
+        // Space, no offsets: points every 55 (50 x 1.1); the straight 100 takes ceil(100/55) = 2,
+        // the 900 to the target ceil(900/55) = 17. Each point but a segment's last draws twice.
+        RocketSpline spline;
+        RocketPathDetail::BuildSpaceRocketPath(spline, p, launch, dir, target);
+        CHECK(spline.ControlPointCount() == 1 + 2 + 17, "space: launch + 2 straight + 17 curve points");
+        CHECK(draws == 2 * (1 + 16), "an angle and a length per offset point; segment ends take none");
+        bool collinear = true;
+        for (int k = 0; k < spline.ControlPointCount(); k++)
+            if (spline.ControlPoint(k)[1] != 0.0f || spline.ControlPoint(k)[2] != 0.0f) collinear = false;
+        CHECK(collinear, "zero offsets keep every point on the launch-target line");
+
+        std::vector<FlightSample> path;
+        CHECK(ComputeProjectileFlight(ProjectileFlightKind::Rocket, p, launch, aimX, target, path), "space rocket flies");
+        CHECK(Dist(path.back().pos, target) <= 8.0 + 1e-3, "it ends within one step of the target");
+        CHECK(path.size() > 120 && path.size() < 130, "about 1000 / 8 frames");
+
+        // Offsets: the largest draw pushes each point Curve_Offset off the line, at right angles.
+        p.randomInRange = maxOffset;
+        RocketSpline bent;
+        RocketPathDetail::BuildSpaceRocketPath(bent, p, launch, dir, target);
+        bool onCircle = true;
+        for (int k = 3; k < bent.ControlPointCount() - 1; k++)
+        {
+            const float* q = bent.ControlPoint(k);
+            if (!Near(std::sqrt(q[1] * q[1] + q[2] * q[2]), 15.0, 1e-2)) onCircle = false;
+        }
+        CHECK(onCircle, "target-segment points sit Curve_Offset off the line");
+        const float* straightEnd = bent.ControlPoint(2);
+        CHECK(Near(straightEnd[0], 100.0, 1e-3) && straightEnd[1] == 0.0f, "the straight start ends exactly 100 along the aim");
+        const float* lastPoint = bent.ControlPoint(bent.ControlPointCount() - 1);
+        CHECK(lastPoint[0] == 1000.0f && lastPoint[1] == 0.0f, "and the path ends exactly on the target");
+
+        // No explode: an overshoot past the target, cut at the flight distance.
+        p.randomInRange          = noOffset;
+        p.rocketExplodesAtTarget = false;
+        p.range                  = 1400.0f;
+        RocketSpline overshoot;
+        RocketPathDetail::BuildSpaceRocketPath(overshoot, p, launch, dir, target);
+        CHECK(overshoot.ControlPoint(overshoot.ControlPointCount() - 1)[0] > 1000.0f &&
+              overshoot.Length() <= 1400.0f + 1.0f, "space overshoot runs past the target, cut near the flight distance");
+
+        // Turn rate 0: the model keeps its launch facing all the way.
+        p.turnRateDegPerFrame = 0.0f;
+        const float aimUp[3] = { 1, 0, 1 };
+        ComputeProjectileFlight(ProjectileFlightKind::Rocket, p, launch, aimUp, target, path);
+        bool fixedFacing = true;
+        for (const FlightSample& s : path)
+            if (!Near(s.facing[0], path[0].facing[0], 1e-5) || !Near(s.facing[2], path[0].facing[2], 1e-5))
+                fixedFacing = false;
+        CHECK(fixedFacing && path[0].facing[2] > 0.5f, "turn rate 0: facing never leaves the launch aim");
+
+        // Land: half the distance straight whatever the tag says, points held at the
+        // launch's clearance, and a target on the terrain pulls the last point down.
+        p.inSpace                = false;
+        p.rocketStraightDistance = 0.0f;
+        p.rocketTargetOnTerrain  = true;
+        p.rocketExplodesAtTarget = true;
+        p.groundZ                = 0.0f;
+        const float high[3] = { 0, 0, 40 };
+        RocketSpline land;
+        const float landExplode = RocketPathDetail::BuildLandRocketPath(land, p, high, dir, target);
+        CHECK(land.ControlPointCount() == 1 + 10 + 10, "land: ceil(500/55) points to half way, then ceil(~500/55) to the target");
+        bool heldUp = true;
+        for (int k = 1; k < land.ControlPointCount() - 1; k++)
+            if (land.ControlPoint(k)[2] < 40.0f - 1e-3f) heldUp = false;
+        CHECK(heldUp, "every point before the target stays at the launch's 40 above the ground");
+        CHECK(land.ControlPoint(land.ControlPointCount() - 1)[2] == 0.0f, "target on terrain: the last point is on the ground");
+        CHECK(Near(landExplode, land.Length(), 1e-3), "explodes at target radius: stops at the path's length");
+
+        float previous[3] = { 0, 0, 100 }, point[3] = { 5, 0, 10 };
+        RocketPathDetail::AdjustHeight(point, previous, 40.0f, 0.0f);
+        CHECK(point[2] == 70.0f, "Adjust_Height: no lower than 0.7 x the previous point's height");
+
+        p.rocketCurveDistance = 0.0f;
+        CHECK(!ComputeProjectileFlight(ProjectileFlightKind::Rocket, p, high, aimX, target, path),
+              "no curve distance: no points, so the rocket detonates on its first frame");
     }
 
     std::printf("[guards]\n");

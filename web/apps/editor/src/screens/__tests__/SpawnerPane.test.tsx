@@ -268,8 +268,8 @@ describe("SpawnerPane — fly like the projectile", () => {
 
   it("flags categories the preview still flies straight and refuses a projectile with no speed", async () => {
     const { unmount } = render(
-      <SpawnerPane bridge={bridgeWith({ ...laser, category: "ROCKET", pathEmulated: false })} />);
-    expect((await screen.findByTestId("spawner-projectile-curved")).textContent).toContain("ROCKET");
+      <SpawnerPane bridge={bridgeWith({ ...laser, category: "LIGHT_SABER", pathEmulated: false })} />);
+    expect((await screen.findByTestId("spawner-projectile-curved")).textContent).toContain("LIGHT_SABER");
     unmount();
     render(<SpawnerPane bridge={bridgeWith({ ...laser, flyable: false, speed: 0 }, true)} />);
     const box = (await screen.findByLabelText("Fly like the projectile")) as HTMLInputElement;

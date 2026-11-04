@@ -76,6 +76,15 @@ ProjectileFlightParams ReferenceFlightParams(const Engine::ReferenceProjectileIn
     p.maxLifetimeSec      = proj.maxLifetimeSec;
     p.groundZ             = groundZ;
     p.clusterBomb         = IsClusterBombCategory(proj.category);
+    p.rocketStraightDistance = proj.rocketStraightDistance;
+    p.rocketCurveDistance    = proj.rocketCurveDistance;
+    p.rocketCurveOffset      = proj.rocketCurveOffset;
+    p.rocketExplodesAtTarget = proj.rocketExplodesAtTarget;
+    p.rocketTargetOnTerrain  = proj.rocketTargetOnTerrain;
+    p.inSpace                = proj.inSpace;
+    // The preview's own random stream stands in for the game's SyncRandom, so each shot
+    // bends differently, like the game's, without matching any one game shot.
+    p.randomInRange = [](float lo, float hi) { return ParticleRandom::Range(lo, hi); };
     return p;
 }
 

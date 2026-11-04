@@ -991,10 +991,17 @@ int main(int argc, char** argv)
             "    <Projectile_Grenade_Gravity>0.7</Projectile_Grenade_Gravity>"
             "    <Projectile_Grenade_Gravity_Lob_Mod>0.8</Projectile_Grenade_Gravity_Lob_Mod>"
             "    <Projectile_Grenade_Can_Lob_Slower>Yes</Projectile_Grenade_Can_Lob_Slower>"
-            "    <Projectile_Max_Lifetime>900.0</Projectile_Max_Lifetime></Projectile>"
+            "    <Projectile_Max_Lifetime>900.0</Projectile_Max_Lifetime>"
+            "    <Projectile_Rocket_Straight_Distance>100</Projectile_Rocket_Straight_Distance>"
+            "    <Projectile_Rocket_Curve_Distance>50</Projectile_Rocket_Curve_Distance>"
+            "    <Projectile_Rocket_Curve_Offset>15</Projectile_Rocket_Curve_Offset>"
+            "    <Explode_When_Reached_Target_Radius> True </Explode_When_Reached_Target_Radius>"
+            "    <Projectile_Target_Point_On_Terrain>False</Projectile_Target_Point_On_Terrain></Projectile>"
             "  <Projectile Name=\"Proj_Ship_Laser_Red\"><Variant_Of_Existing_Type>Proj_Ship_Laser</Variant_Of_Existing_Type>"
             "    <Max_Speed>20</Max_Speed><Max_Rate_Of_Turn>5</Max_Rate_Of_Turn>"
-            "    <Projectile_Grenade_Can_Lob_Slower>no</Projectile_Grenade_Can_Lob_Slower></Projectile>"
+            "    <Projectile_Grenade_Can_Lob_Slower>no</Projectile_Grenade_Can_Lob_Slower>"
+            "    <Projectile_Rocket_Curve_Offset>7</Projectile_Rocket_Curve_Offset>"
+            "    <Projectile_Target_Point_On_Terrain>Yes</Projectile_Target_Point_On_Terrain></Projectile>"
             "  <Projectile Name=\"Proj_Both\"><Land_Model_Name>W_Both.ALO</Land_Model_Name><Max_Speed>-3</Max_Speed>"
             "    <Max_Rate_Of_Turn>-2</Max_Rate_Of_Turn>"
             "    <Space_Model_Name>W_Both.ALO</Space_Model_Name></Projectile>"
@@ -1050,6 +1057,15 @@ int main(int argc, char** argv)
         CHECK(both && both->projectileTurnRate == 0.0f && both->projectileGrenadeGravity == 0.0f &&
               !both->projectileGrenadeLobSlower,
               "negative or absent curved-path tags -> 0 / false");
+        CHECK(laser && laser->projectileRocketStraightDistance == 100.0f && laser->projectileRocketCurveDistance == 50.0f &&
+              laser->projectileRocketCurveOffset == 15.0f && laser->projectileExplodesAtTarget &&
+              !laser->projectileTargetOnTerrain,
+              "rocket tags parsed (straight / curve distance, curve offset, explode at target, target on terrain)");
+        CHECK(red && red->projectileRocketCurveOffset == 7.0f && red->projectileRocketCurveDistance == 50.0f &&
+              red->projectileExplodesAtTarget && red->projectileTargetOnTerrain,
+              "variant overrides curve offset and target-on-terrain, inherits the rest");
+        CHECK(both && both->projectileRocketCurveDistance == 0.0f && !both->projectileExplodesAtTarget,
+              "absent rocket tags -> 0 / false");
         CHECK(laser && laser->modelContent == ModelContent::Mesh, "mesh projectile -> Mesh content");
         const GameObjectRef* flame = find(pc, "Proj_Ground_Flame");
         CHECK(flame && flame->role == ObjRole::Projectile && IsPickerListed(*flame) &&

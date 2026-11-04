@@ -162,6 +162,11 @@ struct GameObjectRef
     float       projectileGrenadeLobMod     = 0.0f;    // <Projectile_Grenade_Gravity_Lob_Mod>
     bool        projectileGrenadeLobSlower  = false;   // <Projectile_Grenade_Can_Lob_Slower>
     float       projectileMaxLifetimeSec    = 0.0f;    // <Projectile_Max_Lifetime>
+    float       projectileRocketStraightDistance = 0.0f;   // <Projectile_Rocket_Straight_Distance>, world units
+    float       projectileRocketCurveDistance    = 0.0f;   // <Projectile_Rocket_Curve_Distance>, world units
+    float       projectileRocketCurveOffset      = 0.0f;   // <Projectile_Rocket_Curve_Offset>, world units
+    bool        projectileExplodesAtTarget  = false;   // <Explode_When_Reached_Target_Radius>
+    bool        projectileTargetOnTerrain   = false;   // <Projectile_Target_Point_On_Terrain>
     ModelContent modelContent = ModelContent::Mesh;   // projectiles: how the model draws
 };
 

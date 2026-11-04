@@ -812,6 +812,12 @@ public:
 	    float       grenadeLobMod       = 0.0f;   // <Projectile_Grenade_Gravity_Lob_Mod>
 	    bool        grenadeCanLobSlower = false;  // <Projectile_Grenade_Can_Lob_Slower>
 	    float       maxLifetimeSec      = 0.0f;   // <Projectile_Max_Lifetime>
+	    float       rocketStraightDistance = 0.0f;   // <Projectile_Rocket_Straight_Distance>
+	    float       rocketCurveDistance    = 0.0f;   // <Projectile_Rocket_Curve_Distance>
+	    float       rocketCurveOffset      = 0.0f;   // <Projectile_Rocket_Curve_Offset>
+	    bool        rocketExplodesAtTarget = false;  // <Explode_When_Reached_Target_Radius>
+	    bool        rocketTargetOnTerrain  = false;  // <Projectile_Target_Point_On_Terrain>
+	    bool        inSpace                = false;  // the catalog files it under Space
 	};
 	bool GetReferenceProjectile(ReferenceProjectileInfo& out) const
 	     { if (!m_referenceIsProjectile) return false; out = m_referenceProjectile; return true; }

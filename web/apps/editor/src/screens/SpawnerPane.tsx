@@ -353,7 +353,7 @@ export function SpawnerPane({ bridge }: Props) {
                 </div>
               </ToolPanel.Row>
               <p data-testid="spawner-projectile-target" className="mt-1 text-2xs text-text-3">
-                Missiles home on the target, grenades lob onto it, cluster bombs launch toward it.
+                Missiles home on the target, rockets curve onto it, grenades lob onto it, cluster bombs launch toward it.
               </p>
               {config.projectileOutOfReach === true && (
                 <p data-testid="spawner-projectile-out-of-reach" className="mt-1 text-2xs text-warning-fg">
