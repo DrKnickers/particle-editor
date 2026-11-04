@@ -3,7 +3,11 @@
 namespace host
 {
 
-enum class ViewportUnavailableAction { ShowNotice, Exit };
+enum class ViewportUnavailableAction
+{
+    ShowNotice,
+    Exit
+};
 
 // Missing engine pixels leave the editor chrome usable. Keep interactive
 // editing/save available, but never produce automation results without a
@@ -11,8 +15,7 @@ enum class ViewportUnavailableAction { ShowNotice, Exit };
 // drive/record and test-host, regardless of whether their HWND is visible.
 inline ViewportUnavailableAction DecideViewportUnavailable(bool interactive)
 {
-    return interactive ? ViewportUnavailableAction::ShowNotice
-                       : ViewportUnavailableAction::Exit;
+    return interactive ? ViewportUnavailableAction::ShowNotice : ViewportUnavailableAction::Exit;
 }
 
 } // namespace host

@@ -20,21 +20,31 @@
 class IFileManager;
 
 // The four independent skydome lists (Land/Space x Primary/Secondary).
-enum class SkydomeAxis { LandPrimary, LandSecondary, SpacePrimary, SpaceSecondary };
+enum class SkydomeAxis
+{
+    LandPrimary,
+    LandSecondary,
+    SpacePrimary,
+    SpaceSecondary
+};
 
 // Battle context for resolving a primary+secondary pair.
-enum class SkydomeContext { Land, Space };
+enum class SkydomeContext
+{
+    Land,
+    Space
+};
 
 // One <...Skydome> GameObject. Textures / cloud-scroll / SH lighting are NOT
 // here -- they come from the `.alo` material (see AloModel).
 struct SkydomeRef
 {
-    std::string name;             // Name= attribute (.ted key; picker label)
-    std::string modelPath;        // chosen *_Model_Name, bare ".alo" filename
-    float       scaleFactor = 1.0f;
+    std::string name;      // Name= attribute (.ted key; picker label)
+    std::string modelPath; // chosen *_Model_Name, bare ".alo" filename
+    float       scaleFactor     = 1.0f;
     int         sortOrderAdjust = 0;
-    float       layerZAdjust = 0.0f;
-    bool        inBackground = false;
+    float       layerZAdjust    = 0.0f;
+    bool        inBackground    = false;
 };
 
 // A resolved environment for one map/context. A future map colour-grade feature
@@ -42,12 +52,12 @@ struct SkydomeRef
 struct MapEnvironment
 {
     SkydomeRef primary, secondary;
-    bool hasPrimary = false;
-    bool hasSecondary = false;
+    bool       hasPrimary   = false;
+    bool       hasSecondary = false;
 };
 
 // Number of skydome axes (index space for the `LoadAllSkydomeLists` arrays).
-constexpr int kNumSkydomeAxes = 4;   // == enum SkydomeAxis size
+constexpr int kNumSkydomeAxes = 4; // == enum SkydomeAxis size
 
 // Enumerate every skydome GameObject for `axis`, deduped by Name. Clears `out`
 // first. Returns false if no list file could be read (out left empty); true
@@ -69,30 +79,31 @@ bool LoadSkydomeList(IFileManager& fm, SkydomeAxis axis, std::vector<SkydomeRef>
 // GOF parse + per-axis re-sniff of every file). Falls back to the four canonical
 // filenames when there is no GameObjectFiles.xml. The Engine caches the result
 // and rebuilds it only on a mod/submod switch. Never throws.
-void LoadAllSkydomeLists(IFileManager& fm,
-                         std::array<std::vector<SkydomeRef>, kNumSkydomeAxes>& out);
+void LoadAllSkydomeLists(IFileManager& fm, std::array<std::vector<SkydomeRef>, kNumSkydomeAxes>& out);
 
 // Resolve a primary+secondary pair (by Name, first match wins) for `ctx` from
 // PRE-LOADED axis lists (e.g. the Engine's cached `LoadAllSkydomeLists` output) --
 // no file I/O. An empty name leaves that slot unset. The file-reading sibling is
 // `LoadMapEnvironment`.
 void ResolveMapEnvironment(const std::array<std::vector<SkydomeRef>, kNumSkydomeAxes>& lists,
-                           SkydomeContext ctx,
-                           const std::string& primaryName, const std::string& secondaryName,
-                           MapEnvironment& out);
+                           SkydomeContext                                              ctx,
+                           const std::string&                                          primaryName,
+                           const std::string&                                          secondaryName,
+                           MapEnvironment&                                             out);
 
 // Slurp a dome's model bytes from "Data\\Art\\Models\\<modelPath>" via `fm`.
 // Returns false on empty modelPath, a miss, or an empty file. Separated from
 // enumeration so the picker can list names cheaply without loading meshes.
-bool ResolveSkydomeModel(IFileManager& fm, const SkydomeRef& ref,
-                         std::vector<unsigned char>& outBytes);
+bool ResolveSkydomeModel(IFileManager& fm, const SkydomeRef& ref, std::vector<unsigned char>& outBytes);
 
 // Resolve a chosen primary+secondary pair (by Name, first match wins) for the
 // given battle context: primary from {ctx}Primary, secondary from
 // {ctx}Secondary. An empty name leaves that slot unset. Returns false only if a
 // requested slot's list could not be read; true otherwise. Never throws.
-bool LoadMapEnvironment(IFileManager& fm, SkydomeContext ctx,
-                        const std::string& primaryName, const std::string& secondaryName,
-                        MapEnvironment& out);
+bool LoadMapEnvironment(IFileManager&      fm,
+                        SkydomeContext     ctx,
+                        const std::string& primaryName,
+                        const std::string& secondaryName,
+                        MapEnvironment&    out);
 
 #endif

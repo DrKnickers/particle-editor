@@ -2,7 +2,7 @@
 // their own translation unit, apart from WinMain, so the standalone unit tests
 // can link the real load and save wrappers.
 
-#include <windows.h>   // GetCurrentProcessId; utils.h (via the header) needs it first
+#include <windows.h> // GetCurrentProcessId; utils.h (via the header) needs it first
 #include <memory>
 #include <string>
 
@@ -11,7 +11,7 @@
 #include "ParticleSystem.h"
 #include "common/exceptions.h"
 #include "common/files.h"
-#include "host/StringConv.h"          // host::WideToUtf8 — ParticleSystemIO errorOut is UTF-8
+#include "host/StringConv.h" // host::WideToUtf8 — ParticleSystemIO errorOut is UTF-8
 
 // ── Pure-IO ParticleSystem helpers ─────────
 //
@@ -20,8 +20,7 @@
 // files without duplicating the PhysicalFile + ParticleSystem(IFile*)
 // ctor dance.
 
-std::unique_ptr<ParticleSystem> LoadParticleSystem(const std::wstring& path,
-                                                   std::string* errorOut)
+std::unique_ptr<ParticleSystem> LoadParticleSystem(const std::wstring& path, std::string* errorOut)
 {
     if (errorOut) errorOut->clear();
     PhysicalFile* file = NULL;
@@ -59,8 +58,7 @@ std::unique_ptr<ParticleSystem> LoadParticleSystem(const std::wstring& path,
     return system;
 }
 
-bool SaveParticleSystem(ParticleSystem* system, const std::wstring& path,
-                        std::string* errorOut)
+bool SaveParticleSystem(ParticleSystem* system, const std::wstring& path, std::string* errorOut)
 {
     if (errorOut) errorOut->clear();
     if (system == NULL)

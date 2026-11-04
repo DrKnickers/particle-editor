@@ -17,7 +17,8 @@
 #include <string>
 #include <vector>
 
-namespace host {
+namespace host
+{
 
 class AcceleratorBridge
 {

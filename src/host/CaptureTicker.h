@@ -11,44 +11,48 @@
 #include <string>
 #include <utility>
 
-namespace host {
+namespace host
+{
 
-class CaptureTicker {
+class CaptureTicker
+{
 public:
     // Outcome of waiting for React's app/ready first paint (plus the settle
     // that follows it) before the composite is captured.
-    struct UiWait {
-        bool   uiReady  = false;  // app/ready arrived
-        bool   timedOut = false;  // gave up waiting (vs. the window closing)
+    struct UiWait
+    {
+        bool   uiReady  = false; // app/ready arrived
+        bool   timedOut = false; // gave up waiting (vs. the window closing)
         double waitedMs = 0.0;
     };
 
-    using SleepFn      = std::function<void(int ms)>;
-    using NowMsFn      = std::function<double()>;  // monotonic ms; < 0 = no clock
-    using ReadyFn      = std::function<bool()>;
-    using StepClockFn  = std::function<void()>;    // advance the frozen sim clock one 60 Hz frame
-    using WriteFn      = std::function<bool(const std::wstring& path)>;
-    using WaitForUiFn  = std::function<UiWait()>;
-    using LogFn        = std::function<void(const std::string&)>;
+    using SleepFn     = std::function<void(int ms)>;
+    using NowMsFn     = std::function<double()>; // monotonic ms; < 0 = no clock
+    using ReadyFn     = std::function<bool()>;
+    using StepClockFn = std::function<void()>; // advance the frozen sim clock one 60 Hz frame
+    using WriteFn     = std::function<bool(const std::wstring& path)>;
+    using WaitForUiFn = std::function<UiWait()>;
+    using LogFn       = std::function<void(const std::string&)>;
 
-    enum class Result { Running, Done };
+    enum class Result
+    {
+        Running,
+        Done
+    };
 
     // Hold the frame counter at most this long for the layout gate before
     // proceeding ungated.
     static constexpr double kLayoutGateTimeoutMs = 10000.0;
     // Wall-clock pacing per pump iteration.
-    static constexpr int    kPaceMs = 16;
+    static constexpr int kPaceMs = 16;
 
-    CaptureTicker(int frames, std::wstring enginePngPath)
-        : m_frames(frames), m_enginePng(std::move(enginePngPath)) {}
+    CaptureTicker(int frames, std::wstring enginePngPath) : m_frames(frames), m_enginePng(std::move(enginePngPath)) {}
 
     // uiReady / layoutReady: React's first paint and first scene-rect.
-    void SetHooks(SleepFn sleep, NowMsFn now, ReadyFn uiReady, ReadyFn layoutReady,
-                  StepClockFn stepClock, LogFn log);
+    void SetHooks(SleepFn sleep, NowMsFn now, ReadyFn uiReady, ReadyFn layoutReady, StepClockFn stepClock, LogFn log);
     // writeEngineRt / writeComposite: the two PNG writers; waitForUi: the
     // app/ready wait + settle that precedes the composite.
-    void SetCaptureHooks(WriteFn writeEngineRt, WriteFn writeComposite,
-                         WaitForUiFn waitForUi);
+    void SetCaptureHooks(WriteFn writeEngineRt, WriteFn writeComposite, WaitForUiFn waitForUi);
 
     // One pump iteration, called right after the frame renders. Returns Done
     // once the target frame has been written and the pump should quit.
@@ -60,8 +64,8 @@ public:
     bool Failed() const { return m_failed; }
     // 2 = bad load / failed engine-RT write, 0 = success. A UI timeout only
     // degrades the composite's name; it never fails the run.
-    int  ExitCode() const { return m_failed ? 2 : 0; }
-    int  CapturedFrames() const { return m_capturedFrames; }
+    int ExitCode() const { return m_failed ? 2 : 0; }
+    int CapturedFrames() const { return m_capturedFrames; }
 
 private:
     void Log(const char* fmt, ...);
@@ -87,6 +91,6 @@ private:
     bool   m_gateWarned     = false;
 };
 
-}  // namespace host
+} // namespace host
 
-#endif  // HOST_CAPTURE_TICKER_H
+#endif // HOST_CAPTURE_TICKER_H

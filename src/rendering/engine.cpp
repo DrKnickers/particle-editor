@@ -14,34 +14,35 @@
 #include <assert.h>
 #include <vector>
 #include <cstdint>
-#include <cmath>     // [hard-guard] std::isfinite for the estimate clamp
-#include <cctype>    // tolower for case-insensitive hardpoint bone matching
-#include <set>       // hardpoint damage-bone hide set
+#include <cmath>  // [hard-guard] std::isfinite for the estimate clamp
+#include <cctype> // tolower for case-insensitive hardpoint bone matching
+#include <set>    // hardpoint damage-bone hide set
 #include <string>
-#include <cstdio>    // [shadow-leak hunt] fopen/fprintf for the ALO_DUMP_RSTATE probe
+#include <cstdio> // [shadow-leak hunt] fopen/fprintf for the ALO_DUMP_RSTATE probe
 #include "engine.h"
 #include "engine_internal.h"
 #include "common/exceptions.h"
-#include "common/ResourceLimits.h"   // kMaxTextureAssetBytes (asset-read size caps)
+#include "common/ResourceLimits.h" // kMaxTextureAssetBytes (asset-read size caps)
 #include "Resources/resource.h"
 #include "simulation/ParticleSystemInstance.h"
 #include "simulation/EmitterInstance.h"
 #include "SphericalHarmonics.h"
-#include "common/utils.h"     // WideToAnsi for custom-slot path bridging
+#include "common/utils.h" // WideToAnsi for custom-slot path bridging
 #include "host/AlphaCompositor.h"
 #include "host/Compositor.h"
 using namespace std;
 
-
 // ---------- Particle vertex layout ----------
 D3DVERTEXELEMENT9 Engine::ParticleElements[] = {
-	{0, offsetof(EmitterInstance::Vertex, Position),  D3DDECLTYPE_FLOAT3,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0}, 
-	{0, offsetof(EmitterInstance::Vertex, Normal),    D3DDECLTYPE_FLOAT3,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL,   0}, 
-	{0, offsetof(EmitterInstance::Vertex, TexCoord0), D3DDECLTYPE_FLOAT2,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0}, 
-	{0, offsetof(EmitterInstance::Vertex, TexCoord1), D3DDECLTYPE_FLOAT2,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 1}, 
-	{0, offsetof(EmitterInstance::Vertex, Color),     D3DDECLTYPE_D3DCOLOR, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR,    0}, 
-	D3DDECL_END()
-};
+    {0, offsetof(EmitterInstance::Vertex, Position), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION,
+     0},
+    {0, offsetof(EmitterInstance::Vertex, Normal), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL, 0},
+    {0, offsetof(EmitterInstance::Vertex, TexCoord0), D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD,
+     0},
+    {0, offsetof(EmitterInstance::Vertex, TexCoord1), D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD,
+     1},
+    {0, offsetof(EmitterInstance::Vertex, Color), D3DDECLTYPE_D3DCOLOR, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR, 0},
+    D3DDECL_END()};
 
 // ---------- Preview clock ----------
 // Preview clock with pause / frame-step support.
@@ -70,9 +71,9 @@ D3DVERTEXELEMENT9 Engine::ParticleElements[] = {
 //
 // All state is process-local and resets to "not paused" at startup;
 // no persistence by design.
-static bool   g_previewPaused      = false;
-static TimeF  g_previewPauseAnchor = 0.0f;   // simTime while paused
-static TimeF  g_pauseOffset        = 0.0f;   // wall - simTime when running
+static bool  g_previewPaused      = false;
+static TimeF g_previewPauseAnchor = 0.0f; // simTime while paused
+static TimeF g_pauseOffset        = 0.0f; // wall - simTime when running
 
 static TimeF WallTimeF()
 {
@@ -152,7 +153,7 @@ ParticleSystemInstance* Engine::SpawnParticleSystem(const ParticleSystem& system
         if (projected > (double)m_maxPreviewParticles)
         {
             ++m_hardGuardRefusals;
-            m_spawnRefusal = { projected, m_maxPreviewParticles, GetNumInstances() + 1 };
+            m_spawnRefusal        = {projected, m_maxPreviewParticles, GetNumInstances() + 1};
             m_spawnRefusalPending = true;
             Clear();
             return nullptr;
@@ -160,12 +161,11 @@ ParticleSystemInstance* Engine::SpawnParticleSystem(const ParticleSystem& system
     }
 
     const std::uint64_t instanceToken = m_instanceBorrows.AllocateToken();
-	auto instance = std::make_unique<ParticleSystemInstance>(
-        *this, system, parent, instanceToken);
+    auto                instance      = std::make_unique<ParticleSystemInstance>(*this, system, parent, instanceToken);
     m_instances.push_back(std::move(instance));
     ParticleSystemInstance* stored = m_instances.back().get();
     m_instanceBorrows.Register(stored, instanceToken);
-	return stored;
+    return stored;
 }
 
 std::vector<LiveParticleSample> Engine::GetLiveParticleSamples() const
@@ -183,14 +183,12 @@ void Engine::PerEmitterParticleCounts(std::vector<int>& counts) const
     for (const auto& instance : m_instances) instance->PerEmitterParticleCounts(counts);
 }
 
-ParticleSystemInstanceHandle Engine::MakeInstanceHandle(
-    ParticleSystemInstance* instance) const
+ParticleSystemInstanceHandle Engine::MakeInstanceHandle(ParticleSystemInstance* instance) const
 {
     return m_instanceBorrows.Make(instance);
 }
 
-ParticleSystemInstance* Engine::ResolveInstance(
-    ParticleSystemInstanceHandle handle) const
+ParticleSystemInstance* Engine::ResolveInstance(ParticleSystemInstanceHandle handle) const
 {
     return m_instanceBorrows.Resolve(handle);
 }
@@ -210,35 +208,35 @@ bool Engine::DetachParticleSystem(ParticleSystemInstanceHandle handle)
 bool Engine::KillParticleSystem(ParticleSystemInstanceHandle handle)
 {
     ParticleSystemInstance* instance = ResolveInstance(handle);
-	if (!instance) return false;
-	if (instance->GetParticleSystem().getLeaveParticles())
-	{
-		// Leave particles to finish; just disable it
-		instance->StopSpawning();
-	}
-	else
-	{
-    	// Don't leave particles, kill the thing now
-		m_numParticles += instance->Kill();
-	}
+    if (!instance) return false;
+    if (instance->GetParticleSystem().getLeaveParticles())
+    {
+        // Leave particles to finish; just disable it
+        instance->StopSpawning();
+    }
+    else
+    {
+        // Don't leave particles, kill the thing now
+        m_numParticles += instance->Kill();
+    }
 
-	instance->Detach();
-	// The killed instance's emitter teardown + count decay happen
-	// inside Update's instance pass — make sure a paused frame runs it
-	// (the kill doesn't change the top-level list size until then).
-	InvalidatePausedIdleSkip();
+    instance->Detach();
+    // The killed instance's emitter teardown + count decay happen
+    // inside Update's instance pass — make sure a paused frame runs it
+    // (the kill doesn't change the top-level list size until then).
+    InvalidatePausedIdleSkip();
     return true;
 }
 
 void Engine::Clear()
 {
-	// Reference particles live outside the document, but their counts share the
-	// totals reset below; their sources stay so resting runs restart next update.
-	ClearReferenceParticles(/*keepSources=*/true);
-	++m_particleSystemDocumentEpoch;
-	m_deferredParticleSystemChange.Reset();
+    // Reference particles live outside the document, but their counts share the
+    // totals reset below; their sources stay so resting runs restart next update.
+    ClearReferenceParticles(/*keepSources=*/true);
+    ++m_particleSystemDocumentEpoch;
+    m_deferredParticleSystemChange.Reset();
     m_instanceBorrows.Clear();
-	m_instances.clear();
+    m_instances.clear();
     m_numParticles = 0;
     m_numEmitters  = 0;
 
@@ -252,23 +250,23 @@ void Engine::Clear()
 
 void Engine::SetOverloadGuard(bool enabled, int maxParticles)
 {
-	if (maxParticles < kMinConfigurableParticles) maxParticles = kMinConfigurableParticles;
-	if (maxParticles > kMaxConfigurableParticles) maxParticles = kMaxConfigurableParticles;
-	m_overloadGuardEnabled = enabled;
-	m_maxPreviewParticles  = maxParticles;
-	m_maxPreviewInstances  = maxParticles / kInstancesDivisor;
-	if (!enabled)
-	{
-		// Latch off NOW — mirrors Clear()'s immediate reset so the UI
-		// banner drops without waiting for the clear-delay debounce.
-		m_overloadActive    = false;
-		m_overloadThisFrame = false;
-		m_lastOverloadTime  = -1.0f;
-	}
+    if (maxParticles < kMinConfigurableParticles) maxParticles = kMinConfigurableParticles;
+    if (maxParticles > kMaxConfigurableParticles) maxParticles = kMaxConfigurableParticles;
+    m_overloadGuardEnabled = enabled;
+    m_maxPreviewParticles  = maxParticles;
+    m_maxPreviewInstances  = maxParticles / kInstancesDivisor;
+    if (!enabled)
+    {
+        // Latch off NOW — mirrors Clear()'s immediate reset so the UI
+        // banner drops without waiting for the clear-delay debounce.
+        m_overloadActive    = false;
+        m_overloadThisFrame = false;
+        m_lastOverloadTime  = -1.0f;
+    }
 #ifndef NDEBUG
-	printf("[overload] guard config: enabled=%d maxParticles=%d (instances=%d)\n",
-	       enabled ? 1 : 0, m_maxPreviewParticles, m_maxPreviewInstances);
-	fflush(stdout);
+    printf("[overload] guard config: enabled=%d maxParticles=%d (instances=%d)\n", enabled ? 1 : 0,
+           m_maxPreviewParticles, m_maxPreviewInstances);
+    fflush(stdout);
 #endif
 }
 
@@ -280,11 +278,10 @@ void Engine::SetEstimatedLoad(double perInstance)
     // already-placed preview over budget: clear it and record the
     // refusal so the banner explains what happened.
     const int n = GetNumInstances();
-    if (m_overloadGuardEnabled && perInstance > 0.0 && n > 0 &&
-        n * perInstance > (double)m_maxPreviewParticles)
+    if (m_overloadGuardEnabled && perInstance > 0.0 && n > 0 && n * perInstance > (double)m_maxPreviewParticles)
     {
         ++m_hardGuardRefusals;
-        m_spawnRefusal = { n * perInstance, m_maxPreviewParticles, n };
+        m_spawnRefusal        = {n * perInstance, m_maxPreviewParticles, n};
         m_spawnRefusalPending = true;
         Clear();
     }
@@ -309,7 +306,7 @@ bool Engine::GetReplayInstanceObservation(ReplayInstanceObservation& out) const
     }
     if (!owned || owned->SpawnTimeForObservation() < 0.0f) return false;
     out.position = owned->GetPosition();
-    out.age = GetTimeF() - owned->SpawnTimeForObservation();
+    out.age      = GetTimeF() - owned->SpawnTimeForObservation();
     return true;
 }
 
@@ -329,48 +326,54 @@ int Engine::ActiveSpawnerInstanceCount() const
 // Non-static: declared in engine_internal.h (render + reference TUs use it too).
 LONGLONG EngQpcNow()
 {
-	LARGE_INTEGER t; QueryPerformanceCounter(&t); return t.QuadPart;
+    LARGE_INTEGER t;
+    QueryPerformanceCounter(&t);
+    return t.QuadPart;
 }
 double EngQpcUs(LONGLONG a, LONGLONG b)
 {
-	static LONGLONG f = 0;
-	if (f == 0) { LARGE_INTEGER q; if (QueryPerformanceFrequency(&q)) f = q.QuadPart; }
-	return f ? static_cast<double>(b - a) * 1.0e6 / static_cast<double>(f) : 0.0;
+    static LONGLONG f = 0;
+    if (f == 0)
+    {
+        LARGE_INTEGER q;
+        if (QueryPerformanceFrequency(&q)) f = q.QuadPart;
+    }
+    return f ? static_cast<double>(b - a) * 1.0e6 / static_cast<double>(f) : 0.0;
 }
 
 IDirect3DTexture9* Engine::GetTexture(const string& name) const
 {
-	if (DeviceCallsBlocked()) return NULL;
-	return m_textureManager.getEmitterTexture(m_pDevice, name);
+    if (DeviceCallsBlocked()) return NULL;
+    return m_textureManager.getEmitterTexture(m_pDevice, name);
 }
 
 void Engine::ResetTextureAttestation()
 {
-	m_textureManager.ResetTextureAttestation();
+    m_textureManager.ResetTextureAttestation();
 }
 
 void Engine::TakeTextureAttestation(std::vector<std::string>& resolved, std::vector<std::string>& unresolved)
 {
-	m_textureManager.TakeTextureAttestation(resolved, unresolved);
+    m_textureManager.TakeTextureAttestation(resolved, unresolved);
 }
 
 std::string Engine::TakeAssetLedger(std::vector<AssetRecord>& records) const
 {
-	records.clear();
-	std::string unverifiable;
-	for (const AssetLedger* ledger : { m_textureManager.GetAssetLedger(), m_shaderManager.GetAssetLedger() })
-	{
-		if (ledger == NULL) continue;
-		const std::vector<AssetRecord> snapshot = ledger->Snapshot();
-		records.insert(records.end(), snapshot.begin(), snapshot.end());
-		if (unverifiable.empty()) unverifiable = ledger->Unverifiable();
-	}
-	return unverifiable;
+    records.clear();
+    std::string unverifiable;
+    for (const AssetLedger* ledger : {m_textureManager.GetAssetLedger(), m_shaderManager.GetAssetLedger()})
+    {
+        if (ledger == NULL) continue;
+        const std::vector<AssetRecord> snapshot = ledger->Snapshot();
+        records.insert(records.end(), snapshot.begin(), snapshot.end());
+        if (unverifiable.empty()) unverifiable = ledger->Unverifiable();
+    }
+    return unverifiable;
 }
 
 IDirect3DTexture9* Engine::GetTextureForDeviceReset(const string& name) const
 {
-	return m_textureManager.getTexture(m_pDevice, name);
+    return m_textureManager.getTexture(m_pDevice, name);
 }
 
 // Called from Reset() only. Deliberately NOT OnParticleSystemChanged(-1): that
@@ -378,183 +381,195 @@ IDirect3DTexture9* Engine::GetTextureForDeviceReset(const string& name) const
 // emitters — a device reset must restore resources, not change the simulation.
 void Engine::ReleaseInstanceTextures()
 {
-	for (auto& instance : m_instances)
-	{
-		instance->ReleaseDeviceTextures();
-	}
-	ReleaseReferenceParticleTextures();
+    for (auto& instance : m_instances)
+    {
+        instance->ReleaseDeviceTextures();
+    }
+    ReleaseReferenceParticleTextures();
 }
 
 void Engine::ReacquireInstanceTextures()
 {
-	for (auto& instance : m_instances)
-	{
-		instance->ReacquireDeviceTextures(*this);
-	}
-	ReacquireReferenceParticleTextures();
+    for (auto& instance : m_instances)
+    {
+        instance->ReacquireDeviceTextures(*this);
+    }
+    ReacquireReferenceParticleTextures();
 }
 
 void Engine::OnParticleSystemChanged(int track)
 {
-	if (m_fatalDeviceState ||
-	    m_deviceRecovery.phase == devicerecovery::Phase::Terminal)
-		return;
-	if (m_deferredParticleSystemChange.DeferIfBlocked(
-	        DeviceCallsBlocked() || m_presentSuspect ||
-	        m_textureReloadApplying, track))
-		return;
-	ApplyParticleSystemChanged(track);
+    if (m_fatalDeviceState || m_deviceRecovery.phase == devicerecovery::Phase::Terminal) return;
+    if (m_deferredParticleSystemChange.DeferIfBlocked(
+            DeviceCallsBlocked() || m_presentSuspect || m_textureReloadApplying, track))
+        return;
+    ApplyParticleSystemChanged(track);
 }
 
 void Engine::ApplyParticleSystemChanged(int track)
 {
-	++m_particleSystemChangeApplyCount;
-	// track < 0 is the "everything changed" broadcast, which is what the
-	// structural emitter handlers send. Re-sync placed instances against the
-	// authored root list there: an instance only spawns roots in its
-	// constructor, so Add Root / Paste / Import / Duplicate / reparent-to-root
-	// never reached one placed earlier. Gated on track < 0
-	// so a per-track curve edit doesn't pay for the scan.
-	//
-	// Safe on the system-REPLACEMENT paths (file/new, file/open, recover,
-	// undo-apply): all four call Clear() first, so m_instances is empty here
-	// and this is a no-op — they must, since each instance holds the
-	// ParticleSystem by reference.
-	const TimeF now = (track < 0) ? GetTimeF() : 0.0f;
-	for (auto& instance : m_instances)
+    ++m_particleSystemChangeApplyCount;
+    // track < 0 is the "everything changed" broadcast, which is what the
+    // structural emitter handlers send. Re-sync placed instances against the
+    // authored root list there: an instance only spawns roots in its
+    // constructor, so Add Root / Paste / Import / Duplicate / reparent-to-root
+    // never reached one placed earlier. Gated on track < 0
+    // so a per-track curve edit doesn't pay for the scan.
+    //
+    // Safe on the system-REPLACEMENT paths (file/new, file/open, recover,
+    // undo-apply): all four call Clear() first, so m_instances is empty here
+    // and this is a no-op — they must, since each instance holds the
+    // ParticleSystem by reference.
+    const TimeF now = (track < 0) ? GetTimeF() : 0.0f;
+    for (auto& instance : m_instances)
     {
-		instance->onParticleSystemChanged(*this, track);
-		if (track < 0) instance->SyncRootEmitters(now);
-	}
-	// Bust the paused-idle skip: while paused, on-screen particles
-	// only reflect an edit when the Update loop re-evaluates their curves
-	// at the frozen time — a paused curve/property edit must repaint now,
-	// not on unpause. (-1 can never equal a real GetTimeF value.)
-	m_lastUpdatedSimTime = -1.0f;
+        instance->onParticleSystemChanged(*this, track);
+        if (track < 0) instance->SyncRootEmitters(now);
+    }
+    // Bust the paused-idle skip: while paused, on-screen particles
+    // only reflect an edit when the Update loop re-evaluates their curves
+    // at the frozen time — a paused curve/property edit must repaint now,
+    // not on unpause. (-1 can never equal a real GetTimeF value.)
+    m_lastUpdatedSimTime = -1.0f;
 }
 
 bool Engine::ReplayPendingTextureReload()
 {
-	if (!TextureReloadPendingForTesting()) return true;
-	if (IsTerminalDeviceState())
-	{
-		m_textureReloadAppliedGeneration = m_textureReloadRequestGeneration;
-		return false;
-	}
-	if (m_textureReloadApplying ||
-	    DeviceCallsBlocked() ||
-	    m_presentSuspect)
-		return false;
+    if (!TextureReloadPendingForTesting()) return true;
+    if (IsTerminalDeviceState())
+    {
+        m_textureReloadAppliedGeneration = m_textureReloadRequestGeneration;
+        return false;
+    }
+    if (m_textureReloadApplying || DeviceCallsBlocked() || m_presentSuspect) return false;
 
-	const uint64_t targetGeneration = m_textureReloadRequestGeneration;
-	const uint64_t documentEpoch = m_particleSystemDocumentEpoch;
-	int deferredTrack = -1;
-	const bool hadDeferredChange =
-	    m_deferredParticleSystemChange.Take(deferredTrack);
+    const uint64_t targetGeneration  = m_textureReloadRequestGeneration;
+    const uint64_t documentEpoch     = m_particleSystemDocumentEpoch;
+    int            deferredTrack     = -1;
+    const bool     hadDeferredChange = m_deferredParticleSystemChange.Take(deferredTrack);
 
-	m_textureReloadApplying = true;
-	bool completed = false;
-	try
-	{
-		completed = PerformTextureReload();
-	}
-	catch (...)
-	{
-		completed = false;
-	}
-	m_textureReloadApplying = false;
+    m_textureReloadApplying = true;
+    bool completed          = false;
+    try
+    {
+        completed = PerformTextureReload();
+    }
+    catch (...)
+    {
+        completed = false;
+    }
+    m_textureReloadApplying = false;
 
-	if (!completed || !TextureReloadCanContinue())
-	{
-		if (IsTerminalDeviceState())
-		{
-			m_textureReloadAppliedGeneration =
-			    m_textureReloadRequestGeneration;
-			return false;
-		}
-		if (hadDeferredChange &&
-		    documentEpoch == m_particleSystemDocumentEpoch)
-			m_deferredParticleSystemChange.Queue(deferredTrack);
-		return false;
-	}
+    if (!completed || !TextureReloadCanContinue())
+    {
+        if (IsTerminalDeviceState())
+        {
+            m_textureReloadAppliedGeneration = m_textureReloadRequestGeneration;
+            return false;
+        }
+        if (hadDeferredChange && documentEpoch == m_particleSystemDocumentEpoch)
+            m_deferredParticleSystemChange.Queue(deferredTrack);
+        return false;
+    }
 
-	m_textureReloadAppliedGeneration = targetGeneration;
-	++m_textureReloadApplyCount;
-	if (TextureReloadPendingForTesting()) return false;
-	if (m_deferredParticleSystemChange.Pending()) return false;
-	return true;
+    m_textureReloadAppliedGeneration = targetGeneration;
+    ++m_textureReloadApplyCount;
+    if (TextureReloadPendingForTesting()) return false;
+    if (m_deferredParticleSystemChange.Pending()) return false;
+    return true;
 }
 
 bool Engine::ReplayPendingParticleSystemChange()
 {
-	return m_deferredParticleSystemChange.Replay(
-	    [this](int track) { ApplyParticleSystemChanged(track); },
-	    [this]() { return DeviceCallsBlocked() || m_presentSuspect; });
+    return m_deferredParticleSystemChange.Replay([this](int track) { ApplyParticleSystemChanged(track); },
+                                                 [this]() { return DeviceCallsBlocked() || m_presentSuspect; });
 }
 
 // ---------- Camera and scene settings ----------
 void Engine::GetViewPort(D3DVIEWPORT9* viewport) const
 {
-	if (viewport == NULL) return;
-	if (DeviceCallsBlocked())
-	{
-		ZeroMemory(viewport, sizeof(*viewport));
-		return;
-	}
-	m_pDevice->GetViewport(viewport);
+    if (viewport == NULL) return;
+    if (DeviceCallsBlocked())
+    {
+        ZeroMemory(viewport, sizeof(*viewport));
+        return;
+    }
+    m_pDevice->GetViewport(viewport);
 }
 
 const Engine::Camera& Engine::GetCamera() const
 {
-	return m_eye;
+    return m_eye;
 }
 
-void Engine::SetCamera( const Camera& camera )
+void Engine::SetCamera(const Camera& camera)
 {
-	if (DeviceCallsBlocked()) return;
+    if (DeviceCallsBlocked()) return;
 
-	// A camera move changes GetBillboardMatrix(), and screen-oriented
-	// (!isWorldOriented) particles bake that matrix into their vertices on the
-	// CPU in EmitterInstance::UpdateParticle. While the preview is paused the
-	// sim clock is frozen, so the paused-idle skip in UpdateParticles would
-	// otherwise elide the re-bake and the quads freeze edge-on as the view
-	// orbits. Force one more Update pass when the camera actually moves.
-	// Guarded on a REAL change so a static paused frame (no orbit) still skips
-	// and the idle-recompute elision is preserved.
-	if (camera.Position != m_eye.Position
-		|| camera.Target != m_eye.Target
-		|| camera.Up     != m_eye.Up)
-	{
-		InvalidatePausedIdleSkip();
-	}
+    // A camera move changes GetBillboardMatrix(), and screen-oriented
+    // (!isWorldOriented) particles bake that matrix into their vertices on the
+    // CPU in EmitterInstance::UpdateParticle. While the preview is paused the
+    // sim clock is frozen, so the paused-idle skip in UpdateParticles would
+    // otherwise elide the re-bake and the quads freeze edge-on as the view
+    // orbits. Force one more Update pass when the camera actually moves.
+    // Guarded on a REAL change so a static paused frame (no orbit) still skips
+    // and the idle-recompute elision is preserved.
+    if (camera.Position != m_eye.Position || camera.Target != m_eye.Target || camera.Up != m_eye.Up)
+    {
+        InvalidatePausedIdleSkip();
+    }
 
-	m_eye = camera;
+    m_eye = camera;
 
-	// Construct matrices
-	D3DXMatrixLookAtRH(&m_view, &camera.Position, &camera.Target, &camera.Up );
-	D3DXMatrixMultiply(&m_viewProjection, &m_view, &m_projection);
+    // Construct matrices
+    D3DXMatrixLookAtRH(&m_view, &camera.Position, &camera.Target, &camera.Up);
+    D3DXMatrixMultiply(&m_viewProjection, &m_view, &m_projection);
 
-	// Create some resulting matrices
-	m_viewRotation = m_view;
-	m_viewRotation._41 = m_viewRotation._42 = m_viewRotation._43 = 0.0;
-	D3DXMatrixInverse(&m_billboard,   NULL, &m_viewRotation);
+    // Create some resulting matrices
+    m_viewRotation     = m_view;
+    m_viewRotation._41 = m_viewRotation._42 = m_viewRotation._43 = 0.0;
+    D3DXMatrixInverse(&m_billboard, NULL, &m_viewRotation);
     D3DXMatrixInverse(&m_viewInverse, NULL, &m_view);
 
     // Set matrices
-	m_pDevice->SetTransform(D3DTS_VIEW,       &m_view);
-	m_pDevice->SetTransform(D3DTS_PROJECTION, &m_projection);
+    m_pDevice->SetTransform(D3DTS_VIEW, &m_view);
+    m_pDevice->SetTransform(D3DTS_PROJECTION, &m_projection);
 }
 
-void Engine::SetGround(bool enable)			        { m_showGround = enable; }
+void Engine::SetGround(bool enable)
+{
+    m_showGround = enable;
+}
 
-void Engine::SetGroundZ(float z)			        { m_groundZ    = z;      }
-void Engine::SetBackground(COLORREF color)		    { m_background = color; }
-void Engine::SetHeatDebug(bool debug)		        { m_debugHeat  = debug;  }
+void Engine::SetGroundZ(float z)
+{
+    m_groundZ = z;
+}
+void Engine::SetBackground(COLORREF color)
+{
+    m_background = color;
+}
+void Engine::SetHeatDebug(bool debug)
+{
+    m_debugHeat = debug;
+}
 
-void Engine::SetBloom(bool enable)                  { m_bloomEnabled  = enable; }
-void Engine::SetBloomStrength(float v)              { m_bloomStrength = v; }
-void Engine::SetBloomCutoff(float v)                { m_bloomCutoff   = v; }
-void Engine::SetBloomSize(float v)                  { m_bloomSize     = v; }
+void Engine::SetBloom(bool enable)
+{
+    m_bloomEnabled = enable;
+}
+void Engine::SetBloomStrength(float v)
+{
+    m_bloomStrength = v;
+}
+void Engine::SetBloomCutoff(float v)
+{
+    m_bloomCutoff = v;
+}
+void Engine::SetBloomSize(float v)
+{
+    m_bloomSize = v;
+}
 
 // [runtime-MSAA] Store the preferred sample count and mark the MSAA surfaces
 // dirty for rebuild on the next render frame. Safe to call from any thread —
@@ -563,7 +578,7 @@ void Engine::SetMsaaLevel(int samples)
 {
     if (samples != 0 && samples != 2 && samples != 4 && samples != 8) samples = 0;
     m_msaaPreferredLevel = samples;
-    m_msaaDirty = true;
+    m_msaaDirty          = true;
 }
 
 // [runtime-MSAA] Returns ascending list of supported sample counts: always
@@ -573,18 +588,18 @@ void Engine::SetMsaaLevel(int samples)
 std::vector<int> Engine::GetSupportedMsaaLevels() const
 {
     std::vector<int> result;
-    result.push_back(0);  // Off is always available
+    result.push_back(0); // Off is always available
     if (!m_pDirect3D || DeviceCallsBlocked()) return result;
     const D3DFORMAT depthFmt = m_presentationParameters.AutoDepthStencilFormat;
     const BOOL      windowed = m_presentationParameters.Windowed;
     for (int n : {2, 4, 8})
     {
-        const D3DMULTISAMPLE_TYPE type = (D3DMULTISAMPLE_TYPE)n;
-        DWORD colorQ = 0, depthQ = 0;
-        if (SUCCEEDED(m_pDirect3D->CheckDeviceMultiSampleType(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL,
-                D3DFMT_A8R8G8B8, windowed, type, &colorQ))
-         && SUCCEEDED(m_pDirect3D->CheckDeviceMultiSampleType(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL,
-                depthFmt, windowed, type, &depthQ)))
+        const D3DMULTISAMPLE_TYPE type   = (D3DMULTISAMPLE_TYPE)n;
+        DWORD                     colorQ = 0, depthQ = 0;
+        if (SUCCEEDED(m_pDirect3D->CheckDeviceMultiSampleType(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, D3DFMT_A8R8G8B8,
+                                                              windowed, type, &colorQ)) &&
+            SUCCEEDED(m_pDirect3D->CheckDeviceMultiSampleType(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, depthFmt, windowed,
+                                                              type, &depthQ)))
         {
             result.push_back(n);
         }
@@ -600,18 +615,18 @@ void Engine::ApplyMsaaLevelNow()
 {
     SAFE_RELEASE(m_pMsaaColor);
     SAFE_RELEASE(m_pMsaaDepth);
-    m_msaaActive = false;
+    m_msaaActive       = false;
     m_currentMsaaLevel = 0;
 
     // Resolve the preference to the highest SUPPORTED level <= the request.
     int target = 0;
     if (m_msaaPreferredLevel > 0)
     {
-        std::vector<int> sup = GetSupportedMsaaLevels();  // ascending, includes 0
+        std::vector<int> sup = GetSupportedMsaaLevels(); // ascending, includes 0
         for (int lv : sup)
-            if (lv > 0 && lv <= m_msaaPreferredLevel) target = lv;  // highest <= pref
+            if (lv > 0 && lv <= m_msaaPreferredLevel) target = lv; // highest <= pref
     }
-    if (target <= 0) return;  // Off (or nothing supported)
+    if (target <= 0) return; // Off (or nothing supported)
 
     const UINT w = m_presentationParameters.BackBufferWidth;
     const UINT h = m_presentationParameters.BackBufferHeight;
@@ -619,10 +634,11 @@ void Engine::ApplyMsaaLevelNow()
 
     const D3DMULTISAMPLE_TYPE type     = (D3DMULTISAMPLE_TYPE)target;
     const D3DFORMAT           depthFmt = m_presentationParameters.AutoDepthStencilFormat;
-    const bool colorOk = SUCCEEDED(m_pDevice->CreateRenderTarget(
-        w, h, D3DFMT_A8R8G8B8, type, 0, FALSE /*lockable*/, &m_pMsaaColor, NULL));
-    const bool depthOk = colorOk && SUCCEEDED(m_pDevice->CreateDepthStencilSurface(
-        w, h, depthFmt, type, 0, TRUE /*discard*/, &m_pMsaaDepth, NULL));
+    const bool                colorOk  = SUCCEEDED(
+        m_pDevice->CreateRenderTarget(w, h, D3DFMT_A8R8G8B8, type, 0, FALSE /*lockable*/, &m_pMsaaColor, NULL));
+    const bool depthOk =
+        colorOk &&
+        SUCCEEDED(m_pDevice->CreateDepthStencilSurface(w, h, depthFmt, type, 0, TRUE /*discard*/, &m_pMsaaDepth, NULL));
     if (colorOk && depthOk)
     {
         m_msaaActive       = true;
@@ -638,36 +654,42 @@ void Engine::ApplyMsaaLevelNow()
     }
 }
 
-void Engine::SetWind(const D3DXVECTOR3& wind)       { m_wind = wind; }
-void Engine::SetGravity(const D3DXVECTOR3& gravity) { D3DXVec3Normalize(&m_gravity, &gravity); }
+void Engine::SetWind(const D3DXVECTOR3& wind)
+{
+    m_wind = wind;
+}
+void Engine::SetGravity(const D3DXVECTOR3& gravity)
+{
+    D3DXVec3Normalize(&m_gravity, &gravity);
+}
 void Engine::SetLight(LightType which, const Light& light)
 {
-	int index = 0;
-	switch (which)
-	{
-		case LT_SUN:	index = 0; break;
-		case LT_FILL1:	index = 1; break;
-		case LT_FILL2:	index = 2; break;
-	}
-	m_lights[index] = light;
-	
-	// Calculate direction from position
+    int index = 0;
+    switch (which)
+    {
+        case LT_SUN:   index = 0; break;
+        case LT_FILL1: index = 1; break;
+        case LT_FILL2: index = 2; break;
+    }
+    m_lights[index] = light;
+
+    // Calculate direction from position
     m_lights[index].Direction   = -m_lights[index].Position;
     m_lights[index].Direction.w = 0.0f;
-	D3DXVec4Normalize(&m_lights[index].Direction, &m_lights[index].Direction);
+    D3DXVec4Normalize(&m_lights[index].Direction, &m_lights[index].Direction);
 
-	// Recalculate Spherical Harmonics matrices
-	SPH_Calculate_Matrices(m_sphLightFill, &m_lights[1], 2, m_ambient);
-	SPH_Calculate_Matrices(m_sphLightAll,  &m_lights[0], 3, m_ambient);
+    // Recalculate Spherical Harmonics matrices
+    SPH_Calculate_Matrices(m_sphLightFill, &m_lights[1], 2, m_ambient);
+    SPH_Calculate_Matrices(m_sphLightAll, &m_lights[0], 3, m_ambient);
 }
 
 void Engine::SetAmbient(const D3DXVECTOR4& color)
 {
-	m_ambient = color;
+    m_ambient = color;
 
-	// Recalculate Spherical Harmonics matrices
-	SPH_Calculate_Matrices(m_sphLightFill, &m_lights[1], 2, m_ambient);
-	SPH_Calculate_Matrices(m_sphLightAll,  &m_lights[0], 3, m_ambient);
+    // Recalculate Spherical Harmonics matrices
+    SPH_Calculate_Matrices(m_sphLightFill, &m_lights[1], 2, m_ambient);
+    SPH_Calculate_Matrices(m_sphLightAll, &m_lights[0], 3, m_ambient);
 }
 
 // scene-global shadow tint setter. The declaration has lived in
@@ -679,19 +701,19 @@ void Engine::SetAmbient(const D3DXVECTOR4& color)
 // visually.
 void Engine::SetShadow(const D3DXVECTOR4& color)
 {
-	m_shadow = color;
+    m_shadow = color;
 }
 
 const Engine::Light& Engine::GetLight(LightType which) const
 {
-	int index = 0;
-	switch (which)
-	{
-		case LT_SUN:	index = 0; break;
-		case LT_FILL1:	index = 1; break;
-		case LT_FILL2:	index = 2; break;
-	}
-	return m_lights[index];
+    int index = 0;
+    switch (which)
+    {
+        case LT_SUN:   index = 0; break;
+        case LT_FILL1: index = 1; break;
+        case LT_FILL2: index = 2; break;
+    }
+    return m_lights[index];
 }
 
 // ---------- Shared frame synchronization ----------
@@ -703,8 +725,8 @@ const Engine::Light& Engine::GetLight(LightType which) const
 // shared_texture_test exe verifies the handle is openable.
 HANDLE Engine::GetSharedTextureHandle() const
 {
-	if (DeviceCallsBlocked()) return nullptr;
-	return m_pAlphaCompositor ? m_pAlphaCompositor->GetSharedHandle() : nullptr;
+    if (DeviceCallsBlocked()) return nullptr;
+    return m_pAlphaCompositor ? m_pAlphaCompositor->GetSharedHandle() : nullptr;
 }
 
 // cross-device GPU sync. See engine.h for
@@ -722,23 +744,23 @@ HANDLE Engine::GetSharedTextureHandle() const
 // commands have completed.
 void Engine::IssueEndFrameQuery()
 {
-	m_endFrameQueryReady = false;
-	m_endFrameQueryLastIssueResult = S_FALSE;
-	if (DeviceCallsBlocked()) return;
-	if (m_pDevice == NULL) return;
-	if (m_pEndFrameQuery == NULL)
-	{
-		HRESULT hr = m_pDevice->CreateQuery(D3DQUERYTYPE_EVENT, &m_pEndFrameQuery);
-		m_endFrameQueryLastIssueResult = hr;
-		if (FAILED(hr) || m_pEndFrameQuery == NULL)
-		{
-			OutputDebugStringA("[Engine] CreateQuery(EVENT) failed; cross-device sync disabled this run\n");
-			m_pEndFrameQuery = NULL;
-			return;
-		}
-		++m_endFrameQueryCreateCount;
-	}
-	m_endFrameQueryLastIssueResult = m_pEndFrameQuery->Issue(D3DISSUE_END);
+    m_endFrameQueryReady           = false;
+    m_endFrameQueryLastIssueResult = S_FALSE;
+    if (DeviceCallsBlocked()) return;
+    if (m_pDevice == NULL) return;
+    if (m_pEndFrameQuery == NULL)
+    {
+        HRESULT hr                     = m_pDevice->CreateQuery(D3DQUERYTYPE_EVENT, &m_pEndFrameQuery);
+        m_endFrameQueryLastIssueResult = hr;
+        if (FAILED(hr) || m_pEndFrameQuery == NULL)
+        {
+            OutputDebugStringA("[Engine] CreateQuery(EVENT) failed; cross-device sync disabled this run\n");
+            m_pEndFrameQuery = NULL;
+            return;
+        }
+        ++m_endFrameQueryCreateCount;
+    }
+    m_endFrameQueryLastIssueResult = m_pEndFrameQuery->Issue(D3DISSUE_END);
 }
 
 // WaitEndFrameQuery spins on GetData with the spike's 100k cap (see
@@ -761,46 +783,43 @@ void Engine::IssueEndFrameQuery()
 // now that late polls yield — irrelevant next to a hung GPU).
 int Engine::WaitEndFrameQuery()
 {
-	m_endFrameQueryReady = false;
-	if (DeviceCallsBlocked()) return 0;
-	if (m_pEndFrameQuery == NULL) return 0;
-	BOOL done = FALSE;
-	int spins = 0;
-	HRESULT queryResult = S_FALSE;
-	for (;;)
-	{
-		queryResult =
-		    m_pEndFrameQuery->GetData(&done, sizeof(done), D3DGETDATA_FLUSH);
-		if (m_endFrameQueryResultOverrideRemaining > 0)
-		{
-			queryResult = m_endFrameQueryResultOverride;
-			--m_endFrameQueryResultOverrideRemaining;
-			++m_endFrameQueryOverrideConsumedCount;
-		}
-		if (queryResult != S_FALSE) break;
-		if (++spins > 100000)
-		{
-			++m_endFrameQueryTimeoutCount;
-			OutputDebugStringA("[Engine] D3D9 sync query never signalled after 100k spins\n");
-			break;
-		}
-		if (spins > 64) SwitchToThread();
-	}
-	m_endFrameQueryReady = queryResult == S_OK;
-	if (FAILED(queryResult))
-	{
-		char message[160] = {};
-		std::snprintf(
-		    message,
-		    sizeof(message),
-		    "[Engine] D3D9 sync query GetData failed hr=0x%08lx; recovery probe scheduled\n",
-		    static_cast<unsigned long>(queryResult));
-		OutputDebugStringA(message);
-		++m_endFrameQueryFailureCount;
-		m_presentSuspect = true;
-		SAFE_RELEASE(m_pEndFrameQuery);
-	}
-	return spins;
+    m_endFrameQueryReady = false;
+    if (DeviceCallsBlocked()) return 0;
+    if (m_pEndFrameQuery == NULL) return 0;
+    BOOL    done        = FALSE;
+    int     spins       = 0;
+    HRESULT queryResult = S_FALSE;
+    for (;;)
+    {
+        queryResult = m_pEndFrameQuery->GetData(&done, sizeof(done), D3DGETDATA_FLUSH);
+        if (m_endFrameQueryResultOverrideRemaining > 0)
+        {
+            queryResult = m_endFrameQueryResultOverride;
+            --m_endFrameQueryResultOverrideRemaining;
+            ++m_endFrameQueryOverrideConsumedCount;
+        }
+        if (queryResult != S_FALSE) break;
+        if (++spins > 100000)
+        {
+            ++m_endFrameQueryTimeoutCount;
+            OutputDebugStringA("[Engine] D3D9 sync query never signalled after 100k spins\n");
+            break;
+        }
+        if (spins > 64) SwitchToThread();
+    }
+    m_endFrameQueryReady = queryResult == S_OK;
+    if (FAILED(queryResult))
+    {
+        char message[160] = {};
+        std::snprintf(message, sizeof(message),
+                      "[Engine] D3D9 sync query GetData failed hr=0x%08lx; recovery probe scheduled\n",
+                      static_cast<unsigned long>(queryResult));
+        OutputDebugStringA(message);
+        ++m_endFrameQueryFailureCount;
+        m_presentSuspect = true;
+        SAFE_RELEASE(m_pEndFrameQuery);
+    }
+    return spins;
 }
 
 // adapter LUID accessor for the multi-GPU
@@ -814,19 +833,18 @@ int Engine::WaitEndFrameQuery()
 // wrong texture).
 LUID Engine::GetAdapterLuid() const
 {
-	LUID luid = {};
-	if (m_pDirect3D == NULL || m_pDevice == NULL || DeviceCallsBlocked())
-		return luid;
+    LUID luid = {};
+    if (m_pDirect3D == NULL || m_pDevice == NULL || DeviceCallsBlocked()) return luid;
 
-	D3DDEVICE_CREATION_PARAMETERS params = {};
-	if (FAILED(m_pDevice->GetCreationParameters(&params))) return luid;
+    D3DDEVICE_CREATION_PARAMETERS params = {};
+    if (FAILED(m_pDevice->GetCreationParameters(&params))) return luid;
 
-	if (FAILED(m_pDirect3D->GetAdapterLUID(params.AdapterOrdinal, &luid)))
-	{
-		LUID zero = {};
-		return zero;
-	}
-	return luid;
+    if (FAILED(m_pDirect3D->GetAdapterLUID(params.AdapterOrdinal, &luid)))
+    {
+        LUID zero = {};
+        return zero;
+    }
+    return luid;
 }
 
 // ---------- Scene viewport ----------
@@ -860,157 +878,164 @@ LUID Engine::GetAdapterLuid() const
 // same LayoutBroker gate that fired this call.
 void Engine::SetSceneViewport(int x, int y, int w, int h)
 {
-	if (DeviceCallsBlocked()) return;
-	SetSceneViewportUnchecked(x, y, w, h);
+    if (DeviceCallsBlocked()) return;
+    SetSceneViewportUnchecked(x, y, w, h);
 }
 
 void Engine::SetSceneViewportUnchecked(int x, int y, int w, int h)
 {
-	const bool clearing = (w <= 0 || h <= 0);
-	if (clearing)
-	{
-		if (!m_sceneViewportActive) return;   // already cleared / never set
+    const bool clearing = (w <= 0 || h <= 0);
+    if (clearing)
+    {
+        if (!m_sceneViewportActive) return; // already cleared / never set
 
-		// Restore full-RT projection (matches ResetParameters' default).
-		if (m_presentationParameters.BackBufferWidth > 0 &&
-		    m_presentationParameters.BackBufferHeight > 0)
-		{
-			float n = 1.0f;
-			D3DXMatrixPerspectiveFovRH(&m_projection, D3DXToRadian(45),
-			    (float)m_presentationParameters.BackBufferWidth /
-			    (float)m_presentationParameters.BackBufferHeight, n, 1000.0f);
-			m_projection._33 = -1.0f;
-			m_projection._43 = -2 * n;
-			// Push to device + recompute m_viewProjection so shader
-			// effects (bound per frame in Engine::Render) see the fresh
-			// matrix. Without this, the device keeps the stale projection
-			// until something else calls SetCamera (visible as "aspect snaps
-			// on click").
-			D3DXMatrixMultiply(&m_viewProjection, &m_view, &m_projection);
-			if (m_pDevice)
-			{
-				m_pDevice->SetTransform(D3DTS_PROJECTION, &m_projection);
-			}
-		}
+        // Restore full-RT projection (matches ResetParameters' default).
+        if (m_presentationParameters.BackBufferWidth > 0 && m_presentationParameters.BackBufferHeight > 0)
+        {
+            float n = 1.0f;
+            D3DXMatrixPerspectiveFovRH(&m_projection, D3DXToRadian(45),
+                                       (float)m_presentationParameters.BackBufferWidth /
+                                           (float)m_presentationParameters.BackBufferHeight,
+                                       n, 1000.0f);
+            m_projection._33 = -1.0f;
+            m_projection._43 = -2 * n;
+            // Push to device + recompute m_viewProjection so shader
+            // effects (bound per frame in Engine::Render) see the fresh
+            // matrix. Without this, the device keeps the stale projection
+            // until something else calls SetCamera (visible as "aspect snaps
+            // on click").
+            D3DXMatrixMultiply(&m_viewProjection, &m_view, &m_projection);
+            if (m_pDevice)
+            {
+                m_pDevice->SetTransform(D3DTS_PROJECTION, &m_projection);
+            }
+        }
 
-		m_sceneViewportX      = 0;
-		m_sceneViewportY      = 0;
-		m_sceneViewportW      = 0;
-		m_sceneViewportH      = 0;
-		m_sceneViewportActive = false;
-		OutputDebugStringA("[engine] SetSceneViewport CLEARED (restored full-RT projection)\n");
-		printf("[engine] SetSceneViewport CLEARED (restored full-RT projection)\n");
-		fflush(stdout);
-		return;
-	}
+        m_sceneViewportX      = 0;
+        m_sceneViewportY      = 0;
+        m_sceneViewportW      = 0;
+        m_sceneViewportH      = 0;
+        m_sceneViewportActive = false;
+        OutputDebugStringA("[engine] SetSceneViewport CLEARED (restored full-RT projection)\n");
+        printf("[engine] SetSceneViewport CLEARED (restored full-RT projection)\n");
+        fflush(stdout);
+        return;
+    }
 
-	// Defensive clamp to the engine RT. The
-	// caller (LayoutBroker) guard-bands the scene viewport a few px beyond the
-	// DComp clip so the D3D9Ex->D3D11 shared-surface edge incoherency lands
-	// outside the clip. The surrounding chrome guarantees margin so the band
-	// stays in-bounds in practice, but never let SetViewport fail on a
-	// degenerate (collapsed-panel) layout.
-	if (m_presentationParameters.BackBufferWidth > 0)
-	{
-		if (x < 0) { w += x; x = 0; }
-		if (x + w > static_cast<int>(m_presentationParameters.BackBufferWidth))
-			w = static_cast<int>(m_presentationParameters.BackBufferWidth) - x;
-	}
-	if (m_presentationParameters.BackBufferHeight > 0)
-	{
-		if (y < 0) { h += y; y = 0; }
-		if (y + h > static_cast<int>(m_presentationParameters.BackBufferHeight))
-			h = static_cast<int>(m_presentationParameters.BackBufferHeight) - y;
-	}
-	if (w <= 0 || h <= 0) return;  // fully clamped away — nothing to render
+    // Defensive clamp to the engine RT. The
+    // caller (LayoutBroker) guard-bands the scene viewport a few px beyond the
+    // DComp clip so the D3D9Ex->D3D11 shared-surface edge incoherency lands
+    // outside the clip. The surrounding chrome guarantees margin so the band
+    // stays in-bounds in practice, but never let SetViewport fail on a
+    // degenerate (collapsed-panel) layout.
+    if (m_presentationParameters.BackBufferWidth > 0)
+    {
+        if (x < 0)
+        {
+            w += x;
+            x = 0;
+        }
+        if (x + w > static_cast<int>(m_presentationParameters.BackBufferWidth))
+            w = static_cast<int>(m_presentationParameters.BackBufferWidth) - x;
+    }
+    if (m_presentationParameters.BackBufferHeight > 0)
+    {
+        if (y < 0)
+        {
+            h += y;
+            y = 0;
+        }
+        if (y + h > static_cast<int>(m_presentationParameters.BackBufferHeight))
+            h = static_cast<int>(m_presentationParameters.BackBufferHeight) - y;
+    }
+    if (w <= 0 || h <= 0) return; // fully clamped away — nothing to render
 
-	// Idempotent — same rect, no-op (silent — 60+ Hz pane-drag
-	// dispatches don't flood logs).
-	if (m_sceneViewportActive &&
-	    x == m_sceneViewportX && y == m_sceneViewportY &&
-	    w == m_sceneViewportW && h == m_sceneViewportH)
-	{
-		return;
-	}
+    // Idempotent — same rect, no-op (silent — 60+ Hz pane-drag
+    // dispatches don't flood logs).
+    if (m_sceneViewportActive && x == m_sceneViewportX && y == m_sceneViewportY && w == m_sceneViewportW &&
+        h == m_sceneViewportH)
+    {
+        return;
+    }
 
-	m_sceneViewportX      = x;
-	m_sceneViewportY      = y;
-	m_sceneViewportW      = w;
-	m_sceneViewportH      = h;
-	m_sceneViewportActive = true;
+    m_sceneViewportX      = x;
+    m_sceneViewportY      = y;
+    m_sceneViewportW      = w;
+    m_sceneViewportH      = h;
+    m_sceneViewportActive = true;
 
-	// Per-pixel-FoV projection — reference is a FIXED anchor: 45° per
-	// kFovAnchorHeightPx (768) of viewport height, so one pixel always
-	// subtends the same angle REGARDLESS of window size. Combined with
-	// aspect = W/H, 1 px ≡ 1 px angular extent in both axes: growing
-	// the scene rect (pane drag, dock slide, AND a window resize)
-	// reveals more world at the edges; shrinking crops. No zoom/FoV
-	// rescale of existing content, ever.
-	//
-	// History: the reference used to be the CURRENT RT height
-	// (BackBufferHeight), which kept the per-pixel angle constant only
-	// while the WINDOW size was constant — a dock slide revealed, but a
-	// window resize rescaled the world to the new height (user verdict
-	// 2026-06-10: "adjusts the zoom as I resize … not desired; I like
-	// how the dock slide just reveals more/less"). An absolute anchor
-	// extends the reveal behaviour to window resizes. 768 ≈ the default
-	// window's client height, so the default framing matches the old
-	// scheme within ~1%; overall zoom is the camera's job (mouse wheel).
-	//
-	// fovY is clamped to 120° — at extreme viewport heights (~2050+ px)
-	// the linear per-pixel widening would approach the projection
-	// breakdown at 180°; past the clamp the view rescales instead
-	// (accepted: wide-angle distortion is objectionable there anyway).
-	float n      = 1.0f;
-	const float kFovAnchorHeightPx = 768.0f;
-	float fovY   = D3DXToRadian(45.0f) * (float)h / kFovAnchorHeightPx;
-	const float kMaxFovY = D3DXToRadian(120.0f);
-	if (fovY > kMaxFovY) fovY = kMaxFovY;
-	m_sceneFovY = fovY;   // capture the CLAMPED FoV the projection uses (gizmo sizing)
-	float aspect = (float)w / (float)h;
-	D3DXMatrixPerspectiveFovRH(&m_projection, fovY, aspect, n, 1000.0f);
-	m_projection._33 = -1.0f;
-	m_projection._43 = -2 * n;
-	// Push the new projection to the device + recompute m_viewProjection
-	// for shader-effect consumers (bound per frame in Engine::Render).
-	// Without these, the device retains whatever projection SetCamera last
-	// pushed (typically from boot) until SetCamera fires again — visible as
-	// "aspect snaps to correct on click in viewport" because click
-	// triggers a camera op which calls SetCamera and finally pushes
-	// the latest m_projection.
-	D3DXMatrixMultiply(&m_viewProjection, &m_view, &m_projection);
-	if (m_pDevice)
-	{
-		m_pDevice->SetTransform(D3DTS_PROJECTION, &m_projection);
-	}
+    // Per-pixel-FoV projection — reference is a FIXED anchor: 45° per
+    // kFovAnchorHeightPx (768) of viewport height, so one pixel always
+    // subtends the same angle REGARDLESS of window size. Combined with
+    // aspect = W/H, 1 px ≡ 1 px angular extent in both axes: growing
+    // the scene rect (pane drag, dock slide, AND a window resize)
+    // reveals more world at the edges; shrinking crops. No zoom/FoV
+    // rescale of existing content, ever.
+    //
+    // History: the reference used to be the CURRENT RT height
+    // (BackBufferHeight), which kept the per-pixel angle constant only
+    // while the WINDOW size was constant — a dock slide revealed, but a
+    // window resize rescaled the world to the new height (user verdict
+    // 2026-06-10: "adjusts the zoom as I resize … not desired; I like
+    // how the dock slide just reveals more/less"). An absolute anchor
+    // extends the reveal behaviour to window resizes. 768 ≈ the default
+    // window's client height, so the default framing matches the old
+    // scheme within ~1%; overall zoom is the camera's job (mouse wheel).
+    //
+    // fovY is clamped to 120° — at extreme viewport heights (~2050+ px)
+    // the linear per-pixel widening would approach the projection
+    // breakdown at 180°; past the clamp the view rescales instead
+    // (accepted: wide-angle distortion is objectionable there anyway).
+    float       n                  = 1.0f;
+    const float kFovAnchorHeightPx = 768.0f;
+    float       fovY               = D3DXToRadian(45.0f) * (float)h / kFovAnchorHeightPx;
+    const float kMaxFovY           = D3DXToRadian(120.0f);
+    if (fovY > kMaxFovY) fovY = kMaxFovY;
+    m_sceneFovY  = fovY; // capture the CLAMPED FoV the projection uses (gizmo sizing)
+    float aspect = (float)w / (float)h;
+    D3DXMatrixPerspectiveFovRH(&m_projection, fovY, aspect, n, 1000.0f);
+    m_projection._33 = -1.0f;
+    m_projection._43 = -2 * n;
+    // Push the new projection to the device + recompute m_viewProjection
+    // for shader-effect consumers (bound per frame in Engine::Render).
+    // Without these, the device retains whatever projection SetCamera last
+    // pushed (typically from boot) until SetCamera fires again — visible as
+    // "aspect snaps to correct on click in viewport" because click
+    // triggers a camera op which calls SetCamera and finally pushes
+    // the latest m_projection.
+    D3DXMatrixMultiply(&m_viewProjection, &m_view, &m_projection);
+    if (m_pDevice)
+    {
+        m_pDevice->SetTransform(D3DTS_PROJECTION, &m_projection);
+    }
 
-	// [resize-perf] Throttled to 1 Hz: this used to print + fflush +
-	// OutputDebugStringA on EVERY apply, and splitter drags apply at the
-	// stream rate (~28/s) — ODS alone is ms-class with a debugger
-	// attached. One line per second is plenty to see the live rect.
-	static DWORD s_lastSvpLogTick = 0;
-	const DWORD svpNow = GetTickCount();
-	if (s_lastSvpLogTick == 0 || (svpNow - s_lastSvpLogTick) >= 1000)
-	{
-		s_lastSvpLogTick = svpNow;
-		char buf[224];
-		snprintf(buf, sizeof(buf),
-		    "[engine] SetSceneViewport x=%d y=%d w=%d h=%d (fovY=%.2f° aspect=%.3f anchorH=%.0f)\n",
-		    x, y, w, h, fovY * (180.0f / 3.14159265f), aspect, kFovAnchorHeightPx);
-		OutputDebugStringA(buf);
-		printf("%s", buf);
-		fflush(stdout);
-	}
+    // [resize-perf] Throttled to 1 Hz: this used to print + fflush +
+    // OutputDebugStringA on EVERY apply, and splitter drags apply at the
+    // stream rate (~28/s) — ODS alone is ms-class with a debugger
+    // attached. One line per second is plenty to see the live rect.
+    static DWORD s_lastSvpLogTick = 0;
+    const DWORD  svpNow           = GetTickCount();
+    if (s_lastSvpLogTick == 0 || (svpNow - s_lastSvpLogTick) >= 1000)
+    {
+        s_lastSvpLogTick = svpNow;
+        char buf[224];
+        snprintf(buf, sizeof(buf),
+                 "[engine] SetSceneViewport x=%d y=%d w=%d h=%d (fovY=%.2f° aspect=%.3f anchorH=%.0f)\n", x, y, w, h,
+                 fovY * (180.0f / 3.14159265f), aspect, kFovAnchorHeightPx);
+        OutputDebugStringA(buf);
+        printf("%s", buf);
+        fflush(stdout);
+    }
 }
 
 bool Engine::GetSceneViewport(int& x, int& y, int& w, int& h) const
 {
-	if (!m_sceneViewportActive) return false;
-	x = m_sceneViewportX;
-	y = m_sceneViewportY;
-	w = m_sceneViewportW;
-	h = m_sceneViewportH;
-	return true;
+    if (!m_sceneViewportActive) return false;
+    x = m_sceneViewportX;
+    y = m_sceneViewportY;
+    w = m_sceneViewportW;
+    h = m_sceneViewportH;
+    return true;
 }
 
 // ---------- Environment list cache ----------
@@ -1035,330 +1060,326 @@ const std::array<std::vector<SkydomeRef>, kNumSkydomeAxes>& Engine::EnsureSkydom
 }
 
 // ---------- Construction ----------
-Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShaderManager& shaderManager, IFileManager& fileManager)
+Engine::Engine(HWND             hFocus,
+               HWND             hDevice,
+               ITextureManager& textureManager,
+               IShaderManager&  shaderManager,
+               IFileManager&    fileManager)
     : m_textureManager(textureManager), m_shaderManager(shaderManager), m_fileManager(fileManager)
 {
-	// Zero shader pointers up front so partial-failure cleanup is safe
-	m_pDistortShader = NULL;
-	for (int i = 0; i < NUM_SHADERS; i++) m_pShaders[i] = NULL;
-	m_pBloomEffect = NULL;
-	m_pBloomPing   = NULL;
-	m_pBloomPong   = NULL;
-	// [soft-shadows] mask RTs + blur effect (zeroed for safe partial-failure cleanup)
-	m_pShadowMask       = NULL;
-	m_pShadowMaskMsaa   = NULL;
-	m_pShadowBlurEffect = NULL;
-	// skydome geometry — pre-init so partial-failure cleanup is safe
-	m_pSkydomeVB        = NULL;
-	m_pSkydomeIB        = NULL;
-	m_pSkydomeDecl      = NULL;
-	m_skydomeIndexCount = 0;
-	// skydome effect + texture state
-	m_pSkydomeEffect    = NULL;
-	m_hSkydomeWVP       = NULL;
-	m_hSkydomeTex       = NULL;
-	m_pSkydomeTexture   = NULL;
-	m_skydomeIndex      = kSkydomeOffSlot;
-	m_skydomeUsesEmbeddedResource = false;
-	// adapter identity — filled at CreateDeviceEx; defined before it so a
-	// failed device creation still reports something rather than garbage.
-	m_adapterDescription[0] = '\0';
-	m_adapterVendorId   = 0;
-	m_adapterDeviceId   = 0;
-	m_adapterDriverVersion  = 0;
-	m_creationDisplayFormat = D3DFMT_UNKNOWN;
-	m_vertexProcessingMode  = "";
-	// ground-lighting effect + tangent-space decl + normal-map state
-	m_pGroundEffect            = NULL;
-	m_pGroundDecl              = NULL;
-	m_pGroundNormalTexture     = NULL;
-	m_pGroundFlatNormalTexture = NULL;
-	m_hGroundWVP = m_hGroundWorld = m_hGroundSphFill = NULL;
-	m_hGroundLightObjVec = m_hGroundLightDiffuse = m_hGroundLightSpecular = NULL;
-	m_hGroundEyeObjPos = m_hGroundBaseTex = m_hGroundNormalTex = NULL;
-	m_hBloomStrength = m_hBloomCutoff = m_hBloomSize = NULL;
-	m_hBloomIteration = m_hBloomSceneTextureParam = NULL;
-	m_hBloomResolutionConstants = NULL;
-	m_hBloomTechnique = NULL;
-	m_bloomPassCount  = 0;
+    // Zero shader pointers up front so partial-failure cleanup is safe
+    m_pDistortShader = NULL;
+    for (int i = 0; i < NUM_SHADERS; i++) m_pShaders[i] = NULL;
+    m_pBloomEffect = NULL;
+    m_pBloomPing   = NULL;
+    m_pBloomPong   = NULL;
+    // [soft-shadows] mask RTs + blur effect (zeroed for safe partial-failure cleanup)
+    m_pShadowMask       = NULL;
+    m_pShadowMaskMsaa   = NULL;
+    m_pShadowBlurEffect = NULL;
+    // skydome geometry — pre-init so partial-failure cleanup is safe
+    m_pSkydomeVB        = NULL;
+    m_pSkydomeIB        = NULL;
+    m_pSkydomeDecl      = NULL;
+    m_skydomeIndexCount = 0;
+    // skydome effect + texture state
+    m_pSkydomeEffect              = NULL;
+    m_hSkydomeWVP                 = NULL;
+    m_hSkydomeTex                 = NULL;
+    m_pSkydomeTexture             = NULL;
+    m_skydomeIndex                = kSkydomeOffSlot;
+    m_skydomeUsesEmbeddedResource = false;
+    // adapter identity — filled at CreateDeviceEx; defined before it so a
+    // failed device creation still reports something rather than garbage.
+    m_adapterDescription[0] = '\0';
+    m_adapterVendorId       = 0;
+    m_adapterDeviceId       = 0;
+    m_adapterDriverVersion  = 0;
+    m_creationDisplayFormat = D3DFMT_UNKNOWN;
+    m_vertexProcessingMode  = "";
+    // ground-lighting effect + tangent-space decl + normal-map state
+    m_pGroundEffect            = NULL;
+    m_pGroundDecl              = NULL;
+    m_pGroundNormalTexture     = NULL;
+    m_pGroundFlatNormalTexture = NULL;
+    m_hGroundWVP = m_hGroundWorld = m_hGroundSphFill = NULL;
+    m_hGroundLightObjVec = m_hGroundLightDiffuse = m_hGroundLightSpecular = NULL;
+    m_hGroundEyeObjPos = m_hGroundBaseTex = m_hGroundNormalTex = NULL;
+    m_hBloomStrength = m_hBloomCutoff = m_hBloomSize = NULL;
+    m_hBloomIteration = m_hBloomSceneTextureParam = NULL;
+    m_hBloomResolutionConstants                   = NULL;
+    m_hBloomTechnique                             = NULL;
+    m_bloomPassCount                              = 0;
 
-	// Initialize members
-	m_showGround     = true;
-	m_groundZ        = 0.0f;
-	m_groundTextureIndex = 0;                 // dirt by default
-	m_groundSolidColor   = RGB(128, 128, 128); // flat grey default
-	m_pGroundTexture = NULL;      // must be NULL before first ReloadGroundTexture()
-	m_debugHeat      = false;
-	m_bloomEnabled   = false;
-	m_bloomReady     = false;
-	// Defaults match the canonical EAW Terrain Editor's brand-new
-	// (Untitled) map — the blank-slate values the editor ships
-	// when no specific map's been authored yet. The shader's
-	// source defaults (1.0 / 0.1 / 0.25) are placeholders the
-	// game overwrites at runtime and aren't the canonical
-	// "fresh start" values.
-	m_bloomStrength  = 0.00f;
-	m_bloomCutoff    = 0.90f;
-	m_bloomSize      = 0.10f;
-	m_gravity        = D3DXVECTOR3(0,0,-1);
-	m_wind           = D3DXVECTOR3(0,0,0);
-	m_eye.Position   = D3DXVECTOR3(0,-250,125);
-	m_eye.Target     = D3DXVECTOR3(0,0,0);
-	m_eye.Up		 = D3DXVECTOR3(0,0,1);
-    m_numEmitters    = 0;
-    m_numParticles   = 0;
-    m_ambient        = D3DXVECTOR4(0,0,0,0);
+    // Initialize members
+    m_showGround         = true;
+    m_groundZ            = 0.0f;
+    m_groundTextureIndex = 0;                  // dirt by default
+    m_groundSolidColor   = RGB(128, 128, 128); // flat grey default
+    m_pGroundTexture     = NULL;               // must be NULL before first ReloadGroundTexture()
+    m_debugHeat          = false;
+    m_bloomEnabled       = false;
+    m_bloomReady         = false;
+    // Defaults match the canonical EAW Terrain Editor's brand-new
+    // (Untitled) map — the blank-slate values the editor ships
+    // when no specific map's been authored yet. The shader's
+    // source defaults (1.0 / 0.1 / 0.25) are placeholders the
+    // game overwrites at runtime and aren't the canonical
+    // "fresh start" values.
+    m_bloomStrength = 0.00f;
+    m_bloomCutoff   = 0.90f;
+    m_bloomSize     = 0.10f;
+    m_gravity       = D3DXVECTOR3(0, 0, -1);
+    m_wind          = D3DXVECTOR3(0, 0, 0);
+    m_eye.Position  = D3DXVECTOR3(0, -250, 125);
+    m_eye.Target    = D3DXVECTOR3(0, 0, 0);
+    m_eye.Up        = D3DXVECTOR3(0, 0, 1);
+    m_numEmitters   = 0;
+    m_numParticles  = 0;
+    m_ambient       = D3DXVECTOR4(0, 0, 0, 0);
     // [shadow] Grey default matching the registry default (RGB 100,100,110 / 255).
     // m_shadow.xyz is the darken tint (result = dest * m_shadow.rgb); pure-black
     // would make shadows fully opaque black if SetShadow is ever skipped.
-    m_shadow         = D3DXVECTOR4(100.0f/255.0f, 100.0f/255.0f, 110.0f/255.0f, 0.0f);
-    m_background     = RGB(0x14,0x08,0x34);
+    m_shadow     = D3DXVECTOR4(100.0f / 255.0f, 100.0f / 255.0f, 110.0f / 255.0f, 0.0f);
+    m_background = RGB(0x14, 0x08, 0x34);
 
-	//
-	// Initialize Direct3D9Ex
-	//
-	// D3D9 → D3D9Ex. D3D9Ex is required for
-	// the shared-handle render-target path; the spike validated
-	// the entire engine→D3D11→DComp pipeline on this rig. The
-	// decision: hard-fail if D3D9Ex is unavailable — there is no
-	// in-process fallback to vanilla D3D9.
-	{
-		HRESULT createHr = Direct3DCreate9Ex(D3D_SDK_VERSION, &m_pDirect3D);
-		if (FAILED(createHr) || m_pDirect3D == NULL)
-		{
-			throw runtime_error("Unable to initialize Direct3D9Ex");
-		}
-	}
+    //
+    // Initialize Direct3D9Ex
+    //
+    // D3D9 → D3D9Ex. D3D9Ex is required for
+    // the shared-handle render-target path; the spike validated
+    // the entire engine→D3D11→DComp pipeline on this rig. The
+    // decision: hard-fail if D3D9Ex is unavailable — there is no
+    // in-process fallback to vanilla D3D9.
+    {
+        HRESULT createHr = Direct3DCreate9Ex(D3D_SDK_VERSION, &m_pDirect3D);
+        if (FAILED(createHr) || m_pDirect3D == NULL)
+        {
+            throw runtime_error("Unable to initialize Direct3D9Ex");
+        }
+    }
 
-	ZeroMemory(&m_presentationParameters, sizeof(m_presentationParameters));
-	m_presentationParameters.BackBufferFormat       = D3DFMT_UNKNOWN;
-	m_presentationParameters.SwapEffect             = D3DSWAPEFFECT_DISCARD;
-	m_presentationParameters.hDeviceWindow          = hDevice;
-	m_presentationParameters.Windowed               = TRUE;
-	m_presentationParameters.EnableAutoDepthStencil = TRUE;
-	m_presentationParameters.Flags                  = D3DPRESENTFLAG_DISCARD_DEPTHSTENCIL;
-	m_presentationParameters.PresentationInterval   = D3DPRESENT_INTERVAL_DEFAULT;
+    ZeroMemory(&m_presentationParameters, sizeof(m_presentationParameters));
+    m_presentationParameters.BackBufferFormat       = D3DFMT_UNKNOWN;
+    m_presentationParameters.SwapEffect             = D3DSWAPEFFECT_DISCARD;
+    m_presentationParameters.hDeviceWindow          = hDevice;
+    m_presentationParameters.Windowed               = TRUE;
+    m_presentationParameters.EnableAutoDepthStencil = TRUE;
+    m_presentationParameters.Flags                  = D3DPRESENTFLAG_DISCARD_DEPTHSTENCIL;
+    m_presentationParameters.PresentationInterval   = D3DPRESENT_INTERVAL_DEFAULT;
 
-	D3DDISPLAYMODE DisplayMode;
-	if (FAILED(m_pDirect3D->GetAdapterDisplayMode(D3DADAPTER_DEFAULT, &DisplayMode)))
-	{
-		SAFE_RELEASE(m_pDirect3D);
-		throw runtime_error("Unable to get current display mode");
-	}
+    D3DDISPLAYMODE DisplayMode;
+    if (FAILED(m_pDirect3D->GetAdapterDisplayMode(D3DADAPTER_DEFAULT, &DisplayMode)))
+    {
+        SAFE_RELEASE(m_pDirect3D);
+        throw runtime_error("Unable to get current display mode");
+    }
 
-	m_creationDisplayFormat = DisplayMode.Format;
-	if ((m_presentationParameters.AutoDepthStencilFormat = GetDepthStencilFormat(DisplayMode.Format, true)) == D3DFMT_UNKNOWN)
-	{
-		SAFE_RELEASE(m_pDirect3D);
-		throw runtime_error("Unable to find a matching depth/stencil buffer format (D24S8 required for model shadows)");
-	}
+    m_creationDisplayFormat = DisplayMode.Format;
+    if ((m_presentationParameters.AutoDepthStencilFormat = GetDepthStencilFormat(DisplayMode.Format, true)) ==
+        D3DFMT_UNKNOWN)
+    {
+        SAFE_RELEASE(m_pDirect3D);
+        throw runtime_error("Unable to find a matching depth/stencil buffer format (D24S8 required for model shadows)");
+    }
 
-	m_presentationParameters.MultiSampleType = GetMultiSampleType(&m_presentationParameters.MultiSampleQuality, DisplayMode.Format, m_presentationParameters.AutoDepthStencilFormat, m_presentationParameters.Windowed);
+    m_presentationParameters.MultiSampleType =
+        GetMultiSampleType(&m_presentationParameters.MultiSampleQuality, DisplayMode.Format,
+                           m_presentationParameters.AutoDepthStencilFormat, m_presentationParameters.Windowed);
 
-	// Create device (first try hardware, then software).
-	// D3D9 CreateDevice → D3D9Ex CreateDeviceEx
-	// (extra trailing nullptr for fullscreen display mode — we are always
-	// windowed) + D3DCREATE_MULTITHREADED, which is required for
-	// cross-device shared-handle textures and costs ~5% per-frame
-	// overhead in exchange. Verified across 189k frames in the dxgi_spike
-	// without anomaly.
-	{
-		DWORD const baseFlags = D3DCREATE_MULTITHREADED;
-		DWORD       vertexFlags = D3DCREATE_HARDWARE_VERTEXPROCESSING;
-		const char* vpModeName  = "HWVP";
-		HRESULT     createDevHr = m_pDirect3D->CreateDeviceEx(
-			D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hFocus,
-			baseFlags | vertexFlags, &m_presentationParameters,
-			NULL, &m_pDevice);
-		if (FAILED(createDevHr))
-		{
-			vertexFlags = D3DCREATE_SOFTWARE_VERTEXPROCESSING;
-			vpModeName  = "SOFTWARE_VP";
-			createDevHr = m_pDirect3D->CreateDeviceEx(
-				D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hFocus,
-				baseFlags | vertexFlags, &m_presentationParameters,
-				NULL, &m_pDevice);
-		}
-		if (FAILED(createDevHr))
-		{
-			SAFE_RELEASE(m_pDirect3D);
-			throw runtime_error("Unable to create render device");
-		}
-		// Reset/ResetEx must run on the thread that created the device even
-		// though D3DCREATE_MULTITHREADED permits ordinary cross-thread calls.
-		m_deviceThreadId = GetCurrentThreadId();
+    // Create device (first try hardware, then software).
+    // D3D9 CreateDevice → D3D9Ex CreateDeviceEx
+    // (extra trailing nullptr for fullscreen display mode — we are always
+    // windowed) + D3DCREATE_MULTITHREADED, which is required for
+    // cross-device shared-handle textures and costs ~5% per-frame
+    // overhead in exchange. Verified across 189k frames in the dxgi_spike
+    // without anomaly.
+    {
+        DWORD const baseFlags   = D3DCREATE_MULTITHREADED;
+        DWORD       vertexFlags = D3DCREATE_HARDWARE_VERTEXPROCESSING;
+        const char* vpModeName  = "HWVP";
+        HRESULT     createDevHr =
+            m_pDirect3D->CreateDeviceEx(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hFocus, baseFlags | vertexFlags,
+                                        &m_presentationParameters, NULL, &m_pDevice);
+        if (FAILED(createDevHr))
+        {
+            vertexFlags = D3DCREATE_SOFTWARE_VERTEXPROCESSING;
+            vpModeName  = "SOFTWARE_VP";
+            createDevHr =
+                m_pDirect3D->CreateDeviceEx(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hFocus, baseFlags | vertexFlags,
+                                            &m_presentationParameters, NULL, &m_pDevice);
+        }
+        if (FAILED(createDevHr))
+        {
+            SAFE_RELEASE(m_pDirect3D);
+            throw runtime_error("Unable to create render device");
+        }
+        // Reset/ResetEx must run on the thread that created the device even
+        // though D3DCREATE_MULTITHREADED permits ordinary cross-thread calls.
+        m_deviceThreadId = GetCurrentThreadId();
 
-		// Adapter info for multi-GPU LUID match debugging.
-		D3DADAPTER_IDENTIFIER9 adapterIdent = {};
-		m_pDirect3D->GetAdapterIdentifier(D3DADAPTER_DEFAULT, 0, &adapterIdent);
-		// Retained (not just logged) so a render golden can record which
-		// adapter produced its pixels — see GetAdapterDescription.
-		strncpy_s(m_adapterDescription, sizeof(m_adapterDescription),
-		          adapterIdent.Description, _TRUNCATE);
-		m_adapterVendorId = (unsigned long)adapterIdent.VendorId;
-		m_adapterDeviceId = (unsigned long)adapterIdent.DeviceId;
-		m_adapterDriverVersion = (unsigned long long)adapterIdent.DriverVersion.QuadPart;
-		m_vertexProcessingMode = vpModeName;
-		printf("[D3D9Ex] device created (%s multithreaded) adapter=%s "
-		       "VendorId=0x%lX DeviceId=0x%lX\n",
-		       vpModeName, adapterIdent.Description,
-		       (unsigned long)adapterIdent.VendorId,
-		       (unsigned long)adapterIdent.DeviceId);
-		fflush(stdout);
-	}
+        // Adapter info for multi-GPU LUID match debugging.
+        D3DADAPTER_IDENTIFIER9 adapterIdent = {};
+        m_pDirect3D->GetAdapterIdentifier(D3DADAPTER_DEFAULT, 0, &adapterIdent);
+        // Retained (not just logged) so a render golden can record which
+        // adapter produced its pixels — see GetAdapterDescription.
+        strncpy_s(m_adapterDescription, sizeof(m_adapterDescription), adapterIdent.Description, _TRUNCATE);
+        m_adapterVendorId      = (unsigned long)adapterIdent.VendorId;
+        m_adapterDeviceId      = (unsigned long)adapterIdent.DeviceId;
+        m_adapterDriverVersion = (unsigned long long)adapterIdent.DriverVersion.QuadPart;
+        m_vertexProcessingMode = vpModeName;
+        printf("[D3D9Ex] device created (%s multithreaded) adapter=%s "
+               "VendorId=0x%lX DeviceId=0x%lX\n",
+               vpModeName, adapterIdent.Description, (unsigned long)adapterIdent.VendorId,
+               (unsigned long)adapterIdent.DeviceId);
+        fflush(stdout);
+    }
 
-	// Create vertex declaration
-	if (FAILED(m_pDevice->CreateVertexDeclaration(ParticleElements, &m_pDeclaration)))
-	{
-		SAFE_RELEASE(m_pDevice);
-		SAFE_RELEASE(m_pDirect3D);
-		throw runtime_error("Unable to create vertex declaration");
-	}
+    // Create vertex declaration
+    if (FAILED(m_pDevice->CreateVertexDeclaration(ParticleElements, &m_pDeclaration)))
+    {
+        SAFE_RELEASE(m_pDevice);
+        SAFE_RELEASE(m_pDirect3D);
+        throw runtime_error("Unable to create vertex declaration");
+    }
 
-	// Create ground texture. routed through ReloadGroundTexture
-	// so the same code path is shared with SetGroundTexture and the
-	// lost-device recovery branches below. m_groundTextureIndex was
-	// initialized to 0 (dirt) in the constructor; main.cpp's startup
-	// flow may call SetGroundTexture(savedIndex) shortly after engine
-	// construction to swap in the user's persisted choice.
-	if (!ReloadGroundTexture())
-	{
-		SAFE_RELEASE(m_pDeclaration);
-		SAFE_RELEASE(m_pDevice);
-		SAFE_RELEASE(m_pDirect3D);
-		throw runtime_error("Unable to load ground texture");
-	}
+    // Create ground texture. routed through ReloadGroundTexture
+    // so the same code path is shared with SetGroundTexture and the
+    // lost-device recovery branches below. m_groundTextureIndex was
+    // initialized to 0 (dirt) in the constructor; main.cpp's startup
+    // flow may call SetGroundTexture(savedIndex) shortly after engine
+    // construction to swap in the user's persisted choice.
+    if (!ReloadGroundTexture())
+    {
+        SAFE_RELEASE(m_pDeclaration);
+        SAFE_RELEASE(m_pDevice);
+        SAFE_RELEASE(m_pDirect3D);
+        throw runtime_error("Unable to load ground texture");
+    }
 
-	// Distortion shader (built-in resource, not part of the hot-reloadable set)
+    // Distortion shader (built-in resource, not part of the hot-reloadable set)
     ID3DXEffect* pDistortEffect = NULL;
-	if (FAILED(D3DXCreateEffectFromResource(m_pDevice, NULL, MAKEINTRESOURCE(IDS_SCENEHEAT), NULL, NULL, D3DXFX_NOT_CLONEABLE, NULL, &pDistortEffect, NULL)))
-	{
-		SAFE_RELEASE(m_pGroundTexture);
-		SAFE_RELEASE(m_pDeclaration);
-		SAFE_RELEASE(m_pDevice);
-		SAFE_RELEASE(m_pDirect3D);
-		throw runtime_error("Unable to load a shader");
-	}
+    if (FAILED(D3DXCreateEffectFromResource(m_pDevice, NULL, MAKEINTRESOURCE(IDS_SCENEHEAT), NULL, NULL,
+                                            D3DXFX_NOT_CLONEABLE, NULL, &pDistortEffect, NULL)))
+    {
+        SAFE_RELEASE(m_pGroundTexture);
+        SAFE_RELEASE(m_pDeclaration);
+        SAFE_RELEASE(m_pDevice);
+        SAFE_RELEASE(m_pDirect3D);
+        throw runtime_error("Unable to load a shader");
+    }
     m_pDistortShader = new Effect(pDistortEffect);
     pDistortEffect->SetFloat("DistortionAmount", 0.50f);
     SAFE_RELEASE(pDistortEffect);
 
-	// Initial shader load — same all-or-nothing semantics as ReloadShaders().
-	// On failure we tear the device down and throw, just like before.
-	if (!ReloadShaders())
-	{
-		SAFE_RELEASE(m_pDistortShader);
-		SAFE_RELEASE(m_pGroundTexture);
-		SAFE_RELEASE(m_pDeclaration);
-		SAFE_RELEASE(m_pDevice);
-		SAFE_RELEASE(m_pDirect3D);
-		throw runtime_error("Unable to load a shader");
-	}
+    // Initial shader load — same all-or-nothing semantics as ReloadShaders().
+    // On failure we tear the device down and throw, just like before.
+    if (!ReloadShaders())
+    {
+        SAFE_RELEASE(m_pDistortShader);
+        SAFE_RELEASE(m_pGroundTexture);
+        SAFE_RELEASE(m_pDeclaration);
+        SAFE_RELEASE(m_pDevice);
+        SAFE_RELEASE(m_pDirect3D);
+        throw runtime_error("Unable to load a shader");
+    }
 
-    Light sun = {
-        D3DXVECTOR4( 1.0f, 1.0f, 1.0f, 1.0f),
-        D3DXVECTOR4( 0.0f, 0.0f, 0.0f, 0.0f),
-        D3DXVECTOR4( 1.0f, 0.0f, 0.0f, 0.0f),
-        D3DXVECTOR4( 0.0f, 0.0f, 0.0f, 0.0f) 
-    };
+    Light sun = {D3DXVECTOR4(1.0f, 1.0f, 1.0f, 1.0f), D3DXVECTOR4(0.0f, 0.0f, 0.0f, 0.0f),
+                 D3DXVECTOR4(1.0f, 0.0f, 0.0f, 0.0f), D3DXVECTOR4(0.0f, 0.0f, 0.0f, 0.0f)};
 
-    Light fill = {
-        D3DXVECTOR4(0.0f, 0.0f, 0.0f, 1.0f),
-        D3DXVECTOR4(0.0f, 0.0f, 0.0f, 1.0f),
-        D3DXVECTOR4(0.0f, 0.0f, 0.0f, 1.0f),
-        D3DXVECTOR4(0.0f, 0.0f, 0.0f, 0.0f) 
-    };
+    Light fill = {D3DXVECTOR4(0.0f, 0.0f, 0.0f, 1.0f), D3DXVECTOR4(0.0f, 0.0f, 0.0f, 1.0f),
+                  D3DXVECTOR4(0.0f, 0.0f, 0.0f, 1.0f), D3DXVECTOR4(0.0f, 0.0f, 0.0f, 0.0f)};
 
-    SetLight(LT_SUN,   sun);
+    SetLight(LT_SUN, sun);
     SetLight(LT_FILL1, fill);
     SetLight(LT_FILL2, fill);
-	ResetParameters();
+    ResetParameters();
 
-	// build the UV sphere mesh used by the skydome render pass.
-	// m_pDevice is guaranteed valid at this point.
-	InitSkydomeMesh();
-	// compile the skydome HLSL effect and cache its parameter handles.
-	// Graceful-degrade: if compile fails m_pSkydomeEffect stays NULL and the
-	// skydome render pass guards on it and skips skydome rendering.
-	InitSkydomeEffect();
-	// ground-lighting effect + tangent-space decl + flat-normal fallback.
-	// Graceful-degrade identically: on compile failure m_pGroundEffect stays
-	// NULL and Render() falls back to the unlit fixed-function ground quad.
-	CreateGroundFlatNormal();
-	InitGroundEffect();
-	ReloadGroundNormalTexture();
+    // build the UV sphere mesh used by the skydome render pass.
+    // m_pDevice is guaranteed valid at this point.
+    InitSkydomeMesh();
+    // compile the skydome HLSL effect and cache its parameter handles.
+    // Graceful-degrade: if compile fails m_pSkydomeEffect stays NULL and the
+    // skydome render pass guards on it and skips skydome rendering.
+    InitSkydomeEffect();
+    // ground-lighting effect + tangent-space decl + flat-normal fallback.
+    // Graceful-degrade identically: on compile failure m_pGroundEffect stays
+    // NULL and Render() falls back to the unlit fixed-function ground quad.
+    CreateGroundFlatNormal();
+    InitGroundEffect();
+    ReloadGroundNormalTexture();
 
 #ifndef NDEBUG
-	// bring-up driver (debug only): load a reference object by .alo path so
-	// the rigid-multi-part render core can be feel-tested before the picker.
-	//   set ALO_TEST_REFERENCE_OBJECT=Data\Art\Models\AI_Bunker_Turret1.alo
-	{
-		char buf[512];
-		if (GetEnvironmentVariableA("ALO_TEST_REFERENCE_OBJECT", buf, sizeof(buf)) > 0)
-		{
-			std::string aloPath = buf;
-			fprintf(stderr, "[RefObj] test driver: loading '%s'\n", aloPath.c_str());
-			if (m_referenceObjectMesh.Load(m_fileManager, aloPath))
-			{
-				m_referenceObjectMesh.Resolve(m_shaderManager, m_pDevice);
-				m_referenceObjectMesh.CreateBuffers(m_pDevice, m_fileManager);
-				m_referenceObjectSelected = RefLockResolveSelected(true, m_referenceLocked);   // gizmo for bring-up (honours lock)
-				fprintf(stderr, "[RefObj] loaded: %zu sub-meshes, skippedSkinned=%d\n",
-				        m_referenceObjectMesh.SubMeshes().size(),
-				        m_referenceObjectMesh.SkippedSkinned() ? 1 : 0);
-			}
-			else
-			{
-				fprintf(stderr, "[RefObj] load FAILED for '%s'\n", aloPath.c_str());
-			}
-		}
-	}
+    // bring-up driver (debug only): load a reference object by .alo path so
+    // the rigid-multi-part render core can be feel-tested before the picker.
+    //   set ALO_TEST_REFERENCE_OBJECT=Data\Art\Models\AI_Bunker_Turret1.alo
+    {
+        char buf[512];
+        if (GetEnvironmentVariableA("ALO_TEST_REFERENCE_OBJECT", buf, sizeof(buf)) > 0)
+        {
+            std::string aloPath = buf;
+            fprintf(stderr, "[RefObj] test driver: loading '%s'\n", aloPath.c_str());
+            if (m_referenceObjectMesh.Load(m_fileManager, aloPath))
+            {
+                m_referenceObjectMesh.Resolve(m_shaderManager, m_pDevice);
+                m_referenceObjectMesh.CreateBuffers(m_pDevice, m_fileManager);
+                m_referenceObjectSelected =
+                    RefLockResolveSelected(true, m_referenceLocked); // gizmo for bring-up (honours lock)
+                fprintf(stderr, "[RefObj] loaded: %zu sub-meshes, skippedSkinned=%d\n",
+                        m_referenceObjectMesh.SubMeshes().size(), m_referenceObjectMesh.SkippedSkinned() ? 1 : 0);
+            }
+            else
+            {
+                fprintf(stderr, "[RefObj] load FAILED for '%s'\n", aloPath.c_str());
+            }
+        }
+    }
 #endif
 }
 
 // ---------- Destruction ----------
 Engine::~Engine()
 {
-	// Join the catalog worker BEFORE any member is torn down -- the worker
-	// captures `this` and writes m_pendingCatalog / m_catalogMutex on completion, so
-	// it must finish before those members are destroyed. (Blocks until the in-flight
-	// build returns; at most the cost of one catalog parse, only at shutdown.)
-	if (m_catalogThread.joinable()) m_catalogThread.join();
+    // Join the catalog worker BEFORE any member is torn down -- the worker
+    // captures `this` and writes m_pendingCatalog / m_catalogMutex on completion, so
+    // it must finish before those members are destroyed. (Blocks until the in-flight
+    // build returns; at most the cost of one catalog parse, only at shutdown.)
+    if (m_catalogThread.joinable()) m_catalogThread.join();
 
-	ReleaseBloomTargets();
-	SAFE_RELEASE(m_pBloomEffect);
-	// [soft-shadows] mask RTs + the dedicated blur effect handle
-	ReleaseShadowMaskTargets();
-	SAFE_RELEASE(m_pShadowBlurEffect);
+    ReleaseBloomTargets();
+    SAFE_RELEASE(m_pBloomEffect);
+    // [soft-shadows] mask RTs + the dedicated blur effect handle
+    ReleaseShadowMaskTargets();
+    SAFE_RELEASE(m_pShadowBlurEffect);
     for (int i = 0; i < NUM_SHADERS; i++)
     {
         SAFE_RELEASE(m_pShaders[i]);
     }
     SAFE_RELEASE(m_pDepthStencilSurface);
-	// Released in Reset()/ResetForResize() but was leaked
-	// at shutdown when no final Reset ran.
-	SAFE_RELEASE(m_pEndFrameQuery);
-	// MSAA surfaces
-	SAFE_RELEASE(m_pMsaaColor);
-	SAFE_RELEASE(m_pMsaaDepth);
-	m_msaaActive = false;
-	SAFE_RELEASE(m_pDistortShader);
-	SAFE_RELEASE(m_pDistortTexture);
-	SAFE_RELEASE(m_pSceneTexture);
-	SAFE_RELEASE(m_pGroundTexture);
-	// skydome effect + texture (released before geometry for symmetry)
-	SAFE_RELEASE(m_pSkydomeEffect);
-	SAFE_RELEASE(m_pSkydomeTexture);
-	// skydome geometry (D3DPOOL_MANAGED — only released here, not on Reset)
-	SAFE_RELEASE(m_pSkydomeVB);
-	SAFE_RELEASE(m_pSkydomeIB);
-	SAFE_RELEASE(m_pSkydomeDecl);
-	// ground-lighting effect + decl + normal textures
-	SAFE_RELEASE(m_pGroundEffect);
-	SAFE_RELEASE(m_pGroundDecl);
-	SAFE_RELEASE(m_pGroundNormalTexture);
-	SAFE_RELEASE(m_pGroundFlatNormalTexture);
-	SAFE_RELEASE(m_pDeclaration);
-	SAFE_RELEASE(m_pDevice);
-	SAFE_RELEASE(m_pDirect3D);
+    // Released in Reset()/ResetForResize() but was leaked
+    // at shutdown when no final Reset ran.
+    SAFE_RELEASE(m_pEndFrameQuery);
+    // MSAA surfaces
+    SAFE_RELEASE(m_pMsaaColor);
+    SAFE_RELEASE(m_pMsaaDepth);
+    m_msaaActive = false;
+    SAFE_RELEASE(m_pDistortShader);
+    SAFE_RELEASE(m_pDistortTexture);
+    SAFE_RELEASE(m_pSceneTexture);
+    SAFE_RELEASE(m_pGroundTexture);
+    // skydome effect + texture (released before geometry for symmetry)
+    SAFE_RELEASE(m_pSkydomeEffect);
+    SAFE_RELEASE(m_pSkydomeTexture);
+    // skydome geometry (D3DPOOL_MANAGED — only released here, not on Reset)
+    SAFE_RELEASE(m_pSkydomeVB);
+    SAFE_RELEASE(m_pSkydomeIB);
+    SAFE_RELEASE(m_pSkydomeDecl);
+    // ground-lighting effect + decl + normal textures
+    SAFE_RELEASE(m_pGroundEffect);
+    SAFE_RELEASE(m_pGroundDecl);
+    SAFE_RELEASE(m_pGroundNormalTexture);
+    SAFE_RELEASE(m_pGroundFlatNormalTexture);
+    SAFE_RELEASE(m_pDeclaration);
+    SAFE_RELEASE(m_pDevice);
+    SAFE_RELEASE(m_pDirect3D);
 }

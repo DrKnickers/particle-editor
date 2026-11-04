@@ -44,10 +44,19 @@
 #include <cstring>
 
 static int g_failed = 0;
-#define CHECK(cond, msg) do {                              \
-    if (cond) { std::printf("  ok: %s\n", msg); }          \
-    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
 static std::uint32_t FloatBits(float value)
 {
@@ -71,7 +80,7 @@ ParticleSystemInstance* Engine::SpawnParticleSystem(const ParticleSystem&, Objec
         g_lastSpawnPos = parent->GetPosition();
         g_lastSpawnVel = parent->GetVelocity();
     }
-    return NULL;   // gate-refusal path: Tick's NULL-spawn hard-guard must disarm
+    return NULL; // gate-refusal path: Tick's NULL-spawn hard-guard must disarm
 }
 
 int Engine::ActiveSpawnerInstanceCount() const
@@ -86,14 +95,20 @@ int Engine::ActiveSpawnerInstanceCount() const
 // instead of failing at link time. If either goes virtual, replace this
 // with a real seam (interface or link-time stub object).
 alignas(Engine) static unsigned char g_engineStorage[sizeof(Engine)];
-static Engine* FakeEngine() { return reinterpret_cast<Engine*>(g_engineStorage); }
+static Engine* FakeEngine()
+{
+    return reinterpret_cast<Engine*>(g_engineStorage);
+}
 alignas(16) static unsigned char g_systemStorage[16];
 static const ParticleSystem* FakeSystem()
 {
     return reinterpret_cast<const ParticleSystem*>(g_systemStorage);
 }
 
-static bool feq(float a, float b) { return std::fabs(a - b) < 1e-6f; }
+static bool feq(float a, float b)
+{
+    return std::fabs(a - b) < 1e-6f;
+}
 
 int main()
 {
@@ -106,33 +121,34 @@ int main()
         c.spacingSec        = -1.0f;
         c.intervalSec       = 61.0f;
         c.maxLifetimeSec    = 601.0f;
-        c.position          = D3DXVECTOR3( 10001.0f, -10001.0f, 5.0f);
-        c.velocity          = D3DXVECTOR3(-20000.0f,  0.0f,     10000.0f);
-        c.jitterPosition    = D3DXVECTOR3( 99999.0f, -99999.0f, 0.0f);
-        c.acceleration      = D3DXVECTOR3( 10000.5f, -10000.5f, 1.0f);
-        c.squiggleAmplitude = D3DXVECTOR3( 12345.0f,  0.0f,    -12345.0f);
+        c.position          = D3DXVECTOR3(10001.0f, -10001.0f, 5.0f);
+        c.velocity          = D3DXVECTOR3(-20000.0f, 0.0f, 10000.0f);
+        c.jitterPosition    = D3DXVECTOR3(99999.0f, -99999.0f, 0.0f);
+        c.acceleration      = D3DXVECTOR3(10000.5f, -10000.5f, 1.0f);
+        c.squiggleAmplitude = D3DXVECTOR3(12345.0f, 0.0f, -12345.0f);
         c.squiggleFrequency = 20.5f;
-        c.targetPosition    = D3DXVECTOR3(-30000.0f,  7.0f,     30000.0f);
+        c.targetPosition    = D3DXVECTOR3(-30000.0f, 7.0f, 30000.0f);
         ClampSpawnerConfig(c);
 
         CHECK(c.burstSize == 1, "burstSize 0 clamps up to 1");
         CHECK(c.spacingSec == 0.0f, "negative spacing clamps to 0");
         CHECK(c.intervalSec == SpawnerDriver::MAX_INTERVAL_SEC, "interval 61 clamps to MAX_INTERVAL_SEC");
         CHECK(c.maxLifetimeSec == SpawnerDriver::MAX_LIFETIME_SEC, "lifetime 601 clamps to MAX_LIFETIME_SEC");
-        CHECK(c.position.x ==  SpawnerDriver::JITTER_MAX
-           && c.position.y == -SpawnerDriver::JITTER_MAX
-           && c.position.z == 5.0f, "position clamps per-axis to +/-JITTER_MAX");
-        CHECK(c.velocity.x == -SpawnerDriver::JITTER_MAX
-           && c.velocity.z ==  SpawnerDriver::JITTER_MAX, "velocity clamps per-axis; boundary value passes");
-        CHECK(c.jitterPosition.x == SpawnerDriver::JITTER_MAX
-           && c.jitterPosition.y == -SpawnerDriver::JITTER_MAX, "jitter clamps per-axis");
-        CHECK(c.acceleration.x == SpawnerDriver::JITTER_MAX
-           && c.acceleration.z == 1.0f, "acceleration clamps per-axis");
-        CHECK(c.squiggleAmplitude.x == SpawnerDriver::JITTER_MAX
-           && c.squiggleAmplitude.z == -SpawnerDriver::JITTER_MAX, "squiggle amplitude clamps per-axis");
+        CHECK(c.position.x == SpawnerDriver::JITTER_MAX && c.position.y == -SpawnerDriver::JITTER_MAX &&
+                  c.position.z == 5.0f,
+              "position clamps per-axis to +/-JITTER_MAX");
+        CHECK(c.velocity.x == -SpawnerDriver::JITTER_MAX && c.velocity.z == SpawnerDriver::JITTER_MAX,
+              "velocity clamps per-axis; boundary value passes");
+        CHECK(c.jitterPosition.x == SpawnerDriver::JITTER_MAX && c.jitterPosition.y == -SpawnerDriver::JITTER_MAX,
+              "jitter clamps per-axis");
+        CHECK(c.acceleration.x == SpawnerDriver::JITTER_MAX && c.acceleration.z == 1.0f,
+              "acceleration clamps per-axis");
+        CHECK(c.squiggleAmplitude.x == SpawnerDriver::JITTER_MAX && c.squiggleAmplitude.z == -SpawnerDriver::JITTER_MAX,
+              "squiggle amplitude clamps per-axis");
         CHECK(c.squiggleFrequency == SpawnerDriver::SQUIGGLE_FREQ_MAX, "squiggle frequency clamps to max");
-        CHECK(c.targetPosition.x == -SpawnerDriver::JITTER_MAX && c.targetPosition.y == 7.0f
-           && c.targetPosition.z == SpawnerDriver::JITTER_MAX, "projectile target clamps per-axis like position");
+        CHECK(c.targetPosition.x == -SpawnerDriver::JITTER_MAX && c.targetPosition.y == 7.0f &&
+                  c.targetPosition.z == SpawnerDriver::JITTER_MAX,
+              "projectile target clamps per-axis like position");
     }
     {
         SpawnerConfig c;
@@ -147,15 +163,17 @@ int main()
         CHECK(c.mode == SpawnerConfig::Mode::Auto, "out-of-range mode coerces to Auto");
     }
     {
-        SpawnerConfig c;   // in-range values must pass through untouched
-        c.mode = SpawnerConfig::Mode::Manual;
-        c.burstSize = 10; c.spacingSec = 10.0f; c.intervalSec = 60.0f;
-        c.maxLifetimeSec = 600.0f; c.squiggleFrequency = 20.0f;
+        SpawnerConfig c; // in-range values must pass through untouched
+        c.mode              = SpawnerConfig::Mode::Manual;
+        c.burstSize         = 10;
+        c.spacingSec        = 10.0f;
+        c.intervalSec       = 60.0f;
+        c.maxLifetimeSec    = 600.0f;
+        c.squiggleFrequency = 20.0f;
         ClampSpawnerConfig(c);
-        CHECK(c.mode == SpawnerConfig::Mode::Manual && c.burstSize == 10
-           && c.spacingSec == 10.0f && c.intervalSec == 60.0f
-           && c.maxLifetimeSec == 600.0f && c.squiggleFrequency == 20.0f,
-           "boundary values pass through unclamped");
+        CHECK(c.mode == SpawnerConfig::Mode::Manual && c.burstSize == 10 && c.spacingSec == 10.0f &&
+                  c.intervalSec == 60.0f && c.maxLifetimeSec == 600.0f && c.squiggleFrequency == 20.0f,
+              "boundary values pass through unclamped");
     }
 
     // ---- B: ComputeBurstsPerSec ---------------------------------------------
@@ -164,36 +182,44 @@ int main()
         c.mode = SpawnerConfig::Mode::Manual;
         CHECK(SpawnerDriver::ComputeBurstsPerSec(c) == 0.0f, "Manual mode -> 0 bursts/sec");
 
-        c.mode = SpawnerConfig::Mode::Auto;
-        c.burstSize = 1; c.spacingSec = 5.0f; c.intervalSec = 10.0f;
+        c.mode        = SpawnerConfig::Mode::Auto;
+        c.burstSize   = 1;
+        c.spacingSec  = 5.0f;
+        c.intervalSec = 10.0f;
         CHECK(feq(SpawnerDriver::ComputeBurstsPerSec(c), 0.1f),
               "burstSize 1: spacing ignored, cycle == interval (1/10)");
 
-        c.burstSize = 4; c.spacingSec = 2.0f; c.intervalSec = 10.0f;
+        c.burstSize   = 4;
+        c.spacingSec  = 2.0f;
+        c.intervalSec = 10.0f;
         CHECK(feq(SpawnerDriver::ComputeBurstsPerSec(c), 1.0f / 16.0f),
               "cycle = (burstSize-1)*spacing + interval = 16 -> 1/16");
 
-        c.burstSize = 1; c.spacingSec = 0.0f; c.intervalSec = 0.0f;
-        CHECK(feq(SpawnerDriver::ComputeBurstsPerSec(c), 10000.0f),
-              "zero cycle floors at 1e-4 -> 10000 bursts/sec");
+        c.burstSize   = 1;
+        c.spacingSec  = 0.0f;
+        c.intervalSec = 0.0f;
+        CHECK(feq(SpawnerDriver::ComputeBurstsPerSec(c), 10000.0f), "zero cycle floors at 1e-4 -> 10000 bursts/sec");
     }
 
     // ---- C: SetConfig clamps what it stores ---------------------------------
     {
         SpawnerDriver d;
         SpawnerConfig c;
-        c.burstSize = 99; c.intervalSec = 1000.0f;
+        c.burstSize   = 99;
+        c.intervalSec = 1000.0f;
         d.SetConfig(c);
-        CHECK(d.GetConfig().burstSize == SpawnerDriver::MAX_BURST_SIZE
-           && d.GetConfig().intervalSec == SpawnerDriver::MAX_INTERVAL_SEC,
-           "SetConfig stores the clamped config");
+        CHECK(d.GetConfig().burstSize == SpawnerDriver::MAX_BURST_SIZE &&
+                  d.GetConfig().intervalSec == SpawnerDriver::MAX_INTERVAL_SEC,
+              "SetConfig stores the clamped config");
     }
 
     // ---- D: NULL guards ------------------------------------------------------
     {
         SpawnerDriver d;
         SpawnerConfig c;
-        c.mode = SpawnerConfig::Mode::Auto; c.enabled = true; c.intervalSec = 0.0f;
+        c.mode        = SpawnerConfig::Mode::Auto;
+        c.enabled     = true;
+        c.intervalSec = 0.0f;
         d.SetConfig(c);
         int before = g_spawnCalls;
         d.Tick(0.5f, NULL, FakeEngine());
@@ -202,7 +228,8 @@ int main()
         CHECK(g_spawnCalls == before, "Tick with NULL system/engine never spawns");
 
         SpawnerDriver m;
-        SpawnerConfig mc; mc.mode = SpawnerConfig::Mode::Manual;
+        SpawnerConfig mc;
+        mc.mode = SpawnerConfig::Mode::Manual;
         m.SetConfig(mc);
         m.Trigger(NULL, FakeEngine());
         m.Trigger(FakeSystem(), NULL);
@@ -214,7 +241,9 @@ int main()
     {
         SpawnerDriver d;
         SpawnerConfig c;
-        c.mode = SpawnerConfig::Mode::Auto; c.enabled = false; c.intervalSec = 10.0f;
+        c.mode        = SpawnerConfig::Mode::Auto;
+        c.enabled     = false;
+        c.intervalSec = 10.0f;
         d.SetConfig(c);
         int before = g_spawnCalls;
         d.Trigger(FakeSystem(), FakeEngine());
@@ -227,10 +256,12 @@ int main()
         g_activeCount = 0;
         SpawnerDriver d;
         SpawnerConfig c;
-        c.mode = SpawnerConfig::Mode::Auto; c.enabled = true; c.intervalSec = 1.0f;
-        c.position = D3DXVECTOR3(4.0f, 8.0f, -16.0f);
-        c.velocity = D3DXVECTOR3(1.0f, 2.0f, 3.0f);
-        d.SetConfig(c);   // enable toggle schedules the first burst 1s out
+        c.mode        = SpawnerConfig::Mode::Auto;
+        c.enabled     = true;
+        c.intervalSec = 1.0f;
+        c.position    = D3DXVECTOR3(4.0f, 8.0f, -16.0f);
+        c.velocity    = D3DXVECTOR3(1.0f, 2.0f, 3.0f);
+        d.SetConfig(c); // enable toggle schedules the first burst 1s out
 
         int before = g_spawnCalls;
         d.Tick(0.5f, FakeSystem(), FakeEngine());
@@ -241,8 +272,7 @@ int main()
               "spawn anchor stamped with cfg.position (no jitter configured)");
         CHECK(g_lastSpawnVel.x == 1.0f && g_lastSpawnVel.y == 2.0f && g_lastSpawnVel.z == 3.0f,
               "spawn anchor stamped with cfg.velocity");
-        CHECK(d.GetConfig().enabled == false,
-              "NULL spawn (gate refusal) latches the hard-guard: driver disarmed");
+        CHECK(d.GetConfig().enabled == false, "NULL spawn (gate refusal) latches the hard-guard: driver disarmed");
         d.Tick(5.0f, FakeSystem(), FakeEngine());
         d.Tick(5.0f, FakeSystem(), FakeEngine());
         CHECK(g_spawnCalls == before + 1, "disarmed driver never spawns again");
@@ -253,26 +283,31 @@ int main()
     {
         SpawnerDriver d;
         SpawnerConfig c;
-        c.mode = SpawnerConfig::Mode::Auto; c.enabled = true; c.intervalSec = 1.0f;
+        c.mode        = SpawnerConfig::Mode::Auto;
+        c.enabled     = true;
+        c.intervalSec = 1.0f;
         d.SetConfig(c);
         d.Tick(0.9f, FakeSystem(), FakeEngine());
-        c.burstSize = 2;              // spinner tweak mid-countdown
+        c.burstSize = 2; // spinner tweak mid-countdown
         d.SetConfig(c);
         int before = g_spawnCalls;
         d.Tick(0.2f, FakeSystem(), FakeEngine());
-        CHECK(g_spawnCalls == before + 1,
-              "param tweak preserved the running countdown (0.9+0.2 crosses 1.0)");
+        CHECK(g_spawnCalls == before + 1, "param tweak preserved the running countdown (0.9+0.2 crosses 1.0)");
     }
 
     // ---- H: re-enabling reschedules a FULL interval (SetConfig) ------------
     {
         SpawnerDriver d;
         SpawnerConfig c;
-        c.mode = SpawnerConfig::Mode::Auto; c.enabled = true; c.intervalSec = 1.0f;
+        c.mode        = SpawnerConfig::Mode::Auto;
+        c.enabled     = true;
+        c.intervalSec = 1.0f;
         d.SetConfig(c);
         d.Tick(0.9f, FakeSystem(), FakeEngine());
-        c.enabled = false; d.SetConfig(c);           // pause with 0.1s left
-        c.enabled = true;  d.SetConfig(c);           // re-enable -> full interval again
+        c.enabled = false;
+        d.SetConfig(c); // pause with 0.1s left
+        c.enabled = true;
+        d.SetConfig(c); // re-enable -> full interval again
         int before = g_spawnCalls;
         d.Tick(0.9f, FakeSystem(), FakeEngine());
         CHECK(g_spawnCalls == before, "re-enable rescheduled a full interval (0.9 < 1.0)");
@@ -285,7 +320,7 @@ int main()
         g_activeCount = SpawnerDriver::MAX_ACTIVE_INSTANCES;
         SpawnerDriver d;
         SpawnerConfig c;
-        c.mode = SpawnerConfig::Mode::Manual;
+        c.mode           = SpawnerConfig::Mode::Manual;
         c.jitterPosition = D3DXVECTOR3(8.0f, 8.0f, 8.0f);
         d.SetConfig(c);
         int before = g_spawnCalls;
@@ -307,7 +342,9 @@ int main()
         g_activeCount = 0;
         SpawnerDriver d;
         SpawnerConfig c;
-        c.mode = SpawnerConfig::Mode::Auto; c.enabled = true; c.intervalSec = 1.0f;
+        c.mode        = SpawnerConfig::Mode::Auto;
+        c.enabled     = true;
+        c.intervalSec = 1.0f;
         d.SetConfig(c);
         int before = g_spawnCalls;
         d.Tick(0.75f, FakeSystem(), FakeEngine());
@@ -338,11 +375,13 @@ int main()
         g_activeCount = 0;
         SpawnerDriver d;
         SpawnerConfig c;
-        c.mode = SpawnerConfig::Mode::Auto; c.enabled = true; c.intervalSec = 1.0f;
+        c.mode        = SpawnerConfig::Mode::Auto;
+        c.enabled     = true;
+        c.intervalSec = 1.0f;
         d.SetConfig(c);
         int before = g_spawnCalls;
         for (int i = 0; i < 15; ++i) d.Tick(1000.0f, FakeSystem(), FakeEngine());
-        for (int i = 0; i < 15; ++i) d.Tick(-5.0f,   FakeSystem(), FakeEngine());
+        for (int i = 0; i < 15; ++i) d.Tick(-5.0f, FakeSystem(), FakeEngine());
         CHECK(g_spawnCalls == before, "30 insane-dt ticks == 0.5s simulated: no burst");
         for (int i = 0; i < 40; ++i) d.Tick(1000.0f, FakeSystem(), FakeEngine());
         CHECK(g_spawnCalls == before + 1, "70 invalid-dt ticks (~1.17s) fire exactly one burst");
@@ -354,21 +393,27 @@ int main()
         g_activeCount = 0;
         SpawnerDriver d;
         SpawnerConfig c;
-        c.mode = SpawnerConfig::Mode::Manual;
+        c.mode           = SpawnerConfig::Mode::Manual;
         c.position       = D3DXVECTOR3(100.0f, -50.0f, 0.0f);
         c.jitterPosition = D3DXVECTOR3(8.0f, 0.0f, 0.0f);
         d.SetConfig(c);
 
-        bool inBounds = true, yzExact = true, varied = false;
+        bool  inBounds = true, yzExact = true, varied = false;
         float firstX = 0.0f;
         for (int i = 0; i < 50; ++i)
         {
             int before = g_spawnCalls;
             d.Trigger(FakeSystem(), FakeEngine());
             d.Tick(0.016f, FakeSystem(), FakeEngine());
-            if (g_spawnCalls != before + 1) { inBounds = false; break; }
-            if (i == 0) firstX = g_lastSpawnPos.x;
-            else if (g_lastSpawnPos.x != firstX) varied = true;
+            if (g_spawnCalls != before + 1)
+            {
+                inBounds = false;
+                break;
+            }
+            if (i == 0)
+                firstX = g_lastSpawnPos.x;
+            else if (g_lastSpawnPos.x != firstX)
+                varied = true;
             if (std::fabs(g_lastSpawnPos.x - 100.0f) > 8.0f) inBounds = false;
             if (g_lastSpawnPos.y != -50.0f || g_lastSpawnPos.z != 0.0f) yzExact = false;
         }
@@ -400,14 +445,13 @@ int main()
         c.mode = SpawnerConfig::Mode::Manual;
         d.SetConfig(c);
         int before = g_spawnCalls;
-        d.Trigger(FakeSystem(), FakeEngine());   // arms burst 1
-        d.Trigger(FakeSystem(), FakeEngine());   // pre-Tick: queues burst 2
-        d.Tick(0.016f, FakeSystem(), FakeEngine());   // burst 1 cap-dropped
+        d.Trigger(FakeSystem(), FakeEngine());      // arms burst 1
+        d.Trigger(FakeSystem(), FakeEngine());      // pre-Tick: queues burst 2
+        d.Tick(0.016f, FakeSystem(), FakeEngine()); // burst 1 cap-dropped
         CHECK(g_spawnCalls == before, "at the cap: no spawn call for the dropped burst");
         g_activeCount = 0;
-        d.Tick(0.016f, FakeSystem(), FakeEngine());   // queued burst 2 fires
-        CHECK(g_spawnCalls == before + 1,
-              "a trigger queued before the burst began survives a cap-dropped burst");
+        d.Tick(0.016f, FakeSystem(), FakeEngine()); // queued burst 2 fires
+        CHECK(g_spawnCalls == before + 1, "a trigger queued before the burst began survives a cap-dropped burst");
     }
     {
         // L2: a gate refusal (NULL spawn) drops the queue along with the
@@ -419,9 +463,9 @@ int main()
         c.mode = SpawnerConfig::Mode::Manual;
         d.SetConfig(c);
         int before = g_spawnCalls;
-        d.Trigger(FakeSystem(), FakeEngine());   // arms burst 1
-        d.Trigger(FakeSystem(), FakeEngine());   // queues burst 2
-        d.Tick(0.016f, FakeSystem(), FakeEngine());   // burst 1: refused -> disarm
+        d.Trigger(FakeSystem(), FakeEngine());      // arms burst 1
+        d.Trigger(FakeSystem(), FakeEngine());      // queues burst 2
+        d.Tick(0.016f, FakeSystem(), FakeEngine()); // burst 1: refused -> disarm
         CHECK(g_spawnCalls == before + 1, "refused burst made exactly one spawn attempt");
         d.Tick(0.016f, FakeSystem(), FakeEngine());
         d.Tick(0.016f, FakeSystem(), FakeEngine());
@@ -436,10 +480,10 @@ int main()
         c.mode = SpawnerConfig::Mode::Manual;
         d.SetConfig(c);
         int before = g_spawnCalls;
-        d.Trigger(FakeSystem(), FakeEngine());   // arms burst 1
-        d.Trigger(NULL, FakeEngine());           // rejected: must not queue
-        d.Trigger(FakeSystem(), NULL);           // rejected: must not queue
-        d.Tick(0.016f, FakeSystem(), FakeEngine());   // burst 1 cap-dropped
+        d.Trigger(FakeSystem(), FakeEngine());      // arms burst 1
+        d.Trigger(NULL, FakeEngine());              // rejected: must not queue
+        d.Trigger(FakeSystem(), NULL);              // rejected: must not queue
+        d.Tick(0.016f, FakeSystem(), FakeEngine()); // burst 1 cap-dropped
         g_activeCount = 0;
         d.Tick(0.016f, FakeSystem(), FakeEngine());
         CHECK(g_spawnCalls == before, "NULL-guarded triggers left nothing queued");
@@ -454,8 +498,8 @@ int main()
         c.mode = SpawnerConfig::Mode::Manual;
         d.SetConfig(c);
         int before = g_spawnCalls;
-        d.Trigger(FakeSystem(), FakeEngine());   // arms burst 1
-        d.Trigger(FakeSystem(), FakeEngine());   // queues burst 2
+        d.Trigger(FakeSystem(), FakeEngine()); // arms burst 1
+        d.Trigger(FakeSystem(), FakeEngine()); // queues burst 2
         d.CancelPending();
         d.Tick(0.016f, FakeSystem(), FakeEngine());
         d.Tick(0.016f, FakeSystem(), FakeEngine());
@@ -470,17 +514,21 @@ int main()
     // not exercise a successfully spawned, begun-and-still-firing burst.
     {
         SpawnerConfig c;
-        c.mode = SpawnerConfig::Mode::Manual; c.enabled = true;
-        c.burstSize = 3; c.spacingSec = 0.25f; c.intervalSec = 2.0f;
-        c.position = D3DXVECTOR3(4, 8, -16);
-        c.velocity = D3DXVECTOR3(1, 2, 3);
-        c.maxLifetimeSec = 42.0f;
-        c.jitterPosition = D3DXVECTOR3(8, 0, 8);
-        c.acceleration = D3DXVECTOR3(0, 0, -3);
+        c.mode              = SpawnerConfig::Mode::Manual;
+        c.enabled           = true;
+        c.burstSize         = 3;
+        c.spacingSec        = 0.25f;
+        c.intervalSec       = 2.0f;
+        c.position          = D3DXVECTOR3(4, 8, -16);
+        c.velocity          = D3DXVECTOR3(1, 2, 3);
+        c.maxLifetimeSec    = 42.0f;
+        c.jitterPosition    = D3DXVECTOR3(8, 0, 8);
+        c.acceleration      = D3DXVECTOR3(0, 0, -3);
         c.squiggleAmplitude = D3DXVECTOR3(1, 2, 3);
         c.squiggleFrequency = 4.0f;
         SpawnerDriver reset, fresh;
-        reset.SetConfig(c); fresh.SetConfig(c);
+        reset.SetConfig(c);
+        fresh.SetConfig(c);
         reset.Trigger(FakeSystem(), FakeEngine());
         reset.Trigger(FakeSystem(), FakeEngine());
         const int beforeReset = g_spawnCalls;
@@ -489,22 +537,20 @@ int main()
         CHECK(g_spawnCalls == beforeReset && ParticleRandom::DrawCount() == 0,
               "Reset calls no engine spawn and draws no randomness");
         const SpawnerConfig& kept = reset.GetConfig();
-        CHECK(kept.mode == c.mode && kept.enabled == c.enabled &&
-              kept.burstSize == c.burstSize && kept.spacingSec == c.spacingSec &&
-              kept.intervalSec == c.intervalSec && kept.position == c.position &&
-              kept.velocity == c.velocity && kept.maxLifetimeSec == c.maxLifetimeSec &&
-              kept.jitterPosition == c.jitterPosition && kept.acceleration == c.acceleration &&
-              kept.squiggleAmplitude == c.squiggleAmplitude &&
-              kept.squiggleFrequency == c.squiggleFrequency,
+        CHECK(kept.mode == c.mode && kept.enabled == c.enabled && kept.burstSize == c.burstSize &&
+                  kept.spacingSec == c.spacingSec && kept.intervalSec == c.intervalSec && kept.position == c.position &&
+                  kept.velocity == c.velocity && kept.maxLifetimeSec == c.maxLifetimeSec &&
+                  kept.jitterPosition == c.jitterPosition && kept.acceleration == c.acceleration &&
+                  kept.squiggleAmplitude == c.squiggleAmplitude && kept.squiggleFrequency == c.squiggleFrequency,
               "Reset preserves every config field");
-        std::uint64_t drawCounts[2] = {};
-        std::uint32_t positions[2][3] = {};
-        SpawnerDriver* drivers[] = { &reset, &fresh };
+        std::uint64_t  drawCounts[2]   = {};
+        std::uint32_t  positions[2][3] = {};
+        SpawnerDriver* drivers[]       = {&reset, &fresh};
         for (int i = 0; i < 2; ++i)
         {
             ParticleRandom::Seed(ParticleRandom::kAutomationSeed);
             const int before = g_spawnCalls;
-            g_activeCount = SpawnerDriver::MAX_ACTIVE_INSTANCES;
+            g_activeCount    = SpawnerDriver::MAX_ACTIVE_INSTANCES;
             drivers[i]->Trigger(FakeSystem(), FakeEngine());
             drivers[i]->Tick(1.0f / 60.0f, FakeSystem(), FakeEngine());
             CHECK(g_spawnCalls == before && ParticleRandom::DrawCount() == 0,
@@ -516,7 +562,7 @@ int main()
             drivers[i]->Trigger(FakeSystem(), FakeEngine());
             drivers[i]->Tick(1.0f / 60.0f, FakeSystem(), FakeEngine());
             CHECK(g_spawnCalls == before + 1, "new trigger makes exactly one refused spawn attempt");
-            drawCounts[i] = ParticleRandom::DrawCount();
+            drawCounts[i]   = ParticleRandom::DrawCount();
             positions[i][0] = FloatBits(g_lastSpawnPos.x);
             positions[i][1] = FloatBits(g_lastSpawnPos.y);
             positions[i][2] = FloatBits(g_lastSpawnPos.z);
@@ -532,14 +578,15 @@ int main()
         ParticleRandom::Seed(ParticleRandom::kAutomationSeed);
         const D3DXVECTOR3 jitter = SpawnerRandom::Jitter(D3DXVECTOR3(8.0f, 8.0f, 8.0f));
         CHECK(FloatBits(jitter.x) == 0x40B5976Cu && FloatBits(jitter.y) == 0xC027C550u &&
-              FloatBits(jitter.z) == 0xBF9DC93Cu, "direct jitter pins z, y, x draw order");
+                  FloatBits(jitter.z) == 0xBF9DC93Cu,
+              "direct jitter pins z, y, x draw order");
         CHECK(ParticleRandom::DrawCount() == 3, "three positive jitter axes draw three times");
     }
     {
         ParticleRandom::Seed(ParticleRandom::kAutomationSeed);
         const D3DXVECTOR3 jitter = SpawnerRandom::Jitter(D3DXVECTOR3(8.0f, 0.0f, 0.0f));
-        CHECK(FloatBits(jitter.x) == 0xBF9DC93Cu && FloatBits(jitter.y) == 0 &&
-              FloatBits(jitter.z) == 0, "direct x-only jitter uses the first draw");
+        CHECK(FloatBits(jitter.x) == 0xBF9DC93Cu && FloatBits(jitter.y) == 0 && FloatBits(jitter.z) == 0,
+              "direct x-only jitter uses the first draw");
         CHECK(ParticleRandom::DrawCount() == 1, "zero jitter axes draw nothing");
     }
     {
@@ -560,28 +607,22 @@ int main()
         ParticleRandom::Seed(ParticleRandom::kAutomationSeed);
         const D3DXVECTOR3 phase = SpawnerRandom::SquigglePhase();
         CHECK(FloatBits(phase.x) == 0x40ABD77Fu && FloatBits(phase.y) == 0x40072DB3u &&
-              FloatBits(phase.z) == 0x402A14AAu, "direct phase pins z, y, x draw order");
+                  FloatBits(phase.z) == 0x402A14AAu,
+              "direct phase pins z, y, x draw order");
         CHECK(ParticleRandom::DrawCount() == 3, "phase draws exactly three times");
     }
     {
-        const D3DXVECTOR3 radii[] = {
-            D3DXVECTOR3(8.0f, 0.0f, 0.0f),
-            D3DXVECTOR3(8.0f, 8.0f, 8.0f),
-            D3DXVECTOR3(0.0f, 0.0f, 0.0f)
-        };
-        const std::uint32_t expected[][3] = {
-            { 0xBF9DC93Cu, 0, 0 },
-            { 0x40B5976Cu, 0xC027C550u, 0xBF9DC93Cu },
-            { 0, 0, 0 }
-        };
-        const std::uint64_t counts[] = { 1, 3, 0 };
+        const D3DXVECTOR3   radii[]       = {D3DXVECTOR3(8.0f, 0.0f, 0.0f), D3DXVECTOR3(8.0f, 8.0f, 8.0f),
+                                             D3DXVECTOR3(0.0f, 0.0f, 0.0f)};
+        const std::uint32_t expected[][3] = {{0xBF9DC93Cu, 0, 0}, {0x40B5976Cu, 0xC027C550u, 0xBF9DC93Cu}, {0, 0, 0}};
+        const std::uint64_t counts[]      = {1, 3, 0};
         for (int i = 0; i < 3; ++i)
         {
             g_activeCount = 0;
             SpawnerDriver d;
             SpawnerConfig c;
-            c.mode = SpawnerConfig::Mode::Manual;
-            c.jitterPosition = radii[i];
+            c.mode              = SpawnerConfig::Mode::Manual;
+            c.jitterPosition    = radii[i];
             c.squiggleAmplitude = D3DXVECTOR3(1.0f, 1.0f, 1.0f);
             d.SetConfig(c);
             ParticleRandom::Seed(ParticleRandom::kAutomationSeed);
@@ -589,30 +630,27 @@ int main()
             d.Trigger(FakeSystem(), FakeEngine());
             d.Tick(0.016f, FakeSystem(), FakeEngine());
             CHECK(g_spawnCalls == before + 1, "pinned NULL-spawn case attempts one spawn");
-            CHECK(FloatBits(g_lastSpawnPos.x) == expected[i][0] &&
-                  FloatBits(g_lastSpawnPos.y) == expected[i][1] &&
-                  FloatBits(g_lastSpawnPos.z) == expected[i][2],
+            CHECK(FloatBits(g_lastSpawnPos.x) == expected[i][0] && FloatBits(g_lastSpawnPos.y) == expected[i][1] &&
+                      FloatBits(g_lastSpawnPos.z) == expected[i][2],
                   "NULL spawn stamps the pinned jitter vector");
-            CHECK(ParticleRandom::DrawCount() == counts[i],
-                  "NULL spawn draws only jitter, never phase");
+            CHECK(ParticleRandom::DrawCount() == counts[i], "NULL spawn draws only jitter, never phase");
         }
     }
 
     {
         SpawnerDriver d;
         SpawnerConfig c;
-        c.mode = SpawnerConfig::Mode::Manual;
+        c.mode      = SpawnerConfig::Mode::Manual;
         c.burstSize = 1;
         d.SetConfig(c);
         d.Reset();
         CHECK(d.IsIdle(), "observation: Reset with no armed work is idle");
         d.Trigger(FakeSystem(), FakeEngine());
         CHECK(!d.IsIdle(), "observation: armed Manual burst is not idle");
-        g_activeCount = 0;
+        g_activeCount    = 0;
         const int before = g_spawnCalls;
         d.Tick(1.0f / 60.0f, FakeSystem(), FakeEngine());
-        CHECK(g_spawnCalls == before + 1 && d.IsIdle(),
-              "observation: refused Manual spawn leaves the driver idle");
+        CHECK(g_spawnCalls == before + 1 && d.IsIdle(), "observation: refused Manual spawn leaves the driver idle");
         d.Reset();
         CHECK(d.IsIdle(), "observation: Reset after a refusal remains idle");
     }

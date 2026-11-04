@@ -13,10 +13,19 @@
 using namespace resizeslack;
 
 static int g_failed = 0;
-#define CHECK(cond, msg) do {                              \
-    if (cond) { std::printf("  ok: %s\n", msg); }          \
-    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
 int main()
 {
@@ -41,12 +50,20 @@ int main()
     for (int w = 1265; w <= 1264 + 512; ++w)
     {
         const int next = Cover(w, popup);
-        if (next != popup) { ++resets; popup = next; }
+        if (next != popup)
+        {
+            ++resets;
+            popup = next;
+        }
     }
     for (int w = 1264 + 511; w >= 1264; --w)
     {
         const int next = Cover(w, popup);
-        if (next != popup) { ++resets; popup = next; }
+        if (next != popup)
+        {
+            ++resets;
+            popup = next;
+        }
     }
     CHECK(resets == 5, "a 512 px drag out and back from 1264 px resets 5 times instead of 1023");
 

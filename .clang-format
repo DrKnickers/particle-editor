@@ -1,0 +1,27 @@
+# C++ style for src/, tests/ and tools/: the code's existing Allman, 4-space, T* p shape.
+# Vendored code is excluded in .clang-format-ignore. Checked by scripts/cpp-format.test.mjs.
+BasedOnStyle: Microsoft
+IndentWidth: 4
+UseTab: Never
+ColumnLimit: 120
+LineEnding: DeriveLF
+BreakBeforeBraces: Allman
+PointerAlignment: Left
+# Windows and D3D headers depend on include order.
+SortIncludes: Never
+AccessModifierOffset: -4
+NamespaceIndentation: None
+IndentCaseLabels: true
+AlignConsecutiveAssignments: Consecutive
+AlignConsecutiveDeclarations: Consecutive
+AlignConsecutiveShortCaseStatements:
+  Enabled: true
+AlignTrailingComments: true
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortLambdasOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: true
+AllowShortBlocksOnASingleLine: Empty
+AllowShortCaseLabelsOnASingleLine: true
+# A parameter list too long for one line gets one parameter per line.
+BinPackParameters: OnePerLine

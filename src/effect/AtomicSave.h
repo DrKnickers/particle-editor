@@ -26,7 +26,9 @@ struct AtomicSaveOptions
 
 // Returns true once the destination holds the new contents. On failure returns
 // false, fills *err (UTF-8, may be null) with a reason, and removes the temp.
-bool AtomicWriteParticleSystem(const ParticleSystem& sys, const std::wstring& dest,
-                               const AtomicSaveOptions& options, std::string* err);
+bool AtomicWriteParticleSystem(const ParticleSystem&    sys,
+                               const std::wstring&      dest,
+                               const AtomicSaveOptions& options,
+                               std::string*             err);
 
 #endif // ATOMIC_SAVE_H

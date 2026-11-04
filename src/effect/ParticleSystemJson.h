@@ -29,7 +29,10 @@ namespace particle_json
 {
 using json = nlohmann::json;
 
-inline json Float(float value) { return json(static_cast<double>(value)); }
+inline json Float(float value)
+{
+    return json(static_cast<double>(value));
+}
 
 inline json Index(size_t value)
 {
@@ -40,13 +43,21 @@ inline json GroupJson(const ParticleSystem::Emitter::Group& g)
 {
     return {
         {"type", g.type},
-        {"minX", Float(g.minX)}, {"minY", Float(g.minY)}, {"minZ", Float(g.minZ)},
-        {"maxX", Float(g.maxX)}, {"maxY", Float(g.maxY)}, {"maxZ", Float(g.maxZ)},
+        {"minX", Float(g.minX)},
+        {"minY", Float(g.minY)},
+        {"minZ", Float(g.minZ)},
+        {"maxX", Float(g.maxX)},
+        {"maxY", Float(g.maxY)},
+        {"maxZ", Float(g.maxZ)},
         {"sideLength", Float(g.sideLength)},
-        {"sphereRadius", Float(g.sphereRadius)}, {"sphereEdge", g.sphereEdge},
-        {"cylinderRadius", Float(g.cylinderRadius)}, {"cylinderEdge", g.cylinderEdge},
+        {"sphereRadius", Float(g.sphereRadius)},
+        {"sphereEdge", g.sphereEdge},
+        {"cylinderRadius", Float(g.cylinderRadius)},
+        {"cylinderEdge", g.cylinderEdge},
         {"cylinderHeight", Float(g.cylinderHeight)},
-        {"valX", Float(g.valX)}, {"valY", Float(g.valY)}, {"valZ", Float(g.valZ)},
+        {"valX", Float(g.valX)},
+        {"valY", Float(g.valY)},
+        {"valZ", Float(g.valZ)},
     };
 }
 
@@ -56,10 +67,13 @@ inline json TrackJson(const ParticleSystem::Emitter& e, int i)
 {
     int source = i;
     for (int j = 0; j < ParticleSystem::NUM_TRACKS; j++)
-        if (e.tracks[i] == &e.trackContents[j]) { source = j; break; }
+        if (e.tracks[i] == &e.trackContents[j])
+        {
+            source = j;
+            break;
+        }
     json keys = json::array();
-    for (const auto& key : e.tracks[i]->keys)
-        keys.push_back(json::array({Float(key.time), Float(key.value)}));
+    for (const auto& key : e.tracks[i]->keys) keys.push_back(json::array({Float(key.time), Float(key.value)}));
     return {
         {"source", source},
         {"explicitUnlock", (e.explicitUnlockMask() & (1ul << i)) != 0},
@@ -115,8 +129,8 @@ inline json EmitterJson(const ParticleSystem::Emitter& e, json parent)
         {"weatherCubeDistance", Float(e.weatherCubeDistance)},
         {"randomRotationAverage", Float(e.randomRotationAverage)},
         {"randomRotationVariance", Float(e.randomRotationVariance)},
-        {"randomColors", json::array({Float(e.randomColors[0]), Float(e.randomColors[1]),
-                                      Float(e.randomColors[2]), Float(e.randomColors[3])})},
+        {"randomColors", json::array({Float(e.randomColors[0]), Float(e.randomColors[1]), Float(e.randomColors[2]),
+                                      Float(e.randomColors[3])})},
         {"bounciness", Float(e.bounciness)},
         {"freezeTime", Float(e.freezeTime)},
         {"skipTime", Float(e.skipTime)},
@@ -141,28 +155,47 @@ inline json EmitterJson(const ParticleSystem::Emitter& e, json parent)
 
 // Every LinkExemptFlags member, by name. persisted-members.test.mjs keeps this
 // in step with LinkGroup.h through persisted-members.json.
-struct ExemptMember { const char* name; bool LinkExemptFlags::* member; };
+struct ExemptMember
+{
+    const char* name;
+    bool LinkExemptFlags::* member;
+};
 inline const ExemptMember* ExemptMembers(size_t* count)
 {
     static const ExemptMember members[] = {
-        {"colorTexture", &LinkExemptFlags::colorTexture}, {"normalTexture", &LinkExemptFlags::normalTexture},
-        {"name", &LinkExemptFlags::name}, {"trackIndex", &LinkExemptFlags::trackIndex},
-        {"trackRed", &LinkExemptFlags::trackRed}, {"trackGreen", &LinkExemptFlags::trackGreen},
-        {"trackBlue", &LinkExemptFlags::trackBlue}, {"trackAlpha", &LinkExemptFlags::trackAlpha},
-        {"trackScale", &LinkExemptFlags::trackScale}, {"trackRotationSpeed", &LinkExemptFlags::trackRotationSpeed},
-        {"lifetime", &LinkExemptFlags::lifetime}, {"initialDelay", &LinkExemptFlags::initialDelay},
-        {"burstDelay", &LinkExemptFlags::burstDelay}, {"nBursts", &LinkExemptFlags::nBursts},
+        {"colorTexture", &LinkExemptFlags::colorTexture},
+        {"normalTexture", &LinkExemptFlags::normalTexture},
+        {"name", &LinkExemptFlags::name},
+        {"trackIndex", &LinkExemptFlags::trackIndex},
+        {"trackRed", &LinkExemptFlags::trackRed},
+        {"trackGreen", &LinkExemptFlags::trackGreen},
+        {"trackBlue", &LinkExemptFlags::trackBlue},
+        {"trackAlpha", &LinkExemptFlags::trackAlpha},
+        {"trackScale", &LinkExemptFlags::trackScale},
+        {"trackRotationSpeed", &LinkExemptFlags::trackRotationSpeed},
+        {"lifetime", &LinkExemptFlags::lifetime},
+        {"initialDelay", &LinkExemptFlags::initialDelay},
+        {"burstDelay", &LinkExemptFlags::burstDelay},
+        {"nBursts", &LinkExemptFlags::nBursts},
         {"nParticlesPerBurst", &LinkExemptFlags::nParticlesPerBurst},
-        {"nParticlesPerSecond", &LinkExemptFlags::nParticlesPerSecond}, {"useBursts", &LinkExemptFlags::useBursts},
-        {"gravity", &LinkExemptFlags::gravity}, {"acceleration", &LinkExemptFlags::acceleration},
-        {"inwardSpeed", &LinkExemptFlags::inwardSpeed}, {"inwardAcceleration", &LinkExemptFlags::inwardAcceleration},
-        {"bounciness", &LinkExemptFlags::bounciness}, {"groundBehavior", &LinkExemptFlags::groundBehavior},
+        {"nParticlesPerSecond", &LinkExemptFlags::nParticlesPerSecond},
+        {"useBursts", &LinkExemptFlags::useBursts},
+        {"gravity", &LinkExemptFlags::gravity},
+        {"acceleration", &LinkExemptFlags::acceleration},
+        {"inwardSpeed", &LinkExemptFlags::inwardSpeed},
+        {"inwardAcceleration", &LinkExemptFlags::inwardAcceleration},
+        {"bounciness", &LinkExemptFlags::bounciness},
+        {"groundBehavior", &LinkExemptFlags::groundBehavior},
         {"objectSpaceAcceleration", &LinkExemptFlags::objectSpaceAcceleration},
         {"affectedByWind", &LinkExemptFlags::affectedByWind},
-        {"blendMode", &LinkExemptFlags::blendMode}, {"textureSize", &LinkExemptFlags::textureSize},
-        {"nTriangles", &LinkExemptFlags::nTriangles}, {"randomScalePerc", &LinkExemptFlags::randomScalePerc},
-        {"randomLifetimePerc", &LinkExemptFlags::randomLifetimePerc}, {"hasTail", &LinkExemptFlags::hasTail},
-        {"tailSize", &LinkExemptFlags::tailSize}, {"noDepthTest", &LinkExemptFlags::noDepthTest},
+        {"blendMode", &LinkExemptFlags::blendMode},
+        {"textureSize", &LinkExemptFlags::textureSize},
+        {"nTriangles", &LinkExemptFlags::nTriangles},
+        {"randomScalePerc", &LinkExemptFlags::randomScalePerc},
+        {"randomLifetimePerc", &LinkExemptFlags::randomLifetimePerc},
+        {"hasTail", &LinkExemptFlags::hasTail},
+        {"tailSize", &LinkExemptFlags::tailSize},
+        {"noDepthTest", &LinkExemptFlags::noDepthTest},
         {"randomColors", &LinkExemptFlags::randomColors},
         {"isWeatherParticle", &LinkExemptFlags::isWeatherParticle},
         {"weatherCubeSize", &LinkExemptFlags::weatherCubeSize},
@@ -175,14 +208,21 @@ inline const ExemptMember* ExemptMembers(size_t* count)
         {"linkToSystem", &LinkExemptFlags::linkToSystem},
         {"parentLinkStrength", &LinkExemptFlags::parentLinkStrength},
         {"doColorAddGrayscale", &LinkExemptFlags::doColorAddGrayscale},
-        {"isHeatParticle", &LinkExemptFlags::isHeatParticle}, {"isWorldOriented", &LinkExemptFlags::isWorldOriented},
-        {"freezeTime", &LinkExemptFlags::freezeTime}, {"skipTime", &LinkExemptFlags::skipTime},
-        {"emitFromMesh", &LinkExemptFlags::emitFromMesh}, {"emitFromMeshOffset", &LinkExemptFlags::emitFromMeshOffset},
-        {"groupSpeed", &LinkExemptFlags::groupSpeed}, {"groupLifetime", &LinkExemptFlags::groupLifetime},
+        {"isHeatParticle", &LinkExemptFlags::isHeatParticle},
+        {"isWorldOriented", &LinkExemptFlags::isWorldOriented},
+        {"freezeTime", &LinkExemptFlags::freezeTime},
+        {"skipTime", &LinkExemptFlags::skipTime},
+        {"emitFromMesh", &LinkExemptFlags::emitFromMesh},
+        {"emitFromMeshOffset", &LinkExemptFlags::emitFromMeshOffset},
+        {"groupSpeed", &LinkExemptFlags::groupSpeed},
+        {"groupLifetime", &LinkExemptFlags::groupLifetime},
         {"groupPosition", &LinkExemptFlags::groupPosition},
-        {"unknown06", &LinkExemptFlags::unknown06}, {"unknown11", &LinkExemptFlags::unknown11},
-        {"unknown15", &LinkExemptFlags::unknown15}, {"unknown2b", &LinkExemptFlags::unknown2b},
-        {"unknown3f", &LinkExemptFlags::unknown3f}, {"unknown44", &LinkExemptFlags::unknown44},
+        {"unknown06", &LinkExemptFlags::unknown06},
+        {"unknown11", &LinkExemptFlags::unknown11},
+        {"unknown15", &LinkExemptFlags::unknown15},
+        {"unknown2b", &LinkExemptFlags::unknown2b},
+        {"unknown3f", &LinkExemptFlags::unknown3f},
+        {"unknown44", &LinkExemptFlags::unknown44},
         {"unknown49", &LinkExemptFlags::unknown49},
     };
     *count = sizeof(members) / sizeof(members[0]);
@@ -192,15 +232,17 @@ inline const ExemptMember* ExemptMembers(size_t* count)
 inline json ParticleSystemJson(const ParticleSystem& system)
 {
     json exempts = json::array();
-    system.forEachLinkExempt([&](uint32_t group, const LinkExemptFlags& flags) {
-        size_t count = 0;
-        const ExemptMember* members = ExemptMembers(&count);
-        json named = json::object();
-        for (size_t i = 0; i < count; i++) named[members[i].name] = flags.*(members[i].member);
-        exempts.push_back({{"linkGroup", group}, {"flags", named}});
-    });
-    json emitters = json::array();
-    const std::vector<ParticleSystem::Emitter*>& list = system.getEmitters();
+    system.forEachLinkExempt(
+        [&](uint32_t group, const LinkExemptFlags& flags)
+        {
+            size_t              count   = 0;
+            const ExemptMember* members = ExemptMembers(&count);
+            json                named   = json::object();
+            for (size_t i = 0; i < count; i++) named[members[i].name] = flags.*(members[i].member);
+            exempts.push_back({{"linkGroup", group}, {"flags", named}});
+        });
+    json                                         emitters = json::array();
+    const std::vector<ParticleSystem::Emitter*>& list     = system.getEmitters();
     for (const ParticleSystem::Emitter* e : list)
     {
         json parent = nullptr;
@@ -222,18 +264,20 @@ using ::IsValidUtf8;
 
 // The first string that is not valid UTF-8 or float that is not finite, as a
 // path such as `emitters[2].groups[0].maxY`. Returns false when there is none.
-inline bool FindInvalidInspectValue(const json& value, std::string* path, std::string* reason,
+inline bool FindInvalidInspectValue(const json&        value,
+                                    std::string*       path,
+                                    std::string*       reason,
                                     const std::string& at = "")
 {
     if (value.is_number_float() && !std::isfinite(value.get<double>()))
     {
-        *path = at;
+        *path   = at;
         *reason = "is not a finite number";
         return true;
     }
     if (value.is_string() && !IsValidUtf8(value.get_ref<const std::string&>()))
     {
-        *path = at;
+        *path   = at;
         *reason = "is not valid UTF-8";
         return true;
     }

@@ -8,27 +8,27 @@
 class IFile : public RefCounted
 {
 public:
-	virtual bool          eof() = 0;
-	virtual unsigned long size() = 0;
-	virtual void          seek(unsigned long offset) = 0;
-	virtual unsigned long tell() = 0;
-	virtual unsigned long read(void* buffer, unsigned long size) = 0;
-	virtual unsigned long write(const void* buffer, unsigned long size) = 0;
+    virtual bool          eof()                                         = 0;
+    virtual unsigned long size()                                        = 0;
+    virtual void          seek(unsigned long offset)                    = 0;
+    virtual unsigned long tell()                                        = 0;
+    virtual unsigned long read(void* buffer, unsigned long size)        = 0;
+    virtual unsigned long write(const void* buffer, unsigned long size) = 0;
 };
 
 class MemoryFile : public IFile
 {
     char*         m_data;
     unsigned long m_size;
-	unsigned long m_position;
+    unsigned long m_position;
 
 public:
-	bool          eof()                      { return m_position == m_size; }
-	unsigned long size()                     { return m_size; }
-	unsigned long tell()                     { return m_position; }
-	void          seek(unsigned long offset) { m_position = min(offset, m_size); }
-	unsigned long read(void* buffer, unsigned long size);
-	unsigned long write(const void* buffer, unsigned long size);
+    bool          eof() { return m_position == m_size; }
+    unsigned long size() { return m_size; }
+    unsigned long tell() { return m_position; }
+    void          seek(unsigned long offset) { m_position = min(offset, m_size); }
+    unsigned long read(void* buffer, unsigned long size);
+    unsigned long write(const void* buffer, unsigned long size);
 
     MemoryFile();
     ~MemoryFile();
@@ -37,49 +37,51 @@ public:
 class PhysicalFile : public IFile
 {
 private:
-	HANDLE        hFile;
-	unsigned long m_position;
-	unsigned long m_size;
+    HANDLE        hFile;
+    unsigned long m_position;
+    unsigned long m_size;
 
-	~PhysicalFile();
+    ~PhysicalFile();
+
 public:
-	enum Mode
-	{
-		WRITE,
-		READ,
-	};
+    enum Mode
+    {
+        WRITE,
+        READ,
+    };
 
-	bool          eof()                      { return m_position == m_size; }
-	unsigned long size()                     { return m_size; }
-	unsigned long tell()                     { return m_position; }
-	void          seek(unsigned long offset) { m_position = min(offset, m_size); }
-	unsigned long read(void* buffer, unsigned long size);
-	unsigned long write(const void* buffer, unsigned long size);
-	// Flush written data to the device (FlushFileBuffers). Throws
-	// WriteException on failure. Needs a handle opened in WRITE mode.
-	void          Flush();
+    bool          eof() { return m_position == m_size; }
+    unsigned long size() { return m_size; }
+    unsigned long tell() { return m_position; }
+    void          seek(unsigned long offset) { m_position = min(offset, m_size); }
+    unsigned long read(void* buffer, unsigned long size);
+    unsigned long write(const void* buffer, unsigned long size);
+    // Flush written data to the device (FlushFileBuffers). Throws
+    // WriteException on failure. Needs a handle opened in WRITE mode.
+    void Flush();
 
-	PhysicalFile(const std::wstring& name, Mode mode = READ);
+    PhysicalFile(const std::wstring& name, Mode mode = READ);
 };
 
 class SubFile : public IFile
 {
 private:
-	IFile*        m_file;
-	unsigned long m_start;
-	unsigned long m_position;
-	unsigned long m_size;
+    IFile*        m_file;
+    unsigned long m_start;
+    unsigned long m_position;
+    unsigned long m_size;
 
-	~SubFile();
+    ~SubFile();
+
 public:
-	bool          eof()                      { return m_position == m_size; }
-	unsigned long size()                     { return m_size; }
-	unsigned long tell()                     { return m_position; }
-	void          seek(unsigned long offset) { m_position = min(offset, m_size); }
-	unsigned long read(void* buffer, unsigned long size);
-	unsigned long write(const void* buffer, unsigned long size);
+    bool          eof() { return m_position == m_size; }
+    unsigned long size() { return m_size; }
+    unsigned long tell() { return m_position; }
+    void          seek(unsigned long offset) { m_position = min(offset, m_size); }
+    unsigned long read(void* buffer, unsigned long size);
+    unsigned long write(const void* buffer, unsigned long size);
 
-	SubFile(IFile* file, unsigned long start, unsigned long size);
+    SubFile(IFile* file, unsigned long start, unsigned long size);
 };
 
 // UNCAPPED whole-file read: read every byte of `file` into a fresh buffer,

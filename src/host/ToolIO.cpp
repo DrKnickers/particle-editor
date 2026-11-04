@@ -21,11 +21,12 @@ static const unsigned long long kMaxSourceBytes = 512ull * 1024 * 1024;
 std::string Sha256Hex(const std::string& bytes)
 {
     HCRYPTPROV provider = 0;
-    HCRYPTHASH hash = 0;
+    HCRYPTHASH hash     = 0;
     if (!CryptAcquireContextW(&provider, nullptr, nullptr, PROV_RSA_AES, CRYPT_VERIFYCONTEXT)) return "";
-    BYTE digest[32] = {};
-    DWORD size = sizeof(digest);
-    const bool ok = CryptCreateHash(provider, CALG_SHA_256, 0, 0, &hash) &&
+    BYTE       digest[32] = {};
+    DWORD      size       = sizeof(digest);
+    const bool ok =
+        CryptCreateHash(provider, CALG_SHA_256, 0, 0, &hash) &&
         CryptHashData(hash, reinterpret_cast<const BYTE*>(bytes.data()), static_cast<DWORD>(bytes.size()), 0) &&
         CryptGetHashParam(hash, HP_HASHVAL, digest, &size, 0) && size == sizeof(digest);
     if (hash) CryptDestroyHash(hash);
@@ -33,7 +34,11 @@ std::string Sha256Hex(const std::string& bytes)
     if (!ok) return "";
     const char* hex = "0123456789abcdef";
     std::string result;
-    for (BYTE byte : digest) { result += hex[byte >> 4]; result += hex[byte & 15]; }
+    for (BYTE byte : digest)
+    {
+        result += hex[byte >> 4];
+        result += hex[byte & 15];
+    }
     return result;
 }
 
@@ -42,15 +47,16 @@ std::string Sha256Hex(const std::string& bytes)
 // name), so case, relative, 8.3, `\\?\` and trailing-dot spellings agree.
 static std::wstring CanonicalPath(const std::wstring& path)
 {
-    wchar_t full[MAX_PATH * 4];
-    DWORD n = GetFullPathNameW(path.c_str(), static_cast<DWORD>(std::size(full)), full, nullptr);
-    std::wstring result = (n > 0 && n < std::size(full)) ? std::wstring(full, n) : path;
-    auto finalPath = [](const std::wstring& p, std::wstring* out) {
+    wchar_t      full[MAX_PATH * 4];
+    DWORD        n         = GetFullPathNameW(path.c_str(), static_cast<DWORD>(std::size(full)), full, nullptr);
+    std::wstring result    = (n > 0 && n < std::size(full)) ? std::wstring(full, n) : path;
+    auto         finalPath = [](const std::wstring& p, std::wstring* out)
+    {
         HANDLE h = CreateFileW(p.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
                                OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
         if (h == INVALID_HANDLE_VALUE) return false;
         wchar_t buffer[MAX_PATH * 4];
-        DWORD len = GetFinalPathNameByHandleW(h, buffer, static_cast<DWORD>(std::size(buffer)), FILE_NAME_NORMALIZED);
+        DWORD   len = GetFinalPathNameByHandleW(h, buffer, static_cast<DWORD>(std::size(buffer)), FILE_NAME_NORMALIZED);
         CloseHandle(h);
         if (len == 0 || len >= std::size(buffer)) return false;
         *out = std::wstring(buffer, len);
@@ -66,7 +72,8 @@ static std::wstring CanonicalPath(const std::wstring& path)
 
 static bool SameFileIdentity(const std::wstring& a, const std::wstring& b)
 {
-    auto identity = [](const std::wstring& p, BY_HANDLE_FILE_INFORMATION* info) {
+    auto identity = [](const std::wstring& p, BY_HANDLE_FILE_INFORMATION* info)
+    {
         HANDLE h = CreateFileW(p.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
                                OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
         if (h == INVALID_HANDLE_VALUE) return false;
@@ -85,14 +92,16 @@ static bool SameFileIdentity(const std::wstring& a, const std::wstring& b)
 bool SameFile(const std::wstring& a, const std::wstring& b)
 {
     const std::wstring ca = CanonicalPath(a), cb = CanonicalPath(b);
-    if (CompareStringOrdinal(ca.c_str(), static_cast<int>(ca.size()), cb.c_str(), static_cast<int>(cb.size()), TRUE) == CSTR_EQUAL)
+    if (CompareStringOrdinal(ca.c_str(), static_cast<int>(ca.size()), cb.c_str(), static_cast<int>(cb.size()), TRUE) ==
+        CSTR_EQUAL)
         return true;
     return SameFileIdentity(a, b);
 }
 
 bool ReadFileBytes(const std::wstring& path, std::string* bytes, std::string* error)
 {
-    HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL,
+                           nullptr);
     if (h == INVALID_HANDLE_VALUE)
     {
         *error = "cannot open the file (error " + std::to_string(GetLastError()) + ")";
@@ -109,9 +118,9 @@ bool ReadFileBytes(const std::wstring& path, std::string* bytes, std::string* er
     size_t done = 0;
     while (done < bytes->size())
     {
-        DWORD got = 0;
+        DWORD        got  = 0;
         const size_t left = bytes->size() - done;
-        const DWORD want = static_cast<DWORD>(left < (1u << 24) ? left : (1u << 24));
+        const DWORD  want = static_cast<DWORD>(left < (1u << 24) ? left : (1u << 24));
         if (!ReadFile(h, &(*bytes)[done], want, &got, nullptr) || got == 0)
         {
             *error = "the read failed (error " + std::to_string(GetLastError()) + ")";
@@ -135,9 +144,17 @@ std::unique_ptr<ParticleSystem> ParseSource(const std::string& bytes, std::strin
         file.seek(0);
         return std::make_unique<ParticleSystem>(&file);
     }
-    catch (wexception& e) { *error = WideToUtf8(e.wwhat()); }
-    catch (const std::exception& e) { *error = e.what(); }
-    catch (...) {}
+    catch (wexception& e)
+    {
+        *error = WideToUtf8(e.wwhat());
+    }
+    catch (const std::exception& e)
+    {
+        *error = e.what();
+    }
+    catch (...)
+    {
+    }
     if (error->empty()) *error = "the file is not a particle system";
     return nullptr;
 }
@@ -150,8 +167,8 @@ bool WriteFileAtomically(const std::wstring& path, const std::string& bytes)
     HANDLE h = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (h == INVALID_HANDLE_VALUE) return false;
     DWORD written = 0;
-    bool ok = WriteFile(h, bytes.data(), static_cast<DWORD>(bytes.size()), &written, nullptr) &&
-              written == bytes.size() && FlushFileBuffers(h);
+    bool  ok      = WriteFile(h, bytes.data(), static_cast<DWORD>(bytes.size()), &written, nullptr) &&
+                    written == bytes.size() && FlushFileBuffers(h);
     CloseHandle(h);
     ok = ok && MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
     if (!ok) DeleteFileW(temp.c_str());

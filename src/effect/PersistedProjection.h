@@ -43,8 +43,14 @@ namespace projection_detail
 {
 using json = nlohmann::json;
 
-inline float F(const json& v) { return static_cast<float>(v.get<double>()); }
-inline json J(float v) { return json(static_cast<double>(v)); }
+inline float F(const json& v)
+{
+    return static_cast<float>(v.get<double>());
+}
+inline json J(float v)
+{
+    return json(static_cast<double>(v));
+}
 
 inline int ClampInterpolation(long long raw)
 {
@@ -60,22 +66,26 @@ inline bool ColourEndpoint(float v, float* out)
     return true;
 }
 
-typedef std::vector<std::pair<float, float>> Keys;   // (time, value)
+typedef std::vector<std::pair<float, float>> Keys; // (time, value)
 
 // The reloaded keys of track `i`, or false with a reason.
 inline bool ProjectTrackKeys(const json& emitter, int i, Keys* out, std::string* reason)
 {
     const json& keys = emitter["tracks"][i]["keys"];
-    if (keys.size() < 2) { *reason = "a track has fewer than two keys"; return false; }
-    const bool colour = i < 4;
+    if (keys.size() < 2)
+    {
+        *reason = "a track has fewer than two keys";
+        return false;
+    }
+    const bool colour   = i < 4;
     const bool rotation = i == 6 && emitter["randomRotation"].get<bool>();
     out->clear();
     float first = F(keys.front()[1]);
-    float last = F(keys.back()[1]);
+    float last  = F(keys.back()[1]);
     if (rotation)
     {
         first = F(emitter["randomRotationAverage"]);
-        last = 0.0f;
+        last  = 0.0f;
     }
     if (colour && !(ColourEndpoint(first, &first) && ColourEndpoint(last, &last)))
     {
@@ -87,8 +97,8 @@ inline bool ProjectTrackKeys(const json& emitter, int i, Keys* out, std::string*
     {
         for (size_t k = 1; k + 1 < keys.size(); k++)
         {
-            float value = F(keys[k][1]);
-            const float time = (F(keys[k][0]) / 100.0f) * 100.0f;
+            float       value = F(keys[k][1]);
+            const float time  = (F(keys[k][0]) / 100.0f) * 100.0f;
             if (colour)
             {
                 const float scaled = value * 255;
@@ -98,8 +108,12 @@ inline bool ProjectTrackKeys(const json& emitter, int i, Keys* out, std::string*
                     return false;
                 }
                 const uint32_t stored = static_cast<uint32_t>(static_cast<unsigned long>(scaled));
-                value = stored / 255.0f;
-                if (!(value <= 1.0f)) { *reason = "a colour key above 1 makes the file unloadable"; return false; }
+                value                 = stored / 255.0f;
+                if (!(value <= 1.0f))
+                {
+                    *reason = "a colour key above 1 makes the file unloadable";
+                    return false;
+                }
             }
             if (!(time <= 100.0f && time >= out->back().first))
             {
@@ -122,17 +136,17 @@ inline json KeysJson(const Keys& keys)
 
 inline bool ProjectEmitter(const json& in, size_t position, json* out, std::string* reason)
 {
-    json e = in;
+    json e     = in;
     e["index"] = static_cast<uint64_t>(position);
 
     const uint64_t nTriangles = in["nTriangles"].get<uint64_t>();
-    e["nTriangles"] = nTriangles < 1 ? 1 : nTriangles;
+    e["nTriangles"]           = nTriangles < 1 ? 1 : nTriangles;
     if (in["nBursts"].get<uint64_t>() == 0xFFFFFFFFull) e["nBursts"] = 0;
     e["blendMode"] = in["blendMode"].get<uint64_t>() % 14;
     // The loader clamps with the Windows min/max macros, whose argument order
     // keeps -0.0 (a std::max would return +0.0).
-    const float variance = F(in["randomRotationVariance"]);
-    const float below = (1.0f < variance) ? 1.0f : variance;
+    const float variance        = F(in["randomRotationVariance"]);
+    const float below           = (1.0f < variance) ? 1.0f : variance;
     e["randomRotationVariance"] = J((0.0f > below) ? 0.0f : below);
     // An empty normal texture is not saved and reloads as the default.
     if (in["normalTexture"].get<std::string>().empty()) e["normalTexture"] = "p_particle_depth_master.tga";
@@ -143,19 +157,23 @@ inline bool ProjectEmitter(const json& in, size_t position, json* out, std::stri
     // The saved lifetime group's type is always 1, so only the speed and
     // position groups can carry an unloadable type.
     for (int g : {0, 2})
-        if (in["groups"][g]["type"].get<uint64_t>() >= 5) { *reason = "a group type of 5 or more makes the file unloadable"; return false; }
-    json& life = e["groups"][1];
+        if (in["groups"][g]["type"].get<uint64_t>() >= 5)
+        {
+            *reason = "a group type of 5 or more makes the file unloadable";
+            return false;
+        }
+    json&       life     = e["groups"][1];
     const float lifetime = F(in["lifetime"]);
-    life["type"] = 1;
-    life["minX"] = J(0.0f);
-    life["maxX"] = J(0.0f);
-    life["minY"] = J(lifetime * (1 - F(in["randomLifetimePerc"])));
-    life["maxY"] = J(lifetime);
-    life["minZ"] = J(0.0f);
-    life["maxZ"] = J(0.0f);
+    life["type"]         = 1;
+    life["minX"]         = J(0.0f);
+    life["maxX"]         = J(0.0f);
+    life["minY"]         = J(lifetime * (1 - F(in["randomLifetimePerc"])));
+    life["maxY"]         = J(lifetime);
+    life["minZ"]         = J(0.0f);
+    life["maxZ"]         = J(0.0f);
 
     Keys keys[7];
-    int interpolation[7];
+    int  interpolation[7];
     for (int i = 0; i < 7; i++)
     {
         if (!ProjectTrackKeys(in, i, &keys[i], reason)) return false;
@@ -166,18 +184,17 @@ inline bool ProjectEmitter(const json& in, size_t position, json* out, std::stri
     int source[4] = {0, 1, 2, 3};
     for (int i = 0; i < 4; i++)
         for (int j = i + 1; j < 4; j++)
-            if (source[i] == i && interpolation[i] == interpolation[j] && keys[i] == keys[j])
-                source[j] = source[i];
+            if (source[i] == i && interpolation[i] == interpolation[j] && keys[i] == keys[j]) source[j] = source[i];
     for (int j = 1; j < 4; j++)
         if (in["tracks"][j]["explicitUnlock"].get<bool>()) source[j] = j;
 
     for (int i = 0; i < 7; i++)
     {
-        const int s = i < 4 ? source[i] : i;
-        json& track = e["tracks"][i];
-        track["source"] = s;
+        const int s            = i < 4 ? source[i] : i;
+        json&     track        = e["tracks"][i];
+        track["source"]        = s;
         track["interpolation"] = interpolation[s];
-        track["keys"] = KeysJson(keys[s]);
+        track["keys"]          = KeysJson(keys[s]);
         bool unlockedIdentical = false;
         if (i >= 1 && i < 4 && s == i)
             for (int k = 0; k < i; k++)
@@ -194,7 +211,7 @@ inline bool ProjectEmitter(const json& in, size_t position, json* out, std::stri
 // the document's save would not load back.
 inline bool ProjectPersisted(const nlohmann::json& in, nlohmann::json* out, std::string* reason)
 {
-    nlohmann::json result = in;
+    nlohmann::json result   = in;
     nlohmann::json emitters = nlohmann::json::array();
     for (size_t i = 0; i < in["emitters"].size(); i++)
     {
@@ -207,7 +224,7 @@ inline bool ProjectPersisted(const nlohmann::json& in, nlohmann::json* out, std:
         emitters.push_back(projected);
     }
     result["emitters"] = emitters;
-    *out = result;
+    *out               = result;
     return true;
 }
 

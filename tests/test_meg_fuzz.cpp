@@ -23,15 +23,24 @@
 #include <vector>
 
 static int g_failed = 0;
-#define CHECK(cond, msg) do {                              \
-    if (cond) { std::printf("  ok: %s\n", msg); }          \
-    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
 typedef std::vector<unsigned char> Bytes;
 
 // FileInfo on disk = 5 x uint32 = 20 bytes (must match MegaFile::FileInfo).
-static const uint32_t kFileInfoSize = 20;
+static const uint32_t kFileInfoSize            = 20;
 static const uint32_t kMaxMegEntryCountForTest = 1u * 1024u * 1024u;
 
 static void putU32(Bytes& b, uint32_t v)
@@ -51,16 +60,19 @@ static void putStr(Bytes& b, const std::string& s)
     putU16(b, (uint16_t)s.size());
     b.insert(b.end(), s.begin(), s.end());
 }
-static void putFileInfo(Bytes& b, uint32_t crc, uint32_t index, uint32_t size,
-                        uint32_t start, uint32_t nameIndex)
+static void putFileInfo(Bytes& b, uint32_t crc, uint32_t index, uint32_t size, uint32_t start, uint32_t nameIndex)
 {
-    putU32(b, crc); putU32(b, index); putU32(b, size); putU32(b, start); putU32(b, nameIndex);
+    putU32(b, crc);
+    putU32(b, index);
+    putU32(b, size);
+    putU32(b, start);
+    putU32(b, nameIndex);
 }
 
 // Seed a MemoryFile with the bytes and rewind to 0 for the ctor's reads.
 static MemoryFile* makeFile(const Bytes& b)
 {
-    MemoryFile* f = new MemoryFile();   // rc=1
+    MemoryFile* f = new MemoryFile(); // rc=1
     if (!b.empty()) f->write(b.data(), (unsigned long)b.size());
     f->seek(0);
     return f;
@@ -71,17 +83,17 @@ static MemoryFile* makeFile(const Bytes& b)
 // unexpected (recorded as a failure with `other`).
 static bool throwsBadFile(const Bytes& b, bool& other)
 {
-    other = false;
-    MemoryFile* f = makeFile(b);   // rc=1
+    other         = false;
+    MemoryFile* f = makeFile(b); // rc=1
     try
     {
-        MegaFile mega(f);          // ctor AddRef's -> rc=2; mega dtor Release -> rc=1
-        f->Release();              // rc=0
-        return false;              // constructed cleanly, no throw
+        MegaFile mega(f); // ctor AddRef's -> rc=2; mega dtor Release -> rc=1
+        f->Release();     // rc=0
+        return false;     // constructed cleanly, no throw
     }
     catch (BadFileException&)
     {
-        f->Release();              // ctor AddRef'd then the partial object unwound; balance our ref
+        f->Release(); // ctor AddRef'd then the partial object unwound; balance our ref
         return true;
     }
     catch (...)
@@ -102,19 +114,18 @@ static void expectBadFile(const Bytes& b, const char* label)
 
 struct ScriptedMegFile : IFile
 {
-    Bytes data;
+    Bytes         data;
     unsigned long reportedSize;
-    unsigned long pos = 0;
-    bool largeNameReadAttempted = false;
-    bool fileInfoReadAttempted = false;
-    bool filenameLengthReadAttempted = false;
+    unsigned long pos                         = 0;
+    bool          largeNameReadAttempted      = false;
+    bool          fileInfoReadAttempted       = false;
+    bool          filenameLengthReadAttempted = false;
 
-    ScriptedMegFile(const Bytes& bytes, unsigned long fakeSize)
-        : data(bytes), reportedSize(fakeSize) {}
+    ScriptedMegFile(const Bytes& bytes, unsigned long fakeSize) : data(bytes), reportedSize(fakeSize) {}
 
-    bool eof() override { return pos >= reportedSize; }
+    bool          eof() override { return pos >= reportedSize; }
     unsigned long size() override { return reportedSize; }
-    void seek(unsigned long offset) override { pos = offset; }
+    void          seek(unsigned long offset) override { pos = offset; }
     unsigned long tell() override { return pos; }
     unsigned long read(void* buffer, unsigned long n) override
     {
@@ -129,13 +140,15 @@ struct ScriptedMegFile : IFile
     unsigned long write(const void*, unsigned long) override { return 0; }
 };
 
-static bool scriptedThrowsBadFile(ScriptedMegFile* f, bool& other,
-                                  bool* largeNameRead = nullptr,
-                                  bool* fileInfoRead = nullptr,
-                                  bool* filenameLengthRead = nullptr)
+static bool scriptedThrowsBadFile(ScriptedMegFile* f,
+                                  bool&            other,
+                                  bool*            largeNameRead      = nullptr,
+                                  bool*            fileInfoRead       = nullptr,
+                                  bool*            filenameLengthRead = nullptr)
 {
-    other = false;
-    auto capture = [&]() {
+    other        = false;
+    auto capture = [&]()
+    {
         if (largeNameRead) *largeNameRead = f->largeNameReadAttempted;
         if (fileInfoRead) *fileInfoRead = f->fileInfoReadAttempted;
         if (filenameLengthRead) *filenameLengthRead = f->filenameLengthReadAttempted;
@@ -170,13 +183,13 @@ int main()
     // 1 string "A.TGA", 1 FileInfo whose nameIndex=0 and start/size fit in-file.
     {
         Bytes b;
-        putU32(b, 1);                 // numStrings
-        putU32(b, 1);                 // numFiles
-        putStr(b, "A.TGA");           // filenames[0]
+        putU32(b, 1);       // numStrings
+        putU32(b, 1);       // numFiles
+        putStr(b, "A.TGA"); // filenames[0]
         // header-end offset is where the FileInfo table starts; place the entry's
         // payload region wholly inside the file. With size=0/start=0 the
         // (start > fsize) and (size > fsize-start) checks both pass trivially.
-        putFileInfo(b, /*crc*/0, /*index*/0, /*size*/0, /*start*/0, /*nameIndex*/0);
+        putFileInfo(b, /*crc*/ 0, /*index*/ 0, /*size*/ 0, /*start*/ 0, /*nameIndex*/ 0);
 
         bool other = false;
         bool threw = throwsBadFile(b, other);
@@ -186,8 +199,8 @@ int main()
     // ---- B: numStrings absurdly large (> filesize/2) ----
     {
         Bytes b;
-        putU32(b, 0xFFFFFFFFul);      // numStrings way past fsize/2
-        putU32(b, 0);                 // numFiles
+        putU32(b, 0xFFFFFFFFul); // numStrings way past fsize/2
+        putU32(b, 0);            // numFiles
         // (no string/file payload; the cap fires before any read loop)
         expectBadFile(b, "numStrings > filesize/2 -> BadFileException (no OOM loop)");
     }
@@ -195,8 +208,8 @@ int main()
     // ---- C: numFiles absurdly large (> filesize/sizeof(FileInfo)) ----
     {
         Bytes b;
-        putU32(b, 0);                 // numStrings
-        putU32(b, 0xFFFFFFFFul);      // numFiles way past fsize/20
+        putU32(b, 0);            // numStrings
+        putU32(b, 0xFFFFFFFFul); // numFiles way past fsize/20
         expectBadFile(b, "numFiles > filesize/20 -> BadFileException (no OOM loop)");
     }
 
@@ -205,65 +218,64 @@ int main()
     // off the end of filenames[] -> must throw (not UB index later).
     {
         Bytes b;
-        putU32(b, 1);                 // numStrings = 1 (valid indices: {0})
-        putU32(b, 1);                 // numFiles = 1
+        putU32(b, 1); // numStrings = 1 (valid indices: {0})
+        putU32(b, 1); // numFiles = 1
         putStr(b, "A.TGA");
-        putFileInfo(b, 0, 0, /*size*/0, /*start*/0, /*nameIndex*/5);  // 5 >= 1
+        putFileInfo(b, 0, 0, /*size*/ 0, /*start*/ 0, /*nameIndex*/ 5); // 5 >= 1
         expectBadFile(b, "FileInfo.nameIndex >= numStrings -> BadFileException");
     }
 
     // ---- E: a FileInfo with start past EOF ----
     {
         Bytes b;
-        putU32(b, 1);                 // numStrings
-        putU32(b, 1);                 // numFiles
+        putU32(b, 1); // numStrings
+        putU32(b, 1); // numFiles
         putStr(b, "A.TGA");
         // start is wildly past the file size -> (start > fsize) fires.
-        putFileInfo(b, 0, 0, /*size*/0, /*start*/0xFFFFFF00ul, /*nameIndex*/0);
+        putFileInfo(b, 0, 0, /*size*/ 0, /*start*/ 0xFFFFFF00ul, /*nameIndex*/ 0);
         expectBadFile(b, "FileInfo.start past EOF -> BadFileException");
     }
 
     // ---- F: a FileInfo with size past EOF (start in range, size overshoots) ----
     {
         Bytes b;
-        putU32(b, 1);                 // numStrings
-        putU32(b, 1);                 // numFiles
+        putU32(b, 1); // numStrings
+        putU32(b, 1); // numFiles
         putStr(b, "A.TGA");
         // start=0 is in range, but size > fsize-start -> (size > fsize - start) fires.
-        putFileInfo(b, 0, 0, /*size*/0xFFFFFF00ul, /*start*/0, /*nameIndex*/0);
+        putFileInfo(b, 0, 0, /*size*/ 0xFFFFFF00ul, /*start*/ 0, /*nameIndex*/ 0);
         expectBadFile(b, "FileInfo.size past EOF -> BadFileException");
     }
 
     // ---- G: per-filename length cap rejects before attempting a huge name read ----
     {
         Bytes b;
-        putU32(b, 1);                 // numStrings
-        putU32(b, 0);                 // numFiles
-        putU16(b, 65535);             // length > kMaxFilenameLength
-        ScriptedMegFile* f = new ScriptedMegFile(b, 128u * 1024u * 1024u);
-        bool other = false;
-        bool largeNameRead = false;
-        bool threw = scriptedThrowsBadFile(f, other, &largeNameRead);
+        putU32(b, 1);     // numStrings
+        putU32(b, 0);     // numFiles
+        putU16(b, 65535); // length > kMaxFilenameLength
+        ScriptedMegFile* f             = new ScriptedMegFile(b, 128u * 1024u * 1024u);
+        bool             other         = false;
+        bool             largeNameRead = false;
+        bool             threw         = scriptedThrowsBadFile(f, other, &largeNameRead);
         CHECK(threw && !other, "filename length > 32 KiB -> BadFileException");
         CHECK(!largeNameRead, "oversized filename rejected before large read");
     }
 
     // ---- H: aggregate name table cap rejects before reading the over-cap entry ----
     {
-        Bytes b;
-        const uint32_t n = 513;        // 512 * 32768 == 16 MiB; 513rd exceeds cap
+        Bytes          b;
+        const uint32_t n = 513; // 512 * 32768 == 16 MiB; 513rd exceeds cap
         putU32(b, n);
         putU32(b, 0);
         for (uint32_t i = 0; i < n; ++i)
         {
             putU16(b, 32768);
-            if (i < 512)
-                b.insert(b.end(), 32768, (unsigned char)'A');
+            if (i < 512) b.insert(b.end(), 32768, (unsigned char)'A');
         }
-        ScriptedMegFile* f = new ScriptedMegFile(b, 128u * 1024u * 1024u);
-        bool other = false;
-        bool largeNameRead = false;
-        bool threw = scriptedThrowsBadFile(f, other, &largeNameRead);
+        ScriptedMegFile* f             = new ScriptedMegFile(b, 128u * 1024u * 1024u);
+        bool             other         = false;
+        bool             largeNameRead = false;
+        bool             threw         = scriptedThrowsBadFile(f, other, &largeNameRead);
         CHECK(threw && !other, "aggregate MEG name table > 16 MiB -> BadFileException");
         CHECK(!largeNameRead, "aggregate overflow entry rejected before reading its filename bytes");
     }
@@ -273,10 +285,10 @@ int main()
         Bytes b;
         putU32(b, 0);
         putU32(b, kMaxMegEntryCountForTest + 1u);
-        ScriptedMegFile* f = new ScriptedMegFile(b, 128u * 1024u * 1024u);
-        bool other = false;
-        bool fileInfoRead = false;
-        bool threw = scriptedThrowsBadFile(f, other, nullptr, &fileInfoRead);
+        ScriptedMegFile* f            = new ScriptedMegFile(b, 128u * 1024u * 1024u);
+        bool             other        = false;
+        bool             fileInfoRead = false;
+        bool             threw        = scriptedThrowsBadFile(f, other, nullptr, &fileInfoRead);
         CHECK(threw && !other, "numFiles > 1M -> BadFileException");
         CHECK(!fileInfoRead, "entry-count cap fires before FileInfo reads");
     }
@@ -286,11 +298,11 @@ int main()
         Bytes b;
         putU32(b, kMaxMegEntryCountForTest + 1u);
         putU32(b, 0);
-        ScriptedMegFile* f = new ScriptedMegFile(b, 128u * 1024u * 1024u);
-        bool other = false;
-        bool largeNameRead = false;
-        bool filenameLengthRead = false;
-        bool threw = scriptedThrowsBadFile(f, other, &largeNameRead, nullptr, &filenameLengthRead);
+        ScriptedMegFile* f                  = new ScriptedMegFile(b, 128u * 1024u * 1024u);
+        bool             other              = false;
+        bool             largeNameRead      = false;
+        bool             filenameLengthRead = false;
+        bool             threw = scriptedThrowsBadFile(f, other, &largeNameRead, nullptr, &filenameLengthRead);
         CHECK(threw && !other, "numStrings > 1M -> BadFileException");
         CHECK(!filenameLengthRead, "numStrings cap fires before filename length reads");
         CHECK(!largeNameRead, "numStrings cap fires before filename byte reads");

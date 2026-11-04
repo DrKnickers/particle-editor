@@ -8,9 +8,11 @@
 #include <utility>
 #include <vector>
 
-namespace host {
+namespace host
+{
 
-struct RestoredSettings {
+struct RestoredSettings
+{
     // Bloom
     std::optional<bool>  bloomEnabled;
     std::optional<float> bloomStrength, bloomCutoff, bloomSize;
@@ -20,21 +22,21 @@ struct RestoredSettings {
     // Ground — apply custom paths BEFORE the index (ordering is load-bearing).
     // Only non-empty slots, in ascending slot order.
     std::vector<std::pair<int, std::wstring>> groundSlotPaths;
-    std::optional<COLORREF> groundSolidColor;
-    std::optional<int>      groundTexture;        // already range-validated
+    std::optional<COLORREF>                   groundSolidColor;
+    std::optional<int>                        groundTexture; // already range-validated
     // Skydome — custom paths applied UNCONDITIONALLY per slot (incl. empties, to
     // clear), in ascending slot order, before the index.
     std::vector<std::pair<int, std::wstring>> skydomeCustomPaths;
-    std::optional<int>      skydomeSlot;          // already range-validated
+    std::optional<int>                        skydomeSlot; // already range-validated
     // Skydome game-dome environment
-    bool         hasSkydomeEnv = false;
-    DWORD        skydomeContextRaw = 1;           // 0 = Land, 1 = Space (default)
+    bool         hasSkydomeEnv     = false;
+    DWORD        skydomeContextRaw = 1; // 0 = Land, 1 = Space (default)
     std::wstring skydomePrimaryName, skydomeSecondaryName;
     // Reference object + grid
     std::optional<std::array<float, 6>> refTransform;
-    std::optional<bool>  refVisible, gridVisible, snapEnabled, refLocked;
-    std::optional<float> gridSpacing;
-    std::optional<std::wstring> refName;          // nullopt in capture mode
+    std::optional<bool>                 refVisible, gridVisible, snapEnabled, refLocked;
+    std::optional<float>                gridSpacing;
+    std::optional<std::wstring>         refName; // nullopt in capture mode
     // Lighting — always populated (defaults from LightingSettings.h). Raw
     // persisted fill angles; force-align is resolved in the apply phase.
     float    sunIntensity, sunZ, sunTilt;

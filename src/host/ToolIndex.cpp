@@ -23,7 +23,9 @@ using nlohmann::json;
 
 // A texture resolved for its identity alone: the index hashes the winner's
 // bytes and never decodes them, so a file D3DX would reject still resolves.
-struct Hashed : RefCounted {};
+struct Hashed : RefCounted
+{
+};
 
 class HashOnlyDecoder : public IAssetDecoder<Hashed>
 {
@@ -106,22 +108,27 @@ int RunIndex(const IndexStack& stack, json* records, std::string* error)
     }
     files->SetLayers(stack.layers);
 
-    AssetCache<Hashed> textures("texture", files.get(), kTextureBasePath, kTextureRetryExtension, kMaxTextureAssetBytes);
-    HashOnlyDecoder decoder;
-    size_t lookups = 0, resolved = 0;
-    auto texture = [&](const std::string& name) {
+    AssetCache<Hashed> textures("texture", files.get(), kTextureBasePath, kTextureRetryExtension,
+                                kMaxTextureAssetBytes);
+    HashOnlyDecoder    decoder;
+    size_t             lookups = 0, resolved = 0;
+    auto               texture = [&](const std::string& name)
+    {
         Hashed* hashed = textures.Get(decoder, name);
         SAFE_RELEASE(hashed);
         lookups++;
-        const std::string identity = AssetIdentity(name);
-        const AssetRecord* record = textures.Ledger().Find("texture", identity);
-        json value = {{"request", name}, {"canonicalName", identity}, {"outcome", "unresolved"},
-                      {"source", nullptr}, {"sha256", nullptr}};
+        const std::string  identity = AssetIdentity(name);
+        const AssetRecord* record   = textures.Ledger().Find("texture", identity);
+        json               value    = {{"request", name},
+                                       {"canonicalName", identity},
+                                       {"outcome", "unresolved"},
+                                       {"source", nullptr},
+                                       {"sha256", nullptr}};
         if (record != NULL && record->outcome == AssetRecord::Outcome::Resolved)
         {
             value["outcome"] = "resolved";
-            value["source"] = WinnerJson(record->winner);
-            value["sha256"] = record->sha256;
+            value["source"]  = WinnerJson(record->winner);
+            value["sha256"]  = record->sha256;
             resolved++;
         }
         return value;
@@ -129,14 +136,14 @@ int RunIndex(const IndexStack& stack, json* records, std::string* error)
 
     // The normal map an emitter gets when its file names none: a file with no
     // normal-map chunk loads the default, and the editor loads it.
-    const ParticleSystem::Emitter defaults;
-    json systems = json::array(), failures = json::array(), entries = json::array();
+    const ParticleSystem::Emitter  defaults;
+    json                           systems = json::array(), failures = json::array(), entries = json::array();
     const std::vector<std::string> models = files->listFiles(kModels, ".ALO");
-    size_t meshes = 0;
+    size_t                         meshes = 0;
     for (const std::string& name : models)
     {
         AssetWinner winner;
-        IFile* file = files->getFileWithWinner(name, &winner);
+        IFile*      file = files->getFileWithWinner(name, &winner);
         if (file == NULL)
         {
             failures.push_back({{"file", name}, {"reason", "listed but could not be opened"}});
@@ -160,7 +167,7 @@ int RunIndex(const IndexStack& stack, json* records, std::string* error)
         const std::string bytes(raw.begin(), raw.end());
         const std::string hash = Sha256Hex(bytes);
         if (hash.empty()) return kExitInternal;
-        std::string reason;
+        std::string                     reason;
         std::unique_ptr<ParticleSystem> system = ParseSource(bytes, &reason);
         if (!system)
         {
@@ -168,26 +175,38 @@ int RunIndex(const IndexStack& stack, json* records, std::string* error)
             continue;
         }
         const std::vector<ParticleSystem::Emitter*>& emitters = system->getEmitters();
-        systems.push_back({{"file", name}, {"source", WinnerJson(winner)}, {"sha256", hash},
-                           {"internalName", system->getName()}, {"emitters", emitters.size()}});
+        systems.push_back({{"file", name},
+                           {"source", WinnerJson(winner)},
+                           {"sha256", hash},
+                           {"internalName", system->getName()},
+                           {"emitters", emitters.size()}});
         for (size_t i = 0; i < emitters.size(); i++)
         {
             const ParticleSystem::Emitter& emitter = *emitters[i];
-            std::set<float> cells;
+            std::set<float>                cells;
             for (const auto& key : emitter.tracks[ParticleSystem::TRACK_INDEX]->keys) cells.insert(key.value);
             // Only the normal map's chunk is optional: a colour name is always the file's own.
-            const struct { const char* slot; const std::string& name; const std::string* loaderDefault; } slots[] = {
-                {"color", emitter.colorTexture, nullptr},
-                {"normal", emitter.normalTexture, &defaults.normalTexture}};
+            const struct
+            {
+                const char*        slot;
+                const std::string& name;
+                const std::string* loaderDefault;
+            } slots[] = {{"color", emitter.colorTexture, nullptr},
+                         {"normal", emitter.normalTexture, &defaults.normalTexture}};
             for (const auto& slot : slots)
             {
                 if (slot.name.empty()) continue;
                 json value = texture(slot.name);
-                value["loaderDefault"] = slot.loaderDefault != nullptr && AssetIdentity(slot.name) == AssetIdentity(*slot.loaderDefault);
-                entries.push_back({{"effect", name}, {"emitter", {{"index", i}, {"name", emitter.name}}},
-                                   {"slot", slot.slot}, {"texture", value},
-                                   {"blendMode", emitter.blendMode}, {"isWorldOriented", emitter.isWorldOriented},
-                                   {"textureSize", emitter.textureSize}, {"indexValues", cells}});
+                value["loaderDefault"] =
+                    slot.loaderDefault != nullptr && AssetIdentity(slot.name) == AssetIdentity(*slot.loaderDefault);
+                entries.push_back({{"effect", name},
+                                   {"emitter", {{"index", i}, {"name", emitter.name}}},
+                                   {"slot", slot.slot},
+                                   {"texture", value},
+                                   {"blendMode", emitter.blendMode},
+                                   {"isWorldOriented", emitter.isWorldOriented},
+                                   {"textureSize", emitter.textureSize},
+                                   {"indexValues", cells}});
             }
         }
     }
@@ -198,17 +217,33 @@ int RunIndex(const IndexStack& stack, json* records, std::string* error)
     wchar_t cwd[MAX_PATH] = L"";
     GetCurrentDirectoryW(MAX_PATH, cwd);
     *records = {
-        {"schema", 1}, {"verb", "index"}, {"tool", PE_VERSION_STR},
-        {"content", {{"gameRoots", ContentPaths(stack.gameRoots)}, {"layers", ContentPaths(stack.layers)},
-                     {"sha256", stackHash}, {"workingDirectory", ContentPaths({cwd})[0]}}},
-        {"summary", {{"models", models.size()}, {"systems", systems.size()}, {"meshes", meshes},
-                     {"failed", failures.size()}, {"records", entries.size()},
-                     {"textures", {{"lookups", lookups}, {"resolved", resolved}, {"unresolved", lookups - resolved},
-                                   {"loads", textures.Ledger().Snapshot().size()}}},
-                     {"unverifiable", unverifiable.empty() ? json(nullptr) : json(unverifiable)}}},
-        {"systems", systems}, {"failures", failures}, {"records", entries},
+        {"schema", 1},
+        {"verb", "index"},
+        {"tool", PE_VERSION_STR},
+        {"content",
+         {{"gameRoots", ContentPaths(stack.gameRoots)},
+          {"layers", ContentPaths(stack.layers)},
+          {"sha256", stackHash},
+          {"workingDirectory", ContentPaths({cwd})[0]}}},
+        {"summary",
+         {{"models", models.size()},
+          {"systems", systems.size()},
+          {"meshes", meshes},
+          {"failed", failures.size()},
+          {"records", entries.size()},
+          {"textures",
+           {{"lookups", lookups},
+            {"resolved", resolved},
+            {"unresolved", lookups - resolved},
+            {"loads", textures.Ledger().Snapshot().size()}}},
+          {"unverifiable", unverifiable.empty() ? json(nullptr) : json(unverifiable)}}},
+        {"systems", systems},
+        {"failures", failures},
+        {"records", entries},
     };
-    fprintf(stderr, "[vfx-index] models=%zu systems=%zu meshes=%zu failed=%zu records=%zu texture-lookups=%zu resolved=%zu loads=%zu\n",
+    fprintf(stderr,
+            "[vfx-index] models=%zu systems=%zu meshes=%zu failed=%zu records=%zu texture-lookups=%zu resolved=%zu "
+            "loads=%zu\n",
             models.size(), systems.size(), meshes, failures.size(), entries.size(), lookups, resolved,
             textures.Ledger().Snapshot().size());
     if (!unverifiable.empty()) fprintf(stderr, "[vfx-index] unverifiable: %s\n", unverifiable.c_str());

@@ -11,25 +11,58 @@
 // keeps the emitter default: a file cannot record none (a missing chunk loads
 // as the default), so the observed attestation also names that one. Window-free so
 // tests/test_houdini_validation_fixture.cpp can pin it.
-namespace houdinifixture {
+namespace houdinifixture
+{
 
-enum class Kind { Puff, Ring, Fireball, Smoke4, Smoke8, Fireball8 };
+enum class Kind
+{
+    Puff,
+    Ring,
+    Fireball,
+    Smoke4,
+    Smoke8,
+    Fireball8
+};
 
 struct Profile
 {
-    int           blendMode;    // ParticleSystem::BLEND_*
-    unsigned long textureSize;  // atlas FRAME COUNT (grid side = floor(sqrt))
-    float         lifetime;     // seconds
+    int           blendMode;   // ParticleSystem::BLEND_*
+    unsigned long textureSize; // atlas FRAME COUNT (grid side = floor(sqrt))
+    float         lifetime;    // seconds
 };
 
 inline bool ParseKind(const std::wstring& text, Kind& kind)
 {
-    if (text == L"puff")     { kind = Kind::Puff;     return true; }
-    if (text == L"ring")     { kind = Kind::Ring;     return true; }
-    if (text == L"fireball") { kind = Kind::Fireball; return true; }
-    if (text == L"smoke4")   { kind = Kind::Smoke4;   return true; }
-    if (text == L"smoke8")   { kind = Kind::Smoke8;   return true; }
-    if (text == L"fireball8") { kind = Kind::Fireball8; return true; }
+    if (text == L"puff")
+    {
+        kind = Kind::Puff;
+        return true;
+    }
+    if (text == L"ring")
+    {
+        kind = Kind::Ring;
+        return true;
+    }
+    if (text == L"fireball")
+    {
+        kind = Kind::Fireball;
+        return true;
+    }
+    if (text == L"smoke4")
+    {
+        kind = Kind::Smoke4;
+        return true;
+    }
+    if (text == L"smoke8")
+    {
+        kind = Kind::Smoke8;
+        return true;
+    }
+    if (text == L"fireball8")
+    {
+        kind = Kind::Fireball8;
+        return true;
+    }
     return false;
 }
 
@@ -37,12 +70,12 @@ inline const char* KindName(Kind kind)
 {
     switch (kind)
     {
-    case Kind::Puff:   return "puff";
-    case Kind::Ring:   return "ring";
-    case Kind::Smoke4: return "smoke4";
-    case Kind::Smoke8: return "smoke8";
-    case Kind::Fireball8: return "fireball8";
-    default:           return "fireball";
+        case Kind::Puff:      return "puff";
+        case Kind::Ring:      return "ring";
+        case Kind::Smoke4:    return "smoke4";
+        case Kind::Smoke8:    return "smoke8";
+        case Kind::Fireball8: return "fireball8";
+        default:              return "fireball";
     }
 }
 
@@ -54,12 +87,12 @@ inline Profile ProfileFor(Kind kind)
 {
     switch (kind)
     {
-    case Kind::Puff:   return { ParticleSystem::BLEND_TRANSPARENT, 1, 2.0f };
-    case Kind::Ring:   return { ParticleSystem::BLEND_ADDITIVE, 1, 2.0f };
-    case Kind::Smoke4: return { ParticleSystem::BLEND_TRANSPARENT, 16, 4.0f };
-    case Kind::Smoke8: return { ParticleSystem::BLEND_TRANSPARENT, 64, 6.4f };
-    case Kind::Fireball8: return { ParticleSystem::BLEND_ADDITIVE, 64, 6.4f };
-    default:           return { ParticleSystem::BLEND_ADDITIVE, 16, 4.0f };
+        case Kind::Puff:      return {ParticleSystem::BLEND_TRANSPARENT, 1, 2.0f};
+        case Kind::Ring:      return {ParticleSystem::BLEND_ADDITIVE, 1, 2.0f};
+        case Kind::Smoke4:    return {ParticleSystem::BLEND_TRANSPARENT, 16, 4.0f};
+        case Kind::Smoke8:    return {ParticleSystem::BLEND_TRANSPARENT, 64, 6.4f};
+        case Kind::Fireball8: return {ParticleSystem::BLEND_ADDITIVE, 64, 6.4f};
+        default:              return {ParticleSystem::BLEND_ADDITIVE, 16, 4.0f};
     }
 }
 
@@ -70,8 +103,8 @@ inline bool IsTextureName(const std::string& name)
     if (name.size() < 5 || name.size() > 64) return false;
     for (const char c : name)
     {
-        const bool ok = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
-            c == '_' || c == '-' || c == '.';
+        const bool ok = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' ||
+                        c == '-' || c == '.';
         if (!ok) return false;
     }
     std::string extension = name.substr(name.size() - 4);
@@ -87,47 +120,47 @@ const float kReviewLift = 40.0f;
 
 inline void Configure(ParticleSystem::Emitter* e, Kind kind, const std::string& texture, float lift = 0)
 {
-    using PS = ParticleSystem;
-    using Track = PS::Emitter::Track;
-    const Profile profile = ProfileFor(kind);
-    e->name = KindName(kind);
-    e->colorTexture = texture;
-    e->blendMode = profile.blendMode;
-    e->textureSize = profile.textureSize;
-    e->useBursts = true;
-    e->nBursts = 1;
-    e->nParticlesPerBurst = 1;
+    using PS               = ParticleSystem;
+    using Track            = PS::Emitter::Track;
+    const Profile profile  = ProfileFor(kind);
+    e->name                = KindName(kind);
+    e->colorTexture        = texture;
+    e->blendMode           = profile.blendMode;
+    e->textureSize         = profile.textureSize;
+    e->useBursts           = true;
+    e->nBursts             = 1;
+    e->nParticlesPerBurst  = 1;
     e->nParticlesPerSecond = 0;
-    e->initialDelay = 0;
-    e->skipTime = 0;
-    e->burstDelay = 10000;
-    e->lifetime = profile.lifetime;
-    e->gravity = 0;
-    e->freezeTime = 0;
-    e->randomLifetimePerc = 0;
-    e->randomScalePerc = 0;
-    e->isWeatherParticle = false;
+    e->initialDelay        = 0;
+    e->skipTime            = 0;
+    e->burstDelay          = 10000;
+    e->lifetime            = profile.lifetime;
+    e->gravity             = 0;
+    e->freezeTime          = 0;
+    e->randomLifetimePerc  = 0;
+    e->randomScalePerc     = 0;
+    e->isWeatherParticle   = false;
     // Everything else that could tint, move, spin or clip it, set rather than
     // inherited so a changed default can't leak into the observation.
     for (float& c : e->randomColors) c = 0;
     for (float& a : e->acceleration) a = 0;
-    e->doColorAddGrayscale = false;
-    e->randomRotation = false;
+    e->doColorAddGrayscale     = false;
+    e->randomRotation          = false;
     e->randomRotationDirection = false;
-    e->randomRotationAverage = 0;
-    e->randomRotationVariance = 0;
-    e->inwardSpeed = 0;
-    e->inwardAcceleration = 0;
+    e->randomRotationAverage   = 0;
+    e->randomRotationVariance  = 0;
+    e->inwardSpeed             = 0;
+    e->inwardAcceleration      = 0;
     e->objectSpaceAcceleration = false;
-    e->affectedByWind = false;
-    e->linkToSystem = false;
-    e->isHeatParticle = false;
-    e->hasTail = false;
-    e->isWorldOriented = false;
-    e->noDepthTest = false;
-    e->emitFromMesh = PS::EMIT_DISABLE;
-    e->groundBehavior = 0;
-    for (int group : { PS::GROUP_POSITION, PS::GROUP_SPEED })
+    e->affectedByWind          = false;
+    e->linkToSystem            = false;
+    e->isHeatParticle          = false;
+    e->hasTail                 = false;
+    e->isWorldOriented         = false;
+    e->noDepthTest             = false;
+    e->emitFromMesh            = PS::EMIT_DISABLE;
+    e->groundBehavior          = 0;
+    for (int group : {PS::GROUP_POSITION, PS::GROUP_SPEED})
     {
         e->groups[group].type = PS::GT_EXACT;
         e->groups[group].valX = 0;
@@ -136,16 +169,14 @@ inline void Configure(ParticleSystem::Emitter* e, Kind kind, const std::string& 
     }
     e->groups[PS::GROUP_POSITION].valZ = lift;
     // Defaults alias RGBA to red; separate the tracks before authoring them.
-    for (int track : { PS::TRACK_RED_CHANNEL, PS::TRACK_GREEN_CHANNEL, PS::TRACK_BLUE_CHANNEL,
-                       PS::TRACK_ALPHA_CHANNEL, PS::TRACK_SCALE, PS::TRACK_INDEX,
-                       PS::TRACK_ROTATION_SPEED })
+    for (int track : {PS::TRACK_RED_CHANNEL, PS::TRACK_GREEN_CHANNEL, PS::TRACK_BLUE_CHANNEL, PS::TRACK_ALPHA_CHANNEL,
+                      PS::TRACK_SCALE, PS::TRACK_INDEX, PS::TRACK_ROTATION_SPEED})
     {
-        e->tracks[track] = &e->trackContents[track];
+        e->tracks[track]                = &e->trackContents[track];
         e->tracks[track]->interpolation = track == PS::TRACK_INDEX ? Track::IT_STEP : Track::IT_LINEAR;
         e->tracks[track]->keys.clear();
     }
-    for (int track : { PS::TRACK_RED_CHANNEL, PS::TRACK_GREEN_CHANNEL, PS::TRACK_BLUE_CHANNEL,
-                       PS::TRACK_ALPHA_CHANNEL })
+    for (int track : {PS::TRACK_RED_CHANNEL, PS::TRACK_GREEN_CHANNEL, PS::TRACK_BLUE_CHANNEL, PS::TRACK_ALPHA_CHANNEL})
     {
         e->tracks[track]->keys.insert(Track::Key(0, 1.0f));
         e->tracks[track]->keys.insert(Track::Key(100, 1.0f));
@@ -165,8 +196,7 @@ inline void Configure(ParticleSystem::Emitter* e, Kind kind, const std::string& 
         const float start = 100.0f * static_cast<float>(k) / static_cast<float>(profile.textureSize);
         e->tracks[PS::TRACK_INDEX]->keys.insert(Track::Key(k == 0 ? 0.0f : start - lead, static_cast<float>(k)));
     }
-    e->tracks[PS::TRACK_INDEX]->keys.insert(
-        Track::Key(100, static_cast<float>(profile.textureSize - 1)));
+    e->tracks[PS::TRACK_INDEX]->keys.insert(Track::Key(100, static_cast<float>(profile.textureSize - 1)));
 }
 
 } // namespace houdinifixture

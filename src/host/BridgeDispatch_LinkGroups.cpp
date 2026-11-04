@@ -7,7 +7,8 @@
 
 using nlohmann::json;
 
-namespace host {
+namespace host
+{
 
 bool BridgeDispatcher::TryDispatchLinkGroups(BridgeRequestContext& ctx)
 {
@@ -27,14 +28,11 @@ bool BridgeDispatcher::TryDispatchLinkGroups(BridgeRequestContext& ctx)
             ctx.SendErr("particle system not bound");
             return true;
         }
-        uint32_t groupId =
-            params.value("groupId", static_cast<uint32_t>(0));
-        const LinkExemptFlags& flags =
-            (*m_pParticleSystem)->getLinkExemptFlags(groupId);
+        uint32_t               groupId = params.value("groupId", static_cast<uint32_t>(0));
+        const LinkExemptFlags& flags   = (*m_pParticleSystem)->getLinkExemptFlags(groupId);
         ctx.SendOk(json{{"fields", LinkExemptFlagsToJsonArray(flags)}});
         return true;
     }
-
 
     // -------- linkGroups/set-exempt-fields --------------------------
     //
@@ -50,13 +48,11 @@ bool BridgeDispatcher::TryDispatchLinkGroups(BridgeRequestContext& ctx)
             ctx.SendErr("particle system not bound");
             return true;
         }
-        uint32_t groupId =
-            params.value("groupId", static_cast<uint32_t>(0));
-        const json& fieldsJson =
-            params.contains("fields") ? params["fields"] : json::array();
-        LinkExemptFlags flags = LinkExemptFlagsFromJsonArray(fieldsJson);
+        uint32_t        groupId    = params.value("groupId", static_cast<uint32_t>(0));
+        const json&     fieldsJson = params.contains("fields") ? params["fields"] : json::array();
+        LinkExemptFlags flags      = LinkExemptFlagsFromJsonArray(fieldsJson);
 
-        ParticleSystem* sys = m_pParticleSystem->get();
+        ParticleSystem*       sys      = m_pParticleSystem->get();
         const LinkExemptFlags oldFlags = sys->getLinkExemptFlags(groupId);
 
         captureUndo();
@@ -70,21 +66,18 @@ bool BridgeDispatcher::TryDispatchLinkGroups(BridgeRequestContext& ctx)
         // are touched, so already-shared params are left as-is. captureUndo()
         // above already snapshotted, so flags + clobbered values fold into
         // ONE undo entry (matches legacy).
-        bool resolved = false;
-        std::vector<ParticleSystem::Emitter*> members =
-            GetLinkGroupMembers(*sys, groupId);
+        bool                                  resolved = false;
+        std::vector<ParticleSystem::Emitter*> members  = GetLinkGroupMembers(*sys, groupId);
         if (groupId != 0 && members.size() >= 2)
         {
-            const LinkExemptFlags diffMask = MakeNewlySharedMask(oldFlags, flags);
-            bool anyDisagree = false;
+            const LinkExemptFlags diffMask    = MakeNewlySharedMask(oldFlags, flags);
+            bool                  anyDisagree = false;
             for (size_t i = 1; i < members.size() && !anyDisagree; ++i)
-                if (!DiffNonExemptParams(*members[i], *members[0], diffMask).empty())
-                    anyDisagree = true;
+                if (!DiffNonExemptParams(*members[i], *members[0], diffMask).empty()) anyDisagree = true;
 
             if (anyDisagree)
             {
-                for (size_t i = 1; i < members.size(); ++i)
-                    members[i]->copySharedParamsFrom(*members[0], diffMask);
+                for (size_t i = 1; i < members.size(); ++i) members[i]->copySharedParamsFrom(*members[0], diffMask);
                 resolved = true;
             }
         }
@@ -92,15 +85,13 @@ bool BridgeDispatcher::TryDispatchLinkGroups(BridgeRequestContext& ctx)
         // track multisets, orphaning live particles' cached cursor iterators.
         // Reseat every instance's cursors (the propagateLinkGroup chokepoint
         // pattern). Only fires when we actually copied.
-        if (resolved && m_engine != nullptr)
-            m_engine->OnParticleSystemChanged(-1);
+        if (resolved && m_engine != nullptr) m_engine->OnParticleSystemChanged(-1);
 
         ctx.SendOk(json::object());
         ctx.MarkDirty();
         EmitEmittersTreeChanged();
         return true;
     }
-
 
     // -------- linkGroups/reset-exempt-fields ------------------------
     //
@@ -113,8 +104,7 @@ bool BridgeDispatcher::TryDispatchLinkGroups(BridgeRequestContext& ctx)
             ctx.SendErr("particle system not bound");
             return true;
         }
-        uint32_t groupId =
-            params.value("groupId", static_cast<uint32_t>(0));
+        uint32_t groupId = params.value("groupId", static_cast<uint32_t>(0));
 
         captureUndo();
         (*m_pParticleSystem)->setLinkExemptFlags(groupId, LinkExemptFlags{});
@@ -124,7 +114,6 @@ bool BridgeDispatcher::TryDispatchLinkGroups(BridgeRequestContext& ctx)
         EmitEmittersTreeChanged();
         return true;
     }
-
 
     // -------- linkGroups/diff-membership --------------------
     //
@@ -154,55 +143,49 @@ bool BridgeDispatcher::TryDispatchLinkGroups(BridgeRequestContext& ctx)
         ParticleSystem* sys = m_pParticleSystem->get();
 
         int groupIdRaw = 0;
-        if (params.contains("groupId") && !params["groupId"].is_null())
-            groupIdRaw = params["groupId"].get<int>();
+        if (params.contains("groupId") && !params["groupId"].is_null()) groupIdRaw = params["groupId"].get<int>();
 
-        const json& idsJson =
-            params.contains("ids") ? params["ids"] : json::array();
+        const json& idsJson = params.contains("ids") ? params["ids"] : json::array();
 
         // Resolve (wire-id, emitter) pairs in caller order. The wire id
         // is echoed back in each conflict so the UI can attribute it.
         std::vector<std::pair<int, ParticleSystem::Emitter*>> targets;
         for (const auto& v : idsJson)
         {
-            int id = v.get<int>();
-            ParticleSystem::Emitter* e = getEmitterById(id);
+            int                      id = v.get<int>();
+            ParticleSystem::Emitter* e  = getEmitterById(id);
             if (e != nullptr) targets.emplace_back(id, e);
         }
 
         // Determine the canonical member, the exempt set, and the joiners
         // to diff — exactly as set-membership would.
-        ParticleSystem::Emitter* canonical = nullptr;
-        const LinkExemptFlags*   exempt    = nullptr;
+        ParticleSystem::Emitter*                              canonical = nullptr;
+        const LinkExemptFlags*                                exempt    = nullptr;
         std::vector<std::pair<int, ParticleSystem::Emitter*>> joiners;
 
         if (groupIdRaw > 0)
         {
-            uint32_t target = static_cast<uint32_t>(groupIdRaw);
-            std::vector<ParticleSystem::Emitter*> members =
-                GetLinkGroupMembers(*sys, target);
+            uint32_t                              target  = static_cast<uint32_t>(groupIdRaw);
+            std::vector<ParticleSystem::Emitter*> members = GetLinkGroupMembers(*sys, target);
             if (!members.empty())
             {
                 canonical = members[0];
                 exempt    = &sys->getLinkExemptFlags(target);
                 for (const auto& t : targets)
-                    if (t.second->linkGroup != target)
-                        joiners.push_back(t);
+                    if (t.second->linkGroup != target) joiners.push_back(t);
             }
             else if (!targets.empty())
             {
                 canonical = targets[0].second;
                 exempt    = &GetDefaultLinkExemptFlags();
-                for (size_t i = 1; i < targets.size(); ++i)
-                    joiners.push_back(targets[i]);
+                for (size_t i = 1; i < targets.size(); ++i) joiners.push_back(targets[i]);
             }
         }
         else if (groupIdRaw == -1 && !targets.empty())
         {
             canonical = targets[0].second;
             exempt    = &GetDefaultLinkExemptFlags();
-            for (size_t i = 1; i < targets.size(); ++i)
-                joiners.push_back(targets[i]);
+            for (size_t i = 1; i < targets.size(); ++i) joiners.push_back(targets[i]);
         }
         // groupIdRaw == 0 (leave): canonical stays null → no conflicts.
 
@@ -211,8 +194,7 @@ bool BridgeDispatcher::TryDispatchLinkGroups(BridgeRequestContext& ctx)
         {
             for (const auto& j : joiners)
             {
-                std::vector<std::string> fields =
-                    DiffNonExemptParams(*j.second, *canonical, *exempt);
+                std::vector<std::string> fields = DiffNonExemptParams(*j.second, *canonical, *exempt);
                 if (!fields.empty())
                 {
                     json entry;
@@ -226,7 +208,6 @@ bool BridgeDispatcher::TryDispatchLinkGroups(BridgeRequestContext& ctx)
         ctx.SendOk(json{{"conflicts", conflicts}});
         return true;
     }
-
 
     // -------- linkGroups/diff-exempt-change (LNK settings surface) ---
     //
@@ -246,21 +227,20 @@ bool BridgeDispatcher::TryDispatchLinkGroups(BridgeRequestContext& ctx)
         }
         ParticleSystem* sys = m_pParticleSystem->get();
 
-        uint32_t groupId = params.value("groupId", static_cast<uint32_t>(0));
-        const json& exemptJson =
-            params.contains("exempt") ? params["exempt"] : json::array();
-        const LinkExemptFlags proposed = LinkExemptFlagsFromJsonArray(exemptJson);
+        uint32_t              groupId    = params.value("groupId", static_cast<uint32_t>(0));
+        const json&           exemptJson = params.contains("exempt") ? params["exempt"] : json::array();
+        const LinkExemptFlags proposed   = LinkExemptFlagsFromJsonArray(exemptJson);
 
-        json conflicts = json::array();
-        std::vector<ParticleSystem::Emitter*> members =
-            GetLinkGroupMembers(*sys, groupId);
+        json                                  conflicts = json::array();
+        std::vector<ParticleSystem::Emitter*> members   = GetLinkGroupMembers(*sys, groupId);
         if (groupId != 0 && members.size() >= 2)
         {
-            const LinkExemptFlags  oldFlags = sys->getLinkExemptFlags(groupId);
-            const LinkExemptFlags  diffMask = MakeNewlySharedMask(oldFlags, proposed);
+            const LinkExemptFlags oldFlags = sys->getLinkExemptFlags(groupId);
+            const LinkExemptFlags diffMask = MakeNewlySharedMask(oldFlags, proposed);
 
             const auto& allEmitters = sys->getEmitters();
-            auto wireIdOf = [&](ParticleSystem::Emitter* e) -> int {
+            auto        wireIdOf    = [&](ParticleSystem::Emitter* e) -> int
+            {
                 for (size_t i = 0; i < allEmitters.size(); ++i)
                     if (allEmitters[i] == e) return static_cast<int>(i);
                 return -1;
@@ -269,8 +249,7 @@ bool BridgeDispatcher::TryDispatchLinkGroups(BridgeRequestContext& ctx)
             ParticleSystem::Emitter* canonical = members[0];
             for (size_t i = 1; i < members.size(); ++i)
             {
-                std::vector<std::string> fields =
-                    DiffNonExemptParams(*members[i], *canonical, diffMask);
+                std::vector<std::string> fields = DiffNonExemptParams(*members[i], *canonical, diffMask);
                 if (!fields.empty())
                 {
                     json entry;
@@ -284,7 +263,6 @@ bool BridgeDispatcher::TryDispatchLinkGroups(BridgeRequestContext& ctx)
         ctx.SendOk(json{{"conflicts", conflicts}});
         return true;
     }
-
 
     // -------- linkGroups/set-membership ------------------------------
     //
@@ -313,8 +291,7 @@ bool BridgeDispatcher::TryDispatchLinkGroups(BridgeRequestContext& ctx)
             ctx.SendErr("particle system not bound");
             return true;
         }
-        const json& idsJson =
-            params.contains("ids") ? params["ids"] : json::array();
+        const json& idsJson = params.contains("ids") ? params["ids"] : json::array();
         // `groupId` may be a JSON number or null. Absent/null → 0 (leave).
         int groupIdRaw = 0;
         if (params.contains("groupId") && !params["groupId"].is_null())
@@ -337,8 +314,7 @@ bool BridgeDispatcher::TryDispatchLinkGroups(BridgeRequestContext& ctx)
         if (groupIdRaw == 0)
         {
             // Leave / unlink.
-            for (size_t i = 0; i < targets.size(); ++i)
-                LeaveLinkGroup(*sys, targets[i]);
+            for (size_t i = 0; i < targets.size(); ++i) LeaveLinkGroup(*sys, targets[i]);
         }
         else if (groupIdRaw > 0)
         {
@@ -350,19 +326,17 @@ bool BridgeDispatcher::TryDispatchLinkGroups(BridgeRequestContext& ctx)
             // creating it if needed". The real dialog only sends positive
             // ids for existing groups, but bridge callers (and tests) rely
             // on create-if-needed.
-            uint32_t target = static_cast<uint32_t>(groupIdRaw);
+            uint32_t   target = static_cast<uint32_t>(groupIdRaw);
             const bool exists = !GetLinkGroupMembers(*sys, target).empty();
             // Detach any target currently in a *different* group first.
             for (size_t i = 0; i < targets.size(); ++i)
             {
-                if (targets[i]->linkGroup != 0 && targets[i]->linkGroup != target)
-                    LeaveLinkGroup(*sys, targets[i]);
+                if (targets[i]->linkGroup != 0 && targets[i]->linkGroup != target) LeaveLinkGroup(*sys, targets[i]);
             }
             if (exists)
             {
                 for (size_t i = 0; i < targets.size(); ++i)
-                    if (targets[i]->linkGroup != target)
-                        JoinLinkGroup(*sys, targets[i], target);
+                    if (targets[i]->linkGroup != target) JoinLinkGroup(*sys, targets[i], target);
             }
             else if (!targets.empty())
             {
@@ -370,7 +344,7 @@ bool BridgeDispatcher::TryDispatchLinkGroups(BridgeRequestContext& ctx)
                 // the rest sync their non-exempt params to it (mirrors
                 // CreateLinkGroup, which only allocates max+1 ids).
                 const LinkExemptFlags& exempt = sys->getLinkExemptFlags(target);
-                targets[0]->linkGroup = target;
+                targets[0]->linkGroup         = target;
                 for (size_t i = 1; i < targets.size(); ++i)
                 {
                     targets[i]->copySharedParamsFrom(*targets[0], exempt);
@@ -381,11 +355,9 @@ bool BridgeDispatcher::TryDispatchLinkGroups(BridgeRequestContext& ctx)
         else // groupIdRaw == -1 : new group
         {
             for (size_t i = 0; i < targets.size(); ++i)
-                if (targets[i]->linkGroup != 0)
-                    LeaveLinkGroup(*sys, targets[i]);
+                if (targets[i]->linkGroup != 0) LeaveLinkGroup(*sys, targets[i]);
             // Minimum group size is 2; a 1-id "new group" is a no-op.
-            if (targets.size() >= 2)
-                CreateLinkGroup(*sys, targets);
+            if (targets.size() >= 2) CreateLinkGroup(*sys, targets);
         }
 
         // Idempotent safety net — the API already preserves the
@@ -402,8 +374,7 @@ bool BridgeDispatcher::TryDispatchLinkGroups(BridgeRequestContext& ctx)
         // key-edit handlers reseat per-track; a membership change can touch
         // EVERY non-exempt track on MULTIPLE members, so reseat all cursors
         // for all instances (-1). Cheap (re-finds cursors) and idempotent.
-        if (m_engine != nullptr)
-            m_engine->OnParticleSystemChanged(-1);
+        if (m_engine != nullptr) m_engine->OnParticleSystemChanged(-1);
 
         ctx.SendOk(json::object());
         ctx.MarkDirty();
@@ -412,8 +383,7 @@ bool BridgeDispatcher::TryDispatchLinkGroups(BridgeRequestContext& ctx)
         return true;
     }
 
-
-    return false;   // kind not in this domain
+    return false; // kind not in this domain
 }
 
 } // namespace host

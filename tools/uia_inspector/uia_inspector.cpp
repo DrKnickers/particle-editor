@@ -27,122 +27,166 @@
 
 // Tiny ComPtr replacement — we don't want to depend on ATL (which isn't
 // always installed with the C++ workload). Just RAII over IUnknown*.
-template <typename T>
-class ComPtr {
+template <typename T> class ComPtr
+{
 public:
     ComPtr() : p_(nullptr) {}
-    ~ComPtr() { if (p_) p_->Release(); }
-    ComPtr(const ComPtr&) = delete;
+    ~ComPtr()
+    {
+        if (p_) p_->Release();
+    }
+    ComPtr(const ComPtr&)            = delete;
     ComPtr& operator=(const ComPtr&) = delete;
-    T* operator->() const { return p_; }
-    T** operator&() { return &p_; }
-    operator T*() const { return p_; }
-    T* get() const { return p_; }
-    void reset() { if (p_) { p_->Release(); p_ = nullptr; } }
-    T* release() { T* t = p_; p_ = nullptr; return t; }
-    void attach(T* t) { if (p_) p_->Release(); p_ = t; }
+    T*      operator->() const { return p_; }
+    T**     operator&() { return &p_; }
+            operator T*() const { return p_; }
+    T*      get() const { return p_; }
+    void    reset()
+    {
+        if (p_)
+        {
+            p_->Release();
+            p_ = nullptr;
+        }
+    }
+    T* release()
+    {
+        T* t = p_;
+        p_   = nullptr;
+        return t;
+    }
+    void attach(T* t)
+    {
+        if (p_) p_->Release();
+        p_ = t;
+    }
+
 private:
     T* p_;
 };
 
 // Tiny BSTR holder.
-class BStr {
+class BStr
+{
 public:
     BStr() : b_(nullptr) {}
-    ~BStr() { if (b_) SysFreeString(b_); }
-    BStr(const BStr&) = delete;
+    ~BStr()
+    {
+        if (b_) SysFreeString(b_);
+    }
+    BStr(const BStr&)            = delete;
     BStr& operator=(const BStr&) = delete;
     BSTR* operator&() { return &b_; }
-    operator BSTR() const { return b_; }
-    BSTR get() const { return b_; }
+          operator BSTR() const { return b_; }
+    BSTR  get() const { return b_; }
+
 private:
     BSTR b_;
 };
 
-static std::string EscapeJson(const std::wstring& s) {
+static std::string EscapeJson(const std::wstring& s)
+{
     std::string out;
     out.reserve(s.size() + 2);
-    for (wchar_t wc : s) {
-        if (wc < 0x80) {
+    for (wchar_t wc : s)
+    {
+        if (wc < 0x80)
+        {
             char c = static_cast<char>(wc);
-            switch (c) {
+            switch (c)
+            {
                 case '"':  out += "\\\""; break;
                 case '\\': out += "\\\\"; break;
                 case '\n': out += "\\n"; break;
                 case '\r': out += "\\r"; break;
                 case '\t': out += "\\t"; break;
                 default:
-                    if (static_cast<unsigned char>(c) < 0x20) {
-                        char buf[8]; sprintf_s(buf, "\\u%04x", c);
+                    if (static_cast<unsigned char>(c) < 0x20)
+                    {
+                        char buf[8];
+                        sprintf_s(buf, "\\u%04x", c);
                         out += buf;
-                    } else {
+                    }
+                    else
+                    {
                         out += c;
                     }
             }
-        } else {
+        }
+        else
+        {
             char buf[8];
-            int n = WideCharToMultiByte(CP_UTF8, 0, &wc, 1, buf, sizeof(buf), nullptr, nullptr);
+            int  n = WideCharToMultiByte(CP_UTF8, 0, &wc, 1, buf, sizeof(buf), nullptr, nullptr);
             if (n > 0) out.append(buf, n);
         }
     }
     return out;
 }
 
-static std::string BstrToUtf8(BSTR b) {
+static std::string BstrToUtf8(BSTR b)
+{
     if (!b) return {};
     return EscapeJson(std::wstring(b, SysStringLen(b)));
 }
 
-static const wchar_t* ControlTypeName(CONTROLTYPEID id) {
-    switch (id) {
-        case UIA_ButtonControlTypeId: return L"Button";
-        case UIA_CheckBoxControlTypeId: return L"CheckBox";
-        case UIA_ComboBoxControlTypeId: return L"ComboBox";
-        case UIA_EditControlTypeId: return L"Edit";
-        case UIA_HyperlinkControlTypeId: return L"Hyperlink";
-        case UIA_ImageControlTypeId: return L"Image";
-        case UIA_ListItemControlTypeId: return L"ListItem";
-        case UIA_ListControlTypeId: return L"List";
-        case UIA_MenuControlTypeId: return L"Menu";
-        case UIA_MenuBarControlTypeId: return L"MenuBar";
-        case UIA_MenuItemControlTypeId: return L"MenuItem";
+static const wchar_t* ControlTypeName(CONTROLTYPEID id)
+{
+    switch (id)
+    {
+        case UIA_ButtonControlTypeId:      return L"Button";
+        case UIA_CheckBoxControlTypeId:    return L"CheckBox";
+        case UIA_ComboBoxControlTypeId:    return L"ComboBox";
+        case UIA_EditControlTypeId:        return L"Edit";
+        case UIA_HyperlinkControlTypeId:   return L"Hyperlink";
+        case UIA_ImageControlTypeId:       return L"Image";
+        case UIA_ListItemControlTypeId:    return L"ListItem";
+        case UIA_ListControlTypeId:        return L"List";
+        case UIA_MenuControlTypeId:        return L"Menu";
+        case UIA_MenuBarControlTypeId:     return L"MenuBar";
+        case UIA_MenuItemControlTypeId:    return L"MenuItem";
         case UIA_ProgressBarControlTypeId: return L"ProgressBar";
         case UIA_RadioButtonControlTypeId: return L"RadioButton";
-        case UIA_ScrollBarControlTypeId: return L"ScrollBar";
-        case UIA_SliderControlTypeId: return L"Slider";
-        case UIA_SpinnerControlTypeId: return L"Spinner";
-        case UIA_StatusBarControlTypeId: return L"StatusBar";
-        case UIA_TabControlTypeId: return L"Tab";
-        case UIA_TabItemControlTypeId: return L"TabItem";
-        case UIA_TextControlTypeId: return L"Text";
-        case UIA_ToolBarControlTypeId: return L"ToolBar";
-        case UIA_ToolTipControlTypeId: return L"ToolTip";
-        case UIA_TreeControlTypeId: return L"Tree";
-        case UIA_TreeItemControlTypeId: return L"TreeItem";
-        case UIA_CustomControlTypeId: return L"Custom";
-        case UIA_GroupControlTypeId: return L"Group";
-        case UIA_ThumbControlTypeId: return L"Thumb";
-        case UIA_DataGridControlTypeId: return L"DataGrid";
-        case UIA_DataItemControlTypeId: return L"DataItem";
-        case UIA_DocumentControlTypeId: return L"Document";
+        case UIA_ScrollBarControlTypeId:   return L"ScrollBar";
+        case UIA_SliderControlTypeId:      return L"Slider";
+        case UIA_SpinnerControlTypeId:     return L"Spinner";
+        case UIA_StatusBarControlTypeId:   return L"StatusBar";
+        case UIA_TabControlTypeId:         return L"Tab";
+        case UIA_TabItemControlTypeId:     return L"TabItem";
+        case UIA_TextControlTypeId:        return L"Text";
+        case UIA_ToolBarControlTypeId:     return L"ToolBar";
+        case UIA_ToolTipControlTypeId:     return L"ToolTip";
+        case UIA_TreeControlTypeId:        return L"Tree";
+        case UIA_TreeItemControlTypeId:    return L"TreeItem";
+        case UIA_CustomControlTypeId:      return L"Custom";
+        case UIA_GroupControlTypeId:       return L"Group";
+        case UIA_ThumbControlTypeId:       return L"Thumb";
+        case UIA_DataGridControlTypeId:    return L"DataGrid";
+        case UIA_DataItemControlTypeId:    return L"DataItem";
+        case UIA_DocumentControlTypeId:    return L"Document";
         case UIA_SplitButtonControlTypeId: return L"SplitButton";
-        case UIA_WindowControlTypeId: return L"Window";
-        case UIA_PaneControlTypeId: return L"Pane";
-        case UIA_HeaderControlTypeId: return L"Header";
-        case UIA_HeaderItemControlTypeId: return L"HeaderItem";
-        case UIA_TableControlTypeId: return L"Table";
-        case UIA_TitleBarControlTypeId: return L"TitleBar";
-        case UIA_SeparatorControlTypeId: return L"Separator";
-        default: return L"Unknown";
+        case UIA_WindowControlTypeId:      return L"Window";
+        case UIA_PaneControlTypeId:        return L"Pane";
+        case UIA_HeaderControlTypeId:      return L"Header";
+        case UIA_HeaderItemControlTypeId:  return L"HeaderItem";
+        case UIA_TableControlTypeId:       return L"Table";
+        case UIA_TitleBarControlTypeId:    return L"TitleBar";
+        case UIA_SeparatorControlTypeId:   return L"Separator";
+        default:                           return L"Unknown";
     }
 }
 
-static void EmitNode(IUIAutomationElement* elem,
+static void EmitNode(IUIAutomationElement*    elem,
                      IUIAutomationTreeWalker* walker,
-                     int depth, int maxDepth,
-                     std::ostringstream& out,
-                     const char* indent) {
-    if (!elem) { out << "null"; return; }
+                     int                      depth,
+                     int                      maxDepth,
+                     std::ostringstream&      out,
+                     const char*              indent)
+{
+    if (!elem)
+    {
+        out << "null";
+        return;
+    }
 
     out << "{\n";
 
@@ -152,8 +196,7 @@ static void EmitNode(IUIAutomationElement* elem,
 
     CONTROLTYPEID ctid = 0;
     elem->get_CurrentControlType(&ctid);
-    out << indent << "  \"ControlType\": \""
-        << EscapeJson(ControlTypeName(ctid)) << "\",\n";
+    out << indent << "  \"ControlType\": \"" << EscapeJson(ControlTypeName(ctid)) << "\",\n";
 
     BStr autoId;
     elem->get_CurrentAutomationId(&autoId);
@@ -165,22 +208,20 @@ static void EmitNode(IUIAutomationElement* elem,
 
     BOOL focusable = FALSE;
     elem->get_CurrentIsKeyboardFocusable(&focusable);
-    out << indent << "  \"IsKeyboardFocusable\": "
-        << (focusable ? "true" : "false") << ",\n";
+    out << indent << "  \"IsKeyboardFocusable\": " << (focusable ? "true" : "false") << ",\n";
 
     BOOL enabled = FALSE;
     elem->get_CurrentIsEnabled(&enabled);
-    out << indent << "  \"IsEnabled\": "
-        << (enabled ? "true" : "false") << ",\n";
+    out << indent << "  \"IsEnabled\": " << (enabled ? "true" : "false") << ",\n";
 
     BOOL offscreen = FALSE;
     elem->get_CurrentIsOffscreen(&offscreen);
-    out << indent << "  \"IsOffscreen\": "
-        << (offscreen ? "true" : "false") << ",\n";
+    out << indent << "  \"IsOffscreen\": " << (offscreen ? "true" : "false") << ",\n";
 
     out << indent << "  \"children\": [";
 
-    if (depth >= maxDepth) {
+    if (depth >= maxDepth)
+    {
         out << "]\n" << indent << "}";
         return;
     }
@@ -188,7 +229,8 @@ static void EmitNode(IUIAutomationElement* elem,
     ComPtr<IUIAutomationElement> child;
     walker->GetFirstChildElement(elem, &child);
     bool first = true;
-    while (child) {
+    while (child)
+    {
         if (!first) out << ",";
         first = false;
         out << "\n" << indent << "    ";
@@ -205,45 +247,74 @@ static void EmitNode(IUIAutomationElement* elem,
     out << "]\n" << indent << "}";
 }
 
-int wmain(int argc, wchar_t* argv[]) {
-    HWND hwnd = nullptr;
+int wmain(int argc, wchar_t* argv[])
+{
+    HWND         hwnd = nullptr;
     std::wstring capture;
-    int maxDepth = 8;
+    int          maxDepth = 8;
 
-    for (int i = 1; i < argc; ++i) {
-        if (wcscmp(argv[i], L"--hwnd") == 0 && i + 1 < argc) {
-            hwnd = reinterpret_cast<HWND>(
-                static_cast<intptr_t>(wcstoull(argv[++i], nullptr, 16)));
-        } else if (wcscmp(argv[i], L"--capture") == 0 && i + 1 < argc) {
+    for (int i = 1; i < argc; ++i)
+    {
+        if (wcscmp(argv[i], L"--hwnd") == 0 && i + 1 < argc)
+        {
+            hwnd = reinterpret_cast<HWND>(static_cast<intptr_t>(wcstoull(argv[++i], nullptr, 16)));
+        }
+        else if (wcscmp(argv[i], L"--capture") == 0 && i + 1 < argc)
+        {
             capture = argv[++i];
-        } else if (wcscmp(argv[i], L"--depth") == 0 && i + 1 < argc) {
+        }
+        else if (wcscmp(argv[i], L"--depth") == 0 && i + 1 < argc)
+        {
             maxDepth = static_cast<int>(wcstol(argv[++i], nullptr, 10));
-        } else if (wcscmp(argv[i], L"--help") == 0) {
+        }
+        else if (wcscmp(argv[i], L"--help") == 0)
+        {
             wprintf(L"uia_inspector --hwnd 0xNNNN --capture <id> [--depth N]\n");
             return 0;
         }
     }
 
-    if (!hwnd) { fprintf(stderr, "missing --hwnd\n"); return 1; }
-    if (!IsWindow(hwnd)) { fprintf(stderr, "invalid HWND\n"); return 3; }
+    if (!hwnd)
+    {
+        fprintf(stderr, "missing --hwnd\n");
+        return 1;
+    }
+    if (!IsWindow(hwnd))
+    {
+        fprintf(stderr, "invalid HWND\n");
+        return 3;
+    }
 
     HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    if (FAILED(hr)) { fprintf(stderr, "CoInitializeEx failed\n"); return 2; }
+    if (FAILED(hr))
+    {
+        fprintf(stderr, "CoInitializeEx failed\n");
+        return 2;
+    }
 
     ComPtr<IUIAutomation> uia;
-    hr = CoCreateInstance(__uuidof(CUIAutomation), nullptr,
-                          CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&uia));
-    if (FAILED(hr)) { fprintf(stderr, "CUIAutomation create failed\n"); return 2; }
+    hr = CoCreateInstance(__uuidof(CUIAutomation), nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&uia));
+    if (FAILED(hr))
+    {
+        fprintf(stderr, "CUIAutomation create failed\n");
+        return 2;
+    }
 
     ComPtr<IUIAutomationTreeWalker> walker;
     hr = uia->get_ControlViewWalker(&walker);
-    if (FAILED(hr) || !walker) {
-        fprintf(stderr, "get_ControlViewWalker failed\n"); return 2;
+    if (FAILED(hr) || !walker)
+    {
+        fprintf(stderr, "get_ControlViewWalker failed\n");
+        return 2;
     }
 
     ComPtr<IUIAutomationElement> root;
     hr = uia->ElementFromHandle(hwnd, &root);
-    if (FAILED(hr) || !root) { fprintf(stderr, "ElementFromHandle failed\n"); return 3; }
+    if (FAILED(hr) || !root)
+    {
+        fprintf(stderr, "ElementFromHandle failed\n");
+        return 3;
+    }
 
     // Warmup: Chromium/WebView2 uses lazy Blink accessibility
     // initialization: the inner React DOM UIA tree is not built until a
@@ -259,19 +330,16 @@ int wmain(int argc, wchar_t* argv[]) {
         // Also try ElementFromPoint at the center of the target window —
         // belt-and-suspenders in case focus is elsewhere.
         RECT wr;
-        if (GetWindowRect(hwnd, &wr)) {
-            POINT center = {
-                (wr.left + wr.right) / 2,
-                (wr.top + wr.bottom) / 2
-            };
+        if (GetWindowRect(hwnd, &wr))
+        {
+            POINT                        center = {(wr.left + wr.right) / 2, (wr.top + wr.bottom) / 2};
             ComPtr<IUIAutomationElement> atPoint;
             uia->ElementFromPoint(center, &atPoint);
         }
         Sleep(300);
     }
 
-    fprintf(stderr, "[A11Y-CAPTURE] surface=%ls hwnd=0x%llx\n",
-            capture.c_str(),
+    fprintf(stderr, "[A11Y-CAPTURE] surface=%ls hwnd=0x%llx\n", capture.c_str(),
             static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(hwnd)));
 
     std::ostringstream out;

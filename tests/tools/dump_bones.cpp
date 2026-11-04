@@ -20,26 +20,47 @@
 
 int main(int argc, char** argv)
 {
-    if (argc < 2) { printf("usage: dump_bones <path.alo>\n"); return 2; }
-    std::string p(argv[1]); std::wstring w(p.begin(), p.end());
-    IFile* f = nullptr;
-    try { f = new PhysicalFile(w, PhysicalFile::READ); } catch (...) { printf("open fail\n"); return 1; }
+    if (argc < 2)
+    {
+        printf("usage: dump_bones <path.alo>\n");
+        return 2;
+    }
+    std::string  p(argv[1]);
+    std::wstring w(p.begin(), p.end());
+    IFile*       f = nullptr;
+    try
+    {
+        f = new PhysicalFile(w, PhysicalFile::READ);
+    }
+    catch (...)
+    {
+        printf("open fail\n");
+        return 1;
+    }
     AloModel m;
-    try { m = LoadAloModel(f); f->Release(); } catch (...) { printf("parse fail\n"); return 1; }
+    try
+    {
+        m = LoadAloModel(f);
+        f->Release();
+    }
+    catch (...)
+    {
+        printf("parse fail\n");
+        return 1;
+    }
 
-    printf("=== %s ===\nmeshes=%zu bones=%zu connections=%zu\n",
-           argv[1], m.meshes.size(), m.bones.size(), m.connections.size());
+    printf("=== %s ===\nmeshes=%zu bones=%zu connections=%zu\n", argv[1], m.meshes.size(), m.bones.size(),
+           m.connections.size());
     for (size_t i = 0; i < m.meshes.size(); ++i)
         printf("  mesh[%zu] name=%-16s subs=%zu\n", i, m.meshes[i].name.c_str(), m.meshes[i].subMeshes.size());
     for (size_t i = 0; i < m.bones.size(); ++i)
     {
         const AloBone& b = m.bones[i];
-        printf("  bone[%zu] name=%-16s parent=%d billboardMode=%u  T=(%.3f,%.3f,%.3f)\n",
-               i, b.name.c_str(), (int)b.parentIndex, b.billboardMode,
-               b.matrix[3], b.matrix[7], b.matrix[11]);
+        printf("  bone[%zu] name=%-16s parent=%d billboardMode=%u  T=(%.3f,%.3f,%.3f)\n", i, b.name.c_str(),
+               (int)b.parentIndex, b.billboardMode, b.matrix[3], b.matrix[7], b.matrix[11]);
     }
     for (size_t i = 0; i < m.connections.size(); ++i)
-        printf("  conn[%zu] mesh(objectIndex)=%u -> bone(boneIndex)=%u\n",
-               i, m.connections[i].objectIndex, m.connections[i].boneIndex);
+        printf("  conn[%zu] mesh(objectIndex)=%u -> bone(boneIndex)=%u\n", i, m.connections[i].objectIndex,
+               m.connections[i].boneIndex);
     return 0;
 }

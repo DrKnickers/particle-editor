@@ -18,10 +18,19 @@
 #include <vector>
 
 static int g_failed = 0;
-#define CHECK(cond, msg) do {                              \
-    if (cond) { std::printf("  ok: %s\n", msg); }          \
-    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
 using recordsafety::IsRecordArtifactName;
 using recordsafety::MayReplaceOutputDir;
@@ -34,31 +43,30 @@ int main()
     // --- artifact-name recognition -----------------------------------------
     CHECK(IsRecordArtifactName(L"frame_00000.png"), "frame_00000.png is a record artifact");
     CHECK(IsRecordArtifactName(L"frame_99999.png"), "frame_99999.png is a record artifact");
-    CHECK(IsRecordArtifactName(L"frame_7.png"),     "short digit run still counts");
+    CHECK(IsRecordArtifactName(L"frame_7.png"), "short digit run still counts");
     CHECK(IsRecordArtifactName(L"cursor-sidecar.json"), "cursor sidecar is a record artifact");
-    CHECK(IsRecordArtifactName(L"pump-trace.txt"),  "the pump trace is a record artifact");
+    CHECK(IsRecordArtifactName(L"pump-trace.txt"), "the pump trace is a record artifact");
 
-    CHECK(!IsRecordArtifactName(L"pump-trace.json"),   "trace with wrong extension -> not an artifact");
-    CHECK(!IsRecordArtifactName(L"trace.txt"),         "other .txt -> not an artifact");
-    CHECK(!IsRecordArtifactName(L"frame_.png"),        "no digits -> not an artifact");
-    CHECK(!IsRecordArtifactName(L"frame_00a01.png"),   "non-digit in the run -> not an artifact");
-    CHECK(!IsRecordArtifactName(L"frame_00001.txt"),   "wrong extension -> not an artifact");
+    CHECK(!IsRecordArtifactName(L"pump-trace.json"), "trace with wrong extension -> not an artifact");
+    CHECK(!IsRecordArtifactName(L"trace.txt"), "other .txt -> not an artifact");
+    CHECK(!IsRecordArtifactName(L"frame_.png"), "no digits -> not an artifact");
+    CHECK(!IsRecordArtifactName(L"frame_00a01.png"), "non-digit in the run -> not an artifact");
+    CHECK(!IsRecordArtifactName(L"frame_00001.txt"), "wrong extension -> not an artifact");
     CHECK(!IsRecordArtifactName(L"myframe_00001.png"), "wrong prefix -> not an artifact");
-    CHECK(!IsRecordArtifactName(L"notes.txt"),         "ordinary file -> not an artifact");
-    CHECK(!IsRecordArtifactName(L"assets"),            "a subdirectory name -> not an artifact");
+    CHECK(!IsRecordArtifactName(L"notes.txt"), "ordinary file -> not an artifact");
+    CHECK(!IsRecordArtifactName(L"assets"), "a subdirectory name -> not an artifact");
 
     std::wstring why;
 
     // --- the safe cases: overwriting must keep working ----------------------
     CHECK(MayReplaceOutputDir(false, {}, why), "absent dir: safe to create");
-    CHECK(MayReplaceOutputDir(true, {}, why),  "existing EMPTY dir: safe to replace");
+    CHECK(MayReplaceOutputDir(true, {}, why), "existing EMPTY dir: safe to replace");
 
     {
         // The normal re-shoot: the directory holds only the previous run's output
         // (including a pump trace when PE_RECORD_TRACE was set).
         const std::vector<std::wstring> prior = {
-            L"frame_00000.png", L"frame_00001.png", L"frame_00002.png",
-            L"cursor-sidecar.json", L"pump-trace.txt",
+            L"frame_00000.png", L"frame_00001.png", L"frame_00002.png", L"cursor-sidecar.json", L"pump-trace.txt",
         };
         CHECK(MayReplaceOutputDir(true, prior, why),
               "dir holding ONLY prior record output (+ pump trace): safe to replace (re-shoot works)");
@@ -66,8 +74,8 @@ int main()
 
     // --- the original repro: a foreign file must block the publish ---------
     {
-        const std::vector<std::wstring> victim = { L"sentinel-do-not-preserve.txt" };
-        const bool may = MayReplaceOutputDir(true, victim, why);
+        const std::vector<std::wstring> victim = {L"sentinel-do-not-preserve.txt"};
+        const bool                      may    = MayReplaceOutputDir(true, victim, why);
         CHECK(!may, "the audit's victim/ dir is REFUSED (sentinel would have been deleted)");
         CHECK(why.find(L"sentinel-do-not-preserve.txt") != std::wstring::npos,
               "refusal names the exact entry that blocked it");
@@ -77,7 +85,9 @@ int main()
         // The nastier shape: mostly-record output with one real file mixed in.
         // A count- or majority-based check would wave this through.
         const std::vector<std::wstring> mixed = {
-            L"frame_00000.png", L"frame_00001.png", L"important-notes.md",
+            L"frame_00000.png",
+            L"frame_00001.png",
+            L"important-notes.md",
         };
         CHECK(!MayReplaceOutputDir(true, mixed, why),
               "ONE foreign file among real frames still refuses (no majority rule)");
@@ -85,23 +95,21 @@ int main()
 
     {
         // A record output is flat, so any subdirectory is foreign by definition.
-        const std::vector<std::wstring> nested = { L"frame_00000.png", L"assets" };
-        CHECK(!MayReplaceOutputDir(true, nested, why),
-              "a subdirectory makes the dir foreign (record output is flat)");
+        const std::vector<std::wstring> nested = {L"frame_00000.png", L"assets"};
+        CHECK(!MayReplaceOutputDir(true, nested, why), "a subdirectory makes the dir foreign (record output is flat)");
     }
 
     // --- MayReplaceRecordDir: the on-disk wrapper used for out AND <out>.tmp --
     CHECK(MayReplaceRecordDir(false, false, false, {}, why), "wrapper: absent path is safe");
-    CHECK(MayReplaceRecordDir(true, true, true, {}, why),    "wrapper: empty dir is safe");
+    CHECK(MayReplaceRecordDir(true, true, true, {}, why), "wrapper: empty dir is safe");
     {
-        const std::vector<std::wstring> prior = { L"frame_00000.png", L"pump-trace.txt" };
+        const std::vector<std::wstring> prior = {L"frame_00000.png", L"pump-trace.txt"};
         CHECK(MayReplaceRecordDir(true, true, true, prior, why),
               "wrapper: a previous run's staging dir (frames + trace) is safe to clear");
     }
     {
-        const std::vector<std::wstring> victim = { L"thesis.docx" };
-        CHECK(!MayReplaceRecordDir(true, true, true, victim, why),
-              "wrapper: a foreign file in <out>.tmp is REFUSED");
+        const std::vector<std::wstring> victim = {L"thesis.docx"};
+        CHECK(!MayReplaceRecordDir(true, true, true, victim, why), "wrapper: a foreign file in <out>.tmp is REFUSED");
     }
     CHECK(!MayReplaceRecordDir(true, false, true, {}, why),
           "wrapper: a FILE sitting at the path is refused, never deleted");

@@ -16,13 +16,18 @@
 #include <fstream>
 #include <map>
 
-namespace host {
-namespace {
+namespace host
+{
+namespace
+{
 
 using nlohmann::json;
 using Clock = std::chrono::steady_clock;
 
-json OptionalFrame(const std::optional<int>& frame) { return frame ? json(*frame) : json(nullptr); }
+json OptionalFrame(const std::optional<int>& frame)
+{
+    return frame ? json(*frame) : json(nullptr);
+}
 
 // The adapter description is in the ANSI code page, not UTF-8.
 std::string AnsiToUtf8(const char* text)
@@ -38,41 +43,46 @@ std::string AnsiToUtf8(const char* text)
 json RenderProfile(const Engine& engine)
 {
     const unsigned long long version = engine.GetAdapterDriverVersion();
-    char driver[96];
+    char                     driver[96];
     sprintf_s(driver, sizeof(driver), "%llu.%llu.%llu.%llu", version >> 48, (version >> 32) & 0xFFFF,
-        (version >> 16) & 0xFFFF, version & 0xFFFF);
-    return {{"adapter", {{"description", AnsiToUtf8(engine.GetAdapterDescription())},
-            {"vendorId", engine.GetAdapterVendorId()}, {"deviceId", engine.GetAdapterDeviceId()},
-            {"driverVersion", driver}}},
-        {"displayFormat", static_cast<int>(engine.GetCreationDisplayFormat())},
-        {"depthStencilFormat", static_cast<int>(engine.GetCreationDepthStencilFormat())},
-        {"multisample", {{"type", static_cast<int>(engine.GetCreationMultiSampleType())},
-            {"quality", engine.GetCreationMultiSampleQuality()}}},
-        {"vertexProcessing", engine.GetVertexProcessingMode()}};
+              (version >> 16) & 0xFFFF, version & 0xFFFF);
+    return {{"adapter",
+             {{"description", AnsiToUtf8(engine.GetAdapterDescription())},
+              {"vendorId", engine.GetAdapterVendorId()},
+              {"deviceId", engine.GetAdapterDeviceId()},
+              {"driverVersion", driver}}},
+            {"displayFormat", static_cast<int>(engine.GetCreationDisplayFormat())},
+            {"depthStencilFormat", static_cast<int>(engine.GetCreationDepthStencilFormat())},
+            {"multisample",
+             {{"type", static_cast<int>(engine.GetCreationMultiSampleType())},
+              {"quality", engine.GetCreationMultiSampleQuality()}}},
+            {"vertexProcessing", engine.GetVertexProcessingMode()}};
 }
 
 const char* OutcomeString(AssetRecord::Outcome outcome)
 {
     switch (outcome)
     {
-    case AssetRecord::Outcome::Resolved: return "resolved";
-    case AssetRecord::Outcome::DefaultSubstituted: return "default-substituted";
-    default: return "failed";
+        case AssetRecord::Outcome::Resolved:           return "resolved";
+        case AssetRecord::Outcome::DefaultSubstituted: return "default-substituted";
+        default:                                       return "failed";
     }
 }
 
 // The nullability of winner, hash and size follows the attempt's result.
 json AttemptJson(const AssetAttempt& attempt)
 {
-    static const char* results[] = { "not-found", "read-rejected", "decode-failed", "resolved" };
-    const auto result = attempt.result;
-    json value = {{"name", attempt.name}, {"result", results[static_cast<int>(result)]},
-        {"winner", result == AssetAttempt::Result::NotFound ? json(nullptr) : WinnerJson(attempt.winner)},
-        {"sha256", result == AssetAttempt::Result::DecodeFailed || result == AssetAttempt::Result::Resolved
-            ? json(attempt.sha256) : json(nullptr)}};
+    static const char* results[] = {"not-found", "read-rejected", "decode-failed", "resolved"};
+    const auto         result    = attempt.result;
+    json value = {{"name", attempt.name},
+                  {"result", results[static_cast<int>(result)]},
+                  {"winner", result == AssetAttempt::Result::NotFound ? json(nullptr) : WinnerJson(attempt.winner)},
+                  {"sha256", result == AssetAttempt::Result::DecodeFailed || result == AssetAttempt::Result::Resolved
+                                 ? json(attempt.sha256)
+                                 : json(nullptr)}};
     if (result == AssetAttempt::Result::ReadRejected)
     {
-        value["size"] = attempt.reportedSize;
+        value["size"]   = attempt.reportedSize;
         value["reason"] = attempt.reason;
     }
     if (!attempt.reason.empty() && result != AssetAttempt::Result::ReadRejected) value["reason"] = attempt.reason;
@@ -84,10 +94,13 @@ json RecordJson(const AssetRecord& record)
     json attempts = json::array();
     for (const auto& attempt : record.attempts) attempts.push_back(AttemptJson(attempt));
     const bool used = record.outcome != AssetRecord::Outcome::Failed;
-    return {{"type", record.type}, {"identity", record.identity}, {"requests", record.requests},
-        {"attempts", attempts}, {"outcome", OutcomeString(record.outcome)},
-        {"winner", used ? WinnerJson(record.winner) : json(nullptr)},
-        {"sha256", used ? json(record.sha256) : json(nullptr)}};
+    return {{"type", record.type},
+            {"identity", record.identity},
+            {"requests", record.requests},
+            {"attempts", attempts},
+            {"outcome", OutcomeString(record.outcome)},
+            {"winner", used ? WinnerJson(record.winner) : json(nullptr)},
+            {"sha256", used ? json(record.sha256) : json(nullptr)}};
 }
 
 // Every string the ledger serialises, so a name that is not UTF-8 is refused
@@ -98,7 +111,8 @@ bool LedgerIsUtf8(const std::vector<AssetRecord>& records)
     {
         if (!IsValidUtf8(record.identity) || !IsValidUtf8(record.winner.path) || !IsValidUtf8(record.winner.member))
             return false;
-        for (const auto& name : record.requests) if (!IsValidUtf8(name)) return false;
+        for (const auto& name : record.requests)
+            if (!IsValidUtf8(name)) return false;
         for (const auto& attempt : record.attempts)
             if (!IsValidUtf8(attempt.name) || !IsValidUtf8(attempt.winner.path) || !IsValidUtf8(attempt.winner.member))
                 return false;
@@ -117,39 +131,47 @@ std::string FramePath(const char* directory, const char* pattern, int frame)
 
 struct ObservationRunner::Impl
 {
-    ReplayRunDeps deps;
-    Deps observation;
-    std::wstring specPath;
+    ReplayRunDeps         deps;
+    Deps                  observation;
+    std::wstring          specPath;
     std::filesystem::path out;
-    ObservationSpec spec;
-    json capture = {{"schemaVersion", 1}, {"tool", PE_VERSION_STR}, {"lifecycle", {{"status", "failed"}}},
-        {"preparation", json::array()}, {"frames", json::array()},
-        {"stride", json::array()}, {"playback", json::array()}};
-    ReplayRunContext context;
-    std::vector<ObservationSample> samples;
-    TelemetryByteBudget telemetryBudget{0};
-    size_t emitterCount = 0;
-    std::map<int, SelectedFrame> selected;
-    std::map<int, int> playback;
+    ObservationSpec       spec;
+    json capture = {{"schemaVersion", 1},           {"tool", PE_VERSION_STR},  {"lifecycle", {{"status", "failed"}}},
+                    {"preparation", json::array()}, {"frames", json::array()}, {"stride", json::array()},
+                    {"playback", json::array()}};
+    ReplayRunContext                   context;
+    std::vector<ObservationSample>     samples;
+    TelemetryByteBudget                telemetryBudget{0};
+    size_t                             emitterCount = 0;
+    std::map<int, SelectedFrame>       selected;
+    std::map<int, int>                 playback;
     std::vector<std::filesystem::path> files, directories;
-    std::uint64_t runtimeBaseline = 0, hardBaseline = 0, indexBaseline = 0, bytes = 0;
-    std::uint64_t resetUpdateCount = 0;
-    int frame = -1, exitCode = 0, pass = 0;
-    bool accepted = false, validated = false;
-    double passMs[2] = {};
-    Clock::time_point passStart;
-    bool passActive = false;
+    std::uint64_t                      runtimeBaseline = 0, hardBaseline = 0, indexBaseline = 0, bytes = 0;
+    std::uint64_t                      resetUpdateCount = 0;
+    int                                frame = -1, exitCode = 0, pass = 0;
+    bool                               accepted = false, validated = false;
+    double                             passMs[2] = {};
+    Clock::time_point                  passStart;
+    bool                               passActive = false;
 
     Impl(ReplayRunDeps dependencies, Deps extra, const std::wstring& path, const std::wstring& directory)
         : deps(std::move(dependencies)), observation(std::move(extra)), specPath(path), out(directory),
           context{deps,
-              [this](int code, const char* hook, const std::string& message) { return Fail(code, hook, message); },
-              [this]() { return exitCode != 0; }, capture["preparation"], {}, {}, {}, false, Clock::now(),
-              [this](const json& locked) { capture["geometry"] = locked; }} {}
+                  [this](int code, const char* hook, const std::string& message) { return Fail(code, hook, message); },
+                  [this]() { return exitCode != 0; },
+                  capture["preparation"],
+                  {},
+                  {},
+                  {},
+                  false,
+                  Clock::now(),
+                  [this](const json& locked) { capture["geometry"] = locked; }}
+    {
+    }
 
     void Log(const char* format, ...)
     {
-        char message[2048];
+        char    message[2048];
         va_list args;
         va_start(args, format);
         _vsnprintf_s(message, sizeof(message), _TRUNCATE, format, args);
@@ -161,9 +183,9 @@ struct ObservationRunner::Impl
     {
         if (!exitCode)
         {
-            exitCode = code;
+            exitCode                       = code;
             capture["lifecycle"]["status"] = "failed";
-            capture["failure"] = {{"hook", hook}, {"frame", frame}, {"exit", code}, {"message", message}};
+            capture["failure"]             = {{"hook", hook}, {"frame", frame}, {"exit", code}, {"message", message}};
             Log("[observe] hook=%s frame=%d exit=%d %s\n", hook, frame, code, message.c_str());
             fprintf(stderr, "[observe] hook=%s frame=%d exit=%d %s\n", hook, frame, code, message.c_str());
         }
@@ -172,9 +194,9 @@ struct ObservationRunner::Impl
 
     void BeginPass(int value)
     {
-        pass = value;
-        frame = -1;
-        passStart = Clock::now();
+        pass       = value;
+        frame      = -1;
+        passStart  = Clock::now();
         passActive = true;
         Log("[observe] pass=%d start\n", pass);
     }
@@ -182,7 +204,7 @@ struct ObservationRunner::Impl
     void EndPass()
     {
         if (!passActive) return;
-        passActive = false;
+        passActive       = false;
         passMs[pass - 1] = std::chrono::duration<double, std::milli>(Clock::now() - passStart).count();
         Log("[observe] pass=%d end frame=%d wallMs=%.3f\n", pass, frame, passMs[pass - 1]);
     }
@@ -190,7 +212,7 @@ struct ObservationRunner::Impl
     bool AcceptDirectory()
     {
         std::error_code error;
-        const auto status = std::filesystem::symlink_status(out, error);
+        const auto      status = std::filesystem::symlink_status(out, error);
         if (error && error != std::errc::no_such_file_or_directory)
             return Fail(13, "output-directory", error.message());
         if (std::filesystem::exists(status) &&
@@ -209,7 +231,7 @@ struct ObservationRunner::Impl
     bool Directory(const char* relative)
     {
         if (context.failed()) return false;
-        const auto path = out / relative;
+        const auto      path = out / relative;
         std::error_code error;
         if (!std::filesystem::create_directory(path, error))
             return Fail(13, "directory", error ? error.message() : "output subdirectory already exists");
@@ -225,16 +247,16 @@ struct ObservationRunner::Impl
         for (auto it = directories.rbegin(); it != directories.rend(); ++it)
             if (it->filename() != L"logs") std::filesystem::remove(*it, error);
         files.clear();
-        bytes = 0;
-        capture["frames"] = json::array();
-        capture["stride"] = json::array();
+        bytes               = 0;
+        capture["frames"]   = json::array();
+        capture["stride"]   = json::array();
         capture["playback"] = json::array();
     }
 
     bool Account(const std::filesystem::path& path)
     {
         std::error_code error;
-        const auto size = std::filesystem::file_size(path, error);
+        const auto      size = std::filesystem::file_size(path, error);
         if (error) return Fail(13, "file-size", error.message());
         bytes += size;
         if (bytes <= spec.output.maxBytes) return true;
@@ -259,13 +281,18 @@ struct ObservationRunner::Impl
     bool Sample()
     {
         if (context.failed() || !CheckGeometry(context, "sample")) return false;
-        ObservationSample sample{frame, deps.engine->GetNumInstances(), deps.engine->GetNumEmitters(),
-            deps.engine->GetNumParticles(), ParticleRandom::DrawCount(), ParticleRandom::StateValue(),
-            deps.engine->RuntimeGuardRefusalCountForObservation() - runtimeBaseline,
-            deps.engine->HardGuardRefusalCountForObservation() - hardBaseline,
-            deps.engine->IndexCapRefusalCountForObservation() - indexBaseline,
-            deps.engine->IsSpawnOverloadActive(), observation.spawnerIdle(),
-            std::vector<int>(emitterCount, 0)};
+        ObservationSample sample{frame,
+                                 deps.engine->GetNumInstances(),
+                                 deps.engine->GetNumEmitters(),
+                                 deps.engine->GetNumParticles(),
+                                 ParticleRandom::DrawCount(),
+                                 ParticleRandom::StateValue(),
+                                 deps.engine->RuntimeGuardRefusalCountForObservation() - runtimeBaseline,
+                                 deps.engine->HardGuardRefusalCountForObservation() - hardBaseline,
+                                 deps.engine->IndexCapRefusalCountForObservation() - indexBaseline,
+                                 deps.engine->IsSpawnOverloadActive(),
+                                 observation.spawnerIdle(),
+                                 std::vector<int>(emitterCount, 0)};
         deps.engine->PerEmitterParticleCounts(sample.perEmitter);
         if (sample.perEmitter.size() != emitterCount)
             return Fail(4, "per-emitter", "an emitter instance has no authored emitter");
@@ -275,11 +302,12 @@ struct ObservationRunner::Impl
         {
             // Count the line before retaining the sample: memory stays within the budget.
             if (!telemetryBudget.Add(ObservationSampleLine(sample).size()))
-                return Fail(16, "quota-telemetry", "telemetry bytes exceeded maxBytes at frame " + std::to_string(frame));
+                return Fail(16, "quota-telemetry",
+                            "telemetry bytes exceeded maxBytes at frame " + std::to_string(frame));
             samples.push_back(std::move(sample));
         }
         else if (pass == 2 && (frame < 0 || static_cast<size_t>(frame) >= samples.size() ||
-                 ObservationSampleJson(sample) != ObservationSampleJson(samples[frame])))
+                               ObservationSampleJson(sample) != ObservationSampleJson(samples[frame])))
             return Fail(15, "determinism", "pass 2 sample differs from pass 1 at frame " + std::to_string(frame));
         return true;
     }
@@ -311,8 +339,8 @@ struct ObservationRunner::Impl
 
     ParticleReplayController::Hooks Hooks()
     {
-        auto hooks = deps.buildHooks(L"");
-        const auto admit = hooks.admitDevice;
+        auto       hooks  = deps.buildHooks(L"");
+        const auto admit  = hooks.admitDevice;
         hooks.admitDevice = [this, admit]()
         {
             if (!PumpMessages(context)) return false;
@@ -322,69 +350,85 @@ struct ObservationRunner::Impl
             frame = frame < 0 ? 0 : frame + 1;
             return Fail(8, "admitDevice", "device admission failed");
         };
-        const auto pin = hooks.pinSettings;
+        const auto pin    = hooks.pinSettings;
         hooks.pinSettings = [this, pin](const PreviewScenario& value)
         {
             if (context.failed()) return false;
-            frame = 0;
+            frame           = 0;
             context.inForce = value;
-            bool pinned = pin(value);
+            bool pinned     = pin(value);
             if (pinned && spec.hasCamera)
             {
                 // The golden pin restores its camera on every replay reset.
                 Engine::Camera camera;
-                camera.Position = D3DXVECTOR3(spec.camera.position[0], spec.camera.position[1], spec.camera.position[2]);
+                camera.Position =
+                    D3DXVECTOR3(spec.camera.position[0], spec.camera.position[1], spec.camera.position[2]);
                 camera.Target = D3DXVECTOR3(spec.camera.target[0], spec.camera.target[1], spec.camera.target[2]);
-                camera.Up = D3DXVECTOR3(spec.camera.up[0], spec.camera.up[1], spec.camera.up[2]);
+                camera.Up     = D3DXVECTOR3(spec.camera.up[0], spec.camera.up[1], spec.camera.up[2]);
                 deps.engine->SetCamera(camera);
                 const auto& applied = deps.engine->GetCamera();
-                pinned = !deps.engine->DeviceCallsBlocked() && applied.Position == camera.Position &&
-                    applied.Target == camera.Target && applied.Up == camera.Up;
+                pinned              = !deps.engine->DeviceCallsBlocked() && applied.Position == camera.Position &&
+                                      applied.Target == camera.Target && applied.Up == camera.Up;
             }
             return pinned || Fail(9, "pinSettings", "fixed profile or scenario settings failed");
         };
-        const auto clear = hooks.clearInstances;
+        const auto clear     = hooks.clearInstances;
         hooks.clearInstances = [this, clear]()
         {
             if (context.failed()) return;
             clear();
             resetUpdateCount = deps.engine->CompletedFullUpdateCountForObservation();
-            runtimeBaseline = deps.engine->RuntimeGuardRefusalCountForObservation();
-            hardBaseline = deps.engine->HardGuardRefusalCountForObservation();
-            indexBaseline = deps.engine->IndexCapRefusalCountForObservation();
+            runtimeBaseline  = deps.engine->RuntimeGuardRefusalCountForObservation();
+            hardBaseline     = deps.engine->HardGuardRefusalCountForObservation();
+            indexBaseline    = deps.engine->IndexCapRefusalCountForObservation();
         };
         const auto seed = hooks.seed;
-        hooks.seed = [this, seed](std::uint32_t value)
+        hooks.seed      = [this, seed](std::uint32_t value)
         {
             if (context.failed()) return;
             seed(value);
             if (ParticleRandom::DrawCount() != 0) Fail(4, "seed", "draws before armSpawn must be zero");
         };
         const auto freeze = hooks.freezeClock;
-        hooks.freezeClock = [this, freeze](float value) { if (!context.failed()) { frame = 0; freeze(value); } };
+        hooks.freezeClock = [this, freeze](float value)
+        {
+            if (!context.failed())
+            {
+                frame = 0;
+                freeze(value);
+            }
+        };
         const auto arm = hooks.armSpawn;
         hooks.armSpawn = [this, arm](const PreviewScenario& value)
         {
             return !context.failed() && (arm(value) || Fail(9, "armSpawn", "spawn hook failed"));
         };
         const auto step = hooks.stepClock;
-        hooks.stepClock = [this, step]() { if (!context.failed()) { ++frame; step(); } };
-        const auto tick = hooks.tickSpawner;
+        hooks.stepClock = [this, step]()
+        {
+            if (!context.failed())
+            {
+                ++frame;
+                step();
+            }
+        };
+        const auto tick   = hooks.tickSpawner;
         hooks.tickSpawner = [this, tick]()
         {
             return !context.failed() && (tick() || Fail(9, "tickSpawner", "spawn tick failed"));
         };
         const auto update = hooks.update;
-        hooks.update = [this, update]()
+        hooks.update      = [this, update]()
         {
             if (context.failed()) return false;
             if (!update()) return Fail(10, "update", "one completed full Update required");
-            if (deps.engine->CompletedFullUpdateCountForObservation() != resetUpdateCount + static_cast<std::uint64_t>(frame) + 1)
+            if (deps.engine->CompletedFullUpdateCountForObservation() !=
+                resetUpdateCount + static_cast<std::uint64_t>(frame) + 1)
                 return Fail(4, "update-count", "incidental Update outside the replay controller");
             return CheckSettings(context) && (pass == 0 || Sample());
         };
         const auto render = hooks.render;
-        hooks.render = [this, render]()
+        hooks.render      = [this, render]()
         {
             if (!CheckGeometry(context, "render-before")) return false;
             if (!render()) return Fail(11, "render", "render, query or composition failed");
@@ -396,11 +440,11 @@ struct ObservationRunner::Impl
             const auto chosen = selected.find(frame);
             if (chosen != selected.end())
             {
-                const auto png = FramePath("selected-frames", "frame-%05d.png", frame);
+                const auto  png = FramePath("selected-frames", "frame-%05d.png", frame);
                 std::string hash;
                 if (!Readback(png, &hash)) return false;
-                capture["frames"].push_back({{"frame", frame}, {"reasons", chosen->second.reasons},
-                    {"png", png}, {"sha256", hash}});
+                capture["frames"].push_back(
+                    {{"frame", frame}, {"reasons", chosen->second.reasons}, {"png", png}, {"sha256", hash}});
             }
             const auto play = playback.find(frame);
             if (play != playback.end())
@@ -415,14 +459,23 @@ struct ObservationRunner::Impl
 
     json Summary(const ObservationLifecycle& lifecycle)
     {
-        return {{"status", ObservationStatusString(lifecycle.Status())}, {"finalFrame", lifecycle.FinalFrame()},
-            {"reviewWindow", {lifecycle.ReviewStartFrame(), lifecycle.ReviewEndFrame()}},
-            {"endedBeforeReview", lifecycle.EndedBeforeReview()}, {"firstActive", OptionalFrame(lifecycle.FirstActiveFrame())},
-            {"peak", OptionalFrame(lifecycle.PeakFrame())}, {"lastActive", OptionalFrame(lifecycle.LastActiveFrame())},
-            {"limits", {
-                {"runtimeGuard", {{"total", lifecycle.RuntimeGuardRefusals()}, {"firstFrame", OptionalFrame(lifecycle.FirstRuntimeGuardFrame())}}},
-                {"hardGuard", {{"total", lifecycle.HardGuardRefusals()}, {"firstFrame", OptionalFrame(lifecycle.FirstHardGuardFrame())}}},
-                {"indexCap", {{"total", lifecycle.IndexCapRefusals()}, {"firstFrame", OptionalFrame(lifecycle.FirstIndexCapFrame())}}}}}};
+        return {{"status", ObservationStatusString(lifecycle.Status())},
+                {"finalFrame", lifecycle.FinalFrame()},
+                {"reviewWindow", {lifecycle.ReviewStartFrame(), lifecycle.ReviewEndFrame()}},
+                {"endedBeforeReview", lifecycle.EndedBeforeReview()},
+                {"firstActive", OptionalFrame(lifecycle.FirstActiveFrame())},
+                {"peak", OptionalFrame(lifecycle.PeakFrame())},
+                {"lastActive", OptionalFrame(lifecycle.LastActiveFrame())},
+                {"limits",
+                 {{"runtimeGuard",
+                   {{"total", lifecycle.RuntimeGuardRefusals()},
+                    {"firstFrame", OptionalFrame(lifecycle.FirstRuntimeGuardFrame())}}},
+                  {"hardGuard",
+                   {{"total", lifecycle.HardGuardRefusals()},
+                    {"firstFrame", OptionalFrame(lifecycle.FirstHardGuardFrame())}}},
+                  {"indexCap",
+                   {{"total", lifecycle.IndexCapRefusals()},
+                    {"firstFrame", OptionalFrame(lifecycle.FirstIndexCapFrame())}}}}}};
     }
 
     // The textures the emitters asked for, by provenance, and the asset ledger:
@@ -432,7 +485,7 @@ struct ObservationRunner::Impl
         std::vector<std::string> resolved, unresolved;
         deps.engine->TakeTextureAttestation(resolved, unresolved);
         std::vector<AssetRecord> records;
-        const std::string unverifiable = deps.engine->TakeAssetLedger(records);
+        const std::string        unverifiable = deps.engine->TakeAssetLedger(records);
         if (!unverifiable.empty()) return Fail(13, "asset-ledger", unverifiable);
         if (!LedgerIsUtf8(records)) return Fail(4, "asset-ledger", "an asset name or path is not valid UTF-8");
         json loaded = json::array(), provenance = json::object();
@@ -445,42 +498,48 @@ struct ObservationRunner::Impl
                 if (record.type == "texture" && record.requests.count(name)) found = &record;
             if (!found || found->outcome != AssetRecord::Outcome::Resolved)
                 return Fail(4, "texture-provenance", "resolved texture " + name + " has no resolved ledger entry");
-            provenance[name] = {{"identity", found->identity}, {"winner", WinnerJson(found->winner)}, {"sha256", found->sha256}};
+            provenance[name] = {
+                {"identity", found->identity}, {"winner", WinnerJson(found->winner)}, {"sha256", found->sha256}};
         }
-        capture["content"]["resolvedTextures"] = resolved;
-        capture["content"]["unresolvedTextures"] = unresolved;
+        capture["content"]["resolvedTextures"]          = resolved;
+        capture["content"]["unresolvedTextures"]        = unresolved;
         capture["content"]["resolvedTextureProvenance"] = provenance;
-        capture["content"]["loadedAssets"] = loaded;
+        capture["content"]["loadedAssets"]              = loaded;
         return true;
     }
 
     json EmitterSummary() const
     {
-        const auto& emitters = deps.particleSystem->getEmitters();
-        const auto landmarks = PerEmitterLandmarks(samples, emitterCount);
-        json result = json::array();
+        const auto& emitters  = deps.particleSystem->getEmitters();
+        const auto  landmarks = PerEmitterLandmarks(samples, emitterCount);
+        json        result    = json::array();
         for (size_t i = 0; i < emitterCount; ++i)
-            result.push_back({{"index", i}, {"name", emitters[i]->name},
-                {"firstActive", OptionalFrame(landmarks[i].firstActive)}, {"peakFrame", OptionalFrame(landmarks[i].peakFrame)},
-                {"lastActive", OptionalFrame(landmarks[i].lastActive)}, {"peakParticles", landmarks[i].peakParticles}});
+            result.push_back({{"index", i},
+                              {"name", emitters[i]->name},
+                              {"firstActive", OptionalFrame(landmarks[i].firstActive)},
+                              {"peakFrame", OptionalFrame(landmarks[i].peakFrame)},
+                              {"lastActive", OptionalFrame(landmarks[i].lastActive)},
+                              {"peakParticles", landmarks[i].peakParticles}});
         return result;
     }
 
     bool Execute()
     {
-        std::ifstream input(std::filesystem::path(specPath), std::ios::binary);
+        std::ifstream     input(std::filesystem::path(specPath), std::ios::binary);
         const std::string text((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
-        std::string error = input.bad() || !input.is_open() ? "spec file could not be read" : ParseObservationSpec(text, spec);
+        std::string       error =
+            input.bad() || !input.is_open() ? "spec file could not be read" : ParseObservationSpec(text, spec);
         if (error.empty()) error = ValidateObservationSpec(spec);
         if (!error.empty()) return Fail(2, "spec", error);
-        validated = true;
+        validated       = true;
         telemetryBudget = TelemetryByteBudget(spec.output.maxBytes);
         capture["spec"] = json::parse(SerializeObservationSpec(spec));
         Log("[observe] spec %s\n", capture["spec"].dump().c_str());
         if (!deps.engine) return Fail(8, "admitDevice", "engine unavailable");
-        if (!WaitReady(context) || !PumpMessages(context) || !LoadDocument(context, spec.scenario.aloPath)) return false;
+        if (!WaitReady(context) || !PumpMessages(context) || !LoadDocument(context, spec.scenario.aloPath))
+            return false;
         const auto& emitters = deps.particleSystem->getEmitters();
-        emitterCount = emitters.size();
+        emitterCount         = emitters.size();
         // Names go into the bundle verbatim; a replacement decode would merge distinct names.
         for (size_t i = 0; i < emitterCount; ++i)
         {
@@ -491,22 +550,26 @@ struct ObservationRunner::Impl
         }
         const std::string sourceHash = Sha256(spec.scenario.aloPath);
         if (sourceHash.empty()) return Fail(13, "source-hash", "source hash failed");
-        capture["source"] = {{"path", WideToUtf8(std::filesystem::path(spec.scenario.aloPath).generic_wstring())},
-            {"sha256", sourceHash}, {"bytes", std::filesystem::file_size(spec.scenario.aloPath)}};
-        const auto mods = observation.selectedModPaths();
+        capture["source"]  = {{"path", WideToUtf8(std::filesystem::path(spec.scenario.aloPath).generic_wstring())},
+                              {"sha256", sourceHash},
+                              {"bytes", std::filesystem::file_size(spec.scenario.aloPath)}};
+        const auto mods    = observation.selectedModPaths();
         const auto modHash = ContentStackHash(mods);
         if (modHash.empty()) return Fail(13, "mod-path-hash", "selected mod path hash failed");
-        capture["content"] = {{"gameRoots", ContentPaths(observation.gameRoots())}, {"selectedModPaths", ContentPaths(mods)},
-            {"sha256", modHash}};
-        capture["render"] = RenderProfile(*deps.engine);
-        capture["random"] = {{"algorithm", "legacy-msvc"}, {"algorithmVersion", spec.scenario.algorithmVersion}, {"seed", spec.scenario.seed}};
-        auto preparation = Hooks();
+        capture["content"] = {{"gameRoots", ContentPaths(observation.gameRoots())},
+                              {"selectedModPaths", ContentPaths(mods)},
+                              {"sha256", modHash}};
+        capture["render"]  = RenderProfile(*deps.engine);
+        capture["random"]  = {{"algorithm", "legacy-msvc"},
+                              {"algorithmVersion", spec.scenario.algorithmVersion},
+                              {"seed", spec.scenario.seed}};
+        auto preparation   = Hooks();
         if (!preparation.admitDevice() || !preparation.pinSettings(spec.scenario)) return false;
         preparation.clearInstances();
         preparation.seed(spec.scenario.seed);
         preparation.freezeClock(0);
         if (context.failed()) return false;
-        context.profile = FixedProfile(*deps.engine);
+        context.profile    = FixedProfile(*deps.engine);
         capture["profile"] = context.profile;
         if (!PrepareScene(context, preparation)) return false;
         if (!CheckGeometry(context, "resize-before")) return false;
@@ -522,7 +585,7 @@ struct ObservationRunner::Impl
         deps.engine->ResetTextureAttestation();
         BeginPass(1);
         ParticleReplayController first(spec.scenario, Hooks());
-        bool ok = first.Reset();
+        bool                     ok = first.Reset();
         if (ok) lifecycle.Push(samples.back());
         while (ok && lifecycle.Status() == ObservationStatus::Running)
         {
@@ -531,23 +594,28 @@ struct ObservationRunner::Impl
         }
         EndPass();
         if (!ok) return context.failed() ? false : Fail(9, "pass-1", "controller failed");
-        capture["lifecycle"] = Summary(lifecycle);
+        capture["lifecycle"]             = Summary(lifecycle);
         capture["lifecycle"]["emitters"] = EmitterSummary();
-        Log("[observe] lifecycle=%s finalFrame=%d\n", ObservationStatusString(lifecycle.Status()), lifecycle.FinalFrame());
+        Log("[observe] lifecycle=%s finalFrame=%d\n", ObservationStatusString(lifecycle.Status()),
+            lifecycle.FinalFrame());
 
         // Measure one destination-only render; Reset in pass 2 restores the sample stream.
-        const auto choices = SelectFrames(samples, spec);
-        pass = 0;
-        const int measuredFrame = lifecycle.PeakFrame().value_or(0);
-        const auto scratchPath = out / L"preflight.png";
+        const auto choices       = SelectFrames(samples, spec);
+        pass                     = 0;
+        const int  measuredFrame = lifecycle.PeakFrame().value_or(0);
+        const auto scratchPath   = out / L"preflight.png";
         struct ScratchFile
         {
             std::filesystem::path path;
-            ~ScratchFile() { std::error_code error; std::filesystem::remove(path, error); }
+            ~ScratchFile()
+            {
+                std::error_code error;
+                std::filesystem::remove(path, error);
+            }
         } scratch{scratchPath};
-        auto measuredHooks = Hooks();
-        const auto readback = deps.buildHooks(scratchPath.wstring()).readback;
-        measuredHooks.readback = [this, readback]()
+        auto       measuredHooks = Hooks();
+        const auto readback      = deps.buildHooks(scratchPath.wstring()).readback;
+        measuredHooks.readback   = [this, readback]()
         {
             if (context.failed() || !CheckGeometry(context, "preflight-readback-before")) return false;
             if (!readback || !readback()) return Fail(13, "preflight-readback", "PNG capture failed");
@@ -557,18 +625,24 @@ struct ObservationRunner::Impl
         if (!measured.SeekTo(measuredFrame, false))
             return context.failed() ? false : Fail(9, "quota-preflight", "controller seek failed");
         std::error_code sizeError, removeError;
-        const auto measuredBytes = std::filesystem::file_size(scratchPath, sizeError);
-        const bool removed = std::filesystem::remove(scratchPath, removeError);
-        if (removeError || !removed) return Fail(13, "preflight-cleanup", removeError ? removeError.message() : "scratch PNG missing");
+        const auto      measuredBytes = std::filesystem::file_size(scratchPath, sizeError);
+        const bool      removed       = std::filesystem::remove(scratchPath, removeError);
+        if (removeError || !removed)
+            return Fail(13, "preflight-cleanup", removeError ? removeError.message() : "scratch PNG missing");
         if (sizeError) return Fail(13, "preflight-size", sizeError.message());
         // The scratch PNG is never a bundle file or part of the running byte total.
-        Log("[observe] preflight frame=%d pngBytes=%llu\n", measuredFrame, static_cast<unsigned long long>(measuredBytes));
-        std::uint64_t playbackCount = spec.output.playbackStride == 0 ? 0 :
-            (lifecycle.ReviewEndFrame() - lifecycle.ReviewStartFrame()) / spec.output.playbackStride + 1;
-        const auto estimate = ObservationPreflightBytes(measuredBytes, choices.size() + playbackCount, telemetryBudget.Bytes());
+        Log("[observe] preflight frame=%d pngBytes=%llu\n", measuredFrame,
+            static_cast<unsigned long long>(measuredBytes));
+        std::uint64_t playbackCount =
+            spec.output.playbackStride == 0
+                ? 0
+                : (lifecycle.ReviewEndFrame() - lifecycle.ReviewStartFrame()) / spec.output.playbackStride + 1;
+        const auto estimate =
+            ObservationPreflightBytes(measuredBytes, choices.size() + playbackCount, telemetryBudget.Bytes());
         Log("[observe] preflightBytes=%llu maxBytes=%llu\n", static_cast<unsigned long long>(estimate),
             static_cast<unsigned long long>(spec.output.maxBytes));
-        if (estimate > spec.output.maxBytes) return Fail(16, "quota-preflight", "estimated native output bytes exceeded maxBytes");
+        if (estimate > spec.output.maxBytes)
+            return Fail(16, "quota-preflight", "estimated native output bytes exceeded maxBytes");
         for (const auto& choice : choices)
         {
             selected.emplace(choice.frame, choice);
@@ -576,12 +650,13 @@ struct ObservationRunner::Impl
                 capture["stride"].push_back(choice.frame);
         }
         if (spec.output.playbackStride != 0)
-            for (int f = lifecycle.ReviewStartFrame(), index = 0; f <= lifecycle.ReviewEndFrame(); f += spec.output.playbackStride)
+            for (int f = lifecycle.ReviewStartFrame(), index = 0; f <= lifecycle.ReviewEndFrame();
+                 f += spec.output.playbackStride)
                 playback.emplace(f, index++);
         if (!Directory("selected-frames") || (!playback.empty() && !Directory("playback-frames"))) return false;
         BeginPass(2);
         // Frame 0 is rendered after Reset with no extra update, as the proof does.
-        const auto captureHooks = Hooks();
+        const auto               captureHooks = Hooks();
         ParticleReplayController second(spec.scenario, captureHooks);
         ok = second.Reset() && captureHooks.render() && captureHooks.readback();
         for (int f = 1; ok && f <= lifecycle.FinalFrame(); ++f) ok = second.Advance(WantsCapture(f));
@@ -592,25 +667,31 @@ struct ObservationRunner::Impl
         std::string telemetry;
         telemetry.reserve(static_cast<size_t>(telemetryBudget.Bytes()));
         for (const auto& sample : samples) telemetry += ObservationSampleLine(sample);
-        return Write("telemetry/frames.jsonl", telemetry) && Write("telemetry/summary.json", capture["lifecycle"].dump(2));
+        return Write("telemetry/frames.jsonl", telemetry) &&
+               Write("telemetry/summary.json", capture["lifecycle"].dump(2));
     }
 
     bool WriteLog()
     {
         // The host flush callback makes the copy include the latest failure and pass lines.
-        const auto path = observation.hostLogPath();
-        std::ifstream input(std::filesystem::path(path), std::ios::binary);
+        const auto        path = observation.hostLogPath();
+        std::ifstream     input(std::filesystem::path(path), std::ios::binary);
         const std::string text((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
         if (!input.is_open() || input.bad()) return Fail(13, "log-copy", "per-process host log could not be read");
         std::error_code error;
-        const auto directory = out / L"logs";
-        if (std::filesystem::create_directory(directory, error)) directories.push_back(directory);
-        else if (error) return Fail(13, "log-directory", error.message());
-        const auto& ignored = deps.dispatcher.IgnoredReplayProofSettingsPushes();
+        const auto      directory = out / L"logs";
+        if (std::filesystem::create_directory(directory, error))
+            directories.push_back(directory);
+        else if (error)
+            return Fail(13, "log-directory", error.message());
+        const auto&   ignored = deps.dispatcher.IgnoredReplayProofSettingsPushes();
         std::ofstream log(directory / L"observe.log", std::ios::binary | std::ios::trunc);
-        log << text << "[observe] passWallMs=" << passMs[0] << "," << passMs[1]
-            << " ignoredSettingsPushes=" << json{{"overloadGuard", ignored.overloadGuard},
-                {"msaaLevel", ignored.msaaLevel}, {"estimatedLoad", ignored.estimatedLoad}}.dump() << "\n";
+        log << text << "[observe] passWallMs=" << passMs[0] << "," << passMs[1] << " ignoredSettingsPushes="
+            << json{{"overloadGuard", ignored.overloadGuard},
+                    {"msaaLevel", ignored.msaaLevel},
+                    {"estimatedLoad", ignored.estimatedLoad}}
+                   .dump()
+            << "\n";
         log.flush();
         return log.good() || Fail(13, "log-write", "observe log write failed");
     }
@@ -636,9 +717,18 @@ struct ObservationRunner::Impl
             if (!AcceptDirectory()) return exitCode;
             Execute();
         }
-        catch (const std::filesystem::filesystem_error& e) { Fail(13, "io", e.what()); }
-        catch (const std::exception& e) { Fail(4, "exception", e.what()); }
-        catch (...) { Fail(4, "exception", "unhandled engine or IO exception"); }
+        catch (const std::filesystem::filesystem_error& e)
+        {
+            Fail(13, "io", e.what());
+        }
+        catch (const std::exception& e)
+        {
+            Fail(4, "exception", e.what());
+        }
+        catch (...)
+        {
+            Fail(4, "exception", "unhandled engine or IO exception");
+        }
         EndPass();
         if (!accepted) return exitCode;
         // Completion marker is always last. Its actual bytes count too; quota failure
@@ -656,18 +746,34 @@ struct ObservationRunner::Impl
         {
             Fail(13, "capture-write", e.what());
             // Best effort failed marker even when finalisation itself threw.
-            try { WriteCapture(); } catch (...) {}
+            try
+            {
+                WriteCapture();
+            }
+            catch (...)
+            {
+            }
         }
         return exitCode;
     }
 };
 
-ObservationRunner::ObservationRunner(ReplayRunDeps deps, Deps extra, const std::wstring& specPath,
+ObservationRunner::ObservationRunner(ReplayRunDeps       deps,
+                                     Deps                extra,
+                                     const std::wstring& specPath,
                                      const std::wstring& outputDirectory)
-    : m_impl(std::make_unique<Impl>(std::move(deps), std::move(extra), specPath, outputDirectory)) {}
+    : m_impl(std::make_unique<Impl>(std::move(deps), std::move(extra), specPath, outputDirectory))
+{
+}
 ObservationRunner::~ObservationRunner() = default;
-int ObservationRunner::Run() { return m_impl->Run(); }
-bool ObservationRunner::BeforeRender() { return CheckGeometry(m_impl->context, "composed-render-before"); }
+int ObservationRunner::Run()
+{
+    return m_impl->Run();
+}
+bool ObservationRunner::BeforeRender()
+{
+    return CheckGeometry(m_impl->context, "composed-render-before");
+}
 bool ObservationRunner::AfterRender(bool succeeded)
 {
     if (!CheckGeometry(m_impl->context, "composed-render-after")) return false;

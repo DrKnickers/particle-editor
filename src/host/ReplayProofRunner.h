@@ -5,17 +5,17 @@
 #include <functional>
 #include "ReplayRunSupport.h"
 
-namespace host {
+namespace host
+{
 
 class ReplayProofRunner
 {
 public:
     using Deps = ReplayRunDeps;
 
-    ReplayProofRunner(Deps, const std::wstring& scenarioPath,
-                      const std::wstring& outputDirectory);
+    ReplayProofRunner(Deps, const std::wstring& scenarioPath, const std::wstring& outputDirectory);
     ~ReplayProofRunner();
-    int Run();
+    int  Run();
     bool BeforeRender();
     bool AfterRender(bool succeeded);
 

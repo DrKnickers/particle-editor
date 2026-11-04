@@ -1,7 +1,7 @@
 #ifndef REF_TRANSFORM_UNDO_KEY_H
 #define REF_TRANSFORM_UNDO_KEY_H
 
-#include <windows.h>     // DWORD
+#include <windows.h> // DWORD
 #include <cstdint>
 #include <string_view>
 
@@ -28,7 +28,7 @@
 // `inc` / `cur` order: posX, posY, posZ, rotX, rotY, rotZ.
 inline DWORD RefTransformCoalesceKey(const float inc[6], const float cur[6])
 {
-    static const char* const kComp[6] = {"posX","posY","posZ","rotX","rotY","rotZ"};
+    static const char* const kComp[6] = {"posX", "posY", "posZ", "rotX", "rotY", "rotZ"};
     // 0xFEF0 sits well above any realistic emitter id (bits 0..15), so the ref
     // key can never collide with an emitter-props key.
     constexpr DWORD kRefTransformDiscriminator = 0xFEF0u;
@@ -36,12 +36,16 @@ inline DWORD RefTransformCoalesceKey(const float inc[6], const float cur[6])
     uint32_t fieldHash = 0;
     for (int i = 0; i < 6; ++i)
     {
-        if (inc[i] == cur[i]) continue;          // unchanged component contributes nothing
-        uint32_t h = 2166136261u;                // FNV-1a offset basis
-        for (unsigned char c : std::string_view(kComp[i])) { h ^= c; h *= 16777619u; }
-        fieldHash ^= h;                          // XOR-accumulate (order-independent)
+        if (inc[i] == cur[i]) continue; // unchanged component contributes nothing
+        uint32_t h = 2166136261u;       // FNV-1a offset basis
+        for (unsigned char c : std::string_view(kComp[i]))
+        {
+            h ^= c;
+            h *= 16777619u;
+        }
+        fieldHash ^= h; // XOR-accumulate (order-independent)
     }
-    if (fieldHash == 0) return 0;                // no detectable change -> caller skips the capture
+    if (fieldHash == 0) return 0; // no detectable change -> caller skips the capture
     return 0x80000000u | ((fieldHash & 0x7FFFu) << 16) | kRefTransformDiscriminator;
 }
 

@@ -14,14 +14,14 @@
 #include "AcceleratorBridge.h"
 #include "BridgeDispatchShared.h"
 #include "BridgeRequestContext.h"
-#include "BridgeWire.h"     // SerializeBridgeEnvelope / RunGuardedDispatch
+#include "BridgeWire.h" // SerializeBridgeEnvelope / RunGuardedDispatch
 #include "InputDispatcher.h"
 #include "LayoutBroker.h"
 #include "WindowCapture.h"
-#include "HostMessages.h"   // WM_APP_QUIT_CONFIRMED
-#include "StringConv.h"   // host::Utf8ToWide / WideToUtf8 (consolidated)
+#include "HostMessages.h"                // WM_APP_QUIT_CONFIRMED
+#include "StringConv.h"                  // host::Utf8ToWide / WideToUtf8 (consolidated)
 #include "simulation/ProjectileShot.h"   // referenceProjectile snapshot field
-#include "simulation/ProjectileFlight.h"  // IsProjectilePathEmulated
+#include "simulation/ProjectileFlight.h" // IsProjectilePathEmulated
 #include "PerfTrace.h"
 #include "host/third_party/nlohmann/json.hpp"
 
@@ -36,7 +36,7 @@
 #include "effect/ParticleSystemIO.h"
 #include "effect/Rescale.h"
 #include "effect/RefTransformUndoKey.h"
-#include "common/ResourceLimits.h"   // kMaxEmitterTreeDepth (BuildEmitterTreeNode backstop)
+#include "common/ResourceLimits.h" // kMaxEmitterTreeDepth (BuildEmitterTreeNode backstop)
 #include "simulation/SpawnerDriver.h"
 #include "effect/UndoStack.h"
 
@@ -84,11 +84,9 @@ bool ParseCssColorToColorRef(const std::string& in, COLORREF& out)
     if (s[0] == '#')
     {
         std::string hex = s.substr(1);
-        if (hex.size() == 3)  // short form #rgb → #rrggbb
-            hex = std::string{ hex[0], hex[0], hex[1], hex[1], hex[2], hex[2] };
-        if (hex.size() != 6 ||
-            hex.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos)
-            return false;
+        if (hex.size() == 3) // short form #rgb → #rrggbb
+            hex = std::string{hex[0], hex[0], hex[1], hex[1], hex[2], hex[2]};
+        if (hex.size() != 6 || hex.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos) return false;
         r  = static_cast<int>(strtol(hex.substr(0, 2).c_str(), nullptr, 16));
         g  = static_cast<int>(strtol(hex.substr(2, 2).c_str(), nullptr, 16));
         bl = static_cast<int>(strtol(hex.substr(4, 2).c_str(), nullptr, 16));
@@ -99,15 +97,17 @@ bool ParseCssColorToColorRef(const std::string& in, COLORREF& out)
         if (lp == std::string::npos) return false;
         // " %d , %d , %d" tolerates "r,g,b" and "r , g , b"; a trailing
         // alpha (rgba) is simply ignored.
-        if (sscanf(s.c_str() + lp + 1, " %d , %d , %d", &r, &g, &bl) != 3)
-            return false;
+        if (sscanf(s.c_str() + lp + 1, " %d , %d , %d", &r, &g, &bl) != 3) return false;
     }
     else
     {
         return false;
     }
 
-    auto clamp = [](int v) { return v < 0 ? 0 : (v > 255 ? 255 : v); };
+    auto clamp = [](int v)
+    {
+        return v < 0 ? 0 : (v > 255 ? 255 : v);
+    };
     out = RGB(clamp(r), clamp(g), clamp(bl));
     return true;
 }
@@ -116,7 +116,7 @@ bool ParseCssColorToColorRef(const std::string& in, COLORREF& out)
 std::string GenerateDuplicateName(const ParticleSystem* system, const std::string& sourceName)
 {
     const std::vector<ParticleSystem::Emitter*>& emitters = system->getEmitters();
-    std::vector<std::string> existingNames;
+    std::vector<std::string>                     existingNames;
     existingNames.reserve(emitters.size());
     for (size_t i = 0; i < emitters.size(); ++i)
     {
@@ -126,7 +126,8 @@ std::string GenerateDuplicateName(const ParticleSystem* system, const std::strin
 }
 
 // ---------- Shared bridge helpers ----------
-namespace host {
+namespace host
+{
 
 // The helpers below (through BuildEngineStateSnapshot) were an anonymous
 // namespace; now external-linkage with declarations in BridgeDispatchShared.h
@@ -138,8 +139,8 @@ std::string BuildOkResponse(const std::string& id, const json& data)
 {
     json env = {
         {"type", "res"},
-        {"id",   id},
-        {"ok",   true},
+        {"id", id},
+        {"ok", true},
         {"data", data},
     };
     return SerializeBridgeEnvelope(env);
@@ -149,9 +150,9 @@ std::string BuildOkResponse(const std::string& id, const json& data)
 std::string BuildErrResponse(const std::string& id, const std::string& error)
 {
     json env = {
-        {"type",  "res"},
-        {"id",    id},
-        {"ok",    false},
+        {"type", "res"},
+        {"id", id},
+        {"ok", false},
         {"error", error},
     };
     return SerializeBridgeEnvelope(env);
@@ -173,17 +174,17 @@ json CameraToJson(const Engine::Camera& c)
 {
     return json{
         {"position", Vec3ToJson(c.Position)},
-        {"target",   Vec3ToJson(c.Target)},
-        {"up",       Vec3ToJson(c.Up)},
+        {"target", Vec3ToJson(c.Target)},
+        {"up", Vec3ToJson(c.Up)},
     };
 }
 
 json LightToJson(const Engine::Light& l)
 {
     return json{
-        {"diffuse",   Vec4ToJson(l.Diffuse)},
-        {"specular",  Vec4ToJson(l.Specular)},
-        {"position",  Vec4ToJson(l.Position)},
+        {"diffuse", Vec4ToJson(l.Diffuse)},
+        {"specular", Vec4ToJson(l.Specular)},
+        {"position", Vec4ToJson(l.Position)},
         {"direction", Vec4ToJson(l.Direction)},
     };
 }
@@ -192,8 +193,7 @@ json LightToJson(const Engine::Light& l)
 // on malformed input (better than crashing on a stray non-array param).
 D3DXVECTOR3 JsonToVec3(const json& j)
 {
-    if (j.is_array() && j.size() >= 3)
-        return D3DXVECTOR3(j[0].get<float>(), j[1].get<float>(), j[2].get<float>());
+    if (j.is_array() && j.size() >= 3) return D3DXVECTOR3(j[0].get<float>(), j[1].get<float>(), j[2].get<float>());
     return D3DXVECTOR3(0, 0, 0);
 }
 
@@ -208,7 +208,7 @@ Engine::LightType ParseLightWhich(const std::string& s)
 {
     if (s == "fill1") return Engine::LT_FILL1;
     if (s == "fill2") return Engine::LT_FILL2;
-    return Engine::LT_SUN;  // default / "sun"
+    return Engine::LT_SUN; // default / "sun"
 }
 
 // Persist the skydome selection to HKCU\Software\AloParticleEditor
@@ -227,21 +227,19 @@ void PersistSkydomeIndex(int value)
 
 void PersistSkydomeCustomPath(int slot, const std::wstring& path)
 {
-    if (slot < Engine::kSkydomeFirstCustomSlot || slot >= Engine::kSkydomeSlotCount)
-        return;
+    if (slot < Engine::kSkydomeFirstCustomSlot || slot >= Engine::kSkydomeSlotCount) return;
     wchar_t name[64];
     swprintf_s(name, L"SkydomeCustomSlot%d", slot);
-    WriteRegSz(name, path);   // empty path deletes the value (mirror legacy)
+    WriteRegSz(name, path); // empty path deletes the value (mirror legacy)
 }
 
 // Persist the game-dome environment selection (context + the two chosen
 // GameObject Names) under the same hive. New REG keys (legacy has no equivalent);
 // the host's startup restore reads them back. Empty name => delete the value.
-void PersistSkydomeEnvironment(int context, const std::wstring& primaryName,
-                                      const std::wstring& secondaryName)
+void PersistSkydomeEnvironment(int context, const std::wstring& primaryName, const std::wstring& secondaryName)
 {
     WriteRegDword(L"SkydomeContext", static_cast<DWORD>(context));
-    WriteRegSz(L"SkydomePrimaryName",   primaryName);    // empty => delete
+    WriteRegSz(L"SkydomePrimaryName", primaryName); // empty => delete
     WriteRegSz(L"SkydomeSecondaryName", secondaryName);
 }
 
@@ -272,7 +270,7 @@ void PersistShowGround(bool enabled)
 // Transform + grid spacing are REG_BINARY floats (6 and 1 respectively).
 void PersistReferenceObjectName(const std::wstring& name)
 {
-    WriteRegSz(L"ReferenceObjectName", name);   // empty => delete
+    WriteRegSz(L"ReferenceObjectName", name); // empty => delete
 }
 
 void PersistReferenceObjectVisible(bool visible)
@@ -287,7 +285,7 @@ void PersistReferenceObjectLock(bool locked)
 
 void PersistReferenceObjectTransform(const D3DXVECTOR3& pos, const D3DXVECTOR3& rot)
 {
-    const float xform[6] = { pos.x, pos.y, pos.z, rot.x, rot.y, rot.z };
+    const float xform[6] = {pos.x, pos.y, pos.z, rot.x, rot.y, rot.z};
     WriteRegBinary(L"ReferenceObjectTransform", xform, sizeof(xform));
 }
 
@@ -323,18 +321,17 @@ const char* RefStatusToString(ReferenceObjectStatus s)
 static json ReferenceProjectileToJson(const Engine& engine)
 {
     Engine::ReferenceProjectileInfo proj;
-    if (!engine.GetReferenceProjectile(proj))
-        return nullptr;
-    const float aim[3] = { 1.0f, 0.0f, 0.0f };
-    ProjectileShot flight = {};
-    const bool flyable = ComputeProjectileShot(proj.speedPerFrame, proj.range, aim, flight);
-    return json{ {"flyable",      flyable},
-                 {"speed",        flight.velocity[0]},   // world units per second
-                 {"range",        proj.range},           // world units
-                 {"flightSec",    flight.flightSec},
-                 {"category",     proj.category},
-                 {"pathEmulated", IsProjectilePathEmulated(proj.category)},
-                 {"usesTarget",   ProjectileUsesTarget(proj.category)} };
+    if (!engine.GetReferenceProjectile(proj)) return nullptr;
+    const float    aim[3]  = {1.0f, 0.0f, 0.0f};
+    ProjectileShot flight  = {};
+    const bool     flyable = ComputeProjectileShot(proj.speedPerFrame, proj.range, aim, flight);
+    return json{{"flyable", flyable},
+                {"speed", flight.velocity[0]}, // world units per second
+                {"range", proj.range},         // world units
+                {"flightSec", flight.flightSec},
+                {"category", proj.category},
+                {"pathEmulated", IsProjectilePathEmulated(proj.category)},
+                {"usesTarget", ProjectileUsesTarget(proj.category)}};
 }
 
 // SkydomeSlotStatus -> wire string for the snapshot DTO. Mirrors
@@ -359,76 +356,75 @@ const char* SkyStatusToString(SkydomeSlotStatus s)
 // looking each name up in this table.
 struct LinkFieldEntry
 {
-    const char*               name;
-    bool LinkExemptFlags::*   flag;
+    const char* name;
+    bool LinkExemptFlags::* flag;
 };
 
 static const LinkFieldEntry kLinkFieldTable[] = {
     // Textures.
-    { "colorTexture",            &LinkExemptFlags::colorTexture },
-    { "normalTexture",           &LinkExemptFlags::normalTexture },
+    {"colorTexture", &LinkExemptFlags::colorTexture},
+    {"normalTexture", &LinkExemptFlags::normalTexture},
     // Curves.
-    { "trackIndex",              &LinkExemptFlags::trackIndex },
-    { "trackRed",                &LinkExemptFlags::trackRed },
-    { "trackGreen",              &LinkExemptFlags::trackGreen },
-    { "trackBlue",               &LinkExemptFlags::trackBlue },
-    { "trackAlpha",              &LinkExemptFlags::trackAlpha },
-    { "trackScale",              &LinkExemptFlags::trackScale },
-    { "trackRotationSpeed",      &LinkExemptFlags::trackRotationSpeed },
+    {"trackIndex", &LinkExemptFlags::trackIndex},
+    {"trackRed", &LinkExemptFlags::trackRed},
+    {"trackGreen", &LinkExemptFlags::trackGreen},
+    {"trackBlue", &LinkExemptFlags::trackBlue},
+    {"trackAlpha", &LinkExemptFlags::trackAlpha},
+    {"trackScale", &LinkExemptFlags::trackScale},
+    {"trackRotationSpeed", &LinkExemptFlags::trackRotationSpeed},
     // Lifetime / spawning.
-    { "lifetime",                &LinkExemptFlags::lifetime },
-    { "initialDelay",            &LinkExemptFlags::initialDelay },
-    { "burstDelay",              &LinkExemptFlags::burstDelay },
-    { "nBursts",                 &LinkExemptFlags::nBursts },
-    { "nParticlesPerBurst",      &LinkExemptFlags::nParticlesPerBurst },
-    { "nParticlesPerSecond",     &LinkExemptFlags::nParticlesPerSecond },
-    { "useBursts",               &LinkExemptFlags::useBursts },
+    {"lifetime", &LinkExemptFlags::lifetime},
+    {"initialDelay", &LinkExemptFlags::initialDelay},
+    {"burstDelay", &LinkExemptFlags::burstDelay},
+    {"nBursts", &LinkExemptFlags::nBursts},
+    {"nParticlesPerBurst", &LinkExemptFlags::nParticlesPerBurst},
+    {"nParticlesPerSecond", &LinkExemptFlags::nParticlesPerSecond},
+    {"useBursts", &LinkExemptFlags::useBursts},
     // Physics.
-    { "gravity",                 &LinkExemptFlags::gravity },
-    { "acceleration",            &LinkExemptFlags::acceleration },
-    { "inwardSpeed",             &LinkExemptFlags::inwardSpeed },
-    { "inwardAcceleration",      &LinkExemptFlags::inwardAcceleration },
-    { "bounciness",              &LinkExemptFlags::bounciness },
-    { "groundBehavior",          &LinkExemptFlags::groundBehavior },
-    { "objectSpaceAcceleration", &LinkExemptFlags::objectSpaceAcceleration },
-    { "affectedByWind",          &LinkExemptFlags::affectedByWind },
+    {"gravity", &LinkExemptFlags::gravity},
+    {"acceleration", &LinkExemptFlags::acceleration},
+    {"inwardSpeed", &LinkExemptFlags::inwardSpeed},
+    {"inwardAcceleration", &LinkExemptFlags::inwardAcceleration},
+    {"bounciness", &LinkExemptFlags::bounciness},
+    {"groundBehavior", &LinkExemptFlags::groundBehavior},
+    {"objectSpaceAcceleration", &LinkExemptFlags::objectSpaceAcceleration},
+    {"affectedByWind", &LinkExemptFlags::affectedByWind},
     // Appearance.
-    { "blendMode",               &LinkExemptFlags::blendMode },
-    { "textureSize",             &LinkExemptFlags::textureSize },
-    { "nTriangles",              &LinkExemptFlags::nTriangles },
-    { "randomScalePerc",         &LinkExemptFlags::randomScalePerc },
-    { "randomLifetimePerc",      &LinkExemptFlags::randomLifetimePerc },
-    { "hasTail",                 &LinkExemptFlags::hasTail },
-    { "tailSize",                &LinkExemptFlags::tailSize },
-    { "noDepthTest",             &LinkExemptFlags::noDepthTest },
-    { "randomColors",            &LinkExemptFlags::randomColors },
+    {"blendMode", &LinkExemptFlags::blendMode},
+    {"textureSize", &LinkExemptFlags::textureSize},
+    {"nTriangles", &LinkExemptFlags::nTriangles},
+    {"randomScalePerc", &LinkExemptFlags::randomScalePerc},
+    {"randomLifetimePerc", &LinkExemptFlags::randomLifetimePerc},
+    {"hasTail", &LinkExemptFlags::hasTail},
+    {"tailSize", &LinkExemptFlags::tailSize},
+    {"noDepthTest", &LinkExemptFlags::noDepthTest},
+    {"randomColors", &LinkExemptFlags::randomColors},
     // Weather.
-    { "isWeatherParticle",       &LinkExemptFlags::isWeatherParticle },
-    { "weatherCubeSize",         &LinkExemptFlags::weatherCubeSize },
-    { "weatherCubeDistance",     &LinkExemptFlags::weatherCubeDistance },
-    { "weatherFadeoutDistance",  &LinkExemptFlags::weatherFadeoutDistance },
+    {"isWeatherParticle", &LinkExemptFlags::isWeatherParticle},
+    {"weatherCubeSize", &LinkExemptFlags::weatherCubeSize},
+    {"weatherCubeDistance", &LinkExemptFlags::weatherCubeDistance},
+    {"weatherFadeoutDistance", &LinkExemptFlags::weatherFadeoutDistance},
     // Rotation.
-    { "randomRotation",          &LinkExemptFlags::randomRotation },
-    { "randomRotationDirection", &LinkExemptFlags::randomRotationDirection },
-    { "randomRotationAverage",   &LinkExemptFlags::randomRotationAverage },
-    { "randomRotationVariance",  &LinkExemptFlags::randomRotationVariance },
+    {"randomRotation", &LinkExemptFlags::randomRotation},
+    {"randomRotationDirection", &LinkExemptFlags::randomRotationDirection},
+    {"randomRotationAverage", &LinkExemptFlags::randomRotationAverage},
+    {"randomRotationVariance", &LinkExemptFlags::randomRotationVariance},
     // Misc.
-    { "linkToSystem",            &LinkExemptFlags::linkToSystem },
-    { "parentLinkStrength",      &LinkExemptFlags::parentLinkStrength },
-    { "doColorAddGrayscale",     &LinkExemptFlags::doColorAddGrayscale },
-    { "isHeatParticle",          &LinkExemptFlags::isHeatParticle },
-    { "isWorldOriented",         &LinkExemptFlags::isWorldOriented },
-    { "freezeTime",              &LinkExemptFlags::freezeTime },
-    { "skipTime",                &LinkExemptFlags::skipTime },
-    { "emitFromMesh",            &LinkExemptFlags::emitFromMesh },
-    { "emitFromMeshOffset",      &LinkExemptFlags::emitFromMeshOffset },
-    { "groupSpeed",              &LinkExemptFlags::groupSpeed },
-    { "groupLifetime",           &LinkExemptFlags::groupLifetime },
-    { "groupPosition",           &LinkExemptFlags::groupPosition },
+    {"linkToSystem", &LinkExemptFlags::linkToSystem},
+    {"parentLinkStrength", &LinkExemptFlags::parentLinkStrength},
+    {"doColorAddGrayscale", &LinkExemptFlags::doColorAddGrayscale},
+    {"isHeatParticle", &LinkExemptFlags::isHeatParticle},
+    {"isWorldOriented", &LinkExemptFlags::isWorldOriented},
+    {"freezeTime", &LinkExemptFlags::freezeTime},
+    {"skipTime", &LinkExemptFlags::skipTime},
+    {"emitFromMesh", &LinkExemptFlags::emitFromMesh},
+    {"emitFromMeshOffset", &LinkExemptFlags::emitFromMeshOffset},
+    {"groupSpeed", &LinkExemptFlags::groupSpeed},
+    {"groupLifetime", &LinkExemptFlags::groupLifetime},
+    {"groupPosition", &LinkExemptFlags::groupPosition},
 };
 
-constexpr size_t kLinkFieldCount =
-    sizeof(kLinkFieldTable) / sizeof(kLinkFieldTable[0]);
+constexpr size_t kLinkFieldCount = sizeof(kLinkFieldTable) / sizeof(kLinkFieldTable[0]);
 
 // Translate a LinkExemptFlags bitfield to the wire's `string[]` of
 // exempt field names.
@@ -437,8 +433,7 @@ json LinkExemptFlagsToJsonArray(const LinkExemptFlags& flags)
     json arr = json::array();
     for (size_t i = 0; i < kLinkFieldCount; ++i)
     {
-        if (flags.*(kLinkFieldTable[i].flag))
-            arr.push_back(kLinkFieldTable[i].name);
+        if (flags.*(kLinkFieldTable[i].flag)) arr.push_back(kLinkFieldTable[i].name);
     }
     return arr;
 }
@@ -448,12 +443,11 @@ json LinkExemptFlagsToJsonArray(const LinkExemptFlags& flags)
 // schemas adding fields the host doesn't yet recognise).
 LinkExemptFlags LinkExemptFlagsFromJsonArray(const json& arr)
 {
-    LinkExemptFlags out;  // default-constructed = v1 defaults
+    LinkExemptFlags out; // default-constructed = v1 defaults
     // Clear the table-mapped fields; we want to honor only what the
     // wire specifies. `name` + unknowns are left at their defaults
     // (intrinsic per-emitter for name; defaults for the unknowns).
-    for (size_t i = 0; i < kLinkFieldCount; ++i)
-        out.*(kLinkFieldTable[i].flag) = false;
+    for (size_t i = 0; i < kLinkFieldCount; ++i) out.*(kLinkFieldTable[i].flag) = false;
 
     if (!arr.is_array()) return out;
     for (const auto& v : arr)
@@ -477,14 +471,13 @@ LinkExemptFlags LinkExemptFlagsFromJsonArray(const json& arr)
 // DiffNonExemptParams / copySharedParamsFrom then act on exactly the
 // newly-shared fields — the precise set the legacy settings-OK warned about
 // and resolved. `name` is forced exempt (never shared).
-LinkExemptFlags MakeNewlySharedMask(const LinkExemptFlags& oldFlags,
-                                    const LinkExemptFlags& proposed)
+LinkExemptFlags MakeNewlySharedMask(const LinkExemptFlags& oldFlags, const LinkExemptFlags& proposed)
 {
     LinkExemptFlags mask;
     for (size_t k = 0; k < kLinkFieldCount; ++k)
     {
         bool LinkExemptFlags::* f = kLinkFieldTable[k].flag;
-        mask.*f = !((oldFlags.*f) && !(proposed.*f)); // false only if newly shared
+        mask.*f                   = !((oldFlags.*f) && !(proposed.*f)); // false only if newly shared
     }
     mask.name = true;
     return mask;
@@ -505,8 +498,8 @@ LinkExemptFlags MakeNewlySharedMask(const LinkExemptFlags& oldFlags,
 json BuildEmitterTreeNode(const ParticleSystem* sys, size_t idx, size_t depth)
 {
     if (sys == nullptr || idx >= sys->getEmitters().size()) return json::object();
-    const ParticleSystem::Emitter& emit = sys->getEmitter(idx);
-    json children = json::array();
+    const ParticleSystem::Emitter& emit     = sys->getEmitter(idx);
+    json                           children = json::array();
     // Recursion backstop. ValidateEmitterGraph caps chain
     // depth on load and import, but it is NOT called from any bridge mutation
     // path, so this walk cannot assume the cap holds. Emit the node without its
@@ -515,7 +508,9 @@ json BuildEmitterTreeNode(const ParticleSystem* sys, size_t idx, size_t depth)
     if (depth >= kMaxEmitterTreeDepth)
     {
         printf("[Bridge] emitter tree exceeds depth cap %lu at emitter %zu; "
-               "truncating subtree\n", kMaxEmitterTreeDepth, idx); fflush(stdout);
+               "truncating subtree\n",
+               kMaxEmitterTreeDepth, idx);
+        fflush(stdout);
     }
     else
     {
@@ -534,31 +529,35 @@ json BuildEmitterTreeNode(const ParticleSystem* sys, size_t idx, size_t depth)
     const char* role = "root";
     if (emit.parent != nullptr)
     {
-        if (emit.parent->spawnOnDeath == idx)         role = "death";
-        else if (emit.parent->spawnDuringLife == idx) role = "lifetime";
-        else                                          role = "lifetime";
+        if (emit.parent->spawnOnDeath == idx)
+            role = "death";
+        else if (emit.parent->spawnDuringLife == idx)
+            role = "lifetime";
+        else
+            role = "lifetime";
     }
 
     return json{
-        {"id",        static_cast<int>(idx)},
-        {"stableId",  emit.stableId},
-        {"name",      emit.name},
-        {"role",      role},
+        {"id", static_cast<int>(idx)},
+        {"stableId", emit.stableId},
+        {"name", emit.name},
+        {"role", role},
         {"linkGroup", static_cast<unsigned int>(emit.linkGroup)},
-        {"visible",   emit.visible},
+        {"visible", emit.visible},
         // Chain-load warning: spawn-quantity params mirrored onto
         // every tree node so the React side can estimate per-chain alive
         // counts without N get-properties round-trips. Field names match
         // EmitterPropertiesDto / SpawnParamsDto in bridge-schema.
-        {"spawn", json{
-            {"lifetime",            emit.lifetime},
-            {"useBursts",           emit.useBursts},
-            {"nBursts",             static_cast<unsigned int>(emit.nBursts)},
-            {"burstDelay",          emit.burstDelay},
-            {"nParticlesPerSecond", static_cast<unsigned int>(emit.nParticlesPerSecond)},
-            {"nParticlesPerBurst",  static_cast<unsigned int>(emit.nParticlesPerBurst)},
-        }},
-        {"children",  children},
+        {"spawn",
+         json{
+             {"lifetime", emit.lifetime},
+             {"useBursts", emit.useBursts},
+             {"nBursts", static_cast<unsigned int>(emit.nBursts)},
+             {"burstDelay", emit.burstDelay},
+             {"nParticlesPerSecond", static_cast<unsigned int>(emit.nParticlesPerSecond)},
+             {"nParticlesPerBurst", static_cast<unsigned int>(emit.nParticlesPerBurst)},
+         }},
+        {"children", children},
     };
 }
 
@@ -570,16 +569,16 @@ json BuildEmitterTreeNode(const ParticleSystem* sys, size_t idx, size_t depth)
 //
 // Coupling note: any new field added to `EngineStateDto` MUST also be
 // added here, otherwise the React UI will read `undefined` for it.
-json BuildEngineStateSnapshot(Engine* engine,
+json BuildEngineStateSnapshot(Engine*             engine,
                               const std::wstring& currentFilePath,
-                              bool dirty,
-                              const json& spawnerConfig,
-                              int selectedEmitterId,
+                              bool                dirty,
+                              const json&         spawnerConfig,
+                              int                 selectedEmitterId,
                               const std::wstring& activeModPath,
-                              bool leaveParticles,
-                              bool canUndo,
-                              bool canRedo,
-                              bool emitterClipboardHasContent)
+                              bool                leaveParticles,
+                              bool                canUndo,
+                              bool                canRedo,
+                              bool                emitterClipboardHasContent)
 {
     if (!engine) return json::object();
 
@@ -593,8 +592,7 @@ json BuildEngineStateSnapshot(Engine* engine,
     // the user's EaW/FoC install resolves their texture; Custom when a path is
     // set. The picker greys out slots whose entry is false.
     json groundAvail = json::array();
-    for (int i = 0; i < Engine::kGroundTextureCount; ++i)
-        groundAvail.push_back(engine->IsGroundSlotAvailable(i));
+    for (int i = 0; i < Engine::kGroundTextureCount; ++i) groundAvail.push_back(engine->IsGroundSlotAvailable(i));
 
     // Skydome custom paths — only slots 9..11 are user-customisable.
     // The DTO exposes them as a flat array indexed 0..2.
@@ -603,7 +601,7 @@ json BuildEngineStateSnapshot(Engine* engine,
         skyPaths.push_back(WideToUtf8(engine->GetSkydomeCustomPath(i)));
 
     json lights = {
-        {"sun",   LightToJson(engine->GetLight(Engine::LT_SUN))},
+        {"sun", LightToJson(engine->GetLight(Engine::LT_SUN))},
         {"fill1", LightToJson(engine->GetLight(Engine::LT_FILL1))},
         {"fill2", LightToJson(engine->GetLight(Engine::LT_FILL2))},
     };
@@ -611,34 +609,32 @@ json BuildEngineStateSnapshot(Engine* engine,
     // currentFilePath as JSON: null when untitled, string otherwise.
     // JSON null is correct semantically — the schema's
     // `currentFilePath: string | null` discriminates by presence.
-    json filePathField = currentFilePath.empty()
-        ? json(nullptr)
-        : json(WideToUtf8(currentFilePath));
+    json filePathField = currentFilePath.empty() ? json(nullptr) : json(WideToUtf8(currentFilePath));
 
     return json{
         // Editor-level state.
-        {"currentFilePath",       filePathField},
-        {"dirty",                 dirty},
+        {"currentFilePath", filePathField},
+        {"dirty", dirty},
 
         // Ground
-        {"ground",                engine->GetGround()},
-        {"groundZ",               engine->GetGroundZ()},
-        {"groundTexture",         engine->GetGroundTexture()},
-        {"groundSolidColor",      static_cast<unsigned int>(engine->GetGroundSolidColor())},
-        {"groundColor",           static_cast<unsigned int>(engine->GetGroundColor())},
+        {"ground", engine->GetGround()},
+        {"groundZ", engine->GetGroundZ()},
+        {"groundTexture", engine->GetGroundTexture()},
+        {"groundSolidColor", static_cast<unsigned int>(engine->GetGroundSolidColor())},
+        {"groundColor", static_cast<unsigned int>(engine->GetGroundColor())},
         {"groundSlotCustomPaths", groundPaths},
-        {"groundSlotAvailable",   groundAvail},
+        {"groundSlotAvailable", groundAvail},
 
         // Skydome
-        {"skydomeSlot",           engine->GetSkydomeSlot()},
-        {"skydomeCustomPaths",    skyPaths},
+        {"skydomeSlot", engine->GetSkydomeSlot()},
+        {"skydomeCustomPaths", skyPaths},
         // game-dome environment selection
-        {"skydomeContext",        engine->GetSkydomeContext() == SkydomeContext::Land ? "land" : "space"},
-        {"skydomePrimaryName",    engine->GetSkydomePrimaryName()},
-        {"skydomeSecondaryName",  engine->GetSkydomeSecondaryName()},
+        {"skydomeContext", engine->GetSkydomeContext() == SkydomeContext::Land ? "land" : "space"},
+        {"skydomePrimaryName", engine->GetSkydomePrimaryName()},
+        {"skydomeSecondaryName", engine->GetSkydomeSecondaryName()},
         // per-slot load outcome so the picker surfaces a chosen-but-
         // unloadable dome instead of silently showing the solid background.
-        {"skydomePrimaryStatus",   SkyStatusToString(engine->GetSkydomePrimaryStatus())},
+        {"skydomePrimaryStatus", SkyStatusToString(engine->GetSkydomePrimaryStatus())},
         {"skydomeSecondaryStatus", SkyStatusToString(engine->GetSkydomeSecondaryStatus())},
         // GPU-resource truth, not bookkeeping. Every field
         // above reports what was SELECTED or what the reader THOUGHT resolved, so
@@ -646,76 +642,72 @@ json BuildEngineStateSnapshot(Engine* engine,
         // black. These two are read straight off the live VB/IB handles, so they
         // cannot be true unless the device really holds the dome — which is what
         // makes that deletion observable to drive-smoke's assert-state.
-        {"skydomeMeshGpuReady",      engine->SkydomeMeshHasGpuBuffers()},
-        {"skydomePrimaryGpuReady",   engine->SkydomePrimaryHasGpuBuffers()},
+        {"skydomeMeshGpuReady", engine->SkydomeMeshHasGpuBuffers()},
+        {"skydomePrimaryGpuReady", engine->SkydomePrimaryHasGpuBuffers()},
         {"skydomeSecondaryGpuReady", engine->SkydomeSecondaryHasGpuBuffers()},
 
         // imported reference object + unit grid
-        {"referenceObjectName",     engine->GetReferenceObjectName()},
-        {"referenceObjectVisible",  engine->GetReferenceObjectVisible()},
-        {"referenceObjectLocked",   engine->IsReferenceLocked()},
+        {"referenceObjectName", engine->GetReferenceObjectName()},
+        {"referenceObjectVisible", engine->GetReferenceObjectVisible()},
+        {"referenceObjectLocked", engine->IsReferenceLocked()},
         {"referenceObjectPosition", Vec3ToJson(engine->GetReferencePosition())},
         {"referenceObjectRotation", Vec3ToJson(engine->GetReferenceRotation())},
-        {"referenceObjectStatus",   RefStatusToString(engine->GetReferenceObjectStatus())},
-        {"referenceProjectile",     ReferenceProjectileToJson(*engine)},
+        {"referenceObjectStatus", RefStatusToString(engine->GetReferenceObjectStatus())},
+        {"referenceProjectile", ReferenceProjectileToJson(*engine)},
         // True while the units/structures catalog is (re)building off the UI thread;
         // the picker shows "Loading objects…" and re-queries its list on the true->false
         // transition (catalog ready / mod-switch rebuild) -- not on every state change.
         {"referenceCatalogBuilding", engine->IsReferenceCatalogBuilding()},
-        {"gridVisible",             engine->GetGridVisible()},
-        {"gridSpacing",             engine->GetGridSpacing()},
-        {"snapEnabled",             engine->GetSnapEnabled()},
+        {"gridVisible", engine->GetGridVisible()},
+        {"gridSpacing", engine->GetGridSpacing()},
+        {"snapEnabled", engine->GetSnapEnabled()},
         // Background (COLORREF; low byte = blue)
-        {"background",            static_cast<unsigned int>(engine->GetBackground())},
+        {"background", static_cast<unsigned int>(engine->GetBackground())},
 
         // Lights / ambient / shadow
-        {"lights",                lights},
-        {"ambient",               Vec4ToJson(engine->GetAmbient())},
-        {"shadow",                Vec4ToJson(engine->GetShadow())},
+        {"lights", lights},
+        {"ambient", Vec4ToJson(engine->GetAmbient())},
+        {"shadow", Vec4ToJson(engine->GetShadow())},
 
         // Bloom
-        {"bloom",                 engine->GetBloom()},
-        {"bloomAvailable",        engine->IsBloomAvailable()},
-        {"bloomStrength",         engine->GetBloomStrength()},
-        {"bloomCutoff",           engine->GetBloomCutoff()},
-        {"bloomSize",             engine->GetBloomSize()},
+        {"bloom", engine->GetBloom()},
+        {"bloomAvailable", engine->IsBloomAvailable()},
+        {"bloomStrength", engine->GetBloomStrength()},
+        {"bloomCutoff", engine->GetBloomCutoff()},
+        {"bloomSize", engine->GetBloomSize()},
 
         // Leave particles after instance death. Read from
         // the active ParticleSystem (passed in by caller); defaults true
         // when no system is bound.
-        {"leaveParticles",        leaveParticles},
+        {"leaveParticles", leaveParticles},
 
         // Debug
-        {"heatDebug",             engine->GetHeatDebug()},
+        {"heatDebug", engine->GetHeatDebug()},
 
         // View state (preview clock). IsPreviewPaused() is a free
         // function declared in engine.h — not a method on Engine.
-        {"paused",                IsPreviewPaused()},
+        {"paused", IsPreviewPaused()},
 
         // Camera
-        {"camera",                CameraToJson(engine->GetCamera())},
+        {"camera", CameraToJson(engine->GetCamera())},
 
         // Wind / gravity — read-only via DTO for now (no setter binding).
-        {"wind",                  Vec3ToJson(engine->GetWind())},
-        {"gravity",               Vec3ToJson(engine->GetGravity())},
+        {"wind", Vec3ToJson(engine->GetWind())},
+        {"gravity", Vec3ToJson(engine->GetGravity())},
 
         // Spawner — always supplied by the dispatcher's parsed, clamped config.
-        {"spawner",               spawnerConfig},
+        {"spawner", spawnerConfig},
 
         // Selected emitter (editor state). Serialise
         // -1 as JSON null so the schema's `number | null` discriminator
         // works without a sentinel-aware client.
-        {"selectedEmitterId",     selectedEmitterId < 0
-                                      ? json(nullptr)
-                                      : json(selectedEmitterId)},
+        {"selectedEmitterId", selectedEmitterId < 0 ? json(nullptr) : json(selectedEmitterId)},
 
         // active mod path. Empty wstring serialises as JSON
         // null so the React side treats "Unmodded" and "no mod state
         // yet" the same way. ModManager owns the canonical state;
         // BridgeDispatcher reads through and serialises here.
-        {"activeModPath",         activeModPath.empty()
-                                      ? json(nullptr)
-                                      : json(WideToUtf8(activeModPath))},
+        {"activeModPath", activeModPath.empty() ? json(nullptr) : json(WideToUtf8(activeModPath))},
 
         // Undo/redo availability — drives the Edit menu enable-state.
         // `canRedo` mirrors UndoStack::CanRedo. `canUndo` is computed
@@ -724,8 +716,8 @@ json BuildEngineStateSnapshot(Engine* engine,
         // makes the subsequent Undo() succeed even though UndoStack's
         // own CanUndo (which requires cursor>=2) would report false.
         // See undo/perform's comment block for the full design.
-        {"canUndo",               canUndo},
-        {"canRedo",               canRedo},
+        {"canUndo", canUndo},
+        {"canRedo", canRedo},
 
         // Process-local emitter clipboard non-empty. It outlives the page,
         // so a reloaded page seeds its Paste gate from here.
@@ -734,12 +726,10 @@ json BuildEngineStateSnapshot(Engine* engine,
 }
 
 // ---------- Dispatcher lifecycle ----------
-BridgeDispatcher::BridgeDispatcher(Engine* engine, LayoutBroker& layout,
-                                    AcceleratorBridge& accel, EmitFn emit,
-                                    bool useTestHost, bool automationMode)
-    : m_engine(engine), m_layout(layout), m_accel(accel), m_emit(std::move(emit))
-    , m_testHost(useTestHost)
-    , m_automationMode(automationMode)
+BridgeDispatcher::BridgeDispatcher(
+    Engine* engine, LayoutBroker& layout, AcceleratorBridge& accel, EmitFn emit, bool useTestHost, bool automationMode)
+    : m_engine(engine), m_layout(layout), m_accel(accel), m_emit(std::move(emit)), m_testHost(useTestHost),
+      m_automationMode(automationMode)
 {
     // Test seam (ALO_SETTINGS_LIVE=1): lift the --test-host settings gate so
     // a CDP test can exercise the real registry round-trip.
@@ -750,20 +740,18 @@ BridgeDispatcher::BridgeDispatcher(Engine* engine, LayoutBroker& layout,
     // (avoids the React menu rendering "(none)" momentarily on first
     // mount even when the user has prior history).
     m_recentFiles = ReadRecentFiles();
-
 }
 
 static std::string JsonStringField(const json& parsed, const char* name)
 {
-    if (auto it = parsed.find(name); it != parsed.end() && it->is_string())
-        return it->get<std::string>();
+    if (auto it = parsed.find(name); it != parsed.end() && it->is_string()) return it->get<std::string>();
     return {};
 }
 
 static void EndDispatchSpan(host::perf::Span* span, const json& res)
 {
     if (!span) return;
-    const bool ok = res.value("ok", false);
+    const bool  ok = res.value("ok", false);
     std::string error;
     if (!ok) error = res.value("error", std::string());
     span->End(ok ? "ok" : "error", error);
@@ -836,9 +824,9 @@ std::string BridgeDispatcher::DispatchSync(const std::string& jsonRequest)
         // Host-object channel — return a well-formed error envelope so
         // the JS side can JSON.parse it without throwing.
         json err = {
-            {"type",  "res"},
-            {"id",    nullptr},
-            {"ok",    false},
+            {"type", "res"},
+            {"id", nullptr},
+            {"ok", false},
             {"error", std::string("parse error: ") + e.what()},
         };
         return SerializeBridgeEnvelope(err);
@@ -848,9 +836,9 @@ std::string BridgeDispatcher::DispatchSync(const std::string& jsonRequest)
     if (typeIt == parsed.end() || !typeIt->is_string() || typeIt->get<std::string>() != "req")
     {
         json err = {
-            {"type",  "res"},
-            {"id",    nullptr},
-            {"ok",    false},
+            {"type", "res"},
+            {"id", nullptr},
+            {"ok", false},
             {"error", "expected type: \"req\""},
         };
         return SerializeBridgeEnvelope(err);
@@ -862,19 +850,20 @@ std::string BridgeDispatcher::DispatchSync(const std::string& jsonRequest)
 json BridgeDispatcher::DispatchParsed(const json& parsed, const char* mode)
 {
     std::unique_ptr<host::perf::Span> span;
-    if (host::perf::Enabled()) {
-        span = std::make_unique<host::perf::Span>("bridge.dispatch", nlohmann::json{
-            {"bridgeMode", mode},
-            {"bridgeKind", JsonStringField(parsed, "kind")},
-            {"requestId", JsonStringField(parsed, "id")}
-        });
+    if (host::perf::Enabled())
+    {
+        span = std::make_unique<host::perf::Span>("bridge.dispatch",
+                                                  nlohmann::json{{"bridgeMode", mode},
+                                                                 {"bridgeKind", JsonStringField(parsed, "kind")},
+                                                                 {"requestId", JsonStringField(parsed, "id")}});
     }
 
     // Every exception escaping a kind handler -- not only nlohmann's
     // type errors -- becomes an ok:false envelope with the request's id.
     // Previously only json::exception was caught, so a std::exception
     // from the file/engine layer reached the WebView2 / COM callback.
-    return RunGuardedDispatch(parsed,
+    return RunGuardedDispatch(
+        parsed,
         [&]() -> json
         {
             json res = DispatchInternal(parsed);
@@ -884,10 +873,10 @@ json BridgeDispatcher::DispatchParsed(const json& parsed, const char* mode)
         [&](const char* category, const char* what)
         {
             char line[512];
-            _snprintf_s(line, sizeof(line), _TRUNCATE,
-                        "[bridge] %s dispatch: %s exception: %s\n", mode, category, what);
+            _snprintf_s(line, sizeof(line), _TRUNCATE, "[bridge] %s dispatch: %s exception: %s\n", mode, category,
+                        what);
             fputs(line, stderr);
-            OutputDebugStringA(line);   // stderr goes nowhere in the Release GUI build
+            OutputDebugStringA(line); // stderr goes nowhere in the Release GUI build
             if (span) span->End("error", what);
 
             // A json type error comes from reading a malformed param, before
@@ -923,7 +912,10 @@ bool BridgeRequestContext::RequireEngine(const char* what)
     return false;
 }
 // == the markDirty lambda (verbatim). SetDirty debounces internally.
-void BridgeRequestContext::MarkDirty() { self.SetDirty(true); }
+void BridgeRequestContext::MarkDirty()
+{
+    self.SetDirty(true);
+}
 
 // ---- Promoted DispatchInternal helpers ----
 // Formerly lambdas defined mid-ladder inside DispatchInternal (between the
@@ -972,11 +964,9 @@ void BridgeDispatcher::reconcileSelectionAfterDeletion(unsigned int stableId)
     m_selectedEmitterId = nextId;
     if (!m_emit) return;
     json env = {
-        {"type",    "evt"},
-        {"kind",    "emitters/selected"},
-        {"payload", json{{"id", m_selectedEmitterId < 0
-                                   ? json(nullptr)
-                                   : json(m_selectedEmitterId)}}},
+        {"type", "evt"},
+        {"kind", "emitters/selected"},
+        {"payload", json{{"id", m_selectedEmitterId < 0 ? json(nullptr) : json(m_selectedEmitterId)}}},
     };
     m_emit(env);
 }
@@ -1010,12 +1000,10 @@ void BridgeDispatcher::propagateLinkGroup(ParticleSystem::Emitter* edited)
 {
     if (edited == nullptr || edited->linkGroup == 0) return;
     if (m_pParticleSystem == nullptr || !*m_pParticleSystem) return;
-    ParticleSystem* sys = m_pParticleSystem->get();
-    std::vector<ParticleSystem::Emitter*> members =
-        GetLinkGroupMembers(*sys, edited->linkGroup);
-    const LinkExemptFlags& exempt =
-        sys->getLinkExemptFlags(edited->linkGroup);
-    bool copied = false;
+    ParticleSystem*                       sys     = m_pParticleSystem->get();
+    std::vector<ParticleSystem::Emitter*> members = GetLinkGroupMembers(*sys, edited->linkGroup);
+    const LinkExemptFlags&                exempt  = sys->getLinkExemptFlags(edited->linkGroup);
+    bool                                  copied  = false;
     for (size_t i = 0; i < members.size(); ++i)
     {
         if (members[i] != edited)
@@ -1034,8 +1022,7 @@ void BridgeDispatcher::propagateLinkGroup(ParticleSystem::Emitter* edited)
     // where the orphaning happens, so no caller can forget. Only fires
     // for a linked emitter with ≥1 sibling (unlinked edits keep their
     // own cheaper per-track reseat).
-    if (copied && m_engine != nullptr)
-        m_engine->OnParticleSystemChanged(-1);
+    if (copied && m_engine != nullptr) m_engine->OnParticleSystemChanged(-1);
 }
 
 // ---------- Request routing ----------
@@ -1067,11 +1054,9 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     // Per-domain handlers (BridgeDispatch_*.cpp, one file per kind
     // family). Kinds are exact-match and mutually exclusive, so the call
     // order carries no semantics.
-    if (TryDispatchEngine(ctx) || TryDispatchEmitters(ctx) ||
-        TryDispatchEmitterProperties(ctx) || TryDispatchEmitterTracks(ctx) ||
-        TryDispatchLinkGroups(ctx) || TryDispatchEmitterClipboard(ctx) ||
-        TryDispatchFile(ctx)   || TryDispatchAssets(ctx)   ||
-        TryDispatchShell(ctx)  || TryDispatchSpawner(ctx) ||
+    if (TryDispatchEngine(ctx) || TryDispatchEmitters(ctx) || TryDispatchEmitterProperties(ctx) ||
+        TryDispatchEmitterTracks(ctx) || TryDispatchLinkGroups(ctx) || TryDispatchEmitterClipboard(ctx) ||
+        TryDispatchFile(ctx) || TryDispatchAssets(ctx) || TryDispatchShell(ctx) || TryDispatchSpawner(ctx) ||
         TryDispatchTimeline(ctx))
     {
         return ctx.res;
@@ -1086,8 +1071,8 @@ void BridgeDispatcher::EmitAcceleratorPressed(const std::string& combo)
 {
     if (!m_emit) return;
     json env = {
-        {"type",    "evt"},
-        {"kind",    "accelerator/pressed"},
+        {"type", "evt"},
+        {"kind", "accelerator/pressed"},
         {"payload", {{"combo", combo}}},
     };
     m_emit(env);
@@ -1097,8 +1082,8 @@ void BridgeDispatcher::EmitCursorPosition3D(float x, float y, float z)
 {
     if (!m_emit) return;
     json env = {
-        {"type",    "evt"},
-        {"kind",    "cursor/position-3d"},
+        {"type", "evt"},
+        {"kind", "cursor/position-3d"},
         {"payload", {{"x", x}, {"y", y}, {"z", z}}},
     };
     m_emit(env);
@@ -1107,7 +1092,7 @@ void BridgeDispatcher::EmitCursorPosition3D(float x, float y, float z)
 void BridgeDispatcher::EmitManipulatorDrag(const json& payload)
 {
     if (!m_emit) return;
-    json env = { {"type", "evt"}, {"kind", "engine/manipulator/drag"}, {"payload", payload} };
+    json env = {{"type", "evt"}, {"kind", "engine/manipulator/drag"}, {"payload", payload}};
     m_emit(env);
 }
 
@@ -1119,12 +1104,14 @@ void BridgeDispatcher::EmitEmittersTreeChanged()
     // push was < kRecordEmitThrottleMs ago, so a record's rapid host-side edits
     // don't flood the web with re-fetches. Leading-edge; continuous edits still
     // deliver ~30 Hz.
-    if (m_recordEmitThrottle) {
+    if (m_recordEmitThrottle)
+    {
         if (now - m_lastTreeEmitTick < kRecordEmitThrottleMs) return;
     }
     // Live trailing coalesce (see the header field block). Automation
     // (m_automationMode: drive asserts must see every change) is exempt.
-    else if (!m_automationMode && now - m_lastTreeEmitTick < kEmitCoalesceMs) {
+    else if (!m_automationMode && now - m_lastTreeEmitTick < kEmitCoalesceMs)
+    {
         m_treeEmitPending = true;
         return;
     }
@@ -1138,16 +1125,16 @@ void BridgeDispatcher::ResetSelectionAndEmitDocumentChanged()
     // Root (index 0) when the new document has emitters, matching file/new's
     // legacy-parity behaviour of opening with the first emitter selected;
     // otherwise nothing is selected.
-    const bool hasEmitters = (m_pParticleSystem != nullptr && *m_pParticleSystem
-                              && !(*m_pParticleSystem)->getEmitters().empty());
+    const bool hasEmitters =
+        (m_pParticleSystem != nullptr && *m_pParticleSystem && !(*m_pParticleSystem)->getEmitters().empty());
     m_selectedEmitterId = hasEmitters ? 0 : -1;
 
     // A document swap is one atomic notification, not a high-frequency edit.
     // Drop any pending old-document broadcasts and bypass live coalescing so
     // the observable order cannot become selection -> tree -> state.
     const unsigned long long now = GetTickCount64();
-    m_stateEmitPending = false;
-    m_treeEmitPending  = false;
+    m_stateEmitPending           = false;
+    m_treeEmitPending            = false;
     if (m_emit && m_engine)
     {
         m_lastStateEmitTick = now;
@@ -1161,10 +1148,9 @@ void BridgeDispatcher::ResetSelectionAndEmitDocumentChanged()
 
     if (!m_emit) return;
     json env = {
-        {"type",    "evt"},
-        {"kind",    "emitters/selected"},
-        {"payload", json{{"id", m_selectedEmitterId < 0 ? json(nullptr)
-                                                        : json(m_selectedEmitterId)}}},
+        {"type", "evt"},
+        {"kind", "emitters/selected"},
+        {"payload", json{{"id", m_selectedEmitterId < 0 ? json(nullptr) : json(m_selectedEmitterId)}}},
     };
     m_emit(env);
 }
@@ -1176,8 +1162,8 @@ void BridgeDispatcher::EmitEmittersTreeChangedNow()
     json children = json::array();
     if (m_pParticleSystem != nullptr && *m_pParticleSystem)
     {
-        const ParticleSystem* sys = m_pParticleSystem->get();
-        const auto& emitters = sys->getEmitters();
+        const ParticleSystem* sys      = m_pParticleSystem->get();
+        const auto&           emitters = sys->getEmitters();
         for (size_t i = 0; i < emitters.size(); ++i)
         {
             if (emitters[i] != nullptr && emitters[i]->parent == nullptr)
@@ -1187,20 +1173,25 @@ void BridgeDispatcher::EmitEmittersTreeChangedNow()
         }
     }
     json tree = {
-        {"id",        -1},
-        {"name",      ""},
-        {"role",      "root"},
+        {"id", -1},
+        {"name", ""},
+        {"role", "root"},
         {"linkGroup", 0},
-        {"visible",   true},
-        {"spawn", json{
-            {"lifetime", 0.0}, {"useBursts", false}, {"nBursts", 0},
-            {"burstDelay", 0.0}, {"nParticlesPerSecond", 0}, {"nParticlesPerBurst", 0},
-        }},
-        {"children",  children},
+        {"visible", true},
+        {"spawn",
+         json{
+             {"lifetime", 0.0},
+             {"useBursts", false},
+             {"nBursts", 0},
+             {"burstDelay", 0.0},
+             {"nParticlesPerSecond", 0},
+             {"nParticlesPerBurst", 0},
+         }},
+        {"children", children},
     };
     json env = {
-        {"type",    "evt"},
-        {"kind",    "emitters/tree/changed"},
+        {"type", "evt"},
+        {"kind", "emitters/tree/changed"},
         {"payload", json{{"root", tree}}},
     };
     m_emit(env);
@@ -1211,33 +1202,34 @@ void BridgeDispatcher::CommitReferenceObjectTransform()
     if (!m_engine) return;
     const D3DXVECTOR3 pos = m_engine->GetReferencePosition();
     const D3DXVECTOR3 rot = m_engine->GetReferenceRotation();
-    if (PersistsUserState())
-        PersistReferenceObjectTransform(pos, rot);
-    SetDirty(true);   // markDirty() in DispatchSync is a local lambda over this
+    if (PersistsUserState()) PersistReferenceObjectTransform(pos, rot);
+    SetDirty(true); // markDirty() in DispatchSync is a local lambda over this
     EmitEngineStateChanged();
 }
 
 // See the header. PRE-mutation capture chokepoint: live PS +
 // selection + (engine-guarded) current reference-object transform as aux.
-void BridgeDispatcher::CaptureUndoPoint(
-    DWORD coalesceKey, UndoStack::BudgetRetention retention)
+void BridgeDispatcher::CaptureUndoPoint(DWORD coalesceKey, UndoStack::BudgetRetention retention)
 {
     if (m_undo == nullptr || m_pParticleSystem == nullptr || !*m_pParticleSystem) return;
-    const ParticleSystem* sys = m_pParticleSystem->get();
-    size_t selIdx = SIZE_MAX;
-    if (m_selectedEmitterId >= 0
-        && static_cast<size_t>(m_selectedEmitterId) < sys->getEmitters().size())
+    const ParticleSystem* sys    = m_pParticleSystem->get();
+    size_t                selIdx = SIZE_MAX;
+    if (m_selectedEmitterId >= 0 && static_cast<size_t>(m_selectedEmitterId) < sys->getEmitters().size())
     {
         selIdx = static_cast<size_t>(m_selectedEmitterId);
     }
-    UndoStack::EditorAux aux;   // defaults to {0,0,0}
-    if (m_engine)               // nullable when D3D init failed — never deref unguarded
+    UndoStack::EditorAux aux; // defaults to {0,0,0}
+    if (m_engine)             // nullable when D3D init failed — never deref unguarded
     {
         const D3DXVECTOR3 p = m_engine->GetReferencePosition();
         const D3DXVECTOR3 r = m_engine->GetReferenceRotation();
-        aux.refPos[0] = p.x; aux.refPos[1] = p.y; aux.refPos[2] = p.z;
-        aux.refRot[0] = r.x; aux.refRot[1] = r.y; aux.refRot[2] = r.z;
-        aux.refName = m_engine->GetReferenceObjectName();   // gate the restore on identity
+        aux.refPos[0]       = p.x;
+        aux.refPos[1]       = p.y;
+        aux.refPos[2]       = p.z;
+        aux.refRot[0]       = r.x;
+        aux.refRot[1]       = r.y;
+        aux.refRot[2]       = r.z;
+        aux.refName         = m_engine->GetReferenceObjectName(); // gate the restore on identity
     }
     // Preserve both capture paths (matches the lambda this replaced + the
     // auto-cap's Capture(...,0)): non-zero key coalesces, zero never does.
@@ -1259,12 +1251,14 @@ void BridgeDispatcher::EmitEngineStateChanged()
     if (!m_emit || !m_engine) return;
     const unsigned long long now = GetTickCount64();
     // Record-only coalesce (see EmitEmittersTreeChanged).
-    if (m_recordEmitThrottle) {
+    if (m_recordEmitThrottle)
+    {
         if (now - m_lastStateEmitTick < kRecordEmitThrottleMs) return;
     }
     // Live trailing coalesce (see the header field block). Automation
     // (m_automationMode: drive asserts must see every change) is exempt.
-    else if (!m_automationMode && now - m_lastStateEmitTick < kEmitCoalesceMs) {
+    else if (!m_automationMode && now - m_lastStateEmitTick < kEmitCoalesceMs)
+    {
         m_stateEmitPending = true;
         return;
     }
@@ -1275,17 +1269,18 @@ void BridgeDispatcher::EmitEngineStateChanged()
 
 void BridgeDispatcher::EmitEngineStateChangedNow()
 {
-    json spawnerJson = BuildSpawnerStateJson();
+    json               spawnerJson   = BuildSpawnerStateJson();
     const std::wstring activeModPath = m_modManager ? m_modManager->GetPrimaryLayerPath() : std::wstring();
-    const bool leaveParticles = (m_pParticleSystem != nullptr && *m_pParticleSystem)
-        ? (*m_pParticleSystem)->getLeaveParticles()
-        : true;
+    const bool         leaveParticles =
+        (m_pParticleSystem != nullptr && *m_pParticleSystem) ? (*m_pParticleSystem)->getLeaveParticles() : true;
     const bool canUndo = ComputeCanUndo();
     const bool canRedo = m_undo ? m_undo->CanRedo() : false;
-    json env = {
-        {"type",    "evt"},
-        {"kind",    "engine/state/changed"},
-        {"payload", BuildEngineStateSnapshot(m_engine, m_currentFilePath, m_dirty, spawnerJson, m_selectedEmitterId, activeModPath, leaveParticles, canUndo, canRedo, !m_emitterClipboard.empty())},
+    json       env     = {
+        {"type", "evt"},
+        {"kind", "engine/state/changed"},
+        {"payload",
+         BuildEngineStateSnapshot(m_engine, m_currentFilePath, m_dirty, spawnerJson, m_selectedEmitterId, activeModPath,
+                                  leaveParticles, canUndo, canRedo, !m_emitterClipboard.empty())},
     };
     m_emit(env);
 }
@@ -1318,16 +1313,14 @@ void BridgeDispatcher::DrainPreviewResults()
     {
         if (r.epoch != m_previewEpoch) continue;
         m_previewInFlight.erase(r.key);
-        PreviewCachePut(r.key, PreviewCacheEntry{r.status, std::move(r.dataUri),
-                                                 r.srcW, r.srcH});
+        PreviewCachePut(r.key, PreviewCacheEntry{r.status, std::move(r.dataUri), r.srcW, r.srcH});
         if (m_emit)
         {
             json env = {
                 {"type", "evt"},
                 {"kind", "textures/preview-ready"},
-                {"payload", {{"filename", WideToUtf8(r.filename)},
-                             {"flattenAlpha", r.flattenAlpha},
-                             {"status", r.status}}},
+                {"payload",
+                 {{"filename", WideToUtf8(r.filename)}, {"flattenAlpha", r.flattenAlpha}, {"status", r.status}}},
             };
             m_emit(env);
         }
@@ -1382,7 +1375,7 @@ void BridgeDispatcher::ResetSavedBaseline()
 
 void BridgeDispatcher::SetDirty(bool dirty)
 {
-    if (m_dirty == dirty) return;  // debounce — no-op if already in target state
+    if (m_dirty == dirty) return; // debounce — no-op if already in target state
     m_dirty = dirty;
     EmitDirtyChanged();
     // Don't broadcast engine/state/changed here. Callers that
@@ -1397,8 +1390,8 @@ void BridgeDispatcher::EmitDirtyChanged()
 {
     if (!m_emit) return;
     json env = {
-        {"type",    "evt"},
-        {"kind",    "dirty/changed"},
+        {"type", "evt"},
+        {"kind", "dirty/changed"},
         {"payload", {{"dirty", m_dirty}}},
     };
     m_emit(env);
@@ -1408,8 +1401,8 @@ void BridgeDispatcher::EmitCloseRequested()
 {
     if (!m_emit) return;
     json env = {
-        {"type",    "evt"},
-        {"kind",    "app/close-requested"},
+        {"type", "evt"},
+        {"kind", "app/close-requested"},
         {"payload", json::object()},
     };
     m_emit(env);
@@ -1424,8 +1417,8 @@ void BridgeDispatcher::EmitRecentChanged()
         paths.push_back(WideToUtf8(w));
     }
     json env = {
-        {"type",    "evt"},
-        {"kind",    "recent/changed"},
+        {"type", "evt"},
+        {"kind", "recent/changed"},
         {"payload", {{"paths", paths}}},
     };
     m_emit(env);
@@ -1442,9 +1435,7 @@ void BridgeDispatcher::EmitRecentChanged()
 // Wrapped in UndoStack::BeginApplying/EndApplying so the swap doesn't
 // recursively trigger a Capture(). Same pattern as the legacy
 // editor's RestoreFromSnapshot.
-void BridgeDispatcher::ApplyUndoSnapshot(const std::vector<char>& buf,
-                                         size_t selIdx,
-                                         const UndoStack::EditorAux& aux)
+void BridgeDispatcher::ApplyUndoSnapshot(const std::vector<char>& buf, size_t selIdx, const UndoStack::EditorAux& aux)
 {
     if (m_undo == nullptr) return;
     if (m_pParticleSystem == nullptr) return;
@@ -1467,9 +1458,7 @@ void BridgeDispatcher::ApplyUndoSnapshot(const std::vector<char>& buf,
         return;
     }
 
-    if (m_pAttachedParticleSystem
-        && *m_pAttachedParticleSystem
-        && m_engine)
+    if (m_pAttachedParticleSystem && *m_pAttachedParticleSystem && m_engine)
     {
         m_engine->KillParticleSystem(*m_pAttachedParticleSystem);
         m_pAttachedParticleSystem->Reset();
@@ -1504,8 +1493,7 @@ void BridgeDispatcher::ApplyUndoSnapshot(const std::vector<char>& buf,
         m_engine->ReloadTextures();
     }
 
-    if (selIdx != SIZE_MAX
-        && selIdx < (*m_pParticleSystem)->getEmitters().size())
+    if (selIdx != SIZE_MAX && selIdx < (*m_pParticleSystem)->getEmitters().size())
     {
         m_selectedEmitterId = static_cast<int>(selIdx);
     }
@@ -1516,11 +1504,9 @@ void BridgeDispatcher::ApplyUndoSnapshot(const std::vector<char>& buf,
     if (m_emit)
     {
         json env = {
-            {"type",    "evt"},
-            {"kind",    "emitters/selected"},
-            {"payload", json{{"id", m_selectedEmitterId < 0
-                                       ? json(nullptr)
-                                       : json(m_selectedEmitterId)}}},
+            {"type", "evt"},
+            {"kind", "emitters/selected"},
+            {"payload", json{{"id", m_selectedEmitterId < 0 ? json(nullptr) : json(m_selectedEmitterId)}}},
         };
         m_emit(env);
     }
@@ -1544,8 +1530,7 @@ void BridgeDispatcher::ApplyUndoSnapshot(const std::vector<char>& buf,
         const D3DXVECTOR3 p(aux.refPos[0], aux.refPos[1], aux.refPos[2]);
         const D3DXVECTOR3 r(aux.refRot[0], aux.refRot[1], aux.refRot[2]);
         m_engine->SetReferenceObjectTransform(p, r);
-        if (PersistsUserState())
-            PersistReferenceObjectTransform(p, r);
+        if (PersistsUserState()) PersistReferenceObjectTransform(p, r);
     }
 
     // Dirty bit follows content-equality against the saved baseline.
@@ -1573,8 +1558,8 @@ void BridgeDispatcher::ApplyUndoSnapshot(const std::vector<char>& buf,
 void BridgeDispatcher::EnforceSingleMemberLinkGroups()
 {
     if (m_pParticleSystem == nullptr || !*m_pParticleSystem) return;
-    ParticleSystem* sys = m_pParticleSystem->get();
-    const auto& emitters = sys->getEmitters();
+    ParticleSystem* sys      = m_pParticleSystem->get();
+    const auto&     emitters = sys->getEmitters();
 
     // Pass 1: count members per positive linkGroup. uint32_t key
     // matches Emitter::linkGroup's type; std::map keeps the surface
@@ -1606,9 +1591,7 @@ void BridgeDispatcher::EnforceSingleMemberLinkGroups()
 }
 
 // ---------- Runtime notifications ----------
-void BridgeDispatcher::EmitStatsTick(float fps, int emitters,
-                                     int particles, int instances,
-                                     bool overload)
+void BridgeDispatcher::EmitStatsTick(float fps, int emitters, int particles, int instances, bool overload)
 {
     if (!m_emit) return;
     // [hard-guard] Poll the engine's one-shot spawn-refusal record on the
@@ -1623,13 +1606,14 @@ void BridgeDispatcher::EmitStatsTick(float fps, int emitters,
         {
             // Surface the refusal to the web (transient banner).
             json env = {
-                {"type",    "evt"},
-                {"kind",    "engine/overload/refused"},
-                {"payload", {
-                    {"estimated",      refusal.estimated},
-                    {"cap",            refusal.cap},
-                    {"attemptedCount", refusal.attemptedCount},
-                }},
+                {"type", "evt"},
+                {"kind", "engine/overload/refused"},
+                {"payload",
+                 {
+                     {"estimated", refusal.estimated},
+                     {"cap", refusal.cap},
+                     {"attemptedCount", refusal.attemptedCount},
+                 }},
             };
             m_emit(env);
             // The engine's SpawnerDriver self-disabled on the refusal
@@ -1654,17 +1638,18 @@ void BridgeDispatcher::EmitStatsTick(float fps, int emitters,
     // re-populate it with non-deterministic per-frame values.
     if (m_statsFrozen) return;
     json env = {
-        {"type",    "evt"},
-        {"kind",    "stats/tick"},
-        {"payload", {
-            {"fps",       fps},
-            {"emitters",  emitters},
-            {"particles", particles},
-            {"instances", instances},
-            // Latched preview overload flag — spawning is suppressed
-            // while true (Engine::IsSpawnOverloadActive).
-            {"overload",  overload},
-        }},
+        {"type", "evt"},
+        {"kind", "stats/tick"},
+        {"payload",
+         {
+             {"fps", fps},
+             {"emitters", emitters},
+             {"particles", particles},
+             {"instances", instances},
+             // Latched preview overload flag — spawning is suppressed
+             // while true (Engine::IsSpawnOverloadActive).
+             {"overload", overload},
+         }},
     };
     m_emit(env);
 }
@@ -1673,8 +1658,8 @@ void BridgeDispatcher::EmitSpawnerActiveCount(int count)
 {
     if (!m_emit) return;
     json env = {
-        {"type",    "evt"},
-        {"kind",    "spawner/active-count"},
+        {"type", "evt"},
+        {"kind", "spawner/active-count"},
         {"payload", {{"count", count}}},
     };
     m_emit(env);
@@ -1684,8 +1669,8 @@ void BridgeDispatcher::EmitViewportUnavailable(const std::string& reason)
 {
     if (!m_emit) return;
     json env = {
-        {"type",    "evt"},
-        {"kind",    "viewport/unavailable"},
+        {"type", "evt"},
+        {"kind", "viewport/unavailable"},
         {"payload", {{"reason", reason}}},
     };
     m_emit(env);
@@ -1693,10 +1678,10 @@ void BridgeDispatcher::EmitViewportUnavailable(const std::string& reason)
 
 bool BridgeDispatcher::EmitWindowState(bool maximized)
 {
-    if (!m_emit) return false;   // web not wired yet — caller replays on app/ready
+    if (!m_emit) return false; // web not wired yet — caller replays on app/ready
     json env = {
-        {"type",    "evt"},
-        {"kind",    "window/state"},
+        {"type", "evt"},
+        {"kind", "window/state"},
         {"payload", {{"maximized", maximized}}},
     };
     m_emit(env);
@@ -1705,10 +1690,10 @@ bool BridgeDispatcher::EmitWindowState(bool maximized)
 
 bool BridgeDispatcher::EmitAutosaveHealth(bool healthy)
 {
-    if (!m_emit) return false;   // web not wired yet — caller replays on app/ready
+    if (!m_emit) return false; // web not wired yet — caller replays on app/ready
     json env = {
-        {"type",    "evt"},
-        {"kind",    "autosave/health"},
+        {"type", "evt"},
+        {"kind", "autosave/health"},
         {"payload", {{"healthy", healthy}}},
     };
     m_emit(env);

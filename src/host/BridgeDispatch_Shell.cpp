@@ -10,12 +10,12 @@
 #include "InputDispatcher.h"
 #include "LayoutBroker.h"
 #include "ExternalLinks.h"
-#include "WindowCapture.h"    // CaptureWindowToPng (debug/capture-*)
-#include "HostMessages.h"     // WM_APP_QUIT_CONFIRMED (app/quit)
-#include "StringConv.h"       // host::Utf8ToWide (debug/capture-window)
+#include "WindowCapture.h" // CaptureWindowToPng (debug/capture-*)
+#include "HostMessages.h"  // WM_APP_QUIT_CONFIRMED (app/quit)
+#include "StringConv.h"    // host::Utf8ToWide (debug/capture-window)
 
-#include <dwmapi.h>           // DwmSetWindowAttribute (host/backing-color)
-#include <shellapi.h>         // ShellExecuteW (app/open-external)
+#include <dwmapi.h>   // DwmSetWindowAttribute (host/backing-color)
+#include <shellapi.h> // ShellExecuteW (app/open-external)
 #pragma comment(lib, "dwmapi.lib")
 // DWM immersive dark-mode caption attribute — same SDK guard as
 // BridgeDispatcher.cpp (value 20, post-Win10-2004).
@@ -25,7 +25,8 @@
 
 using nlohmann::json;
 
-namespace host {
+namespace host
+{
 
 bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
 {
@@ -44,7 +45,6 @@ bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
         ctx.SendOk(json::object());
         return true;
     }
-
 
     // -------- layout/scene-rect --------
     // Under the popup-spans-window architecture the
@@ -79,7 +79,6 @@ bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
         return true;
     }
 
-
     // -------- animate-scene-rect --------
     // One-shot dock-slide animation. Instead of the per-frame
     // layout/scene-rect stream (which the uncapped render loop samples at
@@ -94,16 +93,13 @@ bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
     if (kind == "animate-scene-rect")
     {
         const json from = params.value("from", json::object());
-        const json to   = params.value("to",   json::object());
-        m_layout.StartSceneAnim(
-            from.value("x", 0), from.value("y", 0), from.value("w", 0), from.value("h", 0),
-            to.value("x", 0),   to.value("y", 0),   to.value("w", 0),   to.value("h", 0),
-            params.value("durationMs", 0.0),
-            params.value("msElapsedAtSend", 0.0));
+        const json to   = params.value("to", json::object());
+        m_layout.StartSceneAnim(from.value("x", 0), from.value("y", 0), from.value("w", 0), from.value("h", 0),
+                                to.value("x", 0), to.value("y", 0), to.value("w", 0), to.value("h", 0),
+                                params.value("durationMs", 0.0), params.value("msElapsedAtSend", 0.0));
         ctx.SendOk(json::object());
         return true;
     }
-
 
     // -------- host/backing-color --------
     // recolour the DComp composition backing to the
@@ -117,7 +113,7 @@ bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
     if (kind == "host/backing-color")
     {
         const std::string colorStr = params.value("color", std::string{});
-        COLORREF c = 0;
+        COLORREF          c        = 0;
         if (!ParseCssColorToColorRef(colorStr, c))
         {
             ctx.SendErr("host/backing-color: unparseable color '" + colorStr + "'");
@@ -132,21 +128,16 @@ bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
         // bridge surface). Perceived luminance (Rec.601); < 128 ⇒ dark.
         if (m_hostHwnd)
         {
-            const int luma = (GetRValue(c) * 299 + GetGValue(c) * 587 +
-                              GetBValue(c) * 114) / 1000;
-            BOOL dark = (luma < 128) ? TRUE : FALSE;
-            DwmSetWindowAttribute(m_hostHwnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
-                                  &dark, sizeof(dark));
+            const int luma = (GetRValue(c) * 299 + GetGValue(c) * 587 + GetBValue(c) * 114) / 1000;
+            BOOL      dark = (luma < 128) ? TRUE : FALSE;
+            DwmSetWindowAttribute(m_hostHwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
         }
 
-        printf("[backing] color '%s' -> RGB(%u,%u,%u)\n",
-               colorStr.c_str(),
-               GetRValue(c), GetGValue(c), GetBValue(c));
+        printf("[backing] color '%s' -> RGB(%u,%u,%u)\n", colorStr.c_str(), GetRValue(c), GetGValue(c), GetBValue(c));
         fflush(stdout);
         ctx.SendOk(json::object());
         return true;
     }
-
 
     // -------- viewport/capture-snapshot --------
     // React's Modal primitive calls this on open to grab a
@@ -157,7 +148,7 @@ bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
     // uniformly. The compositor reads the engine RT back on demand, so
     // the capture sees the raw engine output.
     //
-    // Returns `{ imageBase64, w, h }` — base64 of a JPEG (the 
+    // Returns `{ imageBase64, w, h }` — base64 of a JPEG (the
     // backdrop is shown blurred, so lossy is invisible and far cheaper to
     // encode + transmit than PNG). When the compositor has no frame yet
     // (engine never composited, device just reset), returns an empty string
@@ -165,8 +156,8 @@ bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
     if (kind == "viewport/capture-snapshot")
     {
         std::string imageBase64;
-        int w = 0;
-        int h = 0;
+        int         w = 0;
+        int         h = 0;
         if (m_layout.CaptureSnapshotJpegBase64(imageBase64, w, h))
         {
             ctx.SendOk(json{{"imageBase64", std::move(imageBase64)}, {"w", w}, {"h", h}});
@@ -177,7 +168,6 @@ bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
         }
         return true;
     }
-
 
     // -------- debug/capture-frame ([render-capture]) --------
     // Write the current engine viewport frame straight to a PNG at `path` so the
@@ -209,11 +199,12 @@ bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
             return true;
         }
         const bool ok = m_layout.CaptureSnapshotToFile(Utf8ToWide(path));
-        if (ok) ctx.SendOk(json{{"path", path}});
-        else    ctx.SendErr("capture failed (no composited frame yet, no render target, or file write failed)");
+        if (ok)
+            ctx.SendOk(json{{"path", path}});
+        else
+            ctx.SendErr("capture failed (no composited frame yet, no render target, or file write failed)");
         return true;
     }
-
 
     // -------- debug/capture-window ([composed-capture] Track C) --------
     // Capture the FULL composed window (the DWM/DirectComposition flatten of the
@@ -246,11 +237,12 @@ bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
             return true;
         }
         const bool ok = host::CaptureWindowToPng(m_hostHwnd, Utf8ToWide(path));
-        if (ok) ctx.SendOk(json{{"path", path}});
-        else    ctx.SendErr("composed-window capture failed (PrintWindow or file write failed)");
+        if (ok)
+            ctx.SendOk(json{{"path", path}});
+        else
+            ctx.SendErr("composed-window capture failed (PrintWindow or file write failed)");
         return true;
     }
-
 
     // -------- viewport/input --------
     //
@@ -267,7 +259,6 @@ bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
         return true;
     }
 
-
     // -------- register-accelerators --------
     if (kind == "register-accelerators")
     {
@@ -278,12 +269,11 @@ bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
         return true;
     }
 
-
     // -------- app/open-external --------------------------------------
     if (kind == "app/open-external")
     {
         const std::string target = params.value("target", std::string{});
-        const wchar_t* url = ExternalLinkUrl(target);
+        const wchar_t*    url    = ExternalLinkUrl(target);
         if (!url)
         {
             ctx.SendErr("app/open-external: unknown target");
@@ -292,8 +282,8 @@ bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
         bool opened = false;
         if (m_externalLaunchAllowed)
         {
-            const INT_PTR result = reinterpret_cast<INT_PTR>(
-                ShellExecuteW(m_hostHwnd, L"open", url, nullptr, nullptr, SW_SHOWNORMAL));
+            const INT_PTR result =
+                reinterpret_cast<INT_PTR>(ShellExecuteW(m_hostHwnd, L"open", url, nullptr, nullptr, SW_SHOWNORMAL));
             opened = result > 32;
         }
         printf("[bridge] open-external target=%s opened=%d\n", target.c_str(), opened ? 1 : 0);
@@ -301,7 +291,6 @@ bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
         ctx.SendOk(json{{"opened", opened}});
         return true;
     }
-
 
     // -------- app/quit -----------------------------------------------
     //
@@ -321,7 +310,6 @@ bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
         return true;
     }
 
-
     // -------- window/minimize | window/maximize | window/close ----------
     //
     // The frameless custom title bar's controls act on the top-level HWND.
@@ -338,8 +326,7 @@ bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
     if (kind == "window/maximize")
     {
         ctx.SendOk(json::object());
-        if (m_hostHwnd != nullptr)
-            ShowWindow(m_hostHwnd, IsZoomed(m_hostHwnd) ? SW_RESTORE : SW_MAXIMIZE);
+        if (m_hostHwnd != nullptr) ShowWindow(m_hostHwnd, IsZoomed(m_hostHwnd) ? SW_RESTORE : SW_MAXIMIZE);
         return true;
     }
     if (kind == "window/close")
@@ -348,7 +335,6 @@ bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
         if (m_hostHwnd != nullptr) PostMessage(m_hostHwnd, WM_CLOSE, 0, 0);
         return true;
     }
-
 
     // -------- stats/set-frozen --------
     // Test-only knob that suppresses
@@ -360,12 +346,12 @@ bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
     if (kind == "stats/set-frozen")
     {
         const bool frozen = params.value("frozen", true);
-        m_statsFrozen = frozen;
+        m_statsFrozen     = frozen;
         if (m_emit)
         {
             json env = {
-                {"type",    "evt"},
-                {"kind",    "stats/frozen-changed"},
+                {"type", "evt"},
+                {"kind", "stats/frozen-changed"},
                 {"payload", {{"frozen", frozen}}},
             };
             m_emit(env);
@@ -374,8 +360,7 @@ bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
         return true;
     }
 
-
-    return false;   // kind not in this domain
+    return false; // kind not in this domain
 }
 
 } // namespace host

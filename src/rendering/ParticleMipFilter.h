@@ -16,7 +16,12 @@
 // behave like the default).
 struct ParticleMipFilterMode
 {
-    enum Mode { MODE_NONE = 0, MODE_LINEAR = 1, MODE_BIAS = 2 };
+    enum Mode
+    {
+        MODE_NONE   = 0,
+        MODE_LINEAR = 1,
+        MODE_BIAS   = 2
+    };
     int   mode       = MODE_NONE;
     float bias       = 0.0f;
     bool  recognized = true;
@@ -25,7 +30,7 @@ struct ParticleMipFilterMode
 inline ParticleMipFilterMode ParseParticleMipFilter(const char* value)
 {
     ParticleMipFilterMode out;
-    if (value == nullptr || value[0] == '\0') return out;          // unset -> default
+    if (value == nullptr || value[0] == '\0') return out; // unset -> default
     if (_stricmp(value, "linear") == 0)
     {
         out.mode = ParticleMipFilterMode::MODE_LINEAR;
@@ -33,8 +38,8 @@ inline ParticleMipFilterMode ParseParticleMipFilter(const char* value)
     }
     if (_strnicmp(value, "bias:", 5) == 0)
     {
-        char* end = nullptr;
-        const float f = strtof(value + 5, &end);
+        char*       end = nullptr;
+        const float f   = strtof(value + 5, &end);
         // Require the whole suffix consumed and a finite value — "bias:garbage"
         // (strtof -> 0, end == start) and "bias:1x" both fall through to the
         // unrecognized default rather than silently biasing by 0/1.
@@ -45,6 +50,6 @@ inline ParticleMipFilterMode ParseParticleMipFilter(const char* value)
             return out;
         }
     }
-    out.recognized = false;                                        // typo -> default + log
+    out.recognized = false; // typo -> default + log
     return out;
 }

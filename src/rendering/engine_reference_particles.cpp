@@ -19,40 +19,40 @@
 #include "common/exceptions.h"
 #include "common/files.h"
 #include "gamedata/managers.h"
-#include "ReferenceObjectMesh.h"                 // ReadReferenceParticleProxies
+#include "ReferenceObjectMesh.h" // ReadReferenceParticleProxies
 #include "simulation/ParticleSystemInstance.h"
-#include "simulation/ProjectileShot.h"           // ProjectileShotModelAxes
+#include "simulation/ProjectileShot.h" // ProjectileShotModelAxes
 
 namespace
 {
-    // One read-only particle system from the game's files; null on a miss, a file
-    // that isn't a valid particle system, or one with no emitters (a resting run of
-    // it would finish at once and restart every frame).
-    std::unique_ptr<ParticleSystem> LoadReadOnlyParticleSystem(IFileManager& fm, const std::string& aloPath)
+// One read-only particle system from the game's files; null on a miss, a file
+// that isn't a valid particle system, or one with no emitters (a resting run of
+// it would finish at once and restart every frame).
+std::unique_ptr<ParticleSystem> LoadReadOnlyParticleSystem(IFileManager& fm, const std::string& aloPath)
+{
+    IFile* file = fm.getFile(aloPath);
+    if (file == nullptr) return nullptr;
+    std::unique_ptr<ParticleSystem> system;
+    try
     {
-        IFile* file = fm.getFile(aloPath);
-        if (file == nullptr) return nullptr;
-        std::unique_ptr<ParticleSystem> system;
-        try
-        {
-            system = std::make_unique<ParticleSystem>(file);
-        }
-        catch (const wexception&)
-        {
-            system.reset();
-        }
-        file->Release();
-        if (system && system->getEmitters().empty()) system.reset();
-        return system;
+        system = std::make_unique<ParticleSystem>(file);
     }
-
-    D3DXVECTOR3 TransformPoint(const D3DXVECTOR3& p, const D3DXMATRIX& world)
+    catch (const wexception&)
     {
-        D3DXVECTOR3 out;
-        D3DXVec3TransformCoord(&out, &p, &world);
-        return out;
+        system.reset();
     }
+    file->Release();
+    if (system && system->getEmitters().empty()) system.reset();
+    return system;
 }
+
+D3DXVECTOR3 TransformPoint(const D3DXVECTOR3& p, const D3DXMATRIX& world)
+{
+    D3DXVECTOR3 out;
+    D3DXVec3TransformCoord(&out, &p, &world);
+    return out;
+}
+} // namespace
 
 // Loads the particle sources for the selected projectile: the model itself when it
 // is a particle system, otherwise its visible particle proxies. Non-projectiles get
@@ -65,8 +65,7 @@ void Engine::LoadReferenceParticleSources(const GameObjectRef& ref, const std::s
     if (ref.modelContent == ModelContent::ParticleSystem)
     {
         std::unique_ptr<ParticleSystem> system = LoadReadOnlyParticleSystem(m_fileManager, aloPath);
-        if (system)
-            m_referenceParticleSources.push_back({ std::move(system), D3DXVECTOR3(0, 0, 0) });
+        if (system) m_referenceParticleSources.push_back({std::move(system), D3DXVECTOR3(0, 0, 0)});
         return;
     }
 
@@ -80,7 +79,7 @@ void Engine::LoadReferenceParticleSources(const GameObjectRef& ref, const std::s
 #endif
             continue;
         }
-        m_referenceParticleSources.push_back({ std::move(system), proxy.offset });
+        m_referenceParticleSources.push_back({std::move(system), proxy.offset});
     }
 }
 
@@ -92,7 +91,7 @@ void Engine::ClearReferenceParticles(bool keepSources)
     for (ReferenceParticleRun& run : m_referenceParticleRuns)
     {
         m_numParticles += run.instance->Kill();
-        m_numEmitters  -= (int)run.instance->NumLiveEmitters();
+        m_numEmitters -= (int)run.instance->NumLiveEmitters();
     }
     m_referenceParticleRuns.clear();
     m_referenceShotTokens.clear();
@@ -103,17 +102,18 @@ void Engine::UpdateReferenceParticles(TimeF currentTime)
 {
     if (m_referenceParticleSources.empty()) return;
 
-    const bool visible = m_referenceObjectVisible;
-    const bool resting = visible && ReferenceRestsInScene();
+    const bool       visible   = m_referenceObjectVisible;
+    const bool       resting   = visible && ReferenceRestsInScene();
     const D3DXMATRIX restWorld = ReferenceObjectDisplayWorld();
 
-    auto startRun = [&](size_t sourceIdx, const D3DXVECTOR3& at, ParticleSystemInstanceHandle shot) {
+    auto startRun = [&](size_t sourceIdx, const D3DXVECTOR3& at, ParticleSystemInstanceHandle shot)
+    {
         ReferenceParticleRun run;
         run.sourceIdx = sourceIdx;
-        run.anchor   = std::make_unique<Object3D>(nullptr, at);
-        run.instance = std::make_unique<ParticleSystemInstance>(
-            *this, *m_referenceParticleSources[sourceIdx].system, run.anchor.get(), /*instanceToken=*/0);
-        run.shot     = shot;
+        run.anchor    = std::make_unique<Object3D>(nullptr, at);
+        run.instance  = std::make_unique<ParticleSystemInstance>(*this, *m_referenceParticleSources[sourceIdx].system,
+                                                                 run.anchor.get(), /*instanceToken=*/0);
+        run.shot      = shot;
         m_referenceParticleRuns.push_back(std::move(run));
     };
 
@@ -126,8 +126,7 @@ void Engine::UpdateReferenceParticles(TimeF currentTime)
             if (!inst || !inst->IsProjectileShotLive()) continue;
             if (!m_referenceShotTokens.insert(inst->GetInstanceToken()).second) continue;
             const ParticleSystemInstanceHandle shot = m_instanceBorrows.Make(inst.get());
-            for (size_t s = 0; s < m_referenceParticleSources.size(); ++s)
-                startRun(s, inst->GetPosition(), shot);
+            for (size_t s = 0; s < m_referenceParticleSources.size(); ++s) startRun(s, inst->GetPosition(), shot);
         }
     }
 
@@ -146,15 +145,14 @@ void Engine::UpdateReferenceParticles(TimeF currentTime)
                 run.instance->Detach();
                 continue;
             }
-            const D3DXVECTOR3& d = shot->GetShotDirection();
-            const float dir[3] = { d.x, d.y, d.z };
-            float mx[3], my[3], mz[3];
+            const D3DXVECTOR3& d      = shot->GetShotDirection();
+            const float        dir[3] = {d.x, d.y, d.z};
+            float              mx[3], my[3], mz[3];
             ProjectileShotModelAxes(dir, mx, my, mz);
-            const float s = m_referenceScaleFactor;
-            const D3DXVECTOR3 turned(
-                s * (offset.x * mx[0] + offset.y * my[0] + offset.z * mz[0]),
-                s * (offset.x * mx[1] + offset.y * my[1] + offset.z * mz[1]),
-                s * (offset.x * mx[2] + offset.y * my[2] + offset.z * mz[2]));
+            const float       s = m_referenceScaleFactor;
+            const D3DXVECTOR3 turned(s * (offset.x * mx[0] + offset.y * my[0] + offset.z * mz[0]),
+                                     s * (offset.x * mx[1] + offset.y * my[1] + offset.z * mz[1]),
+                                     s * (offset.x * mx[2] + offset.y * my[2] + offset.z * mz[2]));
             run.anchor->MoveTo(shot->GetPosition() + turned, shot->GetVelocity());
         }
         else if (!run.instance->Detached())
@@ -170,8 +168,7 @@ void Engine::UpdateReferenceParticles(TimeF currentTime)
         }
     }
 
-    for (ReferenceParticleRun& run : m_referenceParticleRuns)
-        m_numParticles += run.instance->Update(currentTime);
+    for (ReferenceParticleRun& run : m_referenceParticleRuns) m_numParticles += run.instance->Update(currentTime);
 
     // Retire finished runs. A resting run that finished is restarted below, so a
     // one-shot effect keeps replaying at the placement.
@@ -188,7 +185,11 @@ void Engine::UpdateReferenceParticles(TimeF currentTime)
         {
             bool hasRestingRun = false;
             for (const ReferenceParticleRun& run : m_referenceParticleRuns)
-                if (run.sourceIdx == s && !run.shot && !run.instance->Detached()) { hasRestingRun = true; break; }
+                if (run.sourceIdx == s && !run.shot && !run.instance->Detached())
+                {
+                    hasRestingRun = true;
+                    break;
+                }
             if (!hasRestingRun)
                 startRun(s, TransformPoint(m_referenceParticleSources[s].offset, restWorld),
                          ParticleSystemInstanceHandle());
@@ -200,7 +201,11 @@ void Engine::UpdateReferenceParticles(TimeF currentTime)
     {
         bool alive = false;
         for (const auto& inst : m_instances)
-            if (inst && inst->GetInstanceToken() == *it) { alive = true; break; }
+            if (inst && inst->GetInstanceToken() == *it)
+            {
+                alive = true;
+                break;
+            }
         it = alive ? std::next(it) : m_referenceShotTokens.erase(it);
     }
 }
@@ -209,8 +214,10 @@ void Engine::RenderReferenceParticles(IDirect3DDevice9* pDevice, bool heat)
 {
     for (ReferenceParticleRun& run : m_referenceParticleRuns)
     {
-        if (heat) run.instance->RenderHeat(pDevice);
-        else      run.instance->RenderNormal(pDevice);
+        if (heat)
+            run.instance->RenderHeat(pDevice);
+        else
+            run.instance->RenderNormal(pDevice);
     }
 }
 
@@ -223,12 +230,10 @@ bool Engine::ReferenceParticlesHaveLiveHeat() const
 
 void Engine::ReleaseReferenceParticleTextures()
 {
-    for (ReferenceParticleRun& run : m_referenceParticleRuns)
-        run.instance->ReleaseDeviceTextures();
+    for (ReferenceParticleRun& run : m_referenceParticleRuns) run.instance->ReleaseDeviceTextures();
 }
 
 void Engine::ReacquireReferenceParticleTextures()
 {
-    for (ReferenceParticleRun& run : m_referenceParticleRuns)
-        run.instance->ReacquireDeviceTextures(*this);
+    for (ReferenceParticleRun& run : m_referenceParticleRuns) run.instance->ReacquireDeviceTextures(*this);
 }

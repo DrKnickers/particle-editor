@@ -45,6 +45,6 @@ bool IsToolCommandLine();
 
 // Runs the tool and returns the exit code.
 int RunToolMain();
-}
+} // namespace host
 
 #endif // TOOL_MAIN_H

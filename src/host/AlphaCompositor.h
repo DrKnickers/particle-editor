@@ -27,7 +27,8 @@
 struct IDirect3DDevice9;
 struct IDirect3DSurface9;
 
-namespace host {
+namespace host
+{
 
 class AlphaCompositor
 {
@@ -71,9 +72,19 @@ public:
     // first layout/scene-rect.
     void SetSceneRect(int x, int y, int w, int h);
 
-    struct Size { int width; int height; };
-    struct CropRect { int x; int y; int width; int height; };
-    Size RenderTargetSizeForObservation() const;
+    struct Size
+    {
+        int width;
+        int height;
+    };
+    struct CropRect
+    {
+        int x;
+        int y;
+        int width;
+        int height;
+    };
+    Size     RenderTargetSizeForObservation() const;
     CropRect ReadbackCropForObservation() const;
 
     // Capture the most recent pre-stamp engine frame as a

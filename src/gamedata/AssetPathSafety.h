@@ -15,8 +15,8 @@
 
 inline bool IsSafeRelativeAssetName(const std::string& n)
 {
-    if (n.empty()) return true;                       // empty -> harmless
-    if (n[0] == '\\' || n[0] == '/') return false;    // root-relative or UNC start
+    if (n.empty()) return true;                    // empty -> harmless
+    if (n[0] == '\\' || n[0] == '/') return false; // root-relative or UNC start
     // Reject ANY colon: drive-absolute (C:\x), drive-RELATIVE (C:x — opens
     // against C:'s CWD), and NTFS alternate-data-streams (x.tga:bad). Legit
     // game asset names never contain a colon.
@@ -38,12 +38,14 @@ inline bool IsSafeRelativeAssetName(const std::string& n)
     {
         const bool atEnd = (i == n.size());
         if (!atEnd && n[i] != '\\' && n[i] != '/') continue;
-        bool dotsOnly = (i > segStart);               // non-empty segment
-        size_t dots = 0;
+        bool   dotsOnly = (i > segStart); // non-empty segment
+        size_t dots     = 0;
         for (size_t j = segStart; j < i && dotsOnly; ++j)
         {
-            if (n[j] == '.') ++dots;
-            else if (n[j] != ' ') dotsOnly = false;
+            if (n[j] == '.')
+                ++dots;
+            else if (n[j] != ' ')
+                dotsOnly = false;
         }
         if (dotsOnly && dots >= 2) return false;
         segStart = i + 1;
@@ -104,11 +106,11 @@ inline bool IsLocalCustomAssetPath(const std::wstring& p)
     const bool sep1 = (p.size() >= 2) && (p[1] == L'\\' || p[1] == L'/');
     if (!(sep0 && sep1)) return true;
 
-    const size_t hostStart = 2;
-    const size_t hostEnd = p.find_first_of(L"\\/", hostStart);
-    const size_t hostLength =
-        (hostEnd == std::wstring::npos ? p.size() : hostEnd) - hostStart;
-    auto hostEquals = [&](const wchar_t* expected) {
+    const size_t hostStart  = 2;
+    const size_t hostEnd    = p.find_first_of(L"\\/", hostStart);
+    const size_t hostLength = (hostEnd == std::wstring::npos ? p.size() : hostEnd) - hostStart;
+    auto         hostEquals = [&](const wchar_t* expected)
+    {
         size_t expectedLength = 0;
         while (expected[expectedLength] != L'\0') ++expectedLength;
         if (hostLength != expectedLength) return false;
@@ -120,17 +122,15 @@ inline bool IsLocalCustomAssetPath(const std::wstring& p)
         }
         return true;
     };
-    return hostEquals(L"localhost") ||
-           hostEquals(L"127.0.0.1") ||
-           hostEquals(L"wsl.localhost");
+    return hostEquals(L"localhost") || hostEquals(L"127.0.0.1") || hostEquals(L"wsl.localhost");
 }
 
 inline std::vector<std::string> SafeTextureCandidates(const std::string& bareName)
 {
     if (bareName.empty() || !IsSafeRelativeAssetName(bareName)) return {};
 
-    std::string asDds = bareName;
-    const size_t dot = asDds.rfind('.');
+    std::string  asDds = bareName;
+    const size_t dot   = asDds.rfind('.');
     if (dot != std::string::npos) asDds = asDds.substr(0, dot) + ".dds";
 
     std::vector<std::string> out;

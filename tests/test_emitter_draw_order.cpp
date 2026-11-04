@@ -17,37 +17,43 @@
 static int g_passed = 0;
 static int g_failed = 0;
 
-using Keys   = std::vector<std::pair<std::size_t, bool>>;
-using Order  = std::vector<std::size_t>;
-using Ranks  = std::vector<std::size_t>;
+using Keys                    = std::vector<std::pair<std::size_t, bool>>;
+using Order                   = std::vector<std::size_t>;
+using Ranks                   = std::vector<std::size_t>;
 static const std::size_t ROOT = static_cast<std::size_t>(-1);
 
-#define ASSERT_ORDER(got, ...) do {                                            \
-    Order _exp = __VA_ARGS__;                                                  \
-    Order _got = (got);                                                        \
-    if (_got == _exp) { ++g_passed; }                                          \
-    else {                                                                     \
-        ++g_failed;                                                            \
-        std::printf("  FAIL line %d: order mismatch\n    expected:", __LINE__);\
-        for (auto v : _exp) std::printf(" %zu", v);                            \
-        std::printf("\n    got:     ");                                        \
-        for (auto v : _got) std::printf(" %zu", v);                            \
-        std::printf("\n");                                                     \
-    }                                                                          \
-} while (0)
+#define ASSERT_ORDER(got, ...)                                                                                         \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        Order _exp = __VA_ARGS__;                                                                                      \
+        Order _got = (got);                                                                                            \
+        if (_got == _exp)                                                                                              \
+        {                                                                                                              \
+            ++g_passed;                                                                                                \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL line %d: order mismatch\n    expected:", __LINE__);                                    \
+            for (auto v : _exp) std::printf(" %zu", v);                                                                \
+            std::printf("\n    got:     ");                                                                            \
+            for (auto v : _got) std::printf(" %zu", v);                                                                \
+            std::printf("\n");                                                                                         \
+        }                                                                                                              \
+    } while (0)
 
 // A pass over an empty instance list yields an empty draw order.
 static void test_empty()
 {
     ASSERT_ORDER(ComputeEmitterDrawOrder({}, false), Order{});
-    ASSERT_ORDER(ComputeEmitterDrawOrder({}, true),  Order{});
+    ASSERT_ORDER(ComputeEmitterDrawOrder({}, true), Order{});
 }
 
 // Root-only, already spawned in rank order: the draw order is unchanged
 // (0,1,2) — this is why root-only golden fixtures render identically.
 static void test_root_only_is_noop()
 {
-    Keys k = { {0,false}, {1,false}, {2,false} };
+    Keys k = {{0, false}, {1, false}, {2, false}};
     ASSERT_ORDER(ComputeEmitterDrawOrder(k, false), Order{0, 1, 2});
 }
 
@@ -58,7 +64,7 @@ static void test_root_only_is_noop()
 // authored tree into these keys; here we pin only the key sort.
 static void test_child_moves_behind_higher_ranked_sibling()
 {
-    Keys k = { {0,false}, {3,false}, {1,false} };
+    Keys k = {{0, false}, {3, false}, {1, false}};
     ASSERT_ORDER(ComputeEmitterDrawOrder(k, false), Order{0, 2, 1});
 }
 
@@ -66,16 +72,16 @@ static void test_child_moves_behind_higher_ranked_sibling()
 // disjoint. Heat + normal together must cover every index exactly once.
 static void test_filters_by_heat()
 {
-    Keys k = { {0,false}, {1,true}, {2,false}, {3,true} };
+    Keys k = {{0, false}, {1, true}, {2, false}, {3, true}};
     ASSERT_ORDER(ComputeEmitterDrawOrder(k, false), Order{0, 2}); // normal pass
-    ASSERT_ORDER(ComputeEmitterDrawOrder(k, true),  Order{1, 3}); // heat pass
+    ASSERT_ORDER(ComputeEmitterDrawOrder(k, true), Order{1, 3});  // heat pass
 }
 
 // Equal ranks keep spawn order (stable): the two rank-2 instances stay in their
 // original 0-before-3 order, after the rank-1 instance.
 static void test_stable_among_equal_ranks()
 {
-    Keys k = { {2,false}, {1,false}, {2,false} };
+    Keys k = {{2, false}, {1, false}, {2, false}};
     ASSERT_ORDER(ComputeEmitterDrawOrder(k, false), Order{1, 0, 2});
 }
 
@@ -92,7 +98,7 @@ static void test_keys_empty()
 // identically — the draw key is a no-op re-labelling of the rank.
 static void test_keys_root_only_is_identity()
 {
-    ASSERT_ORDER(ComputeAuthoredDrawKeys({ ROOT, ROOT, ROOT }), Order{0, 1, 2});
+    ASSERT_ORDER(ComputeAuthoredDrawKeys({ROOT, ROOT, ROOT}), Order{0, 1, 2});
 }
 
 // THE parent-on-top fix. Parent = root rank 0; child = rank 1 whose parent is rank 0.
@@ -101,14 +107,14 @@ static void test_keys_root_only_is_identity()
 // the opposite of the earlier pure-rank behaviour that drew the child on top.
 static void test_keys_child_draws_behind_parent()
 {
-    ASSERT_ORDER(ComputeAuthoredDrawKeys({ ROOT, 0 }), Order{1, 0});
+    ASSERT_ORDER(ComputeAuthoredDrawKeys({ROOT, 0}), Order{1, 0});
 }
 
 // Depth > 1: root(0) -> child(1) -> grandchild(2). Deepest first: grandchild
 // key 0, child key 1, root key 2 — the whole lineage stacks with the root on top.
 static void test_keys_grandchild_post_order()
 {
-    ASSERT_ORDER(ComputeAuthoredDrawKeys({ ROOT, 0, 1 }), Order{2, 1, 0});
+    ASSERT_ORDER(ComputeAuthoredDrawKeys({ROOT, 0, 1}), Order{2, 1, 0});
 }
 
 // Sibling rank order preserved: a child whose rank sits between two roots still honours the
@@ -117,7 +123,7 @@ static void test_keys_grandchild_post_order()
 // So the child draws behind its parent root1, and root0's key stays lowest.
 static void test_keys_child_between_roots_follows_parent()
 {
-    ASSERT_ORDER(ComputeAuthoredDrawKeys({ ROOT, ROOT, 1 }), Order{0, 2, 1});
+    ASSERT_ORDER(ComputeAuthoredDrawKeys({ROOT, ROOT, 1}), Order{0, 2, 1});
 }
 
 // Two families interleave by root rank, each parent on top of its own child.
@@ -125,7 +131,7 @@ static void test_keys_child_between_roots_follows_parent()
 // Post-order: [child2, root0, child3, root1] → keys root0=1, root1=3, c2=0, c3=2.
 static void test_keys_two_families_group_by_root()
 {
-    ASSERT_ORDER(ComputeAuthoredDrawKeys({ ROOT, ROOT, 0, 1 }), Order{1, 3, 0, 2});
+    ASSERT_ORDER(ComputeAuthoredDrawKeys({ROOT, ROOT, 0, 1}), Order{1, 3, 0, 2});
 }
 
 // Higher-ranked SIBLING still draws on top (rank order among siblings):
@@ -134,7 +140,7 @@ static void test_keys_two_families_group_by_root()
 // so child2 draws over child1 and the parent over both.
 static void test_keys_sibling_children_by_rank()
 {
-    ASSERT_ORDER(ComputeAuthoredDrawKeys({ ROOT, 0, 0 }), Order{2, 0, 1});
+    ASSERT_ORDER(ComputeAuthoredDrawKeys({ROOT, 0, 0}), Order{2, 0, 1});
 }
 
 // Defensive: a 2-node cycle (each names the other as parent) reaches no root.
@@ -142,7 +148,7 @@ static void test_keys_sibling_children_by_rank()
 // key and the downstream sort stays valid (no crash, no duplicate key).
 static void test_keys_cycle_falls_back_to_rank()
 {
-    ASSERT_ORDER(ComputeAuthoredDrawKeys({ 1, 0 }), Order{0, 1});
+    ASSERT_ORDER(ComputeAuthoredDrawKeys({1, 0}), Order{0, 1});
 }
 
 // End-to-end through both pieces: the parent-on-top case, drawn via the keys.
@@ -150,10 +156,10 @@ static void test_keys_cycle_falls_back_to_rank()
 // instances — parent (rank 0) and child (rank 1) — must draw child then parent.
 static void test_end_to_end_parent_on_top()
 {
-    Ranks parentRank = { ROOT, 0 };
-    Order dk = ComputeAuthoredDrawKeys(parentRank); // {1, 0}
+    Ranks parentRank = {ROOT, 0};
+    Order dk         = ComputeAuthoredDrawKeys(parentRank); // {1, 0}
     // Instance 0 = parent (rank 0, key dk[0]=1); instance 1 = child (rank 1, key dk[1]=0).
-    Keys k = { { dk[0], false }, { dk[1], false } };
+    Keys k = {{dk[0], false}, {dk[1], false}};
     ASSERT_ORDER(ComputeEmitterDrawOrder(k, false), Order{1, 0}); // child (key 0) first
 }
 

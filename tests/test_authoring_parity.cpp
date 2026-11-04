@@ -72,7 +72,11 @@ typedef std::vector<unsigned char> Bytes;
 static uint64_t Fnv1a(const void* data, size_t size, uint64_t h = 1469598103934665603ull)
 {
     const unsigned char* p = static_cast<const unsigned char*>(data);
-    for (size_t i = 0; i < size; i++) { h ^= p[i]; h *= 1099511628211ull; }
+    for (size_t i = 0; i < size; i++)
+    {
+        h ^= p[i];
+        h *= 1099511628211ull;
+    }
     return h;
 }
 
@@ -83,7 +87,12 @@ static std::string Hex64(uint64_t v)
     return buf;
 }
 
-static uint32_t FloatBits(float f) { uint32_t u; std::memcpy(&u, &f, sizeof(u)); return u; }
+static uint32_t FloatBits(float f)
+{
+    uint32_t u;
+    std::memcpy(&u, &f, sizeof(u));
+    return u;
+}
 
 static Bytes Serialize(ParticleSystem& ps)
 {
@@ -111,19 +120,24 @@ static std::unique_ptr<ParticleSystem> Load(const Bytes& image)
 // cannot show, so it is listed explicitly.
 static uint64_t StateHash(ParticleSystem& ps)
 {
-    std::ostringstream s;
+    std::ostringstream           s;
     const std::vector<Emitter*>& emitters = ps.getEmitters();
     for (size_t i = 0; i < emitters.size(); i++)
     {
         const Emitter* e = emitters[i];
-        if (e == nullptr) { s << "E" << i << " null\n"; continue; }
+        if (e == nullptr)
+        {
+            s << "E" << i << " null\n";
+            continue;
+        }
         s << "E" << i << " " << e->name << " link=" << e->linkGroup << "\n";
         for (int t = 0; t < ParticleSystem::NUM_TRACKS; t++)
         {
-            const Track* tr = e->tracks[t];
-            const long src = tr == nullptr ? -2
-                           : (tr >= e->trackContents && tr < e->trackContents + ParticleSystem::NUM_TRACKS)
-                                 ? (long)(tr - e->trackContents) : -1;
+            const Track* tr  = e->tracks[t];
+            const long   src = tr == nullptr ? -2
+                               : (tr >= e->trackContents && tr < e->trackContents + ParticleSystem::NUM_TRACKS)
+                                   ? (long)(tr - e->trackContents)
+                                   : -1;
             s << " t" << t << " src=" << src;
             if (tr != nullptr)
             {
@@ -138,9 +152,9 @@ static uint64_t StateHash(ParticleSystem& ps)
             s << "\n";
         }
     }
-    const std::string text = s.str();
-    const Bytes image = Serialize(ps);
-    uint64_t h = Fnv1a(text.data(), text.size());
+    const std::string text  = s.str();
+    const Bytes       image = Serialize(ps);
+    uint64_t          h     = Fnv1a(text.data(), text.size());
     return Fnv1a(image.data(), image.size(), h);
 }
 
@@ -148,16 +162,20 @@ static uint64_t StateHash(ParticleSystem& ps)
 // Recording stubs for the members the handler TU calls
 // ===========================================================================
 
-static std::vector<std::string> g_calls;
-static std::unique_ptr<ParticleSystem> g_system;   // bound to the dispatcher
+static std::vector<std::string>        g_calls;
+static std::unique_ptr<ParticleSystem> g_system; // bound to the dispatcher
 
-static std::string CurrentStateTag() { return g_system ? Hex64(StateHash(*g_system)) : "nosys"; }
+static std::string CurrentStateTag()
+{
+    return g_system ? Hex64(StateHash(*g_system)) : "nosys";
+}
 
 static int EmitterIndex(const Emitter* e)
 {
     if (!g_system || e == nullptr) return -1;
     const std::vector<Emitter*>& emitters = g_system->getEmitters();
-    for (size_t i = 0; i < emitters.size(); i++) if (emitters[i] == e) return (int)i;
+    for (size_t i = 0; i < emitters.size(); i++)
+        if (emitters[i] == e) return (int)i;
     return -1;
 }
 
@@ -166,17 +184,27 @@ void ParticleSystemInstance::RemoveEmitter(EmitterInstance*) {}
 
 // BindHostState links SpawnerDriver, whose Tick calls these; no spawner is
 // bound here, so they are never reached (as in test_bridge_spawner_state.cpp).
-ParticleSystemInstance* Engine::SpawnParticleSystem(const ParticleSystem&, Object3D*) { return nullptr; }
-int Engine::ActiveSpawnerInstanceCount() const { return 0; }
+ParticleSystemInstance* Engine::SpawnParticleSystem(const ParticleSystem&, Object3D*)
+{
+    return nullptr;
+}
+int Engine::ActiveSpawnerInstanceCount() const
+{
+    return 0;
+}
 
 void Engine::OnParticleSystemChanged(int track)
 {
     g_calls.push_back("invalidate(" + std::to_string(track) + "@" + CurrentStateTag() + ")");
 }
 
-namespace host {
+namespace host
+{
 
-void BridgeRequestContext::MarkDirty() { g_calls.push_back("dirty"); }
+void BridgeRequestContext::MarkDirty()
+{
+    g_calls.push_back("dirty");
+}
 
 void BridgeDispatcher::captureUndo(DWORD coalesceKey)
 {
@@ -185,8 +213,14 @@ void BridgeDispatcher::captureUndo(DWORD coalesceKey)
     g_calls.push_back(std::string("undo(") + buf + "@" + CurrentStateTag() + ")");
 }
 
-void BridgeDispatcher::EmitEmittersTreeChanged() { g_calls.push_back("evt:tree"); }
-void BridgeDispatcher::EmitEngineStateChanged()  { g_calls.push_back("evt:state"); }
+void BridgeDispatcher::EmitEmittersTreeChanged()
+{
+    g_calls.push_back("evt:tree");
+}
+void BridgeDispatcher::EmitEngineStateChanged()
+{
+    g_calls.push_back("evt:state");
+}
 
 // Verbatim copy of BridgeDispatcher.cpp's getEmitterById.
 ParticleSystem::Emitter* BridgeDispatcher::getEmitterById(int id)
@@ -205,12 +239,10 @@ void BridgeDispatcher::propagateLinkGroup(ParticleSystem::Emitter* edited)
     g_calls.push_back("propagate(" + std::to_string(EmitterIndex(edited)) + ")");
     if (edited == nullptr || edited->linkGroup == 0) return;
     if (m_pParticleSystem == nullptr || !*m_pParticleSystem) return;
-    ParticleSystem* sys = m_pParticleSystem->get();
-    std::vector<ParticleSystem::Emitter*> members =
-        GetLinkGroupMembers(*sys, edited->linkGroup);
-    const LinkExemptFlags& exempt =
-        sys->getLinkExemptFlags(edited->linkGroup);
-    bool copied = false;
+    ParticleSystem*                       sys     = m_pParticleSystem->get();
+    std::vector<ParticleSystem::Emitter*> members = GetLinkGroupMembers(*sys, edited->linkGroup);
+    const LinkExemptFlags&                exempt  = sys->getLinkExemptFlags(edited->linkGroup);
+    bool                                  copied  = false;
     for (size_t i = 0; i < members.size(); ++i)
     {
         if (members[i] != edited)
@@ -219,8 +251,7 @@ void BridgeDispatcher::propagateLinkGroup(ParticleSystem::Emitter* edited)
             copied = true;
         }
     }
-    if (copied && m_engine != nullptr)
-        m_engine->OnParticleSystemChanged(-1);
+    if (copied && m_engine != nullptr) m_engine->OnParticleSystemChanged(-1);
 }
 
 struct AuthoringParityTestAccess
@@ -235,7 +266,7 @@ struct AuthoringParityTestAccess
     // envelope, or a "throw:" / "unhandled" marker.
     static std::string Dispatch(BridgeDispatcher& d, const std::string& kind, const json& params)
     {
-        const std::string id = "p";
+        const std::string    id = "p";
         BridgeRequestContext ctx{d, id, kind, params, json()};
         try
         {
@@ -251,7 +282,7 @@ struct AuthoringParityTestAccess
     // The same, through the real set-properties handler.
     static std::string DispatchProperties(BridgeDispatcher& d, const std::string& kind, const json& params)
     {
-        const std::string id = "p";
+        const std::string    id = "p";
         BridgeRequestContext ctx{d, id, kind, params, json()};
         try
         {
@@ -269,7 +300,10 @@ struct AuthoringParityTestAccess
 
 // Fake engine: the handlers only call OnParticleSystemChanged (stubbed above).
 alignas(Engine) static unsigned char g_engineStorage[sizeof(Engine)];
-static Engine* FakeEngine() { return reinterpret_cast<Engine*>(g_engineStorage); }
+static Engine* FakeEngine()
+{
+    return reinterpret_cast<Engine*>(g_engineStorage);
+}
 
 // ===========================================================================
 // Fixtures
@@ -291,8 +325,8 @@ static Bytes SyntheticFixture()
     ParticleSystem ps;
     ps.setName("ParitySys");
 
-    Emitter* e0 = ps.addRootEmitter();
-    e0->name = "E0";
+    Emitter* e0     = ps.addRootEmitter();
+    e0->name        = "E0";
     e0->textureSize = 16;
     SetKeys(e0->trackContents[ParticleSystem::TRACK_RED_CHANNEL],
             {Key(0, 0.2f), Key(25, 0.4f), Key(50, 0.6f), Key(75, 0.8f), Key(100, 1)});
@@ -301,7 +335,7 @@ static Bytes SyntheticFixture()
     SetKeys(e0->trackContents[ParticleSystem::TRACK_INDEX], {Key(0, 0), Key(50, 3), Key(100, 7)});
 
     Emitter* e1 = ps.addRootEmitter();
-    e1->name = "E1";
+    e1->name    = "E1";
     for (int i = 0; i < 4; i++) e1->tracks[i] = &e1->trackContents[i];
     SetKeys(e1->trackContents[0], {Key(0, 0), Key(25, 0.5f), Key(100, 1)});
     SetKeys(e1->trackContents[1], {Key(0, 0.1f), Key(50, 0.2f), Key(50, 0.3f), Key(100, 0.4f)});
@@ -309,7 +343,7 @@ static Bytes SyntheticFixture()
     SetKeys(e1->trackContents[3], {Key(0, 1), Key(75, 0.5f), Key(100, 0)});
 
     Emitter* e2 = ps.addRootEmitter();
-    e2->name = "E2";
+    e2->name    = "E2";
     CreateLinkGroup(ps, {e1, e2});
 
     return Serialize(ps);
@@ -327,9 +361,16 @@ static bool ReadFile(const char* path, Bytes& out)
 // Battery
 // ===========================================================================
 
-struct Request { std::string kind; json params; };
+struct Request
+{
+    std::string kind;
+    json        params;
+};
 
-static json Times(std::initializer_list<json> v) { return json(v); }
+static json Times(std::initializer_list<json> v)
+{
+    return json(v);
+}
 
 static const char* kTrackNames[ParticleSystem::NUM_TRACKS] = {
     "red", "green", "blue", "alpha", "scale", "index", "rotationSpeed",
@@ -341,17 +382,23 @@ static const char* kTrackNames[ParticleSystem::NUM_TRACKS] = {
 static std::vector<Request> BatteryFor(int id, const ParticleSystem& loaded)
 {
     std::vector<Request> out;
-    auto add = [&](const char* kind, json p) { p["id"] = id; out.push_back({kind, p}); };
+    auto                 add = [&](const char* kind, json p)
+    {
+        p["id"] = id;
+        out.push_back({kind, p});
+    };
 
     const std::vector<Emitter*>& emitters = loaded.getEmitters();
-    const Emitter* e = (id >= 0 && (size_t)id < emitters.size()) ? emitters[id] : nullptr;
+    const Emitter*               e        = (id >= 0 && (size_t)id < emitters.size()) ? emitters[id] : nullptr;
     for (int t = 0; e != nullptr && t < ParticleSystem::NUM_TRACKS; t++)
     {
         const Track* tr = e->tracks[t];
         if (tr == nullptr || tr->keys.size() < 3) continue;
-        const float interior = (++tr->keys.begin())->time;   // float -> JSON double -> float is exact
-        add("emitters/set-track-key", {{"track", kTrackNames[t]}, {"oldTime", interior}, {"newTime", 12.5f}, {"newValue", 0.75f}});
-        add("emitters/set-track-key", {{"track", kTrackNames[t]}, {"oldTime", interior}, {"newTime", interior}, {"newValue", 0.25f}});
+        const float interior = (++tr->keys.begin())->time; // float -> JSON double -> float is exact
+        add("emitters/set-track-key",
+            {{"track", kTrackNames[t]}, {"oldTime", interior}, {"newTime", 12.5f}, {"newValue", 0.75f}});
+        add("emitters/set-track-key",
+            {{"track", kTrackNames[t]}, {"oldTime", interior}, {"newTime", interior}, {"newValue", 0.25f}});
         add("emitters/delete-track-keys", {{"track", kTrackNames[t]}, {"times", Times({interior})}});
         add("emitters/add-track-key", {{"track", kTrackNames[t]}, {"time", interior}, {"value", 0.5}});
     }
@@ -359,33 +406,30 @@ static std::vector<Request> BatteryFor(int id, const ParticleSystem& loaded)
     add("emitters/get-tracks", json::object());
 
     const char* delTracks[] = {"red", "green", "alpha", "scale", "index", "bogus"};
-    const json delTimes[] = {
-        json::array(), Times({0}), Times({100}), Times({25}), Times({50}),
-        Times({25, 50, 75}), Times({"x", 25}), Times({33}), Times({0, 25, 100}),
+    const json  delTimes[]  = {
+        json::array(),       Times({0}),       Times({100}), Times({25}),         Times({50}),
+        Times({25, 50, 75}), Times({"x", 25}), Times({33}),  Times({0, 25, 100}),
     };
     for (const char* t : delTracks)
-        for (const json& times : delTimes)
-            add("emitters/delete-track-keys", {{"track", t}, {"times", times}});
+        for (const json& times : delTimes) add("emitters/delete-track-keys", {{"track", t}, {"times", times}});
 
     const char* interpTracks[] = {"red", "green", "scale", "index", "bogus"};
-    const char* interps[] = {"linear", "smooth", "step", "cubic"};
+    const char* interps[]      = {"linear", "smooth", "step", "cubic"};
     for (const char* t : interpTracks)
-        for (const char* i : interps)
-            add("emitters/set-track-interpolation", {{"track", t}, {"interpolation", i}});
+        for (const char* i : interps) add("emitters/set-track-interpolation", {{"track", t}, {"interpolation", i}});
 
     const char* channels[] = {"red", "green", "blue", "alpha", "scale", "bogus"};
-    const char* lockTos[] = {"red", "green", "blue", "alpha", "scale", "bogus"};
+    const char* lockTos[]  = {"red", "green", "blue", "alpha", "scale", "bogus"};
     for (const char* c : channels)
     {
         add("emitters/set-track-lock", {{"channel", c}, {"lockTo", nullptr}});
         add("emitters/set-track-lock", {{"channel", c}});
-        for (const char* l : lockTos)
-            add("emitters/set-track-lock", {{"channel", c}, {"lockTo", l}});
+        for (const char* l : lockTos) add("emitters/set-track-lock", {{"channel", c}, {"lockTo", l}});
     }
 
     const char* setTracks[] = {"red", "green", "scale", "index"};
-    const float oldTimes[] = {0, 100, 25, 50, 33};
-    const float moves[][2] = {{10, 0.5f}, {150, 0.9f}, {60, 0.25f}};
+    const float oldTimes[]  = {0, 100, 25, 50, 33};
+    const float moves[][2]  = {{10, 0.5f}, {150, 0.9f}, {60, 0.25f}};
     for (const char* t : setTracks)
         for (float o : oldTimes)
             for (const auto& m : moves)
@@ -406,7 +450,7 @@ static std::vector<Request> BatteryFor(int id, const ParticleSystem& loaded)
     }
 
     const char* batchTracks[] = {"red", "scale", "bogus"};
-    const json batches[] = {
+    const json  batches[]     = {
         json("notarray"),
         json::array(),
         json::array({{{"time", 25}, {"value", 0.5}}, {{"time", 25}, {"value", 0.6}}}),
@@ -417,8 +461,7 @@ static std::vector<Request> BatteryFor(int id, const ParticleSystem& loaded)
         json::array({{{"time", 33}, {"value", 0.1}}, {{"time", 34}, {"value", 0.2}}}),
     };
     for (const char* t : batchTracks)
-        for (const json& keys : batches)
-            add("emitters/add-track-keys", {{"track", t}, {"keys", keys}});
+        for (const json& keys : batches) add("emitters/add-track-keys", {{"track", t}, {"keys", keys}});
 
     return out;
 }
@@ -427,10 +470,14 @@ static std::vector<Request> BatteryFor(int id, const ParticleSystem& loaded)
 static std::vector<Request> BadIdBattery()
 {
     std::vector<Request> out;
-    const json ids[] = {json(99), json(-1), json()};
+    const json           ids[] = {json(99), json(-1), json()};
     for (const json& id : ids)
     {
-        auto add = [&](const char* kind, json p) { if (!id.is_null()) p["id"] = id; out.push_back({kind, p}); };
+        auto add = [&](const char* kind, json p)
+        {
+            if (!id.is_null()) p["id"] = id;
+            out.push_back({kind, p});
+        };
         add("emitters/get-tracks", json::object());
         add("emitters/delete-track-keys", {{"track", "red"}, {"times", Times({25})}});
         add("emitters/set-track-interpolation", {{"track", "red"}, {"interpolation", "step"}});
@@ -455,7 +502,10 @@ static std::vector<Request> Sequence()
         {"emitters/set-track-lock", {{"id", 1}, {"channel", "green"}, {"lockTo", "red"}}},
         {"emitters/set-track-interpolation", {{"id", 1}, {"track", "green"}, {"interpolation", "smooth"}}},
         {"emitters/set-track-lock", {{"id", 1}, {"channel", "green"}, {"lockTo", nullptr}}},
-        {"emitters/add-track-keys", {{"id", 0}, {"track", "scale"}, {"keys", json::array({{{"time", 40}, {"value", 1}}, {{"time", 40}, {"value", 2}}})}}},
+        {"emitters/add-track-keys",
+         {{"id", 0},
+          {"track", "scale"},
+          {"keys", json::array({{{"time", 40}, {"value", 1}}, {{"time", 40}, {"value", 2}}})}}},
         {"emitters/delete-track-keys", {{"id", 0}, {"track", "scale"}, {"times", Times({40, 40.001})}}},
         {"emitters/get-tracks", {{"id", 0}}},
     };
@@ -473,13 +523,26 @@ static std::vector<Request> ExtraBattery()
     return {
         {"emitters/set-track-lock", {{"id", 1}, {"channel", "green"}, {"lockTo", 5}}},
         {"emitters/add-track-key", {{"id", 0}, {"track", "scale"}, {"time", 33}, {"value", 1e300}}},
-        {"emitters/add-track-keys", {{"id", 0}, {"track", "scale"}, {"keys", json::array({{{"time", 1e300}, {"value", 1}}, {{"time", "x"}, {"value", 1}}})}}},
-        {"emitters/add-track-keys", {{"id", 0}, {"track", "scale"}, {"keys", json::array({{{"time", "x"}, {"value", 1}}, {{"time", 1e300}, {"value", 1}}})}}},
-        {"emitters/add-track-keys", {{"id", 0}, {"track", "scale"}, {"keys", json::array({{{"time", 10}, {"value", 1}}, {{"time", 20}, {"value", -1e300}}})}}},
-        {"emitters/set-track-key", {{"id", 0}, {"track", "red"}, {"oldTime", 25}, {"newTime", 1e300}, {"newValue", 0.5}}},
-        {"emitters/set-track-key", {{"id", 0}, {"track", "red"}, {"oldTime", 25}, {"newTime", 30}, {"newValue", 1e300}}},
-        {"emitters/set-track-key", {{"id", 0}, {"track", "red"}, {"oldTime", -0.0}, {"newTime", 10}, {"newValue", 0.5}}},
-        {"emitters/set-track-key", {{"id", 0}, {"track", "red"}, {"oldTime", 25}, {"newTime", -0.0}, {"newValue", 0.5}}},
+        {"emitters/add-track-keys",
+         {{"id", 0},
+          {"track", "scale"},
+          {"keys", json::array({{{"time", 1e300}, {"value", 1}}, {{"time", "x"}, {"value", 1}}})}}},
+        {"emitters/add-track-keys",
+         {{"id", 0},
+          {"track", "scale"},
+          {"keys", json::array({{{"time", "x"}, {"value", 1}}, {{"time", 1e300}, {"value", 1}}})}}},
+        {"emitters/add-track-keys",
+         {{"id", 0},
+          {"track", "scale"},
+          {"keys", json::array({{{"time", 10}, {"value", 1}}, {{"time", 20}, {"value", -1e300}}})}}},
+        {"emitters/set-track-key",
+         {{"id", 0}, {"track", "red"}, {"oldTime", 25}, {"newTime", 1e300}, {"newValue", 0.5}}},
+        {"emitters/set-track-key",
+         {{"id", 0}, {"track", "red"}, {"oldTime", 25}, {"newTime", 30}, {"newValue", 1e300}}},
+        {"emitters/set-track-key",
+         {{"id", 0}, {"track", "red"}, {"oldTime", -0.0}, {"newTime", 10}, {"newValue", 0.5}}},
+        {"emitters/set-track-key",
+         {{"id", 0}, {"track", "red"}, {"oldTime", 25}, {"newTime", -0.0}, {"newValue", 0.5}}},
         {"emitters/delete-track-keys", {{"id", 0}, {"track", "red"}, {"times", Times({-0.0, 25})}}},
         {"emitters/add-track-key", {{"id", 0}, {"track", "scale"}, {"time", -0.0}, {"value", 1}}},
         {"emitters/add-track-keys", {{"id", 0}, {"track", "scale"}, {"keys", cap}}},
@@ -496,7 +559,8 @@ static std::vector<Request> BorderSequence()
         {"emitters/set-track-key", {{"id", 1}, {"track", "red"}, {"oldTime", -10}, {"newTime", 5}, {"newValue", 0.9}}},
         {"emitters/set-track-key", {{"id", 1}, {"track", "red"}, {"oldTime", 0}, {"newTime", 5}, {"newValue", 0.2}}},
         {"emitters/delete-track-keys", {{"id", 1}, {"track", "red"}, {"times", Times({100, 150, -10, 25})}}},
-        {"emitters/set-track-key", {{"id", 1}, {"track", "red"}, {"oldTime", 150}, {"newTime", 120}, {"newValue", 0.1}}},
+        {"emitters/set-track-key",
+         {{"id", 1}, {"track", "red"}, {"oldTime", 150}, {"newTime", 120}, {"newValue", 0.1}}},
         {"emitters/get-tracks", {{"id", 1}}},
     };
 }
@@ -509,9 +573,13 @@ static std::vector<Request> BoundsBattery()
     return {
         {"emitters/add-track-key", {{"id", 0}, {"track", "red"}, {"time", 50}, {"value", 1.5}}},
         {"emitters/add-track-key", {{"id", 0}, {"track", "scale"}, {"time", 100}, {"value", 3}}},
-        {"emitters/add-track-keys", {{"id", 0}, {"track", "red"}, {"keys", json::array({{{"time", 25}, {"value", 20}}, {{"time", 75}, {"value", 15}}})}}},
+        {"emitters/add-track-keys",
+         {{"id", 0},
+          {"track", "red"},
+          {"keys", json::array({{{"time", 25}, {"value", 20}}, {{"time", 75}, {"value", 15}}})}}},
         {"emitters/set-track-key", {{"id", 0}, {"track", "red"}, {"oldTime", 25}, {"newTime", 25}, {"newValue", 2}}},
-        {"emitters/set-track-key", {{"id", 1}, {"track", "alpha"}, {"oldTime", 75}, {"newTime", 75}, {"newValue", -0.5}}},
+        {"emitters/set-track-key",
+         {{"id", 1}, {"track", "alpha"}, {"oldTime", 75}, {"newTime", 75}, {"newValue", -0.5}}},
     };
 }
 
@@ -534,9 +602,8 @@ static std::string Record(host::BridgeDispatcher& d, size_t n, const std::string
 
     char num[16];
     std::snprintf(num, sizeof(num), "#%04u", (unsigned)n);
-    return std::string(num) + " " + fixture + " " + r.kind + " " + params
-         + " => " + res + " | " + (calls.empty() ? "-" : calls)
-         + " | post=" + CurrentStateTag();
+    return std::string(num) + " " + fixture + " " + r.kind + " " + params + " => " + res + " | " +
+           (calls.empty() ? "-" : calls) + " | post=" + CurrentStateTag();
 }
 
 // ===========================================================================
@@ -557,7 +624,11 @@ static std::string Record(host::BridgeDispatcher& d, size_t n, const std::string
 // the same core action directly: `name = value`, and DoRescaleEmitter.
 // Bytes are written from memory, with no name stamp.
 
-enum class Side { Applied, Refused };
+enum class Side
+{
+    Applied,
+    Refused
+};
 
 static const char* ClassOf(Side tool, Side bridge)
 {
@@ -569,10 +640,11 @@ static int g_tableFailures = 0;
 
 static void Row(const std::string& label, Side tool, Side bridge, bool bytesEqual, const char* expected)
 {
-    const std::string got = ClassOf(tool, bridge);
-    const bool diverged = tool == Side::Applied && bridge == Side::Applied && !bytesEqual;
-    const bool ok = got == expected && !diverged;
-    std::printf("  %s %-58s %s%s\n", ok ? "ok:  " : "FAIL:", label.c_str(), got.c_str(), diverged ? " (bytes differ)" : "");
+    const std::string got      = ClassOf(tool, bridge);
+    const bool        diverged = tool == Side::Applied && bridge == Side::Applied && !bytesEqual;
+    const bool        ok       = got == expected && !diverged;
+    std::printf("  %s %-58s %s%s\n", ok ? "ok:  " : "FAIL:", label.c_str(), got.c_str(),
+                diverged ? " (bytes differ)" : "");
     if (!ok)
     {
         g_tableFailures++;
@@ -593,55 +665,56 @@ static void PropertyBoundaryTable(host::BridgeDispatcher& d, const Bytes& image)
     const PropertyRow rows[] = {
         {"lifetime", 2.5, "same"},
         {"lifetime", -1.0, "same"},
-        {"lifetime", 1e39, "tool-stricter"},                  // the bridge stores infinity
+        {"lifetime", 1e39, "tool-stricter"}, // the bridge stores infinity
         {"gravity", -0.0, "same"},
         {"blendMode", 13, "same"},
-        {"blendMode", 14, "tool-stricter"},                   // reloads as 0
-        {"blendMode", -1, "tool-stricter"},                   // the bridge casts it to 0xFFFFFFFF
+        {"blendMode", 14, "tool-stricter"}, // reloads as 0
+        {"blendMode", -1, "tool-stricter"}, // the bridge casts it to 0xFFFFFFFF
         {"nTriangles", 5, "same"},
-        {"nTriangles", 0, "tool-stricter"},                   // reloads as 1
-        {"nBursts", 4294967295u, "tool-stricter"},            // the bridge applies it; it reloads as 0
-        {"nBursts", 4294967295.0, "both-refuse"},             // as a JSON float it is past the bridge's INT_MAX
+        {"nTriangles", 0, "tool-stricter"},        // reloads as 1
+        {"nBursts", 4294967295u, "tool-stricter"}, // the bridge applies it; it reloads as 0
+        {"nBursts", 4294967295.0, "both-refuse"},  // as a JSON float it is past the bridge's INT_MAX
         {"nParticlesPerBurst", 2.0, "same"},
-        {"nParticlesPerBurst", 2.5, "tool-stricter"},         // the bridge truncates to 2
-        {"textureSize", -1, "tool-stricter"},                 // the bridge casts it to 0xFFFFFFFF
+        {"nParticlesPerBurst", 2.5, "tool-stricter"}, // the bridge truncates to 2
+        {"textureSize", -1, "tool-stricter"},         // the bridge casts it to 0xFFFFFFFF
         {"groundBehavior", 3, "same"},
-        {"groundBehavior", 4, "tool-stricter"},               // outside the enum
+        {"groundBehavior", 4, "tool-stricter"}, // outside the enum
         {"emitFromMesh", 2, "same"},
-        {"emitFromMesh", -1, "tool-stricter"},                // outside the enum
+        {"emitFromMesh", -1, "tool-stricter"}, // outside the enum
         {"randomRotationVariance", 0.5, "same"},
-        {"randomRotationVariance", 1.5, "tool-stricter"},     // the loader clamps it
-        {"bounciness", 1e39, "both-refuse"},                  // the bridge checks bounciness
+        {"randomRotationVariance", 1.5, "tool-stricter"}, // the loader clamps it
+        {"bounciness", 1e39, "both-refuse"},              // the bridge checks bounciness
         {"useBursts", true, "same"},
-        {"useBursts", 1, "both-refuse"},                      // a number for a boolean
-        {"index", 3, "tool-stricter"},                        // positional; not settable
+        {"useBursts", 1, "both-refuse"}, // a number for a boolean
+        {"index", 3, "tool-stricter"},   // positional; not settable
     };
     for (const PropertyRow& row : rows)
     {
         // The bridge.
-        g_system = Load(image);
-        json patch = json::object();
-        patch[row.field] = row.value;
-        const std::string res = host::AuthoringParityTestAccess::DispatchProperties(d, "emitters/set-properties",
-                                                                                    {{"id", 0}, {"patch", patch}});
-        json envelope = json::parse(res, nullptr, false);
-        bool skipped = false;
+        g_system                   = Load(image);
+        json patch                 = json::object();
+        patch[row.field]           = row.value;
+        const std::string res      = host::AuthoringParityTestAccess::DispatchProperties(d, "emitters/set-properties",
+                                                                                         {{"id", 0}, {"patch", patch}});
+        json              envelope = json::parse(res, nullptr, false);
+        bool              skipped  = false;
         if (envelope.is_object() && envelope.contains("data") && envelope["data"].contains("skipped"))
             for (const json& k : envelope["data"]["skipped"]) skipped = skipped || k == row.field;
-        const Side bridge = skipped ? Side::Refused : Side::Applied;
+        const Side  bridge      = skipped ? Side::Refused : Side::Applied;
         const Bytes bridgeBytes = Serialize(*g_system);
 
         // The tool.
         std::unique_ptr<ParticleSystem> tool = Load(image);
-        PropertyValue value = {row.value.is_boolean(), row.value.is_boolean() && row.value.get<bool>(),
-                               row.value.is_number() ? row.value.get<double>() : 0.0};
-        Side toolSide = Side::Refused;
+        PropertyValue value                  = {row.value.is_boolean(), row.value.is_boolean() && row.value.get<bool>(),
+                                                row.value.is_number() ? row.value.get<double>() : 0.0};
+        Side          toolSide               = Side::Refused;
         if (ValidateSetProperty(row.field, value).outcome == EditOutcome::Applied)
         {
             ApplySetProperty(tool->getEmitter(0), row.field, value);
             toolSide = Side::Applied;
         }
-        Row(std::string(row.field) + " = " + row.value.dump(), toolSide, bridge, Serialize(*tool) == bridgeBytes, row.expected);
+        Row(std::string(row.field) + " = " + row.value.dump(), toolSide, bridge, Serialize(*tool) == bridgeBytes,
+            row.expected);
     }
     g_system.reset();
 }
@@ -649,37 +722,50 @@ static void PropertyBoundaryTable(host::BridgeDispatcher& d, const Bytes& image)
 static void RenameAndRescaleTable(const Bytes& image)
 {
     std::printf("tool boundary table: rename (core action)\n");
-    struct NameRow { std::string name; const char* expected; };
+    struct NameRow
+    {
+        std::string name;
+        const char* expected;
+    };
     const NameRow names[] = {
         {"Fresh", "same"},
-        {"E0", "same"},                          // its current name: the tool reports unchanged
-        {"E1", "tool-stricter"},                 // another emitter's name
+        {"E0", "same"},          // its current name: the tool reports unchanged
+        {"E1", "tool-stricter"}, // another emitter's name
         {"", "tool-stricter"},
         {std::string("a\0b", 3), "tool-stricter"},
-        {"\xC3\x28", "tool-stricter"},           // not UTF-8
+        {"\xC3\x28", "tool-stricter"}, // not UTF-8
     };
     for (const NameRow& row : names)
     {
         std::unique_ptr<ParticleSystem> bridge = Load(image), tool = Load(image);
-        bridge->getEmitter(0).name = row.name;   // emitters/rename: target->name = name
-        Side toolSide = Side::Refused;
-        const EditResult r = ValidateRename(*tool, tool->getEmitter(0), row.name);
-        if (r.outcome != EditOutcome::Rejected) { tool->getEmitter(0).name = row.name; toolSide = Side::Applied; }
+        bridge->getEmitter(0).name = row.name; // emitters/rename: target->name = name
+        Side             toolSide  = Side::Refused;
+        const EditResult r         = ValidateRename(*tool, tool->getEmitter(0), row.name);
+        if (r.outcome != EditOutcome::Rejected)
+        {
+            tool->getEmitter(0).name = row.name;
+            toolSide                 = Side::Applied;
+        }
         Row("rename to " + json(row.name).dump(0, ' ', false, json::error_handler_t::replace), toolSide, Side::Applied,
             Serialize(*tool) == Serialize(*bridge), row.expected);
     }
 
     std::printf("tool boundary table: rescale (core action)\n");
-    struct ScaleRow { double time, size; bool bridgeDefined; const char* expected; };
+    struct ScaleRow
+    {
+        double      time, size;
+        bool        bridgeDefined;
+        const char* expected;
+    };
     const ScaleRow scales[] = {
         {2, 1, true, "same"},
         {0.5, 0.5, true, "same"},
         {1, 3, true, "same"},
-        {3, 1, true, "same"},                    // a fractional rate switches to bursts
+        {3, 1, true, "same"}, // a fractional rate switches to bursts
         {-1, 1, true, "tool-stricter"},
-        {0, 1, false, "tool-stricter"},          // the bridge divides by zero
-        {1e-9, 1, true, "same"},                 // a rate of 1e9 still fits an int
-        {1e-10, 1, false, "tool-stricter"},      // 1e10 does not: the bridge's cast overflows
+        {0, 1, false, "tool-stricter"},     // the bridge divides by zero
+        {1e-9, 1, true, "same"},            // a rate of 1e9 still fits an int
+        {1e-10, 1, false, "tool-stricter"}, // 1e10 does not: the bridge's cast overflows
     };
     for (const ScaleRow& row : scales)
     {
@@ -704,14 +790,19 @@ int main(int argc, char** argv)
     const bool update = argc > 1 && std::strcmp(argv[1], "--update") == 0;
     std::printf("test_authoring_parity%s\n", update ? " (--update)" : "");
 
-    struct Fixture { std::string name; Bytes image; std::vector<int> ids; };
+    struct Fixture
+    {
+        std::string      name;
+        Bytes            image;
+        std::vector<int> ids;
+    };
     std::vector<Fixture> fixtures;
     fixtures.push_back({"synthetic", SyntheticFixture(), {0, 1, 2}});
     {
         Fixture flip{"flipbook", {}, {0}};
         Fixture a11y{"a11y-base", {}, {0}};
-        if (!ReadFile("site/guide/downloads/P_EXPLOSION_EXAMPLE_FLIPBOOK.ALO", flip.image)
-            || !ReadFile("web/apps/editor/tests/fixtures/a11y-base-state.alo", a11y.image))
+        if (!ReadFile("site/guide/downloads/P_EXPLOSION_EXAMPLE_FLIPBOOK.ALO", flip.image) ||
+            !ReadFile("web/apps/editor/tests/fixtures/a11y-base-state.alo", a11y.image))
         {
             std::printf("  FAIL: fixture .alo files not found (run from the repo root)\n");
             return 1;
@@ -720,17 +811,16 @@ int main(int argc, char** argv)
         fixtures.push_back(a11y);
     }
 
-    host::LayoutBroker layout;
-    host::AcceleratorBridge accel;
-    std::unique_ptr<host::BridgeDispatcher> d =
-        host::AuthoringParityTestAccess::Make(layout, accel, FakeEngine());
+    host::LayoutBroker                      layout;
+    host::AcceleratorBridge                 accel;
+    std::unique_ptr<host::BridgeDispatcher> d = host::AuthoringParityTestAccess::Make(layout, accel, FakeEngine());
     d->BindHostState(&g_system, nullptr, nullptr);
 
     std::vector<std::string> lines;
-    size_t n = 0;
+    size_t                   n = 0;
     for (const Fixture& f : fixtures)
     {
-        std::vector<Request> battery;
+        std::vector<Request>            battery;
         std::unique_ptr<ParticleSystem> loaded = Load(f.image);
         for (int id : f.ids)
         {
@@ -744,21 +834,19 @@ int main(int argc, char** argv)
         }
         for (const Request& r : battery)
         {
-            g_system = Load(f.image);   // every edit starts from a fresh load
+            g_system = Load(f.image); // every edit starts from a fresh load
             lines.push_back(Record(*d, ++n, f.name, r));
         }
     }
     g_system = Load(fixtures.front().image);
-    for (const Request& r : Sequence())
-        lines.push_back(Record(*d, ++n, "synthetic-seq", r));
+    for (const Request& r : Sequence()) lines.push_back(Record(*d, ++n, "synthetic-seq", r));
     for (const Request& r : ExtraBattery())
     {
         g_system = Load(fixtures.front().image);
         lines.push_back(Record(*d, ++n, "synthetic", r));
     }
     g_system = Load(fixtures.front().image);
-    for (const Request& r : BorderSequence())
-        lines.push_back(Record(*d, ++n, "synthetic-border", r));
+    for (const Request& r : BorderSequence()) lines.push_back(Record(*d, ++n, "synthetic-border", r));
     for (const Request& r : BoundsBattery())
     {
         g_system = Load(fixtures.front().image);
@@ -777,7 +865,7 @@ int main(int argc, char** argv)
     std::vector<std::string> expected;
     {
         std::ifstream in(kBaselinePath, std::ios::binary);
-        std::string l;
+        std::string   l;
         while (std::getline(in, l))
         {
             if (!l.empty() && l.back() == '\r') l.pop_back();
@@ -790,25 +878,31 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    int mismatches = 0;
-    const size_t count = lines.size() > expected.size() ? lines.size() : expected.size();
+    int          mismatches = 0;
+    const size_t count      = lines.size() > expected.size() ? lines.size() : expected.size();
     for (size_t i = 0; i < count; i++)
     {
         const std::string& want = i < expected.size() ? expected[i] : std::string("(none)");
-        const std::string& got  = i < lines.size()    ? lines[i]    : std::string("(none)");
+        const std::string& got  = i < lines.size() ? lines[i] : std::string("(none)");
         if (want == got) continue;
         if (++mismatches <= 10)
-            std::printf("[authoring-parity] MISMATCH line %u\n  expected: %s\n  actual:   %s\n",
-                        (unsigned)(i + 1), want.c_str(), got.c_str());
+            std::printf("[authoring-parity] MISMATCH line %u\n  expected: %s\n  actual:   %s\n", (unsigned)(i + 1),
+                        want.c_str(), got.c_str());
     }
 
     char msg[128];
     std::snprintf(msg, sizeof(msg), "%u edits match the recorded handler baseline", (unsigned)lines.size());
-    if (mismatches == 0) std::printf("  ok: %s\n", msg);
-    else std::printf("  FAIL: %s (%d mismatching)\n", msg, mismatches);
+    if (mismatches == 0)
+        std::printf("  ok: %s\n", msg);
+    else
+        std::printf("  FAIL: %s (%d mismatching)\n", msg, mismatches);
 
     PropertyBoundaryTable(*d, fixtures.front().image);
     RenameAndRescaleTable(fixtures.front().image);
-    if (mismatches == 0 && g_tableFailures == 0) { std::printf("all checks passed\n"); return 0; }
+    if (mismatches == 0 && g_tableFailures == 0)
+    {
+        std::printf("all checks passed\n");
+        return 0;
+    }
     return 1;
 }

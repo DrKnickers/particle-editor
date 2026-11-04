@@ -5,18 +5,19 @@
 #include "BridgeDispatchShared.h"
 #include "BridgeRequestContext.h"
 
-#include "StringConv.h"        // host::Utf8ToWide / WideToUtf8
+#include "StringConv.h"              // host::Utf8ToWide / WideToUtf8
 #include "gamedata/ModManager.h"     // initial-dir resolution (file/open, file/save-as)
-#include "effect/ParticleSystemIO.h"  // LoadParticleSystem / SaveParticleSystem
-#include "effect/Autosave.h"       // autosave/check-recovery, autosave/recover
-#include "effect/CloseDecision.h"  // ShouldRefuseDocumentReplace (file/new, file/open)
+#include "effect/ParticleSystemIO.h" // LoadParticleSystem / SaveParticleSystem
+#include "effect/Autosave.h"         // autosave/check-recovery, autosave/recover
+#include "effect/CloseDecision.h"    // ShouldRefuseDocumentReplace (file/new, file/open)
 
-#include <commdlg.h>           // GetOpenFileNameW / GetSaveFileNameW
+#include <commdlg.h> // GetOpenFileNameW / GetSaveFileNameW
 #include <limits>
 
 using nlohmann::json;
 
-namespace host {
+namespace host
+{
 
 // The composed-host recovery oracle needs the real check/recover call site, but
 // ordinary --test-host runs must remain isolated from a developer's real
@@ -27,9 +28,8 @@ static bool AllowTestHostAutosaveRecovery(bool testHost, const json& params)
 {
 #ifndef NDEBUG
     if (!testHost || !params.value("__testAllowRecovery", false)) return false;
-    wchar_t value[8] = {};
-    const DWORD n =
-        GetEnvironmentVariableW(L"ALO_AUTOSAVE_RECOVERY_TEST", value, 8);
+    wchar_t     value[8] = {};
+    const DWORD n        = GetEnvironmentVariableW(L"ALO_AUTOSAVE_RECOVERY_TEST", value, 8);
     return n == 1 && value[0] == L'1';
 #else
     (void)testHost;
@@ -66,20 +66,14 @@ static bool EnforceUnsavedGuardForTest(bool testHost, const json& params)
 // Keep the same test-host + request + environment boundary as the real scanner
 // opt-in above. The loaded object is attempt-local, so a rejected handoff leaves
 // both the live document and the on-disk orphan untouched for a clean retry.
-static void CorruptRecoveryCandidateForTest(bool testHost,
-                                            const json& params,
-                                            ParticleSystem& loaded)
+static void CorruptRecoveryCandidateForTest(bool testHost, const json& params, ParticleSystem& loaded)
 {
 #ifndef NDEBUG
-    if (!params.value("__testCorruptHandoffCandidate", false)
-        || !AllowTestHostAutosaveRecovery(testHost, params))
+    if (!params.value("__testCorruptHandoffCandidate", false) || !AllowTestHostAutosaveRecovery(testHost, params))
         return;
 
-    ParticleSystem::Emitter* emitter = loaded.getEmitters().empty()
-        ? loaded.addRootEmitter()
-        : loaded.getEmitters()[0];
-    emitter->groups[ParticleSystem::GROUP_SPEED].type =
-        ParticleSystem::NUM_GROUP_TYPES;
+    ParticleSystem::Emitter* emitter = loaded.getEmitters().empty() ? loaded.addRootEmitter() : loaded.getEmitters()[0];
+    emitter->groups[ParticleSystem::GROUP_SPEED].type = ParticleSystem::NUM_GROUP_TYPES;
 #else
     (void)testHost;
     (void)params;
@@ -117,19 +111,15 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
                 ctx.SendErr("undo/test/budget: maxTotalBytes must be a non-negative integer");
                 return true;
             }
-            const json::number_unsigned_t requested =
-                value.get<json::number_unsigned_t>();
-            if (requested > static_cast<json::number_unsigned_t>(
-                    (std::numeric_limits<size_t>::max)()))
+            const json::number_unsigned_t requested = value.get<json::number_unsigned_t>();
+            if (requested > static_cast<json::number_unsigned_t>((std::numeric_limits<size_t>::max)()))
             {
                 ctx.SendErr("undo/test/budget: maxTotalBytes exceeds size_t");
                 return true;
             }
-            if (!m_undo->SetMaxTotalBytesForTesting(
-                    static_cast<size_t>(requested)))
+            if (!m_undo->SetMaxTotalBytesForTesting(static_cast<size_t>(requested)))
             {
-                ctx.SendErr(
-                    "undo/test/budget: stack must be empty and synchronized");
+                ctx.SendErr("undo/test/budget: stack must be empty and synchronized");
                 return true;
             }
         }
@@ -162,12 +152,11 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
             ctx.SendErr("debug/seed-autosave-recovery requires a path");
             return true;
         }
-        m_pendingOrphan = Autosave::OrphanSession{};
-        m_pendingOrphan.pid = GetCurrentProcessId();
-        m_pendingOrphan.recentPath = Utf8ToWide(path8);
-        m_pendingOrphan.originalFilename =
-            Utf8ToWide(params.value("originalFilename", std::string{}));
-        m_hasPendingOrphan = true;
+        m_pendingOrphan                  = Autosave::OrphanSession{};
+        m_pendingOrphan.pid              = GetCurrentProcessId();
+        m_pendingOrphan.recentPath       = Utf8ToWide(path8);
+        m_pendingOrphan.originalFilename = Utf8ToWide(params.value("originalFilename", std::string{}));
+        m_hasPendingOrphan               = true;
         ctx.SendOk(json::object());
         return true;
     }
@@ -179,8 +168,8 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
             return true;
         }
         const unsigned long long now = GetTickCount64();
-        m_lastStateEmitTick = now;
-        m_lastTreeEmitTick  = now;
+        m_lastStateEmitTick          = now;
+        m_lastTreeEmitTick           = now;
         ResetSelectionAndEmitDocumentChanged();
         ctx.SendOk(json::object());
         return true;
@@ -208,25 +197,21 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
     // be false anyway).
     if (kind == "undo/perform")
     {
-        std::string dir = params.value("direction", std::string("undo"));
-        bool applied = false;
+        std::string dir     = params.value("direction", std::string("undo"));
+        bool        applied = false;
         if (m_undo && m_pParticleSystem && *m_pParticleSystem)
         {
-            if (dir == "undo"
-                && m_undo->Cursor() == m_undo->Depth()
-                && m_undo->Depth() > 0
-                && m_undo->IsLiveAhead())
+            if (dir == "undo" && m_undo->Cursor() == m_undo->Depth() && m_undo->Depth() > 0 && m_undo->IsLiveAhead())
             {
                 // Route through the chokepoint so the auto-capped
                 // live state carries the CURRENT ref transform (else the first
                 // Ctrl+Z after a gizmo drag would restore an older transform).
-                CaptureUndoPoint(
-                    0, UndoStack::BudgetRetention::PreserveImmediatePair);
+                CaptureUndoPoint(0, UndoStack::BudgetRetention::PreserveImmediatePair);
             }
 
-            const std::vector<char>* snap = nullptr;
-            size_t selIdx = SIZE_MAX;
-            UndoStack::EditorAux aux;   // restored ref transform
+            const std::vector<char>* snap   = nullptr;
+            size_t                   selIdx = SIZE_MAX;
+            UndoStack::EditorAux     aux; // restored ref transform
             if (dir == "undo" && m_undo->CanUndo())
             {
                 applied = m_undo->Undo(&snap, &selIdx, &aux);
@@ -250,7 +235,6 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         return true;
     }
 
-
     // -------- file/* ----------------------
     //
     // File handlers own the editor-level operation — currentFilePath tracking,
@@ -265,8 +249,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
     {
         // Never drop unsaved work the user has not chosen to discard; the web
         // answers this by reopening its save prompt.
-        if (ShouldRefuseDocumentReplace(m_dirty, DiscardUnsavedConfirmed(params),
-                                        m_automationMode,
+        if (ShouldRefuseDocumentReplace(m_dirty, DiscardUnsavedConfirmed(params), m_automationMode,
                                         m_testHost && !EnforceUnsavedGuardForTest(m_testHost, params)))
         {
             ctx.SendOk(json{{"ok", false}, {"error", "unsaved-changes"}});
@@ -313,8 +296,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         // one-root state is the new dirty-bit baseline. Mutate + Ctrl+Z
         // back here clears the title-bar asterisk in
         // ApplyUndoSnapshot's content-compare.
-        if (m_pParticleSystem && *m_pParticleSystem)
-            m_savedSnapshot = UndoStack::Serialize(**m_pParticleSystem);
+        if (m_pParticleSystem && *m_pParticleSystem) m_savedSnapshot = UndoStack::Serialize(**m_pParticleSystem);
         m_currentFilePath.clear();
         ctx.SendOk(json::object());
         SetDirty(false);
@@ -331,16 +313,14 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         if (m_emit)
         {
             json env = {
-                {"type",    "evt"},
-                {"kind",    "emitters/selected"},
-                {"payload", json{{"id", m_selectedEmitterId < 0 ? json(nullptr)
-                                                                 : json(m_selectedEmitterId)}}},
+                {"type", "evt"},
+                {"kind", "emitters/selected"},
+                {"payload", json{{"id", m_selectedEmitterId < 0 ? json(nullptr) : json(m_selectedEmitterId)}}},
             };
             m_emit(env);
         }
         return true;
     }
-
 
     // -------- file/open + file/pick-open --------
     //
@@ -383,10 +363,9 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         // user has not chosen to discard, BEFORE any picker opens. The
         // non-mutating pickers (file/pick-open, texture filters) never touch
         // the document, so they are never refused.
-        if (kind == "file/open" && filterId == "alo"
-            && ShouldRefuseDocumentReplace(m_dirty, DiscardUnsavedConfirmed(params),
-                                           m_automationMode,
-                                           m_testHost && !EnforceUnsavedGuardForTest(m_testHost, params)))
+        if (kind == "file/open" && filterId == "alo" &&
+            ShouldRefuseDocumentReplace(m_dirty, DiscardUnsavedConfirmed(params), m_automationMode,
+                                        m_testHost && !EnforceUnsavedGuardForTest(m_testHost, params)))
         {
             ctx.SendOk(json{{"ok", false}, {"error", "unsaved-changes"}});
             return true;
@@ -422,26 +401,29 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
                 const std::wstring mod = m_modManager->GetPrimaryLayerPath();
                 if (!mod.empty())
                 {
-                    auto isDir = [](const std::wstring& p) -> bool {
+                    auto isDir = [](const std::wstring& p) -> bool
+                    {
                         DWORD a = GetFileAttributesW(p.c_str());
                         return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY) != 0;
                     };
                     const std::wstring modelsDir = mod + L"\\Data\\Art\\Models";
-                    if (isDir(modelsDir)) initialDir = modelsDir;
-                    else if (isDir(mod))  initialDir = mod;
+                    if (isDir(modelsDir))
+                        initialDir = modelsDir;
+                    else if (isDir(mod))
+                        initialDir = mod;
                 }
             }
 
-            wchar_t buf[MAX_PATH] = {};
-            OPENFILENAMEW ofn = {};
-            ofn.lStructSize     = sizeof(ofn);
-            ofn.hwndOwner       = m_hostHwnd;
-            ofn.lpstrFile       = buf;
-            ofn.nMaxFile        = MAX_PATH;
-            ofn.lpstrFilter     = lpstrFilter;
-            ofn.lpstrTitle      = lpstrTitle;
-            ofn.lpstrInitialDir = initialDir.empty() ? nullptr : initialDir.c_str();
-            ofn.Flags           = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
+            wchar_t       buf[MAX_PATH] = {};
+            OPENFILENAMEW ofn           = {};
+            ofn.lStructSize             = sizeof(ofn);
+            ofn.hwndOwner               = m_hostHwnd;
+            ofn.lpstrFile               = buf;
+            ofn.nMaxFile                = MAX_PATH;
+            ofn.lpstrFilter             = lpstrFilter;
+            ofn.lpstrTitle              = lpstrTitle;
+            ofn.lpstrInitialDir         = initialDir.empty() ? nullptr : initialDir.c_str();
+            ofn.Flags                   = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
 
             if (!GetOpenFileNameW(&ofn))
             {
@@ -480,7 +462,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         }
 
         // actually load the .alo into the host-owned slot.
-        std::string err;
+        std::string                     err;
         std::unique_ptr<ParticleSystem> loaded = LoadParticleSystem(path, &err);
         if (!loaded)
         {
@@ -528,8 +510,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         // state IS the saved file's content. Captured AFTER the
         // link-group sweep so legacy singleton-link-group .alo files don't show
         // as dirty when the user undoes back to "as loaded".
-        if (m_pParticleSystem && *m_pParticleSystem)
-            m_savedSnapshot = UndoStack::Serialize(**m_pParticleSystem);
+        if (m_pParticleSystem && *m_pParticleSystem) m_savedSnapshot = UndoStack::Serialize(**m_pParticleSystem);
         // render loop: same notification sequence as file/new —
         // the engine's cached per-instance / per-emitter state is now
         // stale and must be cleared. Matches the legacy DoOpenFile path.
@@ -548,7 +529,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
             m_engine->ReloadTextures();
         }
         m_currentFilePath = path;
-        m_recentFiles = PersistsUserState() ? WriteRecentFile(path) : ReadRecentFiles();
+        m_recentFiles     = PersistsUserState() ? WriteRecentFile(path) : ReadRecentFiles();
         ctx.SendOk(json{{"ok", true}, {"path", WideToUtf8(path)}});
         SetDirty(false);
         EmitRecentChanged();
@@ -558,7 +539,6 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         ResetSelectionAndEmitDocumentChanged();
         return true;
     }
-
 
     // -------- file/save --------
     //
@@ -576,16 +556,16 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         if (path.empty())
         {
             // No remembered path → pop save-as picker.
-            wchar_t buf[MAX_PATH] = {};
-            OPENFILENAMEW ofn = {};
-            ofn.lStructSize = sizeof(ofn);
-            ofn.hwndOwner   = m_hostHwnd;
-            ofn.lpstrFile   = buf;
-            ofn.nMaxFile    = MAX_PATH;
-            ofn.lpstrFilter = L"Particle Files (*.alo)\0*.alo\0All Files (*.*)\0*.*\0\0";
-            ofn.lpstrDefExt = L"alo";
-            ofn.lpstrTitle  = L"Save particle system";
-            ofn.Flags       = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT | OFN_NOCHANGEDIR;
+            wchar_t       buf[MAX_PATH] = {};
+            OPENFILENAMEW ofn           = {};
+            ofn.lStructSize             = sizeof(ofn);
+            ofn.hwndOwner               = m_hostHwnd;
+            ofn.lpstrFile               = buf;
+            ofn.nMaxFile                = MAX_PATH;
+            ofn.lpstrFilter             = L"Particle Files (*.alo)\0*.alo\0All Files (*.*)\0*.*\0\0";
+            ofn.lpstrDefExt             = L"alo";
+            ofn.lpstrTitle              = L"Save particle system";
+            ofn.Flags                   = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT | OFN_NOCHANGEDIR;
 
             if (!GetSaveFileNameW(&ofn))
             {
@@ -624,7 +604,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
             return true;
         }
         m_currentFilePath = path;
-        m_recentFiles = PersistsUserState() ? WriteRecentFile(path) : ReadRecentFiles();
+        m_recentFiles     = PersistsUserState() ? WriteRecentFile(path) : ReadRecentFiles();
         // Refresh the "saved" reference snapshot — what we just wrote
         // to disk IS the new saved state. ApplyUndoSnapshot uses this
         // to clear the title-bar asterisk when the user undoes back
@@ -642,7 +622,6 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         return true;
     }
 
-
     // -------- file/save-as --------
     //
     // ALWAYS pops GetSaveFileNameW. Matches legacy
@@ -653,20 +632,19 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         wchar_t buf[MAX_PATH] = {};
         // Seed with the current filename so the dialog opens at the
         // existing path's directory — matches legacy save-as ergonomics.
-        if (!m_currentFilePath.empty() &&
-            m_currentFilePath.size() < MAX_PATH)
+        if (!m_currentFilePath.empty() && m_currentFilePath.size() < MAX_PATH)
         {
             wcscpy_s(buf, MAX_PATH, m_currentFilePath.c_str());
         }
         OPENFILENAMEW ofn = {};
-        ofn.lStructSize = sizeof(ofn);
-        ofn.hwndOwner   = m_hostHwnd;
-        ofn.lpstrFile   = buf;
-        ofn.nMaxFile    = MAX_PATH;
-        ofn.lpstrFilter = L"Particle Files (*.alo)\0*.alo\0All Files (*.*)\0*.*\0\0";
-        ofn.lpstrDefExt = L"alo";
-        ofn.lpstrTitle  = L"Save particle system as";
-        ofn.Flags       = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT | OFN_NOCHANGEDIR;
+        ofn.lStructSize   = sizeof(ofn);
+        ofn.hwndOwner     = m_hostHwnd;
+        ofn.lpstrFile     = buf;
+        ofn.nMaxFile      = MAX_PATH;
+        ofn.lpstrFilter   = L"Particle Files (*.alo)\0*.alo\0All Files (*.*)\0*.*\0\0";
+        ofn.lpstrDefExt   = L"alo";
+        ofn.lpstrTitle    = L"Save particle system as";
+        ofn.Flags         = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT | OFN_NOCHANGEDIR;
 
         if (!GetSaveFileNameW(&ofn))
         {
@@ -700,7 +678,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
             return true;
         }
         m_currentFilePath = path;
-        m_recentFiles = PersistsUserState() ? WriteRecentFile(path) : ReadRecentFiles();
+        m_recentFiles     = PersistsUserState() ? WriteRecentFile(path) : ReadRecentFiles();
         // Refresh the "saved" reference snapshot — see file/save above.
         m_savedSnapshot = UndoStack::Serialize(**m_pParticleSystem);
         ctx.SendOk(json{{"ok", true}, {"path", WideToUtf8(path)}});
@@ -712,7 +690,6 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         return true;
     }
 
-
     // -------- file/recent/list --------
     //
     // Re-reads the registry on every call. Cheap (≤ 9 entries) and keeps
@@ -721,12 +698,11 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
     if (kind == "file/recent/list")
     {
         m_recentFiles = ReadRecentFiles();
-        json paths = json::array();
+        json paths    = json::array();
         for (const auto& w : m_recentFiles) paths.push_back(WideToUtf8(w));
         ctx.SendOk(json{{"paths", paths}});
         return true;
     }
-
 
     // -------- autosave/check-recovery --------
     //
@@ -739,12 +715,10 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
     // w/o re-scan.
     if (kind == "autosave/check-recovery")
     {
-        m_hasPendingOrphan = false;
-        const bool allowTestRecovery =
-            AllowTestHostAutosaveRecovery(m_testHost, params);
+        m_hasPendingOrphan             = false;
+        const bool allowTestRecovery   = AllowTestHostAutosaveRecovery(m_testHost, params);
         const bool suppressForTestHost = m_testHost && !allowTestRecovery;
-        if (Autosave::ShouldSuppressRecoveryPrompt(
-                suppressForTestHost, m_automationMode, !m_currentFilePath.empty()))
+        if (Autosave::ShouldSuppressRecoveryPrompt(suppressForTestHost, m_automationMode, !m_currentFilePath.empty()))
         {
             ctx.SendOk(json{{"orphan", nullptr}});
             return true;
@@ -758,13 +732,16 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         m_pendingOrphan    = s;
         m_hasPendingOrphan = true;
 #ifndef NDEBUG
-        fprintf(stderr, "[autosave] check-recovery: orphan found (recent=%d stable=%d)\n",
-                s.recentPath.empty() ? 0 : 1, s.stablePath.empty() ? 0 : 1);
+        fprintf(stderr, "[autosave] check-recovery: orphan found (recent=%d stable=%d)\n", s.recentPath.empty() ? 0 : 1,
+                s.stablePath.empty() ? 0 : 1);
 #endif
 
         // FILETIME (100-ns ticks since 1601) → Unix epoch ms for React.
-        auto mtimeMs = [](const FILETIME& ft) -> json {
-            ULARGE_INTEGER u; u.LowPart = ft.dwLowDateTime; u.HighPart = ft.dwHighDateTime;
+        auto mtimeMs = [](const FILETIME& ft) -> json
+        {
+            ULARGE_INTEGER u;
+            u.LowPart                                 = ft.dwLowDateTime;
+            u.HighPart                                = ft.dwHighDateTime;
             const unsigned long long EPOCH_DIFF_100NS = 116444736000000000ULL;
             if (u.QuadPart < EPOCH_DIFF_100NS) return json(nullptr);
             return json((u.QuadPart - EPOCH_DIFF_100NS) / 10000ULL);
@@ -777,7 +754,6 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         ctx.SendOk(json{{"orphan", orphan}});
         return true;
     }
-
 
     // -------- autosave/recover --------
     //
@@ -805,15 +781,16 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         const Autosave::OrphanSession s = m_pendingOrphan;
 
         std::wstring restorePath;
-        if (choice == "recent")      restorePath = s.recentPath;
-        else if (choice == "stable") restorePath = s.stablePath;
+        if (choice == "recent")
+            restorePath = s.recentPath;
+        else if (choice == "stable")
+            restorePath = s.stablePath;
 #ifndef NDEBUG
-        fprintf(stderr, "[autosave] recover: choice=%s restore=%d\n",
-                choice.c_str(), restorePath.empty() ? 0 : 1);
+        fprintf(stderr, "[autosave] recover: choice=%s restore=%d\n", choice.c_str(), restorePath.empty() ? 0 : 1);
 #endif
 
         Autosave::RecoverOutcome outcome = Autosave::RecoverOutcome::Failed;
-        std::string reason;
+        std::string              reason;
 
         if (choice == "discard")
         {
@@ -828,7 +805,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         }
         else
         {
-            std::string err;
+            std::string                     err;
             std::unique_ptr<ParticleSystem> loaded = LoadParticleSystem(restorePath, &err);
             if (loaded)
             {
@@ -841,7 +818,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
                 if (!Autosave::WriteRecoveryHandoff(*loaded, s.originalFilename))
                 {
                     outcome = Autosave::RecoverOutcome::Failed;
-                    reason = "handoff_write_failed";
+                    reason  = "handoff_write_failed";
                 }
                 else
                 {
@@ -862,8 +839,8 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
                         m_engine->OnParticleSystemChanged(-1);
                         m_engine->ReloadTextures();
                     }
-                    m_currentFilePath = s.originalFilename;  // "" → untitled
-                    m_savedSnapshot.clear();                 // stays dirty until saved
+                    m_currentFilePath = s.originalFilename; // "" → untitled
+                    m_savedSnapshot.clear();                // stays dirty until saved
                     SetDirty(true);
                     // Same replacement notification chokepoint as file/open. The
                     // actual recovery path is suppressed under --test-host, so
@@ -887,20 +864,19 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         {
             Autosave::DeleteOrphan(s);
             m_hasPendingOrphan = false;
-            m_pendingOrphan = Autosave::OrphanSession{};
+            m_pendingOrphan    = Autosave::OrphanSession{};
         }
 
-        const char* status =
-            outcome == Autosave::RecoverOutcome::Recovered ? "recovered" :
-            outcome == Autosave::RecoverOutcome::Discarded ? "discarded" : "failed";
-        json out = json{{"status", status}};
+        const char* status = outcome == Autosave::RecoverOutcome::Recovered   ? "recovered"
+                             : outcome == Autosave::RecoverOutcome::Discarded ? "discarded"
+                                                                              : "failed";
+        json        out    = json{{"status", status}};
         if (!reason.empty()) out["reason"] = reason;
         ctx.SendOk(out);
         return true;
     }
 
-
-    return false;   // kind not in this domain
+    return false; // kind not in this domain
 }
 
 } // namespace host

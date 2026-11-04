@@ -36,9 +36,10 @@
 #include <utility>
 #include <vector>
 
-#include "WicEncode.h"     // WIC PNG core for the worker (GDI+ stays for one-shots)
+#include "WicEncode.h" // WIC PNG core for the worker (GDI+ stays for one-shots)
 
-namespace host {
+namespace host
+{
 
 class AsyncFrameEncoder
 {
@@ -46,14 +47,13 @@ public:
     struct Frame
     {
         std::vector<unsigned char> bgra;
-        int w = 0, h = 0;
-        std::wstring path;
+        int                        w = 0, h = 0;
+        std::wstring               path;
     };
 
     using LogFn = std::function<void(const std::string&)>;
 
-    explicit AsyncFrameEncoder(size_t maxQueuedBytes = 128ull * 1024 * 1024,
-                               LogFn log = nullptr)
+    explicit AsyncFrameEncoder(size_t maxQueuedBytes = 128ull * 1024 * 1024, LogFn log = nullptr)
         : m_maxBytes(maxQueuedBytes), m_log(std::move(log))
     {
         // No GDI+ CLSID pre-warm anymore: the worker encodes via WIC
@@ -61,7 +61,7 @@ public:
         m_worker = std::thread([this] { WorkerLoop(); });
     }
 
-    AsyncFrameEncoder(const AsyncFrameEncoder&) = delete;
+    AsyncFrameEncoder(const AsyncFrameEncoder&)            = delete;
     AsyncFrameEncoder& operator=(const AsyncFrameEncoder&) = delete;
 
     ~AsyncFrameEncoder() { Finish(); }
@@ -82,11 +82,10 @@ public:
         if (m_bytes + bytes > m_maxBytes && !m_queue.empty())
         {
             const auto w0 = std::chrono::steady_clock::now();
-            m_space.wait(lk, [&] {
-                return m_failed || m_stopping || m_bytes + bytes <= m_maxBytes || m_queue.empty();
-            });
-            m_queueWaitMsTotal += std::chrono::duration<double, std::milli>(
-                std::chrono::steady_clock::now() - w0).count();
+            m_space.wait(lk,
+                         [&] { return m_failed || m_stopping || m_bytes + bytes <= m_maxBytes || m_queue.empty(); });
+            m_queueWaitMsTotal +=
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - w0).count();
             ++m_queueWaitCount;
         }
         // Enqueue after Finish() began would silently drop the frame — report
@@ -102,13 +101,17 @@ public:
 
     // Back-pressure telemetry for the record-timing summary: total ms
     // spent blocked on the queue cap + how often, and queue high-water marks.
-    struct QueueStats { double waitMsTotal; unsigned waitCount;
-                        size_t bytesHighWater; size_t depthHighWater; };
+    struct QueueStats
+    {
+        double   waitMsTotal;
+        unsigned waitCount;
+        size_t   bytesHighWater;
+        size_t   depthHighWater;
+    };
     QueueStats GetQueueStats() const
     {
         std::lock_guard<std::mutex> lk(m_mu);
-        return { m_queueWaitMsTotal, m_queueWaitCount,
-                 m_bytesHighWater, m_depthHighWater };
+        return {m_queueWaitMsTotal, m_queueWaitCount, m_bytesHighWater, m_depthHighWater};
     }
 
     // Drain the queue, stop and join the worker. Idempotent. Returns true if
@@ -147,24 +150,27 @@ private:
         struct ComScope
         {
             HRESULT hr;
-            ~ComScope() { if (hr == S_OK || hr == S_FALSE) CoUninitialize(); }
+            ~ComScope()
+            {
+                if (hr == S_OK || hr == S_FALSE) CoUninitialize();
+            }
         } comScope{coHr};
 
         for (;;)
         {
             Frame f;
-            bool alreadyFailed = false;
+            bool  alreadyFailed = false;
             {
                 std::unique_lock<std::mutex> lk(m_mu);
                 m_work.wait(lk, [&] { return m_stopping || !m_queue.empty(); });
-                if (m_queue.empty()) return;   // stopping + drained
+                if (m_queue.empty()) return; // stopping + drained
                 f = std::move(m_queue.front());
                 m_queue.pop_front();
                 m_bytes -= f.bgra.size();
                 alreadyFailed = m_failed;
                 m_space.notify_all();
             }
-            if (alreadyFailed) continue;   // failed runs discard, not encode
+            if (alreadyFailed) continue; // failed runs discard, not encode
             // WIC core (FilterOption=None) replacing the GDI+ encode —
             // measured ≈49 ms/frame at 3200×1460 on GDI+; see WicEncode.h.
             if (!host::EncodeBgraToPngWic(f.bgra.data(), f.w, f.h, f.path))
@@ -172,7 +178,7 @@ private:
                 std::lock_guard<std::mutex> lk(m_mu);
                 if (!m_failed)
                 {
-                    m_failed = true;
+                    m_failed     = true;
                     m_failedPath = f.path;
                     if (m_log) m_log("async-encode failed: frame write did not complete");
                 }
@@ -188,16 +194,16 @@ private:
     size_t                  m_bytes = 0;
     const size_t            m_maxBytes;
     bool                    m_stopping = false;
-    bool                    m_failed = false;
+    bool                    m_failed   = false;
     bool                    m_finished = false;
     std::wstring            m_failedPath;
     LogFn                   m_log;
     // back-pressure telemetry (guarded by m_mu; see GetQueueStats).
-    double                  m_queueWaitMsTotal = 0.0;
-    unsigned                m_queueWaitCount   = 0;
-    size_t                  m_bytesHighWater   = 0;
-    size_t                  m_depthHighWater   = 0;
-    std::thread             m_worker;
+    double      m_queueWaitMsTotal = 0.0;
+    unsigned    m_queueWaitCount   = 0;
+    size_t      m_bytesHighWater   = 0;
+    size_t      m_depthHighWater   = 0;
+    std::thread m_worker;
 };
 
-}  // namespace host
+} // namespace host

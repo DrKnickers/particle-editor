@@ -75,7 +75,8 @@ struct Touched
 
 // Applies a checked op to `e`, a member of `system`, under the editor's rules
 // (exit 5 when a rule refuses it).
-bool ApplyOp(ParticleSystem& system, ParticleSystem::Emitter& e, const nlohmann::json& op, int at, Touched* touched, Stop* stop);
+bool ApplyOp(
+    ParticleSystem& system, ParticleSystem::Emitter& e, const nlohmann::json& op, int at, Touched* touched, Stop* stop);
 
 // Creates a unique sibling of `out` holding `bytes`, flushed. "" on failure.
 std::wstring Stage(const std::wstring& out, const std::string& bytes);

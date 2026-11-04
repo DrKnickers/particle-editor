@@ -11,9 +11,15 @@
 #include <string>
 #include <cwchar>
 
-namespace gameroots {
+namespace gameroots
+{
 
-enum class RootFlavor { Other, FoC, BaseGame };
+enum class RootFlavor
+{
+    Other,
+    FoC,
+    BaseGame
+};
 
 // Strip trailing path separators (casing preserved).
 inline std::wstring TrimTrailingSlashes(std::wstring path)
@@ -27,10 +33,10 @@ inline std::wstring TrimTrailingSlashes(std::wstring path)
 inline RootFlavor ClassifyGameRoot(const std::wstring& root)
 {
     const std::wstring trimmed = TrimTrailingSlashes(root);
-    const size_t sep = trimmed.find_last_of(L"\\/");
-    const std::wstring leaf = (sep == std::wstring::npos) ? trimmed : trimmed.substr(sep + 1);
+    const size_t       sep     = trimmed.find_last_of(L"\\/");
+    const std::wstring leaf    = (sep == std::wstring::npos) ? trimmed : trimmed.substr(sep + 1);
     if (_wcsicmp(leaf.c_str(), L"corruption") == 0) return RootFlavor::FoC;
-    if (_wcsicmp(leaf.c_str(), L"GameData") == 0)   return RootFlavor::BaseGame;
+    if (_wcsicmp(leaf.c_str(), L"GameData") == 0) return RootFlavor::BaseGame;
     return RootFlavor::Other;
 }
 
@@ -40,14 +46,14 @@ inline RootFlavor ClassifyGameRoot(const std::wstring& root)
 inline std::wstring SiblingGameRoot(const std::wstring& root)
 {
     const std::wstring trimmed = TrimTrailingSlashes(root);
-    const size_t sep = trimmed.find_last_of(L"\\/");
+    const size_t       sep     = trimmed.find_last_of(L"\\/");
     if (sep == std::wstring::npos) return std::wstring();
     const std::wstring parent = trimmed.substr(0, sep);
     switch (ClassifyGameRoot(trimmed))
     {
-    case RootFlavor::FoC:      return parent + L"\\GameData";
-    case RootFlavor::BaseGame: return parent + L"\\corruption";
-    default:                   return std::wstring();
+        case RootFlavor::FoC:      return parent + L"\\GameData";
+        case RootFlavor::BaseGame: return parent + L"\\corruption";
+        default:                   return std::wstring();
     }
 }
 

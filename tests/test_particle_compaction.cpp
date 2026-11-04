@@ -15,17 +15,26 @@ struct Primitive
 
 struct Particle
 {
-    int id;
+    int    id;
     size_t m_indicesIndex;
 };
 
 static int g_passed = 0;
 static int g_failed = 0;
 
-#define CHECK(cond, msg) do { \
-    if (cond) { ++g_passed; } \
-    else { ++g_failed; std::printf("  FAIL line %d: %s\n", __LINE__, msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            ++g_passed;                                                                                                \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL line %d: %s\n", __LINE__, msg);                                                        \
+        }                                                                                                              \
+    } while (0)
 
 static std::vector<int> survivorsFor(size_t count, const std::set<size_t>& kills)
 {
@@ -43,7 +52,7 @@ static std::vector<int> survivorsFor(size_t count, const std::set<size_t>& kills
 static void runCase(const char* name, size_t count, const std::set<size_t>& kills)
 {
     std::vector<Primitive> primitives;
-    std::vector<Particle> particles;
+    std::vector<Particle>  particles;
     std::vector<Particle*> particleIndex;
     primitives.reserve(count);
     particles.reserve(count);
@@ -51,13 +60,13 @@ static void runCase(const char* name, size_t count, const std::set<size_t>& kill
 
     for (size_t i = 0; i < count; ++i)
     {
-        primitives.push_back(Primitive{ static_cast<int>(i) });
-        particles.push_back(Particle{ static_cast<int>(i), i });
+        primitives.push_back(Primitive{static_cast<int>(i)});
+        particles.push_back(Particle{static_cast<int>(i), i});
         particleIndex.push_back(&particles.back());
     }
 
     const std::vector<int> expected = survivorsFor(count, kills);
-    const size_t removed = CompactKilledParticleSlots(primitives, particleIndex, kills);
+    const size_t           removed  = CompactKilledParticleSlots(primitives, particleIndex, kills);
 
     CHECK(removed == kills.size(), name);
     CHECK(primitives.size() == expected.size(), name);
@@ -111,7 +120,11 @@ int main()
     test_random_mid();
 
     std::printf("\nResults: %d passed, %d failed\n", g_passed, g_failed);
-    if (g_failed == 0) { std::printf("=== particle compaction: ALL PASS ===\n"); return 0; }
+    if (g_failed == 0)
+    {
+        std::printf("=== particle compaction: ALL PASS ===\n");
+        return 0;
+    }
     std::printf("=== particle compaction: FAILED ===\n");
     return 1;
 }

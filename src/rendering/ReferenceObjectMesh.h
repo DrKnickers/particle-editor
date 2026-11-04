@@ -34,7 +34,7 @@
 #include <d3d9.h>
 #include <d3dx9.h>
 
-#include "gamedata/AloModel.h"   // AloShaderParam, AloModel (bones/connections)
+#include "gamedata/AloModel.h" // AloShaderParam, AloModel (bones/connections)
 
 class Effect;
 class IShaderManager;
@@ -45,29 +45,30 @@ class IFileManager;
 struct RefSubMeshGpu
 {
     // --- cached CPU data (survives device lost/reset) ---
-    std::string                 shaderName;        // 0x10101, e.g. "MeshBumpColorize.fx"
-    std::string                 vertexFormatName;  // 0x10002, e.g. "alD3dVertNU2U3U3"
-    std::vector<AloShaderParam> params;            // authored material params
-    std::vector<unsigned char>  vertexBytes;       // transcoded to `stride` (runtime decl)
-    std::vector<unsigned char>  indexBytes;        // uint16 triangle list
-    uint32_t                    stride = 0;        // runtime vertex stride (== decl size)
-    uint32_t                    vertexCount = 0;
+    std::string                 shaderName;         // 0x10101, e.g. "MeshBumpColorize.fx"
+    std::string                 vertexFormatName;   // 0x10002, e.g. "alD3dVertNU2U3U3"
+    std::vector<AloShaderParam> params;             // authored material params
+    std::vector<unsigned char>  vertexBytes;        // transcoded to `stride` (runtime decl)
+    std::vector<unsigned char>  indexBytes;         // uint16 triangle list
+    uint32_t                    stride         = 0; // runtime vertex stride (== decl size)
+    uint32_t                    vertexCount    = 0;
     uint32_t                    primitiveCount = 0;
-    AloRenderClass              renderClass = ALO_RC_OPAQUE;  // phase/blend bucket (AloClassifyShader)
-    bool                        skinned = false;              // RSkin: render in bind pose (uniform objectWorld skin palette); model-space verts (no `placement`)
+    AloRenderClass              renderClass    = ALO_RC_OPAQUE; // phase/blend bucket (AloClassifyShader)
+    bool                        skinned =
+        false; // RSkin: render in bind pose (uniform objectWorld skin palette); model-space verts (no `placement`)
 
     // Object-space placement = this sub-mesh's parent mesh's bone, accumulated up
     // the parent chain (rigid). Identity when the model has no usable skeleton.
     // The engine multiplies this by the live position/rotation world at draw.
-    D3DXMATRIX                  placement;
+    D3DXMATRIX placement;
 
     // --- GPU handles (released on device lost; refilled on reset) ---
-    Effect*                         effect = nullptr;  // owned ref (ShaderManager::getShader); NULL => skipped
-    IDirect3DVertexBuffer9*         vb     = nullptr;  // D3DPOOL_DEFAULT
-    IDirect3DIndexBuffer9*          ib     = nullptr;  // D3DPOOL_DEFAULT, INDEX16
-    IDirect3DVertexDeclaration9*    decl   = nullptr;  // borrowed from m_decls; survives reset
-    std::vector<IDirect3DTexture9*> matTextures;       // parallel to params (NULL for non-TEXTURE)
-    std::vector<D3DXHANDLE>          matHandles;        // parallel to params; handles into effect
+    Effect*                         effect = nullptr; // owned ref (ShaderManager::getShader); NULL => skipped
+    IDirect3DVertexBuffer9*         vb     = nullptr; // D3DPOOL_DEFAULT
+    IDirect3DIndexBuffer9*          ib     = nullptr; // D3DPOOL_DEFAULT, INDEX16
+    IDirect3DVertexDeclaration9*    decl   = nullptr; // borrowed from m_decls; survives reset
+    std::vector<IDirect3DTexture9*> matTextures;      // parallel to params (NULL for non-TEXTURE)
+    std::vector<D3DXHANDLE>         matHandles;       // parallel to params; handles into effect
 
     RefSubMeshGpu() { D3DXMatrixIdentity(&placement); }
 };
@@ -77,22 +78,21 @@ struct RefSubMeshGpu
 // the preview, so the bone's rotation is not kept.
 struct ReferenceParticleProxy
 {
-    std::string aloPath;   // "Data\Art\Models\<proxy name>.alo"
-    D3DXVECTOR3 offset;    // object-space bone position
+    std::string aloPath; // "Data\Art\Models\<proxy name>.alo"
+    D3DXVECTOR3 offset;  // object-space bone position
 };
 
 // The visible particle proxies of the model at `aloPath` (hidden proxies, which the
 // game shows only on events, are left out). Empty for a missing or unreadable model,
 // a model without proxies, or a proxy whose name isn't a safe asset path.
-std::vector<ReferenceParticleProxy> ReadReferenceParticleProxies(IFileManager& fm,
-                                                                 const std::string& aloPath);
+std::vector<ReferenceParticleProxy> ReadReferenceParticleProxies(IFileManager& fm, const std::string& aloPath);
 
 class ReferenceObjectMesh
 {
 public:
     ReferenceObjectMesh() = default;
     ~ReferenceObjectMesh();
-    ReferenceObjectMesh(const ReferenceObjectMesh&) = delete;
+    ReferenceObjectMesh(const ReferenceObjectMesh&)            = delete;
     ReferenceObjectMesh& operator=(const ReferenceObjectMesh&) = delete;
 
     // Decode + transcode the `.alo` at `aloPath` (resolved via `fm`). CPU only:
@@ -111,8 +111,7 @@ public:
     // (a hardpoint's Damage_Decal / Damage_Particles / Collision_Mesh bones). A mesh
     // whose 0x602 connection bone is in the set is dropped, so the intact unit renders
     // without it. Empty set (the default) = no extra hiding.
-    bool Load(IFileManager& fm, const std::string& aloPath,
-              const std::set<std::string>& hideBoneNamesLower = {});
+    bool Load(IFileManager& fm, const std::string& aloPath, const std::set<std::string>& hideBoneNamesLower = {});
 
     // Release all GPU + cached CPU data and empty the mesh.
     void Clear();
@@ -126,16 +125,16 @@ public:
     // each TEXTURE param. Called at first load AND on device reset.
     void CreateBuffers(IDirect3DDevice9* dev, IFileManager& fm);
 
-    void OnLostDevice();      // release VB/IB + textures + effect->OnLostDevice
-    void OnResetEffects();    // effect->OnResetDevice (phase 1 of the two-phase reset)
+    void OnLostDevice();   // release VB/IB + textures + effect->OnLostDevice
+    void OnResetEffects(); // effect->OnResetDevice (phase 1 of the two-phase reset)
 
     // Release only the DEFAULT-pool buffers/textures. ShaderManager owns the
     // deduplicated effect lifecycle during a full device reset.
     void ReleaseGpuResources() { ReleaseGpuBuffers(); }
 
-    bool IsEmpty()      const { return m_subMeshes.empty(); }
-    bool HasResolved()  const;                  // >=1 sub-mesh with a non-NULL effect
-    bool SkippedSkinned() const { return m_skippedSkinned; }   // dropped >=1 skinned sub-mesh
+    bool IsEmpty() const { return m_subMeshes.empty(); }
+    bool HasResolved() const;                                // >=1 sub-mesh with a non-NULL effect
+    bool SkippedSkinned() const { return m_skippedSkinned; } // dropped >=1 skinned sub-mesh
 
     // Object-space AABB over the KEPT (drawn) geometry, accumulated at Load.
     // Used both to draw the selection box and as the click-to-select hit target, so
@@ -147,34 +146,33 @@ public:
     // at its Attachment_Bone. False (out untouched) if the bone isn't in the skeleton.
     bool GetBoneObjectMatrix(const std::string& boneName, D3DXMATRIX& out) const;
 
-    std::vector<RefSubMeshGpu>&       SubMeshes()       { return m_subMeshes; }
+    std::vector<RefSubMeshGpu>&       SubMeshes() { return m_subMeshes; }
     const std::vector<RefSubMeshGpu>& SubMeshes() const { return m_subMeshes; }
 
     // Shadow-volume sub-meshes (MeshShadowVolume.fx / RSkinShadowVolume.fx), kept
     // OUT of the visible list so a later stencil-shadow pass can draw them without
     // them appearing as solid hulls. Shares the full GPU lifecycle with m_subMeshes.
-    std::vector<RefSubMeshGpu>&       ShadowSubMeshes()       { return m_shadowSubMeshes; }
+    std::vector<RefSubMeshGpu>&       ShadowSubMeshes() { return m_shadowSubMeshes; }
     const std::vector<RefSubMeshGpu>& ShadowSubMeshes() const { return m_shadowSubMeshes; }
 
 private:
     std::vector<RefSubMeshGpu> m_subMeshes;
-    std::vector<RefSubMeshGpu> m_shadowSubMeshes;  // shadow-volume bucket (separate render pass)
-    std::map<std::string, IDirect3DVertexDeclaration9*> m_decls;  // per-format, shared
+    std::vector<RefSubMeshGpu> m_shadowSubMeshes;                // shadow-volume bucket (separate render pass)
+    std::map<std::string, IDirect3DVertexDeclaration9*> m_decls; // per-format, shared
     // Object-space matrix per bone, keyed by LOWER-CASED name -- retained from
     // Load (computeBoneObjectMatrices) so an attach model can be mounted at a named
     // Attachment_Bone. Empty when the model has no skeleton.
     std::map<std::string, D3DXMATRIX> m_boneObjByName;
-    bool m_skippedSkinned = false;
-    D3DXVECTOR3 m_boundMin = D3DXVECTOR3(0, 0, 0);   // object-space AABB over kept geometry
-    D3DXVECTOR3 m_boundMax = D3DXVECTOR3(0, 0, 0);
-    bool m_hasBounds = false;
+    bool                              m_skippedSkinned = false;
+    D3DXVECTOR3                       m_boundMin       = D3DXVECTOR3(0, 0, 0); // object-space AABB over kept geometry
+    D3DXVECTOR3                       m_boundMax       = D3DXVECTOR3(0, 0, 0);
+    bool                              m_hasBounds      = false;
 
     void ReleaseGpuBuffers();
     void ReleaseEffects();
     void ReleaseDecls();
 
-    IDirect3DVertexDeclaration9* GetOrCreateDecl(IDirect3DDevice9* dev,
-                                                 const std::string& formatName);
+    IDirect3DVertexDeclaration9* GetOrCreateDecl(IDirect3DDevice9* dev, const std::string& formatName);
 };
 
 #endif

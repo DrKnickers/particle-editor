@@ -37,9 +37,9 @@ inline bool IsApprovedWebViewOrigin(PCWSTR uri, bool devUi)
         return _wcsnicmp(uri, prefix, wcslen(prefix)) == 0;
     };
     if (hasPrefix(L"https://app.local/")) return true;
-    if (hasPrefix(L"about:"))             return true;
+    if (hasPrefix(L"about:")) return true;
     if (devUi && hasPrefix(L"http://localhost:5174/")) return true;
     return false;
 }
 
-#endif  // HOST_WEBVIEW_ORIGIN_POLICY_H
+#endif // HOST_WEBVIEW_ORIGIN_POLICY_H

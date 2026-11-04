@@ -33,15 +33,24 @@
 #include <string>
 
 static int g_fail = 0;
-#define CHECK(cond, msg) do {                              \
-    if (cond) { std::printf("  ok: %s\n", msg); }          \
-    else { ++g_fail; std::printf("  FAIL: %s\n", msg); }   \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_fail;                                                                                                  \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
 static std::wstring TempPath(const wchar_t* leaf)
 {
-    wchar_t dir[MAX_PATH];
-    const DWORD n = GetTempPathW(MAX_PATH, dir);
+    wchar_t      dir[MAX_PATH];
+    const DWORD  n = GetTempPathW(MAX_PATH, dir);
     std::wstring p(dir, n);
     p += leaf;
     return p;
@@ -56,30 +65,30 @@ int main()
         const std::wstring path = TempPath(L"pe_pfw_basic.bin");
         DeleteFileW(path.c_str());
 
-        const char payload[] = "0123456789ABCDEF";
-        const unsigned long want = (unsigned long)sizeof(payload);
+        const char          payload[] = "0123456789ABCDEF";
+        const unsigned long want      = (unsigned long)sizeof(payload);
 
-        bool threw = false;
-        unsigned long got = 0;
+        bool          threw = false;
+        unsigned long got   = 0;
         try
         {
             PhysicalFile* f = new PhysicalFile(path, PhysicalFile::WRITE);
-            got = f->write(payload, want);
+            got             = f->write(payload, want);
             f->Release();
         }
-        catch (...) { threw = true; }
+        catch (...)
+        {
+            threw = true;
+        }
 
         CHECK(!threw, "a normal write does not throw");
         CHECK(got == want, "write() returns the full requested byte count");
 
-        WIN32_FILE_ATTRIBUTE_DATA fad = {};
-        const bool haveAttrs =
-            GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &fad) != 0;
-        CHECK(haveAttrs && fad.nFileSizeLow == want,
-              "the file on disk is exactly the requested size");
+        WIN32_FILE_ATTRIBUTE_DATA fad       = {};
+        const bool                haveAttrs = GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &fad) != 0;
+        CHECK(haveAttrs && fad.nFileSizeLow == want, "the file on disk is exactly the requested size");
 
-        CHECK(DeleteFileW(path.c_str()) != 0,
-              "the temp file deletes once the PhysicalFile is released");
+        CHECK(DeleteFileW(path.c_str()) != 0, "the temp file deletes once the PhysicalFile is released");
     }
 
     // --- 2. handle lifetime vs DeleteFileW ----------------------------------
@@ -88,14 +97,17 @@ int main()
         const std::wstring path = TempPath(L"pe_pfw_handle.bin");
         DeleteFileW(path.c_str());
 
-        PhysicalFile* f = NULL;
-        bool threw = false;
+        PhysicalFile* f     = NULL;
+        bool          threw = false;
         try
         {
             f = new PhysicalFile(path, PhysicalFile::WRITE);
             f->write("x", 1);
         }
-        catch (...) { threw = true; }
+        catch (...)
+        {
+            threw = true;
+        }
         CHECK(!threw && f != NULL, "opened a temp file for writing");
 
         if (f)
@@ -103,8 +115,7 @@ int main()
             // Still open: no FILE_SHARE_DELETE, so the delete must FAIL. A
             // catch block that deletes here would leave the temp behind.
             const BOOL deletedWhileOpen = DeleteFileW(path.c_str());
-            CHECK(deletedWhileOpen == 0,
-                  "DeleteFileW FAILS while the PhysicalFile handle is still open");
+            CHECK(deletedWhileOpen == 0, "DeleteFileW FAILS while the PhysicalFile handle is still open");
             CHECK(GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES,
                   "...and the file is consequently still on disk");
 
@@ -113,10 +124,8 @@ int main()
             f = NULL;
 
             const BOOL deletedAfterRelease = DeleteFileW(path.c_str());
-            CHECK(deletedAfterRelease != 0,
-                  "DeleteFileW SUCCEEDS once the PhysicalFile has been released");
-            CHECK(GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES,
-                  "...and the temp file is really gone");
+            CHECK(deletedAfterRelease != 0, "DeleteFileW SUCCEEDS once the PhysicalFile has been released");
+            CHECK(GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES, "...and the temp file is really gone");
         }
     }
 
@@ -132,26 +141,40 @@ int main()
         {
             PhysicalFile* f = new PhysicalFile(path, PhysicalFile::WRITE);
             f->write("flush", 5);
-            try { f->Flush(); }
-            catch (...) { flushThrew = true; }
+            try
+            {
+                f->Flush();
+            }
+            catch (...)
+            {
+                flushThrew = true;
+            }
             f->Release();
         }
-        catch (...) { flushThrew = true; }
+        catch (...)
+        {
+            flushThrew = true;
+        }
         CHECK(!flushThrew, "Flush() on a written WRITE-mode file succeeds");
 
         // FlushFileBuffers needs write access, so a READ handle makes it fail.
-        bool writeException = false, otherException = false;
+        bool          writeException = false, otherException = false;
         PhysicalFile* r = NULL;
         try
         {
             r = new PhysicalFile(path, PhysicalFile::READ);
             r->Flush();
         }
-        catch (WriteException&) { writeException = true; }
-        catch (...) { otherException = true; }
+        catch (WriteException&)
+        {
+            writeException = true;
+        }
+        catch (...)
+        {
+            otherException = true;
+        }
         if (r) r->Release();
-        CHECK(writeException && !otherException,
-              "a failing FlushFileBuffers throws WriteException");
+        CHECK(writeException && !otherException, "a failing FlushFileBuffers throws WriteException");
 
         DeleteFileW(path.c_str());
     }

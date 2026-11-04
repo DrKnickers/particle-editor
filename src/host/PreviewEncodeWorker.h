@@ -44,26 +44,30 @@
 #include "GdiplusEncode.h"
 #include "palette/TexturePalette.h"
 
-namespace host {
+namespace host
+{
 
 struct PreviewQueueWiringTestAccess;
 
-class PreviewEncodeWorker {
+class PreviewEncodeWorker
+{
 public:
-    struct Job {
-        std::string  key;           // dispatcher cache key (filename|flatten)
-        std::wstring filename;      // for the ready event payload
-        bool         flattenAlpha = true;
-        int          srcW = 0, srcH = 0;
-        int          outW = 0, outH = 0;
-        std::vector<uint8_t> bgra;  // tightly packed outW*outH*4
-        unsigned     epoch = 0;
+    struct Job
+    {
+        std::string          key;      // dispatcher cache key (filename|flatten)
+        std::wstring         filename; // for the ready event payload
+        bool                 flattenAlpha = true;
+        int                  srcW = 0, srcH = 0;
+        int                  outW = 0, outH = 0;
+        std::vector<uint8_t> bgra; // tightly packed outW*outH*4
+        unsigned             epoch = 0;
     };
-    struct Result {
+    struct Result
+    {
         std::string  key;
         std::wstring filename;
         bool         flattenAlpha = true;
-        std::string  status;        // "ok" | "broken" (encode failure)
+        std::string  status; // "ok" | "broken" (encode failure)
         std::string  dataUri;
         int          srcW = 0, srcH = 0;
         unsigned     epoch = 0;
@@ -71,8 +75,7 @@ public:
 
     // hwnd/doneMsg: posted once per finished job so the UI thread drains
     // TakeFinished() promptly (the paced idle loop sleeps between frames).
-    PreviewEncodeWorker(HWND hwnd, UINT doneMsg)
-        : m_hwnd(hwnd), m_doneMsg(doneMsg)
+    PreviewEncodeWorker(HWND hwnd, UINT doneMsg) : m_hwnd(hwnd), m_doneMsg(doneMsg)
     {
         // Pre-warm the shared GDI+ CLSID cache on THIS (UI) thread. The cache
         // is an unlocked-growth vector (GdiplusEncode.h): once every MIME the
@@ -88,7 +91,7 @@ public:
         m_worker = std::thread([this] { WorkerLoop(); });
     }
 
-    PreviewEncodeWorker(const PreviewEncodeWorker&) = delete;
+    PreviewEncodeWorker(const PreviewEncodeWorker&)            = delete;
     PreviewEncodeWorker& operator=(const PreviewEncodeWorker&) = delete;
 
     ~PreviewEncodeWorker() { Finish(); }
@@ -125,8 +128,8 @@ public:
     size_t DropStaleQueued(unsigned currentEpoch)
     {
         std::lock_guard<std::mutex> lk(m_mu);
-        const size_t before = m_queue.size();
-        for (std::deque<Job>::iterator it = m_queue.begin(); it != m_queue.end(); )
+        const size_t                before = m_queue.size();
+        for (std::deque<Job>::iterator it = m_queue.begin(); it != m_queue.end();)
             it = (it->epoch != currentEpoch) ? m_queue.erase(it) : it + 1;
         return before - m_queue.size();
     }
@@ -143,8 +146,7 @@ public:
     std::vector<Result> TakeFinished()
     {
         std::lock_guard<std::mutex> lk(m_mu);
-        std::vector<Result> out(std::make_move_iterator(m_done.begin()),
-                                std::make_move_iterator(m_done.end()));
+        std::vector<Result>         out(std::make_move_iterator(m_done.begin()), std::make_move_iterator(m_done.end()));
         m_done.clear();
         return out;
     }
@@ -169,11 +171,10 @@ private:
     // test. Always declared (never macro-selected), so test and production
     // compile the same class layout. The normal constructor above remains the
     // only production path and still pre-warms GDI+ before starting the worker.
-    struct NoThreadForTest {};
-    PreviewEncodeWorker(HWND hwnd, UINT doneMsg, NoThreadForTest)
-        : m_hwnd(hwnd), m_doneMsg(doneMsg)
+    struct NoThreadForTest
     {
-    }
+    };
+    PreviewEncodeWorker(HWND hwnd, UINT doneMsg, NoThreadForTest) : m_hwnd(hwnd), m_doneMsg(doneMsg) {}
     friend struct PreviewQueueWiringTestAccess;
 
     void WorkerLoop()
@@ -184,24 +185,23 @@ private:
             {
                 std::unique_lock<std::mutex> lk(m_mu);
                 m_work.wait(lk, [&] { return m_stopping || !m_queue.empty(); });
-                if (m_stopping) return;   // pending jobs dropped by design
+                if (m_stopping) return; // pending jobs dropped by design
                 j = std::move(m_queue.front());
                 m_queue.pop_front();
             }
 
             Result r;
-            r.key = std::move(j.key);
-            r.filename = std::move(j.filename);
+            r.key          = std::move(j.key);
+            r.filename     = std::move(j.filename);
             r.flattenAlpha = j.flattenAlpha;
-            r.srcW = j.srcW; r.srcH = j.srcH;
-            r.epoch = j.epoch;
+            r.srcW         = j.srcW;
+            r.srcH         = j.srcH;
+            r.epoch        = j.epoch;
             std::vector<uint8_t> png;
-            if (TexturePalette::EncodePackedBgraToPngBytes(
-                    j.bgra.data(), j.outW, j.outH, png))
+            if (TexturePalette::EncodePackedBgraToPngBytes(j.bgra.data(), j.outW, j.outH, png))
             {
                 r.status  = "ok";
-                r.dataUri = "data:image/png;base64,"
-                          + host::Base64Encode(png.data(), png.size());
+                r.dataUri = "data:image/png;base64," + host::Base64Encode(png.data(), png.size());
             }
             else
             {
@@ -216,17 +216,17 @@ private:
         }
     }
 
-    HWND m_hwnd;
-    UINT m_doneMsg;
+    HWND                    m_hwnd;
+    UINT                    m_doneMsg;
     std::mutex              m_mu;
     std::condition_variable m_work;
     std::deque<Job>         m_queue;
     std::deque<Result>      m_done;
-    bool m_stopping = false;
-    bool m_finished = false;
-    std::thread m_worker;
+    bool                    m_stopping = false;
+    bool                    m_finished = false;
+    std::thread             m_worker;
 };
 
-}  // namespace host
+} // namespace host
 
-#endif  // HOST_PREVIEW_ENCODE_WORKER_H
+#endif // HOST_PREVIEW_ENCODE_WORKER_H

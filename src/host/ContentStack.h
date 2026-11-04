@@ -11,7 +11,8 @@
 #include <string>
 #include <vector>
 
-namespace host {
+namespace host
+{
 
 inline nlohmann::json ContentPaths(const std::vector<std::wstring>& paths)
 {
@@ -25,18 +26,22 @@ inline nlohmann::json ContentPaths(const std::vector<std::wstring>& paths)
 inline std::string ContentStackHash(const std::vector<std::wstring>& layers)
 {
     const std::string bytes = ContentPaths(layers).dump();
-    return ::Sha256Hex(bytes.data(), bytes.size());   // ToolIO.h's host::Sha256Hex would hide it
+    return ::Sha256Hex(bytes.data(), bytes.size()); // ToolIO.h's host::Sha256Hex would hide it
 }
 
 inline nlohmann::json WinnerJson(const AssetWinner& winner)
 {
     switch (winner.kind)
     {
-    case AssetWinner::Kind::Loose: return {{"kind", "loose"}, {"path", winner.path}};
-    case AssetWinner::Kind::Archive: return {{"kind", "archive"}, {"path", winner.path}, {"member", winner.member},
-        {"start", winner.start}, {"size", winner.size}};
-    case AssetWinner::Kind::Embedded: return {{"kind", "embedded"}, {"resourceId", winner.resourceId}};
-    default: return nullptr;
+        case AssetWinner::Kind::Loose: return {{"kind", "loose"}, {"path", winner.path}};
+        case AssetWinner::Kind::Archive:
+            return {{"kind", "archive"},
+                    {"path", winner.path},
+                    {"member", winner.member},
+                    {"start", winner.start},
+                    {"size", winner.size}};
+        case AssetWinner::Kind::Embedded: return {{"kind", "embedded"}, {"resourceId", winner.resourceId}};
+        default:                          return nullptr;
     }
 }
 

@@ -6,16 +6,25 @@
 #include <string>
 
 static int g_failed = 0;
-#define CHECK(cond, msg) do {                              \
-    if (cond) { std::printf("  ok: %s\n", msg); }          \
-    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
 int main()
 {
     std::printf("test_external_links\n");
 
-    const wchar_t* guide = host::ExternalLinkUrl("guide");
+    const wchar_t* guide      = host::ExternalLinkUrl("guide");
     const wchar_t* repository = host::ExternalLinkUrl("repository");
     CHECK(guide != nullptr, "guide resolves");
     CHECK(repository != nullptr, "repository resolves");

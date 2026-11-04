@@ -17,7 +17,8 @@
 
 #include "host/third_party/nlohmann/json.hpp"
 
-namespace host {
+namespace host
+{
 
 struct CameraParams
 {
@@ -26,7 +27,8 @@ struct CameraParams
     float up[3];
 };
 
-namespace detail {
+namespace detail
+{
 
 // One `[x, y, z]` field: an array of at least three finite numbers (extra
 // elements are ignored, as JsonToVec3 always did).
@@ -53,10 +55,8 @@ inline bool ReadCameraVec3(const nlohmann::json& params, const char* name, float
 // otherwise returns the reason (the handler's ok:false error text).
 inline const char* ReadCameraParams(const nlohmann::json& params, CameraParams& out)
 {
-    if (!params.is_object()
-        || !detail::ReadCameraVec3(params, "position", out.position)
-        || !detail::ReadCameraVec3(params, "target",   out.target)
-        || !detail::ReadCameraVec3(params, "up",       out.up))
+    if (!params.is_object() || !detail::ReadCameraVec3(params, "position", out.position) ||
+        !detail::ReadCameraVec3(params, "target", out.target) || !detail::ReadCameraVec3(params, "up", out.up))
     {
         return "camera position, target and up must each be [x, y, z] finite numbers";
     }
@@ -70,14 +70,13 @@ inline const char* ReadCameraParams(const nlohmann::json& params, CameraParams& 
     }
     const double dirLen = std::sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
     const double upLen  = std::sqrt(up[0] * up[0] + up[1] * up[1] + up[2] * up[2]);
-    if (!(dirLen > 1e-4))
-        return "camera position and target coincide";
+    if (!(dirLen > 1e-4)) return "camera position and target coincide";
 
     // |up x dir| = |up| |dir| sin(angle). Reject only a (numerically) exactly
     // zero or parallel up; near-pole orbit poses stay legal.
-    const double cx = up[1] * dir[2] - up[2] * dir[1];
-    const double cy = up[2] * dir[0] - up[0] * dir[2];
-    const double cz = up[0] * dir[1] - up[1] * dir[0];
+    const double cx       = up[1] * dir[2] - up[2] * dir[1];
+    const double cy       = up[2] * dir[0] - up[0] * dir[2];
+    const double cz       = up[0] * dir[1] - up[1] * dir[0];
     const double crossLen = std::sqrt(cx * cx + cy * cy + cz * cz);
     if (!(upLen > 0.0) || !(crossLen > 1e-6 * upLen * dirLen))
         return "camera up is zero or parallel to the view direction";
@@ -87,4 +86,4 @@ inline const char* ReadCameraParams(const nlohmann::json& params, CameraParams& 
 
 } // namespace host
 
-#endif  // HOST_CAMERA_PARAMS_H
+#endif // HOST_CAMERA_PARAMS_H

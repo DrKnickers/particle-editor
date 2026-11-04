@@ -21,20 +21,41 @@
 #include <string>
 
 static int g_failed = 0;
-#define CHECK(cond, msg) do {                              \
-    if (cond) { std::printf("  ok: %s\n", msg); }          \
-    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
 // Plays `slots` idle slots `slotTicks` apart from frame `start`, the way the
 // host does: advance to the step's target, re-anchor when asked.
-struct Played { int frame; int maxStep; bool ended; int wraps; };
-static Played Play(int start, int slots, std::int64_t slotTicks, std::int64_t frequency,
-                   int maxFrames, bool loop, std::int64_t stallAt = -1, std::int64_t stallTicks = 0)
+struct Played
+{
+    int  frame;
+    int  maxStep;
+    bool ended;
+    int  wraps;
+};
+static Played Play(int          start,
+                   int          slots,
+                   std::int64_t slotTicks,
+                   std::int64_t frequency,
+                   int          maxFrames,
+                   bool         loop,
+                   std::int64_t stallAt    = -1,
+                   std::int64_t stallTicks = 0)
 {
     ReplayPlayAnchor anchor{start, 0};
-    std::int64_t now = 0;
-    Played played{start, 0, false, 0};
+    std::int64_t     now = 0;
+    Played           played{start, 0, false, 0};
     for (int i = 0; i < slots && !played.ended; ++i)
     {
         now += slotTicks;
@@ -67,7 +88,8 @@ int main()
 
     // 2. Catch-up is capped and re-anchors.
     const ReplayPlayStep burst = NextReplayPlayStep(zero, 0, 1000, 1000, 600, false);
-    CHECK(burst.target == kReplayMaxCatchUpFrames && burst.reanchor, "a 1 s stall advances only the cap and re-anchors");
+    CHECK(burst.target == kReplayMaxCatchUpFrames && burst.reanchor,
+          "a 1 s stall advances only the cap and re-anchors");
     const Played stalled = Play(0, 60, 16'667, 1'000'000, 600, false, 10, 2'000'000);
     CHECK(stalled.maxStep == kReplayMaxCatchUpFrames, "a 2 s stall mid-play advances at most the cap in one slot");
     CHECK(stalled.frame >= 60 && stalled.frame <= 60 + kReplayMaxCatchUpFrames,
@@ -81,7 +103,8 @@ int main()
     const ReplayPlayStep atEnd = NextReplayPlayStep(zero, 600, 5, 1000, 600, false);
     CHECK(atEnd.target == 600 && atEnd.ended && !atEnd.wrap, "at maxFrames without loop, stay ended");
     const ReplayPlayStep wrap = NextReplayPlayStep(zero, 600, 5, 1000, 600, true);
-    CHECK(wrap.target == 0 && wrap.wrap && wrap.reanchor && !wrap.ended, "at maxFrames with loop, wrap to 0 and re-anchor");
+    CHECK(wrap.target == 0 && wrap.wrap && wrap.reanchor && !wrap.ended,
+          "at maxFrames with loop, wrap to 0 and re-anchor");
     const Played looping = Play(0, 300, 16'667, 1'000'000, 120, true);
     CHECK(looping.wraps == 2 && !looping.ended, "5 s of a looping 2 s window wraps twice and never ends");
     const Played once = Play(0, 300, 16'667, 1'000'000, 120, false);
@@ -100,8 +123,8 @@ int main()
     std::ifstream source(std::filesystem::current_path() / "src/host/BridgeDispatch_Timeline.cpp", std::ios::binary);
     const std::string text((std::istreambuf_iterator<char>(source)), std::istreambuf_iterator<char>());
     CHECK(text.find("#include \"simulation/ReplayPlayClock.h\"") != std::string::npos &&
-          text.find("NextReplayPlayStep(") != std::string::npos &&
-          text.find("ClampReplayFrame(") != std::string::npos,
+              text.find("NextReplayPlayStep(") != std::string::npos &&
+              text.find("ClampReplayFrame(") != std::string::npos,
           "the timeline session paces play and clamps seeks through the header");
 
     std::printf("%s\n", g_failed ? "=== FAILED ===" : "=== ALL PASS ===");

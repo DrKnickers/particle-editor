@@ -4,11 +4,20 @@
 #include "rendering/SceneOverscan.h"
 
 static int g_fail = 0;
-#define CHECK(cond) do { if (!(cond)) { \
-    std::printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #cond); ++g_fail; } } while (0)
+#define CHECK(cond)                                                                                                    \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (!(cond))                                                                                                   \
+        {                                                                                                              \
+            std::printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #cond);                                                \
+            ++g_fail;                                                                                                  \
+        }                                                                                                              \
+    } while (0)
 
 static bool eq(const SceneViewport& v, int x, int y, int w, int h)
-{ return v.x == x && v.y == y && v.w == w && v.h == h; }
+{
+    return v.x == x && v.y == y && v.w == w && v.h == h;
+}
 
 int main()
 {
@@ -29,7 +38,9 @@ int main()
     CHECK(eq(apply, -12, -9, 664, 498));
     CHECK(apply.x == reemit.x && apply.y == reemit.y && apply.w == reemit.w && apply.h == reemit.h);
 
-    if (g_fail == 0) std::printf("=== SceneOverscan: ALL PASS ===\n");
-    else             std::printf("=== SceneOverscan: %d FAILURE(S) ===\n", g_fail);
+    if (g_fail == 0)
+        std::printf("=== SceneOverscan: ALL PASS ===\n");
+    else
+        std::printf("=== SceneOverscan: %d FAILURE(S) ===\n", g_fail);
     return g_fail == 0 ? 0 : 1;
 }

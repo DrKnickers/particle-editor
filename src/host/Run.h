@@ -23,18 +23,19 @@ class ITextureManager;
 class IShaderManager;
 class IFileManager;
 
-namespace host {
+namespace host
+{
 
 // `gameRoots` is the EmpireAtWarPaths vector that was used
 // to build `fileManager`. Threaded through so the host's ModManager
 // can scan their Mods\ subdirectories on startup.
-int Run(HINSTANCE hInstance,
-        int nCmdShow,
-        ITextureManager& textureManager,
-        IShaderManager&  shaderManager,
-        IFileManager&    fileManager,
+int Run(HINSTANCE                        hInstance,
+        int                              nCmdShow,
+        ITextureManager&                 textureManager,
+        IShaderManager&                  shaderManager,
+        IFileManager&                    fileManager,
         const std::vector<std::wstring>& gameRoots,
-        const HostLaunchOptions& options);
+        const HostLaunchOptions&         options);
 
 } // namespace host
 

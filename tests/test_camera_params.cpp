@@ -12,10 +12,19 @@
 #include <limits>
 
 static int g_failed = 0;
-#define CHECK(cond, msg) do {                              \
-    if (cond) { std::printf("  ok: %s\n", msg); }          \
-    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
 using nlohmann::json;
 
@@ -38,11 +47,10 @@ int main()
     {
         // web/apps/editor/src/lib/reset-camera.ts RESET_CAMERA.
         host::CameraParams p;
-        const char* why = host::ReadCameraParams(
-            Cam({0, -250, 125}, {0, 0, 0}, {0, 0, 1}), p);
+        const char*        why = host::ReadCameraParams(Cam({0, -250, 125}, {0, 0, 0}, {0, 0, 1}), p);
         CHECK(why == nullptr, "Reset Camera default is accepted");
-        CHECK(p.position[0] == 0.0f && p.position[1] == -250.0f && p.position[2] == 125.0f
-              && p.target[2] == 0.0f && p.up[2] == 1.0f,
+        CHECK(p.position[0] == 0.0f && p.position[1] == -250.0f && p.position[2] == 125.0f && p.target[2] == 0.0f &&
+                  p.up[2] == 1.0f,
               "values are copied unchanged");
     }
     CHECK(Accepts(Cam({10, 0, 0}, {0, 0, 0}, {0, 0, 1})), "viewport-camera.spec pose accepted");
@@ -52,9 +60,8 @@ int main()
     {
         // A near-pole orbit (pitch 89.9 deg, ComputeOrbitCamera's Z-up) stays legal.
         const double pitch = 89.9 * 3.14159265358979323846 / 180.0;
-        const double dist = 300.0;
-        CHECK(Accepts(Cam({0, std::cos(pitch) * dist, std::sin(pitch) * dist},
-                          {0, 0, 0}, {0, 0, 1})),
+        const double dist  = 300.0;
+        CHECK(Accepts(Cam({0, std::cos(pitch) * dist, std::sin(pitch) * dist}, {0, 0, 0}, {0, 0, 1})),
               "near-pole orbit pose accepted");
     }
 
@@ -83,7 +90,7 @@ int main()
     CHECK(!Accepts(Cam({0, 0, 10}, {0, 0, 0}, {0, 0, -3})), "up anti-parallel to the view direction refused");
     {
         host::CameraParams p;
-        const char* why = host::ReadCameraParams(Cam({5, 5, 5}, {5, 5, 5}, {0, 0, 1}), p);
+        const char*        why = host::ReadCameraParams(Cam({5, 5, 5}, {5, 5, 5}, {0, 0, 1}), p);
         CHECK(why != nullptr && why[0] != '\0', "a refusal carries a reason for the ok:false envelope");
     }
 

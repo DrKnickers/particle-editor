@@ -7,8 +7,15 @@
 #include "host/third_party/nlohmann/json.hpp"
 
 static int g_fail = 0;
-#define CHECK(cond) do { if (!(cond)) { \
-    std::printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #cond); ++g_fail; } } while (0)
+#define CHECK(cond)                                                                                                    \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (!(cond))                                                                                                   \
+        {                                                                                                              \
+            std::printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #cond);                                                \
+            ++g_fail;                                                                                                  \
+        }                                                                                                              \
+    } while (0)
 
 static std::wstring temp_path(const wchar_t* leaf)
 {
@@ -20,13 +27,15 @@ static std::wstring temp_path(const wchar_t* leaf)
 static std::vector<std::string> read_lines(const std::wstring& path)
 {
     std::vector<std::string> lines;
-    FILE* file = nullptr;
+    FILE*                    file = nullptr;
     if (_wfopen_s(&file, path.c_str(), L"rb") != 0 || !file) return lines;
 
     char buf[4096] = {};
-    while (std::fgets(buf, sizeof(buf), file)) {
+    while (std::fgets(buf, sizeof(buf), file))
+    {
         std::string line(buf);
-        while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) {
+        while (!line.empty() && (line.back() == '\n' || line.back() == '\r'))
+        {
             line.pop_back();
         }
         lines.push_back(line);
@@ -41,9 +50,9 @@ int main()
 
     {
         Config cfg;
-        cfg.mode = SinkMode::Off;
+        cfg.mode      = SinkMode::Off;
         cfg.sessionId = "s-off";
-        cfg.runId = "r-off";
+        cfg.runId     = "r-off";
         CHECK(Init(cfg));
         CHECK(!Enabled());
         Emit({{"eventName", "off.test"}, {"eventType", "instant"}});
@@ -52,9 +61,9 @@ int main()
 
     {
         Config cfg;
-        cfg.mode = SinkMode::Null;
+        cfg.mode      = SinkMode::Null;
         cfg.sessionId = "s-null";
-        cfg.runId = "r-null";
+        cfg.runId     = "r-null";
         CHECK(Init(cfg));
         CHECK(Enabled());
         CHECK(!FileSinkEnabled());
@@ -66,10 +75,10 @@ int main()
         const std::wstring path = temp_path(L"particle_editor_perf_trace_test.ndjson");
         DeleteFileW(path.c_str());
         Config cfg;
-        cfg.mode = SinkMode::File;
+        cfg.mode      = SinkMode::File;
         cfg.tracePath = path;
         cfg.sessionId = "s-file";
-        cfg.runId = "r-file";
+        cfg.runId     = "r-file";
         CHECK(Init(cfg));
         CHECK(Enabled());
         CHECK(FileSinkEnabled());
@@ -94,7 +103,8 @@ int main()
 
         const auto lines = read_lines(path);
         CHECK(lines.size() == 4);
-        if (!lines.empty()) {
+        if (!lines.empty())
+        {
             auto j = nlohmann::json::parse(lines[0]);
             CHECK(j["source"] == "perf-audit");
             CHECK(j["schemaVersion"] == 1);
@@ -106,7 +116,8 @@ int main()
             CHECK(j.contains("timestampMs"));
             CHECK(j.contains("qpcFrequency"));
         }
-        if (lines.size() >= 2) {
+        if (lines.size() >= 2)
+        {
             auto spoof = nlohmann::json::parse(lines[1]);
             CHECK(spoof["source"] == "perf-audit");
             CHECK(spoof["auditId"] == "perf-audit-2026-06-28");
@@ -116,9 +127,10 @@ int main()
             CHECK(spoof["timestampQpc"].get<long long>() != 1);
             CHECK(spoof["qpcFrequency"].get<long long>() != 1);
         }
-        if (lines.size() >= 4) {
+        if (lines.size() >= 4)
+        {
             auto start = nlohmann::json::parse(lines[2]);
-            auto end = nlohmann::json::parse(lines[3]);
+            auto end   = nlohmann::json::parse(lines[3]);
             CHECK(start["eventType"] == "span_start");
             CHECK(end["eventType"] == "span_end");
             CHECK(start.contains("spanId"));
@@ -132,7 +144,7 @@ int main()
 
     {
         Config cfg;
-        cfg.mode = SinkMode::File;
+        cfg.mode      = SinkMode::File;
         cfg.tracePath = L"Z:\\this\\path\\should\\not\\exist\\trace.ndjson";
         std::string err;
         CHECK(!Init(cfg, &err));

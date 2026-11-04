@@ -13,9 +13,9 @@ static void ReadWinner(IFile* file, unsigned long maxBytes, AssetCandidate& cand
     if (size == 0 || (maxBytes != 0 && size > maxBytes))
     {
         file->Release();
-        candidate.attempt.result = AssetAttempt::Result::ReadRejected;
+        candidate.attempt.result       = AssetAttempt::Result::ReadRejected;
         candidate.attempt.reportedSize = size;
-        candidate.attempt.reason = size == 0 ? "empty" : "over the size cap";
+        candidate.attempt.reason       = size == 0 ? "empty" : "over the size cap";
         return;
     }
     try
@@ -48,7 +48,7 @@ AssetCandidate ReadLiteralAsset(const std::string& name, unsigned long maxBytes,
 {
     AssetCandidate candidate;
     candidate.attempt.name = name;
-    IFile* file = NULL;
+    IFile* file            = NULL;
     try
     {
         file = new PhysicalFile(AnsiToWide(name));
@@ -63,11 +63,14 @@ AssetCandidate ReadLiteralAsset(const std::string& name, unsigned long maxBytes,
     return candidate;
 }
 
-AssetCandidate ReadContentAsset(IFileManager* files, const std::string& path, unsigned long maxBytes, AssetLedger& ledger)
+AssetCandidate ReadContentAsset(IFileManager*      files,
+                                const std::string& path,
+                                unsigned long      maxBytes,
+                                AssetLedger&       ledger)
 {
     AssetCandidate candidate;
     candidate.attempt.name = path;
-    IFile* file = files->getFileWithWinner(path, &candidate.attempt.winner);
+    IFile* file            = files->getFileWithWinner(path, &candidate.attempt.winner);
     if (file == NULL)
     {
         candidate.attempt.winner = AssetWinner();

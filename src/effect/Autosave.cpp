@@ -26,8 +26,8 @@ static ProcessNameProbe g_processNameProbe = NULL;
 #endif
 
 // Subdirectory under %TEMP% where all autosave files live.
-static const wchar_t kDirName[]   = L"AloParticleEditor";
-static const wchar_t kFilePrefix[] = L"autosave-";
+static const wchar_t kDirName[]      = L"AloParticleEditor";
+static const wchar_t kFilePrefix[]   = L"autosave-";
 static const wchar_t kRecentSuffix[] = L"-recent.alo";
 static const wchar_t kStableSuffix[] = L"-stable.alo";
 static const wchar_t kMetaSuffix[]   = L".meta";
@@ -39,7 +39,12 @@ static const wchar_t kMetaSuffix[]   = L".meta";
 static const int kSweepOlderThanDays = 30;
 
 #ifndef NDEBUG
-#define AUTOSAVE_LOG(...) do { printf(__VA_ARGS__); fflush(stdout); } while (0)
+#define AUTOSAVE_LOG(...)                                                                                              \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        printf(__VA_ARGS__);                                                                                           \
+        fflush(stdout);                                                                                                \
+    } while (0)
 #else
 #define AUTOSAVE_LOG(...) ((void)0)
 #endif
@@ -49,7 +54,7 @@ static const int kSweepOlderThanDays = 30;
 static std::wstring GetAutosaveDir()
 {
     wchar_t tempPath[MAX_PATH];
-    DWORD len = GetTempPathW(MAX_PATH, tempPath);
+    DWORD   len = GetTempPathW(MAX_PATH, tempPath);
     if (len == 0 || len > MAX_PATH) return L"";
     std::wstring dir(tempPath);
     if (!dir.empty() && dir.back() != L'\\') dir += L'\\';
@@ -64,8 +69,7 @@ static bool EnsureAutosaveDir()
     std::wstring dir = GetAutosaveDir();
     if (dir.empty()) return false;
     int rc = SHCreateDirectoryExW(NULL, dir.c_str(), NULL);
-    return (rc == ERROR_SUCCESS || rc == ERROR_ALREADY_EXISTS
-         || rc == ERROR_FILE_EXISTS);
+    return (rc == ERROR_SUCCESS || rc == ERROR_ALREADY_EXISTS || rc == ERROR_FILE_EXISTS);
 }
 
 struct SessionKey
@@ -77,8 +81,7 @@ struct SessionKey
     bool operator<(const SessionKey& other) const
     {
         if (pid != other.pid) return pid < other.pid;
-        if (hasCreationTime != other.hasCreationTime)
-            return hasCreationTime < other.hasCreationTime;
+        if (hasCreationTime != other.hasCreationTime) return hasCreationTime < other.hasCreationTime;
         return creationTime100ns < other.creationTime100ns;
     }
 };
@@ -86,7 +89,7 @@ struct SessionKey
 static ULONGLONG FileTimeValue(const FILETIME& ft)
 {
     ULARGE_INTEGER value;
-    value.LowPart = ft.dwLowDateTime;
+    value.LowPart  = ft.dwLowDateTime;
     value.HighPart = ft.dwHighDateTime;
     return value.QuadPart;
 }
@@ -98,15 +101,15 @@ static ULONGLONG FileTimeValue(const FILETIME& ft)
 // falling back to collision-prone PID-only names.
 static const SessionKey& OurSessionKey()
 {
-    static const SessionKey key = []() {
-        SessionKey out = {};
-        out.pid = GetCurrentProcessId();
+    static const SessionKey key = []()
+    {
+        SessionKey out    = {};
+        out.pid           = GetCurrentProcessId();
         FILETIME creation = {}, exit = {}, kernel = {}, user = {};
-        if (out.pid != 0
-            && GetProcessTimes(GetCurrentProcess(), &creation, &exit, &kernel, &user))
+        if (out.pid != 0 && GetProcessTimes(GetCurrentProcess(), &creation, &exit, &kernel, &user))
         {
             out.creationTime100ns = FileTimeValue(creation);
-            out.hasCreationTime = out.creationTime100ns != 0;
+            out.hasCreationTime   = out.creationTime100ns != 0;
         }
         return out;
     }();
@@ -115,24 +118,28 @@ static const SessionKey& OurSessionKey()
 
 static std::wstring PathForSession(const SessionKey& session, const wchar_t* suffix)
 {
-    if (session.pid == 0 || !session.hasCreationTime
-        || session.creationTime100ns == 0)
-        return L"";
+    if (session.pid == 0 || !session.hasCreationTime || session.creationTime100ns == 0) return L"";
 
     std::wstring dir = GetAutosaveDir();
     if (dir.empty()) return L"";
     wchar_t buf[96];
-    swprintf_s(buf, 96, L"\\%ls%lu-%016llx%ls",
-               kFilePrefix,
-               (unsigned long)session.pid,
-               (unsigned long long)session.creationTime100ns,
-               suffix);
+    swprintf_s(buf, 96, L"\\%ls%lu-%016llx%ls", kFilePrefix, (unsigned long)session.pid,
+               (unsigned long long)session.creationTime100ns, suffix);
     return dir + buf;
 }
 
-static std::wstring OurRecentPath() { return PathForSession(OurSessionKey(), kRecentSuffix); }
-static std::wstring OurStablePath() { return PathForSession(OurSessionKey(), kStableSuffix); }
-static std::wstring OurMetaPath()   { return PathForSession(OurSessionKey(), kMetaSuffix);   }
+static std::wstring OurRecentPath()
+{
+    return PathForSession(OurSessionKey(), kRecentSuffix);
+}
+static std::wstring OurStablePath()
+{
+    return PathForSession(OurSessionKey(), kStableSuffix);
+}
+static std::wstring OurMetaPath()
+{
+    return PathForSession(OurSessionKey(), kMetaSuffix);
+}
 
 // ----- Process-session liveness ---------------------------------
 
@@ -143,9 +150,7 @@ static std::wstring CurrentModuleBaseName()
     if (g_processNameProbe)
     {
         path = host::ModuleFilePathWith([](wchar_t* buffer, DWORD capacity)
-        {
-            return g_processNameProbe(GetCurrentProcessId(), buffer, capacity);
-        });
+                                        { return g_processNameProbe(GetCurrentProcessId(), buffer, capacity); });
     }
     else
 #endif
@@ -157,21 +162,22 @@ static std::wstring CurrentModuleBaseName()
 
 static std::wstring ProcessImagePath(HANDLE process, DWORD pid)
 {
-    return host::ModuleFilePathWith([process, pid](wchar_t* buffer, DWORD capacity)
-    {
+    return host::ModuleFilePathWith(
+        [process, pid](wchar_t* buffer, DWORD capacity)
+        {
 #ifdef AUTOSAVE_TESTING
-        if (g_processNameProbe) return g_processNameProbe(pid, buffer, capacity);
+            if (g_processNameProbe) return g_processNameProbe(pid, buffer, capacity);
 #endif
-        DWORD size = capacity;
-        SetLastError(ERROR_SUCCESS);
-        if (QueryFullProcessImageNameW(process, 0, buffer, &size))
-            return host::ModuleNameProbeResult{ size, ERROR_SUCCESS };
-        const DWORD error = GetLastError();
-        return host::ModuleNameProbeResult{
-            error == ERROR_INSUFFICIENT_BUFFER ? capacity : 0,
-            error,
-        };
-    });
+            DWORD size = capacity;
+            SetLastError(ERROR_SUCCESS);
+            if (QueryFullProcessImageNameW(process, 0, buffer, &size))
+                return host::ModuleNameProbeResult{size, ERROR_SUCCESS};
+            const DWORD error = GetLastError();
+            return host::ModuleNameProbeResult{
+                error == ERROR_INSUFFICIENT_BUFFER ? capacity : 0,
+                error,
+            };
+        });
 }
 
 // True if `pid` is a currently-running process whose image file
@@ -188,8 +194,8 @@ static bool IsLiveLegacyEditorPid(DWORD pid)
     if (h == NULL)
     {
         DWORD err = GetLastError();
-        if (err == ERROR_INVALID_PARAMETER) return false;  // unambiguously not a process
-        return true;  // access denied / other — be conservative
+        if (err == ERROR_INVALID_PARAMETER) return false; // unambiguously not a process
+        return true;                                      // access denied / other — be conservative
     }
     const std::wstring imagePath = ProcessImagePath(h, pid);
     if (imagePath.empty())
@@ -208,8 +214,8 @@ static bool IsLiveLegacyEditorPid(DWORD pid)
         CloseHandle(h);
         return true;
     }
-    const std::wstring name = std::filesystem::path(imagePath).filename().wstring();
-    const bool isEditor = _wcsicmp(name.c_str(), ours.c_str()) == 0;
+    const std::wstring name     = std::filesystem::path(imagePath).filename().wstring();
+    const bool         isEditor = _wcsicmp(name.c_str(), ours.c_str()) == 0;
     CloseHandle(h);
     return isEditor;
 }
@@ -219,8 +225,7 @@ static bool IsLiveLegacyEditorPid(DWORD pid)
 // query errors, remain conservative and treat the session as live.
 static bool IsLiveEditorSession(const AutosaveName& name)
 {
-    if (!name.hasCreationTime)
-        return IsLiveLegacyEditorPid((DWORD)name.pid);
+    if (!name.hasCreationTime) return IsLiveLegacyEditorPid((DWORD)name.pid);
 
     HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, (DWORD)name.pid);
     if (h == NULL)
@@ -230,9 +235,8 @@ static bool IsLiveEditorSession(const AutosaveName& name)
         return true;
     }
 
-    FILETIME creation = {}, exit = {}, kernel = {}, user = {};
-    const bool queried =
-        GetProcessTimes(h, &creation, &exit, &kernel, &user) != FALSE;
+    FILETIME   creation = {}, exit = {}, kernel = {}, user = {};
+    const bool queried = GetProcessTimes(h, &creation, &exit, &kernel, &user) != FALSE;
     CloseHandle(h);
     if (!queried) return true;
     return FileTimeValue(creation) == name.creationTime100ns;
@@ -247,54 +251,55 @@ static bool WriteMeta(const std::wstring& originalFilename)
 {
     std::wstring path = OurMetaPath();
     if (path.empty()) return false;
-    HANDLE h = CreateFileW(path.c_str(), GENERIC_WRITE, 0, NULL,
-                           CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE h = CreateFileW(path.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (h == INVALID_HANDLE_VALUE) return false;
 
     SYSTEMTIME st;
     GetLocalTime(&st);
     wchar_t ts[64];
-    swprintf_s(ts, 64, L"%04d-%02d-%02dT%02d:%02d:%02d",
-               st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+    swprintf_s(ts, 64, L"%04d-%02d-%02dT%02d:%02d:%02d", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute,
+               st.wSecond);
 
     std::wstring content;
-    content.push_back((wchar_t)0xFEFF);                  // UTF-16LE BOM
+    content.push_back((wchar_t)0xFEFF); // UTF-16LE BOM
     content += originalFilename;
     content += L"\r\n";
     content += ts;
     content += L"\r\n";
 
     DWORD written = 0;
-    BOOL ok = WriteFile(h, content.data(),
-                        (DWORD)(content.size() * sizeof(wchar_t)),
-                        &written, NULL);
+    BOOL  ok      = WriteFile(h, content.data(), (DWORD)(content.size() * sizeof(wchar_t)), &written, NULL);
     CloseHandle(h);
     return (ok != 0);
 }
 
 static bool ReadMeta(const std::wstring& path, std::wstring* outOriginalFilename)
 {
-    HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ,
-                           NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE h =
+        CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (h == INVALID_HANDLE_VALUE) return false;
     DWORD size = GetFileSize(h, NULL);
-    if (size == INVALID_FILE_SIZE || size > 64 * 1024) { CloseHandle(h); return false; }
+    if (size == INVALID_FILE_SIZE || size > 64 * 1024)
+    {
+        CloseHandle(h);
+        return false;
+    }
 
     std::vector<unsigned char> bytes(size);
-    DWORD read = 0;
-    BOOL ok = ReadFile(h, bytes.data(), size, &read, NULL);
+    DWORD                      read = 0;
+    BOOL                       ok   = ReadFile(h, bytes.data(), size, &read, NULL);
     CloseHandle(h);
     if (!ok || read < 2) return false;
 
     // Strip UTF-16LE BOM and decode.
     size_t offset = 0;
     if (read >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE) offset = 2;
-    const wchar_t* wbase = reinterpret_cast<const wchar_t*>(bytes.data() + offset);
-    size_t wcount = (read - offset) / sizeof(wchar_t);
-    std::wstring text(wbase, wcount);
+    const wchar_t* wbase  = reinterpret_cast<const wchar_t*>(bytes.data() + offset);
+    size_t         wcount = (read - offset) / sizeof(wchar_t);
+    std::wstring   text(wbase, wcount);
 
     // First line up to the first CR/LF is the original filename.
-    size_t eol = text.find_first_of(L"\r\n");
+    size_t eol           = text.find_first_of(L"\r\n");
     *outOriginalFilename = (eol == std::wstring::npos) ? text : text.substr(0, eol);
     return true;
 }
@@ -343,8 +348,7 @@ static bool WriteTier(const ParticleSystem& sys,
     std::string err;
     if (!AtomicWriteParticleSystem(sys, dest, options, &err))
     {
-        AUTOSAVE_LOG("[Autosave] tier=%s write FAILED %ls (%s)\n",
-                     tier == Tier::Recent ? "recent" : "stable",
+        AUTOSAVE_LOG("[Autosave] tier=%s write FAILED %ls (%s)\n", tier == Tier::Recent ? "recent" : "stable",
                      options.tmpPath.c_str(), err.c_str());
         return false;
     }
@@ -354,20 +358,16 @@ static bool WriteTier(const ParticleSystem& sys,
     // tiers so either tier writing it is fine.
     WriteMeta(originalFilename);
 
-    AUTOSAVE_LOG("[Autosave] tier=%s write OK %ls\n",
-                 tier == Tier::Recent ? "recent" : "stable", dest.c_str());
+    AUTOSAVE_LOG("[Autosave] tier=%s write OK %ls\n", tier == Tier::Recent ? "recent" : "stable", dest.c_str());
     return true;
 }
 
-bool Write(const ParticleSystem& sys,
-           const std::wstring&   originalFilename,
-           Tier                  tier)
+bool Write(const ParticleSystem& sys, const std::wstring& originalFilename, Tier tier)
 {
     return WriteTier(sys, originalFilename, tier, false);
 }
 
-bool WriteRecoveryHandoff(const ParticleSystem& sys,
-                          const std::wstring&   originalFilename)
+bool WriteRecoveryHandoff(const ParticleSystem& sys, const std::wstring& originalFilename)
 {
     return WriteTier(sys, originalFilename, Tier::Recent, true);
 }
@@ -376,10 +376,10 @@ void DeleteOurSession()
 {
     const std::wstring recent = OurRecentPath();
     const std::wstring stable = OurStablePath();
-    const std::wstring meta = OurMetaPath();
+    const std::wstring meta   = OurMetaPath();
     if (!recent.empty()) DeleteFileW(recent.c_str());
     if (!stable.empty()) DeleteFileW(stable.c_str());
-    if (!meta.empty())   DeleteFileW(meta.c_str());
+    if (!meta.empty()) DeleteFileW(meta.c_str());
     // The .tmp may exist if a write was interrupted; sweep it too.
     if (!recent.empty())
     {
@@ -397,8 +397,10 @@ void DeleteOurSession()
 static bool FtNewer(const FILETIME& a, const FILETIME& b)
 {
     ULARGE_INTEGER ai, bi;
-    ai.LowPart = a.dwLowDateTime;  ai.HighPart = a.dwHighDateTime;
-    bi.LowPart = b.dwLowDateTime;  bi.HighPart = b.dwHighDateTime;
+    ai.LowPart  = a.dwLowDateTime;
+    ai.HighPart = a.dwHighDateTime;
+    bi.LowPart  = b.dwLowDateTime;
+    bi.HighPart = b.dwHighDateTime;
     return ai.QuadPart > bi.QuadPart;
 }
 
@@ -425,9 +427,9 @@ bool ScanForOrphan(OrphanSession* out)
     std::wstring dir = GetAutosaveDir();
     if (dir.empty()) return false;
 
-    std::wstring pattern = dir + L"\\" + kFilePrefix + L"*";
+    std::wstring     pattern = dir + L"\\" + kFilePrefix + L"*";
     WIN32_FIND_DATAW fd;
-    HANDLE hFind = FindFirstFileW(pattern.c_str(), &fd);
+    HANDLE           hFind = FindFirstFileW(pattern.c_str(), &fd);
     if (hFind == INVALID_HANDLE_VALUE) return false;
 
     // Group by complete process-session identity. Files older than the sweep threshold get
@@ -441,14 +443,12 @@ bool ScanForOrphan(OrphanSession* out)
         FILETIME     stableMtime;
     };
     std::map<SessionKey, Group> bySession;
-    std::vector<std::wstring> sweepList;
-    FILETIME sweepThreshold = FtSubtractDays(kSweepOlderThanDays);
+    std::vector<std::wstring>   sweepList;
+    FILETIME                    sweepThreshold = FtSubtractDays(kSweepOlderThanDays);
 
     do
     {
-        if ((fd.dwFileAttributes
-             & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) != 0)
-            continue;
+        if ((fd.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) != 0) continue;
         const AutosaveName name = ClassifyAutosaveName(fd.cFileName);
         if (name.pid == 0) continue;
 
@@ -467,8 +467,7 @@ bool ScanForOrphan(OrphanSession* out)
         if (name.isTmp)
         {
             sweepList.push_back(full);
-            AUTOSAVE_LOG("[Autosave] orphaned temp from dead session %lu: %ls\n",
-                         name.pid, fd.cFileName);
+            AUTOSAVE_LOG("[Autosave] orphaned temp from dead session %lu: %ls\n", name.pid, fd.cFileName);
             continue;
         }
 
@@ -485,11 +484,21 @@ bool ScanForOrphan(OrphanSession* out)
             name.hasCreationTime,
         };
         Group& g = bySession[key];
-        if      (name.isRecent) { g.recentPath = full; g.recentMtime = fd.ftLastWriteTime; }
-        else if (name.isStable) { g.stablePath = full; g.stableMtime = fd.ftLastWriteTime; }
-        else if (name.isMeta)   { g.metaPath   = full; }
-    }
-    while (FindNextFileW(hFind, &fd));
+        if (name.isRecent)
+        {
+            g.recentPath  = full;
+            g.recentMtime = fd.ftLastWriteTime;
+        }
+        else if (name.isStable)
+        {
+            g.stablePath  = full;
+            g.stableMtime = fd.ftLastWriteTime;
+        }
+        else if (name.isMeta)
+        {
+            g.metaPath = full;
+        }
+    } while (FindNextFileW(hFind, &fd));
     FindClose(hFind);
 
     for (const std::wstring& victim : sweepList)
@@ -503,9 +512,9 @@ bool ScanForOrphan(OrphanSession* out)
     // Pick the orphan session with the newest file across either
     // tier. Ties break toward whichever complete key iterates first; the
     // user gets at least one recoverable session either way.
-    SessionKey bestKey = {};
-    bool haveBest = false;
-    FILETIME bestMtime = { 0, 0 };
+    SessionKey bestKey   = {};
+    bool       haveBest  = false;
+    FILETIME   bestMtime = {0, 0};
     for (const auto& kv : bySession)
     {
         const Group& g = kv.second;
@@ -514,32 +523,30 @@ bool ScanForOrphan(OrphanSession* out)
         if (FtNewer(g.stableMtime, m)) m = g.stableMtime;
         if (!haveBest || FtNewer(m, bestMtime))
         {
-            bestKey = kv.first;
+            bestKey   = kv.first;
             bestMtime = m;
-            haveBest = true;
+            haveBest  = true;
         }
     }
     if (!haveBest) return false;
 
-    const Group& g = bySession.find(bestKey)->second;
-    out->pid                 = bestKey.pid;
-    out->creationTime100ns   = bestKey.creationTime100ns;
-    out->hasCreationTime     = bestKey.hasCreationTime;
-    out->recentPath          = g.recentPath;
-    out->stablePath          = g.stablePath;
-    out->metaPath            = g.metaPath;
-    out->recentMtime         = g.recentMtime;
-    out->stableMtime         = g.stableMtime;
+    const Group& g         = bySession.find(bestKey)->second;
+    out->pid               = bestKey.pid;
+    out->creationTime100ns = bestKey.creationTime100ns;
+    out->hasCreationTime   = bestKey.hasCreationTime;
+    out->recentPath        = g.recentPath;
+    out->stablePath        = g.stablePath;
+    out->metaPath          = g.metaPath;
+    out->recentMtime       = g.recentMtime;
+    out->stableMtime       = g.stableMtime;
     if (!g.metaPath.empty())
     {
         ReadMeta(g.metaPath, &out->originalFilename);
     }
 
     AUTOSAVE_LOG("[Autosave] orphan PID=%lu creation=%016llx recent=%s stable=%s origfile='%ls'\n",
-                 (unsigned long)out->pid,
-                 (unsigned long long)out->creationTime100ns,
-                 g.recentPath.empty() ? "no"  : "yes",
-                 g.stablePath.empty() ? "no"  : "yes",
+                 (unsigned long)out->pid, (unsigned long long)out->creationTime100ns,
+                 g.recentPath.empty() ? "no" : "yes", g.stablePath.empty() ? "no" : "yes",
                  out->originalFilename.c_str());
     return true;
 }
@@ -548,12 +555,13 @@ void DeleteOrphan(const OrphanSession& session)
 {
     const std::wstring currentRecent = OurRecentPath();
     const std::wstring currentStable = OurStablePath();
-    const std::wstring currentMeta = OurMetaPath();
-    const auto deleteOldPath = [&](const std::wstring& path) {
+    const std::wstring currentMeta   = OurMetaPath();
+    const auto         deleteOldPath = [&](const std::wstring& path)
+    {
         if (path.empty()) return;
-        if ((!currentRecent.empty() && _wcsicmp(path.c_str(), currentRecent.c_str()) == 0)
-            || (!currentStable.empty() && _wcsicmp(path.c_str(), currentStable.c_str()) == 0)
-            || (!currentMeta.empty() && _wcsicmp(path.c_str(), currentMeta.c_str()) == 0))
+        if ((!currentRecent.empty() && _wcsicmp(path.c_str(), currentRecent.c_str()) == 0) ||
+            (!currentStable.empty() && _wcsicmp(path.c_str(), currentStable.c_str()) == 0) ||
+            (!currentMeta.empty() && _wcsicmp(path.c_str(), currentMeta.c_str()) == 0))
         {
             AUTOSAVE_LOG("[Autosave] refused orphan delete of current path %ls\n", path.c_str());
             return;

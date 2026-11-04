@@ -25,7 +25,8 @@
 class IFileManager;
 struct IDirect3DDevice9;
 
-namespace TexturePalette {
+namespace TexturePalette
+{
 
 // Which texture slot an entry has been used for. Bit-flags so a single
 // entry can be flagged for both (e.g., a master texture used as the
@@ -45,9 +46,9 @@ enum SlotMask : uint8_t
 struct Entry
 {
     std::wstring filename;
-    bool         isPinned;        // true = pins row, false = recents row
-    uint8_t      slotMask;        // bit-flags from SlotMask
-    uint64_t     lastUsedNs;      // QueryPerformanceCounter snapshot; recents LRU sort key
+    bool         isPinned;   // true = pins row, false = recents row
+    uint8_t      slotMask;   // bit-flags from SlotMask
+    uint64_t     lastUsedNs; // QueryPerformanceCounter snapshot; recents LRU sort key
 };
 
 // Capacity caps for the PaletteStore. Raising either limit is a one-line change.
@@ -62,20 +63,20 @@ public:
     // Mod lifecycle. Loads/saves the matching INI section. Switching
     // mods flushes the previous mod's state to disk before reading
     // the new one.
-    void              SetActiveMod(const std::wstring& modPath);
-    void              ClearActiveMod();   // wipes the current mod's INI section (Reset View Settings)
+    void SetActiveMod(const std::wstring& modPath);
+    void ClearActiveMod(); // wipes the current mod's INI section (Reset View Settings)
     // Automation isolation: in --record / --drive (HostWindow m_automationMode)
     // the dispatcher suppresses persistence, so persistent user state must not be
     // read or mutated. Switching modes clears the in-memory cache. An ephemeral
     // run can then seed capture-local recents/pins without inheriting or overwriting the
     // user's real per-mod palette. Mirrors the skydome/registry gate.
-    void              SetEphemeral(bool ephemeral);
+    void                SetEphemeral(bool ephemeral);
     const std::wstring& ActiveMod() const { return m_activeMod; }
-    bool              HasActiveMod() const { return !m_activeMod.empty(); }
+    bool                HasActiveMod() const { return !m_activeMod.empty(); }
 
     // Filter (per-mod). Defaults to SLOT_COLOR.
-    SlotMask          ActiveFilter() const;
-    void              SetActiveFilter(SlotMask filter);
+    SlotMask ActiveFilter() const;
+    void     SetActiveFilter(SlotMask filter);
 
     // Mutations. Each writes to disk before returning — INI is small
     // and writes are infrequent enough that debouncing isn't worth it.
@@ -83,16 +84,16 @@ public:
     // bumps its lastUsedNs and OR's `usedAs` into its slotMask. Otherwise
     // adds a new recent. If recents are full (MAX_RECENTS), the oldest
     // recent is evicted.
-    void              TouchRecent(const std::wstring& filename, SlotMask usedAs);
+    void TouchRecent(const std::wstring& filename, SlotMask usedAs);
     // TogglePin: flips pinned state. Returns false if pinning would
     // exceed MAX_PINS (caller should show "pins full" status feedback).
-    bool              TogglePin(const std::wstring& filename);
+    bool TogglePin(const std::wstring& filename);
 
     // Read access for the popup's WM_PAINT. Returns entries matching
     // the given filter, in display order:
     //   - Pins: insertion order, oldest first.
     //   - Recents: most-recently-used first.
-    std::vector<Entry> Pins   (SlotMask filter) const;
+    std::vector<Entry> Pins(SlotMask filter) const;
     std::vector<Entry> Recents(SlotMask filter) const;
 
 private:
@@ -103,24 +104,24 @@ private:
 
     struct ModPalette
     {
-        std::vector<Entry> entries;   // pins first (insertion order), then recents (insertion order)
+        std::vector<Entry> entries; // pins first (insertion order), then recents (insertion order)
         SlotMask           filter;
     };
 
     // Loads a mod section from INI on demand; cached in m_byMod.
-    ModPalette&       LoadOrInit(const std::wstring& modPath);
-    void              FlushMod  (const std::wstring& modPath, const ModPalette& mp) const;
+    ModPalette& LoadOrInit(const std::wstring& modPath);
+    void        FlushMod(const std::wstring& modPath, const ModPalette& mp) const;
 
     // INI path under %APPDATA%\AloParticleEditor\.
-    std::wstring      IniPath() const;
+    std::wstring IniPath() const;
     // Section name for a mod path: "mod=<8-hex-crc32>".
-    std::wstring      SectionFor(const std::wstring& modPath) const;
+    std::wstring SectionFor(const std::wstring& modPath) const;
 
-    std::wstring                                       m_activeMod;
-    std::unordered_map<std::wstring, ModPalette>       m_byMod;        // keyed by lowercased mod path
-    bool                                               m_ephemeral = false;  // automation: skip INI reads/writes
-    mutable bool                                       m_iniPathChecked;
-    mutable std::wstring                               m_iniPathCache;
+    std::wstring                                 m_activeMod;
+    std::unordered_map<std::wstring, ModPalette> m_byMod;             // keyed by lowercased mod path
+    bool                                         m_ephemeral = false; // automation: skip INI reads/writes
+    mutable bool                                 m_iniPathChecked;
+    mutable std::wstring                         m_iniPathCache;
 };
 
 // ============================================================================
@@ -136,14 +137,18 @@ private:
 // popup's grey-X vs magenta-X placeholders, so React can tell them apart.
 // Results are cached by filename; ClearBridgeThumbCache() drops the cache on
 // mod switch so same-named textures from different mods don't leak across.
-enum class ThumbStatus { Ok, Missing, Broken };
-struct ThumbnailResult {
-    std::string dataUri;   // non-empty only when status == Ok
+enum class ThumbStatus
+{
+    Ok,
+    Missing,
+    Broken
+};
+struct ThumbnailResult
+{
+    std::string dataUri; // non-empty only when status == Ok
     ThumbStatus status;
 };
-ThumbnailResult GetThumbnail(const std::wstring& filename,
-                             IFileManager* fileManager,
-                             IDirect3DDevice9* device);
+ThumbnailResult GetThumbnail(const std::wstring& filename, IFileManager* fileManager, IDirect3DDevice9* device);
 void            ClearBridgeThumbCache();
 
 // ============================================================================
@@ -158,17 +163,18 @@ void            ClearBridgeThumbCache();
 //   status: "ok"      — dataUri holds a data:image/png;base64,... preview
 //           "missing" — file couldn't be resolved (typo'd/absent path, no device)
 //           "broken"  — file present but unusable (empty, won't decode, cube/volume)
-struct PreviewResult {
-    std::string status;   // "ok" | "missing" | "broken"
-    std::string dataUri;  // valid only when status == "ok"
-    int srcW = 0;
-    int srcH = 0;
+struct PreviewResult
+{
+    std::string status;  // "ok" | "missing" | "broken"
+    std::string dataUri; // valid only when status == "ok"
+    int         srcW = 0;
+    int         srcH = 0;
 };
 PreviewResult GetTexturePreview(const std::wstring& filename,
-                                IFileManager* fileManager,
-                                IDirect3DDevice9* device,
-                                int maxBound = 1024,
-                                bool flattenAlpha = true);
+                                IFileManager*       fileManager,
+                                IDirect3DDevice9*   device,
+                                int                 maxBound     = 1024,
+                                bool                flattenAlpha = true);
 
 // Async split of GetTexturePreview. DecodeTexturePreviewBgra runs the
 // DEVICE-BOUND half on the UI thread (file/MEG read + D3DX decode into a
@@ -177,19 +183,19 @@ PreviewResult GetTexturePreview(const std::wstring& filename,
 // EncodePackedBgraToPngBytes (pure CPU; GDI+ CLSID cache must be pre-warmed
 // on the UI thread — see PreviewEncodeWorker's ctor). GetTexturePreview is
 // the synchronous composition of the two (behavior unchanged).
-struct PreviewPixels {
-    std::string status;   // "ok" | "missing" | "broken"
-    int srcW = 0, srcH = 0;      // true source dims (pre-clamp)
-    int outW = 0, outH = 0;      // decoded/clamped dims (== bgra dims)
-    std::vector<uint8_t> bgra;   // tightly packed outW*outH*4, BGRA
+struct PreviewPixels
+{
+    std::string          status;             // "ok" | "missing" | "broken"
+    int                  srcW = 0, srcH = 0; // true source dims (pre-clamp)
+    int                  outW = 0, outH = 0; // decoded/clamped dims (== bgra dims)
+    std::vector<uint8_t> bgra;               // tightly packed outW*outH*4, BGRA
 };
 PreviewPixels DecodeTexturePreviewBgra(const std::wstring& filename,
-                                       IFileManager* fileManager,
-                                       IDirect3DDevice9* device,
-                                       int maxBound = 1024,
-                                       bool flattenAlpha = true);
-bool EncodePackedBgraToPngBytes(const uint8_t* bgra, int w, int h,
-                                std::vector<uint8_t>& outPng);
+                                       IFileManager*       fileManager,
+                                       IDirect3DDevice9*   device,
+                                       int                 maxBound     = 1024,
+                                       bool                flattenAlpha = true);
+bool          EncodePackedBgraToPngBytes(const uint8_t* bgra, int w, int h, std::vector<uint8_t>& outPng);
 
 } // namespace TexturePalette
 

@@ -10,35 +10,30 @@
 #include <cstdio>
 #include <memory>
 
-namespace host {
+namespace host
+{
 
 struct SpawnerConfigWiringTestAccess
 {
-    static std::unique_ptr<BridgeDispatcher> MakeDispatcher(
-        LayoutBroker& layout, AcceleratorBridge& accel, Engine* engine = NULL)
+    static std::unique_ptr<BridgeDispatcher> MakeDispatcher(LayoutBroker&      layout,
+                                                            AcceleratorBridge& accel,
+                                                            Engine*            engine = NULL)
     {
         return std::unique_ptr<BridgeDispatcher>(
-            new BridgeDispatcher(layout, accel,
-                                 BridgeDispatcher::SpawnerConfigTestTag{}, engine));
+            new BridgeDispatcher(layout, accel, BridgeDispatcher::SpawnerConfigTestTag{}, engine));
     }
 
-    static nlohmann::json State(const BridgeDispatcher& dispatcher)
-    {
-        return dispatcher.BuildSpawnerStateJson();
-    }
+    static nlohmann::json State(const BridgeDispatcher& dispatcher) { return dispatcher.BuildSpawnerStateJson(); }
 
     static void Start(BridgeDispatcher& dispatcher, const nlohmann::json& params)
     {
         dispatcher.ApplySpawnerStart(params);
     }
 
-    static void Stop(BridgeDispatcher& dispatcher)
-    {
-        dispatcher.ApplySpawnerStop();
-    }
+    static void Stop(BridgeDispatcher& dispatcher) { dispatcher.ApplySpawnerStop(); }
 
     static bool IgnoreSettingsPush(BridgeDispatcher& dispatcher,
-        std::uint64_t BridgeDispatcher::ReplayProofIgnoredPushCounts::* counter)
+                                   std::uint64_t BridgeDispatcher::ReplayProofIgnoredPushCounts::* counter)
     {
         return dispatcher.IgnoreReplayProofSettingsPush(dispatcher.m_replayProofIgnoredPushes.*counter);
     }
@@ -47,14 +42,23 @@ struct SpawnerConfigWiringTestAccess
 } // namespace host
 
 static int g_failed = 0;
-#define CHECK(cond, msg) do {                              \
-    if (cond) { std::printf("  ok: %s\n", msg); }          \
-    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
 // Engine link stubs. The real SpawnerDriver is used so ApplySpawnerStop must
 // cancel its armed/manual queue before it flips the shared config.
-static int g_spawnCalls = 0;
+static int              g_spawnCalls = 0;
 ParticleSystemInstance* Engine::SpawnParticleSystem(const ParticleSystem&, Object3D*)
 {
     ++g_spawnCalls;
@@ -67,7 +71,10 @@ int Engine::ActiveSpawnerInstanceCount() const
 }
 
 alignas(Engine) static unsigned char g_engineStorage[sizeof(Engine)];
-static Engine* FakeEngine() { return reinterpret_cast<Engine*>(g_engineStorage); }
+static Engine* FakeEngine()
+{
+    return reinterpret_cast<Engine*>(g_engineStorage);
+}
 alignas(16) static unsigned char g_systemStorage[16];
 static const ParticleSystem* FakeSystem()
 {
@@ -77,90 +84,82 @@ static const ParticleSystem* FakeSystem()
 static nlohmann::json OutOfRangeConfig()
 {
     return {
-        {"mode",              "unexpected"},
-        {"enabled",           true},
-        {"burstSize",         99},
-        {"spacingSec",        -1.0f},
-        {"intervalSec",       61.0f},
-        {"position",          {10001.0f, -10001.0f, 10001.0f}},
-        {"velocity",          {-10001.0f, 10001.0f, -10001.0f}},
-        {"maxLifetimeSec",    -1.0f},
-        {"jitterPosition",    {10001.0f, -10001.0f, 10001.0f}},
-        {"acceleration",      {-10001.0f, 10001.0f, -10001.0f}},
+        {"mode", "unexpected"},
+        {"enabled", true},
+        {"burstSize", 99},
+        {"spacingSec", -1.0f},
+        {"intervalSec", 61.0f},
+        {"position", {10001.0f, -10001.0f, 10001.0f}},
+        {"velocity", {-10001.0f, 10001.0f, -10001.0f}},
+        {"maxLifetimeSec", -1.0f},
+        {"jitterPosition", {10001.0f, -10001.0f, 10001.0f}},
+        {"acceleration", {-10001.0f, 10001.0f, -10001.0f}},
         {"squiggleAmplitude", {10001.0f, -10001.0f, 10001.0f}},
         {"squiggleFrequency", 21.0f},
-        {"matchProjectile",   true},
-        {"targetPosition",    {-10001.0f, 10001.0f, 3.0f}},
+        {"matchProjectile", true},
+        {"targetPosition", {-10001.0f, 10001.0f, 3.0f}},
     };
 }
 
 static nlohmann::json ClampedConfig()
 {
     return {
-        {"mode",              "auto"},
-        {"enabled",           true},
-        {"burstSize",         SpawnerDriver::MAX_BURST_SIZE},
-        {"spacingSec",        0.0f},
-        {"intervalSec",       SpawnerDriver::MAX_INTERVAL_SEC},
-        {"position",          {SpawnerDriver::JITTER_MAX, -SpawnerDriver::JITTER_MAX, SpawnerDriver::JITTER_MAX}},
-        {"velocity",          {-SpawnerDriver::JITTER_MAX, SpawnerDriver::JITTER_MAX, -SpawnerDriver::JITTER_MAX}},
-        {"maxLifetimeSec",    0.0f},
-        {"jitterPosition",    {SpawnerDriver::JITTER_MAX, -SpawnerDriver::JITTER_MAX, SpawnerDriver::JITTER_MAX}},
-        {"acceleration",      {-SpawnerDriver::JITTER_MAX, SpawnerDriver::JITTER_MAX, -SpawnerDriver::JITTER_MAX}},
+        {"mode", "auto"},
+        {"enabled", true},
+        {"burstSize", SpawnerDriver::MAX_BURST_SIZE},
+        {"spacingSec", 0.0f},
+        {"intervalSec", SpawnerDriver::MAX_INTERVAL_SEC},
+        {"position", {SpawnerDriver::JITTER_MAX, -SpawnerDriver::JITTER_MAX, SpawnerDriver::JITTER_MAX}},
+        {"velocity", {-SpawnerDriver::JITTER_MAX, SpawnerDriver::JITTER_MAX, -SpawnerDriver::JITTER_MAX}},
+        {"maxLifetimeSec", 0.0f},
+        {"jitterPosition", {SpawnerDriver::JITTER_MAX, -SpawnerDriver::JITTER_MAX, SpawnerDriver::JITTER_MAX}},
+        {"acceleration", {-SpawnerDriver::JITTER_MAX, SpawnerDriver::JITTER_MAX, -SpawnerDriver::JITTER_MAX}},
         {"squiggleAmplitude", {SpawnerDriver::JITTER_MAX, -SpawnerDriver::JITTER_MAX, SpawnerDriver::JITTER_MAX}},
         {"squiggleFrequency", SpawnerDriver::SQUIGGLE_FREQ_MAX},
-        {"matchProjectile",   true},
-        {"targetPosition",    {-SpawnerDriver::JITTER_MAX, SpawnerDriver::JITTER_MAX, 3.0f}},
-        {"projectileOutOfReach", false},   // no engine: nothing to fire
+        {"matchProjectile", true},
+        {"targetPosition", {-SpawnerDriver::JITTER_MAX, SpawnerDriver::JITTER_MAX, 3.0f}},
+        {"projectileOutOfReach", false}, // no engine: nothing to fire
     };
 }
 
 static bool DriverHasClampedConfig(const SpawnerDriver& driver)
 {
     const SpawnerConfig& cfg = driver.GetConfig();
-    return cfg.mode == SpawnerConfig::Mode::Auto
-        && cfg.enabled
-        && cfg.burstSize == SpawnerDriver::MAX_BURST_SIZE
-        && cfg.spacingSec == 0.0f
-        && cfg.intervalSec == SpawnerDriver::MAX_INTERVAL_SEC
-        && cfg.maxLifetimeSec == 0.0f
-        && cfg.position.x == SpawnerDriver::JITTER_MAX
-        && cfg.position.y == -SpawnerDriver::JITTER_MAX
-        && cfg.velocity.x == -SpawnerDriver::JITTER_MAX
-        && cfg.velocity.y == SpawnerDriver::JITTER_MAX
-        && cfg.jitterPosition.x == SpawnerDriver::JITTER_MAX
-        && cfg.acceleration.x == -SpawnerDriver::JITTER_MAX
-        && cfg.squiggleAmplitude.x == SpawnerDriver::JITTER_MAX
-        && cfg.squiggleFrequency == SpawnerDriver::SQUIGGLE_FREQ_MAX
-        && cfg.matchProjectile
-        && cfg.targetPosition.x == -SpawnerDriver::JITTER_MAX
-        && cfg.targetPosition.z == 3.0f;
+    return cfg.mode == SpawnerConfig::Mode::Auto && cfg.enabled && cfg.burstSize == SpawnerDriver::MAX_BURST_SIZE &&
+           cfg.spacingSec == 0.0f && cfg.intervalSec == SpawnerDriver::MAX_INTERVAL_SEC && cfg.maxLifetimeSec == 0.0f &&
+           cfg.position.x == SpawnerDriver::JITTER_MAX && cfg.position.y == -SpawnerDriver::JITTER_MAX &&
+           cfg.velocity.x == -SpawnerDriver::JITTER_MAX && cfg.velocity.y == SpawnerDriver::JITTER_MAX &&
+           cfg.jitterPosition.x == SpawnerDriver::JITTER_MAX && cfg.acceleration.x == -SpawnerDriver::JITTER_MAX &&
+           cfg.squiggleAmplitude.x == SpawnerDriver::JITTER_MAX &&
+           cfg.squiggleFrequency == SpawnerDriver::SQUIGGLE_FREQ_MAX && cfg.matchProjectile &&
+           cfg.targetPosition.x == -SpawnerDriver::JITTER_MAX && cfg.targetPosition.z == 3.0f;
 }
 
 int main()
 {
     std::printf("test_bridge_spawner_state\n");
-    host::LayoutBroker layout;
+    host::LayoutBroker      layout;
     host::AcceleratorBridge accel;
 
     // Exercise the production switch without requiring an Engine or WebView.
     {
-        auto dispatcher = host::SpawnerConfigWiringTestAccess::MakeDispatcher(layout, accel);
-        using Counts = host::BridgeDispatcher::ReplayProofIgnoredPushCounts;
+        auto dispatcher   = host::SpawnerConfigWiringTestAccess::MakeDispatcher(layout, accel);
+        using Counts      = host::BridgeDispatcher::ReplayProofIgnoredPushCounts;
         const auto ignore = [&](std::uint64_t Counts::* counter)
         {
             return host::SpawnerConfigWiringTestAccess::IgnoreSettingsPush(*dispatcher, counter);
         };
         const auto& counts = dispatcher->IgnoredReplayProofSettingsPushes();
-        for (auto counter : { &Counts::overloadGuard, &Counts::msaaLevel, &Counts::estimatedLoad })
+        for (auto counter : {&Counts::overloadGuard, &Counts::msaaLevel, &Counts::estimatedLoad})
             CHECK(!ignore(counter) && counts.*counter == 0, "normal mode accepts settings pushes without counting");
         dispatcher->SetReplayProofOwnsSettings(true);
-        for (auto counter : { &Counts::overloadGuard, &Counts::msaaLevel, &Counts::estimatedLoad })
+        for (auto counter : {&Counts::overloadGuard, &Counts::msaaLevel, &Counts::estimatedLoad})
             CHECK(ignore(counter) && counts.*counter == 1, "proof mode ignores and counts each settings kind");
-        CHECK(ignore(&Counts::estimatedLoad) && counts.estimatedLoad == 2 &&
-              counts.overloadGuard == 1 && counts.msaaLevel == 1, "ignored push counters are independent");
+        CHECK(ignore(&Counts::estimatedLoad) && counts.estimatedLoad == 2 && counts.overloadGuard == 1 &&
+                  counts.msaaLevel == 1,
+              "ignored push counters are independent");
         dispatcher->SetReplayProofOwnsSettings(false);
-        for (auto counter : { &Counts::overloadGuard, &Counts::msaaLevel, &Counts::estimatedLoad })
+        for (auto counter : {&Counts::overloadGuard, &Counts::msaaLevel, &Counts::estimatedLoad})
             CHECK(!ignore(counter), "disabling proof ownership restores normal settings handling");
         CHECK(counts.overloadGuard == 1 && counts.msaaLevel == 1 && counts.estimatedLoad == 2,
               "normal handling does not alter ignored push counts");
@@ -177,8 +176,7 @@ int main()
 
         SpawnerDriver delayedDriver;
         dispatcher->BindHostState(NULL, &delayedDriver, NULL);
-        CHECK(DriverHasClampedConfig(delayedDriver),
-              "a later-bound driver receives the dispatcher-owned config");
+        CHECK(DriverHasClampedConfig(delayedDriver), "a later-bound driver receives the dispatcher-owned config");
     }
 
     // Stop must also reflect correctly when the dispatcher has no driver at
@@ -189,7 +187,7 @@ int main()
         host::SpawnerConfigWiringTestAccess::Start(*dispatcher, OutOfRangeConfig());
 
         nlohmann::json expectedStopped = ClampedConfig();
-        expectedStopped["enabled"] = false;
+        expectedStopped["enabled"]     = false;
         host::SpawnerConfigWiringTestAccess::Stop(*dispatcher);
         CHECK(host::SpawnerConfigWiringTestAccess::State(*dispatcher) == expectedStopped,
               "unbound stop reflects disabled and preserves config");
@@ -203,7 +201,7 @@ int main()
             host::SpawnerConfigWiringTestAccess::MakeDispatcher(layout, accel, FakeEngine());
         host::SpawnerConfigWiringTestAccess::Start(*dispatcher, OutOfRangeConfig());
         nlohmann::json expectedStopped = ClampedConfig();
-        expectedStopped["enabled"] = false;
+        expectedStopped["enabled"]     = false;
         host::SpawnerConfigWiringTestAccess::Stop(*dispatcher);
         CHECK(host::SpawnerConfigWiringTestAccess::State(*dispatcher) == expectedStopped,
               "driver-unbound overload-refusal echo is disabled and preserves config");
@@ -218,10 +216,10 @@ int main()
         dispatcher->BindHostState(NULL, &driver, NULL);
 
         nlohmann::json manual = ClampedConfig();
-        manual["mode"] = "manual";
+        manual["mode"]        = "manual";
         host::SpawnerConfigWiringTestAccess::Start(*dispatcher, manual);
-        CHECK(driver.GetConfig().mode == SpawnerConfig::Mode::Manual
-           && driver.GetConfig().burstSize == SpawnerDriver::MAX_BURST_SIZE,
+        CHECK(driver.GetConfig().mode == SpawnerConfig::Mode::Manual &&
+                  driver.GetConfig().burstSize == SpawnerDriver::MAX_BURST_SIZE,
               "bound driver receives the dispatcher-owned clamped config");
 
         driver.Trigger(FakeSystem(), FakeEngine());
@@ -229,10 +227,8 @@ int main()
         const int beforeStopTick = g_spawnCalls;
         host::SpawnerConfigWiringTestAccess::Stop(*dispatcher);
         driver.Tick(0.016f, FakeSystem(), FakeEngine());
-        CHECK(g_spawnCalls == beforeStopTick,
-              "stop cancels the driver's armed burst and pending manual queue");
-        CHECK(!driver.GetConfig().enabled,
-              "stop disables the bound driver from the shared config");
+        CHECK(g_spawnCalls == beforeStopTick, "stop cancels the driver's armed burst and pending manual queue");
+        CHECK(!driver.GetConfig().enabled, "stop disables the bound driver from the shared config");
     }
 
     std::printf("%s\n", g_failed ? "=== FAILED ===" : "=== ALL PASS ===");

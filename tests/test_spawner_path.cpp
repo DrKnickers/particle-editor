@@ -19,12 +19,22 @@ static int g_failed = 0;
 
 static void Check(bool ok, const char* expr, int line)
 {
-    if (ok) { ++g_passed; }
-    else    { ++g_failed; std::printf("  FAIL line %d: %s\n", line, expr); }
+    if (ok)
+    {
+        ++g_passed;
+    }
+    else
+    {
+        ++g_failed;
+        std::printf("  FAIL line %d: %s\n", line, expr);
+    }
 }
 #define CHECK(cond) Check((cond), #cond, __LINE__)
 
-static bool Near(float a, float b, float eps = 1e-3f) { return std::fabs(a - b) <= eps; }
+static bool Near(float a, float b, float eps = 1e-3f)
+{
+    return std::fabs(a - b) <= eps;
+}
 static bool NearV(const D3DXVECTOR3& a, const D3DXVECTOR3& b, float eps = 1e-3f)
 {
     return Near(a.x, b.x, eps) && Near(a.y, b.y, eps) && Near(a.z, b.z, eps);
@@ -38,14 +48,13 @@ int main()
     // ── τ=0 emanates from the exact spawn point, even with
     //    nonzero amplitude + phase + accel (the −sin(φ) zeroing term). ──
     {
-        SpawnerPathState s = { spawn, v0, D3DXVECTOR3(0, -9.8f, 0),
-                               D3DXVECTOR3(3, 1, 2), 2.5f,
-                               D3DXVECTOR3(0.7f, 1.9f, 4.1f) };
+        SpawnerPathState s = {
+            spawn, v0, D3DXVECTOR3(0, -9.8f, 0), D3DXVECTOR3(3, 1, 2), 2.5f, D3DXVECTOR3(0.7f, 1.9f, 4.1f)};
         D3DXVECTOR3 pos, vel;
         EvalSpawnerPath(s, 0.0f, pos, vel);
-        CHECK(NearV(pos, spawn));                 // no frame-1 teleport
+        CHECK(NearV(pos, spawn)); // no frame-1 teleport
         // Initial velocity = v0 + per-instance lateral kick Aᵢ·ω·cos(φᵢ).
-        float w = 2.0f * 3.14159265358979323846f * 2.5f;
+        float       w = 2.0f * 3.14159265358979323846f * 2.5f;
         D3DXVECTOR3 kick(3 * w * cosf(0.7f), 1 * w * cosf(1.9f), 2 * w * cosf(4.1f));
         CHECK(NearV(vel, v0 + kick, 1e-2f));
     }
@@ -53,11 +62,9 @@ int main()
     // ── Accel-only is an exact parabola; velocity is live
     //    (v0 + a·τ), so emitted particles inherit the right value. ──
     {
-        D3DXVECTOR3 a(0, -9.8f, 0);
-        SpawnerPathState s = { spawn, v0, a,
-                               D3DXVECTOR3(0, 0, 0), 1.0f,
-                               D3DXVECTOR3(0, 0, 0) };
-        for (float tau : { 0.5f, 1.0f, 3.0f })
+        D3DXVECTOR3      a(0, -9.8f, 0);
+        SpawnerPathState s = {spawn, v0, a, D3DXVECTOR3(0, 0, 0), 1.0f, D3DXVECTOR3(0, 0, 0)};
+        for (float tau : {0.5f, 1.0f, 3.0f})
         {
             D3DXVECTOR3 pos, vel;
             EvalSpawnerPath(s, tau, pos, vel);
@@ -71,13 +78,12 @@ int main()
     // ── Squiggle-only: bounded by amplitude, and returns to the base
     //    (straight) path after a whole period (sin is periodic). ──
     {
-        D3DXVECTOR3 amp(4, 0, 0);
-        float freq = 2.0f;                         // period = 0.5 s
-        SpawnerPathState s = { spawn, v0, D3DXVECTOR3(0, 0, 0),
-                               amp, freq, D3DXVECTOR3(1.3f, 0, 0) };
+        D3DXVECTOR3      amp(4, 0, 0);
+        float            freq = 2.0f; // period = 0.5 s
+        SpawnerPathState s    = {spawn, v0, D3DXVECTOR3(0, 0, 0), amp, freq, D3DXVECTOR3(1.3f, 0, 0)};
         // After exactly one period the squiggle term is back to 0 ⇒ pos
         // equals the pure straight-line base at that τ.
-        float period = 1.0f / freq;
+        float       period = 1.0f / freq;
         D3DXVECTOR3 pos, vel;
         EvalSpawnerPath(s, period, pos, vel);
         CHECK(NearV(pos, spawn + v0 * period, 1e-2f));
@@ -85,10 +91,10 @@ int main()
         bool bounded = true;
         for (int i = 1; i <= 200; ++i)
         {
-            float tau = i * 0.01f;
+            float       tau = i * 0.01f;
             D3DXVECTOR3 p, vv;
             EvalSpawnerPath(s, tau, p, vv);
-            float lateral = p.x - (spawn.x + v0.x * tau);   // deviation from base
+            float lateral = p.x - (spawn.x + v0.x * tau); // deviation from base
             if (std::fabs(lateral) > 2.0f * amp.x + 1e-3f) bounded = false;
         }
         CHECK(bounded);
@@ -96,13 +102,11 @@ int main()
 
     // ── All-zero shaping ⇒ a plain straight line, constant velocity. ──
     {
-        SpawnerPathState s = { spawn, v0, D3DXVECTOR3(0, 0, 0),
-                               D3DXVECTOR3(0, 0, 0), 5.0f,
-                               D3DXVECTOR3(0, 0, 0) };
-        D3DXVECTOR3 pos, vel;
+        SpawnerPathState s = {spawn, v0, D3DXVECTOR3(0, 0, 0), D3DXVECTOR3(0, 0, 0), 5.0f, D3DXVECTOR3(0, 0, 0)};
+        D3DXVECTOR3      pos, vel;
         EvalSpawnerPath(s, 2.0f, pos, vel);
         CHECK(NearV(pos, spawn + v0 * 2.0f));
-        CHECK(NearV(vel, v0));                      // velocity unchanged
+        CHECK(NearV(vel, v0)); // velocity unchanged
     }
 
     std::printf("Results: %d passed, %d failed\n", g_passed, g_failed);

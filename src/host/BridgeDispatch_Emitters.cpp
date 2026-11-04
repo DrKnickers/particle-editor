@@ -5,12 +5,13 @@
 #include "BridgeDispatchShared.h"
 #include "BridgeRequestContext.h"
 
-#include "StringConv.h"           // host::Utf8ToWide / WideToUtf8
-#include "effect/ParticleSystemIO.h"  // LoadParticleSystem (preview/import-from-file)
+#include "StringConv.h"              // host::Utf8ToWide / WideToUtf8
+#include "effect/ParticleSystemIO.h" // LoadParticleSystem (preview/import-from-file)
 
 using nlohmann::json;
 
-namespace host {
+namespace host
+{
 
 // Duplicate `source` in `sys` (deep copy via the chunk writer/reader, with a
 // fresh auto-suffixed name) and shift every TRACK_INDEX keyframe on the copy by
@@ -18,20 +19,21 @@ namespace host {
 // Mirrors legacy EmitterList_DuplicateEmitter + ShiftIndexTrack. Returns the new
 // emitter, or nullptr if the copy/insert failed. Shared by the single and the
 // batch duplicate-with-index-increment handlers.
-static ParticleSystem::Emitter* DuplicateEmitterWithIndexShift(
-    ParticleSystem* sys, ParticleSystem::Emitter* source, float delta)
+static ParticleSystem::Emitter* DuplicateEmitterWithIndexShift(ParticleSystem*          sys,
+                                                               ParticleSystem::Emitter* source,
+                                                               float                    delta)
 {
-    ParticleSystem::Emitter* dup = nullptr;
-    MemoryFile* memfile = new MemoryFile;
+    ParticleSystem::Emitter* dup     = nullptr;
+    MemoryFile*              memfile = new MemoryFile;
     try
     {
         ChunkWriter writer(memfile);
         source->copy(writer);
         memfile->seek(0);
-        ChunkReader reader(memfile);
+        ChunkReader             reader(memfile);
         ParticleSystem::Emitter cleanCopy(reader);
         cleanCopy.name = GenerateDuplicateName(sys, source->name);
-        dup = sys->insertEmitterAfter(source, cleanCopy);
+        dup            = sys->insertEmitterAfter(source, cleanCopy);
     }
     catch (...)
     {
@@ -50,13 +52,11 @@ static ParticleSystem::Emitter* DuplicateEmitterWithIndexShift(
         }
         else
         {
-            std::vector<ParticleSystem::Emitter::Track::Key> tmp(
-                track->keys.begin(), track->keys.end());
+            std::vector<ParticleSystem::Emitter::Track::Key> tmp(track->keys.begin(), track->keys.end());
             track->keys.clear();
             for (size_t i = 0; i < tmp.size(); ++i)
             {
-                track->keys.insert(ParticleSystem::Emitter::Track::Key(
-                    tmp[i].time, tmp[i].value + delta));
+                track->keys.insert(ParticleSystem::Emitter::Track::Key(tmp[i].time, tmp[i].value + delta));
             }
         }
     }
@@ -88,8 +88,8 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
             ctx.SendOk(json{{"ok", false}, {"error", "missing path"}});
             return true;
         }
-        std::wstring path = Utf8ToWide(path8);
-        std::string err;
+        std::wstring                    path = Utf8ToWide(path8);
+        std::string                     err;
         std::unique_ptr<ParticleSystem> tmp = LoadParticleSystem(path, &err);
         if (!tmp)
         {
@@ -97,13 +97,13 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
             // result so request() won't throw; success path is
             // ctx.SendOk({ok:true,tree}). Caller inspects nested ok.
             ctx.SendOk(json{
-                {"ok",    false},
+                {"ok", false},
                 {"error", err.empty() ? std::string("could not load file") : err},
             });
             return true;
         }
         // Build the synthetic root + per-actual-root children.
-        json children = json::array();
+        json        children = json::array();
         const auto& emitters = tmp->getEmitters();
         for (size_t i = 0; i < emitters.size(); ++i)
         {
@@ -117,24 +117,28 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         // so consumers don't see undefined when the schema is read
         // strictly.
         json tree = {
-            {"id",        0},
-            {"stableId",  0},  // synthetic root: 0 is reserved (real ids start at 1)
-            {"name",      "root"},
-            {"role",      "root"},
+            {"id", 0},
+            {"stableId", 0}, // synthetic root: 0 is reserved (real ids start at 1)
+            {"name", "root"},
+            {"role", "root"},
             {"linkGroup", 0},
-            {"visible",   true},
+            {"visible", true},
             // Zero spawn: synthetic root never warns (= ZERO_SPAWN in
             // bridge-schema, the canonical zero shape).
-            {"spawn", json{
-                {"lifetime", 0.0}, {"useBursts", false}, {"nBursts", 0},
-                {"burstDelay", 0.0}, {"nParticlesPerSecond", 0}, {"nParticlesPerBurst", 0},
-            }},
-            {"children",  children},
+            {"spawn",
+             json{
+                 {"lifetime", 0.0},
+                 {"useBursts", false},
+                 {"nBursts", 0},
+                 {"burstDelay", 0.0},
+                 {"nParticlesPerSecond", 0},
+                 {"nParticlesPerBurst", 0},
+             }},
+            {"children", children},
         };
         ctx.SendOk(json{{"ok", true}, {"tree", tree}});
         return true;
     }
-
 
     // -------- emitters/list -----------------------------------------
     //
@@ -147,8 +151,8 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         json children = json::array();
         if (m_pParticleSystem != nullptr && *m_pParticleSystem)
         {
-            const ParticleSystem* sys = m_pParticleSystem->get();
-            const auto& emitters = sys->getEmitters();
+            const ParticleSystem* sys      = m_pParticleSystem->get();
+            const auto&           emitters = sys->getEmitters();
             for (size_t i = 0; i < emitters.size(); ++i)
             {
                 if (emitters[i] != nullptr && emitters[i]->parent == nullptr)
@@ -158,22 +162,26 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
             }
         }
         json tree = {
-            {"id",        -1},
-            {"stableId",  0},  // synthetic root: 0 is reserved (real ids start at 1)
-            {"name",      ""},
-            {"role",      "root"},
+            {"id", -1},
+            {"stableId", 0}, // synthetic root: 0 is reserved (real ids start at 1)
+            {"name", ""},
+            {"role", "root"},
             {"linkGroup", 0},
-            {"visible",   true},
-            {"spawn", json{
-                {"lifetime", 0.0}, {"useBursts", false}, {"nBursts", 0},
-                {"burstDelay", 0.0}, {"nParticlesPerSecond", 0}, {"nParticlesPerBurst", 0},
-            }},
-            {"children",  children},
+            {"visible", true},
+            {"spawn",
+             json{
+                 {"lifetime", 0.0},
+                 {"useBursts", false},
+                 {"nBursts", 0},
+                 {"burstDelay", 0.0},
+                 {"nParticlesPerSecond", 0},
+                 {"nParticlesPerBurst", 0},
+             }},
+            {"children", children},
         };
         ctx.SendOk(json{{"root", tree}});
         return true;
     }
-
 
     // -------- emitters/select ---------------------------------------
     //
@@ -188,8 +196,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         // to a JSON null; we store as -1 internally and re-serialise
         // as JSON null on the way out (in BuildEngineStateSnapshot).
         int newId = -1;
-        if (params.contains("id") && !params["id"].is_null())
-            newId = params["id"].get<int>();
+        if (params.contains("id") && !params["id"].is_null()) newId = params["id"].get<int>();
 
         // Validate against the live tree when bound — selecting an
         // index that isn't a real emitter resets to no-selection. This
@@ -199,8 +206,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         if (newId >= 0 && m_pParticleSystem != nullptr && *m_pParticleSystem)
         {
             const auto& emitters = (*m_pParticleSystem)->getEmitters();
-            if (static_cast<size_t>(newId) >= emitters.size() || emitters[newId] == nullptr)
-                newId = -1;
+            if (static_cast<size_t>(newId) >= emitters.size() || emitters[newId] == nullptr) newId = -1;
         }
 
         m_selectedEmitterId = newId;
@@ -211,8 +217,8 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         if (m_emit)
         {
             json env = {
-                {"type",    "evt"},
-                {"kind",    "emitters/selected"},
+                {"type", "evt"},
+                {"kind", "emitters/selected"},
                 {"payload", json{{"id", newId < 0 ? json(nullptr) : json(newId)}}},
             };
             m_emit(env);
@@ -223,7 +229,6 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         EmitEngineStateChanged();
         return true;
     }
-
 
     // -------- emitters/import-from-file ------------------
     //
@@ -264,8 +269,8 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
             ctx.SendErr("no emitters selected");
             return true;
         }
-        std::wstring path = Utf8ToWide(path8);
-        std::string err;
+        std::wstring                    path = Utf8ToWide(path8);
+        std::string                     err;
         std::unique_ptr<ParticleSystem> tmp = LoadParticleSystem(path, &err);
         if (!tmp)
         {
@@ -276,9 +281,10 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         // request imports nothing, so it must not push an undo snapshot or
         // dirty the document (no dirty on a no-op). In-range picks
         // keep their order.
-        const size_t srcCount = tmp->getEmitters().size();
+        const size_t        srcCount = tmp->getEmitters().size();
         std::vector<size_t> validPicks;
-        for (size_t p : picks) if (p < srcCount) validPicks.push_back(p);
+        for (size_t p : picks)
+            if (p < srcCount) validPicks.push_back(p);
         if (validPicks.empty())
         {
             ctx.SendErr("no valid emitters to import");
@@ -289,9 +295,8 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         // leaves a stray undo entry.
         captureUndo();
         ParticleSystem* sys = m_pParticleSystem->get();
-        size_t n = sys->ImportEmittersFrom(
-            *tmp, validPicks,
-            [sys](const std::string& nm) { return GenerateDuplicateName(sys, nm); });
+        size_t n = sys->ImportEmittersFrom(*tmp, validPicks,
+                                           [sys](const std::string& nm) { return GenerateDuplicateName(sys, nm); });
         ctx.SendOk(json{{"ok", true}, {"imported", static_cast<int>(n)}});
         // Only signal a mutation if something actually imported (n could be 0
         // only if every clone threw — a corrupt source that still loaded).
@@ -316,7 +321,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
     // becomes a root via `insertEmitterAfter`.
     if (kind == "emitters/duplicate")
     {
-        int id = params.value("id", -1);
+        int                      id     = params.value("id", -1);
         ParticleSystem::Emitter* source = getEmitterById(id);
         if (source == nullptr)
         {
@@ -329,16 +334,16 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
 
         captureUndo();
 
-        ParticleSystem* sys = m_pParticleSystem->get();
-        ParticleSystem::Emitter* dup = nullptr;
-        MemoryFile* memfile = new MemoryFile;
+        ParticleSystem*          sys     = m_pParticleSystem->get();
+        ParticleSystem::Emitter* dup     = nullptr;
+        MemoryFile*              memfile = new MemoryFile;
         try
         {
             ChunkWriter writer(memfile);
             source->copy(writer);
 
             memfile->seek(0);
-            ChunkReader reader(memfile);
+            ChunkReader             reader(memfile);
             ParticleSystem::Emitter cleanCopy(reader);
 
             // Auto-suffix the name to avoid collisions; mirrors the
@@ -374,7 +379,6 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         return true;
     }
 
-
     // -------- emitters/duplicate-many --------------------------------
     //
     // Batch duplicate: clone each selected emitter (the same single-emitter
@@ -400,8 +404,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         {
             for (const auto& j : params["ids"])
             {
-                ParticleSystem::Emitter* e =
-                    getEmitterById(j.is_number_integer() ? j.get<int>() : -1);
+                ParticleSystem::Emitter* e = getEmitterById(j.is_number_integer() ? j.get<int>() : -1);
                 if (e != nullptr) sources.push_back(e);
             }
         }
@@ -419,17 +422,17 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         dups.reserve(sources.size());
         for (ParticleSystem::Emitter* src : sources)
         {
-            ParticleSystem::Emitter* dup = nullptr;
-            MemoryFile* memfile = new MemoryFile;
+            ParticleSystem::Emitter* dup     = nullptr;
+            MemoryFile*              memfile = new MemoryFile;
             try
             {
                 ChunkWriter writer(memfile);
                 src->copy(writer);
                 memfile->seek(0);
-                ChunkReader reader(memfile);
+                ChunkReader             reader(memfile);
                 ParticleSystem::Emitter cleanCopy(reader);
                 cleanCopy.name = GenerateDuplicateName(sys, src->name);
-                dup = sys->insertEmitterAfter(src, cleanCopy);
+                dup            = sys->insertEmitterAfter(src, cleanCopy);
             }
             catch (...)
             {
@@ -451,8 +454,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         }
 
         json newIds = json::array();
-        for (ParticleSystem::Emitter* dup : dups)
-            newIds.push_back(static_cast<int>(dup->index));
+        for (ParticleSystem::Emitter* dup : dups) newIds.push_back(static_cast<int>(dup->index));
 
         ctx.SendOk(json{{"ok", true}, {"newIds", newIds}});
         ctx.MarkDirty();
@@ -463,7 +465,6 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         return true;
     }
 
-
     // -------- emitters/delete ---------------------------------------
     //
     // Mirrors the legacy Win32 editor's `EmitterList_DeleteEmitter`.
@@ -472,7 +473,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
     // identity because every positional id above the deletion can shift.
     if (kind == "emitters/delete")
     {
-        int id = params.value("id", -1);
+        int                      id     = params.value("id", -1);
         ParticleSystem::Emitter* target = getEmitterById(id);
         if (target == nullptr)
         {
@@ -484,7 +485,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
 
         captureUndo();
 
-        ParticleSystem* sys = m_pParticleSystem->get();
+        ParticleSystem*    sys              = m_pParticleSystem->get();
         const unsigned int selectedStableId = selectedEmitterStableId();
         sys->deleteEmitter(target);
         reconcileSelectionAfterDeletion(selectedStableId);
@@ -502,7 +503,6 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         EmitEmittersTreeChanged();
         return true;
     }
-
 
     // -------- emitters/delete-many ----------------------------------
     //
@@ -544,9 +544,9 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         captureUndo();
 
         std::sort(ids.begin(), ids.end(), std::greater<int>());
-        ParticleSystem* sys = m_pParticleSystem->get();
+        ParticleSystem*    sys              = m_pParticleSystem->get();
         const unsigned int selectedStableId = selectedEmitterStableId();
-        int deleted = 0;
+        int                deleted          = 0;
         for (int id : ids)
         {
             ParticleSystem::Emitter* target = getEmitterById(id);
@@ -555,8 +555,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
             deleted++;
         }
 
-        if (deleted > 0)
-            reconcileSelectionAfterDeletion(selectedStableId);
+        if (deleted > 0) reconcileSelectionAfterDeletion(selectedStableId);
         ctx.SendOk(json::object());
         if (deleted > 0)
         {
@@ -571,7 +570,6 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         return true;
     }
 
-
     // -------- emitters/rename ---------------------------------------
     //
     // The legacy editor used an inline tree-view edit (EmitterList_RenameEmitter
@@ -580,8 +578,8 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
     // mid-edit Ctrl-Z weirdness.
     if (kind == "emitters/rename")
     {
-        int id = params.value("id", -1);
-        std::string name = params.value("name", std::string{});
+        int                      id     = params.value("id", -1);
+        std::string              name   = params.value("name", std::string{});
         ParticleSystem::Emitter* target = getEmitterById(id);
         if (target == nullptr)
         {
@@ -598,7 +596,6 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         return true;
     }
 
-
     // -------- emitters/duplicate-with-index-increment ---------------
     //
     // Legacy `EmitterList_DuplicateEmitter(hWnd, indexDelta)`. Duplicate
@@ -609,8 +606,8 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
     // t=0 with value=delta.
     if (kind == "emitters/duplicate-with-index-increment")
     {
-        int id = params.value("id", -1);
-        float delta = params.value("delta", 0.0f);
+        int                      id     = params.value("id", -1);
+        float                    delta  = params.value("delta", 0.0f);
         ParticleSystem::Emitter* source = getEmitterById(id);
         if (source == nullptr)
         {
@@ -620,7 +617,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
 
         captureUndo();
 
-        ParticleSystem* sys = m_pParticleSystem->get();
+        ParticleSystem*          sys = m_pParticleSystem->get();
         ParticleSystem::Emitter* dup = DuplicateEmitterWithIndexShift(sys, source, delta);
         if (dup == nullptr)
         {
@@ -646,11 +643,11 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
     // response.newIds are the copies in creation order.
     if (kind == "emitters/duplicate-with-index-increment-many")
     {
-        int id = params.value("id", -1);
+        int   id    = params.value("id", -1);
         float delta = params.value("delta", 0.0f);
-        int count = params.value("count", 1);
-        if (count < 1)   count = 1;
-        if (count > 999) count = 999;   // match the dialog spinner's range
+        int   count = params.value("count", 1);
+        if (count < 1) count = 1;
+        if (count > 999) count = 999; // match the dialog spinner's range
 
         ParticleSystem::Emitter* source = getEmitterById(id);
         if (source == nullptr)
@@ -661,8 +658,8 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
 
         captureUndo();
 
-        ParticleSystem* sys = m_pParticleSystem->get();
-        std::vector<int> newIds;
+        ParticleSystem*          sys = m_pParticleSystem->get();
+        std::vector<int>         newIds;
         ParticleSystem::Emitter* cur = source;
         for (int i = 0; i < count; ++i)
         {
@@ -684,7 +681,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
                 return true;
             }
             newIds.push_back(static_cast<int>(dup->index));
-            cur = dup;   // chain: next copy is made from this one
+            cur = dup; // chain: next copy is made from this one
         }
 
         ctx.SendOk(json{{"newIds", newIds}});
@@ -696,7 +693,6 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         return true;
     }
 
-
     // -------- add child / move / link-group memb -
 
     // -------- emitters/add-lifetime-child ---------------------------
@@ -707,16 +703,15 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
     // return the new emitter's index in getEmitters().
     if (kind == "emitters/add-lifetime-child")
     {
-        int parentId = params.value("parentId", -1);
-        ParticleSystem::Emitter* parent = getEmitterById(parentId);
+        int                      parentId = params.value("parentId", -1);
+        ParticleSystem::Emitter* parent   = getEmitterById(parentId);
         if (parent == nullptr || m_pParticleSystem == nullptr || !*m_pParticleSystem)
         {
             ctx.SendOk(json{{"newId", -1}});
             return true;
         }
         captureUndo();
-        ParticleSystem::Emitter* child =
-            (*m_pParticleSystem)->addLifetimeEmitter(parent);
+        ParticleSystem::Emitter* child = (*m_pParticleSystem)->addLifetimeEmitter(parent);
         if (child == nullptr)
         {
             ctx.SendOk(json{{"newId", -1}});
@@ -730,7 +725,6 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         EmitEmittersTreeChanged();
         return true;
     }
-
 
     // -------- emitters/add-root --------------------------------------
     //
@@ -747,8 +741,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
             return true;
         }
         captureUndo();
-        ParticleSystem::Emitter* child =
-            (*m_pParticleSystem)->addRootEmitter();
+        ParticleSystem::Emitter* child = (*m_pParticleSystem)->addRootEmitter();
         if (child == nullptr)
         {
             ctx.SendOk(json{{"newId", -1}});
@@ -763,20 +756,18 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         return true;
     }
 
-
     // -------- emitters/add-death-child -------------------------------
     if (kind == "emitters/add-death-child")
     {
-        int parentId = params.value("parentId", -1);
-        ParticleSystem::Emitter* parent = getEmitterById(parentId);
+        int                      parentId = params.value("parentId", -1);
+        ParticleSystem::Emitter* parent   = getEmitterById(parentId);
         if (parent == nullptr || m_pParticleSystem == nullptr || !*m_pParticleSystem)
         {
             ctx.SendOk(json{{"newId", -1}});
             return true;
         }
         captureUndo();
-        ParticleSystem::Emitter* child =
-            (*m_pParticleSystem)->addDeathEmitter(parent);
+        ParticleSystem::Emitter* child = (*m_pParticleSystem)->addDeathEmitter(parent);
         if (child == nullptr)
         {
             ctx.SendOk(json{{"newId", -1}});
@@ -790,7 +781,6 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         EmitEmittersTreeChanged();
         return true;
     }
-
 
     // -------- emitters/move ------------------------------------------
     //
@@ -802,9 +792,9 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
     // a refusal is defensive). Always sends `{}` to match the schema.
     if (kind == "emitters/move")
     {
-        int id = params.value("id", -1);
-        std::string dirStr = params.value("direction", std::string{"up"});
-        int dir = (dirStr == "down") ? +1 : -1;
+        int                      id     = params.value("id", -1);
+        std::string              dirStr = params.value("direction", std::string{"up"});
+        int                      dir    = (dirStr == "down") ? +1 : -1;
         ParticleSystem::Emitter* target = getEmitterById(id);
         if (target == nullptr || m_pParticleSystem == nullptr || !*m_pParticleSystem)
         {
@@ -823,7 +813,6 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         return true;
     }
 
-
     // -------- emitters/move-many -------------------------------------
     //
     // Batch reorder: move the selected ROOT emitters up/down by one as a UNIT
@@ -841,15 +830,14 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
             return true;
         }
         const std::string dirStr = params.value("direction", std::string{"up"});
-        const int dir = (dirStr == "down") ? +1 : -1;
+        const int         dir    = (dirStr == "down") ? +1 : -1;
 
         std::vector<ParticleSystem::Emitter*> targets;
         if (params.contains("ids") && params["ids"].is_array())
         {
             for (const auto& j : params["ids"])
             {
-                ParticleSystem::Emitter* e =
-                    getEmitterById(j.is_number_integer() ? j.get<int>() : -1);
+                ParticleSystem::Emitter* e = getEmitterById(j.is_number_integer() ? j.get<int>() : -1);
                 if (e != nullptr) targets.push_back(e);
             }
         }
@@ -859,8 +847,9 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
             return true;
         }
 
-        ParticleSystem* sys = m_pParticleSystem->get();
-        auto isSel = [&](ParticleSystem::Emitter* e) {
+        ParticleSystem* sys   = m_pParticleSystem->get();
+        auto            isSel = [&](ParticleSystem::Emitter* e)
+        {
             return std::find(targets.begin(), targets.end(), e) != targets.end();
         };
 
@@ -877,19 +866,18 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         // processed ascending (up) / descending (down) so each one's neighbour
         // is already an unselected root when it swaps.
         std::vector<ParticleSystem::Emitter*> movable;
-        const bool edgePinned =
-            !roots.empty() && isSel(dir == -1 ? roots.front() : roots.back());
+        const bool edgePinned = !roots.empty() && isSel(dir == -1 ? roots.front() : roots.back());
         if (!edgePinned)
         {
             if (dir == -1)
             {
                 for (size_t i = 0; i < roots.size(); ++i)
-                    if (isSel(roots[i])) movable.push_back(roots[i]);   // ascending
+                    if (isSel(roots[i])) movable.push_back(roots[i]); // ascending
             }
             else
             {
-                for (size_t i = roots.size(); i-- > 0; )
-                    if (isSel(roots[i])) movable.push_back(roots[i]);   // descending
+                for (size_t i = roots.size(); i-- > 0;)
+                    if (isSel(roots[i])) movable.push_back(roots[i]); // descending
             }
         }
 
@@ -899,8 +887,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
             if (sys->moveEmitter(e, dir)) anyMoved = true;
 
         json newIds = json::array();
-        for (ParticleSystem::Emitter* e : targets)
-            newIds.push_back(static_cast<int>(e->index));
+        for (ParticleSystem::Emitter* e : targets) newIds.push_back(static_cast<int>(e->index));
 
         ctx.SendOk(json{{"newIds", newIds}});
         if (anyMoved)
@@ -912,7 +899,6 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         return true;
     }
 
-
     // -------- emitters/set-visible -----------------------------------
     //
     // Per-emitter visibility toggle for the EmitterTree
@@ -923,9 +909,9 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
     // re-renders and any open inspector reflects the new flag.
     if (kind == "emitters/set-visible")
     {
-        int  id      = params.value("id", -1);
-        bool visible = params.value("visible", true);
-        ParticleSystem::Emitter* target = getEmitterById(id);
+        int                      id      = params.value("id", -1);
+        bool                     visible = params.value("visible", true);
+        ParticleSystem::Emitter* target  = getEmitterById(id);
         if (target == nullptr)
         {
             ctx.SendOk(json::object());
@@ -937,7 +923,6 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         EmitEmittersTreeChanged();
         return true;
     }
-
 
     // -------- emitters/set-all-visible -------------------------------
     //
@@ -964,7 +949,6 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         EmitEmittersTreeChanged();
         return true;
     }
-
 
     // -------- emitters/drop ----------------------
     //
@@ -999,8 +983,8 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
             ctx.SendOk(json{{"ok", false}, {"error", "particle system not bound"}});
             return true;
         }
-        std::string mode = params.value("mode", std::string{});
-        int id = params.value("id", -1);
+        std::string              mode   = params.value("mode", std::string{});
+        int                      id     = params.value("id", -1);
         ParticleSystem::Emitter* source = getEmitterById(id);
         if (source == nullptr)
         {
@@ -1014,7 +998,8 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         // emitters/selected event this emits. `source` is the same Emitter
         // object across the move, so its new index is its position in the
         // (now-reordered) flat emitter vector.
-        auto reselectMovedEmitter = [&]() {
+        auto reselectMovedEmitter = [&]()
+        {
             const auto& es = (*m_pParticleSystem)->getEmitters();
             for (size_t i = 0; i < es.size(); ++i)
             {
@@ -1026,8 +1011,8 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
                     if (m_emit)
                     {
                         json env = {
-                            {"type",    "evt"},
-                            {"kind",    "emitters/selected"},
+                            {"type", "evt"},
+                            {"kind", "emitters/selected"},
                             {"payload", json{{"id", json(m_selectedEmitterId)}}},
                         };
                         m_emit(env);
@@ -1045,8 +1030,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
                 ctx.SendOk(json{{"ok", false}, {"error", "invalid rootIndex"}});
                 return true;
             }
-            const bool ok = (*m_pParticleSystem)->moveEmitterToRootIndex(
-                source, static_cast<size_t>(rootIndex));
+            const bool ok = (*m_pParticleSystem)->moveEmitterToRootIndex(source, static_cast<size_t>(rootIndex));
             if (!ok)
             {
                 ctx.SendOk(json{{"ok", false}, {"error", "reorder refused"}});
@@ -1061,17 +1045,16 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         }
         if (mode == "reparent")
         {
-            int targetId = params.value("targetId", -1);
-            std::string slot = params.value("slot", std::string{"lifetime"});
-            ParticleSystem::Emitter* target = getEmitterById(targetId);
+            int                      targetId = params.value("targetId", -1);
+            std::string              slot     = params.value("slot", std::string{"lifetime"});
+            ParticleSystem::Emitter* target   = getEmitterById(targetId);
             if (target == nullptr)
             {
                 ctx.SendOk(json{{"ok", false}, {"error", "target emitter not found"}});
                 return true;
             }
             const bool useDuringLife = (slot != "death");
-            const bool ok = (*m_pParticleSystem)->reparentEmitter(
-                source, target, useDuringLife);
+            const bool ok            = (*m_pParticleSystem)->reparentEmitter(source, target, useDuringLife);
             if (!ok)
             {
                 ctx.SendOk(json{{"ok", false}, {"error", "reparent refused"}});
@@ -1089,7 +1072,6 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         ctx.SendOk(json{{"ok", false}, {"error", "unknown mode"}});
         return true;
     }
-
 
     // -------- emitters/reorder-many (multi-select drag-reorder) ------
     //
@@ -1124,8 +1106,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         {
             for (const auto& j : params["ids"])
             {
-                ParticleSystem::Emitter* e =
-                    getEmitterById(j.is_number_integer() ? j.get<int>() : -1);
+                ParticleSystem::Emitter* e = getEmitterById(j.is_number_integer() ? j.get<int>() : -1);
                 if (e == nullptr)
                 {
                     ctx.SendOk(json{{"ok", false}, {"error", "emitter not found"}});
@@ -1146,8 +1127,8 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         }
         captureUndo();
         std::vector<size_t> outNewIds;
-        const bool ok = (*m_pParticleSystem)->reorderManyRootsToIndex(
-            selection, static_cast<size_t>(rootIndex), outNewIds);
+        const bool          ok =
+            (*m_pParticleSystem)->reorderManyRootsToIndex(selection, static_cast<size_t>(rootIndex), outNewIds);
         if (!ok)
         {
             ctx.SendOk(json{{"ok", false}, {"error", "reorder refused"}});
@@ -1162,8 +1143,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx)
         return true;
     }
 
-
-    return false;   // kind not in this domain
+    return false; // kind not in this domain
 }
 
 } // namespace host

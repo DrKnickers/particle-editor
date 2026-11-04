@@ -4,16 +4,17 @@
 #include "BridgeDispatcher.h"
 #include "BridgeDispatchShared.h"
 #include "BridgeRequestContext.h"
-#include "CameraParams.h"         // ReadCameraParams (engine/set/camera validation)
+#include "CameraParams.h" // ReadCameraParams (engine/set/camera validation)
 
-#include "StringConv.h"           // host::Utf8ToWide / WideToUtf8
-#include "gamedata/ModManager.h"      // activeModPath in the state snapshot
-#include "effect/Rescale.h"              // DoRescaleEmitter (engine/action/rescale-*)
-#include "effect/RefTransformUndoKey.h"  // RefTransformCoalesceKey (set/reference-object-transform)
+#include "StringConv.h"                 // host::Utf8ToWide / WideToUtf8
+#include "gamedata/ModManager.h"        // activeModPath in the state snapshot
+#include "effect/Rescale.h"             // DoRescaleEmitter (engine/action/rescale-*)
+#include "effect/RefTransformUndoKey.h" // RefTransformCoalesceKey (set/reference-object-transform)
 
 using nlohmann::json;
 
-namespace host {
+namespace host
+{
 
 bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
 {
@@ -34,9 +35,8 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         }
         if (!ctx.RequireEngine(kind.c_str())) return true;
 
-        const std::string action =
-            params.value("action", std::string("query"));
-        bool frameReady = !m_engine->DeviceCallsBlocked();
+        const std::string action     = params.value("action", std::string("query"));
+        bool              frameReady = !m_engine->DeviceCallsBlocked();
         if (action == "arm")
         {
             if (!m_engine->SetDeviceRecoveryWorkHoldForTesting(true))
@@ -53,9 +53,8 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         }
         else if (action == "inject-query-result")
         {
-            const std::string result =
-                params.value("result", std::string());
-            const int repeatCount = params.value("repeatCount", 1);
+            const std::string result      = params.value("result", std::string());
+            const int         repeatCount = params.value("repeatCount", 1);
             if (repeatCount < 1 || repeatCount > 100001)
             {
                 ctx.SendErr("query result repeatCount must be 1..100001");
@@ -74,9 +73,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
                 ctx.SendErr("unknown end-frame query result");
                 return true;
             }
-            m_engine->InjectEndFrameQueryResultForTesting(
-                queryResult,
-                static_cast<uint32_t>(repeatCount));
+            m_engine->InjectEndFrameQueryResultForTesting(queryResult, static_cast<uint32_t>(repeatCount));
         }
         else if (action == "clear-query-result")
         {
@@ -91,22 +88,14 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         ctx.SendOk({
             {"pending", m_engine->TextureReloadPendingForTesting()},
             {"reloadCount", m_engine->TextureReloadApplyCountForTesting()},
-            {"authoredApplyCount",
-             m_engine->ParticleSystemChangeApplyCountForTesting()},
-            {"deviceProbeCount",
-             m_engine->DeviceStateProbeCountForTesting()},
-            {"composedFramePrepareCount",
-             m_engine->ComposedFramePrepareCountForTesting()},
-            {"endFrameQueryCreateCount",
-             m_engine->EndFrameQueryCreateCountForTesting()},
-            {"endFrameQueryFailureCount",
-             m_engine->EndFrameQueryFailureCountForTesting()},
-            {"endFrameQueryTimeoutCount",
-             m_engine->EndFrameQueryTimeoutCountForTesting()},
-            {"endFrameQueryOverrideConsumedCount",
-             m_engine->EndFrameQueryOverrideConsumedCountForTesting()},
-            {"endFrameQueryOverrideRemaining",
-             m_engine->EndFrameQueryOverrideRemainingForTesting()},
+            {"authoredApplyCount", m_engine->ParticleSystemChangeApplyCountForTesting()},
+            {"deviceProbeCount", m_engine->DeviceStateProbeCountForTesting()},
+            {"composedFramePrepareCount", m_engine->ComposedFramePrepareCountForTesting()},
+            {"endFrameQueryCreateCount", m_engine->EndFrameQueryCreateCountForTesting()},
+            {"endFrameQueryFailureCount", m_engine->EndFrameQueryFailureCountForTesting()},
+            {"endFrameQueryTimeoutCount", m_engine->EndFrameQueryTimeoutCountForTesting()},
+            {"endFrameQueryOverrideConsumedCount", m_engine->EndFrameQueryOverrideConsumedCountForTesting()},
+            {"endFrameQueryOverrideRemaining", m_engine->EndFrameQueryOverrideRemainingForTesting()},
             {"frameReady", frameReady},
         });
         return true;
@@ -116,17 +105,17 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
     if (kind == "engine/state/snapshot")
     {
         if (!ctx.RequireEngine("snapshot")) return true;
-        json spawnerJson = BuildSpawnerStateJson();
+        json               spawnerJson   = BuildSpawnerStateJson();
         const std::wstring activeModPath = m_modManager ? m_modManager->GetPrimaryLayerPath() : std::wstring();
-        const bool leaveParticles = (m_pParticleSystem != nullptr && *m_pParticleSystem)
-            ? (*m_pParticleSystem)->getLeaveParticles()
-            : true;
+        const bool         leaveParticles =
+            (m_pParticleSystem != nullptr && *m_pParticleSystem) ? (*m_pParticleSystem)->getLeaveParticles() : true;
         const bool canUndo = ComputeCanUndo();
         const bool canRedo = m_undo ? m_undo->CanRedo() : false;
-        ctx.SendOk(BuildEngineStateSnapshot(m_engine, m_currentFilePath, m_dirty, spawnerJson, m_selectedEmitterId, activeModPath, leaveParticles, canUndo, canRedo, !m_emitterClipboard.empty()));
+        ctx.SendOk(BuildEngineStateSnapshot(m_engine, m_currentFilePath, m_dirty, spawnerJson, m_selectedEmitterId,
+                                            activeModPath, leaveParticles, canUndo, canRedo,
+                                            !m_emitterClipboard.empty()));
         return true;
     }
-
 
     // -------- engine/set/* (17 handlers) --------
     if (kind == "engine/set/ground")
@@ -140,8 +129,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         const bool enabled = params.value("enabled", false);
         m_engine->SetGround(enabled);
         ctx.SendOk(json::object());
-        if (PersistsUserState())
-            PersistShowGround(enabled);
+        if (PersistsUserState()) PersistShowGround(enabled);
         EmitEngineStateChanged();
         return true;
     }
@@ -160,11 +148,11 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         // Invalid/unavailable slots stay put; a decode failure can instead
         // fall back to dirt. Report and dirty against the state actually
         // reached, independently of whether the requested slot applied.
-        const int requestedSlot = params.value("slot", 0);
-        const int previousSlot = m_engine->GetGroundTexture();
-        const bool applied = m_engine->SetGroundTexture(requestedSlot);
-        const int actualSlot = m_engine->GetGroundTexture();
-        ctx.SendOk({ {"slot", actualSlot}, {"applied", applied} });
+        const int  requestedSlot = params.value("slot", 0);
+        const int  previousSlot  = m_engine->GetGroundTexture();
+        const bool applied       = m_engine->SetGroundTexture(requestedSlot);
+        const int  actualSlot    = m_engine->GetGroundTexture();
+        ctx.SendOk({{"slot", actualSlot}, {"applied", applied}});
         if (actualSlot != previousSlot) ctx.MarkDirty();
         EmitEngineStateChanged();
         return true;
@@ -182,8 +170,8 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
     if (kind == "engine/set/ground-slot-custom-path")
     {
         if (!ctx.RequireEngine(kind.c_str())) return true;
-        int slot = params.value("slot", -1);
-        std::string p = params.value("path", std::string{});
+        int         slot = params.value("slot", -1);
+        std::string p    = params.value("path", std::string{});
         // The setter's bool was dropped here, so a refused path still answered
         // {ok:true} — the silent-success shape, telling the user it took when it did not.
         if (!m_engine->SetGroundSlotCustomPath(slot, Utf8ToWide(p)))
@@ -199,16 +187,15 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
     if (kind == "engine/set/skydome-slot")
     {
         if (!ctx.RequireEngine(kind.c_str())) return true;
-        const int requestedSlot = params.value("slot", 0);
-        const int previousSlot = m_engine->GetSkydomeSlot();
-        const bool applied = m_engine->SetSkydomeSlot(requestedSlot);
-        const int actualSlot = m_engine->GetSkydomeSlot();
+        const int  requestedSlot = params.value("slot", 0);
+        const int  previousSlot  = m_engine->GetSkydomeSlot();
+        const bool applied       = m_engine->SetSkydomeSlot(requestedSlot);
+        const int  actualSlot    = m_engine->GetSkydomeSlot();
         // Preserve the handler's registry-sync behavior, but persist only the
         // state the engine actually reached. A failed custom load reaches Off;
         // an invalid request keeps (and re-persists) the prior valid slot.
-        if (PersistsUserState())
-            PersistSkydomeIndex(actualSlot);
-        ctx.SendOk({ {"slot", actualSlot}, {"applied", applied} });
+        if (PersistsUserState()) PersistSkydomeIndex(actualSlot);
+        ctx.SendOk({{"slot", actualSlot}, {"applied", applied}});
         if (actualSlot != previousSlot)
         {
             ctx.MarkDirty();
@@ -219,8 +206,8 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
     if (kind == "engine/set/skydome-custom-path")
     {
         if (!ctx.RequireEngine(kind.c_str())) return true;
-        int slot = params.value("slot", -1);
-        std::string p = params.value("path", std::string{});
+        int          slot  = params.value("slot", -1);
+        std::string  p     = params.value("path", std::string{});
         std::wstring wpath = Utf8ToWide(p);
         // Check BEFORE persisting: writing a refused path to the registry
         // would make the refusal durable — the startup restore would
@@ -231,8 +218,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
             return true;
         }
         // Persist the custom slot path (round-trips with legacy).
-        if (PersistsUserState())
-            PersistSkydomeCustomPath(slot, wpath);
+        if (PersistsUserState()) PersistSkydomeCustomPath(slot, wpath);
         ctx.SendOk(json::object());
         ctx.MarkDirty();
         EmitEngineStateChanged();
@@ -249,8 +235,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         SkydomeContext skyCtx = (ctxStr == "land") ? SkydomeContext::Land : SkydomeContext::Space;
         m_engine->SetSkydomeEnvironment(skyCtx, prim, sec);
         if (PersistsUserState())
-            PersistSkydomeEnvironment(skyCtx == SkydomeContext::Land ? 0 : 1,
-                                      Utf8ToWide(prim), Utf8ToWide(sec));
+            PersistSkydomeEnvironment(skyCtx == SkydomeContext::Land ? 0 : 1, Utf8ToWide(prim), Utf8ToWide(sec));
         ctx.SendOk(json::object());
         ctx.MarkDirty();
         EmitEngineStateChanged();
@@ -271,8 +256,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
             // registry tracks the SHOWN object -- otherwise a stale transform from a
             // previous object would be restored onto this one at next startup and
             // float it (the cross-restart tail of the same bug).
-            PersistReferenceObjectTransform(m_engine->GetReferencePosition(),
-                                            m_engine->GetReferenceRotation());
+            PersistReferenceObjectTransform(m_engine->GetReferencePosition(), m_engine->GetReferenceRotation());
         }
         ctx.SendOk(json::object());
         ctx.MarkDirty();
@@ -284,8 +268,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         if (!ctx.RequireEngine(kind.c_str())) return true;
         bool visible = params.value("visible", true);
         m_engine->SetReferenceObjectVisible(visible);
-        if (PersistsUserState())
-            PersistReferenceObjectVisible(visible);
+        if (PersistsUserState()) PersistReferenceObjectVisible(visible);
         ctx.SendOk(json::object());
         ctx.MarkDirty();
         EmitEngineStateChanged();
@@ -296,8 +279,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         if (!ctx.RequireEngine(kind.c_str())) return true;
         bool locked = params.value("locked", false);
         m_engine->SetReferenceLocked(locked);
-        if (PersistsUserState())
-            PersistReferenceObjectLock(locked);
+        if (PersistsUserState()) PersistReferenceObjectLock(locked);
         ctx.SendOk(json::object());
         ctx.MarkDirty();
         EmitEngineStateChanged();
@@ -314,7 +296,11 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         // selectable, so no handle is grabbable), and engine-internal restores
         // (ApplyUndoSnapshot) intentionally still move it, so SetReferenceObjectTransform
         // itself stays ungated.
-        if (m_engine->IsReferenceLocked()) { ctx.SendOk(json::object()); return true; }
+        if (m_engine->IsReferenceLocked())
+        {
+            ctx.SendOk(json::object());
+            return true;
+        }
         D3DXVECTOR3 pos = JsonToVec3(params.value("position", json::array()));
         D3DXVECTOR3 rot = JsonToVec3(params.value("rotation", json::array()));
         // PRE-mutation undo capture, keyed PER changed component
@@ -323,16 +309,15 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         // object) returns key 0 and we push NO entry. ctx.RequireEngine() above
         // guarantees m_engine here, so the getter reads are safe.
         {
-            const D3DXVECTOR3 cp = m_engine->GetReferencePosition();
-            const D3DXVECTOR3 cr = m_engine->GetReferenceRotation();
-            const float inc[6] = { pos.x, pos.y, pos.z, rot.x, rot.y, rot.z };
-            const float cur[6] = { cp.x,  cp.y,  cp.z,  cr.x,  cr.y,  cr.z  };
-            const DWORD refKey = RefTransformCoalesceKey(inc, cur);
+            const D3DXVECTOR3 cp     = m_engine->GetReferencePosition();
+            const D3DXVECTOR3 cr     = m_engine->GetReferenceRotation();
+            const float       inc[6] = {pos.x, pos.y, pos.z, rot.x, rot.y, rot.z};
+            const float       cur[6] = {cp.x, cp.y, cp.z, cr.x, cr.y, cr.z};
+            const DWORD       refKey = RefTransformCoalesceKey(inc, cur);
             if (refKey != 0) CaptureUndoPoint(refKey);
         }
         m_engine->SetReferenceObjectTransform(pos, rot);
-        if (PersistsUserState())
-            PersistReferenceObjectTransform(pos, rot);
+        if (PersistsUserState()) PersistReferenceObjectTransform(pos, rot);
         ctx.SendOk(json::object());
         ctx.MarkDirty();
         EmitEngineStateChanged();
@@ -344,8 +329,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         if (!ctx.RequireEngine(kind.c_str())) return true;
         bool visible = params.value("visible", false);
         m_engine->SetGridVisible(visible);
-        if (PersistsUserState())
-            PersistGrid(visible, m_engine->GetGridSpacing());
+        if (PersistsUserState()) PersistGrid(visible, m_engine->GetGridSpacing());
         ctx.SendOk(json::object());
         ctx.MarkDirty();
         EmitEngineStateChanged();
@@ -356,8 +340,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         if (!ctx.RequireEngine(kind.c_str())) return true;
         float spacing = params.value("spacing", 20.0f);
         m_engine->SetGridSpacing(spacing);
-        if (PersistsUserState())
-            PersistGrid(m_engine->GetGridVisible(), m_engine->GetGridSpacing());
+        if (PersistsUserState()) PersistGrid(m_engine->GetGridVisible(), m_engine->GetGridSpacing());
         ctx.SendOk(json::object());
         ctx.MarkDirty();
         EmitEngineStateChanged();
@@ -370,8 +353,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         if (!ctx.RequireEngine(kind.c_str())) return true;
         bool enabled = params.value("enabled", false);
         m_engine->SetSnapEnabled(enabled);
-        if (PersistsUserState())
-            PersistSnap(enabled);
+        if (PersistsUserState()) PersistSnap(enabled);
         ctx.SendOk(json::object());
         ctx.MarkDirty();
         EmitEngineStateChanged();
@@ -384,8 +366,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         m_engine->SetBackground(static_cast<COLORREF>(rgb));
         // Persist the solid-colour background (same Background picker as
         // the skydome; previously only markDirty'd, so it was lost on restart).
-        if (PersistsUserState())
-            PersistBackgroundColor(static_cast<COLORREF>(rgb));
+        if (PersistsUserState()) PersistBackgroundColor(static_cast<COLORREF>(rgb));
         ctx.SendOk(json::object());
         ctx.MarkDirty();
         EmitEngineStateChanged();
@@ -497,11 +478,11 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
     if (kind == "engine/set/light")
     {
         if (!ctx.RequireEngine(kind.c_str())) return true;
-        std::string which = params.value("which", std::string{"sun"});
+        std::string   which = params.value("which", std::string{"sun"});
         Engine::Light l;
-        l.Diffuse   = JsonToVec4(params.value("diffuse",   json::array()));
-        l.Specular  = JsonToVec4(params.value("specular",  json::array()));
-        l.Position  = JsonToVec4(params.value("position",  json::array()));
+        l.Diffuse   = JsonToVec4(params.value("diffuse", json::array()));
+        l.Specular  = JsonToVec4(params.value("specular", json::array()));
+        l.Position  = JsonToVec4(params.value("position", json::array()));
         l.Direction = JsonToVec4(params.value("direction", json::array()));
         m_engine->SetLight(ParseLightWhich(which), l);
         ctx.SendOk(json::object());
@@ -553,8 +534,8 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         // defensively; we cache pre-clamp intent for SetEngine reapply
         // (the engine re-clamps on every apply, so the cache needs no
         // clamping of its own).
-        const bool enabled      = params.value("enabled", true);
-        const int  maxParticles = params.value("maxParticles", 15'000);
+        const bool enabled          = params.value("enabled", true);
+        const int  maxParticles     = params.value("maxParticles", 15'000);
         m_overloadGuardCached       = true;
         m_overloadGuardEnabled      = enabled;
         m_overloadGuardMaxParticles = maxParticles;
@@ -621,8 +602,8 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         }
         double perInstance = params.value("perInstance", 0.0);
         if (perInstance < 0.0) perInstance = 0.0;
-        m_estimatedLoadCached       = true;
-        m_estimatedLoadPerInstance  = perInstance;
+        m_estimatedLoadCached      = true;
+        m_estimatedLoadPerInstance = perInstance;
         // Applying it can clear live instances; an open timeline instead
         // replays with the new cache in its next slot.
         if (m_engine && !m_timeline.active) m_engine->SetEstimatedLoad(perInstance);
@@ -651,9 +632,9 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         m_engine->SetGroundTexture(0);
         m_engine->SetBloom(false);
         m_engine->SetBloomStrength(0.00f);
-        m_engine->SetBloomCutoff (0.90f);
-        m_engine->SetBloomSize   (0.10f);
-        m_engine->SetSkydomeSlot(0);  // "Off"
+        m_engine->SetBloomCutoff(0.90f);
+        m_engine->SetBloomSize(0.10f);
+        m_engine->SetSkydomeSlot(0); // "Off"
         ctx.SendOk(json::object());
         // No markDirty — these are view settings, not particle-system
         // mutations. The user-visible cascade is communicated by a
@@ -661,7 +642,6 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         EmitEngineStateChanged();
         return true;
     }
-
 
     // -------- engine/action/* --------
     if (kind == "engine/action/clear")
@@ -694,7 +674,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
     if (kind == "engine/action/reload-textures")
     {
         if (!ctx.RequireEngine(kind.c_str())) return true;
-        m_engine->InvalidateSkydomeListCache();   // explicit disk re-read -> refresh skydome XML too
+        m_engine->InvalidateSkydomeListCache(); // explicit disk re-read -> refresh skydome XML too
         m_engine->ReloadTextures();
         // Reload re-reads the same filenames with NEW pixels, so the
         // (stack, filename)-keyed preview LRU + thumb cache are stale even
@@ -742,15 +722,15 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
     if (kind == "engine/action/rescale-system")
     {
         float durPct  = params.value("durationScalePercent", 100.0f);
-        float sizePct = params.value("sizeScalePercent",     100.0f);
+        float sizePct = params.value("sizeScalePercent", 100.0f);
         if (m_pParticleSystem == nullptr || !*m_pParticleSystem)
         {
             ctx.SendErr("particle system not bound");
             return true;
         }
-        ParticleSystem* sys = m_pParticleSystem->get();
-        const float timeScale = durPct  / 100.0f;
-        const float sizeScale = sizePct / 100.0f;
+        ParticleSystem* sys       = m_pParticleSystem->get();
+        const float     timeScale = durPct / 100.0f;
+        const float     sizeScale = sizePct / 100.0f;
         // Snapshot BEFORE the mutation, and after the not-bound check so an
         // error path never lands an entry. Mirrors rescale-emitter below.
         captureUndo();
@@ -761,8 +741,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         auto& emitters = sys->getEmitters();
         for (size_t i = 0; i < emitters.size(); ++i)
         {
-            if (emitters[i] != nullptr)
-                DoRescaleEmitter(emitters[i], timeScale, sizeScale);
+            if (emitters[i] != nullptr) DoRescaleEmitter(emitters[i], timeScale, sizeScale);
         }
         ctx.SendOk(json::object());
         ctx.MarkDirty();
@@ -779,7 +758,6 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         return true;
     }
 
-
     // -------- engine/query/* --------
     if (kind == "engine/query/ground-slot-empty")
     {
@@ -793,7 +771,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         std::string ctxStr = params.value("context", std::string{"space"});
         // Renamed from `ctx` on the TU move — it would shadow the
         // BridgeRequestContext parameter.
-        SkydomeContext skyCtx = (ctxStr == "land") ? SkydomeContext::Land : SkydomeContext::Space;
+        SkydomeContext           skyCtx = (ctxStr == "land") ? SkydomeContext::Land : SkydomeContext::Space;
         std::vector<std::string> prim, sec;
         m_engine->EnumerateSkydomeNames(skyCtx, prim, sec);
         json out;
@@ -807,21 +785,21 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
     {
         if (!ctx.RequireEngine(kind.c_str())) return true;
         std::vector<GameObjectRef> objs;
-        m_engine->EnumerateReferenceObjects(objs);   // kicks the off-thread build
+        m_engine->EnumerateReferenceObjects(objs); // kicks the off-thread build
         json arr = json::array();
         for (const GameObjectRef& r : objs)
             // domain/role/bucket from the profile classifier drive the
             // picker's collapsible Heroes / Ground / Space tree (legacy `category` retired).
-            arr.push_back(json{ {"name", r.name},
-                                {"domain", ObjDomainName(r.domain)},
-                                {"role",   ObjRoleName(r.role)},
-                                {"bucket", ObjBucketName(r.bucket)},
-                                {"dualEnv", r.dualEnv},              // a projectile lists under Ground AND Space
-                                {"affiliation", r.affiliation} });   // picker faction filter
+            arr.push_back(json{{"name", r.name},
+                               {"domain", ObjDomainName(r.domain)},
+                               {"role", ObjRoleName(r.role)},
+                               {"bucket", ObjBucketName(r.bucket)},
+                               {"dualEnv", r.dualEnv},           // a projectile lists under Ground AND Space
+                               {"affiliation", r.affiliation}}); // picker faction filter
         // While the catalog builds off the UI thread, `objs` is empty and
         // `building` is true -> the picker shows "Loading objects…" and re-queries when
         // the catalog-ready engine/state/changed event fires (see HostWindow RenderD3D9).
-        ctx.SendOk(json{ {"objects", arr}, {"building", !m_engine->IsReferenceCatalogReady()} });
+        ctx.SendOk(json{{"objects", arr}, {"building", !m_engine->IsReferenceCatalogReady()}});
         return true;
     }
     if (kind == "engine/query/skydome-slot-empty")
@@ -848,17 +826,17 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         for (const LiveParticleSample& sample : m_engine->GetLiveParticleSamples())
         {
             samples.push_back(json{
-                {"instanceIndex",       sample.instanceIndex},
-                {"emitterId",           sample.emitterId},
+                {"instanceIndex", sample.instanceIndex},
+                {"emitterId", sample.emitterId},
                 {"relativeTimePercent", sample.relativeTimePercent},
-                {"scale",               sample.scale},
+                {"scale", sample.scale},
             });
         }
         ctx.SendOk(json{
             {"instances", m_engine->GetNumInstances()},
-            {"emitters",  m_engine->GetNumEmitters()},
+            {"emitters", m_engine->GetNumEmitters()},
             {"particles", m_engine->GetNumParticles()},
-            {"samples",   samples},
+            {"samples", samples},
         });
         return true;
     }
@@ -872,12 +850,11 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
     {
         if (!ctx.RequireEngine(kind.c_str())) return true;
         std::vector<int> supported = m_engine->GetSupportedMsaaLevels();
-        json levels = json::array();
+        json             levels    = json::array();
         for (int s : supported) levels.push_back(s);
-        ctx.SendOk(json{ {"levels", levels}, {"current", m_engine->GetCurrentMsaaLevel()} });
+        ctx.SendOk(json{{"levels", levels}, {"current", m_engine->GetCurrentMsaaLevel()}});
         return true;
     }
-
 
     // -------- engine/action/rescale-emitter -------------------------
     //
@@ -887,10 +864,10 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
     // DoRescaleEmitter once on the chosen emitter.
     if (kind == "engine/action/rescale-emitter")
     {
-        int id = params.value("id", -1);
-        float durPct  = params.value("durationScalePercent", 100.0f);
-        float sizePct = params.value("sizeScalePercent",     100.0f);
-        ParticleSystem::Emitter* target = getEmitterById(id);
+        int                      id      = params.value("id", -1);
+        float                    durPct  = params.value("durationScalePercent", 100.0f);
+        float                    sizePct = params.value("sizeScalePercent", 100.0f);
+        ParticleSystem::Emitter* target  = getEmitterById(id);
         if (target == nullptr)
         {
             ctx.SendErr("emitter not found");
@@ -910,8 +887,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         return true;
     }
 
-
-    return false;   // kind not in this domain
+    return false; // kind not in this domain
 }
 
 } // namespace host

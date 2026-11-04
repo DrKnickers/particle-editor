@@ -19,9 +19,9 @@
 // Expand every `${NAME}` in `in` against `tokens`. On the FIRST unresolved or
 // malformed token, sets `err` and returns `in` unchanged. `err` is empty on success.
 // A bare `$` not followed by `{` is a literal. No nesting.
-inline std::string ExpandPathTokens(const std::string& in,
+inline std::string ExpandPathTokens(const std::string&                        in,
                                     const std::map<std::string, std::string>& tokens,
-                                    std::string& err)
+                                    std::string&                              err)
 {
     err.clear();
     std::string out;
@@ -45,9 +45,13 @@ inline std::string ExpandPathTokens(const std::string& in,
             const auto it = tokens.find(name);
             if (it == tokens.end())
             {
-                err = "unknown path token \"${" + name + "}\" (known: ";
+                err        = "unknown path token \"${" + name + "}\" (known: ";
                 bool first = true;
-                for (const auto& kv : tokens) { err += (first ? "" : ", ") + kv.first; first = false; }
+                for (const auto& kv : tokens)
+                {
+                    err += (first ? "" : ", ") + kv.first;
+                    first = false;
+                }
                 if (first) err += "(none)";
                 err += ")";
                 return in;

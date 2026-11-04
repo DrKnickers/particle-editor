@@ -131,7 +131,7 @@ test("nested types and member functions are not members of Emitter", () => {
 });
 
 test("a planted unmapped member in a scratch copy of the header fails", () => {
-  const planted = particleHeader.replace("float unknown3f;", "float unknown3f;\n\t\tfloat plantedMember;");
+  const planted = particleHeader.replace(/float\s+unknown3f;/, "float unknown3f;\n\t\tfloat plantedMember;");
   assert.notEqual(planted, particleHeader);
   const { persisted, mapped } = sets(dataMembers(emitterBody(planted)), table.Emitter);
   assert.notDeepEqual(persisted, mapped);
@@ -140,7 +140,7 @@ test("a planted unmapped member in a scratch copy of the header fails", () => {
 
 test("a planted array member and a nested declaration are parsed", () => {
   const planted = particleHeader.replace(
-    "float unknown3f;",
+    /float\s+unknown3f;/,
     "float unknown3f;\n\t\tfloat plantedArray[4];\n\t\tstruct Nested { int inner; float other[2]; };\n\t\tstd::map<int, float> plantedMap;",
   );
   const declared = dataMembers(emitterBody(planted));

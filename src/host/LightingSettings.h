@@ -2,7 +2,8 @@
 
 #include <windows.h>
 
-namespace host {
+namespace host
+{
 
 // On-disk registry value names for the persisted lighting split. Floats are
 // REG_BINARY; colours + the force-align flag are REG_DWORD. ONE definition —
@@ -37,23 +38,44 @@ constexpr float kFill2IntensityDefault = 0.50f;
 constexpr float kFill2ZAngleDefault    = 210.0f;
 constexpr float kFill2TiltDefault      = -10.0f;
 constexpr bool  kForceAlignDefault     = true;
-inline COLORREF SunAmbientColorDefault()   { return RGB(40, 40, 50); }
-inline COLORREF SunSpecularColorDefault()  { return RGB(190, 190, 200); }
-inline COLORREF SunDiffuseColorDefault()   { return RGB(180, 180, 190); }
-inline COLORREF SunShadowColorDefault()    { return RGB(100, 100, 110); }
-inline COLORREF Fill1DiffuseColorDefault() { return RGB(60, 80, 160); }
-inline COLORREF Fill2DiffuseColorDefault() { return RGB(60, 80, 160); }
+inline COLORREF SunAmbientColorDefault()
+{
+    return RGB(40, 40, 50);
+}
+inline COLORREF SunSpecularColorDefault()
+{
+    return RGB(190, 190, 200);
+}
+inline COLORREF SunDiffuseColorDefault()
+{
+    return RGB(180, 180, 190);
+}
+inline COLORREF SunShadowColorDefault()
+{
+    return RGB(100, 100, 110);
+}
+inline COLORREF Fill1DiffuseColorDefault()
+{
+    return RGB(60, 80, 160);
+}
+inline COLORREF Fill2DiffuseColorDefault()
+{
+    return RGB(60, 80, 160);
+}
 
 // Force-align fill azimuths (verbatim from the legacy dialog): when ON the fill
 // angles derive from the sun (sun.z + 120° / + 210°, both at -10° tilt); the
 // offsets intentionally equal the fill default azimuths. When OFF the persisted
 // free-edit angles pass through unchanged.
-struct FillAngles { float fill1Z, fill1Tilt, fill2Z, fill2Tilt; };
-inline FillAngles ForceAlignFillAngles(bool forceAlign, float sunZ,
-    float fill1Zp, float fill1Tiltp, float fill2Zp, float fill2Tiltp)
+struct FillAngles
 {
-    if (forceAlign) return { sunZ + 120.0f, -10.0f, sunZ + 210.0f, -10.0f };
-    return { fill1Zp, fill1Tiltp, fill2Zp, fill2Tiltp };
+    float fill1Z, fill1Tilt, fill2Z, fill2Tilt;
+};
+inline FillAngles ForceAlignFillAngles(
+    bool forceAlign, float sunZ, float fill1Zp, float fill1Tiltp, float fill2Zp, float fill2Tiltp)
+{
+    if (forceAlign) return {sunZ + 120.0f, -10.0f, sunZ + 210.0f, -10.0f};
+    return {fill1Zp, fill1Tiltp, fill2Zp, fill2Tiltp};
 }
 
 // The raw persisted lighting split: intensity and colour kept separate, fill
@@ -85,6 +107,6 @@ struct LightingValues
 // nullptr (first run), which yields the defaults. Write stores all 16 into an
 // already-open key opened for writing.
 LightingValues ReadLightingSettings(HKEY hKey);
-void WriteLightingSettings(HKEY hKey, const LightingValues& v);
+void           WriteLightingSettings(HKEY hKey, const LightingValues& v);
 
 } // namespace host

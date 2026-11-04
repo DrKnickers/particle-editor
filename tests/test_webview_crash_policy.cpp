@@ -20,10 +20,19 @@
 using namespace webviewcrash;
 
 static int g_failed = 0;
-#define CHECK(cond, msg) do {                              \
-    if (cond) { std::printf("  ok: %s\n", msg); }          \
-    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
 int main()
 {
@@ -33,8 +42,8 @@ int main()
     for (int interactive = 0; interactive < 2; ++interactive)
         for (int used = 0; used <= kMaxWebReloads; ++used)
             for (int pending = 0; pending < 2; ++pending)
-                if (DecideWebFailure(WebFailure::BrowserExited, interactive != 0, used, pending != 0, 0)
-                    != WebFailureAction::MarkDead)
+                if (DecideWebFailure(WebFailure::BrowserExited, interactive != 0, used, pending != 0, 0) !=
+                    WebFailureAction::MarkDead)
                     CHECK(false, "browser exit must always mark the web dead");
     CHECK(true, "browser exit -> MarkDead in every mode");
 
@@ -56,11 +65,14 @@ int main()
           "headless renderer exit -> MarkDead (no reload)");
 
     // Renderer hang, interactive.
-    CHECK(DecideWebFailure(WebFailure::RenderUnresponsive, true, 0, false, kHangReportsBeforeReload) == WebFailureAction::Reload,
+    CHECK(DecideWebFailure(WebFailure::RenderUnresponsive, true, 0, false, kHangReportsBeforeReload) ==
+              WebFailureAction::Reload,
           "interactive renderer hang -> Reload");
-    CHECK(DecideWebFailure(WebFailure::RenderUnresponsive, true, 0, true, kHangReportsBeforeReload) == WebFailureAction::LogOnly,
+    CHECK(DecideWebFailure(WebFailure::RenderUnresponsive, true, 0, true, kHangReportsBeforeReload) ==
+              WebFailureAction::LogOnly,
           "interactive renderer hang while a reload is pending -> LogOnly (no double spend)");
-    CHECK(DecideWebFailure(WebFailure::RenderUnresponsive, true, kMaxWebReloads, false, kHangReportsBeforeReload) == WebFailureAction::MarkDead,
+    CHECK(DecideWebFailure(WebFailure::RenderUnresponsive, true, kMaxWebReloads, false, kHangReportsBeforeReload) ==
+              WebFailureAction::MarkDead,
           "interactive renderer hang with the budget spent -> MarkDead");
 
     // A single hang report is often transient: only a sustained hang reloads.
@@ -69,8 +81,8 @@ int main()
           "interactive first hang report -> LogOnly (may be transient)");
     CHECK(DecideWebFailure(WebFailure::RenderUnresponsive, true, kMaxWebReloads, false, 1) == WebFailureAction::LogOnly,
           "interactive first hang report with the budget spent -> still LogOnly");
-    CHECK(DecideWebFailure(WebFailure::RenderUnresponsive, true, 0, false, kHangReportsBeforeReload + 5)
-              == WebFailureAction::Reload,
+    CHECK(DecideWebFailure(WebFailure::RenderUnresponsive, true, 0, false, kHangReportsBeforeReload + 5) ==
+              WebFailureAction::Reload,
           "interactive long hang -> Reload");
 
     // Reload deadline: a reload the page never answered marks the web dead,
@@ -82,15 +94,17 @@ int main()
     CHECK(kWebReloadDeadlineMs >= 5000, "the reload deadline leaves time for a real reload");
 
     // Renderer hang, headless: log only; the run's watchdogs bound the wait.
-    CHECK(DecideWebFailure(WebFailure::RenderUnresponsive, false, 0, false, kHangReportsBeforeReload) == WebFailureAction::LogOnly,
+    CHECK(DecideWebFailure(WebFailure::RenderUnresponsive, false, 0, false, kHangReportsBeforeReload) ==
+              WebFailureAction::LogOnly,
           "headless renderer hang -> LogOnly");
-    CHECK(DecideWebFailure(WebFailure::RenderUnresponsive, false, kMaxWebReloads, false, kHangReportsBeforeReload) == WebFailureAction::LogOnly,
+    CHECK(DecideWebFailure(WebFailure::RenderUnresponsive, false, kMaxWebReloads, false, kHangReportsBeforeReload) ==
+              WebFailureAction::LogOnly,
           "headless renderer hang past the budget -> LogOnly");
 
     // Self-recovering kinds: log only, everywhere.
     for (int interactive = 0; interactive < 2; ++interactive)
-        CHECK(DecideWebFailure(WebFailure::Other, interactive != 0, kMaxWebReloads, false, kHangReportsBeforeReload)
-                  == WebFailureAction::LogOnly,
+        CHECK(DecideWebFailure(WebFailure::Other, interactive != 0, kMaxWebReloads, false, kHangReportsBeforeReload) ==
+                  WebFailureAction::LogOnly,
               "other process kinds -> LogOnly");
 
     CHECK(kMaxWebReloads >= 1, "the reload budget allows at least one reload");
@@ -98,14 +112,13 @@ int main()
 
     // Dead-web close plan.
     {
-        const DeadWebClosePlan p = PlanDeadWebClose(/*dirty*/true, /*interactive*/true);
+        const DeadWebClosePlan p = PlanDeadWebClose(/*dirty*/ true, /*interactive*/ true);
         CHECK(p.writeRecoveryHandoff && p.keepAutosaveSession && p.notifyUser,
               "dirty interactive: handoff + keep session + notify");
     }
     {
         const DeadWebClosePlan p = PlanDeadWebClose(false, true);
-        CHECK(!p.writeRecoveryHandoff && !p.keepAutosaveSession && p.notifyUser,
-              "clean interactive: notify only");
+        CHECK(!p.writeRecoveryHandoff && !p.keepAutosaveSession && p.notifyUser, "clean interactive: notify only");
     }
     {
         const DeadWebClosePlan p = PlanDeadWebClose(true, false);
@@ -114,8 +127,7 @@ int main()
     }
     {
         const DeadWebClosePlan p = PlanDeadWebClose(false, false);
-        CHECK(!p.writeRecoveryHandoff && !p.keepAutosaveSession && !p.notifyUser,
-              "clean headless: nothing");
+        CHECK(!p.writeRecoveryHandoff && !p.keepAutosaveSession && !p.notifyUser, "clean headless: nothing");
     }
 
     std::printf("%s\n", g_failed ? "=== FAILED ===" : "=== ALL PASS ===");

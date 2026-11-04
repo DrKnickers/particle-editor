@@ -9,18 +9,25 @@
 
 #include <string>
 
-namespace host {
+namespace host
+{
 
 // The QPC frequency is fixed for the process lifetime, so cache it once.
 inline LONGLONG PerfQpcFreq()
 {
     static LONGLONG freq = 0;
-    if (freq == 0) { LARGE_INTEGER f; if (QueryPerformanceFrequency(&f)) freq = f.QuadPart; }
+    if (freq == 0)
+    {
+        LARGE_INTEGER f;
+        if (QueryPerformanceFrequency(&f)) freq = f.QuadPart;
+    }
     return freq;
 }
 inline LONGLONG PerfQpcNow()
 {
-    LARGE_INTEGER t; QueryPerformanceCounter(&t); return t.QuadPart;
+    LARGE_INTEGER t;
+    QueryPerformanceCounter(&t);
+    return t.QuadPart;
 }
 
 // Elapsed milliseconds from a QPC tick delta. Guarded for freq<=0 (QPC
@@ -28,9 +35,7 @@ inline LONGLONG PerfQpcNow()
 // iteration counter.
 inline double QpcMs(LONGLONG deltaTicks, LONGLONG freq)
 {
-    return freq > 0
-        ? static_cast<double>(deltaTicks) * 1000.0 / static_cast<double>(freq)
-        : 0.0;
+    return freq > 0 ? static_cast<double>(deltaTicks) * 1000.0 / static_cast<double>(freq) : 0.0;
 }
 
 // Insert `suffix` before the filename's extension, e.g. ("C:\\a\\b.png",
@@ -51,6 +56,6 @@ inline std::wstring DeriveSibling(const std::wstring& path, const std::wstring& 
     return path + suffix + L".png";
 }
 
-}  // namespace host
+} // namespace host
 
-#endif  // HOST_RUN_UTIL_H
+#endif // HOST_RUN_UTIL_H

@@ -5,15 +5,16 @@
 
 #include "CaptureTicker.h"
 
-#include "HostRunUtil.h"   // DeriveSibling
+#include "HostRunUtil.h" // DeriveSibling
 
 #include <cstdarg>
 #include <cstdio>
 
-namespace host {
+namespace host
+{
 
-void CaptureTicker::SetHooks(SleepFn sleep, NowMsFn now, ReadyFn uiReady,
-                             ReadyFn layoutReady, StepClockFn stepClock, LogFn log)
+void CaptureTicker::SetHooks(
+    SleepFn sleep, NowMsFn now, ReadyFn uiReady, ReadyFn layoutReady, StepClockFn stepClock, LogFn log)
 {
     m_sleep       = std::move(sleep);
     m_now         = std::move(now);
@@ -23,8 +24,7 @@ void CaptureTicker::SetHooks(SleepFn sleep, NowMsFn now, ReadyFn uiReady,
     m_log         = std::move(log);
 }
 
-void CaptureTicker::SetCaptureHooks(WriteFn writeEngineRt, WriteFn writeComposite,
-                                    WaitForUiFn waitForUi)
+void CaptureTicker::SetCaptureHooks(WriteFn writeEngineRt, WriteFn writeComposite, WaitForUiFn waitForUi)
 {
     m_writeEngineRt  = std::move(writeEngineRt);
     m_writeComposite = std::move(writeComposite);
@@ -33,7 +33,7 @@ void CaptureTicker::SetCaptureHooks(WriteFn writeEngineRt, WriteFn writeComposit
 
 void CaptureTicker::Log(const char* fmt, ...)
 {
-    char buf[2048];
+    char    buf[2048];
     va_list ap;
     va_start(ap, fmt);
     _vsnprintf_s(buf, sizeof(buf), _TRUNCATE, fmt, ap);
@@ -62,20 +62,23 @@ CaptureTicker::Result CaptureTicker::Tick()
     const bool layoutReady = m_layoutReady && m_layoutReady();
     if (!(uiReady && layoutReady))
     {
-        const double now = m_now ? m_now() : -1.0;
-        double heldMs = kLayoutGateTimeoutMs;
+        const double now    = m_now ? m_now() : -1.0;
+        double       heldMs = kLayoutGateTimeoutMs;
         if (now >= 0.0)
         {
-            if (!m_gateStarted) { m_gateStarted = true; m_gateStartMs = now; }
+            if (!m_gateStarted)
+            {
+                m_gateStarted = true;
+                m_gateStartMs = now;
+            }
             heldMs = now - m_gateStartMs;
         }
-        if (heldMs < kLayoutGateTimeoutMs)
-            return Result::Running;
+        if (heldMs < kLayoutGateTimeoutMs) return Result::Running;
         if (!m_gateWarned)
         {
             m_gateWarned = true;
-            Log("[capture] layout gate timed out (uiReady=%d sceneRect=%d) — proceeding ungated\n",
-                (int)uiReady, (int)layoutReady);
+            Log("[capture] layout gate timed out (uiReady=%d sceneRect=%d) — proceeding ungated\n", (int)uiReady,
+                (int)layoutReady);
             // Also on stdout: an ungated capture is racy-sized, so golden
             // consumers (scripts/render-goldens.mjs) must be able to SEE the
             // degradation and fail the scene rather than flake against a
@@ -92,8 +95,7 @@ CaptureTicker::Result CaptureTicker::Tick()
     // sim time capturedFrames/60, independent of UI cold-start duration.
     // Consumed by the NEXT render at the top of the pump.
     if (m_stepClock) m_stepClock();
-    if (++m_capturedFrames < m_frames)
-        return Result::Running;
+    if (++m_capturedFrames < m_frames) return Result::Running;
 
     // (1) engine RT: the engine's own pre-composite pixels, captured at the
     // exact frame target. Only the composite below is gated on the UI.
@@ -109,16 +111,15 @@ CaptureTicker::Result CaptureTicker::Tick()
     // OR an external WM_QUIT before the signal yields a degraded image under a
     // DISTINCT name so it can never be mistaken for a good one (the harness
     // greps for the non-TIMEOUT name + requires ui-ready=1).
-    const wchar_t* suffix = wait.uiReady ? L"-composite" : L"-composite-TIMEOUT";
-    const char*    state  = wait.uiReady ? "" : (wait.timedOut ? " TIMEOUT" : " ABORTED");
+    const wchar_t*     suffix   = wait.uiReady ? L"-composite" : L"-composite-TIMEOUT";
+    const char*        state    = wait.uiReady ? "" : (wait.timedOut ? " TIMEOUT" : " ABORTED");
     const std::wstring compPath = DeriveSibling(m_enginePng, suffix);
     // Composite is UNCONDITIONAL (attempted even if engine-RT failed) — the
     // diagnostic composite is most valuable exactly when a render broke.
     const bool okc = m_writeComposite && m_writeComposite(compPath);
     Log("[capture] frame %d: engine-RT %ls -> %s; composite %ls -> %s "
         "(ui-ready=%d waited=%.0fms%s)\n",
-        m_capturedFrames, m_enginePng.c_str(), ok ? "ok" : "FAILED",
-        compPath.c_str(), okc ? "ok" : "FAILED",
+        m_capturedFrames, m_enginePng.c_str(), ok ? "ok" : "FAILED", compPath.c_str(), okc ? "ok" : "FAILED",
         wait.uiReady ? 1 : 0, wait.waitedMs, state);
     if (!wait.uiReady)
         Log("[capture] WARNING: app/ready not received (%s) — composite "
@@ -130,4 +131,4 @@ CaptureTicker::Result CaptureTicker::Tick()
     return Result::Done;
 }
 
-}  // namespace host
+} // namespace host

@@ -24,48 +24,74 @@
 
 using namespace TexturePalette;
 
-static int g_passed = 0;
-static int g_failed = 0;
+static int          g_passed = 0;
+static int          g_failed = 0;
 static std::wstring g_paletteDir;
 static std::wstring g_iniPath;
 
-#define ASSERT_TRUE(cond) do { \
-    if (cond) { ++g_passed; } \
-    else { ++g_failed; std::printf("  FAIL line %d: ASSERT_TRUE(%s)\n", __LINE__, #cond); } \
-} while(0)
+#define ASSERT_TRUE(cond)                                                                                              \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            ++g_passed;                                                                                                \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL line %d: ASSERT_TRUE(%s)\n", __LINE__, #cond);                                         \
+        }                                                                                                              \
+    } while (0)
 
-#define ASSERT_EQ(a, b) do { \
-    auto _a = (a); auto _b = (b); \
-    if (_a == _b) { ++g_passed; } \
-    else { ++g_failed; std::printf("  FAIL line %d: ASSERT_EQ(%s, %s)\n", __LINE__, #a, #b); } \
-} while(0)
+#define ASSERT_EQ(a, b)                                                                                                \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        auto _a = (a);                                                                                                 \
+        auto _b = (b);                                                                                                 \
+        if (_a == _b)                                                                                                  \
+        {                                                                                                              \
+            ++g_passed;                                                                                                \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL line %d: ASSERT_EQ(%s, %s)\n", __LINE__, #a, #b);                                      \
+        }                                                                                                              \
+    } while (0)
 
-#define ASSERT_STREQ(a, b) do { \
-    std::wstring _a = (a); std::wstring _b = (b); \
-    if (_a == _b) { ++g_passed; } \
-    else { ++g_failed; std::printf("  FAIL line %d: ASSERT_STREQ\n", __LINE__); } \
-} while(0)
+#define ASSERT_STREQ(a, b)                                                                                             \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        std::wstring _a = (a);                                                                                         \
+        std::wstring _b = (b);                                                                                         \
+        if (_a == _b)                                                                                                  \
+        {                                                                                                              \
+            ++g_passed;                                                                                                \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL line %d: ASSERT_STREQ\n", __LINE__);                                                   \
+        }                                                                                                              \
+    } while (0)
 
 // ---- Helpers ------------------------------------------------------------
 
 static bool CreateTempPaletteDir()
 {
     wchar_t tempRoot[MAX_PATH];
-    DWORD n = GetTempPathW(_countof(tempRoot), tempRoot);
+    DWORD   n = GetTempPathW(_countof(tempRoot), tempRoot);
     if (n == 0 || n >= _countof(tempRoot)) return false;
 
     for (DWORD attempt = 0; attempt < 100; ++attempt)
     {
         wchar_t candidate[MAX_PATH];
-        swprintf_s(candidate, L"%sAloPaletteStoreTest-%lu-%llu-%lu",
-                   tempRoot,
-                   GetCurrentProcessId(),
-                   (unsigned long long)GetTickCount64(),
-                   attempt);
+        swprintf_s(candidate, L"%sAloPaletteStoreTest-%lu-%llu-%lu", tempRoot, GetCurrentProcessId(),
+                   (unsigned long long)GetTickCount64(), attempt);
         if (CreateDirectoryW(candidate, NULL))
         {
             g_paletteDir = candidate;
-            g_iniPath = g_paletteDir + L"\\texture-palettes.ini";
+            g_iniPath    = g_paletteDir + L"\\texture-palettes.ini";
             return true;
         }
         if (GetLastError() != ERROR_ALREADY_EXISTS) return false;
@@ -95,19 +121,22 @@ static void ResetState()
 static size_t CountWithSlot(const std::vector<Entry>& v, SlotMask slot)
 {
     size_t n = 0;
-    for (const Entry& e : v) if (e.slotMask & slot) ++n;
+    for (const Entry& e : v)
+        if (e.slotMask & slot) ++n;
     return n;
 }
 
 static bool ContainsFilename(const std::vector<Entry>& v, const wchar_t* fn)
 {
-    for (const Entry& e : v) if (e.filename == fn) return true;
+    for (const Entry& e : v)
+        if (e.filename == fn) return true;
     return false;
 }
 
 static int IndexOfFilename(const std::vector<Entry>& v, const wchar_t* fn)
 {
-    for (size_t i = 0; i < v.size(); ++i) if (v[i].filename == fn) return (int)i;
+    for (size_t i = 0; i < v.size(); ++i)
+        if (v[i].filename == fn) return (int)i;
     return -1;
 }
 
@@ -144,11 +173,11 @@ static void test_touch_existing_bumps_order()
     std::printf("test_touch_existing_bumps_order\n");
     ResetState();
     Store::Instance().SetActiveMod(L"C:\\Test\\ModA");
-    Store::Instance().TouchRecent(L"first.tga",  SLOT_COLOR);
+    Store::Instance().TouchRecent(L"first.tga", SLOT_COLOR);
     Store::Instance().TouchRecent(L"second.tga", SLOT_COLOR);
-    Store::Instance().TouchRecent(L"third.tga",  SLOT_COLOR);
+    Store::Instance().TouchRecent(L"third.tga", SLOT_COLOR);
     // Re-touch first.tga — should move it to position 0.
-    Store::Instance().TouchRecent(L"first.tga",  SLOT_COLOR);
+    Store::Instance().TouchRecent(L"first.tga", SLOT_COLOR);
     auto recents = Store::Instance().Recents(SLOT_COLOR);
     ASSERT_EQ(recents.size(), (size_t)3);
     ASSERT_STREQ(recents[0].filename, L"first.tga");
@@ -167,10 +196,10 @@ static void test_touch_existing_with_different_slot()
     auto colorRecents = Store::Instance().Recents(SLOT_COLOR);
     auto bumpRecents  = Store::Instance().Recents(SLOT_BUMP);
     ASSERT_TRUE(ContainsFilename(colorRecents, L"shared.tga"));
-    ASSERT_TRUE(ContainsFilename(bumpRecents,  L"shared.tga"));
+    ASSERT_TRUE(ContainsFilename(bumpRecents, L"shared.tga"));
     // Total entries (across both filters) is still 1 logical entry.
     ASSERT_EQ(colorRecents.size(), (size_t)1);
-    ASSERT_EQ(bumpRecents.size(),  (size_t)1);
+    ASSERT_EQ(bumpRecents.size(), (size_t)1);
 }
 
 static void test_recent_eviction_at_cap()
@@ -190,9 +219,9 @@ static void test_recent_eviction_at_cap()
     Store::Instance().TouchRecent(L"overflow.tga", SLOT_COLOR);
     auto recents = Store::Instance().Recents(SLOT_COLOR);
     ASSERT_EQ(recents.size(), MAX_RECENTS);
-    ASSERT_TRUE(!ContainsFilename(recents, L"r0.tga"));   // evicted
+    ASSERT_TRUE(!ContainsFilename(recents, L"r0.tga")); // evicted
     ASSERT_TRUE(ContainsFilename(recents, L"overflow.tga"));
-    ASSERT_STREQ(recents[0].filename, L"overflow.tga");   // most recent first
+    ASSERT_STREQ(recents[0].filename, L"overflow.tga"); // most recent first
 }
 
 static void test_pin_from_recent()
@@ -204,7 +233,7 @@ static void test_pin_from_recent()
     ASSERT_TRUE(Store::Instance().TogglePin(L"pinme.tga"));
     auto pins    = Store::Instance().Pins(SLOT_COLOR);
     auto recents = Store::Instance().Recents(SLOT_COLOR);
-    ASSERT_EQ(pins.size(),    (size_t)1);
+    ASSERT_EQ(pins.size(), (size_t)1);
     ASSERT_EQ(recents.size(), (size_t)0);
     ASSERT_STREQ(pins[0].filename, L"pinme.tga");
     ASSERT_TRUE(pins[0].isPinned);
@@ -239,11 +268,11 @@ static void test_unpin_returns_to_recent()
     Store::Instance().SetActiveMod(L"C:\\Test\\ModA");
     Store::Instance().TouchRecent(L"foo.tga", SLOT_COLOR);
     Store::Instance().TogglePin(L"foo.tga");
-    ASSERT_EQ(Store::Instance().Pins(SLOT_COLOR).size(),    (size_t)1);
+    ASSERT_EQ(Store::Instance().Pins(SLOT_COLOR).size(), (size_t)1);
     ASSERT_EQ(Store::Instance().Recents(SLOT_COLOR).size(), (size_t)0);
     // Unpin.
     ASSERT_TRUE(Store::Instance().TogglePin(L"foo.tga"));
-    ASSERT_EQ(Store::Instance().Pins(SLOT_COLOR).size(),    (size_t)0);
+    ASSERT_EQ(Store::Instance().Pins(SLOT_COLOR).size(), (size_t)0);
     auto recents = Store::Instance().Recents(SLOT_COLOR);
     ASSERT_EQ(recents.size(), (size_t)1);
     ASSERT_STREQ(recents[0].filename, L"foo.tga");
@@ -283,10 +312,10 @@ static void test_per_mod_filter_persists()
     Store::Instance().SetActiveMod(L"C:\\Test\\ModA");
     Store::Instance().SetActiveFilter(SLOT_BUMP);
     Store::Instance().SetActiveMod(L"C:\\Test\\ModB");
-    ASSERT_EQ(Store::Instance().ActiveFilter(), SLOT_COLOR);   // Mod B default
+    ASSERT_EQ(Store::Instance().ActiveFilter(), SLOT_COLOR); // Mod B default
     Store::Instance().SetActiveFilter(SLOT_BUMP);
     Store::Instance().SetActiveMod(L"C:\\Test\\ModA");
-    ASSERT_EQ(Store::Instance().ActiveFilter(), SLOT_BUMP);    // Mod A's saved filter
+    ASSERT_EQ(Store::Instance().ActiveFilter(), SLOT_BUMP); // Mod A's saved filter
 }
 
 static void test_case_insensitive_mod_path()
@@ -295,7 +324,7 @@ static void test_case_insensitive_mod_path()
     ResetState();
     Store::Instance().SetActiveMod(L"C:\\Test\\MyMod");
     Store::Instance().TouchRecent(L"x.tga", SLOT_COLOR);
-    Store::Instance().SetActiveMod(L"c:\\test\\mymod");   // different casing
+    Store::Instance().SetActiveMod(L"c:\\test\\mymod"); // different casing
     ASSERT_EQ(Store::Instance().Recents(SLOT_COLOR).size(), (size_t)1);
     ASSERT_STREQ(Store::Instance().Recents(SLOT_COLOR)[0].filename, L"x.tga");
 }
@@ -306,9 +335,9 @@ static void test_slot_filter()
     ResetState();
     Store::Instance().SetActiveMod(L"C:\\Test\\ModA");
     Store::Instance().TouchRecent(L"color-only.tga", SLOT_COLOR);
-    Store::Instance().TouchRecent(L"bump-only.tga",  SLOT_BUMP);
-    Store::Instance().TouchRecent(L"both.tga",       SLOT_COLOR);
-    Store::Instance().TouchRecent(L"both.tga",       SLOT_BUMP);
+    Store::Instance().TouchRecent(L"bump-only.tga", SLOT_BUMP);
+    Store::Instance().TouchRecent(L"both.tga", SLOT_COLOR);
+    Store::Instance().TouchRecent(L"both.tga", SLOT_BUMP);
     auto color = Store::Instance().Recents(SLOT_COLOR);
     auto bump  = Store::Instance().Recents(SLOT_BUMP);
     // color: color-only + both
@@ -332,7 +361,7 @@ static void test_clear_active_mod()
     Store::Instance().ClearActiveMod();
     // Re-activate the same mod; should be empty (INI section was wiped).
     Store::Instance().SetActiveMod(L"C:\\Test\\ModA");
-    ASSERT_EQ(Store::Instance().Pins(SLOT_COLOR).size(),    (size_t)0);
+    ASSERT_EQ(Store::Instance().Pins(SLOT_COLOR).size(), (size_t)0);
     ASSERT_EQ(Store::Instance().Recents(SLOT_COLOR).size(), (size_t)0);
 }
 
@@ -341,10 +370,10 @@ static void test_malformed_filenames_rejected()
     std::printf("test_malformed_filenames_rejected\n");
     ResetState();
     Store::Instance().SetActiveMod(L"C:\\Test\\ModA");
-    Store::Instance().TouchRecent(L"good.tga",       SLOT_COLOR);
-    Store::Instance().TouchRecent(L"with=equals.tga", SLOT_COLOR);   // = is INI metachar
-    Store::Instance().TouchRecent(L"with\nnewline",   SLOT_COLOR);   // newline
-    Store::Instance().TouchRecent(L"",                SLOT_COLOR);   // empty
+    Store::Instance().TouchRecent(L"good.tga", SLOT_COLOR);
+    Store::Instance().TouchRecent(L"with=equals.tga", SLOT_COLOR); // = is INI metachar
+    Store::Instance().TouchRecent(L"with\nnewline", SLOT_COLOR);   // newline
+    Store::Instance().TouchRecent(L"", SLOT_COLOR);                // empty
     auto recents = Store::Instance().Recents(SLOT_COLOR);
     ASSERT_EQ(recents.size(), (size_t)1);
     ASSERT_STREQ(recents[0].filename, L"good.tga");

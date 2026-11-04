@@ -44,10 +44,19 @@
 void ParticleSystemInstance::RemoveEmitter(EmitterInstance*) {}
 
 static int g_failed = 0;
-#define CHECK(cond, msg) do {                              \
-    if (cond) { std::printf("  ok: %s\n", msg); }          \
-    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
 using Emitter = ParticleSystem::Emitter;
 using Track   = ParticleSystem::Emitter::Track;
@@ -57,7 +66,10 @@ static const float kInf = std::numeric_limits<float>::infinity();
 static const float kNaN = std::numeric_limits<float>::quiet_NaN();
 
 // Keys in iteration order. Exact float compare: no NaN ever reaches a track here.
-static std::vector<Key> keysOf(const Track& t) { return std::vector<Key>(t.keys.begin(), t.keys.end()); }
+static std::vector<Key> keysOf(const Track& t)
+{
+    return std::vector<Key>(t.keys.begin(), t.keys.end());
+}
 
 static bool sameKeys(const std::vector<Key>& a, const std::vector<Key>& b)
 {
@@ -100,16 +112,25 @@ static Effects refSetTrackKey(Track* track, float oldTime, float newTime, float 
     if (track == nullptr || track->keys.empty()) return fx;
     const float firstTime = track->keys.begin()->time;
     const float lastTime  = track->keys.rbegin()->time;
-    const bool isBorder = (oldTime == firstTime || oldTime == lastTime);
+    const bool  isBorder  = (oldTime == firstTime || oldTime == lastTime);
     if (isBorder) newTime = oldTime;
     if (!isBorder && !(newTime >= 0.0f && newTime <= 100.0f))
-    { fx.err = "set-track-key 'newTime' must be within [0, 100]"; return fx; }
+    {
+        fx.err = "set-track-key 'newTime' must be within [0, 100]";
+        return fx;
+    }
     if (!std::isfinite(newValue))
-    { fx.err = "set-track-key 'newValue' must be finite"; return fx; }
+    {
+        fx.err = "set-track-key 'newValue' must be finite";
+        return fx;
+    }
     if (isColor && (newValue < 0.0f || newValue > 1.0f))
-    { fx.err = "set-track-key 'newValue' must be within [0, 1] on a color track"; return fx; }
+    {
+        fx.err = "set-track-key 'newValue' must be within [0, 1] on a color track";
+        return fx;
+    }
     Track::Key probe(oldTime, 0.0f);
-    auto it = track->keys.find(probe);
+    auto       it = track->keys.find(probe);
     if (it == track->keys.end()) return fx;
     fx.undo = true;
     track->keys.erase(it);
@@ -125,13 +146,13 @@ static Effects refDeleteTrackKeys(Track* track, const std::vector<float>& times)
     if (track == nullptr || track->keys.empty()) return fx;
     const float firstTime = track->keys.begin()->time;
     const float lastTime  = track->keys.rbegin()->time;
-    fx.undo = true;
-    int removed = 0;
+    fx.undo               = true;
+    int removed           = 0;
     for (float timeVal : times)
     {
         if (timeVal == firstTime || timeVal == lastTime) continue;
         Track::Key probe(timeVal, 0.0f);
-        auto it = track->keys.find(probe);
+        auto       it = track->keys.find(probe);
         if (it != track->keys.end())
         {
             track->keys.erase(it);
@@ -146,7 +167,7 @@ static Effects refDeleteTrackKeys(Track* track, const std::vector<float>& times)
 static float refBump(const Track* track, float time, float step)
 {
     Track::Key probe(time, 0.0f);
-    int safety = 1000;
+    int        safety = 1000;
     while (track->keys.find(probe) != track->keys.end() && safety-- > 0)
     {
         time += step;
@@ -168,7 +189,11 @@ static float refAddTrackKey(Track* track, float time, float value)
 static Effects refSetTrackLock(Emitter* target, int channelIdx, bool lockToIsNull, int targetIdx)
 {
     Effects fx;
-    if (channelIdx < 0) { fx.err = "unknown channel"; return fx; }
+    if (channelIdx < 0)
+    {
+        fx.err = "unknown channel";
+        return fx;
+    }
     if (channelIdx >= 4) return fx;
     Track* desired = nullptr;
     if (lockToIsNull)
@@ -181,9 +206,9 @@ static Effects refSetTrackLock(Emitter* target, int channelIdx, bool lockToIsNul
         return fx;
     }
     if (target->tracks[channelIdx] == desired) return fx;
-    fx.undo = true;
+    fx.undo                    = true;
     target->tracks[channelIdx] = desired;
-    fx.changed = true;
+    fx.changed                 = true;
     return fx;
 }
 
@@ -193,14 +218,21 @@ static Effects refSetTrackInterpolation(Track* track, const std::string& interpN
     Effects fx;
     if (track == nullptr) return fx;
     Track::InterpolationType next;
-    if      (interpName == "linear") next = Track::IT_LINEAR;
-    else if (interpName == "smooth") next = Track::IT_SMOOTH;
-    else if (interpName == "step")   next = Track::IT_STEP;
-    else { fx.err = "unknown interpolation"; return fx; }
+    if (interpName == "linear")
+        next = Track::IT_LINEAR;
+    else if (interpName == "smooth")
+        next = Track::IT_SMOOTH;
+    else if (interpName == "step")
+        next = Track::IT_STEP;
+    else
+    {
+        fx.err = "unknown interpolation";
+        return fx;
+    }
     if (track->interpolation == next) return fx;
-    fx.undo = true;
+    fx.undo              = true;
     track->interpolation = next;
-    fx.changed = true;
+    fx.changed           = true;
     return fx;
 }
 
@@ -211,7 +243,11 @@ static Effects unitSetTrackKey(Track* track, float oldTime, float newTime, float
     Effects fx;
     if (track == nullptr) return fx;
     TrackKeyPlan plan = PlanSetTrackKey(*track, oldTime, newTime, newValue, isColor);
-    if (plan.outcome == EditOutcome::Rejected) { fx.err = plan.reason; return fx; }
+    if (plan.outcome == EditOutcome::Rejected)
+    {
+        fx.err = plan.reason;
+        return fx;
+    }
     fx.undo = plan.willMutate;
     ApplySetTrackKey(*track, plan);
     fx.changed = plan.willMutate;
@@ -222,7 +258,7 @@ static Effects unitDeleteTrackKeys(Track* track, const std::vector<float>& times
 {
     Effects fx;
     if (track == nullptr || track->keys.empty()) return fx;
-    fx.undo = true;   // the handler captures before the loop, unconditionally
+    fx.undo     = true; // the handler captures before the loop, unconditionally
     int removed = 0;
     for (float t : times)
     {
@@ -243,9 +279,13 @@ static float unitAddTrackKey(Track* track, float time, float value)
 
 static Effects unitSetTrackLock(Emitter* e, int channelIdx, bool lockToIsNull, int targetIdx)
 {
-    Effects fx;
+    Effects       fx;
     TrackLockPlan plan = PlanSetTrackLock(*e, channelIdx, targetIdx, lockToIsNull);
-    if (plan.outcome == EditOutcome::Rejected) { fx.err = plan.reason; return fx; }
+    if (plan.outcome == EditOutcome::Rejected)
+    {
+        fx.err = plan.reason;
+        return fx;
+    }
     fx.undo = plan.willMutate;
     ApplySetTrackLock(*e, plan);
     fx.changed = plan.willMutate;
@@ -257,7 +297,11 @@ static Effects unitSetTrackInterpolation(Track* track, const std::string& name)
     Effects fx;
     if (track == nullptr) return fx;
     InterpolationPlan plan = PlanSetTrackInterpolation(*track, name);
-    if (plan.outcome == EditOutcome::Rejected) { fx.err = plan.reason; return fx; }
+    if (plan.outcome == EditOutcome::Rejected)
+    {
+        fx.err = plan.reason;
+        return fx;
+    }
     fx.undo = plan.willMutate;
     ApplySetTrackInterpolation(*track, plan);
     fx.changed = plan.willMutate;
@@ -288,22 +332,24 @@ static void testParity()
     {
         const float newTimes[]  = {0, 100, 25, 10, 150, -5, 50};
         const float newValues[] = {0.5f, 3};
-        int runs = 0, bad = 0;
+        int         runs = 0, bad = 0;
         for (const Track& base : fixtureTracks())
-        for (float oldTime : kProbeTimes)
-        for (float newTime : newTimes)
-        for (float newValue : newValues)
-        for (bool isColor : {false, true})
-        {
-            Track a = base, b = base;
-            Effects fa = refSetTrackKey(&a, oldTime, newTime, newValue, isColor);
-            Effects fb = unitSetTrackKey(&b, oldTime, newTime, newValue, isColor);
-            runs++;
-            if (!sameKeys(keysOf(a), keysOf(b)) || !sameEffects(fa, fb))
-            {
-                if (bad++ == 0) std::printf("    first mismatch: old=%g new=%g val=%g\n", oldTime, newTime, newValue);
-            }
-        }
+            for (float oldTime : kProbeTimes)
+                for (float newTime : newTimes)
+                    for (float newValue : newValues)
+                        for (bool isColor : {false, true})
+                        {
+                            Track   a = base, b = base;
+                            Effects fa = refSetTrackKey(&a, oldTime, newTime, newValue, isColor);
+                            Effects fb = unitSetTrackKey(&b, oldTime, newTime, newValue, isColor);
+                            runs++;
+                            if (!sameKeys(keysOf(a), keysOf(b)) || !sameEffects(fa, fb))
+                            {
+                                if (bad++ == 0)
+                                    std::printf("    first mismatch: old=%g new=%g val=%g\n", oldTime, newTime,
+                                                newValue);
+                            }
+                        }
         char msg[96];
         std::snprintf(msg, sizeof(msg), "set-track-key: %d edits match the handler", runs);
         CHECK(bad == 0, msg);
@@ -320,14 +366,14 @@ static void testParity()
         requests.push_back({});
         int runs = 0, bad = 0;
         for (const Track& base : fixtureTracks())
-        for (const auto& times : requests)
-        {
-            Track a = base, b = base;
-            Effects fa = refDeleteTrackKeys(&a, times);
-            Effects fb = unitDeleteTrackKeys(&b, times);
-            runs++;
-            if (!sameKeys(keysOf(a), keysOf(b)) || !sameEffects(fa, fb)) bad++;
-        }
+            for (const auto& times : requests)
+            {
+                Track   a = base, b = base;
+                Effects fa = refDeleteTrackKeys(&a, times);
+                Effects fb = unitDeleteTrackKeys(&b, times);
+                runs++;
+                if (!sameKeys(keysOf(a), keysOf(b)) || !sameEffects(fa, fb)) bad++;
+            }
         char msg[96];
         std::snprintf(msg, sizeof(msg), "delete-track-keys: %d requests match the handler", runs);
         CHECK(bad == 0, msg);
@@ -337,22 +383,26 @@ static void testParity()
     // repeated, so each key dedups against the keys inserted before it.
     {
         std::vector<std::vector<Key>> batches = {
-            {Key(50, 0.3f)}, {Key(0, 0.3f)}, {Key(100, 0.3f)}, {Key(25, 0.3f)},
+            {Key(50, 0.3f)},
+            {Key(0, 0.3f)},
+            {Key(100, 0.3f)},
+            {Key(25, 0.3f)},
             {Key(50, 0.1f), Key(50, 0.2f), Key(50, 0.3f)},
             {Key(0, 0.1f), Key(100, 0.2f), Key(0, 0.3f)},
             {Key(60, 0.1f), Key(60.001f, 0.2f), Key(60, 0.3f)},
         };
         int runs = 0, bad = 0;
         for (const Track& base : fixtureTracks())
-        for (const auto& batch : batches)
-        {
-            Track a = base, b = base;
-            bool sameTimes = true;
-            for (const Key& k : batch)
-                sameTimes = sameTimes && refAddTrackKey(&a, k.time, k.value) == unitAddTrackKey(&b, k.time, k.value);
-            runs++;
-            if (!sameTimes || !sameKeys(keysOf(a), keysOf(b))) bad++;
-        }
+            for (const auto& batch : batches)
+            {
+                Track a = base, b = base;
+                bool  sameTimes = true;
+                for (const Key& k : batch)
+                    sameTimes =
+                        sameTimes && refAddTrackKey(&a, k.time, k.value) == unitAddTrackKey(&b, k.time, k.value);
+                runs++;
+                if (!sameTimes || !sameKeys(keysOf(a), keysOf(b))) bad++;
+            }
         char msg[96];
         std::snprintf(msg, sizeof(msg), "add-track-key(s): %d batches match the handler", runs);
         CHECK(bad == 0, msg);
@@ -362,26 +412,27 @@ static void testParity()
     {
         int runs = 0, bad = 0;
         for (int state = 0; state < 4; state++)
-        for (int ch = -1; ch < ParticleSystem::NUM_TRACKS; ch++)
-        for (int tgt = -2; tgt < ParticleSystem::NUM_TRACKS; tgt++)   // -2 = lockTo null
-        {
-            Emitter a, b;
-            for (Emitter* e : {&a, &b})
-            {
-                // 0: default (G/B/A locked to R); 1: all unlocked; 2: B->G; 3: A->B
-                if (state >= 1) for (int i = 0; i < 4; i++) e->tracks[i] = &e->trackContents[i];
-                if (state == 2) e->tracks[2] = &e->trackContents[1];
-                if (state == 3) e->tracks[3] = &e->trackContents[2];
-            }
-            const bool isNull = tgt == -2;
-            Effects fa = refSetTrackLock(&a, ch, isNull, isNull ? -1 : tgt);
-            Effects fb = unitSetTrackLock(&b, ch, isNull, isNull ? -1 : tgt);
-            bool samePtrs = true;
-            for (int i = 0; i < ParticleSystem::NUM_TRACKS; i++)
-                samePtrs = samePtrs && (a.tracks[i] - a.trackContents) == (b.tracks[i] - b.trackContents);
-            runs++;
-            if (!samePtrs || !sameEffects(fa, fb)) bad++;
-        }
+            for (int ch = -1; ch < ParticleSystem::NUM_TRACKS; ch++)
+                for (int tgt = -2; tgt < ParticleSystem::NUM_TRACKS; tgt++) // -2 = lockTo null
+                {
+                    Emitter a, b;
+                    for (Emitter* e : {&a, &b})
+                    {
+                        // 0: default (G/B/A locked to R); 1: all unlocked; 2: B->G; 3: A->B
+                        if (state >= 1)
+                            for (int i = 0; i < 4; i++) e->tracks[i] = &e->trackContents[i];
+                        if (state == 2) e->tracks[2] = &e->trackContents[1];
+                        if (state == 3) e->tracks[3] = &e->trackContents[2];
+                    }
+                    const bool isNull   = tgt == -2;
+                    Effects    fa       = refSetTrackLock(&a, ch, isNull, isNull ? -1 : tgt);
+                    Effects    fb       = unitSetTrackLock(&b, ch, isNull, isNull ? -1 : tgt);
+                    bool       samePtrs = true;
+                    for (int i = 0; i < ParticleSystem::NUM_TRACKS; i++)
+                        samePtrs = samePtrs && (a.tracks[i] - a.trackContents) == (b.tracks[i] - b.trackContents);
+                    runs++;
+                    if (!samePtrs || !sameEffects(fa, fb)) bad++;
+                }
         char msg[96];
         std::snprintf(msg, sizeof(msg), "set-track-lock: %d requests match the handler", runs);
         CHECK(bad == 0, msg);
@@ -389,18 +440,19 @@ static void testParity()
 
     // set-track-interpolation
     {
-        const char* names[] = {"linear", "smooth", "step", "Linear", "", "cubic"};
-        const Track::InterpolationType starts[] = {Track::IT_UNKNOWN, Track::IT_LINEAR, Track::IT_SMOOTH, Track::IT_STEP};
-        int runs = 0, bad = 0;
+        const char*                    names[]  = {"linear", "smooth", "step", "Linear", "", "cubic"};
+        const Track::InterpolationType starts[] = {Track::IT_UNKNOWN, Track::IT_LINEAR, Track::IT_SMOOTH,
+                                                   Track::IT_STEP};
+        int                            runs = 0, bad = 0;
         for (Track::InterpolationType start : starts)
-        for (const char* name : names)
-        {
-            Track a = makeTrack({Key(0, 0), Key(100, 1)}, start), b = a;
-            Effects fa = refSetTrackInterpolation(&a, name);
-            Effects fb = unitSetTrackInterpolation(&b, name);
-            runs++;
-            if (a.interpolation != b.interpolation || !sameEffects(fa, fb)) bad++;
-        }
+            for (const char* name : names)
+            {
+                Track   a = makeTrack({Key(0, 0), Key(100, 1)}, start), b = a;
+                Effects fa = refSetTrackInterpolation(&a, name);
+                Effects fb = unitSetTrackInterpolation(&b, name);
+                runs++;
+                if (a.interpolation != b.interpolation || !sameEffects(fa, fb)) bad++;
+            }
         char msg[96];
         std::snprintf(msg, sizeof(msg), "set-track-interpolation: %d requests match the handler", runs);
         CHECK(bad == 0, msg);
@@ -421,29 +473,35 @@ static void testBorderAndNotFound()
     CHECK(!IsBorderKeyTime(Track(), 0), "IsBorderKeyTime: empty track has no border");
 
     TrackKeyPlan del = PlanDeleteTrackKey(base, 0);
-    CHECK(del.outcome == EditOutcome::NoOpBorderSkip && !del.willMutate, "delete on a border key: NoOpBorderSkip, no mutation");
+    CHECK(del.outcome == EditOutcome::NoOpBorderSkip && !del.willMutate,
+          "delete on a border key: NoOpBorderSkip, no mutation");
 
-    Track t = base;
+    Track        t   = base;
     TrackKeyPlan set = PlanSetTrackKey(t, 100, 40, 0.7f, false);
     ApplySetTrackKey(t, set);
-    CHECK(set.outcome == EditOutcome::AppliedBorderTime && set.willMutate, "set on a border key: AppliedBorderTime, mutates");
-    CHECK(t.keys.rbegin()->time == 100 && t.keys.rbegin()->value == 0.7f, "set on a border key: time pinned, VALUE applied");
+    CHECK(set.outcome == EditOutcome::AppliedBorderTime && set.willMutate,
+          "set on a border key: AppliedBorderTime, mutates");
+    CHECK(t.keys.rbegin()->time == 100 && t.keys.rbegin()->value == 0.7f,
+          "set on a border key: time pinned, VALUE applied");
 
-    t = base;
+    t   = base;
     set = PlanSetTrackKey(t, 50, 40, 0.9f, false);
     ApplySetTrackKey(t, set);
-    CHECK(set.outcome == EditOutcome::Applied && t.keys.find(Key(40, 0))->value == 0.9f && t.keys.find(Key(50, 0)) == t.keys.end(),
+    CHECK(set.outcome == EditOutcome::Applied && t.keys.find(Key(40, 0))->value == 0.9f &&
+              t.keys.find(Key(50, 0)) == t.keys.end(),
           "set on an interior key moves time and value");
 
-    t = base;
+    t   = base;
     del = PlanDeleteTrackKey(t, 50);
     ApplyDeleteTrackKey(t, del);
     CHECK(del.outcome == EditOutcome::Applied && t.keys.size() == 2, "delete on an interior key removes it");
 
     TrackKeyPlan missSet = PlanSetTrackKey(base, 33, 40, 1, false);
     TrackKeyPlan missDel = PlanDeleteTrackKey(base, 33);
-    CHECK(missSet.outcome == EditOutcome::NoOpNotFound && !missSet.willMutate, "set at an absent time: NoOpNotFound, no undo");
-    CHECK(missDel.outcome == EditOutcome::NoOpNotFound && !missDel.willMutate, "delete at an absent time: NoOpNotFound, no undo");
+    CHECK(missSet.outcome == EditOutcome::NoOpNotFound && !missSet.willMutate,
+          "set at an absent time: NoOpNotFound, no undo");
+    CHECK(missDel.outcome == EditOutcome::NoOpNotFound && !missDel.willMutate,
+          "delete at an absent time: NoOpNotFound, no undo");
 
     t = base;
     ApplySetTrackKey(t, missSet);
@@ -451,10 +509,11 @@ static void testBorderAndNotFound()
     CHECK(sameKeys(keysOf(t), keysOf(base)), "Apply* of a non-mutating plan leaves the track alone");
 
     // NaN would match the first key in the multiset; refuse it outright.
-    CHECK(PlanDeleteTrackKey(base, kNaN).outcome == EditOutcome::Rejected, "delete at NaN: Rejected (would erase a border)");
-    CHECK(PlanSetTrackKey(base, kNaN, 10, 1, false).outcome == EditOutcome::Rejected
-          && PlanSetTrackKey(base, 50, kNaN, 1, false).outcome == EditOutcome::Rejected
-          && PlanSetTrackKey(base, 50, 10, kNaN, false).outcome == EditOutcome::Rejected,
+    CHECK(PlanDeleteTrackKey(base, kNaN).outcome == EditOutcome::Rejected,
+          "delete at NaN: Rejected (would erase a border)");
+    CHECK(PlanSetTrackKey(base, kNaN, 10, 1, false).outcome == EditOutcome::Rejected &&
+              PlanSetTrackKey(base, 50, kNaN, 1, false).outcome == EditOutcome::Rejected &&
+              PlanSetTrackKey(base, 50, 10, kNaN, false).outcome == EditOutcome::Rejected,
           "set with any NaN argument: Rejected");
 }
 
@@ -467,8 +526,12 @@ static void testDedup()
 
     // A run of occupied times at the exact accumulated bump values.
     std::vector<float> run;
-    float x = 40;
-    for (int i = 0; i <= 1000; i++) { run.push_back(x); x += 0.001f; }   // run[i] = 40 + i bumps
+    float              x = 40;
+    for (int i = 0; i <= 1000; i++)
+    {
+        run.push_back(x);
+        x += 0.001f;
+    } // run[i] = 40 + i bumps
 
     Track three = makeTrack({Key(0, 0), Key(100, 1)});
     for (int i = 0; i < 3; i++) three.keys.insert(Key(run[i], 0));
@@ -484,7 +547,8 @@ static void testDedup()
     Track over = under;
     over.keys.insert(Key(run[1000], 0));
     const float o = DedupedInsertTime(over, 40);
-    CHECK(o == run[1000] && over.keys.find(Key(o, 0)) != over.keys.end(), "1001 collisions: cap returns an occupied time (duplicate)");
+    CHECK(o == run[1000] && over.keys.find(Key(o, 0)) != over.keys.end(),
+          "1001 collisions: cap returns an occupied time (duplicate)");
 }
 
 static void testLock()
@@ -493,28 +557,35 @@ static void testLock()
     // 4x4 matrix from the all-unlocked state: accepted iff target < channel.
     bool matrixOk = true;
     for (int ch = 0; ch < 4; ch++)
-    for (int tgt = 0; tgt < 4; tgt++)
-    {
-        Emitter e;
-        for (int i = 0; i < 4; i++) e.tracks[i] = &e.trackContents[i];
-        TrackLockPlan p = PlanSetTrackLock(e, ch, tgt, false);
-        const bool accepted = p.outcome == EditOutcome::Applied;
-        matrixOk = matrixOk && accepted == (tgt < ch);
-        if (!accepted) matrixOk = matrixOk && p.outcome == EditOutcome::Rejected
-                                          && p.reason == "invalid lockTo channel (must be an earlier RGBA channel)";
-    }
+        for (int tgt = 0; tgt < 4; tgt++)
+        {
+            Emitter e;
+            for (int i = 0; i < 4; i++) e.tracks[i] = &e.trackContents[i];
+            TrackLockPlan p        = PlanSetTrackLock(e, ch, tgt, false);
+            const bool    accepted = p.outcome == EditOutcome::Applied;
+            matrixOk               = matrixOk && accepted == (tgt < ch);
+            if (!accepted)
+                matrixOk = matrixOk && p.outcome == EditOutcome::Rejected &&
+                           p.reason == "invalid lockTo channel (must be an earlier RGBA channel)";
+        }
     CHECK(matrixOk, "4x4 matrix: only an earlier channel is accepted; later/self rejected with the wire reason");
 
-    Emitter e;   // default: G/B/A locked to R
-    CHECK(PlanSetTrackLock(e, 2, 0, false).outcome == EditOutcome::NoOpUnchanged, "lock already in place: NoOpUnchanged");
+    Emitter e; // default: G/B/A locked to R
+    CHECK(PlanSetTrackLock(e, 2, 0, false).outcome == EditOutcome::NoOpUnchanged,
+          "lock already in place: NoOpUnchanged");
     TrackLockPlan unlock = PlanSetTrackLock(e, 2, -1, true);
     ApplySetTrackLock(e, unlock);
-    CHECK(unlock.outcome == EditOutcome::Applied && e.tracks[2] == &e.trackContents[2], "unlock restores the channel's own keys");
-    CHECK(PlanSetTrackLock(e, 0, -1, true).outcome == EditOutcome::NoOpUnchanged, "unlocking an unlocked channel: NoOpUnchanged");
-    CHECK(PlanSetTrackLock(e, 3, -1, false).outcome == EditOutcome::Rejected, "unresolved lockTo with unlock=false: Rejected");
-    CHECK(PlanSetTrackLock(e, 3, ParticleSystem::TRACK_SCALE, false).outcome == EditOutcome::Rejected, "non-RGBA lock target: Rejected");
+    CHECK(unlock.outcome == EditOutcome::Applied && e.tracks[2] == &e.trackContents[2],
+          "unlock restores the channel's own keys");
+    CHECK(PlanSetTrackLock(e, 0, -1, true).outcome == EditOutcome::NoOpUnchanged,
+          "unlocking an unlocked channel: NoOpUnchanged");
+    CHECK(PlanSetTrackLock(e, 3, -1, false).outcome == EditOutcome::Rejected,
+          "unresolved lockTo with unlock=false: Rejected");
+    CHECK(PlanSetTrackLock(e, 3, ParticleSystem::TRACK_SCALE, false).outcome == EditOutcome::Rejected,
+          "non-RGBA lock target: Rejected");
     const TrackLockPlan scale = PlanSetTrackLock(e, ParticleSystem::TRACK_SCALE, 0, false);
-    CHECK(scale.outcome == EditOutcome::NoOpOutOfDomain && !scale.willMutate, "lock on a non-RGBA track: NoOpOutOfDomain (distinct from unchanged)");
+    CHECK(scale.outcome == EditOutcome::NoOpOutOfDomain && !scale.willMutate,
+          "lock on a non-RGBA track: NoOpOutOfDomain (distinct from unchanged)");
     CHECK(PlanSetTrackLock(e, -1, 0, false).reason == "unknown channel", "unknown channel: Rejected");
 }
 
@@ -526,27 +597,32 @@ static void testInterpolationAndScalars()
     CHECK(!IsValidInterpolation("Linear") && !IsValidInterpolation("") && !IsValidInterpolation("cubic"),
           "anything else rejected (case-sensitive)");
 
-    CHECK(IsFiniteFloatField(0) && IsFiniteFloatField(FLT_MAX) && IsFiniteFloatField(-FLT_MAX), "finite float fields accepted");
-    CHECK(!IsFiniteFloatField(std::nan("")) && !IsFiniteFloatField(HUGE_VAL) && !IsFiniteFloatField(-HUGE_VAL)
-          && !IsFiniteFloatField(1e39) && !IsFiniteFloatField(-1e39),
+    CHECK(IsFiniteFloatField(0) && IsFiniteFloatField(FLT_MAX) && IsFiniteFloatField(-FLT_MAX),
+          "finite float fields accepted");
+    CHECK(!IsFiniteFloatField(std::nan("")) && !IsFiniteFloatField(HUGE_VAL) && !IsFiniteFloatField(-HUGE_VAL) &&
+              !IsFiniteFloatField(1e39) && !IsFiniteFloatField(-1e39),
           "NaN, +-inf and |x| > FLT_MAX rejected");
-    CHECK(InIntFieldRange(INT_MAX) && InIntFieldRange(INT_MIN) && InIntFieldRange(0), "int range accepted at both ends");
-    CHECK(!InIntFieldRange((double)INT_MAX + 1) && !InIntFieldRange((double)INT_MIN - 1) && !InIntFieldRange(std::nan("")),
+    CHECK(InIntFieldRange(INT_MAX) && InIntFieldRange(INT_MIN) && InIntFieldRange(0),
+          "int range accepted at both ends");
+    CHECK(!InIntFieldRange((double)INT_MAX + 1) && !InIntFieldRange((double)INT_MIN - 1) &&
+              !InIntFieldRange(std::nan("")),
           "out-of-range and NaN int rejected");
 
-    CHECK(ValidateAddTrackKey({true, 10, 0.5f}, false).outcome == EditOutcome::Applied, "add-track-key: finite numeric key accepted");
+    CHECK(ValidateAddTrackKey({true, 10, 0.5f}, false).outcome == EditOutcome::Applied,
+          "add-track-key: finite numeric key accepted");
     CHECK(ValidateAddTrackKey({false, 0, 0}, false).reason == "add-track-key requires numeric 'time' and 'value'",
           "add-track-key: non-numeric -> its wire reason");
-    CHECK(ValidateAddTrackKey({true, kInf, 0}, false).reason == "add-track-key 'time'/'value' must be finite"
-          && ValidateAddTrackKey({true, 0, -kInf}, false).outcome == EditOutcome::Rejected,
+    CHECK(ValidateAddTrackKey({true, kInf, 0}, false).reason == "add-track-key 'time'/'value' must be finite" &&
+              ValidateAddTrackKey({true, 0, -kInf}, false).outcome == EditOutcome::Rejected,
           "add-track-key: non-finite -> its wire reason");
 
     // Batch: the FIRST bad key decides, whichever kind it is.
     CHECK(ValidateBatchKeys({}, false).outcome == EditOutcome::Applied, "add-track-keys: empty batch is legal");
-    CHECK(ValidateBatchKeys({{true, kInf, 0}, {false, 0, 0}}, false).reason == "add-track-keys 'time'/'value' must be finite",
+    CHECK(ValidateBatchKeys({{true, kInf, 0}, {false, 0, 0}}, false).reason ==
+              "add-track-keys 'time'/'value' must be finite",
           "add-track-keys: non-finite before non-numeric -> finite reason");
-    CHECK(ValidateBatchKeys({{true, 1, 0}, {false, 0, 0}, {true, kInf, 0}}, false).reason
-          == "add-track-keys requires numeric 'time' and 'value' on every key",
+    CHECK(ValidateBatchKeys({{true, 1, 0}, {false, 0, 0}, {true, kInf, 0}}, false).reason ==
+              "add-track-keys requires numeric 'time' and 'value' on every key",
           "add-track-keys: non-numeric before non-finite -> numeric reason");
 
     Emitter e;
@@ -579,8 +655,14 @@ static ParticleSystem* reload(const Bytes& image)
     if (!image.empty()) f->write(image.data(), (unsigned long)image.size());
     f->seek(0);
     ParticleSystem* ps = nullptr;
-    try { ps = new ParticleSystem(f); }
-    catch (...) { ps = nullptr; }
+    try
+    {
+        ps = new ParticleSystem(f);
+    }
+    catch (...)
+    {
+        ps = nullptr;
+    }
     f->Release();
     return ps;
 }
@@ -589,7 +671,7 @@ static void newSystem(ParticleSystem& ps)
 {
     ps.setName("AuthoringTest");
     Emitter* e = ps.addRootEmitter();
-    e->name = "Em0";
+    e->name    = "Em0";
     for (int t = 0; t < ParticleSystem::NUM_TRACKS; ++t) e->tracks[t] = &e->trackContents[t];
 }
 
@@ -603,17 +685,19 @@ static void testFullTrackReplacement()
     std::printf("(c) full-track replacement\n");
     ParticleSystem ps;
     newSystem(ps);
-    Emitter& e = ps.getEmitter(0);
+    Emitter&  e     = ps.getEmitter(0);
     const int SCALE = ParticleSystem::TRACK_SCALE, RED = ParticleSystem::TRACK_RED_CHANNEL;
 
     // Exactly representable times (t/100*100 round-trips) and values.
     const std::vector<Key> scaleKeys = {Key(0, 2), Key(12.5f, 8), Key(50, 8), Key(50, 4), Key(100, -1)};
-    CHECK(ValidateFullTrackReplacement(e, SCALE, scaleKeys).outcome == EditOutcome::Applied, "valid scale replacement accepted");
+    CHECK(ValidateFullTrackReplacement(e, SCALE, scaleKeys).outcome == EditOutcome::Applied,
+          "valid scale replacement accepted");
     ApplyFullTrackReplacement(e, SCALE, scaleKeys);
     CHECK(sameKeys(keysOf(*e.tracks[SCALE]), scaleKeys), "apply keeps the proposed order, same-time keys included");
 
     const std::vector<Key> redKeys = {Key(0, 0), Key(25, 1), Key(100, 1)};
-    CHECK(ValidateFullTrackReplacement(e, RED, redKeys).outcome == EditOutcome::Applied, "valid color replacement accepted");
+    CHECK(ValidateFullTrackReplacement(e, RED, redKeys).outcome == EditOutcome::Applied,
+          "valid color replacement accepted");
     ApplyFullTrackReplacement(e, RED, redKeys);
 
     ParticleSystem* rp = reload(serialize(ps));
@@ -631,22 +715,25 @@ static void testFullTrackReplacement()
     CHECK(rejected(e, SCALE, {Key(0, 1), Key(99, 1)}), "last key not at 100 rejected");
     CHECK(rejected(e, SCALE, {Key(0, 1), Key(60, 1), Key(40, 1), Key(100, 1)}), "decreasing times rejected");
     CHECK(rejected(e, SCALE, {Key(0, 1), Key(150, 1), Key(100, 1)}), "a time past 100 rejected");
-    CHECK(rejected(e, SCALE, {Key(0, 1), Key(50, kNaN), Key(100, 1)})
-          && rejected(e, SCALE, {Key(0, 1), Key(kInf, 1), Key(100, 1)}), "non-finite time or value rejected");
-    CHECK(rejected(e, RED, {Key(0, 0), Key(50, 1.5f), Key(100, 1)})
-          && rejected(e, RED, {Key(0, -0.1f), Key(100, 1)}), "color value outside [0, 1] rejected");
+    CHECK(rejected(e, SCALE, {Key(0, 1), Key(50, kNaN), Key(100, 1)}) &&
+              rejected(e, SCALE, {Key(0, 1), Key(kInf, 1), Key(100, 1)}),
+          "non-finite time or value rejected");
+    CHECK(rejected(e, RED, {Key(0, 0), Key(50, 1.5f), Key(100, 1)}) && rejected(e, RED, {Key(0, -0.1f), Key(100, 1)}),
+          "color value outside [0, 1] rejected");
     CHECK(!rejected(e, SCALE, {Key(0, 0), Key(50, 1.5f), Key(100, -3)}), "non-color tracks take any finite value");
-    CHECK(rejected(e, -1, {Key(0, 0), Key(100, 1)}) && rejected(e, ParticleSystem::NUM_TRACKS, {Key(0, 0), Key(100, 1)}),
+    CHECK(rejected(e, -1, {Key(0, 0), Key(100, 1)}) &&
+              rejected(e, ParticleSystem::NUM_TRACKS, {Key(0, 0), Key(100, 1)}),
           "unknown track rejected");
 
     std::vector<Key> huge(kMaxAloTrackKeys + 2, Key(50, 1));
     huge.front() = Key(0, 1);
     huge.back()  = Key(100, 1);
     CHECK(rejected(e, SCALE, huge), "kMaxAloTrackKeys intermediates rejected");
-    huge.pop_back(); huge.back() = Key(100, 1);
+    huge.pop_back();
+    huge.back() = Key(100, 1);
     CHECK(!rejected(e, SCALE, huge), "kMaxAloTrackKeys - 1 intermediates accepted");
 
-    Emitter locked;   // default: G/B/A locked to R
+    Emitter locked; // default: G/B/A locked to R
     CHECK(rejected(locked, ParticleSystem::TRACK_GREEN_CHANNEL, {Key(0, 0), Key(100, 1)}),
           "locked color channel rejected (would rewrite the channel it is locked to)");
     locked.randomRotation = true;
@@ -658,7 +745,7 @@ static void testFullTrackReplacement()
         ParticleSystem bad;
         newSystem(bad);
         bad.getEmitter(0).tracks[RED]->keys = makeTrack({Key(0, 0), Key(50, 1.5f), Key(100, 1)}).keys;
-        ParticleSystem* r = reload(serialize(bad));
+        ParticleSystem* r                   = reload(serialize(bad));
         CHECK(r == nullptr, "grounding: a color value > 1 makes the saved file unloadable");
         delete r;
     }
@@ -666,7 +753,7 @@ static void testFullTrackReplacement()
         ParticleSystem bad;
         newSystem(bad);
         bad.getEmitter(0).tracks[SCALE]->keys = makeTrack({Key(5, 1), Key(100, 1)}).keys;
-        ParticleSystem* r = reload(serialize(bad));
+        ParticleSystem* r                     = reload(serialize(bad));
         CHECK(r != nullptr && r->getEmitter(0).tracks[SCALE]->keys.begin()->time == 0,
               "grounding: a first key off 0 silently reloads at 0");
         delete r;
@@ -676,43 +763,44 @@ static void testFullTrackReplacement()
 static void testKeyBounds()
 {
     std::printf("(c) track-key bounds\n");
-    const std::string addTime = "add-track-key 'time' must be within [0, 100]";
+    const std::string addTime  = "add-track-key 'time' must be within [0, 100]";
     const std::string addColor = "add-track-key 'value' must be within [0, 1] on a color track";
-    CHECK(ValidateAddTrackKey({true, 0, 0.5f}, true).outcome == EditOutcome::Applied
-          && ValidateAddTrackKey({true, 100, 1}, true).outcome == EditOutcome::Applied
-          && ValidateAddTrackKey({true, -0.0f, 0}, true).outcome == EditOutcome::Applied,
+    CHECK(ValidateAddTrackKey({true, 0, 0.5f}, true).outcome == EditOutcome::Applied &&
+              ValidateAddTrackKey({true, 100, 1}, true).outcome == EditOutcome::Applied &&
+              ValidateAddTrackKey({true, -0.0f, 0}, true).outcome == EditOutcome::Applied,
           "add: times 0, 100 and -0.0 accepted; color values 0 and 1 accepted");
-    CHECK(ValidateAddTrackKey({true, -0.1f, 0.5f}, false).reason == addTime
-          && ValidateAddTrackKey({true, 100.001f, 0.5f}, false).reason == addTime
-          && ValidateAddTrackKey({true, 150, 0.5f}, false).reason == addTime,
+    CHECK(ValidateAddTrackKey({true, -0.1f, 0.5f}, false).reason == addTime &&
+              ValidateAddTrackKey({true, 100.001f, 0.5f}, false).reason == addTime &&
+              ValidateAddTrackKey({true, 150, 0.5f}, false).reason == addTime,
           "add: time below 0 or above 100 rejected with its reason");
-    CHECK(ValidateAddTrackKey({true, 50, 1.5f}, true).reason == addColor
-          && ValidateAddTrackKey({true, 50, -0.1f}, true).reason == addColor,
+    CHECK(ValidateAddTrackKey({true, 50, 1.5f}, true).reason == addColor &&
+              ValidateAddTrackKey({true, 50, -0.1f}, true).reason == addColor,
           "add: color value outside [0, 1] rejected on a color track");
-    CHECK(ValidateAddTrackKey({true, 50, 20}, false).outcome == EditOutcome::Applied
-          && ValidateAddTrackKey({true, 50, -5}, false).outcome == EditOutcome::Applied,
+    CHECK(ValidateAddTrackKey({true, 50, 20}, false).outcome == EditOutcome::Applied &&
+              ValidateAddTrackKey({true, 50, -5}, false).outcome == EditOutcome::Applied,
           "add: non-color tracks take any finite value");
-    CHECK(ValidateBatchKeys({{true, 10, 0.5f}, {true, 150, 0.5f}, {true, 20, 2}}, true).reason
-          == "add-track-keys 'time' must be within [0, 100] on every key",
+    CHECK(ValidateBatchKeys({{true, 10, 0.5f}, {true, 150, 0.5f}, {true, 20, 2}}, true).reason ==
+              "add-track-keys 'time' must be within [0, 100] on every key",
           "batch: first bad key decides (time before a later bad color value)");
-    CHECK(ValidateBatchKeys({{true, 10, 0.5f}, {true, 20, 2}, {true, 150, 0.5f}}, true).reason
-          == "add-track-keys 'value' must be within [0, 1] on a color track",
+    CHECK(ValidateBatchKeys({{true, 10, 0.5f}, {true, 20, 2}, {true, 150, 0.5f}}, true).reason ==
+              "add-track-keys 'value' must be within [0, 1] on a color track",
           "batch: first bad key decides (color value before a later bad time)");
     CHECK(ValidateBatchKeys({{true, 10, 20}, {true, 90, 15}}, false).outcome == EditOutcome::Applied,
           "batch: a scale paste is legal on a non-color track");
 
     const Track base = makeTrack({Key(0, 0.2f), Key(50, 0.5f), Key(100, 1)});
-    CHECK(PlanSetTrackKey(base, 50, 150, 0.5f, false).reason == "set-track-key 'newTime' must be within [0, 100]"
-          && PlanSetTrackKey(base, 50, -1, 0.5f, false).outcome == EditOutcome::Rejected
-          && PlanSetTrackKey(base, 50, kInf, 0.5f, false).outcome == EditOutcome::Rejected,
+    CHECK(PlanSetTrackKey(base, 50, 150, 0.5f, false).reason == "set-track-key 'newTime' must be within [0, 100]" &&
+              PlanSetTrackKey(base, 50, -1, 0.5f, false).outcome == EditOutcome::Rejected &&
+              PlanSetTrackKey(base, 50, kInf, 0.5f, false).outcome == EditOutcome::Rejected,
           "set: a non-border key's newTime outside [0, 100] (or infinite) rejected");
     const TrackKeyPlan border = PlanSetTrackKey(base, 100, 150, 0.7f, false);
     CHECK(border.outcome == EditOutcome::AppliedBorderTime && border.replacement.time == 100,
           "set: a border key's newTime is ignored, so an out-of-range one is not refused");
     CHECK(PlanSetTrackKey(base, 50, 40, kInf, false).reason == "set-track-key 'newValue' must be finite",
           "set: non-finite newValue rejected on any track");
-    CHECK(PlanSetTrackKey(base, 50, 40, 2, true).reason == "set-track-key 'newValue' must be within [0, 1] on a color track"
-          && PlanSetTrackKey(base, 50, 40, 2, false).outcome == EditOutcome::Applied,
+    CHECK(PlanSetTrackKey(base, 50, 40, 2, true).reason ==
+                  "set-track-key 'newValue' must be within [0, 1] on a color track" &&
+              PlanSetTrackKey(base, 50, 40, 2, false).outcome == EditOutcome::Applied,
           "set: color value outside [0, 1] rejected on a color track only");
     CHECK(PlanSetTrackKey(base, 33, 150, 0.5f, false).outcome == EditOutcome::Rejected,
           "set: a bad request fails loud even when no key sits at oldTime");
@@ -730,7 +818,8 @@ static void testKeyBounds()
     {
         ParticleSystem bad;
         newSystem(bad);
-        bad.getEmitter(0).tracks[SCALE]->keys = makeTrack({Key(0, 20), Key(50, 10), Key(100, 5), Key(150, 7), Key(160, 8)}).keys;
+        bad.getEmitter(0).tracks[SCALE]->keys =
+            makeTrack({Key(0, 20), Key(50, 10), Key(100, 5), Key(150, 7), Key(160, 8)}).keys;
         ParticleSystem* r = reload(serialize(bad));
         CHECK(r == nullptr, "grounding: two keys past 100 make the saved file unloadable");
         delete r;
@@ -738,9 +827,10 @@ static void testKeyBounds()
     {
         ParticleSystem bad;
         newSystem(bad);
-        bad.getEmitter(0).tracks[SCALE]->keys = makeTrack({Key(0, 20), Key(50, 10), Key(100, 5), Key(100 + 0.001f, 7)}).keys;
+        bad.getEmitter(0).tracks[SCALE]->keys =
+            makeTrack({Key(0, 20), Key(50, 10), Key(100, 5), Key(100 + 0.001f, 7)}).keys;
         ParticleSystem* r = reload(serialize(bad));
-        const Track* t = r ? r->getEmitter(0).tracks[SCALE] : nullptr;
+        const Track*    t = r ? r->getEmitter(0).tracks[SCALE] : nullptr;
         CHECK(t != nullptr && t->keys.count(Key(100, 0)) == 2,
               "grounding: the old edge bump (100.001) reloads as a second key at 100");
         delete r;
@@ -751,7 +841,10 @@ static void testAtlas()
 {
     std::printf("(c) atlas grid and index\n");
     // The renderer's formula before it moved to AtlasGridSide (EmitterInstance.cpp).
-    auto engineSide = [](unsigned long ts) { return (int)floor(sqrtf((float)(ts > 1ul ? ts : 1ul))); };
+    auto engineSide = [](unsigned long ts)
+    {
+        return (int)floor(sqrtf((float)(ts > 1ul ? ts : 1ul)));
+    };
     bool same = true;
     for (unsigned long ts = 0; ts <= 5000; ts++) same = same && AtlasGridSide(ts) == engineSide(ts);
     const unsigned long big[] = {65535ul, 65536ul, 1000000ul, 4294967295ul};
@@ -761,23 +854,37 @@ static void testAtlas()
           "textureSize is a frame count: 64 -> 8x8, 16 and 20 -> 4x4, 0 -> 1x1");
 
     Emitter e;
-    e.textureSize = 20;   // 4x4 grid: 16 cells, NOT 20
-    CHECK(ClassifyAtlasIndex(e, 0).outcome == EditOutcome::Applied && ClassifyAtlasIndex(e, 15.9f).outcome == EditOutcome::Applied,
+    e.textureSize = 20; // 4x4 grid: 16 cells, NOT 20
+    CHECK(ClassifyAtlasIndex(e, 0).outcome == EditOutcome::Applied &&
+              ClassifyAtlasIndex(e, 15.9f).outcome == EditOutcome::Applied,
           "indices inside the grid pass");
     const EditResult out = ClassifyAtlasIndex(e, 16);
-    CHECK(out.outcome == EditOutcome::OutOfGrid && !out.reason.empty(), "index 16 of textureSize 20 is out of the 4x4 grid (bound is side^2)");
-    CHECK(ClassifyAtlasIndex(e, -0.5f).outcome == EditOutcome::OutOfGrid && ClassifyAtlasIndex(e, kNaN).outcome == EditOutcome::OutOfGrid,
+    CHECK(out.outcome == EditOutcome::OutOfGrid && !out.reason.empty(),
+          "index 16 of textureSize 20 is out of the 4x4 grid (bound is side^2)");
+    CHECK(ClassifyAtlasIndex(e, -0.5f).outcome == EditOutcome::OutOfGrid &&
+              ClassifyAtlasIndex(e, kNaN).outcome == EditOutcome::OutOfGrid,
           "negative and non-finite indices are out of grid");
-    bool neverRejected = true;
-    const float probes[] = {-100, -1, 0, 3, 16, 64, 1e9f, kInf, kNaN};
+    bool        neverRejected = true;
+    const float probes[]      = {-100, -1, 0, 3, 16, 64, 1e9f, kInf, kNaN};
     for (float v : probes) neverRejected = neverRejected && ClassifyAtlasIndex(e, v).outcome != EditOutcome::Rejected;
     CHECK(neverRejected, "the classifier never rejects (the engine wraps out-of-grid indices)");
 }
 
-static PropertyValue num(double v)  { PropertyValue p = {false, false, v}; return p; }
-static PropertyValue flag(bool b)   { PropertyValue p = {true, b, 0.0}; return p; }
+static PropertyValue num(double v)
+{
+    PropertyValue p = {false, false, v};
+    return p;
+}
+static PropertyValue flag(bool b)
+{
+    PropertyValue p = {true, b, 0.0};
+    return p;
+}
 
-static bool isRejected(const EditResult& r) { return r.outcome == EditOutcome::Rejected; }
+static bool isRejected(const EditResult& r)
+{
+    return r.outcome == EditOutcome::Rejected;
+}
 
 static bool samePropertyValue(const PropertyValue& a, const PropertyValue& b)
 {
@@ -789,7 +896,8 @@ static bool samePropertyValue(const PropertyValue& a, const PropertyValue& b)
 
 static bool hasName(const std::vector<std::string>& names, const std::string& name)
 {
-    for (const std::string& n : names) if (n == name) return true;
+    for (const std::string& n : names)
+        if (n == name) return true;
     return false;
 }
 
@@ -802,11 +910,15 @@ static bool survivesSave(const std::string& field, const PropertyValue& value, s
     // randomRotationAverage is saved only while randomRotation is on.
     if (field == "randomRotationAverage") e.randomRotation = true;
     ApplySetProperty(e, field, value);
-    const PropertyValue applied = GetProperty(e, field);   // floats narrowed
-    ParticleSystem* rp = reload(serialize(ps));
-    if (!rp) { *got = "unloadable"; return false; }
+    const PropertyValue applied = GetProperty(e, field); // floats narrowed
+    ParticleSystem*     rp      = reload(serialize(ps));
+    if (!rp)
+    {
+        *got = "unloadable";
+        return false;
+    }
     const PropertyValue back = GetProperty(rp->getEmitter(0), field);
-    char buf[64];
+    char                buf[64];
     std::snprintf(buf, sizeof(buf), back.isBool ? (back.boolValue ? "true" : "false") : "%.9g", back.number);
     *got = buf;
     delete rp;
@@ -816,29 +928,31 @@ static bool survivesSave(const std::string& field, const PropertyValue& value, s
 static void testSetProperty()
 {
     std::printf("(d) tool-only: set-property\n");
-    const std::vector<std::string> names = SettablePropertyNames();
-    bool unique = true;
+    const std::vector<std::string> names  = SettablePropertyNames();
+    bool                           unique = true;
     for (size_t i = 0; i < names.size(); i++)
         for (size_t j = i + 1; j < names.size(); j++) unique = unique && names[i] != names[j];
     CHECK(unique, "settable names are unique");
     CHECK(hasName(names, "blendMode") && hasName(names, "acceleration[2]") && hasName(names, "randomColors[3]") &&
-          hasName(names, "groups[0].type") && hasName(names, "groups[2].valZ") && hasName(names, "unknown49"),
+              hasName(names, "groups[0].type") && hasName(names, "groups[2].valZ") && hasName(names, "unknown49"),
           "settable names cover scalars, array elements and the speed/position groups");
-    const char* excluded[] = {"index", "linkGroup", "spawnOnDeath", "spawnDuringLife", "unknown11", "has11",
-                              "groups[1].type", "groups[1].minX", "name", "colorTexture", "normalTexture", "visible",
-                              "stableId", "parent", "acceleration[3]", "groups[3].type"};
-    bool none = true;
+    const char* excluded[] = {"index",     "linkGroup",    "spawnOnDeath",    "spawnDuringLife",
+                              "unknown11", "has11",        "groups[1].type",  "groups[1].minX",
+                              "name",      "colorTexture", "normalTexture",   "visible",
+                              "stableId",  "parent",       "acceleration[3]", "groups[3].type"};
+    bool        none       = true;
     for (const char* n : excluded) none = none && !hasName(names, n) && isRejected(ValidateSetProperty(n, num(0)));
     CHECK(none, "identity, link, spawn, derived and verb-owned fields are not settable");
 
     // Every settable field: legal values at its edges survive a save exactly.
-    int roundTrips = 0;
+    int         roundTrips = 0;
     std::string firstMiss;
     for (const std::string& field : names)
     {
         std::vector<PropertyValue> values;
-        const PropertyValue current = GetProperty(Emitter(), field);
-        if (current.isBool) values = {flag(true), flag(false)};
+        const PropertyValue        current = GetProperty(Emitter(), field);
+        if (current.isBool)
+            values = {flag(true), flag(false)};
         else
         {
             const double probes[] = {0, 1, 3, 13, 255, 4294967294.0, 4294967295.0, -2.5, 0.125, 1e30, -1e-30, -FLT_MAX};
@@ -848,11 +962,16 @@ static void testSetProperty()
         for (const PropertyValue& v : values)
         {
             std::string got;
-            if (survivesSave(field, v, &got)) { roundTrips++; continue; }
+            if (survivesSave(field, v, &got))
+            {
+                roundTrips++;
+                continue;
+            }
             if (firstMiss.empty())
             {
                 char buf[160];
-                std::snprintf(buf, sizeof(buf), "%s = %.9g reloads as %s", field.c_str(), v.isBool ? (double)v.boolValue : v.number, got.c_str());
+                std::snprintf(buf, sizeof(buf), "%s = %.9g reloads as %s", field.c_str(),
+                              v.isBool ? (double)v.boolValue : v.number, got.c_str());
                 firstMiss = buf;
             }
         }
@@ -862,50 +981,64 @@ static void testSetProperty()
     CHECK(roundTrips > 300, "the round-trip battery ran on every field");
 
     CHECK(isRejected(ValidateSetProperty("noSuchField", num(1))), "unknown field rejected");
-    CHECK(isRejected(ValidateSetProperty("useBursts", num(1))) && isRejected(ValidateSetProperty("lifetime", flag(true))),
+    CHECK(isRejected(ValidateSetProperty("useBursts", num(1))) &&
+              isRejected(ValidateSetProperty("lifetime", flag(true))),
           "a number for a boolean, or a boolean for a number, rejected");
     CHECK(isRejected(ValidateSetProperty("nParticlesPerSecond", num(1.5))) &&
-          isRejected(ValidateSetProperty("nParticlesPerSecond", num(-1))) &&
-          isRejected(ValidateSetProperty("nParticlesPerSecond", num(4294967296.0))) &&
-          isRejected(ValidateSetProperty("nParticlesPerSecond", num(NAN))),
+              isRejected(ValidateSetProperty("nParticlesPerSecond", num(-1))) &&
+              isRejected(ValidateSetProperty("nParticlesPerSecond", num(4294967296.0))) &&
+              isRejected(ValidateSetProperty("nParticlesPerSecond", num(NAN))),
           "integers: fractional, negative, above 0xFFFFFFFF and NaN rejected");
-    CHECK(isRejected(ValidateSetProperty("blendMode", num(14))) && isRejected(ValidateSetProperty("nTriangles", num(0))) &&
-          isRejected(ValidateSetProperty("nBursts", num(4294967295.0))) && isRejected(ValidateSetProperty("groundBehavior", num(4))) &&
-          isRejected(ValidateSetProperty("emitFromMesh", num(4))) && isRejected(ValidateSetProperty("emitFromMesh", num(-1))) &&
-          isRejected(ValidateSetProperty("groups[0].type", num(5))) && isRejected(ValidateSetProperty("groups[2].type", num(5))),
-          "integer ranges: blendMode 14, nTriangles 0, nBursts 0xFFFFFFFF, groundBehavior 4, emitFromMesh -1/4, group type 5");
-    CHECK(isRejected(ValidateSetProperty("gravity", num(1e39))) && isRejected(ValidateSetProperty("gravity", num(INFINITY))) &&
-          isRejected(ValidateSetProperty("gravity", num(NAN))),
+    CHECK(isRejected(ValidateSetProperty("blendMode", num(14))) &&
+              isRejected(ValidateSetProperty("nTriangles", num(0))) &&
+              isRejected(ValidateSetProperty("nBursts", num(4294967295.0))) &&
+              isRejected(ValidateSetProperty("groundBehavior", num(4))) &&
+              isRejected(ValidateSetProperty("emitFromMesh", num(4))) &&
+              isRejected(ValidateSetProperty("emitFromMesh", num(-1))) &&
+              isRejected(ValidateSetProperty("groups[0].type", num(5))) &&
+              isRejected(ValidateSetProperty("groups[2].type", num(5))),
+          "integer ranges: blendMode 14, nTriangles 0, nBursts 0xFFFFFFFF, groundBehavior 4, emitFromMesh -1/4, group "
+          "type 5");
+    CHECK(isRejected(ValidateSetProperty("gravity", num(1e39))) &&
+              isRejected(ValidateSetProperty("gravity", num(INFINITY))) &&
+              isRejected(ValidateSetProperty("gravity", num(NAN))),
           "floats: beyond float range and non-finite rejected");
     CHECK(isRejected(ValidateSetProperty("randomRotationVariance", num(1.0001))) &&
-          isRejected(ValidateSetProperty("randomRotationVariance", num(-0.1))) &&
-          ValidateSetProperty("randomRotationVariance", num(1)).outcome == EditOutcome::Applied,
+              isRejected(ValidateSetProperty("randomRotationVariance", num(-0.1))) &&
+              ValidateSetProperty("randomRotationVariance", num(1)).outcome == EditOutcome::Applied,
           "randomRotationVariance stays within [0, 1]");
     CHECK(!ValidateSetProperty("blendMode", num(1.5)).reason.empty(), "a rejection says why");
 
     // Why the integer ranges exist: write the value directly and reload.
     {
-        ParticleSystem ps; newSystem(ps);
-        ps.getEmitter(0).blendMode = 14; ps.getEmitter(0).nTriangles = 0; ps.getEmitter(0).nBursts = 0xFFFFFFFFul;
-        ParticleSystem* r = reload(serialize(ps));
+        ParticleSystem ps;
+        newSystem(ps);
+        ps.getEmitter(0).blendMode  = 14;
+        ps.getEmitter(0).nTriangles = 0;
+        ps.getEmitter(0).nBursts    = 0xFFFFFFFFul;
+        ParticleSystem* r           = reload(serialize(ps));
         CHECK(r && r->getEmitter(0).blendMode == 0 && r->getEmitter(0).nTriangles == 1 && r->getEmitter(0).nBursts == 0,
               "grounding: blendMode 14, nTriangles 0 and nBursts 0xFFFFFFFF reload as 0, 1 and 0");
         delete r;
     }
     {
-        ParticleSystem ps; newSystem(ps);
+        ParticleSystem ps;
+        newSystem(ps);
         ps.getEmitter(0).groups[ParticleSystem::GROUP_POSITION].type = 5;
-        ParticleSystem* r = reload(serialize(ps));
+        ParticleSystem* r                                            = reload(serialize(ps));
         CHECK(r == nullptr, "grounding: a group type of 5 makes the saved file unloadable");
         delete r;
     }
 
-    CHECK(PropertyFootprint("acceleration[0]") == std::vector<std::string>({"acceleration[0]"}), "a plain field's footprint is itself");
+    CHECK(PropertyFootprint("acceleration[0]") == std::vector<std::string>({"acceleration[0]"}),
+          "a plain field's footprint is itself");
     CHECK(PropertyFootprint("lifetime") == std::vector<std::string>({"lifetime", "groups[1]"}) &&
-          PropertyFootprint("randomLifetimePerc") == std::vector<std::string>({"randomLifetimePerc", "groups[1]"}),
+              PropertyFootprint("randomLifetimePerc") == std::vector<std::string>({"randomLifetimePerc", "groups[1]"}),
           "lifetime and randomLifetimePerc also derive groups[1]");
-    CHECK(PropertyFootprint("randomRotation") == std::vector<std::string>({"randomRotation", "randomRotationAverage", "tracks[6]"}) &&
-          PropertyFootprint("randomRotationAverage") == std::vector<std::string>({"randomRotationAverage", "tracks[6]"}),
+    CHECK(PropertyFootprint("randomRotation") ==
+                  std::vector<std::string>({"randomRotation", "randomRotationAverage", "tracks[6]"}) &&
+              PropertyFootprint("randomRotationAverage") ==
+                  std::vector<std::string>({"randomRotationAverage", "tracks[6]"}),
           "randomRotation and its average reach the rotation track");
 
     Emitter e;
@@ -921,25 +1054,28 @@ static void testRenameAndTextures()
     std::printf("(d) tool-only: rename and texture names\n");
     ParticleSystem ps;
     newSystem(ps);
-    Emitter* second = ps.addRootEmitter();
-    second->name = "Em1";
+    Emitter* second      = ps.addRootEmitter();
+    second->name         = "Em1";
     const Emitter& first = ps.getEmitter(0);
-    CHECK(ValidateRename(ps, first, "Em0").outcome == EditOutcome::NoOpUnchanged, "renaming to the current name is unchanged");
+    CHECK(ValidateRename(ps, first, "Em0").outcome == EditOutcome::NoOpUnchanged,
+          "renaming to the current name is unchanged");
     CHECK(ValidateRename(ps, first, "Fresh").outcome == EditOutcome::Applied, "a free name is accepted");
     const EditResult taken = ValidateRename(ps, first, "Em1");
-    CHECK(isRejected(taken) && taken.reason.find("Em1_1") != std::string::npos, "a taken name is rejected with a free suggestion");
+    CHECK(isRejected(taken) && taken.reason.find("Em1_1") != std::string::npos,
+          "a taken name is rejected with a free suggestion");
     CHECK(isRejected(ValidateRename(ps, first, "")) && isRejected(ValidateRename(ps, first, std::string("a\0b", 3))) &&
-          isRejected(ValidateRename(ps, first, "\xC3\x28")),
+              isRejected(ValidateRename(ps, first, "\xC3\x28")),
           "empty, NUL-holding and non-UTF-8 names rejected");
     CHECK(ValidateRename(ps, first, "\xC3\xA9tincelle").outcome == EditOutcome::Applied, "a UTF-8 name is accepted");
 
     CHECK(isRejected(ValidateTextureName("", true)) && isRejected(ValidateTextureName("", false)) &&
-          ValidateTextureName("p_particle_depth_master.tga", false).outcome == EditOutcome::Applied,
+              ValidateTextureName("p_particle_depth_master.tga", false).outcome == EditOutcome::Applied,
           "an empty texture name is rejected for both (an empty normal texture reloads as the default name)");
     CHECK(ValidateTextureName(std::string(kMaxTextureNameBytes, 'a'), true).outcome == EditOutcome::Applied &&
-          isRejected(ValidateTextureName(std::string(kMaxTextureNameBytes + 1, 'a'), true)),
+              isRejected(ValidateTextureName(std::string(kMaxTextureNameBytes + 1, 'a'), true)),
           "texture names are capped at kMaxTextureNameBytes");
-    CHECK(isRejected(ValidateTextureName(std::string("a\0.tga", 6), true)) && isRejected(ValidateTextureName("\xFF.tga", false)),
+    CHECK(isRejected(ValidateTextureName(std::string("a\0.tga", 6), true)) &&
+              isRejected(ValidateTextureName("\xFF.tga", false)),
           "NUL-holding and non-UTF-8 texture names rejected");
 }
 
@@ -947,20 +1083,21 @@ static void testRescaleRule()
 {
     std::printf("(d) tool-only: rescale preconditions\n");
     Emitter e;
-    e.useBursts = false;
+    e.useBursts           = false;
     e.nParticlesPerSecond = 10;
     CHECK(ValidateRescale(e, 2, 0.5).outcome == EditOutcome::Applied, "ordinary scales accepted");
     const double bad[] = {0, -1, NAN, INFINITY, 1e-40, 1e39};
-    bool all = true;
+    bool         all   = true;
     for (double v : bad) all = all && isRejected(ValidateRescale(e, v, 1)) && isRejected(ValidateRescale(e, 1, v));
     CHECK(all, "zero, negative, non-finite, subnormal and beyond-float scales rejected");
 
     CHECK(isRejected(ValidateRescale(e, 1e-9, 1)), "a particle rate pushed past INT_MAX rejected");
     e.nParticlesPerSecond = 1;
     CHECK(isRejected(ValidateRescale(e, FLT_MAX, 1)), "a fractional rate whose burst delay overflows rejected");
-    CHECK(ValidateRescale(e, 3, 1).outcome == EditOutcome::Applied, "a fractional rate with a finite burst delay accepted");
+    CHECK(ValidateRescale(e, 3, 1).outcome == EditOutcome::Applied,
+          "a fractional rate with a finite burst delay accepted");
 
-    e.useBursts = true;
+    e.useBursts  = true;
     e.burstDelay = 0;
     CHECK(isRejected(ValidateRescale(e, 2, 1)), "a zero burst delay rejected (the conversion divides by it)");
     e.burstDelay = 1e-6f;
@@ -969,7 +1106,8 @@ static void testRescaleRule()
     e.burstDelay = -1e-6f;
     CHECK(isRejected(ValidateRescale(e, 1e-3, 1)), "a negative burst rate pushed past INT_MIN rejected");
     e.burstDelay = -0.5f;
-    CHECK(ValidateRescale(e, 2, 1).outcome == EditOutcome::Applied, "a negative burst delay that converts is accepted (no overflow)");
+    CHECK(ValidateRescale(e, 2, 1).outcome == EditOutcome::Applied,
+          "a negative burst delay that converts is accepted (no overflow)");
     e.burstDelay = 0.25f;
     CHECK(ValidateRescale(e, 2, 1).outcome == EditOutcome::Applied, "an ordinary burst delay accepted");
     e.burstDelay = 0;
@@ -982,11 +1120,13 @@ static void testKeyCountAndLocks()
 {
     std::printf("(d) tool-only: key count and locks\n");
     Track t = makeTrack({Key(0, 1), Key(100, 1)});
-    CHECK(ValidateKeyCount(t, kMaxAloTrackKeys - 1).outcome == EditOutcome::Applied, "kMaxAloTrackKeys - 1 interior keys accepted");
+    CHECK(ValidateKeyCount(t, kMaxAloTrackKeys - 1).outcome == EditOutcome::Applied,
+          "kMaxAloTrackKeys - 1 interior keys accepted");
     CHECK(isRejected(ValidateKeyCount(t, kMaxAloTrackKeys)), "kMaxAloTrackKeys interior keys rejected");
 
-    Emitter locked;   // default: G/B/A locked to R
-    CHECK(LockedDependents(locked, ParticleSystem::TRACK_RED_CHANNEL) == std::vector<int>({1, 2, 3}), "red drives green, blue and alpha");
+    Emitter locked; // default: G/B/A locked to R
+    CHECK(LockedDependents(locked, ParticleSystem::TRACK_RED_CHANNEL) == std::vector<int>({1, 2, 3}),
+          "red drives green, blue and alpha");
     CHECK(LockedDependents(locked, ParticleSystem::TRACK_GREEN_CHANNEL).empty() && LockedDependents(locked, 4).empty(),
           "a locked channel and a non-colour track drive nothing");
     const EditResult onLocked = ValidateTrackEditLocks(locked, ParticleSystem::TRACK_BLUE_CHANNEL, true);
@@ -998,13 +1138,15 @@ static void testKeyCountAndLocks()
           "editing a source is accepted when its dependents are allowed");
     CHECK(ValidateTrackEditLocks(locked, ParticleSystem::TRACK_SCALE, false).outcome == EditOutcome::Applied,
           "non-colour tracks are never locked");
-    CHECK(isRejected(ValidateTrackEditLocks(locked, -1, true)) && isRejected(ValidateTrackEditLocks(locked, ParticleSystem::NUM_TRACKS, true)),
+    CHECK(isRejected(ValidateTrackEditLocks(locked, -1, true)) &&
+              isRejected(ValidateTrackEditLocks(locked, ParticleSystem::NUM_TRACKS, true)),
           "unknown track rejected");
 
     ParticleSystem ps;
-    newSystem(ps);   // every channel unlocked
-    CHECK(ValidateTrackEditLocks(ps.getEmitter(0), ParticleSystem::TRACK_ALPHA_CHANNEL, false).outcome == EditOutcome::Applied &&
-          LockedDependents(ps.getEmitter(0), ParticleSystem::TRACK_RED_CHANNEL).empty(),
+    newSystem(ps); // every channel unlocked
+    CHECK(ValidateTrackEditLocks(ps.getEmitter(0), ParticleSystem::TRACK_ALPHA_CHANNEL, false).outcome ==
+                  EditOutcome::Applied &&
+              LockedDependents(ps.getEmitter(0), ParticleSystem::TRACK_RED_CHANNEL).empty(),
           "unlocked channels edit freely");
 }
 
@@ -1023,7 +1165,11 @@ int main()
     testRenameAndTextures();
     testRescaleRule();
     testKeyCountAndLocks();
-    if (g_failed) { std::printf("FAILED: %d check(s)\n", g_failed); return 1; }
+    if (g_failed)
+    {
+        std::printf("FAILED: %d check(s)\n", g_failed);
+        return 1;
+    }
     std::printf("all checks passed\n");
     return 0;
 }

@@ -6,47 +6,49 @@ using namespace std;
 // Convert an ANSI string to a wide (UCS-2) string
 wstring AnsiToWide(const char* cstr)
 {
-	int size = MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, cstr, -1, NULL, 0);
-	WCHAR* wstr = new WCHAR[size];
-	try
-	{
-		MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, cstr, -1, wstr, size);
-		wstring result(wstr);
-		delete[] wstr;
-		return result;
-	}
-	catch (...)
-	{
-		delete[] wstr;
-		throw;
-	}
+    int    size = MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, cstr, -1, NULL, 0);
+    WCHAR* wstr = new WCHAR[size];
+    try
+    {
+        MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, cstr, -1, wstr, size);
+        wstring result(wstr);
+        delete[] wstr;
+        return result;
+    }
+    catch (...)
+    {
+        delete[] wstr;
+        throw;
+    }
 }
 
 // Convert  a wide (UCS-2) string to an an ANSI string
 string WideToAnsi(const wchar_t* cstr, const char* defChar)
 {
-	int size = WideCharToMultiByte(CP_ACP, WC_COMPOSITECHECK | WC_NO_BEST_FIT_CHARS | WC_DEFAULTCHAR, cstr, -1, NULL, 0, defChar, NULL);
-	CHAR* str = new CHAR[size];
-	try
-	{
-		WideCharToMultiByte(CP_ACP, WC_COMPOSITECHECK | WC_NO_BEST_FIT_CHARS | WC_DEFAULTCHAR, cstr, -1, str, size, defChar, NULL);
-		string result(str);
-		delete[] str;
-		return result;
-	}
-	catch (...)
-	{
-		delete[] str;
-		throw;
-	}
+    int size = WideCharToMultiByte(CP_ACP, WC_COMPOSITECHECK | WC_NO_BEST_FIT_CHARS | WC_DEFAULTCHAR, cstr, -1, NULL, 0,
+                                   defChar, NULL);
+    CHAR* str = new CHAR[size];
+    try
+    {
+        WideCharToMultiByte(CP_ACP, WC_COMPOSITECHECK | WC_NO_BEST_FIT_CHARS | WC_DEFAULTCHAR, cstr, -1, str, size,
+                            defChar, NULL);
+        string result(str);
+        delete[] str;
+        return result;
+    }
+    catch (...)
+    {
+        delete[] str;
+        throw;
+    }
 }
 
 static wstring FormatString(const wchar_t* format, va_list args)
 {
     // Measuring consumes a va_list, so measure a copy and format with the original
-    va_list  copy;
+    va_list copy;
     va_copy(copy, args);
-    int      n   = _vscwprintf(format, copy);
+    int n = _vscwprintf(format, copy);
     va_end(copy);
     wchar_t* buf = new wchar_t[n + 1];
     try
@@ -65,7 +67,7 @@ static wstring FormatString(const wchar_t* format, va_list args)
 
 wstring LoadString(UINT id, ...)
 {
-    int len = 256;
+    int    len = 256;
     TCHAR* buf = new TCHAR[len];
     try
     {

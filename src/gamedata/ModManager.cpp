@@ -8,7 +8,7 @@
 // a ModManager method.
 
 #include "ModManager.h"
-#include "ModScan.h"   // ScanModNestedLayers / ModRootHasArt (transitively ModLayers.h)
+#include "ModScan.h" // ScanModNestedLayers / ModRootHasArt (transitively ModLayers.h)
 #include "GameRoots.h"
 #include "host/SettingsRegistry.h"
 
@@ -23,10 +23,10 @@
 #include <cstdio>
 #include <vector>
 
-#pragma comment(lib, "shlwapi.lib")  // PathIsDirectory
+#pragma comment(lib, "shlwapi.lib") // PathIsDirectory
 
-using std::wstring;
 using std::vector;
+using std::wstring;
 
 // ---------------------------------------------------------------------------
 // Registry helpers (file-scope private, plus the one exposed nickname read).
@@ -52,8 +52,7 @@ static void WriteLastMod(const wstring& modPath)
     // writes directly instead of through WriteRegSz (which deletes on empty).
     if (HKEY hKey = host::OpenSettingsKeyForWrite())
     {
-        RegSetValueExW(hKey, L"LastMod", 0, REG_SZ,
-                       (const BYTE*)modPath.c_str(),
+        RegSetValueExW(hKey, L"LastMod", 0, REG_SZ, (const BYTE*)modPath.c_str(),
                        (DWORD)((modPath.size() + 1) * sizeof(wchar_t)));
         RegCloseKey(hKey);
     }
@@ -69,8 +68,7 @@ static vector<wstring> ReadLastLayers()
     if (HKEY hKey = host::OpenSettingsKeyForRead())
     {
         const std::vector<wchar_t> buf = host::ReadRegMultiSz(hKey, L"LastLayers");
-        if (!buf.empty())
-            out = modlayers::ParseMultiSz(buf.data(), buf.size());
+        if (!buf.empty()) out = modlayers::ParseMultiSz(buf.data(), buf.size());
         RegCloseKey(hKey);
     }
     return out;
@@ -99,7 +97,7 @@ static void ScanModsDir(const wstring& modsRoot, bool isFoC, vector<ModEntry>& o
     search += L"*";
 
     WIN32_FIND_DATA fd;
-    HANDLE hFind = FindFirstFile(search.c_str(), &fd);
+    HANDLE          hFind = FindFirstFile(search.c_str(), &fd);
     if (hFind == INVALID_HANDLE_VALUE) return;
 
     do
@@ -112,12 +110,11 @@ static void ScanModsDir(const wstring& modsRoot, bool isFoC, vector<ModEntry>& o
         e.folderName = fd.cFileName;
         e.path       = modsRoot;
         if (!e.path.empty() && e.path.back() != L'\\') e.path += L'\\';
-        e.path      += e.folderName;
-        e.isFoC      = isFoC;
-        e.nickname   = ReadModNickname(e.path);
+        e.path += e.folderName;
+        e.isFoC    = isFoC;
+        e.nickname = ReadModNickname(e.path);
         out.push_back(e);
-    }
-    while (FindNextFile(hFind, &fd));
+    } while (FindNextFile(hFind, &fd));
 
     FindClose(hFind);
 }
@@ -126,13 +123,10 @@ static void ScanModsDir(const wstring& modsRoot, bool isFoC, vector<ModEntry>& o
 // ModManager.
 // ---------------------------------------------------------------------------
 
-ModManager::ModManager(IFileManager* fileManager,
-                       const vector<wstring>& gameRoots,
-                       bool suppressPersistence)
-    : m_suppressPersistence(suppressPersistence),
-      m_fileManager(fileManager),
-      m_gameRoots(gameRoots)
-{}
+ModManager::ModManager(IFileManager* fileManager, const vector<wstring>& gameRoots, bool suppressPersistence)
+    : m_suppressPersistence(suppressPersistence), m_fileManager(fileManager), m_gameRoots(gameRoots)
+{
+}
 
 void ModManager::SetEngine(Engine* engine)
 {
@@ -146,8 +140,8 @@ void ModManager::DiscoverMods()
     {
         // Strip trailing slashes; the leaf basename is the engine-flavor
         // discriminator (corruption/ → FoC, GameData/ → Base Game).
-        const wstring trimmed = gameroots::TrimTrailingSlashes(root);
-        const gameroots::RootFlavor flavor = gameroots::ClassifyGameRoot(trimmed);
+        const wstring               trimmed = gameroots::TrimTrailingSlashes(root);
+        const gameroots::RootFlavor flavor  = gameroots::ClassifyGameRoot(trimmed);
         if (flavor == gameroots::RootFlavor::Other) continue;
         const bool isFoC = (flavor == gameroots::RootFlavor::FoC);
 
@@ -160,10 +154,12 @@ void ModManager::DiscoverMods()
 
     // Sort: FoC mods first, then base game; within each, alphabetical by
     // folder name. Matches the legacy ordering.
-    std::sort(m_mods.begin(), m_mods.end(), [](const ModEntry& a, const ModEntry& b) {
-        if (a.isFoC != b.isFoC) return a.isFoC && !b.isFoC;
-        return _wcsicmp(a.folderName.c_str(), b.folderName.c_str()) < 0;
-    });
+    std::sort(m_mods.begin(), m_mods.end(),
+              [](const ModEntry& a, const ModEntry& b)
+              {
+                  if (a.isFoC != b.isFoC) return a.isFoC && !b.isFoC;
+                  return _wcsicmp(a.folderName.c_str(), b.folderName.c_str()) < 0;
+              });
 
     // Per mod, discover its nested layers + whether its own root has Data\Art.
     for (ModEntry& e : m_mods)
@@ -172,8 +168,8 @@ void ModManager::DiscoverMods()
         ScanModNestedLayers(e.path, e.nested);
     }
 
-    printf("[Mods] DiscoverMods: scanned %zu game roots, found %zu mods\n",
-           m_gameRoots.size(), m_mods.size()); fflush(stdout);
+    printf("[Mods] DiscoverMods: scanned %zu game roots, found %zu mods\n", m_gameRoots.size(), m_mods.size());
+    fflush(stdout);
 }
 
 void ModManager::RestoreLastLayerStack()
@@ -190,11 +186,11 @@ void ModManager::RestoreLastLayerStack()
     // drive is inactive for this session, not deleted from the user's order.
     // SetLayerStack tolerates m_engine == null during startup.
     SetLayerStack(stack, /*allowPersist=*/false);
-    printf("[Mods] Restored %zu configured layer(s)\n", m_layerStack.size()); fflush(stdout);
+    printf("[Mods] Restored %zu configured layer(s)\n", m_layerStack.size());
+    fflush(stdout);
 }
 
-bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers, bool allowPersist,
-                               std::string* outError)
+bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers, bool allowPersist, std::string* outError)
 {
     // Every call site, including capture/quick-switch paths outside the bridge,
     // must reject before changing configured roots while D3D work is blocked.
@@ -203,9 +199,7 @@ bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers, bool allow
     // new-root session.
     if (m_engine != NULL && m_engine->DeviceCallsBlocked())
     {
-        if (outError != nullptr)
-            *outError =
-                "the rendering device is unavailable; the load order was not changed";
+        if (outError != nullptr) *outError = "the rendering device is unavailable; the load order was not changed";
         return false;
     }
 
@@ -213,11 +207,9 @@ bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers, bool allow
     // unavailable. Runtime activation is separate: primary is the first path
     // that exists now, and FileManager::SetLayers applies its own existence
     // filter before building content roots.
-    const modlayers::ResolvedLayerStack resolved =
-        modlayers::ResolveLayerStack(absoluteLayers, [](const wstring& path) {
-            return PathIsDirectory(path.c_str()) != FALSE;
-        });
-    m_layerStack = resolved.configured;
+    const modlayers::ResolvedLayerStack resolved = modlayers::ResolveLayerStack(
+        absoluteLayers, [](const wstring& path) { return PathIsDirectory(path.c_str()) != FALSE; });
+    m_layerStack       = resolved.configured;
     m_primaryLayerPath = resolved.primary;
 
     const wstring primary = GetPrimaryLayerPath();
@@ -236,8 +228,8 @@ bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers, bool allow
     //    cache-clear / refresh was removed with the old UI.)
     TexturePalette::Store::Instance().SetActiveMod(primary);
 
-    printf("[Mods] Layer stack: %zu configured layer(s), primary=%S\n",
-           m_layerStack.size(), primary.empty() ? L"(unmodded)" : primary.c_str());
+    printf("[Mods] Layer stack: %zu configured layer(s), primary=%S\n", m_layerStack.size(),
+           primary.empty() ? L"(unmodded)" : primary.c_str());
     fflush(stdout);
 
     // 4. Engine hot-swap (if bound).
@@ -266,7 +258,8 @@ bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers, bool allow
             if (outError != nullptr)
                 *outError = "the load order was applied but could not be saved "
                             "to the registry, so it will not survive a restart";
-            printf("[Mods] WARNING: LastLayers persist FAILED\n"); fflush(stdout);
+            printf("[Mods] WARNING: LastLayers persist FAILED\n");
+            fflush(stdout);
         }
         WriteLastMod(primary);
     }
@@ -277,6 +270,5 @@ bool ModManager::SelectMod(const wstring& modPath)
 {
     // Quick-switch = replace the whole stack with this single layer
     // (empty = Unmodded). Used by the host's mod quick-switch.
-    return SetLayerStack(modPath.empty() ? std::vector<wstring>{}
-                                         : std::vector<wstring>{ modPath });
+    return SetLayerStack(modPath.empty() ? std::vector<wstring>{} : std::vector<wstring>{modPath});
 }

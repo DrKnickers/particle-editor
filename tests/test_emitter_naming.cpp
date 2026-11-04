@@ -7,8 +7,9 @@
 static int g_failed = 0;
 
 static void CheckName(const std::vector<std::string>& existingNames,
-                      const std::string& sourceName,
-                      const std::string& expected, const char* msg)
+                      const std::string&              sourceName,
+                      const std::string&              expected,
+                      const char*                     msg)
 {
     const std::string got = NextDuplicateName(existingNames, sourceName);
     if (got == expected)
@@ -18,8 +19,7 @@ static void CheckName(const std::vector<std::string>& existingNames,
     else
     {
         ++g_failed;
-        std::printf("  FAIL: %s (got %s, expected %s)\n",
-                    msg, got.c_str(), expected.c_str());
+        std::printf("  FAIL: %s (got %s, expected %s)\n", msg, got.c_str(), expected.c_str());
     }
 }
 

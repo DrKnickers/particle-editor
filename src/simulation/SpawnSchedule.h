@@ -26,16 +26,15 @@
 // `scheduled = now + newDelay`, the obvious-looking version, breaks the first
 // two — which is exactly what the tests pin.
 
-typedef float SpawnTimeF;   // mirrors engine.h's TimeF; kept local so this
-                            // header stays free of the engine's includes
+typedef float SpawnTimeF; // mirrors engine.h's TimeF; kept local so this
+                          // header stays free of the engine's includes
 
 inline SpawnTimeF ReconcileNextSpawnTime(SpawnTimeF scheduled,
                                          SpawnTimeF now,
                                          SpawnTimeF newDelay,
-                                         bool scheduledFromInitialDelay)
+                                         bool       scheduledFromInitialDelay)
 {
-    if (scheduledFromInitialDelay)
-        return scheduled;
+    if (scheduledFromInitialDelay) return scheduled;
 
     const SpawnTimeF latest = now + newDelay;
     return (scheduled > latest) ? latest : scheduled;

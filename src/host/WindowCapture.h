@@ -5,7 +5,8 @@
 #include <string>
 #include <vector>
 
-namespace host {
+namespace host
+{
 
 // [record-async-encode] Split of CaptureWindowToPng for the record loop's
 // background PNG encoder (AsyncFrameEncoder.h): the GRAB stays synchronous
@@ -41,9 +42,8 @@ int ProbeWindowMaxLuma(HWND hwnd, double x0, double y0, double x1, double y1);
 // Max R+G+B (0..765) over a top-down BGRA buffer (stride w*4) inside the
 // fractional region [x0,y0)x[x1,y1) of the image, each edge clamped to the
 // image. Returns -1 for a null/empty buffer or an empty region. Pure.
-int MaxLumaInRect(const unsigned char* bgra, int w, int h,
-                  double x0, double y0, double x1, double y1);
+int MaxLumaInRect(const unsigned char* bgra, int w, int h, double x0, double y0, double x1, double y1);
 
-}  // namespace host
+} // namespace host
 
-#endif  // HOST_WINDOWCAPTURE_H
+#endif // HOST_WINDOWCAPTURE_H

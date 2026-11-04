@@ -15,10 +15,19 @@
 #include <string>
 
 static int g_failed = 0;
-#define CHECK(cond, msg) do {                              \
-    if (cond) { std::printf("  ok: %s\n", msg); }          \
-    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
 namespace fs = std::filesystem;
 
@@ -31,8 +40,7 @@ static void Touch(const fs::path& path)
 int main()
 {
     std::printf("test_isolated_webview_profile\n");
-    const fs::path root = fs::temp_directory_path() /
-        (L"AloIsoProfileTest-" + std::to_wstring(GetCurrentProcessId()));
+    const fs::path  root = fs::temp_directory_path() / (L"AloIsoProfileTest-" + std::to_wstring(GetCurrentProcessId()));
     std::error_code error;
     fs::remove_all(root, error);
 
@@ -49,11 +57,11 @@ int main()
           "an absent profile is created empty");
 
     // A file held open without sharing cannot be removed: use a fresh sibling instead.
-    const fs::path held = root / L"WebView2-iso-6262";
+    const fs::path held     = root / L"WebView2-iso-6262";
     const fs::path heldFile = held / L"lock";
     Touch(heldFile);
-    HANDLE lock = CreateFileW(heldFile.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING,
-                              FILE_ATTRIBUTE_NORMAL, nullptr);
+    HANDLE lock =
+        CreateFileW(heldFile.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     CHECK(lock != INVALID_HANDLE_VALUE, "test holds a profile file open without sharing");
     const fs::path fallback = host::FreshIsolatedProfileFolder(held, 99);
     CloseHandle(lock);
@@ -70,31 +78,33 @@ int main()
     const std::wstring stem = L"WebView2-iso-";
     CHECK(host::IsolatedProfileOwnerPid(L"WebView2-iso-4242", stem) == 4242, "owner of a per-PID profile");
     CHECK(host::IsolatedProfileOwnerPid(L"WebView2-iso-4242-99", stem) == 4242, "owner of a salted profile");
-    CHECK(host::IsolatedProfileOwnerPid(L"AloParticleEditor_WebView2-iso-12",
-                                        L"AloParticleEditor_WebView2-iso-") == 12,
+    CHECK(host::IsolatedProfileOwnerPid(L"AloParticleEditor_WebView2-iso-12", L"AloParticleEditor_WebView2-iso-") == 12,
           "owner of a TEMP-fallback profile");
     bool rejected = true;
-    for (const wchar_t* leaf : { L"WebView2", L"WebView2-iso-", L"WebView2-iso-abc", L"WebView2-iso-12x",
-                                 L"WebView2-iso-12-", L"WebView2-iso-12-x", L"WebView2-iso-12-3-4",
-                                 L"WebView2-iso-99999999999", L"WebView2-iso-4294967296",
-                                 L"AloParticleEditor_WebView2-iso-12", L"xWebView2-iso-12" })
+    for (const wchar_t* leaf :
+         {L"WebView2", L"WebView2-iso-", L"WebView2-iso-abc", L"WebView2-iso-12x", L"WebView2-iso-12-",
+          L"WebView2-iso-12-x", L"WebView2-iso-12-3-4", L"WebView2-iso-99999999999", L"WebView2-iso-4294967296",
+          L"AloParticleEditor_WebView2-iso-12", L"xWebView2-iso-12"})
         rejected = rejected && host::IsolatedProfileOwnerPid(leaf, stem) == 0;
     CHECK(rejected, "every other shape, an overflowing PID and a different stem have no owner");
 
     // The sweep removes dead owners' profiles and leaves everything else.
     const fs::path sweep = root / L"sweep";
-    const fs::path own = sweep / L"WebView2-iso-1";
-    for (const wchar_t* leaf : { L"WebView2-iso-1", L"WebView2-iso-2", L"WebView2-iso-3", L"WebView2-iso-3-77",
-                                 L"WebView2", L"foo-iso-3", L"WebView2-iso-3x" })
+    const fs::path own   = sweep / L"WebView2-iso-1";
+    for (const wchar_t* leaf : {L"WebView2-iso-1", L"WebView2-iso-2", L"WebView2-iso-3", L"WebView2-iso-3-77",
+                                L"WebView2", L"foo-iso-3", L"WebView2-iso-3x"})
         Touch(sweep / leaf / L"EBWebView" / L"data");
-    Touch(sweep / L"WebView2-iso-30");                         // a FILE named like a profile
+    Touch(sweep / L"WebView2-iso-30"); // a FILE named like a profile
     const fs::path outside = root / L"outside";
     Touch(outside / L"precious.txt");
-    const std::wstring junctionCommand = L"cmd /c mklink /J \"" + (sweep / L"WebView2-iso-31").wstring() +
-                                         L"\" \"" + outside.wstring() + L"\" >nul";
+    const std::wstring junctionCommand =
+        L"cmd /c mklink /J \"" + (sweep / L"WebView2-iso-31").wstring() + L"\" \"" + outside.wstring() + L"\" >nul";
     const bool junction = _wsystem(junctionCommand.c_str()) == 0;
     CHECK(junction, "test made a junction named like a dead profile");
-    auto live = [](unsigned long pid) { return pid == 1 || pid == 2; };
+    auto live = [](unsigned long pid)
+    {
+        return pid == 1 || pid == 2;
+    };
     const int removed = host::SweepStaleIsolatedProfiles(own, live);
     CHECK(removed == 2, "the sweep reports the two dead profiles it removed");
     CHECK(!fs::exists(sweep / L"WebView2-iso-3") && !fs::exists(sweep / L"WebView2-iso-3-77"),
@@ -103,7 +113,7 @@ int main()
           "our own and a live sibling's profiles are kept");
     CHECK(fs::exists(sweep / L"WebView2" / L"EBWebView" / L"data"), "the daily-driver profile is kept");
     CHECK(fs::exists(sweep / L"foo-iso-3") && fs::exists(sweep / L"WebView2-iso-3x") &&
-          fs::is_regular_file(sweep / L"WebView2-iso-30"),
+              fs::is_regular_file(sweep / L"WebView2-iso-30"),
           "unrelated folders and a file named like a profile are kept");
     CHECK(fs::exists(outside / L"precious.txt"), "a junction is never followed");
     if (junction) RemoveDirectoryW((sweep / L"WebView2-iso-31").c_str());
@@ -121,7 +131,8 @@ int main()
 
     // A folder that is not an isolated profile never sweeps its siblings.
     CHECK(host::SweepStaleIsolatedProfiles(sweep / L"WebView2", [](unsigned long) { return false; }) == 0 &&
-          fs::exists(own), "a non-isolated folder sweeps nothing");
+              fs::exists(own),
+          "a non-isolated folder sweeps nothing");
 
     fs::remove_all(root, error);
     std::printf("%s (%d failures)\n", g_failed ? "=== FAILED ===" : "=== ALL PASS ===", g_failed);

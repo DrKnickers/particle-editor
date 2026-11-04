@@ -31,14 +31,14 @@
 
 enum class EditOutcome
 {
-    Applied,            // the edit is legal and mutates (or, for a check, passes)
-    AppliedBorderTime,  // set-track-key on a first/last key: time pinned, value applied
-    NoOpBorderSkip,     // delete-track-keys on a first/last key: skipped
-    NoOpNotFound,       // no key at the requested time
-    NoOpUnchanged,      // already in the requested state
-    NoOpOutOfDomain,    // the edit does not apply to this target (lock on a non-RGBA track)
-    OutOfGrid,          // advisory only: an atlas index outside the grid (the engine wraps it)
-    Rejected            // illegal; `reason` says why
+    Applied,           // the edit is legal and mutates (or, for a check, passes)
+    AppliedBorderTime, // set-track-key on a first/last key: time pinned, value applied
+    NoOpBorderSkip,    // delete-track-keys on a first/last key: skipped
+    NoOpNotFound,      // no key at the requested time
+    NoOpUnchanged,     // already in the requested state
+    NoOpOutOfDomain,   // the edit does not apply to this target (lock on a non-RGBA track)
+    OutOfGrid,         // advisory only: an atlas index outside the grid (the engine wraps it)
+    Rejected           // illegal; `reason` says why
 };
 
 struct EditResult
@@ -58,7 +58,7 @@ struct EditPlan
 // and, for a set, `replacement` is inserted.
 struct TrackKeyPlan : EditPlan
 {
-    float      findTime;
+    float                               findTime;
     ParticleSystem::Emitter::Track::Key replacement;
 };
 
@@ -94,16 +94,22 @@ bool IsBorderKeyTime(const ParticleSystem::Emitter::Track& track, float time);
 // interior time past 100 or a color value outside [0, 1]. So a key time
 // outside [0, 100] is silently re-timed by a save (two of them make the file
 // unloadable), and a color value outside [0, 1] makes it unloadable.
-inline bool IsColorTrack(int trackIdx) { return trackIdx >= 0 && trackIdx < 4; }
-inline bool InTrackTimeRange(float time) { return time >= 0.0f && time <= 100.0f; }   // NaN fails
+inline bool IsColorTrack(int trackIdx)
+{
+    return trackIdx >= 0 && trackIdx < 4;
+}
+inline bool InTrackTimeRange(float time)
+{
+    return time >= 0.0f && time <= 100.0f;
+} // NaN fails
 
 // Border key: the time stays at oldTime, the value is still applied. Refuses
 // a non-border key's newTime outside [0, 100] (a border key's newTime is
 // ignored, so it is not checked), a non-finite newValue, and on a color
 // track a newValue outside [0, 1].
-TrackKeyPlan PlanSetTrackKey(const ParticleSystem::Emitter::Track& track, float oldTime, float newTime,
-                             float newValue, bool isColor);
-void         ApplySetTrackKey(ParticleSystem::Emitter::Track& track, const TrackKeyPlan& plan);
+TrackKeyPlan PlanSetTrackKey(
+    const ParticleSystem::Emitter::Track& track, float oldTime, float newTime, float newValue, bool isColor);
+void ApplySetTrackKey(ParticleSystem::Emitter::Track& track, const TrackKeyPlan& plan);
 
 // One time of a delete-track-keys request. A border key is skipped. Borders
 // never move, so planning each time against the current track matches the
@@ -165,11 +171,13 @@ bool InIntFieldRange(double value);
 // channel (the keys belong to the channel it is locked to) and the rotation
 // track while randomRotation is on (the save does not store those keys).
 // Index values outside the atlas grid are legal; see ClassifyAtlasIndex.
-EditResult ValidateFullTrackReplacement(const ParticleSystem::Emitter& emitter, int trackIdx,
+EditResult ValidateFullTrackReplacement(const ParticleSystem::Emitter&                          emitter,
+                                        int                                                     trackIdx,
                                         const std::vector<ParticleSystem::Emitter::Track::Key>& proposed);
 // Call only after ValidateFullTrackReplacement returned Applied.
-void       ApplyFullTrackReplacement(ParticleSystem::Emitter& emitter, int trackIdx,
-                                     const std::vector<ParticleSystem::Emitter::Track::Key>& proposed);
+void ApplyFullTrackReplacement(ParticleSystem::Emitter&                                emitter,
+                               int                                                     trackIdx,
+                               const std::vector<ParticleSystem::Emitter::Track::Key>& proposed);
 
 // ---- Atlas ------------------------------------------------------------------
 
@@ -205,26 +213,42 @@ inline bool HasLinkGroupMembership(const ParticleSystem::Emitter& emitter)
 inline bool IsValidUtf8(const std::string& s)
 {
     const unsigned char* p = reinterpret_cast<const unsigned char*>(s.data());
-    const size_t n = s.size();
-    size_t i = 0;
+    const size_t         n = s.size();
+    size_t               i = 0;
     while (i < n)
     {
         const unsigned char c = p[i];
-        size_t len;
-        unsigned long cp;
-        if (c < 0x80) { i++; continue; }
-        else if (c >= 0xC2 && c <= 0xDF) { len = 2; cp = c & 0x1F; }
-        else if (c >= 0xE0 && c <= 0xEF) { len = 3; cp = c & 0x0F; }
-        else if (c >= 0xF0 && c <= 0xF4) { len = 4; cp = c & 0x07; }
-        else return false;
+        size_t              len;
+        unsigned long       cp;
+        if (c < 0x80)
+        {
+            i++;
+            continue;
+        }
+        else if (c >= 0xC2 && c <= 0xDF)
+        {
+            len = 2;
+            cp  = c & 0x1F;
+        }
+        else if (c >= 0xE0 && c <= 0xEF)
+        {
+            len = 3;
+            cp  = c & 0x0F;
+        }
+        else if (c >= 0xF0 && c <= 0xF4)
+        {
+            len = 4;
+            cp  = c & 0x07;
+        }
+        else
+            return false;
         if (n - i < len) return false;
         for (size_t k = 1; k < len; k++)
         {
             if ((p[i + k] & 0xC0) != 0x80) return false;
             cp = (cp << 6) | (p[i + k] & 0x3F);
         }
-        if ((len == 3 && cp < 0x800) || (len == 4 && (cp < 0x10000 || cp > 0x10FFFF)) ||
-            (cp >= 0xD800 && cp <= 0xDFFF))
+        if ((len == 3 && cp < 0x800) || (len == 4 && (cp < 0x10000 || cp > 0x10FFFF)) || (cp >= 0xD800 && cp <= 0xDFFF))
             return false;
         i += len;
     }
@@ -254,7 +278,7 @@ std::vector<std::string> SettablePropertyNames();
 // randomRotationVariance within [0, 1].
 EditResult ValidateSetProperty(const std::string& field, const PropertyValue& value);
 // Call only after ValidateSetProperty returned Applied.
-void       ApplySetProperty(ParticleSystem::Emitter& emitter, const std::string& field, const PropertyValue& value);
+void ApplySetProperty(ParticleSystem::Emitter& emitter, const std::string& field, const PropertyValue& value);
 // The current value of a settable `field` (a float widened to double).
 PropertyValue GetProperty(const ParticleSystem::Emitter& emitter, const std::string& field);
 
@@ -266,8 +290,7 @@ std::vector<std::string> PropertyFootprint(const std::string& field);
 
 // Rename to exactly `name`: refused when empty, holding a NUL, not UTF-8, or
 // equal to another emitter's name (which would make selectors ambiguous).
-EditResult ValidateRename(const ParticleSystem& system, const ParticleSystem::Emitter& target,
-                          const std::string& name);
+EditResult ValidateRename(const ParticleSystem& system, const ParticleSystem::Emitter& target, const std::string& name);
 
 // A texture name: not UTF-8, holding a NUL (the writer would save it and the
 // game would cut the name there) or longer than kMaxTextureNameBytes is
@@ -275,7 +298,7 @@ EditResult ValidateRename(const ParticleSystem& system, const ParticleSystem::Em
 // saves no chunk and reloads as p_particle_depth_master.tga, so the file is
 // not a fixed point of a save (name the default instead).
 static const size_t kMaxTextureNameBytes = 259;
-EditResult ValidateTextureName(const std::string& name, bool colorTexture);
+EditResult          ValidateTextureName(const std::string& name, bool colorTexture);
 
 // DoRescaleEmitter's preconditions: both scales finite and above 0, and, for
 // a time scale on a non-weather emitter, a rescaled burst delay or particle

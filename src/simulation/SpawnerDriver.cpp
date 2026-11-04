@@ -5,7 +5,8 @@
 #include "ProjectileShot.h"
 #include <algorithm>
 
-namespace {
+namespace
+{
 
 // Anchor-Object3D with public position/velocity setters. Used as the
 // transient parent of each spawned instance so the spawn inherits a
@@ -36,24 +37,22 @@ inline int ClampInt(int v, int lo, int hi)
 
 inline D3DXVECTOR3 ClampVec(const D3DXVECTOR3& v, float bound)
 {
-    return D3DXVECTOR3(Clamp(v.x, -bound, bound),
-                       Clamp(v.y, -bound, bound),
-                       Clamp(v.z, -bound, bound));
+    return D3DXVECTOR3(Clamp(v.x, -bound, bound), Clamp(v.y, -bound, bound), Clamp(v.z, -bound, bound));
 }
 
 } // namespace
 
 void ClampSpawnerConfig(SpawnerConfig& cfg)
 {
-    cfg.burstSize      = ClampInt(cfg.burstSize, 1, SpawnerDriver::MAX_BURST_SIZE);
-    cfg.spacingSec     = Clamp(cfg.spacingSec,     0.0f, SpawnerDriver::MAX_SPACING_SEC);
-    cfg.intervalSec    = Clamp(cfg.intervalSec,    0.0f, SpawnerDriver::MAX_INTERVAL_SEC);
-    cfg.maxLifetimeSec = Clamp(cfg.maxLifetimeSec, 0.0f, SpawnerDriver::MAX_LIFETIME_SEC);
-    cfg.position       = ClampVec(cfg.position, SpawnerDriver::JITTER_MAX);
-    cfg.velocity       = ClampVec(cfg.velocity, SpawnerDriver::JITTER_MAX);
-    cfg.targetPosition = ClampVec(cfg.targetPosition, SpawnerDriver::JITTER_MAX);
-    cfg.jitterPosition = ClampVec(cfg.jitterPosition, SpawnerDriver::JITTER_MAX);
-    cfg.acceleration      = ClampVec(cfg.acceleration,      SpawnerDriver::JITTER_MAX);
+    cfg.burstSize         = ClampInt(cfg.burstSize, 1, SpawnerDriver::MAX_BURST_SIZE);
+    cfg.spacingSec        = Clamp(cfg.spacingSec, 0.0f, SpawnerDriver::MAX_SPACING_SEC);
+    cfg.intervalSec       = Clamp(cfg.intervalSec, 0.0f, SpawnerDriver::MAX_INTERVAL_SEC);
+    cfg.maxLifetimeSec    = Clamp(cfg.maxLifetimeSec, 0.0f, SpawnerDriver::MAX_LIFETIME_SEC);
+    cfg.position          = ClampVec(cfg.position, SpawnerDriver::JITTER_MAX);
+    cfg.velocity          = ClampVec(cfg.velocity, SpawnerDriver::JITTER_MAX);
+    cfg.targetPosition    = ClampVec(cfg.targetPosition, SpawnerDriver::JITTER_MAX);
+    cfg.jitterPosition    = ClampVec(cfg.jitterPosition, SpawnerDriver::JITTER_MAX);
+    cfg.acceleration      = ClampVec(cfg.acceleration, SpawnerDriver::JITTER_MAX);
     cfg.squiggleAmplitude = ClampVec(cfg.squiggleAmplitude, SpawnerDriver::JITTER_MAX);
     cfg.squiggleFrequency = Clamp(cfg.squiggleFrequency, 0.0f, SpawnerDriver::SQUIGGLE_FREQ_MAX);
 
@@ -66,16 +65,16 @@ void ClampSpawnerConfig(SpawnerConfig& cfg)
 ProjectileFlightParams ReferenceFlightParams(const Engine::ReferenceProjectileInfo& proj, float groundZ)
 {
     ProjectileFlightParams p;
-    p.speedPerFrame       = proj.speedPerFrame;
-    p.range               = proj.range;
-    p.turnRateDegPerFrame = proj.turnRateDegPerFrame;
-    p.bombFallAccel       = proj.bombFallAccel;
-    p.grenadeGravity      = proj.grenadeGravity;
-    p.grenadeLobMod       = proj.grenadeLobMod;
-    p.grenadeCanLobSlower = proj.grenadeCanLobSlower;
-    p.maxLifetimeSec      = proj.maxLifetimeSec;
-    p.groundZ             = groundZ;
-    p.clusterBomb         = IsClusterBombCategory(proj.category);
+    p.speedPerFrame          = proj.speedPerFrame;
+    p.range                  = proj.range;
+    p.turnRateDegPerFrame    = proj.turnRateDegPerFrame;
+    p.bombFallAccel          = proj.bombFallAccel;
+    p.grenadeGravity         = proj.grenadeGravity;
+    p.grenadeLobMod          = proj.grenadeLobMod;
+    p.grenadeCanLobSlower    = proj.grenadeCanLobSlower;
+    p.maxLifetimeSec         = proj.maxLifetimeSec;
+    p.groundZ                = groundZ;
+    p.clusterBomb            = IsClusterBombCategory(proj.category);
     p.rocketStraightDistance = proj.rocketStraightDistance;
     p.rocketCurveDistance    = proj.rocketCurveDistance;
     p.rocketCurveOffset      = proj.rocketCurveOffset;
@@ -84,7 +83,10 @@ ProjectileFlightParams ReferenceFlightParams(const Engine::ReferenceProjectileIn
     p.inSpace                = proj.inSpace;
     // The preview's own random stream stands in for the game's SyncRandom, so each shot
     // bends differently, like the game's, without matching any one game shot.
-    p.randomInRange = [](float lo, float hi) { return ParticleRandom::Range(lo, hi); };
+    p.randomInRange = [](float lo, float hi)
+    {
+        return ParticleRandom::Range(lo, hi);
+    };
     return p;
 }
 
@@ -93,25 +95,26 @@ bool IsProjectileTargetOutOfReach(const SpawnerConfig& cfg, const Engine* engine
     Engine::ReferenceProjectileInfo proj;
     if (!cfg.matchProjectile || engine == NULL || !engine->GetReferenceProjectile(proj)) return false;
     if (ProjectileFlightKindFor(proj.category) != ProjectileFlightKind::Grenade) return false;
-    const ProjectileFlightParams p = ReferenceFlightParams(proj, engine->GetGroundZ());
-    const float launch[3] = { cfg.position.x, cfg.position.y, cfg.position.z };
-    const float target[3] = { cfg.targetPosition.x, cfg.targetPosition.y, cfg.targetPosition.z };
-    float angleRad = 0.0f, speedPerFrame = 0.0f;
+    const ProjectileFlightParams p         = ReferenceFlightParams(proj, engine->GetGroundZ());
+    const float                  launch[3] = {cfg.position.x, cfg.position.y, cfg.position.z};
+    const float                  target[3] = {cfg.targetPosition.x, cfg.targetPosition.y, cfg.targetPosition.z};
+    float                        angleRad = 0.0f, speedPerFrame = 0.0f;
     return p.speedPerFrame > 0.0f && !GameGrenadeLob(p, launch, target, angleRad, speedPerFrame);
 }
 
-namespace {
+namespace
+{
 
 // How one spawned instance moves: the authored motion, or the projectile's flight.
 struct ShotMotion
 {
-    bool                      fired            = true;    // false: the game wouldn't fire this shot
-    bool                      isProjectileShot = false;   // the projectile's flight replaced the authored motion
+    bool                      fired            = true;  // false: the game wouldn't fire this shot
+    bool                      isProjectileShot = false; // the projectile's flight replaced the authored motion
     D3DXVECTOR3               velocity;
-    float                     maxLifetimeSec   = 0.0f;
+    float                     maxLifetimeSec = 0.0f;
     D3DXVECTOR3               accel;
     D3DXVECTOR3               squiggle;
-    std::vector<FlightSample> curvedPath;                 // empty for authored motion and straight shots
+    std::vector<FlightSample> curvedPath; // empty for authored motion and straight shots
 };
 
 ShotMotion ComputeShotMotion(const SpawnerConfig& cfg, const D3DXVECTOR3& launchPos, const Engine& engine)
@@ -125,8 +128,8 @@ ShotMotion ComputeShotMotion(const SpawnerConfig& cfg, const D3DXVECTOR3& launch
     Engine::ReferenceProjectileInfo proj;
     if (!cfg.matchProjectile || !engine.GetReferenceProjectile(proj)) return motion;
 
-    const float aim[3] = { cfg.velocity.x, cfg.velocity.y, cfg.velocity.z };
-    const ProjectileFlightKind kind = ProjectileFlightKindFor(proj.category);
+    const float                aim[3] = {cfg.velocity.x, cfg.velocity.y, cfg.velocity.z};
+    const ProjectileFlightKind kind   = ProjectileFlightKindFor(proj.category);
     if (kind == ProjectileFlightKind::Direct)
     {
         ProjectileShot flight;
@@ -136,9 +139,9 @@ ShotMotion ComputeShotMotion(const SpawnerConfig& cfg, const D3DXVECTOR3& launch
     }
     else
     {
-        const float launch[3] = { launchPos.x, launchPos.y, launchPos.z };
-        const float target[3] = { cfg.targetPosition.x, cfg.targetPosition.y, cfg.targetPosition.z };
-        const ProjectileFlightParams params = ReferenceFlightParams(proj, engine.GetGroundZ());
+        const float                  launch[3] = {launchPos.x, launchPos.y, launchPos.z};
+        const float                  target[3] = {cfg.targetPosition.x, cfg.targetPosition.y, cfg.targetPosition.z};
+        const ProjectileFlightParams params    = ReferenceFlightParams(proj, engine.GetGroundZ());
         if (!ComputeProjectileFlight(kind, params, launch, aim, target, motion.curvedPath))
         {
             // A grenade out of lob range: the game doesn't fire, so the preview doesn't either.
@@ -159,10 +162,10 @@ ShotMotion ComputeShotMotion(const SpawnerConfig& cfg, const D3DXVECTOR3& launch
 }
 
 // Returns false when the preview's hard guard refused the spawn.
-bool SpawnShotInstance(const ParticleSystem& sys, Engine& engine, SpawnerAnchor& anchor,
-                       float squiggleFrequency, ShotMotion motion)
+bool SpawnShotInstance(
+    const ParticleSystem& sys, Engine& engine, SpawnerAnchor& anchor, float squiggleFrequency, ShotMotion motion)
 {
-    anchor.SetVelocity(motion.velocity);   // no velocity jitter; path is shaped over lifetime instead
+    anchor.SetVelocity(motion.velocity); // no velocity jitter; path is shaped over lifetime instead
     ParticleSystemInstance* inst = engine.SpawnParticleSystem(sys, &anchor);
     if (inst == NULL) return false;
 
@@ -174,23 +177,20 @@ bool SpawnShotInstance(const ParticleSystem& sys, Engine& engine, SpawnerAnchor&
         D3DXVECTOR3 dir;
         D3DXVec3Normalize(&dir, &motion.velocity);
         if (!motion.curvedPath.empty())
-            dir = D3DXVECTOR3(motion.curvedPath[0].facing[0], motion.curvedPath[0].facing[1], motion.curvedPath[0].facing[2]);
+            dir = D3DXVECTOR3(motion.curvedPath[0].facing[0], motion.curvedPath[0].facing[1],
+                              motion.curvedPath[0].facing[2]);
         inst->MarkProjectileShot(dir);
         if (!motion.curvedPath.empty()) inst->SetFlightPath(std::move(motion.curvedPath));
     }
-    inst->Detach();   // freeze the stamped values; per-frame motion takes over from Update
+    inst->Detach(); // freeze the stamped values; per-frame motion takes over from Update
     return true;
 }
 
 } // namespace
 
 SpawnerDriver::SpawnerDriver()
-    : m_phase(Phase::Waiting),
-      m_burstRemaining(0),
-      m_timeUntilNextInstance(0.0f),
-      m_timeUntilNextBurst(0.0f),
-      m_pendingBursts(0),
-      m_burstBegun(false)
+    : m_phase(Phase::Waiting), m_burstRemaining(0), m_timeUntilNextInstance(0.0f), m_timeUntilNextBurst(0.0f),
+      m_pendingBursts(0), m_burstBegun(false)
 {
 }
 
@@ -207,13 +207,13 @@ void SpawnerDriver::Reset()
 bool SpawnerDriver::IsIdle() const
 {
     return m_phase == Phase::Waiting && m_burstRemaining == 0 && m_pendingBursts == 0 &&
-        (m_cfg.mode == SpawnerConfig::Mode::Manual || !m_cfg.enabled);
+           (m_cfg.mode == SpawnerConfig::Mode::Manual || !m_cfg.enabled);
 }
 
 void SpawnerDriver::SetConfig(const SpawnerConfig& cfg)
 {
     SpawnerConfig oldCfg = m_cfg;
-    m_cfg = cfg;
+    m_cfg                = cfg;
     ClampSpawnerConfig(m_cfg);
 
     // Reset the burst-state machine ONLY on transitions that change the
@@ -229,7 +229,7 @@ void SpawnerDriver::SetConfig(const SpawnerConfig& cfg)
     // captured at StartBurst (so changing burstSize mid-burst affects
     // the *next* burst, not the current one). Spacing is read fresh on
     // each emission, so changing it mid-burst takes effect immediately.
-    bool modeChanged    = (oldCfg.mode    != m_cfg.mode);
+    bool modeChanged    = (oldCfg.mode != m_cfg.mode);
     bool enabledChanged = (oldCfg.enabled != m_cfg.enabled);
 
     if (modeChanged)
@@ -237,8 +237,8 @@ void SpawnerDriver::SetConfig(const SpawnerConfig& cfg)
         m_phase                 = Phase::Waiting;
         m_burstRemaining        = 0;
         m_timeUntilNextInstance = 0.0f;
-        m_timeUntilNextBurst    = m_cfg.intervalSec;   // wait one interval before first burst
-        m_pendingBursts         = 0;                   // queued manual triggers die with the mode
+        m_timeUntilNextBurst    = m_cfg.intervalSec; // wait one interval before first burst
+        m_pendingBursts         = 0;                 // queued manual triggers die with the mode
         m_burstBegun            = false;
     }
     else if (enabledChanged && m_cfg.enabled && m_phase == Phase::Waiting)
@@ -253,7 +253,7 @@ void SpawnerDriver::SetConfig(const SpawnerConfig& cfg)
 float SpawnerDriver::ComputeBurstsPerSec(const SpawnerConfig& cfg)
 {
     if (cfg.mode != SpawnerConfig::Mode::Auto) return 0.0f;
-    int n = (cfg.burstSize > 1) ? cfg.burstSize - 1 : 0;
+    int   n     = (cfg.burstSize > 1) ? cfg.burstSize - 1 : 0;
     float cycle = n * cfg.spacingSec + cfg.intervalSec;
     if (cycle < 1.0e-4f) cycle = 1.0e-4f;
     return 1.0f / cycle;
@@ -263,8 +263,8 @@ void SpawnerDriver::StartBurst()
 {
     m_phase                 = Phase::BurstFiring;
     m_burstRemaining        = m_cfg.burstSize;
-    m_timeUntilNextInstance = 0.0f;     // first instance fires this frame
-    m_burstBegun            = false;    // Tick hasn't processed this burst yet
+    m_timeUntilNextInstance = 0.0f;  // first instance fires this frame
+    m_burstBegun            = false; // Tick hasn't processed this burst yet
 }
 
 void SpawnerDriver::Trigger(const ParticleSystem* sys, Engine* engine)
@@ -279,8 +279,7 @@ void SpawnerDriver::Trigger(const ParticleSystem* sys, Engine* engine)
         // silently dropped — the preview-overload spec flake). Queue it.
         // Once the burst has begun, re-triggers stay debounced (button
         // hammering mid-burst doesn't stack bursts).
-        if (!m_burstBegun && m_pendingBursts < MAX_PENDING_BURSTS)
-            ++m_pendingBursts;
+        if (!m_burstBegun && m_pendingBursts < MAX_PENDING_BURSTS) ++m_pendingBursts;
         return;
     }
     StartBurst();
@@ -308,9 +307,7 @@ void SpawnerDriver::Tick(float dtSeconds, const ParticleSystem* sys, Engine* eng
     if (dtSeconds < 0.0f || dtSeconds > 1.0f) dtSeconds = 1.0f / 60.0f;
 
     // Auto mode: countdown to next burst when between bursts.
-    if (m_phase == Phase::Waiting
-        && m_cfg.mode == SpawnerConfig::Mode::Auto
-        && m_cfg.enabled)
+    if (m_phase == Phase::Waiting && m_cfg.mode == SpawnerConfig::Mode::Auto && m_cfg.enabled)
     {
         m_timeUntilNextBurst -= dtSeconds;
         if (m_timeUntilNextBurst <= 0.0f)
@@ -324,10 +321,10 @@ void SpawnerDriver::Tick(float dtSeconds, const ParticleSystem* sys, Engine* eng
     // or we hit a per-frame / live-instance cap.
     if (m_phase == Phase::BurstFiring)
     {
-        m_burstBegun = true;   // re-triggers from here on are mid-burst (debounced)
+        m_burstBegun = true; // re-triggers from here on are mid-burst (debounced)
         m_timeUntilNextInstance -= dtSeconds;
 
-        int spawnsThisFrame = 0;
+        int           spawnsThisFrame = 0;
         SpawnerAnchor anchor;
         while (m_burstRemaining > 0 && m_timeUntilNextInstance <= 0.0f)
         {
@@ -362,7 +359,7 @@ void SpawnerDriver::Tick(float dtSeconds, const ParticleSystem* sys, Engine* eng
                 m_cfg.enabled    = false;
                 m_burstRemaining = 0;
                 m_phase          = Phase::Waiting;
-                m_pendingBursts  = 0;   // queued bursts would refuse-and-clear again
+                m_pendingBursts  = 0; // queued bursts would refuse-and-clear again
                 break;
             }
 
@@ -373,7 +370,7 @@ void SpawnerDriver::Tick(float dtSeconds, const ParticleSystem* sys, Engine* eng
 
         if (m_burstRemaining == 0)
         {
-            m_phase = Phase::Waiting;
+            m_phase              = Phase::Waiting;
             m_timeUntilNextBurst = m_cfg.intervalSec;
             // A manual trigger queued while this burst was armed-but-unbegun
             // fires next: re-arm now, emit on the next Tick. (Zero after a

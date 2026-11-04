@@ -32,12 +32,19 @@ class IFile;
 // One authored material parameter (sub-mesh chunks 0x10102-0x10106).
 struct AloShaderParam
 {
-    enum Kind { INT, FLOAT, FLOAT3, FLOAT4, TEXTURE };
+    enum Kind
+    {
+        INT,
+        FLOAT,
+        FLOAT3,
+        FLOAT4,
+        TEXTURE
+    };
     Kind        kind = FLOAT;
-    std::string name;                  // HLSL name, e.g. "CloudScrollRate", "BaseTexture"
-    int         i = 0;                 // INT
-    float       f[4] = { 0, 0, 0, 0 }; // FLOAT (f[0]) / FLOAT3 (f[0..2]) / FLOAT4 (f[0..3])
-    std::string tex;                   // TEXTURE: bare filename (consumer prefixes the art dir)
+    std::string name;                // HLSL name, e.g. "CloudScrollRate", "BaseTexture"
+    int         i    = 0;            // INT
+    float       f[4] = {0, 0, 0, 0}; // FLOAT (f[0]) / FLOAT3 (f[0..2]) / FLOAT4 (f[0..3])
+    std::string tex;                 // TEXTURE: bare filename (consumer prefixes the art dir)
 };
 
 // One renderable sub-mesh: a named game shader, its material params, and the
@@ -50,34 +57,34 @@ struct AloSubMesh
 #ifdef ALO_MODEL_TEST_PROBES
     AloSubMesh();
 #endif
-    std::string                 shaderName;        // 0x10101, e.g. "Skydome.fx"
-    std::string                 vertexFormatName;  // 0x10002, e.g. "alD3dVertNU2C"
+    std::string                 shaderName;       // 0x10101, e.g. "Skydome.fx"
+    std::string                 vertexFormatName; // 0x10002, e.g. "alD3dVertNU2C"
     std::vector<AloShaderParam> params;
-    uint32_t                    vertexCount = 0;
+    uint32_t                    vertexCount    = 0;
     uint32_t                    primitiveCount = 0; // triangles; index count = *3
-    std::vector<unsigned char>  rawVertexBytes;    // vertexCount * kAloVertexStride
-    std::vector<unsigned char>  indexBytes;        // primitiveCount * 3 * sizeof(uint16)
+    std::vector<unsigned char>  rawVertexBytes;     // vertexCount * kAloVertexStride
+    std::vector<unsigned char>  indexBytes;         // primitiveCount * 3 * sizeof(uint16)
 };
 
 #ifdef ALO_MODEL_TEST_PROBES
 // Test-build-only construction probe for the nested material fan-out guard.
 // Keeping the counter in the real AloSubMesh constructor makes a late-check
 // mutant observable without changing normal production builds or parser calls.
-void AloResetSubMeshConstructionCountForTesting();
+void   AloResetSubMeshConstructionCountForTesting();
 size_t AloSubMeshConstructionCountForTesting();
 #endif
 
 struct AloMesh
 {
-    std::string             name;       // 0x401
+    std::string name; // 0x401
     // Per-mesh flags from the 0x402 MESH-INFO chunk (the consumer gates rendering
     // on `hidden`). Cross-verified writer-side (max2alamo alo_build.cpp:145-161,
     // `isHidden`@offset32 = 1=>hidden) and reader-side (alo-viewer Models.cpp:189,
     // `isVisible = (readInteger()==0)`). Default visible/non-collision when 0x402
     // is absent or too short (tolerant). Visibility is a MESH property -> it gates
     // all of this mesh's sub-meshes.
-    bool                    hidden    = false;  // 0x402 isHidden    (1 => not drawn)
-    bool                    collision = false;  // 0x402 isCollision (1 => collision mesh)
+    bool                    hidden    = false; // 0x402 isHidden    (1 => not drawn)
+    bool                    collision = false; // 0x402 isCollision (1 => collision mesh)
     std::vector<AloSubMesh> subMeshes;
 };
 
@@ -93,11 +100,11 @@ struct AloMesh
 //     1" variant, so the consumer pins the convention against a known model).
 struct AloBone
 {
-    std::string name;                                       // 0x203
-    uint32_t    parentIndex   = 0;                          // raw; root sentinel not normalized
+    std::string name;              // 0x203
+    uint32_t    parentIndex   = 0; // raw; root sentinel not normalized
     bool        visible       = true;
-    uint32_t    billboardMode = 0;                          // 0 for a 0x205 (no-billboard) bone
-    float       matrix[12]    = { 1,0,0,0, 0,1,0,0, 0,0,1,0 };  // 4x3 column-major, verbatim
+    uint32_t    billboardMode = 0;                                    // 0 for a 0x205 (no-billboard) bone
+    float       matrix[12]    = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0}; // 4x3 column-major, verbatim
 };
 
 // One object->bone connection (chunk 0x602): which bone places a given object.
@@ -123,10 +130,10 @@ struct AloProxy
 
 struct AloModel
 {
-    std::vector<AloMesh>       meshes;       // one per 0x400 chunk
-    std::vector<AloBone>       bones;        // 0x202 under the 0x200 skeleton (empty if none)
-    std::vector<AloConnection> connections;  // 0x602 under the 0x600 connections (empty if none)
-    std::vector<AloProxy>      proxies;      // 0x603 under the 0x600 connections (empty if none)
+    std::vector<AloMesh>       meshes;      // one per 0x400 chunk
+    std::vector<AloBone>       bones;       // 0x202 under the 0x200 skeleton (empty if none)
+    std::vector<AloConnection> connections; // 0x602 under the 0x600 connections (empty if none)
+    std::vector<AloProxy>      proxies;     // 0x603 under the 0x600 connections (empty if none)
 };
 
 // On-disk vertex stride is a fixed 144-byte MASTER_VERTEX for EVERY vertex
@@ -136,7 +143,7 @@ struct AloModel
 //   pos@0, normal@12, uv0@24, uv1-3@32/40/48, tangent@56, binormal@68,
 //   color(float4)@80, reserved@96, boneIdx[4]@112, weights[4]@128.
 static const long kAloVertexStride = 144;
-static const long kAloColorOffset  = 80;   // float4 RGBA (RGB@80, A@92)
+static const long kAloColorOffset  = 80; // float4 RGBA (RGB@80, A@92)
 
 // Sub-mesh classification helpers (pure string checks) shared by the
 // renderer (ReferenceObjectMesh skips these sub-meshes) and the catalog
@@ -164,13 +171,14 @@ bool AloIsNonVisibleShader(const std::string& shaderName);
 // SRCALPHA/INVSRCALPHA (MeshAlpha*), Heat/Shadow/Occluded are non-opaque-visible
 // scaffolding phases, everything else (MeshGloss/Bump/Collision/SolidColor...) is
 // opaque. The single classifier keeps the renderer + the catalog in lockstep.
-enum AloRenderClass {
-    ALO_RC_OPAQUE,     // opaque pass (incl. MeshCollision = flat blue)
-    ALO_RC_ADDITIVE,   // transparent pass, ONE/ONE
-    ALO_RC_ALPHA,      // transparent pass, SRCALPHA/INVSRCALPHA
-    ALO_RC_HEAT,       // "Heat" phase: a two-stage scene-composite -- v1 logs + skips
-    ALO_RC_SHADOW,     // stencil shadow volume -- never visible geometry
-    ALO_RC_OCCLUDED,   // occluded-unit phase -- never visible geometry
+enum AloRenderClass
+{
+    ALO_RC_OPAQUE,   // opaque pass (incl. MeshCollision = flat blue)
+    ALO_RC_ADDITIVE, // transparent pass, ONE/ONE
+    ALO_RC_ALPHA,    // transparent pass, SRCALPHA/INVSRCALPHA
+    ALO_RC_HEAT,     // "Heat" phase: a two-stage scene-composite -- v1 logs + skips
+    ALO_RC_SHADOW,   // stencil shadow volume -- never visible geometry
+    ALO_RC_OCCLUDED, // occluded-unit phase -- never visible geometry
 };
 AloRenderClass AloClassifyShader(const std::string& shaderName);
 

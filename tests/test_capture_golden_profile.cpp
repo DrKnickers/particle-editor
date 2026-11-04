@@ -15,16 +15,24 @@
 
 static int g_failed = 0;
 
-#define CHECK(cond, msg) do {                              \
-    if (cond) { std::printf("  ok: %s\n", msg); }          \
-    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
 static std::string ReadSource(const std::filesystem::path& path)
 {
     std::ifstream input(path, std::ios::binary);
-    return std::string(std::istreambuf_iterator<char>(input),
-                       std::istreambuf_iterator<char>());
+    return std::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
 }
 
 // The host window implementation is split across HostWindowImpl.h and the
@@ -32,10 +40,9 @@ static std::string ReadSource(const std::filesystem::path& path)
 // them. Empty if any file is missing, which fails the readable checks.
 static std::string ReadHostWindowSources(const std::filesystem::path& root)
 {
-    const char* const files[] = {
-        "HostWindowImpl.h", "HostWindow.cpp", "HostWindow_WebView2.cpp",
-        "HostWindow_Viewport.cpp", "HostWindow_Record.cpp", "HostWindow_Replay.cpp" };
-    std::string all;
+    const char* const files[] = {"HostWindowImpl.h",        "HostWindow.cpp",        "HostWindow_WebView2.cpp",
+                                 "HostWindow_Viewport.cpp", "HostWindow_Record.cpp", "HostWindow_Replay.cpp"};
+    std::string       all;
     for (const char* file : files)
     {
         const std::string text = ReadSource(root / "src" / "host" / file);
@@ -46,10 +53,9 @@ static std::string ReadHostWindowSources(const std::filesystem::path& root)
     return all;
 }
 
-static size_t CountOccurrences(const std::string& text,
-                               const std::string& needle)
+static size_t CountOccurrences(const std::string& text, const std::string& needle)
 {
-    size_t count = 0;
+    size_t count  = 0;
     size_t offset = 0;
     while ((offset = text.find(needle, offset)) != std::string::npos)
     {
@@ -65,25 +71,21 @@ static std::string WithoutWhitespace(const std::string& text)
     compact.reserve(text.size());
     for (unsigned char c : text)
     {
-        if (!std::isspace(c))
-            compact.push_back(static_cast<char>(c));
+        if (!std::isspace(c)) compact.push_back(static_cast<char>(c));
     }
     return compact;
 }
 
-static std::string ControlledBlock(const std::string& source,
-                                   const std::string& call)
+static std::string ControlledBlock(const std::string& source, const std::string& call)
 {
     const size_t callAt = source.find(call);
-    if (callAt == std::string::npos)
-        return {};
+    if (callAt == std::string::npos) return {};
 
     // A semicolon before the opening brace means the predicate was merely
     // evaluated/assigned rather than directly controlling this block.
-    const size_t open = source.find('{', callAt + call.size());
+    const size_t open      = source.find('{', callAt + call.size());
     const size_t semicolon = source.find(';', callAt + call.size());
-    if (open == std::string::npos ||
-        (semicolon != std::string::npos && semicolon < open))
+    if (open == std::string::npos || (semicolon != std::string::npos && semicolon < open))
     {
         return {};
     }
@@ -128,17 +130,13 @@ int main()
           "ordinary capture with skydome 0 remains valid");
     CHECK(host::ShouldRestorePersistedViewSettings(false, false),
           "ordinary non-test-host run still restores persisted view settings");
-    CHECK(host::ShouldReadCaptureRegistryOverrides(false),
-          "ordinary capture still reads registry overrides");
+    CHECK(host::ShouldReadCaptureRegistryOverrides(false), "ordinary capture still reads registry overrides");
 
-    CHECK(!host::ShouldRestorePersistedViewSettings(true, false),
-          "test-host continues to skip persisted view restore");
-    CHECK(!host::ShouldRestorePersistedViewSettings(false, true),
-          "golden capture skips persisted view restore");
+    CHECK(!host::ShouldRestorePersistedViewSettings(true, false), "test-host continues to skip persisted view restore");
+    CHECK(!host::ShouldRestorePersistedViewSettings(false, true), "golden capture skips persisted view restore");
     CHECK(!host::ShouldRestorePersistedViewSettings(true, true),
           "golden test-host combination also skips persisted view restore");
-    CHECK(!host::ShouldReadCaptureRegistryOverrides(true),
-          "golden capture skips capture-only registry overrides");
+    CHECK(!host::ShouldReadCaptureRegistryOverrides(true), "golden capture skips capture-only registry overrides");
 
     // --- 3. CLI rejection is exercised against the Release executable by
     // scripts/tool-smoke.mjs, including each invalid parsed capture value.
@@ -147,34 +145,29 @@ int main()
     // extracted reader + applier, not sit unused nearby; cross-file checks pin
     // the value reads and ambient push at their new production homes.
     {
-        const std::filesystem::path root = std::filesystem::current_path();
-        const std::string source = ReadHostWindowSources(root);
-        const std::string restoredSource = ReadSource(
-            root / "src" / "host" / "RestoredSettings.cpp");
-        const std::string lightingSource = ReadSource(
-            root / "src" / "host" / "LightingSettings.h");
-        const std::string compact = WithoutWhitespace(source);
-        const std::string call =
-            "ShouldRestorePersistedViewSettings(";
-        const std::string block = ControlledBlock(source, call);
+        const std::filesystem::path root           = std::filesystem::current_path();
+        const std::string           source         = ReadHostWindowSources(root);
+        const std::string           restoredSource = ReadSource(root / "src" / "host" / "RestoredSettings.cpp");
+        const std::string           lightingSource = ReadSource(root / "src" / "host" / "LightingSettings.h");
+        const std::string           compact        = WithoutWhitespace(source);
+        const std::string           call           = "ShouldRestorePersistedViewSettings(";
+        const std::string           block          = ControlledBlock(source, call);
 
         CHECK(!source.empty(), "HostWindow production source is readable");
         CHECK(compact.find("m_captureGoldenProfile(options.captureGoldenProfile||"
-                  "!options.replayScenarioPath.empty()||!options.observeSpecPath.empty())") != std::string::npos,
-              "proof and observe force the golden profile before view and mod restoration");
-        CHECK(CountOccurrences(source, call) == 1,
-              "HostWindow calls the persisted-view predicate exactly once");
-        CHECK(compact.find(
-                  "if(ShouldRestorePersistedViewSettings("
-                  "useTestHost,m_captureGoldenProfile)){") !=
+                           "!options.replayScenarioPath.empty()||!options.observeSpecPath.empty())") !=
                   std::string::npos,
+              "proof and observe force the golden profile before view and mod restoration");
+        CHECK(CountOccurrences(source, call) == 1, "HostWindow calls the persisted-view predicate exactly once");
+        CHECK(compact.find("if(ShouldRestorePersistedViewSettings("
+                           "useTestHost,m_captureGoldenProfile)){") != std::string::npos,
               "persisted restore is directly controlled by the production predicate");
         CHECK(block.find("ReadRestoredSettings(") != std::string::npos &&
-              block.find("ApplyRestoredSettings(") != std::string::npos,
+                  block.find("ApplyRestoredSettings(") != std::string::npos,
               "predicate directly drives the extracted reader and applier");
         CHECK(restoredSource.find("BloomEnabled") != std::string::npos &&
-              restoredSource.find("ShowGround") != std::string::npos &&
-              restoredSource.find("SkydomeIndex") != std::string::npos,
+                  restoredSource.find("ShowGround") != std::string::npos &&
+                  restoredSource.find("SkydomeIndex") != std::string::npos,
               "extracted reader contains the persisted bloom and view reads");
         CHECK(lightingSource.find("LightSunIntensity") != std::string::npos,
               "central lighting schema contains the persisted sun key");
@@ -186,58 +179,40 @@ int main()
     // remain inside the one registry-read decision. Covering only the helper
     // would miss the original two-stage contamination path.
     {
-        const std::string source = ReadSource(
-            std::filesystem::current_path() / "src" / "host" /
-            "CaptureRunner.cpp");
+        const std::string source  = ReadSource(std::filesystem::current_path() / "src" / "host" / "CaptureRunner.cpp");
         const std::string compact = WithoutWhitespace(source);
-        const std::string call =
-            "ShouldReadCaptureRegistryOverrides(";
-        const std::string block = ControlledBlock(source, call);
-        const std::string goldenOnlyBlock =
-            ControlledBlock(source, "if (m_params.captureGoldenProfile)");
-        const size_t clearAt =
-            source.find("engine->SetSkydomeEnvironment(");
-        const size_t loadAt =
-            source.find("LoadParticleSystem(m_params.captureAlo");
-        const size_t seedAt = source.find("ParticleRandom::Seed(");
+        const std::string call    = "ShouldReadCaptureRegistryOverrides(";
+        const std::string block   = ControlledBlock(source, call);
+        const std::string goldenOnlyBlock = ControlledBlock(source, "if (m_params.captureGoldenProfile)");
+        const size_t      clearAt         = source.find("engine->SetSkydomeEnvironment(");
+        const size_t      loadAt          = source.find("LoadParticleSystem(m_params.captureAlo");
+        const size_t      seedAt          = source.find("ParticleRandom::Seed(");
 
         CHECK(!source.empty(), "CaptureRunner production source is readable");
-        CHECK(CountOccurrences(source, call) == 1,
-              "CaptureRunner calls the registry-read predicate exactly once");
-        CHECK(compact.find(
-                  "if(ShouldReadCaptureRegistryOverrides("
-                  "m_params.captureGoldenProfile)){") != std::string::npos,
+        CHECK(CountOccurrences(source, call) == 1, "CaptureRunner calls the registry-read predicate exactly once");
+        CHECK(compact.find("if(ShouldReadCaptureRegistryOverrides("
+                           "m_params.captureGoldenProfile)){") != std::string::npos,
               "capture registry reads are directly controlled by the predicate");
         CHECK(block.find("\"ShowGround\"") != std::string::npos,
               "ShowGround registry read is inside the controlled block");
         CHECK(block.find("\"CaptureCamYaw\"") != std::string::npos &&
-              block.find("\"CaptureCamPitch\"") != std::string::npos &&
-              block.find("\"CaptureCamDist\"") != std::string::npos,
+                  block.find("\"CaptureCamPitch\"") != std::string::npos &&
+                  block.find("\"CaptureCamDist\"") != std::string::npos,
               "all CaptureCam registry reads are inside the controlled block");
-        CHECK(compact.find(
-                  "m_params.captureGoldenProfile?"
-                  "engine->SetEmbeddedSkydomeSlotForCapture("
-                  "m_params.captureSkydomeSlot):"
-                  "engine->SetSkydomeSlot(m_params.captureSkydomeSlot)") !=
-                  std::string::npos,
+        CHECK(compact.find("m_params.captureGoldenProfile?"
+                           "engine->SetEmbeddedSkydomeSlotForCapture("
+                           "m_params.captureSkydomeSlot):"
+                           "engine->SetSkydomeSlot(m_params.captureSkydomeSlot)") != std::string::npos,
               "golden mode alone selects the embedded skydome source");
-        CHECK(goldenOnlyBlock.find("engine->SetSkydomeEnvironment(") !=
-                  std::string::npos,
+        CHECK(goldenOnlyBlock.find("engine->SetSkydomeEnvironment(") != std::string::npos,
               "golden-only block clears both game-dome selections");
-        CHECK(clearAt != std::string::npos &&
-              loadAt != std::string::npos &&
-              seedAt != std::string::npos &&
-              clearAt < loadAt &&
-              loadAt < seedAt,
+        CHECK(clearAt != std::string::npos && loadAt != std::string::npos && seedAt != std::string::npos &&
+                  clearAt < loadAt && loadAt < seedAt,
               "game-dome clear precedes fixture loading and the final PRNG seed");
-        CHECK(source.find("IsSkydomeUsingEmbeddedResource") !=
-                  std::string::npos &&
-              source.find("SkydomePrimaryHasGpuBuffers") !=
-                  std::string::npos &&
-              source.find("SkydomeSecondaryHasGpuBuffers") !=
-                  std::string::npos &&
-              source.find("SkydomeMeshHasGpuBuffers") !=
-                  std::string::npos,
+        CHECK(source.find("IsSkydomeUsingEmbeddedResource") != std::string::npos &&
+                  source.find("SkydomePrimaryHasGpuBuffers") != std::string::npos &&
+                  source.find("SkydomeSecondaryHasGpuBuffers") != std::string::npos &&
+                  source.find("SkydomeMeshHasGpuBuffers") != std::string::npos,
               "runtime attestation verifies embedded source and live dome buffers");
     }
 
@@ -245,54 +220,38 @@ int main()
     // FileManager-first route, survive Reset through ReloadSkydomeTexture, and
     // ordinary selection must explicitly leave embedded mode.
     {
-        const std::filesystem::path root = std::filesystem::current_path();
-        const std::string header = ReadSource(root / "src" / "rendering" / "engine.h");
-        const std::string core = ReadSource(root / "src" / "rendering" / "engine.cpp");
-        const std::string device = ReadSource(root / "src" / "rendering" / "engine_device.cpp");
-        const std::string environment =
-            ReadSource(root / "src" / "rendering" / "engine_environment.cpp");
-        const std::string compactHeader = WithoutWhitespace(header);
-        const std::string compactCore = WithoutWhitespace(core);
-        const std::string compactEnvironment = WithoutWhitespace(environment);
-        const std::string embeddedLoadBlock = ControlledBlock(
-            environment, "static bool LoadEmbeddedSkydomeSlotOne(");
-        const std::string resetReacquireBlock = ControlledBlock(
-            device, "void Engine::ReacquireDeviceResourcesAfterReset()");
+        const std::filesystem::path root          = std::filesystem::current_path();
+        const std::string           header        = ReadSource(root / "src" / "rendering" / "engine.h");
+        const std::string           core          = ReadSource(root / "src" / "rendering" / "engine.cpp");
+        const std::string           device        = ReadSource(root / "src" / "rendering" / "engine_device.cpp");
+        const std::string           environment   = ReadSource(root / "src" / "rendering" / "engine_environment.cpp");
+        const std::string           compactHeader = WithoutWhitespace(header);
+        const std::string           compactCore   = WithoutWhitespace(core);
+        const std::string           compactEnvironment = WithoutWhitespace(environment);
+        const std::string embeddedLoadBlock = ControlledBlock(environment, "static bool LoadEmbeddedSkydomeSlotOne(");
+        const std::string resetReacquireBlock =
+            ControlledBlock(device, "void Engine::ReacquireDeviceResourcesAfterReset()");
 
-        CHECK(compactHeader.find(
-                  "boolSetEmbeddedSkydomeSlotForCapture(intindex);") !=
-                  std::string::npos &&
-              compactHeader.find(
-                  "boolIsSkydomeUsingEmbeddedResource()const"
-                  "{returnm_skydomeUsesEmbeddedResource;}") !=
-                  std::string::npos,
+        CHECK(compactHeader.find("boolSetEmbeddedSkydomeSlotForCapture(intindex);") != std::string::npos &&
+                  compactHeader.find("boolIsSkydomeUsingEmbeddedResource()const"
+                                     "{returnm_skydomeUsesEmbeddedResource;}") != std::string::npos,
               "Engine exposes capture-only selection and source identity");
-        CHECK(compactEnvironment.find(
-                  "m_skydomeUsesEmbeddedResource=true;"
-                  "if(!ReloadSkydomeTexture(index))") != std::string::npos,
+        CHECK(compactEnvironment.find("m_skydomeUsesEmbeddedResource=true;"
+                                      "if(!ReloadSkydomeTexture(index))") != std::string::npos,
               "embedded selector latches source identity before loading");
-        CHECK(compactEnvironment.find(
-                  "if(m_skydomeUsesEmbeddedResource){"
-                  "if(slot==1&&LoadEmbeddedSkydomeSlotOne(") !=
-                  std::string::npos,
+        CHECK(compactEnvironment.find("if(m_skydomeUsesEmbeddedResource){"
+                                      "if(slot==1&&LoadEmbeddedSkydomeSlotOne(") != std::string::npos,
               "reload bypasses FileManager when embedded identity is latched");
         CHECK(embeddedLoadBlock.find("FindResource") != std::string::npos &&
-              embeddedLoadBlock.find("D3DXCreateTextureFromFileInMemory") !=
-                  std::string::npos &&
-              embeddedLoadBlock.find("LoadTextureViaFileManager") ==
-                  std::string::npos,
+                  embeddedLoadBlock.find("D3DXCreateTextureFromFileInMemory") != std::string::npos &&
+                  embeddedLoadBlock.find("LoadTextureViaFileManager") == std::string::npos,
               "embedded loader binds direct RCDATA decode without FileManager");
-        CHECK(compactEnvironment.find(
-                  "m_skydomeUsesEmbeddedResource=false;"
-                  "if(!ReloadSkydomeTexture(newIndex))") != std::string::npos,
+        CHECK(compactEnvironment.find("m_skydomeUsesEmbeddedResource=false;"
+                                      "if(!ReloadSkydomeTexture(newIndex))") != std::string::npos,
               "ordinary selection leaves embedded-source mode before reload");
-        CHECK(compactCore.find("m_skydomeUsesEmbeddedResource=false;") !=
-                  std::string::npos &&
-              resetReacquireBlock.find(
-                  "ReloadSkydomeTexture(m_skydomeIndex);") !=
-                  std::string::npos &&
-              resetReacquireBlock.find(
-                  "m_skydomeUsesEmbeddedResource") == std::string::npos,
+        CHECK(compactCore.find("m_skydomeUsesEmbeddedResource=false;") != std::string::npos &&
+                  resetReacquireBlock.find("ReloadSkydomeTexture(m_skydomeIndex);") != std::string::npos &&
+                  resetReacquireBlock.find("m_skydomeUsesEmbeddedResource") == std::string::npos,
               "Engine initializes ordinary source mode and Reset preserves it");
     }
 
@@ -306,41 +265,35 @@ int main()
         CHECK(!host::ShouldRestorePersistedModLayers(true),
               "golden captures do not restore the persisted mod-layer stack");
 
-        const std::string source =
-            ReadHostWindowSources(std::filesystem::current_path());
+        const std::string source  = ReadHostWindowSources(std::filesystem::current_path());
         const std::string compact = WithoutWhitespace(source);
 
         CHECK(!source.empty(), "HostWindow production sources are readable");
         CHECK(CountOccurrences(source, "RestoreLastLayerStack()") == 1,
               "HostWindow restores the layer stack from exactly one site");
-        CHECK(compact.find(
-                  "if(ShouldRestorePersistedModLayers(m_captureGoldenProfile))"
-                  "modManager->RestoreLastLayerStack();") != std::string::npos,
+        CHECK(compact.find("if(ShouldRestorePersistedModLayers(m_captureGoldenProfile))"
+                           "modManager->RestoreLastLayerStack();") != std::string::npos,
               "the mod-layer restore is directly controlled by the predicate");
         // An observe spec's explicit stack replaces the restore outright and
         // never persists, so it can't leak into the daily driver's stack.
-        CHECK(compact.find(
-                  "if(options.hasObserveContentLayers)"
-                  "modManager->SetLayerStack(options.observeContentLayers,/*allowPersist=*/false);"
-                  "elseif(ShouldRestorePersistedModLayers(m_captureGoldenProfile))") != std::string::npos,
+        CHECK(compact.find("if(options.hasObserveContentLayers)"
+                           "modManager->SetLayerStack(options.observeContentLayers,/*allowPersist=*/false);"
+                           "elseif(ShouldRestorePersistedModLayers(m_captureGoldenProfile))") != std::string::npos,
               "explicit observe layers replace the restore and are never persisted");
         CHECK(CountOccurrences(source, "options.observeContentLayers") == 1,
               "explicit observe layers are applied from exactly one site");
         // No clear-and-restore anywhere: suppressing the read is the whole
         // point, and a write path would reintroduce the stranding window.
         CHECK(compact.find("SetLayerStack({})") == std::string::npos &&
-              compact.find("ClearLayerStack(") == std::string::npos,
+                  compact.find("ClearLayerStack(") == std::string::npos,
               "golden isolation never rewrites the persisted stack");
         // The attestation must report the LIVE count. A hardcoded zero would
         // still print layers=0 after the gate above regressed.
-        CHECK(compact.find(
-                  "constsize_tlayers=modManager?"
-                  "modManager->GetLayerStack().size():0;") != std::string::npos,
+        CHECK(compact.find("constsize_tlayers=modManager?"
+                           "modManager->GetLayerStack().size():0;") != std::string::npos,
               "attested layer count is read from the live stack");
-        CHECK(compact.find(
-                  "\"[capture-profile]golden"
-                  "persisted-mod-layer-restore=skippedlayers=%zu\\n\",layers)") !=
-                  std::string::npos,
+        CHECK(compact.find("\"[capture-profile]golden"
+                           "persisted-mod-layer-restore=skippedlayers=%zu\\n\",layers)") != std::string::npos,
               "host emits the mod-layer attestation with the live count");
     }
 
@@ -348,35 +301,27 @@ int main()
     // GPU, so a golden records which adapter drew it. Provenance is reported,
     // never gated — see the runner test for the never-fails-the-lane binding.
     {
-        const std::filesystem::path root = std::filesystem::current_path();
-        const std::string header = ReadSource(root / "src" / "rendering" / "engine.h");
-        const std::string core = ReadSource(root / "src" / "rendering" / "engine.cpp");
-        const std::string runner = ReadSource(
-            root / "src" / "host" / "CaptureRunner.cpp");
-        const std::string compactHeader = WithoutWhitespace(header);
-        const std::string compactCore = WithoutWhitespace(core);
-        const std::string compactRunner = WithoutWhitespace(runner);
+        const std::filesystem::path root          = std::filesystem::current_path();
+        const std::string           header        = ReadSource(root / "src" / "rendering" / "engine.h");
+        const std::string           core          = ReadSource(root / "src" / "rendering" / "engine.cpp");
+        const std::string           runner        = ReadSource(root / "src" / "host" / "CaptureRunner.cpp");
+        const std::string           compactHeader = WithoutWhitespace(header);
+        const std::string           compactCore   = WithoutWhitespace(core);
+        const std::string           compactRunner = WithoutWhitespace(runner);
 
-        CHECK(compactHeader.find(
-                  "constchar*GetAdapterDescription()const"
-                  "{returnm_adapterDescription;}") != std::string::npos,
+        CHECK(compactHeader.find("constchar*GetAdapterDescription()const"
+                                 "{returnm_adapterDescription;}") != std::string::npos,
               "Engine exposes the adapter description it actually created on");
-        CHECK(compactCore.find(
-                  "strncpy_s(m_adapterDescription,sizeof(m_adapterDescription),"
-                  "adapterIdent.Description,_TRUNCATE);") != std::string::npos,
+        CHECK(compactCore.find("strncpy_s(m_adapterDescription,sizeof(m_adapterDescription),"
+                               "adapterIdent.Description,_TRUNCATE);") != std::string::npos,
               "adapter identity is retained at CreateDeviceEx, not just logged");
-        CHECK(compactCore.find(
-                  "m_adapterVendorId=(unsignedlong)adapterIdent.VendorId;") !=
-                  std::string::npos &&
-              compactCore.find(
-                  "m_adapterDeviceId=(unsignedlong)adapterIdent.DeviceId;") !=
-                  std::string::npos,
+        CHECK(compactCore.find("m_adapterVendorId=(unsignedlong)adapterIdent.VendorId;") != std::string::npos &&
+                  compactCore.find("m_adapterDeviceId=(unsignedlong)adapterIdent.DeviceId;") != std::string::npos,
               "vendor and device ids are retained alongside the description");
-        CHECK(compactRunner.find(
-                  "\"[capture-profile]goldenadapter=%svendor=0x%lXdevice=0x%lX\\n\","
-                  "engine->GetAdapterDescription(),"
-                  "engine->GetAdapterVendorId(),"
-                  "engine->GetAdapterDeviceId());") != std::string::npos,
+        CHECK(compactRunner.find("\"[capture-profile]goldenadapter=%svendor=0x%lXdevice=0x%lX\\n\","
+                                 "engine->GetAdapterDescription(),"
+                                 "engine->GetAdapterVendorId(),"
+                                 "engine->GetAdapterDeviceId());") != std::string::npos,
               "capture runner reports provenance from the live device");
     }
 

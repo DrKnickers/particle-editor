@@ -5,8 +5,10 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+// Sources are read with whitespace collapsed, so the checks match tokens, not clang-format's alignment.
+const readSource = (path) => readFileSync(resolve(repoRoot, path), "utf8").replace(/\s+/g, " ");
 // The HostWindowImpl constructor is defined in-class in the private header.
-const hostSource = readFileSync(resolve(repoRoot, "src/host/HostWindowImpl.h"), "utf8");
+const hostSource = readSource("src/host/HostWindowImpl.h");
 
 test("automation isolates the texture palette before restoring the saved mod stack", () => {
   const constructor = hostSource.indexOf("HostWindowImpl(HINSTANCE inst");
@@ -44,8 +46,8 @@ test("automation isolates the texture palette before restoring the saved mod sta
 });
 
 test("observe shares proof's constructor and boot isolation at every entry point", () => {
-  const host = readFileSync(resolve(repoRoot, "src/host/HostWindow.cpp"), "utf8");
-  const main = readFileSync(resolve(repoRoot, "src/main.cpp"), "utf8");
+  const host = readSource("src/host/HostWindow.cpp");
+  const main = readSource("src/main.cpp");
   assert.match(hostSource, /m_captureGoldenProfile\(options\.captureGoldenProfile \|\| !options\.replayScenarioPath\.empty\(\) \|\| !options\.observeSpecPath\.empty\(\)\)/);
   assert.match(hostSource, /!options\.replayScenarioPath\.empty\(\) \|\| !options\.observeSpecPath\.empty\(\),\s*options\.useTestHost/);
   assert.match(hostSource, /m_runMode\(!options\.observeSpecPath\.empty\(\) \? RunMode::Observe/);

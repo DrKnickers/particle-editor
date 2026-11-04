@@ -42,10 +42,19 @@
 
 static int g_failed = 0;
 
-#define CHECK(cond, msg) do {                              \
-    if (cond) { std::printf("  ok: %s\n", msg); }          \
-    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
 // Minimal stand-in for the D3DXVECTOR3 float operators the original loop used
 // (component-wise, FLOAT scalar), so the oracle below is the shipped code.
@@ -53,9 +62,21 @@ struct Vec3
 {
     float x, y, z;
 };
-static Vec3 operator+(const Vec3& a, const Vec3& b) { Vec3 r = { a.x + b.x, a.y + b.y, a.z + b.z }; return r; }
-static Vec3 operator*(const Vec3& v, float f)       { Vec3 r = { v.x * f, v.y * f, v.z * f }; return r; }
-static Vec3 operator*(float f, const Vec3& v)       { Vec3 r = { f * v.x, f * v.y, f * v.z }; return r; }
+static Vec3 operator+(const Vec3& a, const Vec3& b)
+{
+    Vec3 r = {a.x + b.x, a.y + b.y, a.z + b.z};
+    return r;
+}
+static Vec3 operator*(const Vec3& v, float f)
+{
+    Vec3 r = {v.x * f, v.y * f, v.z * f};
+    return r;
+}
+static Vec3 operator*(float f, const Vec3& v)
+{
+    Vec3 r = {f * v.x, f * v.y, f * v.z};
+    return r;
+}
 
 struct Particle
 {
@@ -72,31 +93,32 @@ struct Particle
 // `maxSteps` bound so the oracle can be stopped where the new loop stopped.
 static int OldBounceLoop(Particle& particle, float t, float bounciness, int maxSteps)
 {
-        int steps = 0;
-        while (t > particle.m_bounceTime && steps < maxSteps)
-        {
-            // The particle has bounced
-            float bt = particle.m_bounceTime - particle.m_positionTime;
-            particle.m_initialPosition =  particle.m_initialPosition + (particle.m_initialSpeed + 0.5f * particle.m_acceleration * bt) * bt;
-            particle.m_initialSpeed    =  particle.m_initialSpeed + particle.m_acceleration * bt;
-            particle.m_initialSpeed.z  = -particle.m_initialSpeed.z * bounciness;
-            particle.m_positionTime    =  particle.m_bounceTime;
+    int steps = 0;
+    while (t > particle.m_bounceTime && steps < maxSteps)
+    {
+        // The particle has bounced
+        float bt = particle.m_bounceTime - particle.m_positionTime;
+        particle.m_initialPosition =
+            particle.m_initialPosition + (particle.m_initialSpeed + 0.5f * particle.m_acceleration * bt) * bt;
+        particle.m_initialSpeed   = particle.m_initialSpeed + particle.m_acceleration * bt;
+        particle.m_initialSpeed.z = -particle.m_initialSpeed.z * bounciness;
+        particle.m_positionTime   = particle.m_bounceTime;
 
-            // Calculate new bounce time
-            if (particle.m_acceleration.z == 0 || particle.m_initialSpeed.z == 0)
-            {
-                // No more bounces
-                particle.m_bounceTime = FLT_MAX;
-            }
-            else
-            {
-                // Calculate the new parabola
-                // We know x(0) is 0, so the problem becomes a lot simpler
-                particle.m_bounceTime += 2 * -particle.m_initialSpeed.z / particle.m_acceleration.z;
-            }
-            steps++;
+        // Calculate new bounce time
+        if (particle.m_acceleration.z == 0 || particle.m_initialSpeed.z == 0)
+        {
+            // No more bounces
+            particle.m_bounceTime = FLT_MAX;
         }
-        return steps;
+        else
+        {
+            // Calculate the new parabola
+            // We know x(0) is 0, so the problem becomes a lot simpler
+            particle.m_bounceTime += 2 * -particle.m_initialSpeed.z / particle.m_acceleration.z;
+        }
+        steps++;
+    }
+    return steps;
 }
 
 // The same original loop with no stop, bounded by an iteration budget so the
@@ -108,10 +130,11 @@ static long long UnboundedOldBounceLoop(Particle& particle, float t, float bounc
     {
         if (++n > budget) return -1;
         float bt = particle.m_bounceTime - particle.m_positionTime;
-        particle.m_initialPosition =  particle.m_initialPosition + (particle.m_initialSpeed + 0.5f * particle.m_acceleration * bt) * bt;
-        particle.m_initialSpeed    =  particle.m_initialSpeed + particle.m_acceleration * bt;
-        particle.m_initialSpeed.z  = -particle.m_initialSpeed.z * bounciness;
-        particle.m_positionTime    =  particle.m_bounceTime;
+        particle.m_initialPosition =
+            particle.m_initialPosition + (particle.m_initialSpeed + 0.5f * particle.m_acceleration * bt) * bt;
+        particle.m_initialSpeed   = particle.m_initialSpeed + particle.m_acceleration * bt;
+        particle.m_initialSpeed.z = -particle.m_initialSpeed.z * bounciness;
+        particle.m_positionTime   = particle.m_bounceTime;
         if (particle.m_acceleration.z == 0 || particle.m_initialSpeed.z == 0)
             particle.m_bounceTime = FLT_MAX;
         else
@@ -122,19 +145,19 @@ static long long UnboundedOldBounceLoop(Particle& particle, float t, float bounc
 
 static int NewBounceLoop(Particle& p, float t, float bounciness)
 {
-    return BounceCatchUp(&p.m_initialPosition.x, &p.m_initialSpeed.x, &p.m_acceleration.x,
-                         p.m_positionTime, p.m_bounceTime, t, bounciness);
+    return BounceCatchUp(&p.m_initialPosition.x, &p.m_initialSpeed.x, &p.m_acceleration.x, p.m_positionTime,
+                         p.m_bounceTime, t, bounciness);
 }
 
 // Watchdog: a candidate call that never returns can't be joined, so a monitor
 // thread reports it and exits instead of letting the lane hang.
 static std::atomic<long long> g_deadlineMs(0);
-static char g_watchLabel[256];
+static char                   g_watchLabel[256];
 
 static long long NowMs()
 {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now().time_since_epoch()).count();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
+        .count();
 }
 
 static void WatchdogMain()
@@ -173,9 +196,9 @@ static Particle Spawn(Vec3 pos, Vec3 speed, Vec3 acc)
     p.m_positionTime    = 0;
     if (acc.z != 0)
     {
-        float D  = sqrtf(speed.z * speed.z - 2 * acc.z * pos.z);
-        float t0 = (-speed.z - D) / acc.z;
-        float t1 = (-speed.z + D) / acc.z;
+        float D        = sqrtf(speed.z * speed.z - 2 * acc.z * pos.z);
+        float t0       = (-speed.z - D) / acc.z;
+        float t1       = (-speed.z + D) / acc.z;
         p.m_bounceTime = (t0 > t1) ? t0 : t1;
     }
     else if (speed.z != 0)
@@ -192,49 +215,43 @@ static Particle Spawn(Vec3 pos, Vec3 speed, Vec3 acc)
 
 static bool Same(const Particle& a, const Particle& b)
 {
-    return a.m_initialPosition.x == b.m_initialPosition.x &&
-           a.m_initialPosition.y == b.m_initialPosition.y &&
-           a.m_initialPosition.z == b.m_initialPosition.z &&
-           a.m_initialSpeed.x    == b.m_initialSpeed.x    &&
-           a.m_initialSpeed.y    == b.m_initialSpeed.y    &&
-           a.m_initialSpeed.z    == b.m_initialSpeed.z    &&
-           a.m_positionTime      == b.m_positionTime      &&
-           a.m_bounceTime        == b.m_bounceTime;
+    return a.m_initialPosition.x == b.m_initialPosition.x && a.m_initialPosition.y == b.m_initialPosition.y &&
+           a.m_initialPosition.z == b.m_initialPosition.z && a.m_initialSpeed.x == b.m_initialSpeed.x &&
+           a.m_initialSpeed.y == b.m_initialSpeed.y && a.m_initialSpeed.z == b.m_initialSpeed.z &&
+           a.m_positionTime == b.m_positionTime && a.m_bounceTime == b.m_bounceTime;
 }
 
 static bool Finite(const Particle& p)
 {
     return std::isfinite(p.m_initialPosition.x) && std::isfinite(p.m_initialPosition.y) &&
            std::isfinite(p.m_initialPosition.z) && std::isfinite(p.m_initialSpeed.x) &&
-           std::isfinite(p.m_initialSpeed.y)    && std::isfinite(p.m_initialSpeed.z) &&
-           std::isfinite(p.m_positionTime)      && std::isfinite(p.m_bounceTime);
+           std::isfinite(p.m_initialSpeed.y) && std::isfinite(p.m_initialSpeed.z) && std::isfinite(p.m_positionTime) &&
+           std::isfinite(p.m_bounceTime);
 }
 
 // One update of the new loop checked against the oracle. `oracle` carries the
 // original's state between updates (it adopts the settled state once the new
 // loop settles, as the particle in the engine would). Returns false on any
 // mismatch; counts bounces and settles for the report line.
-static bool CompareUpdate(Particle& candidate, Particle& oracle, float t, float b,
-                          int& bounces, int& settles, int& cappedSettles)
+static bool CompareUpdate(
+    Particle& candidate, Particle& oracle, float t, float b, int& bounces, int& settles, int& cappedSettles)
 {
     const bool wasBouncing = candidate.m_bounceTime != FLT_MAX;
-    const int newSteps = NewBounceLoop(candidate, t, b);
-    const int oldSteps = OldBounceLoop(oracle, t, b, newSteps);
+    const int  newSteps    = NewBounceLoop(candidate, t, b);
+    const int  oldSteps    = OldBounceLoop(oracle, t, b, newSteps);
     bounces += newSteps;
     if (oldSteps != newSteps) return false;
     if (Same(candidate, oracle)) return true;
 
     // The only allowed difference: the new loop settled after its last bounce.
-    if (!wasBouncing || candidate.m_bounceTime != FLT_MAX || oracle.m_bounceTime == FLT_MAX)
-        return false;
-    const float delta  = 2 * -oracle.m_initialSpeed.z / oracle.m_acceleration.z;
-    const bool  degenerate = !(delta > 0) || oracle.m_positionTime + delta == oracle.m_positionTime;
-    const bool  capped     = newSteps >= kMaxBounceCatchUpSteps && t > oracle.m_bounceTime;
-    Particle settled = oracle;
+    if (!wasBouncing || candidate.m_bounceTime != FLT_MAX || oracle.m_bounceTime == FLT_MAX) return false;
+    const float delta        = 2 * -oracle.m_initialSpeed.z / oracle.m_acceleration.z;
+    const bool  degenerate   = !(delta > 0) || oracle.m_positionTime + delta == oracle.m_positionTime;
+    const bool  capped       = newSteps >= kMaxBounceCatchUpSteps && t > oracle.m_bounceTime;
+    Particle    settled      = oracle;
     settled.m_initialSpeed.z = 0.0f;
     settled.m_bounceTime     = FLT_MAX;
-    if (!(degenerate || capped) || !Same(candidate, settled))
-        return false;
+    if (!(degenerate || capped) || !Same(candidate, settled)) return false;
     settles++;
     if (!degenerate) cappedSettles++;
     oracle = settled;
@@ -244,14 +261,14 @@ static bool CompareUpdate(Particle& candidate, Particle& oracle, float t, float 
 struct Scenario
 {
     const char* name;
-    Vec3 pos, speed, acc;
+    Vec3        pos, speed, acc;
 };
 
 static const Scenario kScenarios[] = {
-    { "dropped from 10",          { 0, 0, 10 },    { 0, 0, 0 },     { 0, 0, -9.8f } },
-    { "thrown up and sideways",   { 1, -2, 3 },    { 4, 1.5f, 12 }, { 0.5f, 0, -25 } },
-    { "fast and low",             { 0, 0, 0.25f }, { 30, 0, -40 },  { 0, -3, -300 } },
-    { "linear fall (no gravity)", { 0, 0, 5 },     { 1, 0, -2 },    { 0, 0, 0 } },
+    {"dropped from 10", {0, 0, 10}, {0, 0, 0}, {0, 0, -9.8f}},
+    {"thrown up and sideways", {1, -2, 3}, {4, 1.5f, 12}, {0.5f, 0, -25}},
+    {"fast and low", {0, 0, 0.25f}, {30, 0, -40}, {0, -3, -300}},
+    {"linear fall (no gravity)", {0, 0, 5}, {1, 0, -2}, {0, 0, 0}},
 };
 
 static std::string Label(const char* what, const Scenario& s, float b)
@@ -273,16 +290,16 @@ int main()
 
     // --- 1. EXACT equality with the original loop over the ordinary range.
     std::printf("[exact] new loop == original loop for 0 <= b < 1\n");
-    const float kOrdinary[] = { 0.0f, 0.2f, 0.25f, 0.5f, 0.9f };
+    const float kOrdinary[] = {0.0f, 0.2f, 0.25f, 0.5f, 0.9f};
     for (const Scenario& s : kScenarios)
     {
         for (float b : kOrdinary)
         {
             // Frame by frame at 30 fps for 40 s: every intermediate state matches.
-            Particle oracle = Spawn(s.pos, s.speed, s.acc);
-            Particle p      = oracle;
-            int bounces = 0, settles = 0, capped = 0;
-            bool ok = true;
+            Particle oracle  = Spawn(s.pos, s.speed, s.acc);
+            Particle p       = oracle;
+            int      bounces = 0, settles = 0, capped = 0;
+            bool     ok = true;
             for (int frame = 1; frame <= 1200 && ok; frame++)
             {
                 std::snprintf(g_watchLabel, sizeof(g_watchLabel), "%s", Label("exact frame update", s, b).c_str());
@@ -290,7 +307,8 @@ int main()
                 ok = CompareUpdate(p, oracle, frame / 30.0f, b, bounces, settles, capped);
                 g_deadlineMs.store(0);
             }
-            std::printf("    (%d bounces, %d settle%s, %d at the cap)\n", bounces, settles, settles == 1 ? "" : "s", capped);
+            std::printf("    (%d bounces, %d settle%s, %d at the cap)\n", bounces, settles, settles == 1 ? "" : "s",
+                        capped);
             CHECK(ok && bounces > 0, Label("per-frame state matches the original", s, b).c_str());
 
             // One large catch-up (a seek or a long stall).
@@ -310,14 +328,14 @@ int main()
     // exists). Budgeted, so it can't hang the test.
     for (float b : kOrdinary)
     {
-        Particle p = Spawn(kScenarios[2].pos, kScenarios[2].speed, kScenarios[2].acc);
+        Particle        p = Spawn(kScenarios[2].pos, kScenarios[2].speed, kScenarios[2].acc);
         const long long n = UnboundedOldBounceLoop(p, 1000.0f, b, 20000000LL);
         if (n < 0)
             std::printf("  note: unbounded original, %s, b=%g: still looping after 20M iterations (bounceTime=%g)\n",
                         kScenarios[2].name, b, p.m_bounceTime);
         else
-            std::printf("  note: unbounded original, %s, b=%g: finished after %lld iterations\n",
-                        kScenarios[2].name, b, n);
+            std::printf("  note: unbounded original, %s, b=%g: finished after %lld iterations\n", kScenarios[2].name, b,
+                        n);
     }
 
     // --- 2. TERMINATION for the values the original loop could not survive.
@@ -336,13 +354,13 @@ int main()
         for (float b : kHostile)
         {
             // Frame by frame for 60 s, then one huge jump.
-            Particle p = Spawn(s.pos, s.speed, s.acc);
-            bool ok = true;
+            Particle p  = Spawn(s.pos, s.speed, s.acc);
+            bool     ok = true;
             for (int frame = 1; frame <= 1800 && ok; frame++)
             {
-                const float t = frame / 30.0f;
-                const int steps = GuardedNewLoop(p, t, b, Label("frame update", s, b));
-                ok = steps <= kMaxBounceCatchUpSteps && p.m_bounceTime >= t && Finite(p);
+                const float t     = frame / 30.0f;
+                const int   steps = GuardedNewLoop(p, t, b, Label("frame update", s, b));
+                ok                = steps <= kMaxBounceCatchUpSteps && p.m_bounceTime >= t && Finite(p);
             }
             CHECK(ok, Label("per-frame updates capped, caught up, finite", s, b).c_str());
 
@@ -356,19 +374,19 @@ int main()
     // is far below an ulp of bounceTime, so the original `+=` never moved it.
     {
         Particle p;
-        p.m_initialPosition = { 0, 0, 0 };
-        p.m_initialSpeed    = { 0, 0, -1.0e-5f };
-        p.m_acceleration    = { 0, 0, -9.8f };
+        p.m_initialPosition = {0, 0, 0};
+        p.m_initialSpeed    = {0, 0, -1.0e-5f};
+        p.m_acceleration    = {0, 0, -9.8f};
         p.m_positionTime    = 4096.0f;
         p.m_bounceTime      = 4096.0f;
-        const int steps = GuardedNewLoop(p, 4097.0f, 1.0f, "sub-ulp arc at b=1");
+        const int steps     = GuardedNewLoop(p, 4097.0f, 1.0f, "sub-ulp arc at b=1");
         CHECK(steps == 1 && p.m_bounceTime == FLT_MAX && p.m_initialSpeed.z == 0.0f,
               "an arc shorter than an ulp of bounceTime settles instead of spinning");
     }
 
     // Many legitimate bounces in one update stop at the cap and settle.
     {
-        Particle p = Spawn({ 0, 0, 1.0e-6f }, { 0, 0, 0 }, { 0, 0, -9.8f });
+        Particle  p     = Spawn({0, 0, 1.0e-6f}, {0, 0, 0}, {0, 0, -9.8f});
         const int steps = GuardedNewLoop(p, 4096.0f, 1.0f, "capped catch-up at b=1");
         CHECK(steps == kMaxBounceCatchUpSteps && p.m_bounceTime == FLT_MAX && p.m_initialSpeed.z == 0.0f,
               "a catch-up longer than the per-update cap settles at the cap");
@@ -376,23 +394,25 @@ int main()
 
     // A non-finite time can't be caught up to; it must not loop either.
     {
-        Particle p = Spawn({ 0, 0, 10 }, { 0, 0, 0 }, { 0, 0, -9.8f });
+        Particle       p      = Spawn({0, 0, 10}, {0, 0, 0}, {0, 0, -9.8f});
         const Particle before = p;
-        const int steps = GuardedNewLoop(p, std::numeric_limits<float>::infinity(), 0.5f, "t=+inf");
+        const int      steps  = GuardedNewLoop(p, std::numeric_limits<float>::infinity(), 0.5f, "t=+inf");
         CHECK(steps == 0 && Same(p, before), "t = +inf is ignored");
     }
 
     // --- 3. PRODUCTION BINDING: UpdateParticle uses the header.
     {
-        const std::filesystem::path repoRoot =
-            std::filesystem::path(__FILE__).parent_path().parent_path();
-        const std::string source = ReadSource(repoRoot / "src" / "simulation" / "EmitterInstance.cpp");
+        const std::filesystem::path repoRoot = std::filesystem::path(__FILE__).parent_path().parent_path();
+        const std::string           source   = ReadSource(repoRoot / "src" / "simulation" / "EmitterInstance.cpp");
         CHECK(!source.empty(), "EmitterInstance.cpp is readable");
         CHECK(std::regex_search(source, std::regex(R"(#include\s+"BounceCatchUp\.h")")),
               "EmitterInstance.cpp includes BounceCatchUp.h");
-        CHECK(std::regex_search(source, std::regex(
-            R"(BounceCatchUp\s*\(\s*particle\.m_initialPosition\s*,\s*particle\.m_initialSpeed\s*,\s*particle\.m_acceleration\s*,\s*particle\.m_positionTime\s*,\s*particle\.m_bounceTime\s*,\s*t\s*,\s*m_emitter\.bounciness\s*\))")),
-              "UpdateParticle calls BounceCatchUp with the particle's state");
+        CHECK(
+            std::regex_search(
+                source,
+                std::regex(
+                    R"(BounceCatchUp\s*\(\s*particle\.m_initialPosition\s*,\s*particle\.m_initialSpeed\s*,\s*particle\.m_acceleration\s*,\s*particle\.m_positionTime\s*,\s*particle\.m_bounceTime\s*,\s*t\s*,\s*m_emitter\.bounciness\s*\))")),
+            "UpdateParticle calls BounceCatchUp with the particle's state");
         CHECK(!std::regex_search(source, std::regex(R"(while\s*\(\s*t\s*>\s*particle\.m_bounceTime\s*\))")),
               "no private copy of the bounce loop remains in EmitterInstance.cpp");
     }

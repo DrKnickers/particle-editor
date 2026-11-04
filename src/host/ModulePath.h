@@ -37,8 +37,8 @@ namespace host
 // truncation contract without touching SetLastError.
 struct ModuleNameProbeResult
 {
-    DWORD written;     // the API's return value: characters written, excluding NUL
-    DWORD lastError;   // GetLastError() sampled immediately after the call
+    DWORD written;   // the API's return value: characters written, excluding NUL
+    DWORD lastError; // GetLastError() sampled immediately after the call
 };
 
 // The Win32 extended-length path ceiling. A read still failing at this size is
@@ -49,8 +49,7 @@ const size_t kMaxModulePathChars = 32768;
 // Empty is the only failure signal: a caller must never treat a short result as
 // a usable path, because the whole point of this loop is that a truncated read
 // is indistinguishable from a real one by inspection.
-template <typename Probe>
-inline std::wstring ModuleFilePathWith(Probe probe)
+template <typename Probe> inline std::wstring ModuleFilePathWith(Probe probe)
 {
     std::vector<wchar_t> buf(MAX_PATH);
     for (;;)
@@ -79,15 +78,16 @@ inline std::wstring ModuleFilePathWith(Probe probe)
 // Production binding of the above.
 inline std::wstring ModuleFilePath()
 {
-    return ModuleFilePathWith([](wchar_t* buf, DWORD cap) -> ModuleNameProbeResult
-    {
-        SetLastError(ERROR_SUCCESS);
-        const DWORD n = GetModuleFileNameW(nullptr, buf, cap);
-        ModuleNameProbeResult r;
-        r.written   = n;
-        r.lastError = GetLastError();
-        return r;
-    });
+    return ModuleFilePathWith(
+        [](wchar_t* buf, DWORD cap) -> ModuleNameProbeResult
+        {
+            SetLastError(ERROR_SUCCESS);
+            const DWORD           n = GetModuleFileNameW(nullptr, buf, cap);
+            ModuleNameProbeResult r;
+            r.written   = n;
+            r.lastError = GetLastError();
+            return r;
+        });
 }
 
 // Directory holding the running executable, without a trailing separator, or
@@ -101,4 +101,4 @@ inline std::wstring ModuleDirectory()
     return std::filesystem::path(p).parent_path().wstring();
 }
 
-}   // namespace host
+} // namespace host

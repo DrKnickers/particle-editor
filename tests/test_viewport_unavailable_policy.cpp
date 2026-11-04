@@ -4,10 +4,19 @@
 #include <cstdio>
 
 static int g_failed = 0;
-#define CHECK(cond, msg) do {                              \
-    if (cond) { std::printf("  ok: %s\n", msg); }          \
-    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
 int main()
 {
@@ -24,11 +33,10 @@ int main()
         for (int automation = 0; automation < 2; ++automation)
             for (int testHost = 0; testHost < 2; ++testHost)
             {
-                const bool interactive = IsFullyInteractiveSession(
-                    capture != 0, automation != 0, testHost != 0);
-                const auto action = DecideViewportUnavailable(interactive);
-                CHECK(action == ((capture || automation || testHost)
-                      ? ViewportUnavailableAction::Exit : ViewportUnavailableAction::ShowNotice),
+                const bool interactive = IsFullyInteractiveSession(capture != 0, automation != 0, testHost != 0);
+                const auto action      = DecideViewportUnavailable(interactive);
+                CHECK(action == ((capture || automation || testHost) ? ViewportUnavailableAction::Exit
+                                                                     : ViewportUnavailableAction::ShowNotice),
                       "capture/drive/record/test-host flags select fatal policy");
             }
 

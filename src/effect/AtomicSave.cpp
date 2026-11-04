@@ -3,11 +3,12 @@
 #include "ParticleSystem.h"
 #include "common/files.h"
 #include "common/exceptions.h"
-#include "host/StringConv.h"   // host::WideToUtf8 -- errors are UTF-8
+#include "host/StringConv.h" // host::WideToUtf8 -- errors are UTF-8
 
 #include <memory>
 
-namespace {
+namespace
+{
 
 void SetError(std::string* err, const char* message)
 {
@@ -43,8 +44,10 @@ bool VerifyParticleSystemFile(const std::wstring& path)
 
 } // namespace
 
-bool AtomicWriteParticleSystem(const ParticleSystem& sys, const std::wstring& dest,
-                               const AtomicSaveOptions& options, std::string* err)
+bool AtomicWriteParticleSystem(const ParticleSystem&    sys,
+                               const std::wstring&      dest,
+                               const AtomicSaveOptions& options,
+                               std::string*             err)
 {
     if (err) err->clear();
     const std::wstring tmp = options.tmpPath.empty() ? dest + L".tmp" : options.tmpPath;
@@ -96,14 +99,12 @@ bool AtomicWriteParticleSystem(const ParticleSystem& sys, const std::wstring& de
         }
     }
 
-    if (ok && !MoveFileExW(tmp.c_str(), dest.c_str(),
-                           MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+    if (ok && !MoveFileExW(tmp.c_str(), dest.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
     {
         SetError(err, "could not replace destination file");
         ok = false;
     }
 
-    if (!ok)
-        DeleteFileW(tmp.c_str());   // the destination is untouched; no orphan temp
+    if (!ok) DeleteFileW(tmp.c_str()); // the destination is untouched; no orphan temp
     return ok;
 }

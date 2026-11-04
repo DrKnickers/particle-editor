@@ -23,9 +23,11 @@
 
 using nlohmann::json;
 
-namespace host {
+namespace host
+{
 
-namespace {
+namespace
+{
 
 // The timeline replays the in-memory document, saved or not; the scenario's
 // path is only a label (the hooks spawn the live ParticleSystem).
@@ -71,7 +73,7 @@ struct ScopedFlag
 
 void CopyCamera(const Engine::Camera& camera, float (&out)[9])
 {
-    const D3DXVECTOR3* vectors[] = { &camera.Position, &camera.Target, &camera.Up };
+    const D3DXVECTOR3* vectors[] = {&camera.Position, &camera.Target, &camera.Up};
     for (int v = 0; v < 3; ++v)
     {
         out[v * 3 + 0] = vectors[v]->x;
@@ -86,10 +88,9 @@ bool BridgeDispatcher::TimelineInputs::operator==(const TimelineInputs& other) c
 {
     // Bitwise camera comparison: any change, however small, is a new input.
     return document == other.document && documentChanges == other.documentChanges &&
-        documentEdits == other.documentEdits &&
-        seed == other.seed && guardEnabled == other.guardEnabled &&
-        guardLimit == other.guardLimit && estimate == other.estimate &&
-        std::memcmp(camera, other.camera, sizeof(camera)) == 0;
+           documentEdits == other.documentEdits && seed == other.seed && guardEnabled == other.guardEnabled &&
+           guardLimit == other.guardLimit && estimate == other.estimate &&
+           std::memcmp(camera, other.camera, sizeof(camera)) == 0;
 }
 
 void BridgeDispatcher::SetTimelineSeed(std::uint32_t seed)
@@ -105,26 +106,28 @@ PreviewScenario BridgeDispatcher::TimelineScenario() const
     scenario.seed    = m_timelineSeed;
     // The guard and estimate the user last pushed, else what the engine runs
     // with now. The engine clamps the limit to the range the scenario allows.
-    scenario.overloadGuardEnabled = m_overloadGuardCached ? m_overloadGuardEnabled
-        : (m_engine ? m_engine->OverloadGuardEnabledForObservation() : true);
-    const int limit = m_overloadGuardCached ? m_overloadGuardMaxParticles
-        : (m_engine ? m_engine->OverloadGuardLimitForObservation() : scenario.overloadGuardLimit);
+    scenario.overloadGuardEnabled = m_overloadGuardCached
+                                        ? m_overloadGuardEnabled
+                                        : (m_engine ? m_engine->OverloadGuardEnabledForObservation() : true);
+    const int limit = m_overloadGuardCached
+                          ? m_overloadGuardMaxParticles
+                          : (m_engine ? m_engine->OverloadGuardLimitForObservation() : scenario.overloadGuardLimit);
     scenario.overloadGuardLimit = std::clamp(limit, 1000, 1000000);
-    scenario.estimatedParticlesPerInstance = m_estimatedLoadCached ? m_estimatedLoadPerInstance
-        : (m_engine ? m_engine->EstimatedLoadForObservation() : 0.0);
+    scenario.estimatedParticlesPerInstance =
+        m_estimatedLoadCached ? m_estimatedLoadPerInstance : (m_engine ? m_engine->EstimatedLoadForObservation() : 0.0);
     return scenario;
 }
 
 BridgeDispatcher::TimelineInputs BridgeDispatcher::CurrentTimelineInputs() const
 {
     TimelineInputs inputs;
-    inputs.document = (m_pParticleSystem && *m_pParticleSystem) ? m_pParticleSystem->get() : nullptr;
-    inputs.seed     = m_timelineSeed;
-    inputs.documentEdits = m_documentEdits;
+    inputs.document                = (m_pParticleSystem && *m_pParticleSystem) ? m_pParticleSystem->get() : nullptr;
+    inputs.seed                    = m_timelineSeed;
+    inputs.documentEdits           = m_documentEdits;
     const PreviewScenario scenario = TimelineScenario();
-    inputs.guardEnabled = scenario.overloadGuardEnabled;
-    inputs.guardLimit   = scenario.overloadGuardLimit;
-    inputs.estimate     = scenario.estimatedParticlesPerInstance;
+    inputs.guardEnabled            = scenario.overloadGuardEnabled;
+    inputs.guardLimit              = scenario.overloadGuardLimit;
+    inputs.estimate                = scenario.estimatedParticlesPerInstance;
     if (m_engine)
     {
         inputs.documentChanges = m_engine->ParticleSystemChangeApplyCountForTesting();
@@ -146,12 +149,12 @@ bool BridgeDispatcher::ReplayTimelineTo(int frame)
     TimelineSession& t = m_timeline;
     // A replay can pump messages (the proof's admitDevice does); an end that
     // arrives meanwhile waits for it (EndTimeline).
-    const ScopedFlag replaying(t.replaying);
-    const TimelineInputs inputs = CurrentTimelineInputs();
-    const bool inputsChanged = !(inputs == t.replayed);
+    const ScopedFlag     replaying(t.replaying);
+    const TimelineInputs inputs        = CurrentTimelineInputs();
+    const bool           inputsChanged = !(inputs == t.replayed);
     if (inputsChanged) ++t.revision;
     t.replayed = inputs;
-    t.frame = frame;
+    t.frame    = frame;
 
     if (!m_engine || !inputs.document || inputs.document->getEmitters().empty())
     {
@@ -163,9 +166,9 @@ bool BridgeDispatcher::ReplayTimelineTo(int frame)
             m_engine->Clear();
             m_engine->InvalidatePausedIdleSkip();
         }
-        FreezePreviewClockAt(0.0f);  // the free-run clock stays stopped
-        t.empty = true;
-        t.stale = false;
+        FreezePreviewClockAt(0.0f); // the free-run clock stays stopped
+        t.empty   = true;
+        t.stale   = false;
         t.refused = false;
         return true;
     }
@@ -177,8 +180,7 @@ bool BridgeDispatcher::ReplayTimelineTo(int frame)
         // Nothing changed: continue forward instead of replaying from frame 0.
         // The proof's E2 shows seeking and playing sequentially agree.
         ok = true;
-        while (ok && t.controller->Frame() < frame)
-            ok = t.controller->Advance(t.controller->Frame() + 1 == frame);
+        while (ok && t.controller->Frame() < frame) ok = t.controller->Advance(t.controller->Frame() + 1 == frame);
     }
     else
     {
@@ -186,13 +188,13 @@ bool BridgeDispatcher::ReplayTimelineTo(int frame)
         {
             ParticleReplayController::Hooks hooks = m_timelineHooks();
             // Report a guard refusal instead of leaving an unexplained empty frame.
-            const auto clear = hooks.clearInstances;
+            const auto clear     = hooks.clearInstances;
             hooks.clearInstances = [this, clear]()
             {
                 clear();
                 m_timeline.refused = false;
             };
-            const auto tick = hooks.tickSpawner;
+            const auto tick   = hooks.tickSpawner;
             hooks.tickSpawner = [this, tick]()
             {
                 const bool ticked = tick();
@@ -204,7 +206,7 @@ bool BridgeDispatcher::ReplayTimelineTo(int frame)
             // blocked device fails the replay. The proof's checks, wrapped
             // inside, still fail a strict render there.
             const auto render = hooks.render;
-            hooks.render = [this, render]()
+            hooks.render      = [this, render]()
             {
                 return render() || (m_engine && !m_engine->DeviceCallsBlocked());
             };
@@ -222,24 +224,24 @@ bool BridgeDispatcher::ReplayTimelineTo(int frame)
 
 nlohmann::json BridgeDispatcher::TimelineStateJson() const
 {
-    const TimelineSession& t = m_timeline;
-    const char* status = !t.active ? "closed"
-        : t.stale ? "stale"
-        : t.empty ? "empty"
-        : t.playing ? "playing"
-        : t.frame >= kTimelineMaxFrames ? "ended"
-        : "paused";
+    const TimelineSession& t      = m_timeline;
+    const char*            status = !t.active                       ? "closed"
+                                    : t.stale                       ? "stale"
+                                    : t.empty                       ? "empty"
+                                    : t.playing                     ? "playing"
+                                    : t.frame >= kTimelineMaxFrames ? "ended"
+                                                                    : "paused";
     return json{
-        {"active",      t.active},
-        {"playing",     t.playing},
-        {"loop",        t.loop},
-        {"frame",       t.frame},
+        {"active", t.active},
+        {"playing", t.playing},
+        {"loop", t.loop},
+        {"frame", t.frame},
         {"timeSeconds", static_cast<double>(t.frame) / kReplayFramesPerSecond},
-        {"maxFrames",   kTimelineMaxFrames},
-        {"seed",        m_timelineSeed},
-        {"status",      status},
-        {"refused",     t.refused},
-        {"revision",    t.revision},
+        {"maxFrames", kTimelineMaxFrames},
+        {"seed", m_timelineSeed},
+        {"status", status},
+        {"refused", t.refused},
+        {"revision", t.revision},
     };
 }
 
@@ -261,7 +263,7 @@ bool BridgeDispatcher::ServiceTimeline()
 {
     TimelineSession& t = m_timeline;
     if (!t.active || t.replaying) return false;
-    const std::int64_t now = TimelineTicks();
+    const std::int64_t now       = TimelineTicks();
     const std::int64_t frequency = TimelineFrequency();
 
     // An input changed (or the last replay failed): replay to the frame. A
@@ -271,16 +273,16 @@ bool BridgeDispatcher::ServiceTimeline()
     {
         const bool wasStale = t.stale;
         if (wasStale && now - t.retryTicks < frequency / 4) return false;
-        t.retryTicks = now;
+        t.retryTicks  = now;
         const bool ok = ReplayTimelineTo(t.frame);
-        t.anchor = ReplayPlayAnchor{t.frame, now};
+        t.anchor      = ReplayPlayAnchor{t.frame, now};
         if (!(wasStale && t.stale)) EmitTimelineState();
         if (t.endPending)
         {
             EndTimeline();
             return false;
         }
-        return ok && !t.empty;  // the replay presented its destination
+        return ok && !t.empty; // the replay presented its destination
     }
     if (t.empty || !t.controller) return false;
 
@@ -292,8 +294,7 @@ bool BridgeDispatcher::ServiceTimeline()
         // draws nothing; the proof's E12 checks that against E1.
         float camera[9] = {};
         if (m_engine) CopyCamera(m_engine->GetCamera(), camera);
-        if (m_engine && !m_engine->DeviceCallsBlocked() &&
-            std::memcmp(camera, t.bakedCamera, sizeof(camera)) != 0)
+        if (m_engine && !m_engine->DeviceCallsBlocked() && std::memcmp(camera, t.bakedCamera, sizeof(camera)) != 0)
         {
             // Update returns early on a device it cannot admit: keep the
             // old camera then, so the next slot tries again.
@@ -306,9 +307,8 @@ bool BridgeDispatcher::ServiceTimeline()
         return false;
     }
 
-    const ReplayPlayStep step = NextReplayPlayStep(
-        t.anchor, t.frame, now, frequency, kTimelineMaxFrames, t.loop);
-    bool presented = false;
+    const ReplayPlayStep step      = NextReplayPlayStep(t.anchor, t.frame, now, frequency, kTimelineMaxFrames, t.loop);
+    bool                 presented = false;
     if (step.wrap)
     {
         presented = ReplayTimelineTo(0);
@@ -322,17 +322,17 @@ bool BridgeDispatcher::ServiceTimeline()
             while (ok && t.controller->Frame() < step.target) ok = t.controller->Advance(false);
         }
         if (m_engine) CopyCamera(m_engine->GetCamera(), t.bakedCamera);
-        if (ok) t.frame = step.target;
+        if (ok)
+            t.frame = step.target;
         else
         {
-            t.stale = true;
+            t.stale   = true;
             t.playing = false;
         }
     }
     if (step.reanchor) t.anchor = ReplayPlayAnchor{t.frame, now};
     if (step.ended) t.playing = false;
-    if (!t.playing || step.wrap ||
-        now - t.lastEmitTicks >= frequency / kTimelinePlayEmitsPerSecond)
+    if (!t.playing || step.wrap || now - t.lastEmitTicks >= frequency / kTimelinePlayEmitsPerSecond)
         EmitTimelineState();
     if (t.endPending)
     {
@@ -354,7 +354,7 @@ void BridgeDispatcher::EndTimeline()
     }
     t.endPending = false;
     t.controller.reset();
-    t.active = false;
+    t.active  = false;
     t.playing = false;
     // The replay's instance goes; free-run resumes with the user's spawner,
     // guard, estimate and clock. Placed instances from before the session
@@ -393,7 +393,10 @@ bool BridgeDispatcher::TryDispatchTimeline(BridgeRequestContext& ctx)
     struct EndAfterReply
     {
         BridgeDispatcher& dispatcher;
-        ~EndAfterReply() { if (dispatcher.m_timeline.endPending) dispatcher.EndTimeline(); }
+        ~EndAfterReply()
+        {
+            if (dispatcher.m_timeline.endPending) dispatcher.EndTimeline();
+        }
     } endAfterReply{*this};
 
     // -------- timeline/begin -----------------------------------------
@@ -413,15 +416,15 @@ bool BridgeDispatcher::TryDispatchTimeline(BridgeRequestContext& ctx)
             if (!m_timelineSeeded) SetTimelineSeed(ParticleRandom::SeedValue());
             t.savedPaused = IsPreviewPaused();
             t.savedTime   = GetTimeF();
-            t.active  = true;
-            t.playing = false;
-            t.stale   = false;
-            t.replayed = TimelineInputs{};
+            t.active      = true;
+            t.playing     = false;
+            t.stale       = false;
+            t.replayed    = TimelineInputs{};
             t.controller.reset();
             ReplayTimelineTo(0);
             t.revision = 0;
-            t.anchor = ReplayPlayAnchor{0, TimelineTicks()};
-            EmitEngineStateChanged();  // the free-run clock is now frozen
+            t.anchor   = ReplayPlayAnchor{0, TimelineTicks()};
+            EmitEngineStateChanged(); // the free-run clock is now frozen
         }
         ctx.SendOk(TimelineStateJson());
         return true;
@@ -493,7 +496,7 @@ bool BridgeDispatcher::TryDispatchTimeline(BridgeRequestContext& ctx)
     if (kind == "timeline/new-variation")
     {
         std::random_device entropy;
-        std::uint32_t seed = entropy();
+        std::uint32_t      seed = entropy();
         if (seed == m_timelineSeed) ++seed;
         SetTimelineSeed(seed);
         ReplayTimelineTo(t.frame);

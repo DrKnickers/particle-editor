@@ -5,12 +5,13 @@
 #include "BridgeDispatchShared.h"
 #include "BridgeRequestContext.h"
 
-#include <algorithm>              // std::sort (cut delete order)
-#include <utility>                // std::move (clipboard buffers)
+#include <algorithm> // std::sort (cut delete order)
+#include <utility>   // std::move (clipboard buffers)
 
 using nlohmann::json;
 
-namespace host {
+namespace host
+{
 
 bool BridgeDispatcher::TryDispatchEmitterClipboard(BridgeRequestContext& ctx)
 {
@@ -91,9 +92,9 @@ bool BridgeDispatcher::TryDispatchEmitterClipboard(BridgeRequestContext& ctx)
         // `deleteEmitter` shifts subsequent slots down, invalidating
         // raw pointers across calls.
         std::sort(ids.begin(), ids.end(), std::greater<int>());
-        ParticleSystem* sys = m_pParticleSystem->get();
+        ParticleSystem*    sys              = m_pParticleSystem->get();
         const unsigned int selectedStableId = selectedEmitterStableId();
-        int deleted = 0;
+        int                deleted          = 0;
         for (int id : ids)
         {
             ParticleSystem::Emitter* target = getEmitterById(id);
@@ -101,8 +102,7 @@ bool BridgeDispatcher::TryDispatchEmitterClipboard(BridgeRequestContext& ctx)
             sys->deleteEmitter(target);
             deleted++;
         }
-        if (deleted > 0)
-            reconcileSelectionAfterDeletion(selectedStableId);
+        if (deleted > 0) reconcileSelectionAfterDeletion(selectedStableId);
         ctx.SendOk(json::object());
         ctx.MarkDirty();
         EmitEngineStateChanged();
@@ -131,24 +131,21 @@ bool BridgeDispatcher::TryDispatchEmitterClipboard(BridgeRequestContext& ctx)
             afterId = params.value("afterId", -1);
         }
         captureUndo();
-        ParticleSystem* sys = m_pParticleSystem->get();
-        json newIds = json::array();
-        ParticleSystem::Emitter* prevAnchor = (afterId >= 0)
-            ? getEmitterById(afterId)
-            : nullptr;
+        ParticleSystem*          sys        = m_pParticleSystem->get();
+        json                     newIds     = json::array();
+        ParticleSystem::Emitter* prevAnchor = (afterId >= 0) ? getEmitterById(afterId) : nullptr;
         // Track failure separately so a partial paste still emits one
         // tree-changed and returns the ids that *did* land.
         for (auto& buf : m_emitterClipboard)
         {
             if (buf.empty()) continue;
-            MemoryFile* memfile = new MemoryFile;
-            ParticleSystem::Emitter* pasted = nullptr;
+            MemoryFile*              memfile = new MemoryFile;
+            ParticleSystem::Emitter* pasted  = nullptr;
             try
             {
-                memfile->write(buf.data(),
-                               static_cast<unsigned long>(buf.size()));
+                memfile->write(buf.data(), static_cast<unsigned long>(buf.size()));
                 memfile->seek(0);
-                ChunkReader reader(memfile);
+                ChunkReader             reader(memfile);
                 ParticleSystem::Emitter staging(reader);
                 staging.name = GenerateDuplicateName(sys, staging.name);
                 if (prevAnchor != nullptr)
@@ -196,30 +193,29 @@ bool BridgeDispatcher::TryDispatchEmitterClipboard(BridgeRequestContext& ctx)
     // pastes only buffer[0] (matches legacy's single-blob clipboard).
     if (kind == "emitters/paste-as-child")
     {
-        int parentId = params.value("parentId", -1);
-        std::string slot = params.value("slot", std::string());
-        ParticleSystem::Emitter* parent = getEmitterById(parentId);
-        if (parent == nullptr || m_pParticleSystem == nullptr || !*m_pParticleSystem
-            || m_emitterClipboard.empty() || m_emitterClipboard.front().empty())
+        int                      parentId = params.value("parentId", -1);
+        std::string              slot     = params.value("slot", std::string());
+        ParticleSystem::Emitter* parent   = getEmitterById(parentId);
+        if (parent == nullptr || m_pParticleSystem == nullptr || !*m_pParticleSystem || m_emitterClipboard.empty() ||
+            m_emitterClipboard.front().empty())
         {
             ctx.SendOk(json{{"newId", -1}});
             return true;
         }
         captureUndo();
-        ParticleSystem* sys = m_pParticleSystem->get();
-        ParticleSystem::Emitter* child = nullptr;
-        MemoryFile* memfile = new MemoryFile;
+        ParticleSystem*          sys     = m_pParticleSystem->get();
+        ParticleSystem::Emitter* child   = nullptr;
+        MemoryFile*              memfile = new MemoryFile;
         try
         {
             auto& buf = m_emitterClipboard.front();
             memfile->write(buf.data(), static_cast<unsigned long>(buf.size()));
             memfile->seek(0);
-            ChunkReader reader(memfile);
+            ChunkReader             reader(memfile);
             ParticleSystem::Emitter staging(reader);
             staging.name = GenerateDuplicateName(sys, staging.name);
-            child = (slot == "death")
-                ? sys->addDeathEmitter(parent, staging)
-                : sys->addLifetimeEmitter(parent, staging);
+            child =
+                (slot == "death") ? sys->addDeathEmitter(parent, staging) : sys->addLifetimeEmitter(parent, staging);
         }
         catch (...)
         {
@@ -243,8 +239,7 @@ bool BridgeDispatcher::TryDispatchEmitterClipboard(BridgeRequestContext& ctx)
         return true;
     }
 
-
-    return false;   // kind not in this domain
+    return false; // kind not in this domain
 }
 
 } // namespace host

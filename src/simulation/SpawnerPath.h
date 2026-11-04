@@ -12,12 +12,12 @@
 
 struct SpawnerPathState
 {
-    D3DXVECTOR3 spawnPos;       // launch position (world, post-Detach absolute)
-    D3DXVECTOR3 spawnVel;       // launch velocity, units/sec
-    D3DXVECTOR3 accel;          // deterministic arc, units/sec²
-    D3DXVECTOR3 squiggleAmp;    // per-axis peak lateral displacement, world units
-    float       squiggleFreq;   // squiggle frequency, Hz (oscillations/sec)
-    D3DXVECTOR3 squigglePhase;  // per-instance random phase per axis, radians
+    D3DXVECTOR3 spawnPos;      // launch position (world, post-Detach absolute)
+    D3DXVECTOR3 spawnVel;      // launch velocity, units/sec
+    D3DXVECTOR3 accel;         // deterministic arc, units/sec²
+    D3DXVECTOR3 squiggleAmp;   // per-axis peak lateral displacement, world units
+    float       squiggleFreq;  // squiggle frequency, Hz (oscillations/sec)
+    D3DXVECTOR3 squigglePhase; // per-instance random phase per axis, radians
 };
 
 // Evaluate the path at elapsed time tau (seconds since spawn, >= 0):
@@ -31,8 +31,7 @@ struct SpawnerPathState
 // emanates from its exact spawn point; the residual Aᵢ·ω·cos(φᵢ) initial
 // lateral velocity is the desired per-instance launch divergence. vel(τ)
 // is the instantaneous velocity so emitted particles inherit it correctly.
-inline void EvalSpawnerPath(const SpawnerPathState& s, float tau,
-                            D3DXVECTOR3& outPos, D3DXVECTOR3& outVel)
+inline void EvalSpawnerPath(const SpawnerPathState& s, float tau, D3DXVECTOR3& outPos, D3DXVECTOR3& outVel)
 {
     const float TWO_PI = 2.0f * 3.14159265358979323846f;
     const float omega  = TWO_PI * s.squiggleFreq;

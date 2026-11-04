@@ -26,8 +26,7 @@ inline bool ShouldVetoClose(bool dirty, bool ephemeral, bool testHost, bool webA
 // Automation (--drive / --record) and --test-host runs are exempt exactly as
 // ShouldVetoClose exempts them: there is no user to prompt, and their scripts
 // and contract specs replace documents freely.
-inline bool ShouldRefuseDocumentReplace(bool dirty, bool discardConfirmed,
-                                        bool automation, bool testHost)
+inline bool ShouldRefuseDocumentReplace(bool dirty, bool discardConfirmed, bool automation, bool testHost)
 {
     return dirty && !discardConfirmed && !automation && !testHost;
 }

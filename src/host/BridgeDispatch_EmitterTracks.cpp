@@ -5,11 +5,12 @@
 #include "BridgeDispatchShared.h"
 #include "BridgeRequestContext.h"
 
-#include "effect/ParticleAuthoring.h"   // shared track-edit rules (Plan*/Apply*)
+#include "effect/ParticleAuthoring.h" // shared track-edit rules (Plan*/Apply*)
 
 using nlohmann::json;
 
-namespace host {
+namespace host
+{
 
 bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
 {
@@ -38,22 +39,22 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
     if (kind == "emitters/get-tracks")
     {
         static const char* kTrackNames[ParticleSystem::NUM_TRACKS] = {
-            "red", "green", "blue", "alpha",
-            "scale", "index", "rotationSpeed",
+            "red", "green", "blue", "alpha", "scale", "index", "rotationSpeed",
         };
-        auto interpToString = [](ParticleSystem::Emitter::Track::InterpolationType it) -> const char* {
+        auto interpToString = [](ParticleSystem::Emitter::Track::InterpolationType it) -> const char*
+        {
             switch (it)
             {
                 case ParticleSystem::Emitter::Track::IT_LINEAR: return "linear";
                 case ParticleSystem::Emitter::Track::IT_SMOOTH: return "smooth";
                 case ParticleSystem::Emitter::Track::IT_STEP:   return "step";
-                default: return "linear";
+                default:                                        return "linear";
             }
         };
 
-        int id = params.value("id", -1);
-        json tracksArr = json::array();
-        const ParticleSystem::Emitter* emit = nullptr;
+        int                            id        = params.value("id", -1);
+        json                           tracksArr = json::array();
+        const ParticleSystem::Emitter* emit      = nullptr;
         if (id >= 0 && m_pParticleSystem != nullptr && *m_pParticleSystem)
         {
             const auto& emitters = (*m_pParticleSystem)->getEmitters();
@@ -64,8 +65,8 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
         }
         for (int i = 0; i < ParticleSystem::NUM_TRACKS; i++)
         {
-            json keysArr = json::array();
-            const char* interp = "linear";
+            json        keysArr = json::array();
+            const char* interp  = "linear";
             if (emit != nullptr)
             {
                 const ParticleSystem::Emitter::Track* t = emit->tracks[i];
@@ -77,7 +78,7 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
                     for (const auto& k : t->keys)
                     {
                         keysArr.push_back(json{
-                            {"time",  k.time},
+                            {"time", k.time},
                             {"value", k.value},
                         });
                     }
@@ -98,8 +99,7 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
                 for (int j = 0; j < 4; j++)
                 {
                     if (j == i) continue;
-                    if (emit->tracks[i] == &emit->trackContents[j]
-                        || emit->tracks[i] == emit->tracks[j])
+                    if (emit->tracks[i] == &emit->trackContents[j] || emit->tracks[i] == emit->tracks[j])
                     {
                         // Only "earlier channel" locks are valid per
                         // the schema. If we matched a later channel
@@ -115,18 +115,15 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
                 }
             }
             tracksArr.push_back(json{
-                {"name",          kTrackNames[i]},
-                {"keys",          keysArr},
+                {"name", kTrackNames[i]},
+                {"keys", keysArr},
                 {"interpolation", interp},
-                {"lockedTo",      lockedToName == nullptr
-                                      ? json(nullptr)
-                                      : json(lockedToName)},
+                {"lockedTo", lockedToName == nullptr ? json(nullptr) : json(lockedToName)},
             });
         }
         ctx.SendOk(json{{"tracks", tracksArr}});
         return true;
     }
-
 
     // -------- emitters/delete-track-keys + set-track-interpolation --
     //
@@ -143,20 +140,21 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
     // Both mutations capture undo, mark the editor dirty, and emit
     // engine/state/changed + emitters/tree/changed so the React
     // panel re-fetches via `emitters/get-tracks`.
-    auto trackNameToIndex = [](const std::string& name) -> int {
-        if (name == "red")           return ParticleSystem::TRACK_RED_CHANNEL;
-        if (name == "green")         return ParticleSystem::TRACK_GREEN_CHANNEL;
-        if (name == "blue")          return ParticleSystem::TRACK_BLUE_CHANNEL;
-        if (name == "alpha")         return ParticleSystem::TRACK_ALPHA_CHANNEL;
-        if (name == "scale")         return ParticleSystem::TRACK_SCALE;
-        if (name == "index")         return ParticleSystem::TRACK_INDEX;
+    auto trackNameToIndex = [](const std::string& name) -> int
+    {
+        if (name == "red") return ParticleSystem::TRACK_RED_CHANNEL;
+        if (name == "green") return ParticleSystem::TRACK_GREEN_CHANNEL;
+        if (name == "blue") return ParticleSystem::TRACK_BLUE_CHANNEL;
+        if (name == "alpha") return ParticleSystem::TRACK_ALPHA_CHANNEL;
+        if (name == "scale") return ParticleSystem::TRACK_SCALE;
+        if (name == "index") return ParticleSystem::TRACK_INDEX;
         if (name == "rotationSpeed") return ParticleSystem::TRACK_ROTATION_SPEED;
         return -1;
     };
 
     if (kind == "emitters/delete-track-keys")
     {
-        int id = params.value("id", -1);
+        int         id        = params.value("id", -1);
         std::string trackName = params.value("track", std::string{});
         const json& timesJson = params.contains("times") ? params["times"] : json::array();
 
@@ -218,8 +216,8 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
 
     if (kind == "emitters/set-track-interpolation")
     {
-        int id = params.value("id", -1);
-        std::string trackName  = params.value("track",         std::string{});
+        int         id         = params.value("id", -1);
+        std::string trackName  = params.value("track", std::string{});
         std::string interpName = params.value("interpolation", std::string{});
 
         ParticleSystem::Emitter* target = getEmitterById(id);
@@ -276,7 +274,6 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
         return true;
     }
 
-
     // -------- emitters/set-track-lock ------------------------------
     //
     // Per-channel track lock. The legacy editor's track-lock combo and the
@@ -296,12 +293,12 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
     //     is preserved because the lock didn't touch it).
     if (kind == "emitters/set-track-lock")
     {
-        int id = params.value("id", -1);
+        int         id          = params.value("id", -1);
         std::string channelName = params.value("channel", std::string{});
         // lockTo is `string | null` per the schema; nlohmann's
         // `value<string>` would throw on null, so check explicitly.
         std::string lockToName;
-        bool lockToIsNull = !params.contains("lockTo") || params["lockTo"].is_null();
+        bool        lockToIsNull = !params.contains("lockTo") || params["lockTo"].is_null();
         if (!lockToIsNull) lockToName = params["lockTo"].get<std::string>();
 
         ParticleSystem::Emitter* target = getEmitterById(id);
@@ -324,8 +321,8 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
         // an RGBA channel EARLIER than this one; anything else is an error,
         // not a silent unlock, so a typo'd --record step aborts (its
         // ClassifyResponse sees the error) instead of recording as success.
-        const int lockToIdx = lockToIsNull ? -1 : trackNameToIndex(lockToName);
-        const TrackLockPlan plan = PlanSetTrackLock(*target, channelIdx, lockToIdx, lockToIsNull);
+        const int           lockToIdx = lockToIsNull ? -1 : trackNameToIndex(lockToName);
+        const TrackLockPlan plan      = PlanSetTrackLock(*target, channelIdx, lockToIdx, lockToIsNull);
         if (plan.outcome == EditOutcome::Rejected)
         {
             ctx.SendErr(plan.reason);
@@ -356,7 +353,6 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
         return true;
     }
 
-
     // -------- emitters/set-track-key ----------
     //
     // Drag-to-move + Spinner edit commit. Erases the key at
@@ -369,11 +365,11 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
     // ApplySetTrackKey), shared with the --tool verbs.
     if (kind == "emitters/set-track-key")
     {
-        int id = params.value("id", -1);
+        int         id        = params.value("id", -1);
         std::string trackName = params.value("track", std::string{});
-        const float oldTime  = params.value("oldTime",  0.0f);
-        const float newTime  = params.value("newTime",  0.0f);
-        const float newValue = params.value("newValue", 0.0f);
+        const float oldTime   = params.value("oldTime", 0.0f);
+        const float newTime   = params.value("newTime", 0.0f);
+        const float newValue  = params.value("newValue", 0.0f);
 
         ParticleSystem::Emitter* target = getEmitterById(id);
         if (target == nullptr)
@@ -398,8 +394,7 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
         }
 
         // A border key keeps its time and still takes the new value.
-        const TrackKeyPlan plan = PlanSetTrackKey(*track, oldTime, newTime, newValue,
-                                                  IsColorTrack(trackIdx));
+        const TrackKeyPlan plan = PlanSetTrackKey(*track, oldTime, newTime, newValue, IsColorTrack(trackIdx));
         if (plan.outcome == EditOutcome::Rejected)
         {
             ctx.SendErr(plan.reason);
@@ -422,8 +417,7 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
         // (set-properties, BridgeDispatch_EmitterProperties.cpp) with trackIdx in place of the field
         // hash; bit 31 set so the key is never 0 (= structural / never-fold).
         const DWORD coalesceKey =
-            0x80000000u | ((static_cast<DWORD>(trackIdx) & 0x7FFFu) << 16)
-                        | (static_cast<DWORD>(id) & 0xFFFFu);
+            0x80000000u | ((static_cast<DWORD>(trackIdx) & 0x7FFFu) << 16) | (static_cast<DWORD>(id) & 0xFFFFu);
         captureUndo(coalesceKey);
         ApplySetTrackKey(*track, plan);
 
@@ -443,7 +437,6 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
         return true;
     }
 
-
     // -------- emitters/add-track-key ----------
     //
     // Click-to-add (Insert mode) commit. Inserts a new key into the
@@ -454,7 +447,7 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
     // (time, value) so the React side can auto-select the new key.
     if (kind == "emitters/add-track-key")
     {
-        int id = params.value("id", -1);
+        int         id        = params.value("id", -1);
         std::string trackName = params.value("track", std::string{});
         // `time`/`value` must be present, numeric and finite, the time within
         // [0, 100] and a color value within [0, 1] — a missing field defaulting
@@ -463,8 +456,8 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
         // out-of-range key is re-timed or breaks the file on save. The track
         // name resolves without the emitter, so these checks still come first.
         ProposedKey key{};
-        key.numeric = params.contains("time")  && params["time"].is_number()
-                   && params.contains("value") && params["value"].is_number();
+        key.numeric = params.contains("time") && params["time"].is_number() && params.contains("value") &&
+                      params["value"].is_number();
         if (key.numeric)
         {
             key.time  = params["time"].get<float>();
@@ -521,7 +514,6 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
         return true;
     }
 
-
     // -------- emitters/add-track-keys --------------------------------
     //
     // The multi-key curve-paste gesture: every key inserted under ONE
@@ -534,7 +526,7 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
     // only the undo + event boundary is shared across the batch.
     if (kind == "emitters/add-track-keys")
     {
-        int id = params.value("id", -1);
+        int         id        = params.value("id", -1);
         std::string trackName = params.value("track", std::string{});
         if (!params.contains("keys") || !params["keys"].is_array())
         {
@@ -550,9 +542,8 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
         for (const auto& k : params["keys"])
         {
             ProposedKey pk{};
-            pk.numeric = k.is_object()
-                      && k.contains("time")  && k["time"].is_number()
-                      && k.contains("value") && k["value"].is_number();
+            pk.numeric = k.is_object() && k.contains("time") && k["time"].is_number() && k.contains("value") &&
+                         k["value"].is_number();
             if (pk.numeric)
             {
                 pk.time  = k["time"].get<float>();
@@ -621,8 +612,7 @@ bool BridgeDispatcher::TryDispatchEmitterTracks(BridgeRequestContext& ctx)
         return true;
     }
 
-
-    return false;   // kind not in this domain
+    return false; // kind not in this domain
 }
 
 } // namespace host

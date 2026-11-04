@@ -41,45 +41,46 @@
 // are treated as roots / swept in position order at the end, so every position
 // always receives a distinct key and std::sort stays on a valid
 // strict-weak-ordering key.
-inline std::vector<std::size_t> ComputeAuthoredDrawKeys(
-    const std::vector<std::size_t>& parentRank)
+inline std::vector<std::size_t> ComputeAuthoredDrawKeys(const std::vector<std::size_t>& parentRank)
 {
-    const std::size_t n = parentRank.size();
+    const std::size_t n         = parentRank.size();
     const std::size_t NO_PARENT = static_cast<std::size_t>(-1);
 
     // Children lists, keyed by parent rank. We push child ranks in ascending r,
     // so each children[p] is already sorted ascending — the sibling order.
     std::vector<std::vector<std::size_t>> children(n);
-    std::vector<std::size_t> roots;
+    std::vector<std::size_t>              roots;
     roots.reserve(n);
     for (std::size_t r = 0; r < n; ++r)
     {
         const std::size_t p = parentRank[r];
-        if (p < n && p != r) children[p].push_back(r);
-        else                 roots.push_back(r); // root or malformed → root
+        if (p < n && p != r)
+            children[p].push_back(r);
+        else
+            roots.push_back(r); // root or malformed → root
     }
 
     std::vector<std::size_t> key(n, 0);
-    std::vector<char> assigned(n, 0);
-    std::size_t seq = 0;
+    std::vector<char>        assigned(n, 0);
+    std::size_t              seq = 0;
 
     // Iterative post-order DFS (children before parent) so a deep spawn chain
     // can't overflow the call stack. `stack` holds (node, next-child-index).
     std::vector<std::pair<std::size_t, std::size_t>> stack;
     for (const std::size_t root : roots)
     {
-        stack.push_back({ root, 0 });
+        stack.push_back({root, 0});
         while (!stack.empty())
         {
-            auto& top = stack.back();
+            auto&                           top  = stack.back();
             const std::vector<std::size_t>& kids = children[top.first];
             if (top.second < kids.size())
             {
-                stack.push_back({ kids[top.second++], 0 });
+                stack.push_back({kids[top.second++], 0});
             }
             else
             {
-                key[top.first] = seq++;
+                key[top.first]      = seq++;
                 assigned[top.first] = 1;
                 stack.pop_back();
             }
@@ -101,17 +102,15 @@ inline std::vector<std::size_t> ComputeAuthoredDrawKeys(
 // matching `wantHeat`, STABLE-sorted ascending by drawKey — so instances draw
 // back-to-front per the authored tree, and the stable sort preserves spawn
 // order among the (equal-key) instances of one emitter.
-inline std::vector<std::size_t> ComputeEmitterDrawOrder(
-    const std::vector<std::pair<std::size_t, bool>>& emitters, bool wantHeat)
+inline std::vector<std::size_t> ComputeEmitterDrawOrder(const std::vector<std::pair<std::size_t, bool>>& emitters,
+                                                        bool                                             wantHeat)
 {
     std::vector<std::size_t> order;
     order.reserve(emitters.size());
     for (std::size_t i = 0; i < emitters.size(); ++i)
-        if (emitters[i].second == wantHeat)
-            order.push_back(i);
+        if (emitters[i].second == wantHeat) order.push_back(i);
     std::stable_sort(order.begin(), order.end(),
-        [&emitters](std::size_t a, std::size_t b)
-        { return emitters[a].first < emitters[b].first; });
+                     [&emitters](std::size_t a, std::size_t b) { return emitters[a].first < emitters[b].first; });
     return order;
 }
 

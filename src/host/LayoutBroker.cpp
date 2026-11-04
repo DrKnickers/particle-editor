@@ -8,7 +8,8 @@
 
 #include <cmath>
 
-namespace {
+namespace
+{
 
 // CSS `ease` timing function = cubic-bezier(0.25, 0.1, 0.25, 1.0),
 // evaluated the way browsers do (the WebKit/Chromium UnitBezier): given the
@@ -21,24 +22,28 @@ struct UnitBezier
     double ax, bx, cx, ay, by, cy;
     UnitBezier(double x1, double y1, double x2, double y2)
     {
-        cx = 3.0 * x1; bx = 3.0 * (x2 - x1) - cx; ax = 1.0 - cx - bx;
-        cy = 3.0 * y1; by = 3.0 * (y2 - y1) - cy; ay = 1.0 - cy - by;
+        cx = 3.0 * x1;
+        bx = 3.0 * (x2 - x1) - cx;
+        ax = 1.0 - cx - bx;
+        cy = 3.0 * y1;
+        by = 3.0 * (y2 - y1) - cy;
+        ay = 1.0 - cy - by;
     }
-    double sampleX(double t)  const { return ((ax * t + bx) * t + cx) * t; }
-    double sampleY(double t)  const { return ((ay * t + by) * t + cy) * t; }
+    double sampleX(double t) const { return ((ax * t + bx) * t + cx) * t; }
+    double sampleY(double t) const { return ((ay * t + by) * t + cy) * t; }
     double sampleDX(double t) const { return (3.0 * ax * t + 2.0 * bx) * t + cx; }
     double solveT(double x) const
     {
         double t = x;
-        for (int i = 0; i < 8; ++i)             // Newton-Raphson
+        for (int i = 0; i < 8; ++i) // Newton-Raphson
         {
             const double xe = sampleX(t) - x;
             if (xe > -1e-6 && xe < 1e-6) return t;
             const double d = sampleDX(t);
-            if (d > -1e-6 && d < 1e-6) break;    // flat slope → fall to bisection
+            if (d > -1e-6 && d < 1e-6) break; // flat slope → fall to bisection
             t -= xe / d;
         }
-        double lo = 0.0, hi = 1.0;              // bisection fallback
+        double lo = 0.0, hi = 1.0; // bisection fallback
         t = x;
         if (t < lo) return lo;
         if (t > hi) return hi;
@@ -46,7 +51,10 @@ struct UnitBezier
         {
             const double xe = sampleX(t);
             if (xe > x - 1e-6 && xe < x + 1e-6) return t;
-            if (x > xe) lo = t; else hi = t;
+            if (x > xe)
+                lo = t;
+            else
+                hi = t;
             t = 0.5 * (lo + hi);
         }
         return t;
@@ -61,13 +69,17 @@ double CssEaseY(double x)
     return kEase.sampleY(kEase.solveT(x));
 }
 
-float Lerpf(float a, float b, double t) { return a + static_cast<float>((b - a) * t); }
+float Lerpf(float a, float b, double t)
+{
+    return a + static_cast<float>((b - a) * t);
+}
 
 // QueryPerformanceCounter ticks per millisecond, or 0 if the counter is
 // unavailable. Cached on first use (the frequency is fixed at boot).
 double QpcPerMs()
 {
-    static double cached = []() -> double {
+    static double cached = []() -> double
+    {
         LARGE_INTEGER f;
         if (!QueryPerformanceFrequency(&f) || f.QuadPart <= 0) return 0.0;
         return static_cast<double>(f.QuadPart) / 1000.0;
@@ -77,7 +89,8 @@ double QpcPerMs()
 
 } // namespace
 
-namespace host {
+namespace host
+{
 
 void LayoutBroker::SetAlphaCompositor(AlphaCompositor* compositor)
 {
@@ -118,20 +131,19 @@ void LayoutBroker::Apply(int x, int y, int w, int h)
 {
     if (!m_viewport) return;
 
-    HWND owner = GetWindow(m_viewport, GW_OWNER);
-    POINT screenPt = { x, y };
+    HWND  owner    = GetWindow(m_viewport, GW_OWNER);
+    POINT screenPt = {x, y};
     if (owner) ClientToScreen(owner, &screenPt);
 
     if (w <= 0 || h <= 0)
     {
         // Slot collapsed — move popup off-screen-ish but keep it
         // valid. Don't reset the swap chain for degenerate sizes.
-        SetWindowPos(m_viewport, nullptr, screenPt.x, screenPt.y, 1, 1,
-                     SWP_NOACTIVATE | SWP_NOZORDER);
-        m_lastX = x;
-        m_lastY = y;
-        m_lastW = 0;
-        m_lastH = 0;
+        SetWindowPos(m_viewport, nullptr, screenPt.x, screenPt.y, 1, 1, SWP_NOACTIVATE | SWP_NOZORDER);
+        m_lastX  = x;
+        m_lastY  = y;
+        m_lastW  = 0;
+        m_lastH  = 0;
         m_popupW = 0;
         m_popupH = 0;
         ReemitSceneRect();
@@ -140,8 +152,7 @@ void LayoutBroker::Apply(int x, int y, int w, int h)
 
     int pw, ph;
     PopupSize(w, h, pw, ph);
-    SetWindowPos(m_viewport, nullptr, screenPt.x, screenPt.y, pw, ph,
-                 SWP_NOACTIVATE | SWP_NOZORDER);
+    SetWindowPos(m_viewport, nullptr, screenPt.x, screenPt.y, pw, ph, SWP_NOACTIVATE | SWP_NOZORDER);
     InvalidateRect(m_viewport, nullptr, FALSE);
 
     // A real viewport resize invalidates the dock-slide anim's captured
@@ -200,21 +211,19 @@ void LayoutBroker::PredictAndApply()
     if (newW < 1) newW = 1;
     if (newH < 1) newH = 1;
 
-    if (newX == m_lastX && newY == m_lastY &&
-        newW == m_lastW && newH == m_lastH &&
-        curW == m_lastClientW && curH == m_lastClientH)
+    if (newX == m_lastX && newY == m_lastY && newW == m_lastW && newH == m_lastH && curW == m_lastClientW &&
+        curH == m_lastClientH)
     {
         RefreshScreenPosition();
         return;
     }
 
-    POINT screenPt = { newX, newY };
+    POINT screenPt = {newX, newY};
     ClientToScreen(owner, &screenPt);
 
     int pw, ph;
     PopupSize(newW, newH, pw, ph);
-    SetWindowPos(m_viewport, nullptr, screenPt.x, screenPt.y, pw, ph,
-                 SWP_NOACTIVATE | SWP_NOZORDER);
+    SetWindowPos(m_viewport, nullptr, screenPt.x, screenPt.y, pw, ph, SWP_NOACTIVATE | SWP_NOZORDER);
 
     const bool sizeChanged = (newW != m_lastW || newH != m_lastH);
 
@@ -222,10 +231,10 @@ void LayoutBroker::PredictAndApply()
     // move-only branch above already returned via RefreshScreenPosition.
     if (sizeChanged) CancelSceneAnim();
 
-    m_lastX = newX;
-    m_lastY = newY;
-    m_lastW = newW;
-    m_lastH = newH;
+    m_lastX       = newX;
+    m_lastY       = newY;
+    m_lastW       = newW;
+    m_lastH       = newH;
     m_lastClientW = curW;
     m_lastClientH = curH;
 
@@ -250,7 +259,7 @@ void LayoutBroker::ResetEngineForResize(int w, int h)
 {
     if (!m_engine) return;
 
-    bool resetOk = false;
+    bool resetOk                 = false;
     bool rebuildFailedAfterReset = false;
     try
     {
@@ -303,10 +312,10 @@ void LayoutBroker::ResetEngineForResize(int w, int h)
 void LayoutBroker::SettleDeferredReset()
 {
     if (!m_engine || !m_viewport) return;
-    if (m_lastW <= 0 || m_lastH <= 0) return;          // collapsed popup
+    if (m_lastW <= 0 || m_lastH <= 0) return; // collapsed popup
     int pw, ph;
     PopupSize(m_lastW, m_lastH, pw, ph);
-    if (pw == m_resetW && ph == m_resetH) return;      // per-tick resets all succeeded
+    if (pw == m_resetW && ph == m_resetH) return; // per-tick resets all succeeded
 
     ResetEngineForResize(pw, ph);
 }
@@ -318,7 +327,7 @@ void LayoutBroker::EndResizeSlack()
     if (!m_viewport || m_lastW <= 0 || m_lastH <= 0) return;
     m_popupW = m_lastW;
     m_popupH = m_lastH;
-    RefreshScreenPosition();   // back to the exact size; SettleDeferredReset resets to it
+    RefreshScreenPosition(); // back to the exact size; SettleDeferredReset resets to it
 }
 
 void LayoutBroker::PopupSize(int w, int h, int& pw, int& ph) const
@@ -344,12 +353,11 @@ void LayoutBroker::RefreshScreenPosition()
 {
     if (!m_viewport || m_lastW <= 0 || m_lastH <= 0) return;
 
-    HWND owner = GetWindow(m_viewport, GW_OWNER);
-    POINT screenPt = { m_lastX, m_lastY };
+    HWND  owner    = GetWindow(m_viewport, GW_OWNER);
+    POINT screenPt = {m_lastX, m_lastY};
     if (owner) ClientToScreen(owner, &screenPt);
-    SetWindowPos(m_viewport, nullptr, screenPt.x, screenPt.y,
-                 m_popupW > 0 ? m_popupW : m_lastW, m_popupH > 0 ? m_popupH : m_lastH,
-                 SWP_NOACTIVATE | SWP_NOZORDER);
+    SetWindowPos(m_viewport, nullptr, screenPt.x, screenPt.y, m_popupW > 0 ? m_popupW : m_lastW,
+                 m_popupH > 0 ? m_popupH : m_lastH, SWP_NOACTIVATE | SWP_NOZORDER);
 
     // Popup origin in main-client coords hasn't changed (m_lastX/Y
     // unchanged), so the popup-client coords of cached occlusions
@@ -463,16 +471,23 @@ void LayoutBroker::ApplySceneRect(int x, int y, int w, int h, bool animFrame)
     }
 }
 
-void LayoutBroker::StartSceneAnim(int fromX, int fromY, int fromW, int fromH,
-                                  int toX, int toY, int toW, int toH,
-                                  double durationMs, double msElapsedAtSend)
+void LayoutBroker::StartSceneAnim(int    fromX,
+                                  int    fromY,
+                                  int    fromW,
+                                  int    fromH,
+                                  int    toX,
+                                  int    toY,
+                                  int    toW,
+                                  int    toH,
+                                  double durationMs,
+                                  double msElapsedAtSend)
 {
     // The interpolation drives the DComp engine visual + the per-frame engine
     // viewport. With no DComp compositor attached (e.g. headless --capture)
     // there is no such path, so this is a clean no-op.
     if (!m_dcompCompositor) return;
 
-    const double qpcPerMs = QpcPerMs();
+    const double  qpcPerMs = QpcPerMs();
     LARGE_INTEGER nowLi;
     if (durationMs <= 0.0 || qpcPerMs <= 0.0 || !QueryPerformanceCounter(&nowLi))
     {
@@ -507,11 +522,11 @@ bool LayoutBroker::AdvanceSceneAnim(long long qpcNow)
     if (!m_sceneAnim.active) return false;
 
     const double qpcPerMs = QpcPerMs();
-    double t = 1.0;
+    double       t        = 1.0;
     if (qpcPerMs > 0.0 && m_sceneAnim.durMs > 0.0)
     {
         const double elapsedMs = static_cast<double>(qpcNow - m_sceneAnim.startQpc) / qpcPerMs;
-        t = elapsedMs / m_sceneAnim.durMs;
+        t                      = elapsedMs / m_sceneAnim.durMs;
         if (t < 0.0) t = 0.0;
         if (t > 1.0) t = 1.0;
     }
@@ -521,16 +536,14 @@ bool LayoutBroker::AdvanceSceneAnim(long long qpcNow)
         // Land exactly on `to` and release the rect; the authoritative settle
         // send (due ~60ms later) then takes over through SetSceneRect.
         m_sceneAnim.active = false;
-        ApplySceneRect(static_cast<int>(std::lround(m_sceneAnim.toX)),
-                       static_cast<int>(std::lround(m_sceneAnim.toY)),
-                       static_cast<int>(std::lround(m_sceneAnim.toW)),
-                       static_cast<int>(std::lround(m_sceneAnim.toH)));
+        ApplySceneRect(static_cast<int>(std::lround(m_sceneAnim.toX)), static_cast<int>(std::lround(m_sceneAnim.toY)),
+                       static_cast<int>(std::lround(m_sceneAnim.toW)), static_cast<int>(std::lround(m_sceneAnim.toH)));
         return true;
     }
 
     // animFrame=true: mid-flight applies skip the per-apply transform
     // log (they run at the render rate; the terminal apply above logs).
-    const double e = CssEaseY(t);  // only the in-flight frames need the curve
+    const double e = CssEaseY(t); // only the in-flight frames need the curve
     ApplySceneRect(static_cast<int>(std::lround(Lerpf(m_sceneAnim.fromX, m_sceneAnim.toX, e))),
                    static_cast<int>(std::lround(Lerpf(m_sceneAnim.fromY, m_sceneAnim.toY, e))),
                    static_cast<int>(std::lround(Lerpf(m_sceneAnim.fromW, m_sceneAnim.toW, e))),
@@ -541,15 +554,13 @@ bool LayoutBroker::AdvanceSceneAnim(long long qpcNow)
 
 bool LayoutBroker::CaptureSnapshotJpegBase64(std::string& outBase64, int& outW, int& outH)
 {
-    if (!m_alphaCompositor || !m_engine || m_engine->DeviceCallsBlocked())
-        return false;
+    if (!m_alphaCompositor || !m_engine || m_engine->DeviceCallsBlocked()) return false;
     return m_alphaCompositor->CaptureSnapshotJpegBase64(outBase64, outW, outH);
 }
 
 bool LayoutBroker::CaptureSnapshotToFile(const std::wstring& path)
 {
-    if (!m_alphaCompositor || !m_engine || m_engine->DeviceCallsBlocked())
-        return false;
+    if (!m_alphaCompositor || !m_engine || m_engine->DeviceCallsBlocked()) return false;
     return m_alphaCompositor->CaptureSnapshotToFile(path);
 }
 
@@ -579,8 +590,7 @@ void LayoutBroker::ReemitSceneRect()
     if (m_alphaCompositor)
     {
         if (m_sceneW > 0 && m_sceneH > 0)
-            m_alphaCompositor->SetSceneRect(
-                m_sceneX - m_lastX, m_sceneY - m_lastY, m_sceneW, m_sceneH);
+            m_alphaCompositor->SetSceneRect(m_sceneX - m_lastX, m_sceneY - m_lastY, m_sceneW, m_sceneH);
         else
             m_alphaCompositor->SetSceneRect(0, 0, 0, 0);
     }
@@ -594,8 +604,7 @@ void LayoutBroker::ReemitSceneRect()
     // SetSceneViewport make repeated calls from popup-origin changes effectively free.
     if (m_dcompCompositor && m_sceneW > 0 && m_sceneH > 0)
     {
-        m_dcompCompositor->SetEngineVisualTransform(
-            m_sceneX, m_sceneY, m_sceneW, m_sceneH);
+        m_dcompCompositor->SetEngineVisualTransform(m_sceneX, m_sceneY, m_sceneW, m_sceneH);
         if (m_engine)
         {
             const SceneViewport ov = ComputeOverscanViewport(m_sceneX, m_sceneY, m_sceneW, m_sceneH);

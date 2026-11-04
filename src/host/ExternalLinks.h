@@ -5,7 +5,7 @@
 namespace host
 {
 
-inline constexpr wchar_t GUIDE_URL[] = L"https://drknickers.github.io/particle-editor/guide/home.html";
+inline constexpr wchar_t GUIDE_URL[]      = L"https://drknickers.github.io/particle-editor/guide/home.html";
 inline constexpr wchar_t REPOSITORY_URL[] = L"https://github.com/DrKnickers/particle-editor";
 
 // Returns the fixed https URL for a known link name, or nullptr.

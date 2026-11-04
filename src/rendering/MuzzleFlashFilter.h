@@ -25,11 +25,9 @@
 //
 // Both arguments must be lower-cased by the caller (the .alo stores mixed case);
 // boneNameLower is "" when the mesh has no 0x602 connection.
-inline bool IsMuzzleFlashMesh(const std::string& meshNameLower,
-                              const std::string& boneNameLower)
+inline bool IsMuzzleFlashMesh(const std::string& meshNameLower, const std::string& boneNameLower)
 {
-    if (meshNameLower.find("flash") == std::string::npos)
-        return false;                                  // not a flash quad -> never hidden
+    if (meshNameLower.find("flash") == std::string::npos) return false; // not a flash quad -> never hidden
     return meshNameLower.find("muzzle") != std::string::npos ||
-           boneNameLower.rfind("muzzle", 0) == 0;      // muzzle-associated by name or bone
+           boneNameLower.rfind("muzzle", 0) == 0; // muzzle-associated by name or bone
 }

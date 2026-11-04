@@ -29,10 +29,10 @@ struct ReplayPlayAnchor
 
 struct ReplayPlayStep
 {
-    int  target   = 0;      // advance the replay to this frame in this slot
-    bool wrap     = false;  // loop at the end: seek to frame 0 instead
-    bool ended    = false;  // no loop: target is the last frame; pause there
-    bool reanchor = false;  // set the anchor to {target, now}
+    int  target   = 0;     // advance the replay to this frame in this slot
+    bool wrap     = false; // loop at the end: seek to frame 0 instead
+    bool ended    = false; // no loop: target is the last frame; pause there
+    bool reanchor = false; // set the anchor to {target, now}
 };
 
 // A requested frame clamped to the review window [0, maxFrames].
@@ -45,9 +45,8 @@ inline int ClampReplayFrame(long long frame, int maxFrames)
 
 // The step for one idle slot while playing. `frame` is the replay's current
 // frame; `maxFrames` is the end of the review window.
-inline ReplayPlayStep NextReplayPlayStep(const ReplayPlayAnchor& anchor, int frame,
-                                         std::int64_t now, std::int64_t frequency,
-                                         int maxFrames, bool loop)
+inline ReplayPlayStep NextReplayPlayStep(
+    const ReplayPlayAnchor& anchor, int frame, std::int64_t now, std::int64_t frequency, int maxFrames, bool loop)
 {
     ReplayPlayStep step;
     step.target = frame;
@@ -62,8 +61,7 @@ inline ReplayPlayStep NextReplayPlayStep(const ReplayPlayAnchor& anchor, int fra
     }
     if (frequency <= 0 || now <= anchor.ticks) return step;
 
-    const std::int64_t due =
-        anchor.frame + (now - anchor.ticks) * kReplayFramesPerSecond / frequency;
+    const std::int64_t due = anchor.frame + (now - anchor.ticks) * kReplayFramesPerSecond / frequency;
     if (due <= frame) return step;
 
     std::int64_t target = due;

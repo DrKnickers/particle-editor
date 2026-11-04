@@ -18,10 +18,19 @@
 #include <cstdio>
 
 static int g_failed = 0;
-#define CHECK(cond, msg) do {                              \
-    if (cond) { std::printf("  ok: %s\n", msg); }          \
-    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
 int main()
 {
@@ -31,21 +40,20 @@ int main()
 
     // Ordinary traffic. Real bridge requests are a few KB against a 16 Mi-char
     // cap, so the overwhelmingly common answer must be "accept".
-    CHECK(ShouldAcceptWebMessage(0, cap),    "an empty message is accepted");
-    CHECK(ShouldAcceptWebMessage(1, cap),    "a one-character message is accepted");
-    CHECK(ShouldAcceptWebMessage(999, cap),  "just under the cap is accepted");
+    CHECK(ShouldAcceptWebMessage(0, cap), "an empty message is accepted");
+    CHECK(ShouldAcceptWebMessage(1, cap), "a one-character message is accepted");
+    CHECK(ShouldAcceptWebMessage(999, cap), "just under the cap is accepted");
 
     // The boundary, from both sides. Inclusive at the cap: the documented limit
     // is a size the bridge ACCEPTS, not one it refuses -- so a message of
     // exactly cap characters must get through.
-    CHECK(ShouldAcceptWebMessage(cap, cap),  "exactly at the cap is accepted");
+    CHECK(ShouldAcceptWebMessage(cap, cap), "exactly at the cap is accepted");
     CHECK(!ShouldAcceptWebMessage(cap + 1, cap), "one past the cap is refused");
 
     // Well past, including the degenerate huge value an overflowing length
     // computation would produce.
     CHECK(!ShouldAcceptWebMessage(cap * 1000, cap), "far over the cap is refused");
-    CHECK(!ShouldAcceptWebMessage((std::size_t)-1, cap),
-          "SIZE_MAX is refused (no wraparound in the comparison)");
+    CHECK(!ShouldAcceptWebMessage((std::size_t)-1, cap), "SIZE_MAX is refused (no wraparound in the comparison)");
 
     // The shipped constant must leave real traffic alone. A cap small enough to
     // reject an ordinary request would break the bridge rather than protect it.

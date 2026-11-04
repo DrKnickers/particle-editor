@@ -24,15 +24,14 @@
 #include <string>
 #include <vector>
 
-namespace host {
+namespace host
+{
 
-bool EncodeBgraToPngWic(const unsigned char* bgra, int w, int h,
-                        const std::wstring& path);
+bool EncodeBgraToPngWic(const unsigned char* bgra, int w, int h, const std::wstring& path);
 
 // Decodes the first frame of a PNG to top-down 32bppBGRA.
-bool DecodePngToBgraWic(const std::wstring& path, unsigned& w, unsigned& h,
-                        std::vector<unsigned char>& bgra);
+bool DecodePngToBgraWic(const std::wstring& path, unsigned& w, unsigned& h, std::vector<unsigned char>& bgra);
 
-}  // namespace host
+} // namespace host
 
-#endif  // HOST_WIC_ENCODE_H
+#endif // HOST_WIC_ENCODE_H

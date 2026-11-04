@@ -4,7 +4,8 @@
 #include <limits>
 #include <stdexcept>
 
-namespace {
+namespace
+{
 
 using nlohmann::json;
 
@@ -12,9 +13,8 @@ bool KnownField(const std::string& key, const std::string& level)
 {
     if (level == "observation")
         return key == "schemaVersion" || key == "scenario" || key == "contentLayers" || key == "lifecycle" ||
-            key == "output" || key == "camera";
-    if (level == "camera")
-        return key == "position" || key == "target" || key == "up";
+               key == "output" || key == "camera";
+    if (level == "camera") return key == "position" || key == "target" || key == "up";
     if (level == "lifecycle")
         return key == "type" || key == "quietTailFrames" || key == "warmupFrames" || key == "reviewFrames";
     return key == "strideInterval" || key == "playbackStride" || key == "maxBytes";
@@ -44,29 +44,28 @@ void ReadCameraVector(const json& camera, const char* field, std::array<float, 3
         Require(input[i].is_number(), component, "must be a number");
         const double number = input[i].get<double>();
         Require(std::isfinite(number), component, "must be finite");
-        Require(number >= -(std::numeric_limits<float>::max)() &&
-                number <= (std::numeric_limits<float>::max)(), component, "is out of range");
+        Require(number >= -(std::numeric_limits<float>::max)() && number <= (std::numeric_limits<float>::max)(),
+                component, "is out of range");
         value[i] = static_cast<float>(number);
     }
 }
 
-template<class T>
-void ReadInteger(const json& object, const char* field, const char* level, T& value)
+template <class T> void ReadInteger(const json& object, const char* field, const char* level, T& value)
 {
     if (!object.contains(field)) return;
-    const json& input = object.at(field);
-    const std::string name = std::string(level) + "." + field;
+    const json&       input = object.at(field);
+    const std::string name  = std::string(level) + "." + field;
     Require(input.is_number_integer(), name, "must be an integer");
     // Comparing integer domains avoids rounding UINT64_MAX up to 2^64.
     if (input.is_number_unsigned())
-        Require(input.get<std::uint64_t>() <= static_cast<std::uint64_t>((std::numeric_limits<T>::max)()),
-                name, "is out of range");
+        Require(input.get<std::uint64_t>() <= static_cast<std::uint64_t>((std::numeric_limits<T>::max)()), name,
+                "is out of range");
     else
     {
         const std::int64_t number = input.get<std::int64_t>();
         if constexpr (std::numeric_limits<T>::is_signed)
-            Require(number >= (std::numeric_limits<T>::lowest)() &&
-                    number <= (std::numeric_limits<T>::max)(), name, "is out of range");
+            Require(number >= (std::numeric_limits<T>::lowest)() && number <= (std::numeric_limits<T>::max)(), name,
+                    "is out of range");
         else
             Require(number >= 0, name, "is out of range");
     }
@@ -117,7 +116,7 @@ std::string host::ParseObservationSpec(const std::string& text, ObservationSpec&
                 const std::string type = lifecycle.at("type").get<std::string>();
                 Require(type == "oneshot" || type == "continuous", "lifecycle.type", "must be oneshot or continuous");
                 parsed.lifecycle.type = type == "oneshot" ? ObservationSpec::Lifecycle::Type::Oneshot
-                    : ObservationSpec::Lifecycle::Type::Continuous;
+                                                          : ObservationSpec::Lifecycle::Type::Continuous;
             }
             ReadInteger(lifecycle, "quietTailFrames", "lifecycle", parsed.lifecycle.quietTailFrames);
             ReadInteger(lifecycle, "warmupFrames", "lifecycle", parsed.lifecycle.warmupFrames);
@@ -147,23 +146,19 @@ std::string host::SerializeObservationSpec(const ObservationSpec& spec)
     const std::string problem = ValidateObservationSpec(spec);
     if (!problem.empty()) throw std::runtime_error(problem);
     json object = {
-        { "schemaVersion", spec.schemaVersion },
-        { "scenario", json::parse(SerializePreviewScenario(spec.scenario)) },
-        { "lifecycle", {
-            { "type", spec.lifecycle.type == ObservationSpec::Lifecycle::Type::Oneshot ? "oneshot" : "continuous" },
-            { "quietTailFrames", spec.lifecycle.quietTailFrames },
-            { "warmupFrames", spec.lifecycle.warmupFrames },
-            { "reviewFrames", spec.lifecycle.reviewFrames }
-        } },
-        { "output", {
-            { "strideInterval", spec.output.strideInterval },
-            { "playbackStride", spec.output.playbackStride },
-            { "maxBytes", spec.output.maxBytes }
-        } }
-    };
+        {"schemaVersion", spec.schemaVersion},
+        {"scenario", json::parse(SerializePreviewScenario(spec.scenario))},
+        {"lifecycle",
+         {{"type", spec.lifecycle.type == ObservationSpec::Lifecycle::Type::Oneshot ? "oneshot" : "continuous"},
+          {"quietTailFrames", spec.lifecycle.quietTailFrames},
+          {"warmupFrames", spec.lifecycle.warmupFrames},
+          {"reviewFrames", spec.lifecycle.reviewFrames}}},
+        {"output",
+         {{"strideInterval", spec.output.strideInterval},
+          {"playbackStride", spec.output.playbackStride},
+          {"maxBytes", spec.output.maxBytes}}}};
     if (spec.hasContentLayers) object["contentLayers"] = spec.contentLayers;
-    if (spec.hasCamera) object["camera"] = {
-        { "position", spec.camera.position }, { "target", spec.camera.target }, { "up", spec.camera.up }
-    };
+    if (spec.hasCamera)
+        object["camera"] = {{"position", spec.camera.position}, {"target", spec.camera.target}, {"up", spec.camera.up}};
     return object.dump();
 }

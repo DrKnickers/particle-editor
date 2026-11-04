@@ -14,8 +14,8 @@ namespace host
 {
 struct IndexStack
 {
-    std::vector<std::wstring> gameRoots;   // the installs, searched after the layers, with their MEGs
-    std::vector<std::wstring> layers;      // the mod layers, front = highest precedence
+    std::vector<std::wstring> gameRoots; // the installs, searched after the layers, with their MEGs
+    std::vector<std::wstring> layers;    // the mod layers, front = highest precedence
 };
 
 // The content-stack hash covers the layer paths as given, as --observe's does:
@@ -23,6 +23,6 @@ struct IndexStack
 // Fills *records and returns kExitOk; or returns kExitUsage (a root or layer
 // that is not a folder) or kExitSource (no root lists a MEG) with *error.
 int RunIndex(const IndexStack& stack, nlohmann::json* records, std::string* error);
-}
+} // namespace host
 
 #endif // TOOL_INDEX_H

@@ -147,11 +147,11 @@ file agree.
    field-specific code: it derives `applied` and `skipped` from the fixture's
    keys. The mock does not check types; the host does.
 3. In [ParticleSystem.h](../../../src/effect/ParticleSystem.h), search for
-   `float gravity` and add the stored member. In
+   `gravity;` and add the stored member. In
    [ParticleSystem.cpp](../../../src/effect/ParticleSystem.cpp), search for
    `setDefaults` and give it a default. In
    [ParticleSystemSerialization.cpp](../../../src/effect/ParticleSystemSerialization.cpp),
-   search for `writeMiniFloat  (writer, 0x0C, gravity)` for the write line,
+   search for `writeMiniFloat(writer, 0x0C, gravity)` for the write line,
    then `case 0x0C:` and `readFloat(reader)` for the matching read line.
    Add both sides for the new field. Mini-chunk IDs must be unique within
    chunk `0x0002`; read `writeProperties` to find the next free ID rather

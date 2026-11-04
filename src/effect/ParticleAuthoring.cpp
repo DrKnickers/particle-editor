@@ -24,8 +24,7 @@ static EditResult Result(EditOutcome outcome, const char* reason = "")
 }
 
 // Fill the shared EditPlan fields of a derived plan.
-template <typename Plan>
-static Plan& Decide(Plan& plan, EditOutcome outcome, bool willMutate, const char* reason = "")
+template <typename Plan> static Plan& Decide(Plan& plan, EditOutcome outcome, bool willMutate, const char* reason = "")
 {
     plan.outcome    = outcome;
     plan.reason     = reason;
@@ -53,8 +52,7 @@ TrackKeyPlan PlanSetTrackKey(const Track& track, float oldTime, float newTime, f
     plan.replacement = Track::Key(newTime, newValue);
     if (std::isnan(oldTime) || std::isnan(newTime) || std::isnan(newValue))
         return Decide(plan, EditOutcome::Rejected, false, kNaNKeyReason);
-    if (track.keys.empty())
-        return Decide(plan, EditOutcome::NoOpNotFound, false);
+    if (track.keys.empty()) return Decide(plan, EditOutcome::NoOpNotFound, false);
 
     // Border keys: time fixed, value still moves.
     const bool isBorder = IsBorderKeyTime(track, oldTime);
@@ -67,7 +65,8 @@ TrackKeyPlan PlanSetTrackKey(const Track& track, float oldTime, float newTime, f
     if (!std::isfinite(newValue))
         return Decide(plan, EditOutcome::Rejected, false, "set-track-key 'newValue' must be finite");
     if (isColor && (newValue < 0.0f || newValue > 1.0f))
-        return Decide(plan, EditOutcome::Rejected, false, "set-track-key 'newValue' must be within [0, 1] on a color track");
+        return Decide(plan, EditOutcome::Rejected, false,
+                      "set-track-key 'newValue' must be within [0, 1] on a color track");
 
     if (track.keys.find(Track::Key(oldTime, 0.0f)) == track.keys.end())
         return Decide(plan, EditOutcome::NoOpNotFound, false);
@@ -81,7 +80,7 @@ void ApplySetTrackKey(Track& track, const TrackKeyPlan& plan)
     // Erase + insert is the ordered-key idiom: a key's time is its ordering
     // key, so it cannot be changed in place.
     Track::KeyMap::iterator it = track.keys.find(Track::Key(plan.findTime, 0.0f));
-    assert(it != track.keys.end());   // the plan was made on a different track state
+    assert(it != track.keys.end()); // the plan was made on a different track state
     if (it == track.keys.end()) return;
     track.keys.erase(it);
     track.keys.insert(plan.replacement);
@@ -92,12 +91,9 @@ TrackKeyPlan PlanDeleteTrackKey(const Track& track, float time)
     TrackKeyPlan plan;
     plan.findTime    = time;
     plan.replacement = Track::Key(time, 0.0f);
-    if (std::isnan(time))
-        return Decide(plan, EditOutcome::Rejected, false, kNaNKeyReason);
-    if (track.keys.empty())
-        return Decide(plan, EditOutcome::NoOpNotFound, false);
-    if (IsBorderKeyTime(track, time))
-        return Decide(plan, EditOutcome::NoOpBorderSkip, false);
+    if (std::isnan(time)) return Decide(plan, EditOutcome::Rejected, false, kNaNKeyReason);
+    if (track.keys.empty()) return Decide(plan, EditOutcome::NoOpNotFound, false);
+    if (IsBorderKeyTime(track, time)) return Decide(plan, EditOutcome::NoOpBorderSkip, false);
     if (track.keys.find(Track::Key(time, 0.0f)) == track.keys.end())
         return Decide(plan, EditOutcome::NoOpNotFound, false);
     return Decide(plan, EditOutcome::Applied, true);
@@ -107,7 +103,7 @@ void ApplyDeleteTrackKey(Track& track, const TrackKeyPlan& plan)
 {
     if (!plan.willMutate) return;
     Track::KeyMap::iterator it = track.keys.find(Track::Key(plan.findTime, 0.0f));
-    assert(it != track.keys.end());   // the plan was made on a different track state
+    assert(it != track.keys.end()); // the plan was made on a different track state
     if (it == track.keys.end()) return;
     track.keys.erase(it);
 }
@@ -119,7 +115,7 @@ void ApplyDeleteTrackKey(Track& track, const TrackKeyPlan& plan)
 static float BumpWhileOccupied(const Track& track, float time, float step)
 {
     Track::Key probe(time, 0.0f);
-    int safety = 1000;
+    int        safety = 1000;
     while (track.keys.find(probe) != track.keys.end() && safety-- > 0)
     {
         time += step;
@@ -133,8 +129,7 @@ float DedupedInsertTime(const Track& track, float desiredTime)
     const float up = BumpWhileOccupied(track, desiredTime, 0.001f);
     // An add at an occupied 100 would bump past the track's end and become a
     // new last key (which the save re-times to 100); search downward instead.
-    if (up > 100.0f && desiredTime <= 100.0f)
-        return BumpWhileOccupied(track, desiredTime, -0.001f);
+    if (up > 100.0f && desiredTime <= 100.0f) return BumpWhileOccupied(track, desiredTime, -0.001f);
     return up;
 }
 
@@ -142,8 +137,7 @@ EditResult ValidateAddTrackKey(const ProposedKey& key, bool isColor)
 {
     // A missing field defaulting to 0 would silently insert a wrong key
     // (a typo'd param name in a --record clip records as success).
-    if (!key.numeric)
-        return Result(EditOutcome::Rejected, "add-track-key requires numeric 'time' and 'value'");
+    if (!key.numeric) return Result(EditOutcome::Rejected, "add-track-key requires numeric 'time' and 'value'");
     if (!std::isfinite(key.time) || !std::isfinite(key.value))
         return Result(EditOutcome::Rejected, "add-track-key 'time'/'value' must be finite");
     if (!InTrackTimeRange(key.time))
@@ -182,8 +176,7 @@ TrackLockPlan PlanSetTrackLock(const Emitter& emitter, int channelIdx, int lockT
         return Decide(plan, EditOutcome::Rejected, false, "unknown channel");
 
     // Only RGBA take part; the other tracks accept the request and ignore it.
-    if (channelIdx >= 4)
-        return Decide(plan, EditOutcome::NoOpOutOfDomain, false);
+    if (channelIdx >= 4) return Decide(plan, EditOutcome::NoOpOutOfDomain, false);
 
     if (!unlock)
     {
@@ -215,10 +208,14 @@ void ApplySetTrackLock(Emitter& emitter, const TrackLockPlan& plan)
 
 bool ParseInterpolation(const string& name, Track::InterpolationType& out)
 {
-    if      (name == "linear") out = Track::IT_LINEAR;
-    else if (name == "smooth") out = Track::IT_SMOOTH;
-    else if (name == "step")   out = Track::IT_STEP;
-    else return false;
+    if (name == "linear")
+        out = Track::IT_LINEAR;
+    else if (name == "smooth")
+        out = Track::IT_SMOOTH;
+    else if (name == "step")
+        out = Track::IT_STEP;
+    else
+        return false;
     return true;
 }
 
@@ -234,8 +231,7 @@ InterpolationPlan PlanSetTrackInterpolation(const Track& track, const string& na
     plan.next = track.interpolation;
     if (!ParseInterpolation(name, plan.next))
         return Decide(plan, EditOutcome::Rejected, false, "unknown interpolation");
-    if (track.interpolation == plan.next)
-        return Decide(plan, EditOutcome::NoOpUnchanged, false);
+    if (track.interpolation == plan.next) return Decide(plan, EditOutcome::NoOpUnchanged, false);
     return Decide(plan, EditOutcome::Applied, true);
 }
 
@@ -259,18 +255,16 @@ bool InIntFieldRange(double value)
 
 // ---- Full-track replacement -------------------------------------------------
 
-EditResult ValidateFullTrackReplacement(const Emitter& emitter, int trackIdx,
-                                        const vector<Track::Key>& proposed)
+EditResult ValidateFullTrackReplacement(const Emitter& emitter, int trackIdx, const vector<Track::Key>& proposed)
 {
-    if (trackIdx < 0 || trackIdx >= ParticleSystem::NUM_TRACKS)
-        return Result(EditOutcome::Rejected, "unknown track");
-    if (emitter.tracks[trackIdx] == NULL)
-        return Result(EditOutcome::Rejected, "no track slot bound for this channel");
+    if (trackIdx < 0 || trackIdx >= ParticleSystem::NUM_TRACKS) return Result(EditOutcome::Rejected, "unknown track");
+    if (emitter.tracks[trackIdx] == NULL) return Result(EditOutcome::Rejected, "no track slot bound for this channel");
 
     // A locked color channel displays an earlier channel's keys; replacing
     // "its" keys would rewrite that other channel.
     if (trackIdx < 4 && emitter.tracks[trackIdx] != &emitter.trackContents[trackIdx])
-        return Result(EditOutcome::Rejected, "track is locked to an earlier channel; unlock it before replacing its keys");
+        return Result(EditOutcome::Rejected,
+                      "track is locked to an earlier channel; unlock it before replacing its keys");
 
     // With randomRotation on, the save writes the rotation track from
     // randomRotationAverage and drops its keys.
@@ -282,8 +276,7 @@ EditResult ValidateFullTrackReplacement(const Emitter& emitter, int trackIdx,
         return Result(EditOutcome::Rejected, "a track needs at least 2 keys (the endpoints at 0 and 100)");
     // readTracks admits an intermediate key only while the track holds fewer
     // than kMaxAloTrackKeys keys, the first endpoint included.
-    if (proposed.size() - 2 >= kMaxAloTrackKeys)
-        return Result(EditOutcome::Rejected, "too many keys for one track");
+    if (proposed.size() - 2 >= kMaxAloTrackKeys) return Result(EditOutcome::Rejected, "too many keys for one track");
 
     for (size_t i = 0; i < proposed.size(); i++)
     {
@@ -292,10 +285,8 @@ EditResult ValidateFullTrackReplacement(const Emitter& emitter, int trackIdx,
     }
 
     // The endpoints reload at exactly 0 and 100 whatever their saved time.
-    if (proposed.front().time != 0.0f)
-        return Result(EditOutcome::Rejected, "the first key must be at time 0");
-    if (proposed.back().time != 100.0f)
-        return Result(EditOutcome::Rejected, "the last key must be at time 100");
+    if (proposed.front().time != 0.0f) return Result(EditOutcome::Rejected, "the first key must be at time 0");
+    if (proposed.back().time != 100.0f) return Result(EditOutcome::Rejected, "the last key must be at time 100");
 
     // readTracks refuses a key earlier than the one before it or past 100.
     for (size_t i = 1; i < proposed.size(); i++)
@@ -323,8 +314,7 @@ void ApplyFullTrackReplacement(Emitter& emitter, int trackIdx, const vector<Trac
     // in order keeps the proposed order of same-time keys.
     Track& track = *emitter.tracks[trackIdx];
     track.keys.clear();
-    for (size_t i = 0; i < proposed.size(); i++)
-        track.keys.insert(proposed[i]);
+    for (size_t i = 0; i < proposed.size(); i++) track.keys.insert(proposed[i]);
 }
 
 // ---- Atlas ------------------------------------------------------------------
@@ -334,12 +324,10 @@ EditResult ClassifyAtlasIndex(const Emitter& emitter, float indexValue)
     const int    side  = AtlasGridSide(emitter.textureSize);
     const double cells = (double)side * side;
     const double frame = std::floor((double)indexValue);
-    if (std::isfinite(indexValue) && frame >= 0.0 && frame < cells)
-        return Result(EditOutcome::Applied);
+    if (std::isfinite(indexValue) && frame >= 0.0 && frame < cells) return Result(EditOutcome::Applied);
 
     char reason[160];
-    snprintf(reason, sizeof(reason),
-             "atlas index %g is outside the %d x %d grid; the engine wraps it to another frame",
+    snprintf(reason, sizeof(reason), "atlas index %g is outside the %d x %d grid; the engine wraps it to another frame",
              (double)indexValue, side, side);
     return Result(EditOutcome::OutOfGrid, reason);
 }
@@ -348,14 +336,21 @@ EditResult ClassifyAtlasIndex(const Emitter& emitter, float indexValue)
 
 namespace
 {
-enum class PropertyKind { Bool, Float, ULong, UInt, Int };
+enum class PropertyKind
+{
+    Bool,
+    Float,
+    ULong,
+    UInt,
+    Int
+};
 
 struct PropertyRule
 {
-    std::string  name;
-    PropertyKind kind;
-    bool         ranged;   // floats: whether [lo, hi] applies; integers always
-    double       lo, hi;
+    std::string                    name;
+    PropertyKind                   kind;
+    bool                           ranged; // floats: whether [lo, hi] applies; integers always
+    double                         lo, hi;
     std::function<void*(Emitter&)> ref;
 };
 
@@ -364,16 +359,26 @@ const double kU32Max = 4294967295.0;
 std::vector<PropertyRule> BuildPropertyRules()
 {
     std::vector<PropertyRule> rules;
-    auto boolean = [&](const char* name, bool Emitter::* m) {
+    auto                      boolean = [&](const char* name, bool Emitter::* m)
+    {
         rules.push_back({name, PropertyKind::Bool, false, 0, 0, [m](Emitter& e) -> void* { return &(e.*m); }});
     };
-    auto real = [&](const std::string& name, std::function<float*(Emitter&)> f, bool ranged = false, double lo = 0, double hi = 0) {
+    auto real = [&](const std::string& name, std::function<float*(Emitter&)> f, bool ranged = false, double lo = 0,
+                    double hi = 0)
+    {
         rules.push_back({name, PropertyKind::Float, ranged, lo, hi, [f](Emitter& e) -> void* { return f(e); }});
     };
-    auto ulong = [&](const char* name, unsigned long Emitter::* m, double lo, double hi) {
+    auto ulong = [&](const char* name, unsigned long Emitter::* m, double lo, double hi)
+    {
         rules.push_back({name, PropertyKind::ULong, true, lo, hi, [m](Emitter& e) -> void* { return &(e.*m); }});
     };
-    auto member = [](float Emitter::* m) { return [m](Emitter& e) { return &(e.*m); }; };
+    auto member = [](float Emitter::* m)
+    {
+        return [m](Emitter& e)
+        {
+            return &(e.*m);
+        };
+    };
 
     boolean("linkToSystem", &Emitter::linkToSystem);
     boolean("objectSpaceAcceleration", &Emitter::objectSpaceAcceleration);
@@ -416,7 +421,7 @@ std::vector<PropertyRule> BuildPropertyRules()
     for (int i = 0; i < 4; i++)
         real("randomColors[" + std::to_string(i) + "]", [i](Emitter& e) { return &e.randomColors[i]; });
 
-    ulong("nBursts", &Emitter::nBursts, 0, kU32Max - 1);   // 0xFFFFFFFF reloads as 0
+    ulong("nBursts", &Emitter::nBursts, 0, kU32Max - 1); // 0xFFFFFFFF reloads as 0
     ulong("blendMode", &Emitter::blendMode, 0, 13);
     ulong("textureSize", &Emitter::textureSize, 0, kU32Max);
     ulong("nParticlesPerSecond", &Emitter::nParticlesPerSecond, 0, kU32Max);
@@ -425,31 +430,37 @@ std::vector<PropertyRule> BuildPropertyRules()
     ulong("groundBehavior", &Emitter::groundBehavior, ParticleSystem::GROUND_NONE, ParticleSystem::GROUND_STICK);
     ulong("unknown06", &Emitter::unknown06, 0, kU32Max);
     ulong("unknown49", &Emitter::unknown49, 0, kU32Max);
-    rules.push_back({"emitFromMesh", PropertyKind::Int, true, ParticleSystem::EMIT_DISABLE, ParticleSystem::EMIT_EVERY_VERTEX,
-                     [](Emitter& e) -> void* { return &e.emitFromMesh; }});
+    rules.push_back({"emitFromMesh", PropertyKind::Int, true, ParticleSystem::EMIT_DISABLE,
+                     ParticleSystem::EMIT_EVERY_VERTEX, [](Emitter& e) -> void* { return &e.emitFromMesh; }});
 
     // The speed and position groups. The lifetime group is derived on save.
     for (int g : {ParticleSystem::GROUP_SPEED, ParticleSystem::GROUP_POSITION})
     {
-        const std::string prefix = "groups[" + std::to_string(g) + "].";
-        auto groupFloat = [&](const char* name, float Emitter::Group::* m) {
+        const std::string prefix     = "groups[" + std::to_string(g) + "].";
+        auto              groupFloat = [&](const char* name, float Emitter::Group::* m)
+        {
             real(prefix + name, [g, m](Emitter& e) { return &(e.groups[g].*m); });
         };
-        auto groupUInt = [&](const char* name, unsigned int Emitter::Group::* m, double hi) {
+        auto groupUInt = [&](const char* name, unsigned int Emitter::Group::* m, double hi)
+        {
             rules.push_back({prefix + name, PropertyKind::UInt, true, 0, hi,
                              [g, m](Emitter& e) -> void* { return &(e.groups[g].*m); }});
         };
         groupUInt("type", &Emitter::Group::type, ParticleSystem::NUM_GROUP_TYPES - 1);
-        groupFloat("minX", &Emitter::Group::minX); groupFloat("minY", &Emitter::Group::minY);
-        groupFloat("minZ", &Emitter::Group::minZ); groupFloat("maxX", &Emitter::Group::maxX);
-        groupFloat("maxY", &Emitter::Group::maxY); groupFloat("maxZ", &Emitter::Group::maxZ);
+        groupFloat("minX", &Emitter::Group::minX);
+        groupFloat("minY", &Emitter::Group::minY);
+        groupFloat("minZ", &Emitter::Group::minZ);
+        groupFloat("maxX", &Emitter::Group::maxX);
+        groupFloat("maxY", &Emitter::Group::maxY);
+        groupFloat("maxZ", &Emitter::Group::maxZ);
         groupFloat("sideLength", &Emitter::Group::sideLength);
         groupFloat("sphereRadius", &Emitter::Group::sphereRadius);
         groupUInt("sphereEdge", &Emitter::Group::sphereEdge, kU32Max);
         groupFloat("cylinderRadius", &Emitter::Group::cylinderRadius);
         groupUInt("cylinderEdge", &Emitter::Group::cylinderEdge, kU32Max);
         groupFloat("cylinderHeight", &Emitter::Group::cylinderHeight);
-        groupFloat("valX", &Emitter::Group::valX); groupFloat("valY", &Emitter::Group::valY);
+        groupFloat("valX", &Emitter::Group::valX);
+        groupFloat("valY", &Emitter::Group::valY);
         groupFloat("valZ", &Emitter::Group::valZ);
     }
     return rules;
@@ -497,7 +508,8 @@ EditResult ValidateSetProperty(const std::string& field, const PropertyValue& va
     char range[96];
     if (rule->kind == PropertyKind::Float)
     {
-        if (!IsFiniteFloatField(value.number)) return Rejected("'" + field + "' must be a finite number that fits a float");
+        if (!IsFiniteFloatField(value.number))
+            return Rejected("'" + field + "' must be a finite number that fits a float");
         if (rule->ranged && !(value.number >= rule->lo && value.number <= rule->hi))
         {
             snprintf(range, sizeof(range), "[%g, %g]", rule->lo, rule->hi);
@@ -523,24 +535,29 @@ void ApplySetProperty(Emitter& emitter, const std::string& field, const Property
     void* target = rule->ref(emitter);
     switch (rule->kind)
     {
-        case PropertyKind::Bool:  *static_cast<bool*>(target)          = value.boolValue; break;
-        case PropertyKind::Float: *static_cast<float*>(target)         = static_cast<float>(value.number); break;
-        case PropertyKind::ULong: *static_cast<unsigned long*>(target) = static_cast<unsigned long>(value.number); break;
-        case PropertyKind::UInt:  *static_cast<unsigned int*>(target)  = static_cast<unsigned int>(value.number); break;
-        case PropertyKind::Int:   *static_cast<int*>(target)           = static_cast<int>(value.number); break;
+        case PropertyKind::Bool:  *static_cast<bool*>(target) = value.boolValue; break;
+        case PropertyKind::Float: *static_cast<float*>(target) = static_cast<float>(value.number); break;
+        case PropertyKind::ULong:
+            *static_cast<unsigned long*>(target) = static_cast<unsigned long>(value.number);
+            break;
+        case PropertyKind::UInt: *static_cast<unsigned int*>(target) = static_cast<unsigned int>(value.number); break;
+        case PropertyKind::Int:  *static_cast<int*>(target) = static_cast<int>(value.number); break;
     }
 }
 
 PropertyValue GetProperty(const Emitter& emitter, const std::string& field)
 {
-    PropertyValue value = {false, false, 0.0};
-    const PropertyRule* rule = FindPropertyRule(field);
+    PropertyValue       value = {false, false, 0.0};
+    const PropertyRule* rule  = FindPropertyRule(field);
     assert(rule != nullptr);
     if (!rule) return value;
     const void* source = rule->ref(const_cast<Emitter&>(emitter));
     switch (rule->kind)
     {
-        case PropertyKind::Bool:  value.isBool = true; value.boolValue = *static_cast<const bool*>(source); break;
+        case PropertyKind::Bool:
+            value.isBool    = true;
+            value.boolValue = *static_cast<const bool*>(source);
+            break;
         case PropertyKind::Float: value.number = *static_cast<const float*>(source); break;
         case PropertyKind::ULong: value.number = *static_cast<const unsigned long*>(source); break;
         case PropertyKind::UInt:  value.number = *static_cast<const unsigned int*>(source); break;
@@ -553,7 +570,11 @@ std::vector<std::string> PropertyFootprint(const std::string& field)
 {
     std::vector<std::string> paths = {field};
     if (field == "lifetime" || field == "randomLifetimePerc") paths.push_back("groups[1]");
-    if (field == "randomRotation") { paths.push_back("randomRotationAverage"); paths.push_back("tracks[6]"); }
+    if (field == "randomRotation")
+    {
+        paths.push_back("randomRotationAverage");
+        paths.push_back("tracks[6]");
+    }
     if (field == "randomRotationAverage") paths.push_back("tracks[6]");
     return paths;
 }
@@ -565,7 +586,7 @@ EditResult ValidateRename(const ParticleSystem& system, const Emitter& target, c
     if (!IsValidUtf8(name)) return Rejected("rename: the name must be valid UTF-8");
     if (name == target.name) return Result(EditOutcome::NoOpUnchanged);
     std::vector<std::string> names;
-    bool taken = false;
+    bool                     taken = false;
     for (const Emitter* e : system.getEmitters())
     {
         names.push_back(e->name);
@@ -583,7 +604,7 @@ EditResult ValidateTextureName(const std::string& name, bool colorTexture)
     if (name.empty())
         return Rejected(colorTexture ? std::string(which) + " must not be empty"
                                      : std::string(which) + " must not be empty; an empty one reloads as "
-                                       "p_particle_depth_master.tga, so name that");
+                                                            "p_particle_depth_master.tga, so name that");
     if (name.find('\0') != std::string::npos) return Rejected(std::string(which) + " must not contain a NUL");
     if (!IsValidUtf8(name)) return Rejected(std::string(which) + " must be valid UTF-8");
     if (name.size() > kMaxTextureNameBytes)

@@ -34,12 +34,22 @@ void ParticleSystemInstance::RemoveEmitter(EmitterInstance*) {}
 static int g_passed = 0;
 static int g_failed = 0;
 
-#define ASSERT_EQ(a, b) do { \
-    auto _a = (a); auto _b = (b); \
-    if (_a == _b) { ++g_passed; } \
-    else { ++g_failed; std::printf("  FAIL line %d: ASSERT_EQ(%s, %s) -> %zu != %zu\n", \
-        __LINE__, #a, #b, (size_t)_a, (size_t)_b); } \
-} while (0)
+#define ASSERT_EQ(a, b)                                                                                                \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        auto _a = (a);                                                                                                 \
+        auto _b = (b);                                                                                                 \
+        if (_a == _b)                                                                                                  \
+        {                                                                                                              \
+            ++g_passed;                                                                                                \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL line %d: ASSERT_EQ(%s, %s) -> %zu != %zu\n", __LINE__, #a, #b, (size_t)_a,             \
+                        (size_t)_b);                                                                                   \
+        }                                                                                                              \
+    } while (0)
 
 using Emitter = ParticleSystem::Emitter;
 
@@ -47,17 +57,21 @@ using Emitter = ParticleSystem::Emitter;
 // m_emitters = [P, C1, C2, Q]; P.spawnDuringLife=1 (C1), P.spawnOnDeath=2 (C2).
 // Pointers are stable across a reorder (the vector is permuted, emitters are
 // not reallocated), so we compare each slot against the child's live index.
-struct Repro { ParticleSystem ps; Emitter *P, *C1, *C2, *Q; };
+struct Repro
+{
+    ParticleSystem ps;
+    Emitter *      P, *C1, *C2, *Q;
+};
 
 static void buildRepro(Repro& r)
 {
     r.P  = r.ps.addRootEmitter();
-    r.C1 = r.ps.addLifetimeEmitter(r.P);   // P.spawnDuringLife = C1->index
-    r.C2 = r.ps.addDeathEmitter(r.P);      // P.spawnOnDeath    = C2->index
+    r.C1 = r.ps.addLifetimeEmitter(r.P); // P.spawnDuringLife = C1->index
+    r.C2 = r.ps.addDeathEmitter(r.P);    // P.spawnOnDeath    = C2->index
     r.Q  = r.ps.addRootEmitter();
     // Sanity: the repro is wired as expected before any reorder.
     ASSERT_EQ(r.P->spawnDuringLife, r.C1->index);
-    ASSERT_EQ(r.P->spawnOnDeath,    r.C2->index);
+    ASSERT_EQ(r.P->spawnOnDeath, r.C2->index);
 }
 
 // Build the same P subtree with Q interleaved between its children:
@@ -66,19 +80,19 @@ static void buildRepro(Repro& r)
 static void buildReproInterleaved(Repro& r)
 {
     r.P  = r.ps.addRootEmitter();
-    r.C1 = r.ps.addLifetimeEmitter(r.P);   // P.spawnDuringLife = C1->index
-    r.Q  = r.ps.addRootEmitter();          // lands between C1 and C2
-    r.C2 = r.ps.addDeathEmitter(r.P);      // P.spawnOnDeath    = C2->index
+    r.C1 = r.ps.addLifetimeEmitter(r.P); // P.spawnDuringLife = C1->index
+    r.Q  = r.ps.addRootEmitter();        // lands between C1 and C2
+    r.C2 = r.ps.addDeathEmitter(r.P);    // P.spawnOnDeath    = C2->index
     // Sanity: the interleaved repro is wired as expected before any reorder.
     ASSERT_EQ(r.P->spawnDuringLife, r.C1->index);
-    ASSERT_EQ(r.P->spawnOnDeath,    r.C2->index);
+    ASSERT_EQ(r.P->spawnOnDeath, r.C2->index);
 }
 
 static void assertInterleavedReorder(const Repro& r)
 {
     // P's interleaved subtree must be reunited after Q, preserving its slots.
     ASSERT_EQ(r.P->spawnDuringLife, r.C1->index);
-    ASSERT_EQ(r.P->spawnOnDeath,    r.C2->index);
+    ASSERT_EQ(r.P->spawnOnDeath, r.C2->index);
     ASSERT_EQ(r.C1->parent, r.P);
     ASSERT_EQ(r.C2->parent, r.P);
 
@@ -87,59 +101,63 @@ static void assertInterleavedReorder(const Repro& r)
     ASSERT_EQ(&r.ps.getEmitter(1), r.P);
     ASSERT_EQ(&r.ps.getEmitter(2), r.C1);
     ASSERT_EQ(&r.ps.getEmitter(3), r.C2);
-    for (size_t i = 0; i < r.ps.getEmitters().size(); i++)
-        ASSERT_EQ(r.ps.getEmitter(i).index, i);
+    for (size_t i = 0; i < r.ps.getEmitters().size(); i++) ASSERT_EQ(r.ps.getEmitter(i).index, i);
 }
 
 // reorder-many: drag P below Q. New layout [Q, P, C1, C2] aliases C2's new
 // index (3) with... actually aliases C1.new(2)==C2.old(2): the exact trigger.
 static void test_reorder_many_preserves_slots()
 {
-    Repro r; buildRepro(r);
-    std::vector<Emitter*> sel = { r.P };
-    std::vector<size_t> out;
-    bool ok = r.ps.reorderManyRootsToIndex(sel, 2 /* after last root */, out);
+    Repro r;
+    buildRepro(r);
+    std::vector<Emitter*> sel = {r.P};
+    std::vector<size_t>   out;
+    bool                  ok = r.ps.reorderManyRootsToIndex(sel, 2 /* after last root */, out);
     ASSERT_EQ(ok, true);
     // Slots must still point at the SAME children, not be swapped.
-    ASSERT_EQ(r.P->spawnDuringLife, r.C1->index);  // life still C1
-    ASSERT_EQ(r.P->spawnOnDeath,    r.C2->index);   // death still C2
+    ASSERT_EQ(r.P->spawnDuringLife, r.C1->index); // life still C1
+    ASSERT_EQ(r.P->spawnOnDeath, r.C2->index);    // death still C2
 }
 
 // moveEmitter (adjacent swap, +1 = down): same aliasing, Move Up/Down path.
 static void test_move_emitter_preserves_slots()
 {
-    Repro r; buildRepro(r);
+    Repro r;
+    buildRepro(r);
     bool ok = r.ps.moveEmitter(r.P, +1 /* down, past Q */);
     ASSERT_EQ(ok, true);
     ASSERT_EQ(r.P->spawnDuringLife, r.C1->index);
-    ASSERT_EQ(r.P->spawnOnDeath,    r.C2->index);
+    ASSERT_EQ(r.P->spawnOnDeath, r.C2->index);
 }
 
 // moveEmitterToRootIndex (absolute target): the third KEEP-IN-SYNC copy.
 static void test_move_to_root_index_preserves_slots()
 {
-    Repro r; buildRepro(r);
+    Repro r;
+    buildRepro(r);
     bool ok = r.ps.moveEmitterToRootIndex(r.P, 2 /* after last root */);
     ASSERT_EQ(ok, true);
     ASSERT_EQ(r.P->spawnDuringLife, r.C1->index);
-    ASSERT_EQ(r.P->spawnOnDeath,    r.C2->index);
+    ASSERT_EQ(r.P->spawnOnDeath, r.C2->index);
 }
 
 // reorder-many must collect P's non-contiguous subtree from vector order,
 // rather than treating the range from P to the next root as its subtree.
 static void test_reorder_many_reunites_interleaved_subtree()
 {
-    Repro r; buildReproInterleaved(r);
-    std::vector<Emitter*> sel = { r.P };
-    std::vector<size_t> out;
-    bool ok = r.ps.reorderManyRootsToIndex(sel, 2 /* after last root */, out);
+    Repro r;
+    buildReproInterleaved(r);
+    std::vector<Emitter*> sel = {r.P};
+    std::vector<size_t>   out;
+    bool                  ok = r.ps.reorderManyRootsToIndex(sel, 2 /* after last root */, out);
     ASSERT_EQ(ok, true);
     assertInterleavedReorder(r);
 }
 
 static void test_move_to_root_index_reunites_interleaved_subtree()
 {
-    Repro r; buildReproInterleaved(r);
+    Repro r;
+    buildReproInterleaved(r);
     bool ok = r.ps.moveEmitterToRootIndex(r.P, 2 /* after last root */);
     ASSERT_EQ(ok, true);
     assertInterleavedReorder(r);

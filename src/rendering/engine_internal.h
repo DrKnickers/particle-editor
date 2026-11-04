@@ -23,9 +23,9 @@ double   EngQpcUs(LONGLONG a, LONGLONG b);
 // rendering AND reference-object rendering — kept in lockstep).
 #include <vector>
 struct AloShaderParam;
-void ApplyAloMaterialParams(ID3DXEffect* fx,
-                            const std::vector<AloShaderParam>& params,
-                            const std::vector<D3DXHANDLE>& matHandles,
+void ApplyAloMaterialParams(ID3DXEffect*                           fx,
+                            const std::vector<AloShaderParam>&     params,
+                            const std::vector<D3DXHANDLE>&         matHandles,
                             const std::vector<IDirect3DTexture9*>& matTextures);
 
 #endif // ENGINE_INTERNAL_H

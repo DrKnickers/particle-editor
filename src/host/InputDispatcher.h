@@ -35,7 +35,8 @@
 
 #include "host/third_party/nlohmann/json.hpp"
 
-namespace host {
+namespace host
+{
 
 class InputDispatcher
 {
@@ -47,7 +48,7 @@ public:
 
     explicit InputDispatcher(HWND viewportPopup) noexcept;
 
-    ~InputDispatcher() = default;
+    ~InputDispatcher()                                 = default;
     InputDispatcher(const InputDispatcher&)            = delete;
     InputDispatcher& operator=(const InputDispatcher&) = delete;
 

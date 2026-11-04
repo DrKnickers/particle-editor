@@ -34,7 +34,10 @@ bool Fail(Stop* stop, int code, const std::string& category, const std::string& 
     return false;
 }
 
-bool IsIndex(const json& v) { return v.is_number_unsigned() || (v.is_number_integer() && v.get<long long>() >= 0); }
+bool IsIndex(const json& v)
+{
+    return v.is_number_unsigned() || (v.is_number_integer() && v.get<long long>() >= 0);
+}
 
 bool CheckRequest(const json& request, Stop* stop)
 {
@@ -72,29 +75,55 @@ json Mapped(const json& position, const std::vector<size_t>& map)
 bool IsPermutation(const json& source, const json& candidate, const std::vector<size_t>& map, std::string* why)
 {
     const json& from = source["emitters"];
-    const json& to = candidate["emitters"];
-    if (from.size() != to.size()) { *why = "the emitter count changed"; return false; }
+    const json& to   = candidate["emitters"];
+    if (from.size() != to.size())
+    {
+        *why = "the emitter count changed";
+        return false;
+    }
     for (size_t b = 0; b < from.size(); b++)
     {
-        const json& s = from[b];
-        const json& c = to[map[b]];
+        const json&       s  = from[b];
+        const json&       c  = to[map[b]];
         const std::string at = "emitter " + std::to_string(b) + " -> " + std::to_string(map[b]);
-        if (Payload(s) != Payload(c)) { *why = at + ": its contents changed"; return false; }
-        if (c["index"] != map[b]) { *why = at + ": its index is not its new position"; return false; }
+        if (Payload(s) != Payload(c))
+        {
+            *why = at + ": its contents changed";
+            return false;
+        }
+        if (c["index"] != map[b])
+        {
+            *why = at + ": its index is not its new position";
+            return false;
+        }
         for (const char* key : {"parent", "spawnOnDeath", "spawnDuringLife"})
-            if (c[key] != Mapped(s[key], map)) { *why = at + ": " + key + " is not the mapped " + key; return false; }
+            if (c[key] != Mapped(s[key], map))
+            {
+                *why = at + ": " + key + " is not the mapped " + key;
+                return false;
+            }
     }
     json a = source, b = candidate;
-    a.erase("emitters"); b.erase("emitters");
-    a.erase("sourceDocumentHash"); b.erase("sourceDocumentHash");
-    if (a != b) { *why = "a system field changed"; return false; }
+    a.erase("emitters");
+    b.erase("emitters");
+    a.erase("sourceDocumentHash");
+    b.erase("sourceDocumentHash");
+    if (a != b)
+    {
+        *why = "a system field changed";
+        return false;
+    }
     return true;
 }
 
-bool Reorder(const std::string& source, const std::string& sourceHash, const std::string& requestBytes,
-             const std::wstring& out, json& report, Stop* stop)
+bool Reorder(const std::string&  source,
+             const std::string&  sourceHash,
+             const std::string&  requestBytes,
+             const std::wstring& out,
+             json&               report,
+             Stop*               stop)
 {
-    json request;
+    json        request;
     std::string reason;
     if (!tool_selector::ParseStrictJson(requestBytes, &request, &reason))
         return Fail(stop, kExitUsage, "request-malformed", reason);
@@ -106,8 +135,8 @@ bool Reorder(const std::string& source, const std::string& sourceHash, const std
     if (!S) return Fail(stop, kExitSource, "source-invalid", "the source did not load: " + reason);
     if (!S->getGraphRepairs().empty())
         return Fail(stop, kExitSource, "source-invalid", "the loader repaired the source: " + S->getGraphRepairs()[0]);
-    const std::string baseline = SaveToBytes(*S);
-    std::unique_ptr<ParticleSystem> B = ParseSource(baseline, &reason);
+    const std::string               baseline = SaveToBytes(*S);
+    std::unique_ptr<ParticleSystem> B        = ParseSource(baseline, &reason);
     if (!B) return Fail(stop, kExitInternal, "internal", "the unedited source does not reload: " + reason);
     std::unique_ptr<ParticleSystem> W = ParseSource(source, &reason);
     if (!W) return Fail(stop, kExitInternal, "internal", "the second parse failed: " + reason);
@@ -115,19 +144,24 @@ bool Reorder(const std::string& source, const std::string& sourceHash, const std
     if (request["sourceDocumentHash"] != sourceHash)
         return Fail(stop, kExitSelector, "hash-mismatch", "the request was written against other source bytes");
 
-    const size_t pos = request["move"]["index"].get<size_t>();
+    const size_t           pos  = request["move"]["index"].get<size_t>();
     std::vector<Emitter*>& list = W->getEmitters();
     if (pos >= list.size()) return Fail(stop, kExitSelector, "no-target", "there is no emitter " + std::to_string(pos));
     Emitter* target = list[pos];
     if (target->name != request["move"]["name"].get<std::string>())
-        return Fail(stop, kExitSelector, "name-mismatch", "emitter " + std::to_string(pos) + " is '" + target->name + "'");
-    if (target->parent != nullptr) return Fail(stop, kExitRule, "not-a-root", "emitter " + std::to_string(pos) + " is a child");
+        return Fail(stop, kExitSelector, "name-mismatch",
+                    "emitter " + std::to_string(pos) + " is '" + target->name + "'");
+    if (target->parent != nullptr)
+        return Fail(stop, kExitRule, "not-a-root", "emitter " + std::to_string(pos) + " is a child");
     if (HasLinkGroupMembership(*target))
-        return Fail(stop, kExitRule, "linked-target", "the target is in link group " + std::to_string(target->linkGroup));
+        return Fail(stop, kExitRule, "linked-target",
+                    "the target is in link group " + std::to_string(target->linkGroup));
 
     const std::vector<Emitter*> before = list;
     if (!W->moveEmitterToRootIndex(target, request["toRoot"].get<size_t>()))
-        return Fail(stop, kExitRule, "no-move", "moving the root to gap " + request["toRoot"].dump() + " leaves the order unchanged or is out of range");
+        return Fail(stop, kExitRule, "no-move",
+                    "moving the root to gap " + request["toRoot"].dump() +
+                        " leaves the order unchanged or is out of range");
     std::vector<size_t> map(before.size());
     for (size_t b = 0; b < before.size(); b++)
         for (size_t c = 0; c < list.size(); c++)
@@ -135,33 +169,39 @@ bool Reorder(const std::string& source, const std::string& sourceHash, const std
     report["map"] = map;
 
     // The candidate, checked before anything is written.
-    const std::string bytesW = SaveToBytes(*W);
-    std::unique_ptr<ParticleSystem> C = ParseSource(bytesW, &reason);
+    const std::string               bytesW = SaveToBytes(*W);
+    std::unique_ptr<ParticleSystem> C      = ParseSource(bytesW, &reason);
     if (!C) return Fail(stop, kExitPostcheck, "postcondition", "the candidate does not load: " + reason);
     if (!C->getGraphRepairs().empty())
-        return Fail(stop, kExitPostcheck, "postcondition", "the loader repaired the candidate: " + C->getGraphRepairs()[0]);
+        return Fail(stop, kExitPostcheck, "postcondition",
+                    "the loader repaired the candidate: " + C->getGraphRepairs()[0]);
     if (SaveToBytes(*C) != bytesW)
         return Fail(stop, kExitPostcheck, "postcondition", "a save of the reloaded candidate differs from it");
     std::string why;
     if (!IsPermutation(particle_json::ParticleSystemJson(*B), particle_json::ParticleSystemJson(*C), map, &why))
         return Fail(stop, kExitPostcheck, "postcondition", why);
 
-    if (!WriteFileAtomically(out, bytesW)) return Fail(stop, kExitIo, "io", "the candidate could not be written to --out");
+    if (!WriteFileAtomically(out, bytesW))
+        return Fail(stop, kExitIo, "io", "the candidate could not be written to --out");
     std::string written;
-    if (!ReadFileBytes(out, &written, &reason)) return Fail(stop, kExitIo, "io", "--out could not be read back: " + reason);
+    if (!ReadFileBytes(out, &written, &reason))
+        return Fail(stop, kExitIo, "io", "--out could not be read back: " + reason);
     report["candidateHash"] = Sha256Hex(written);
     return true;
 }
 } // namespace
 
-int RunReorder(const std::string& source, const std::string& sourceHash, const std::string& request,
-               const std::wstring& out, json* report)
+int RunReorder(const std::string&  source,
+               const std::string&  sourceHash,
+               const std::string&  request,
+               const std::wstring& out,
+               json*               report)
 {
     json& r = *report;
-    r = {{"schema", 1}, {"verb", "reorder"}, {"sourceDocumentHash", sourceHash}};
-    Stop stop;
+    r       = {{"schema", 1}, {"verb", "reorder"}, {"sourceDocumentHash", sourceHash}};
+    Stop       stop;
     const bool ok = Reorder(source, sourceHash, request, out, r, &stop);
-    r["outcome"] = ok ? "ok" : (stop.code == kExitPostcheck ? "postcondition-failed" : "refused");
+    r["outcome"]  = ok ? "ok" : (stop.code == kExitPostcheck ? "postcondition-failed" : "refused");
     r["exitCode"] = ok ? kExitOk : stop.code;
     if (!ok) r["refusal"] = {{"category", stop.category}, {"reason", stop.reason}};
     return ok ? kExitOk : stop.code;

@@ -16,7 +16,8 @@
 #include <utility>
 #include <vector>
 
-namespace {
+namespace
+{
 
 int g_fail = 0;
 
@@ -41,10 +42,7 @@ public:
         RegDeleteTreeW(HKEY_CURRENT_USER, m_path.c_str());
     }
 
-    ~RegistryCleanup()
-    {
-        RegDeleteTreeW(HKEY_CURRENT_USER, m_path.c_str());
-    }
+    ~RegistryCleanup() { RegDeleteTreeW(HKEY_CURRENT_USER, m_path.c_str()); }
 
 private:
     std::wstring m_path;
@@ -58,7 +56,7 @@ bool PathsEqual(const std::vector<std::pair<int, std::wstring>>& actual,
 
 host::RestoredSettings Read(const std::wstring& path, bool inCaptureMode)
 {
-    HKEY key = host::OpenSettingsKeyForRead(path.c_str());
+    HKEY                   key      = host::OpenSettingsKeyForRead(path.c_str());
     host::RestoredSettings settings = host::ReadRestoredSettings(key, inCaptureMode);
     if (key) RegCloseKey(key);
     return settings;
@@ -67,33 +65,36 @@ host::RestoredSettings Read(const std::wstring& path, bool inCaptureMode)
 bool HasRegistryType(HKEY key, const wchar_t* name, DWORD type)
 {
     DWORD actualType = 0;
-    return RegQueryValueExW(key, name, nullptr, &actualType, nullptr, nullptr)
-            == ERROR_SUCCESS
-        && actualType == type;
+    return RegQueryValueExW(key, name, nullptr, &actualType, nullptr, nullptr) == ERROR_SUCCESS && actualType == type;
 }
 
 void CheckLightingSchema(HKEY key)
 {
-    struct Entry { const wchar_t* literal; const wchar_t* shared; DWORD type; };
+    struct Entry
+    {
+        const wchar_t* literal;
+        const wchar_t* shared;
+        DWORD          type;
+    };
     // Independent external schema pin: do not derive the literals from the
     // production constants, or a typo'd shared name would round-trip itself.
     const Entry entries[] = {
-        { L"LightSunIntensity",       host::kLightSunIntensity,       REG_BINARY },
-        { L"LightSunZAngle",          host::kLightSunZAngle,          REG_BINARY },
-        { L"LightSunTilt",            host::kLightSunTilt,            REG_BINARY },
-        { L"LightSunAmbientColor",    host::kLightSunAmbientColor,    REG_DWORD },
-        { L"LightSunSpecularColor",   host::kLightSunSpecularColor,   REG_DWORD },
-        { L"LightSunDiffuseColor",    host::kLightSunDiffuseColor,    REG_DWORD },
-        { L"LightSunShadowColor",     host::kLightSunShadowColor,     REG_DWORD },
-        { L"LightingForceFillAlignment", host::kLightForceFillAlignment, REG_DWORD },
-        { L"LightFill1Intensity",     host::kLightFill1Intensity,     REG_BINARY },
-        { L"LightFill1ZAngle",        host::kLightFill1ZAngle,        REG_BINARY },
-        { L"LightFill1Tilt",          host::kLightFill1Tilt,          REG_BINARY },
-        { L"LightFill1DiffuseColor",  host::kLightFill1DiffuseColor,  REG_DWORD },
-        { L"LightFill2Intensity",     host::kLightFill2Intensity,     REG_BINARY },
-        { L"LightFill2ZAngle",        host::kLightFill2ZAngle,        REG_BINARY },
-        { L"LightFill2Tilt",          host::kLightFill2Tilt,          REG_BINARY },
-        { L"LightFill2DiffuseColor",  host::kLightFill2DiffuseColor,  REG_DWORD },
+        {L"LightSunIntensity", host::kLightSunIntensity, REG_BINARY},
+        {L"LightSunZAngle", host::kLightSunZAngle, REG_BINARY},
+        {L"LightSunTilt", host::kLightSunTilt, REG_BINARY},
+        {L"LightSunAmbientColor", host::kLightSunAmbientColor, REG_DWORD},
+        {L"LightSunSpecularColor", host::kLightSunSpecularColor, REG_DWORD},
+        {L"LightSunDiffuseColor", host::kLightSunDiffuseColor, REG_DWORD},
+        {L"LightSunShadowColor", host::kLightSunShadowColor, REG_DWORD},
+        {L"LightingForceFillAlignment", host::kLightForceFillAlignment, REG_DWORD},
+        {L"LightFill1Intensity", host::kLightFill1Intensity, REG_BINARY},
+        {L"LightFill1ZAngle", host::kLightFill1ZAngle, REG_BINARY},
+        {L"LightFill1Tilt", host::kLightFill1Tilt, REG_BINARY},
+        {L"LightFill1DiffuseColor", host::kLightFill1DiffuseColor, REG_DWORD},
+        {L"LightFill2Intensity", host::kLightFill2Intensity, REG_BINARY},
+        {L"LightFill2ZAngle", host::kLightFill2ZAngle, REG_BINARY},
+        {L"LightFill2Tilt", host::kLightFill2Tilt, REG_BINARY},
+        {L"LightFill2DiffuseColor", host::kLightFill2DiffuseColor, REG_DWORD},
     };
     for (const Entry& entry : entries)
     {
@@ -130,13 +131,12 @@ void WriteLightingSentinels(const std::wstring& path)
 int main()
 {
     std::printf("test_settings_restore\n");
-    const std::wstring testPath = L"Software\\ParticleEditorTest-" +
-                                  std::to_wstring(GetCurrentProcessId());
-    RegistryCleanup cleanup(testPath);
+    const std::wstring testPath = L"Software\\ParticleEditorTest-" + std::to_wstring(GetCurrentProcessId());
+    RegistryCleanup    cleanup(testPath);
 
-    const float bloomStrength = 0.75f;
-    const std::array<float, 6> transform = { 1, 2, 3, 4, 5, 6 };
-    const float gridSpacing = 37.5f;
+    const float                bloomStrength = 0.75f;
+    const std::array<float, 6> transform     = {1, 2, 3, 4, 5, 6};
+    const float                gridSpacing   = 37.5f;
     host::WriteRegDword(L"BloomEnabled", 1, testPath.c_str());
     host::WriteRegBinary(L"BloomStrength", &bloomStrength, sizeof(bloomStrength), testPath.c_str());
     host::WriteRegDword(L"BackgroundColor", 0x00123456, testPath.c_str());
@@ -151,8 +151,8 @@ int main()
     host::WriteRegSz(L"SkydomePrimaryName", L"PrimaryDome", testPath.c_str());
     host::WriteRegSz(L"SkydomeSecondaryName", L"SecondaryDome", testPath.c_str());
     host::WriteRegDword(L"SkydomeContext", 0, testPath.c_str());
-    host::WriteRegBinary(L"ReferenceObjectTransform", transform.data(),
-                          static_cast<DWORD>(sizeof(transform)), testPath.c_str());
+    host::WriteRegBinary(L"ReferenceObjectTransform", transform.data(), static_cast<DWORD>(sizeof(transform)),
+                         testPath.c_str());
     host::WriteRegDword(L"ReferenceObjectVisible", 0, testPath.c_str());
     host::WriteRegDword(L"GridVisible", 1, testPath.c_str());
     host::WriteRegBinary(L"GridSpacing", &gridSpacing, sizeof(gridSpacing), testPath.c_str());
@@ -172,16 +172,13 @@ int main()
     CHECK(!settings.bloomCutoff && !settings.bloomSize);
     CHECK(settings.backgroundColor && *settings.backgroundColor == 0x00123456);
     CHECK(settings.showGround && !*settings.showGround);
-    CHECK(PathsEqual(settings.groundSlotPaths,
-                     { { 0, L"ground-zero" }, { 2, L"ground-two" } }));
+    CHECK(PathsEqual(settings.groundSlotPaths, {{0, L"ground-zero"}, {2, L"ground-two"}}));
     CHECK(settings.groundSolidColor && *settings.groundSolidColor == 0x00654321);
     CHECK(settings.groundTexture && *settings.groundTexture == 2);
-    CHECK(PathsEqual(settings.skydomeCustomPaths,
-                     { { 9, L"sky-nine" }, { 10, L"" }, { 11, L"sky-eleven" } }));
+    CHECK(PathsEqual(settings.skydomeCustomPaths, {{9, L"sky-nine"}, {10, L""}, {11, L"sky-eleven"}}));
     CHECK(settings.skydomeSlot && *settings.skydomeSlot == 11);
     CHECK(settings.hasSkydomeEnv && settings.skydomeContextRaw == 0);
-    CHECK(settings.skydomePrimaryName == L"PrimaryDome" &&
-          settings.skydomeSecondaryName == L"SecondaryDome");
+    CHECK(settings.skydomePrimaryName == L"PrimaryDome" && settings.skydomeSecondaryName == L"SecondaryDome");
     CHECK(settings.refTransform && *settings.refTransform == transform);
     CHECK(settings.refVisible && !*settings.refVisible);
     CHECK(settings.gridVisible && *settings.gridVisible);
@@ -193,54 +190,44 @@ int main()
     CHECK(settings.sunAmbient == 0x00010203 && settings.sunSpecular == 0x00040506 &&
           settings.sunDiffuse == 0x00070809 && settings.sunShadow == 0x000A0B0C);
     CHECK(!settings.forceAlign);
-    CHECK(settings.fill1Intensity == 2.25f && settings.fill1Zp == 132.5f &&
-          settings.fill1Tiltp == -12.5f && settings.fill1Diffuse == 0x000D0E0F);
-    CHECK(settings.fill2Intensity == 3.25f && settings.fill2Zp == 222.5f &&
-          settings.fill2Tiltp == -22.5f && settings.fill2Diffuse == 0x00101112);
+    CHECK(settings.fill1Intensity == 2.25f && settings.fill1Zp == 132.5f && settings.fill1Tiltp == -12.5f &&
+          settings.fill1Diffuse == 0x000D0E0F);
+    CHECK(settings.fill2Intensity == 3.25f && settings.fill2Zp == 222.5f && settings.fill2Tiltp == -22.5f &&
+          settings.fill2Diffuse == 0x00101112);
 
     const host::RestoredSettings captureSettings = Read(testPath, true);
     CHECK(!captureSettings.refName);
 
-    const std::wstring missingPath = L"Software\\NoSuchKey-" +
-                                     std::to_wstring(GetCurrentProcessId());
+    const std::wstring missingPath = L"Software\\NoSuchKey-" + std::to_wstring(GetCurrentProcessId());
     RegDeleteTreeW(HKEY_CURRENT_USER, missingPath.c_str());
     HKEY missingKey = host::OpenSettingsKeyForRead(missingPath.c_str());
     CHECK(missingKey == nullptr);
     if (missingKey) RegCloseKey(missingKey);
     const host::RestoredSettings firstRun = host::ReadRestoredSettings(nullptr, false);
-    CHECK(!firstRun.bloomEnabled && !firstRun.bloomStrength && !firstRun.bloomCutoff &&
-          !firstRun.bloomSize && !firstRun.backgroundColor && !firstRun.showGround &&
-          !firstRun.groundSolidColor && !firstRun.groundTexture && !firstRun.skydomeSlot &&
-          !firstRun.refTransform && !firstRun.refVisible && !firstRun.gridVisible &&
+    CHECK(!firstRun.bloomEnabled && !firstRun.bloomStrength && !firstRun.bloomCutoff && !firstRun.bloomSize &&
+          !firstRun.backgroundColor && !firstRun.showGround && !firstRun.groundSolidColor && !firstRun.groundTexture &&
+          !firstRun.skydomeSlot && !firstRun.refTransform && !firstRun.refVisible && !firstRun.gridVisible &&
           !firstRun.gridSpacing && !firstRun.snapEnabled && !firstRun.refLocked && !firstRun.refName);
     CHECK(firstRun.groundSlotPaths.empty());
-    CHECK(!firstRun.hasSkydomeEnv && firstRun.skydomeContextRaw == 1 &&
-          firstRun.skydomePrimaryName.empty() && firstRun.skydomeSecondaryName.empty());
+    CHECK(!firstRun.hasSkydomeEnv && firstRun.skydomeContextRaw == 1 && firstRun.skydomePrimaryName.empty() &&
+          firstRun.skydomeSecondaryName.empty());
     // Legacy always clears the three custom skydome slots before applying its
     // selected index, including on first run. Preserve those ordered empty calls.
-    CHECK(PathsEqual(firstRun.skydomeCustomPaths,
-                     { { 9, L"" }, { 10, L"" }, { 11, L"" } }));
-    CHECK(firstRun.sunIntensity == host::kSunIntensityDefault &&
-          firstRun.sunZ == host::kSunZAngleDefault && firstRun.sunTilt == host::kSunTiltDefault &&
-          firstRun.sunAmbient == host::SunAmbientColorDefault() &&
+    CHECK(PathsEqual(firstRun.skydomeCustomPaths, {{9, L""}, {10, L""}, {11, L""}}));
+    CHECK(firstRun.sunIntensity == host::kSunIntensityDefault && firstRun.sunZ == host::kSunZAngleDefault &&
+          firstRun.sunTilt == host::kSunTiltDefault && firstRun.sunAmbient == host::SunAmbientColorDefault() &&
           firstRun.sunSpecular == host::SunSpecularColorDefault() &&
           firstRun.sunDiffuse == host::SunDiffuseColorDefault() &&
-          firstRun.sunShadow == host::SunShadowColorDefault() &&
-          firstRun.forceAlign == host::kForceAlignDefault &&
-          firstRun.fill1Intensity == host::kFill1IntensityDefault &&
-          firstRun.fill1Zp == host::kFill1ZAngleDefault &&
-          firstRun.fill1Tiltp == host::kFill1TiltDefault &&
-          firstRun.fill1Diffuse == host::Fill1DiffuseColorDefault() &&
-          firstRun.fill2Intensity == host::kFill2IntensityDefault &&
-          firstRun.fill2Zp == host::kFill2ZAngleDefault &&
-          firstRun.fill2Tiltp == host::kFill2TiltDefault &&
-          firstRun.fill2Diffuse == host::Fill2DiffuseColorDefault());
+          firstRun.sunShadow == host::SunShadowColorDefault() && firstRun.forceAlign == host::kForceAlignDefault &&
+          firstRun.fill1Intensity == host::kFill1IntensityDefault && firstRun.fill1Zp == host::kFill1ZAngleDefault &&
+          firstRun.fill1Tiltp == host::kFill1TiltDefault && firstRun.fill1Diffuse == host::Fill1DiffuseColorDefault() &&
+          firstRun.fill2Intensity == host::kFill2IntensityDefault && firstRun.fill2Zp == host::kFill2ZAngleDefault &&
+          firstRun.fill2Tiltp == host::kFill2TiltDefault && firstRun.fill2Diffuse == host::Fill2DiffuseColorDefault());
 
     host::WriteRegSz(L"BloomStrength", L"wrong type", testPath.c_str());
     CHECK(!Read(testPath, false).bloomStrength);
-    const std::array<float, 2> wrongSize = { 1.0f, 2.0f };
-    host::WriteRegBinary(L"BloomStrength", wrongSize.data(),
-                          static_cast<DWORD>(sizeof(wrongSize)), testPath.c_str());
+    const std::array<float, 2> wrongSize = {1.0f, 2.0f};
+    host::WriteRegBinary(L"BloomStrength", wrongSize.data(), static_cast<DWORD>(sizeof(wrongSize)), testPath.c_str());
     CHECK(!Read(testPath, false).bloomStrength);
     const DWORD nanBits = 0x7FC00000u;
     host::WriteRegBinary(L"BloomStrength", &nanBits, sizeof(nanBits), testPath.c_str());
@@ -252,14 +239,22 @@ int main()
     // back (the settings/lighting bridge handlers use this pair).
     {
         host::LightingValues written;
-        written.sunIntensity = 0.75f;  written.sunZ = 45.0f;   written.sunTilt = 10.0f;
-        written.sunAmbient = 0x00111213; written.sunSpecular = 0x00141516;
-        written.sunDiffuse = 0x00171819; written.sunShadow = 0x001A1B1C;
-        written.forceAlign = false;
-        written.fill1Intensity = 0.25f; written.fill1Z = 100.0f; written.fill1Tilt = -5.0f;
-        written.fill1Diffuse = 0x001D1E1F;
-        written.fill2Intensity = 0.35f; written.fill2Z = 200.0f; written.fill2Tilt = -6.0f;
-        written.fill2Diffuse = 0x00202122;
+        written.sunIntensity   = 0.75f;
+        written.sunZ           = 45.0f;
+        written.sunTilt        = 10.0f;
+        written.sunAmbient     = 0x00111213;
+        written.sunSpecular    = 0x00141516;
+        written.sunDiffuse     = 0x00171819;
+        written.sunShadow      = 0x001A1B1C;
+        written.forceAlign     = false;
+        written.fill1Intensity = 0.25f;
+        written.fill1Z         = 100.0f;
+        written.fill1Tilt      = -5.0f;
+        written.fill1Diffuse   = 0x001D1E1F;
+        written.fill2Intensity = 0.35f;
+        written.fill2Z         = 200.0f;
+        written.fill2Tilt      = -6.0f;
+        written.fill2Diffuse   = 0x00202122;
         if (HKEY k = host::OpenSettingsKeyForWrite(testPath.c_str()))
         {
             host::WriteLightingSettings(k, written);
@@ -272,18 +267,17 @@ int main()
             CheckLightingSchema(key);
             const host::LightingValues back = host::ReadLightingSettings(key);
             CHECK(back.sunIntensity == 0.75f && back.sunZ == 45.0f && back.sunTilt == 10.0f);
-            CHECK(back.sunAmbient == 0x00111213 && back.sunSpecular == 0x00141516 &&
-                  back.sunDiffuse == 0x00171819 && back.sunShadow == 0x001A1B1C);
+            CHECK(back.sunAmbient == 0x00111213 && back.sunSpecular == 0x00141516 && back.sunDiffuse == 0x00171819 &&
+                  back.sunShadow == 0x001A1B1C);
             CHECK(!back.forceAlign);
-            CHECK(back.fill1Intensity == 0.25f && back.fill1Z == 100.0f &&
-                  back.fill1Tilt == -5.0f && back.fill1Diffuse == 0x001D1E1F);
-            CHECK(back.fill2Intensity == 0.35f && back.fill2Z == 200.0f &&
-                  back.fill2Tilt == -6.0f && back.fill2Diffuse == 0x00202122);
+            CHECK(back.fill1Intensity == 0.25f && back.fill1Z == 100.0f && back.fill1Tilt == -5.0f &&
+                  back.fill1Diffuse == 0x001D1E1F);
+            CHECK(back.fill2Intensity == 0.35f && back.fill2Z == 200.0f && back.fill2Tilt == -6.0f &&
+                  back.fill2Diffuse == 0x00202122);
             RegCloseKey(key);
         }
         const host::LightingValues defaults = host::ReadLightingSettings(nullptr);
-        CHECK(defaults.sunIntensity == host::kSunIntensityDefault &&
-              defaults.forceAlign == host::kForceAlignDefault &&
+        CHECK(defaults.sunIntensity == host::kSunIntensityDefault && defaults.forceAlign == host::kForceAlignDefault &&
               defaults.fill2Diffuse == host::Fill2DiffuseColorDefault());
     }
 

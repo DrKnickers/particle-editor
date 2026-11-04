@@ -25,7 +25,8 @@
 
 #include "host/third_party/nlohmann/json.hpp"
 
-namespace host {
+namespace host
+{
 
 // Serialize a bridge envelope (res or evt) for the UI. Compact, like the
 // default dump(); invalid UTF-8 bytes become U+FFFD rather than throwing.
@@ -38,12 +39,11 @@ inline std::string SerializeBridgeEnvelope(const nlohmann::json& env)
 // the request's correlation id when it had a string one; `id: null`
 // otherwise (the async door drops id-less responses, the sync door returns
 // them so the caller still gets a parseable answer).
-inline nlohmann::json BuildDispatchExceptionEnvelope(const nlohmann::json& parsed,
-                                                     const char* what)
+inline nlohmann::json BuildDispatchExceptionEnvelope(const nlohmann::json& parsed, const char* what)
 {
     nlohmann::json res = {
-        {"type",  "res"},
-        {"ok",    false},
+        {"type", "res"},
+        {"ok", false},
         {"error", std::string("dispatch exception: ") + (what ? what : "(no message)")},
     };
     // Preserve correlation id if the request had one.
@@ -60,8 +60,7 @@ inline nlohmann::json BuildDispatchExceptionEnvelope(const nlohmann::json& parse
 // engine or file layer, or anything else — becomes the envelope above.
 // `onError(category, what)` is told first, for logging and the perf span.
 template <typename Handler, typename OnError>
-nlohmann::json RunGuardedDispatch(const nlohmann::json& parsed,
-                                  Handler&& handler, OnError&& onError)
+nlohmann::json RunGuardedDispatch(const nlohmann::json& parsed, Handler&& handler, OnError&& onError)
 {
     const char* category = nullptr;
     std::string what;
@@ -72,17 +71,17 @@ nlohmann::json RunGuardedDispatch(const nlohmann::json& parsed,
     catch (const nlohmann::json::exception& e)
     {
         category = "type/conversion";
-        what = e.what();
+        what     = e.what();
     }
     catch (const std::exception& e)
     {
         category = "std";
-        what = e.what();
+        what     = e.what();
     }
     catch (...)
     {
         category = "unknown";
-        what = "unknown exception";
+        what     = "unknown exception";
     }
     onError(category, what.c_str());
     return BuildDispatchExceptionEnvelope(parsed, what.c_str());

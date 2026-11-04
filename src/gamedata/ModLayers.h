@@ -11,7 +11,8 @@
 #include <algorithm>
 #include <cwchar>
 
-namespace modlayers {
+namespace modlayers
+{
 
 // Persist the chosen layer stack to the registry ONLY when the post-apply shader
 // reload succeeded — so a failed reload never records a stack the next launch
@@ -26,15 +27,14 @@ inline bool ShouldPersistLayers(bool reloadOk)
 inline std::wstring CanonicalizeLayerPath(std::wstring p)
 {
     while (!p.empty() && (p.back() == L' ' || p.back() == L'\t')) p.pop_back();
-    while (!p.empty() && (p.back() == L'\\' || p.back() == L'/'))  p.pop_back();
+    while (!p.empty() && (p.back() == L'\\' || p.back() == L'/')) p.pop_back();
     return p;
 }
 
 // Case-insensitive equality of canonicalized layer paths.
 inline bool LayerPathsEqual(const std::wstring& a, const std::wstring& b)
 {
-    return _wcsicmp(CanonicalizeLayerPath(a).c_str(),
-                    CanonicalizeLayerPath(b).c_str()) == 0;
+    return _wcsicmp(CanonicalizeLayerPath(a).c_str(), CanonicalizeLayerPath(b).c_str()) == 0;
 }
 
 // The user's configured order and the subset currently usable by the runtime
@@ -42,13 +42,12 @@ inline bool LayerPathsEqual(const std::wstring& a, const std::wstring& b)
 // launch; that must not turn temporary unavailability into a persisted deletion.
 struct ResolvedLayerStack
 {
-    std::vector<std::wstring> configured;  // canonical, deduplicated, may be unavailable
-    std::wstring              primary;     // first configured path that currently exists
+    std::vector<std::wstring> configured; // canonical, deduplicated, may be unavailable
+    std::wstring              primary;    // first configured path that currently exists
 };
 
-inline ResolvedLayerStack ResolveLayerStack(
-    const std::vector<std::wstring>& layers,
-    const std::function<bool(const std::wstring&)>& dirExists)
+inline ResolvedLayerStack ResolveLayerStack(const std::vector<std::wstring>&                layers,
+                                            const std::function<bool(const std::wstring&)>& dirExists)
 {
     ResolvedLayerStack out;
     for (const std::wstring& raw : layers)
@@ -58,12 +57,15 @@ inline ResolvedLayerStack ResolveLayerStack(
 
         bool dup = false;
         for (const std::wstring& configured : out.configured)
-            if (LayerPathsEqual(configured, c)) { dup = true; break; }
+            if (LayerPathsEqual(configured, c))
+            {
+                dup = true;
+                break;
+            }
         if (dup) continue;
 
         out.configured.push_back(c);
-        if (out.primary.empty() && dirExists(c))
-            out.primary = c;
+        if (out.primary.empty() && dirExists(c)) out.primary = c;
     }
     return out;
 }
@@ -75,9 +77,8 @@ inline ResolvedLayerStack ResolveLayerStack(
 // requirement (unlike the legacy submod gate in BuildModContentRoots) — but a
 // uniform directory-EXISTENCE check IS applied to every layer, including the root
 // (legacy pushed the mod root with no check at all).
-inline std::vector<std::wstring> BuildContentRoots(
-    const std::vector<std::wstring>& layers,
-    const std::function<bool(const std::wstring&)>& dirExists)
+inline std::vector<std::wstring> BuildContentRoots(const std::vector<std::wstring>&                layers,
+                                                   const std::function<bool(const std::wstring&)>& dirExists)
 {
     std::vector<std::wstring> roots;
     for (const std::wstring& raw : layers)
@@ -87,7 +88,11 @@ inline std::vector<std::wstring> BuildContentRoots(
         if (!dirExists(c)) continue;
         bool dup = false;
         for (const std::wstring& r : roots)
-            if (_wcsicmp(CanonicalizeLayerPath(r).c_str(), c.c_str()) == 0) { dup = true; break; }
+            if (_wcsicmp(CanonicalizeLayerPath(r).c_str(), c.c_str()) == 0)
+            {
+                dup = true;
+                break;
+            }
         if (dup) continue;
         roots.push_back(c + L"\\");
     }
@@ -99,7 +104,11 @@ inline std::vector<std::wstring> BuildContentRoots(
 inline std::wstring SerializeMultiSz(const std::vector<std::wstring>& items)
 {
     std::wstring blob;
-    for (const std::wstring& s : items) { blob += s; blob.push_back(L'\0'); }
+    for (const std::wstring& s : items)
+    {
+        blob += s;
+        blob.push_back(L'\0');
+    }
     blob.push_back(L'\0');
     return blob;
 }
@@ -110,13 +119,13 @@ inline std::wstring SerializeMultiSz(const std::vector<std::wstring>& items)
 inline std::vector<std::wstring> ParseMultiSz(const wchar_t* buf, size_t countChars)
 {
     std::vector<std::wstring> out;
-    size_t i = 0;
+    size_t                    i = 0;
     while (i < countChars && buf[i] != L'\0')
     {
         const size_t start = i;
         while (i < countChars && buf[i] != L'\0') ++i;
         out.emplace_back(buf + start, buf + i);
-        if (i < countChars) ++i;  // skip the null separator
+        if (i < countChars) ++i; // skip the null separator
     }
     return out;
 }

@@ -36,21 +36,33 @@
 // (see header comment). The include guard makes the .h re-include a no-op, so
 // only the function body is compiled here, against the global D3DX/Engine types.
 #define USE_PROPER_SPH
-namespace propersph {
+namespace propersph
+{
 #include "rendering/SphericalHarmonics.cpp"
 }
 #undef USE_PROPER_SPH
 
 static int g_failed = 0;
-#define CHECK(cond, msg) do {                              \
-    if (cond) { std::printf("  ok: %s\n", msg); }          \
-    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
-static bool feq(float a, float b, float eps = 1e-5f) { return std::fabs(a - b) < eps; }
+static bool feq(float a, float b, float eps = 1e-5f)
+{
+    return std::fabs(a - b) < eps;
+}
 
-static Engine::Light makeLight(float dx, float dy, float dz,
-                               float r, float g, float b, float w)
+static Engine::Light makeLight(float dx, float dy, float dz, float r, float g, float b, float w)
 {
     Engine::Light l;
     std::memset(&l, 0, sizeof(l));
@@ -82,7 +94,7 @@ static bool allFinite(const D3DXMATRIX* m)
 static bool onlyRow4Written(const D3DXMATRIX* m)
 {
     for (int k = 0; k < 3; ++k)
-        for (int i = 0; i < 3; ++i)          // rows _1x.._3x only
+        for (int i = 0; i < 3; ++i) // rows _1x.._3x only
             for (int j = 0; j < 4; ++j)
                 if (m[k](i, j) != 0.0f) return false;
     return true;
@@ -108,12 +120,11 @@ int main()
     // ---- one white light from +Z --------------------------------------------
     {
         Engine::Light l = makeLight(0, 0, 1, 1, 1, 1, 1);
-        D3DXMATRIX m[3];
+        D3DXMATRIX    m[3];
         SPH_Calculate_Matrices(m, &l, 1, D3DXVECTOR4(0.25f, 0.5f, 0.75f, 2.0f));
         CHECK(onlyRow4Written(m), "white +Z light: only the _4x row is written");
         bool rowOk = true;
-        for (int k = 0; k < 3; ++k)
-            rowOk = rowOk && m[k](3, 0) == 0.0f && m[k](3, 1) == 0.0f && m[k](3, 2) == -1.0f;
+        for (int k = 0; k < 3; ++k) rowOk = rowOk && m[k](3, 0) == 0.0f && m[k](3, 1) == 0.0f && m[k](3, 2) == -1.0f;
         CHECK(rowOk, "white +Z light: _41=_42=0, _43 == Diffuse * -Direction.z == -1 (all channels)");
         CHECK(m[0](3, 3) == 0.5f && m[1](3, 3) == 1.0f && m[2](3, 3) == 1.5f,
               "_44 == ambient[ch] * ambient.w per channel");
@@ -123,18 +134,15 @@ int main()
     // _4j = Diffuse[ch] * -Direction[j]; exact for these binary-exact inputs.
     {
         Engine::Light l = makeLight(1.0f, -2.0f, 3.0f, 0.25f, 0.5f, 1.0f, 123.0f);
-        D3DXMATRIX m[3];
+        D3DXMATRIX    m[3];
         SPH_Calculate_Matrices(m, &l, 1, D3DXVECTOR4(0, 0, 0, 0));
-        CHECK(m[0](3, 0) == -0.25f && m[0](3, 1) == 0.5f && m[0](3, 2) == -0.75f,
-              "red channel: (-0.25, 0.5, -0.75)");
-        CHECK(m[1](3, 0) == -0.5f && m[1](3, 1) == 1.0f && m[1](3, 2) == -1.5f,
-              "green channel: (-0.5, 1.0, -1.5)");
-        CHECK(m[2](3, 0) == -1.0f && m[2](3, 1) == 2.0f && m[2](3, 2) == -3.0f,
-              "blue channel: (-1.0, 2.0, -3.0)");
+        CHECK(m[0](3, 0) == -0.25f && m[0](3, 1) == 0.5f && m[0](3, 2) == -0.75f, "red channel: (-0.25, 0.5, -0.75)");
+        CHECK(m[1](3, 0) == -0.5f && m[1](3, 1) == 1.0f && m[1](3, 2) == -1.5f, "green channel: (-0.5, 1.0, -1.5)");
+        CHECK(m[2](3, 0) == -1.0f && m[2](3, 1) == 2.0f && m[2](3, 2) == -3.0f, "blue channel: (-1.0, 2.0, -3.0)");
 
         // Diffuse.w must be ignored by the classical branch.
         Engine::Light l2 = makeLight(1.0f, -2.0f, 3.0f, 0.25f, 0.5f, 1.0f, 0.0f);
-        D3DXMATRIX m2[3];
+        D3DXMATRIX    m2[3];
         SPH_Calculate_Matrices(m2, &l2, 1, D3DXVECTOR4(0, 0, 0, 0));
         CHECK(std::memcmp(m, m2, sizeof(m)) == 0, "classical branch ignores Diffuse.w");
     }
@@ -142,14 +150,16 @@ int main()
     // ---- linearity in Diffuse ------------------------------------------------
     {
         Engine::Light a = makeLight(0.5f, 0.25f, -1.0f, 0.5f, 0.25f, 0.125f, 1.0f);
-        Engine::Light b = a; b.Diffuse.x *= 2; b.Diffuse.y *= 2; b.Diffuse.z *= 2;
+        Engine::Light b = a;
+        b.Diffuse.x *= 2;
+        b.Diffuse.y *= 2;
+        b.Diffuse.z *= 2;
         D3DXMATRIX ma[3], mb[3];
         SPH_Calculate_Matrices(ma, &a, 1, D3DXVECTOR4(0, 0, 0, 0));
         SPH_Calculate_Matrices(mb, &b, 1, D3DXVECTOR4(0, 0, 0, 0));
         bool lin = true;
         for (int k = 0; k < 3 && lin; ++k)
-            for (int j = 0; j < 3; ++j)
-                lin = lin && mb[k](3, j) == 2.0f * ma[k](3, j);
+            for (int j = 0; j < 3; ++j) lin = lin && mb[k](3, j) == 2.0f * ma[k](3, j);
         CHECK(lin, "doubling Diffuse doubles every direction term (exact)");
     }
 
@@ -161,8 +171,7 @@ int main()
         };
         D3DXMATRIX m[3];
         SPH_Calculate_Matrices(m, l, 2, D3DXVECTOR4(0.5f, 0.25f, 0.125f, 1.0f));
-        CHECK(m[0](3, 0) == -1.0f && m[0](3, 1) == -0.5f && m[0](3, 2) == 0.0f,
-              "two lights: direction terms sum");
+        CHECK(m[0](3, 0) == -1.0f && m[0](3, 1) == -0.5f && m[0](3, 2) == 0.0f, "two lights: direction terms sum");
         CHECK(m[0](3, 3) == 1.0f && m[1](3, 3) == 0.5f && m[2](3, 3) == 0.25f,
               "two lights: ambient added once per light (2x) -- pins the loop quirk");
     }
@@ -182,7 +191,7 @@ int main()
     // ---- one white light: finite, symmetric quadratic form, equal channels --
     {
         Engine::Light l = makeLight(0.0f, 0.0f, -1.0f, 1, 1, 1, 1);
-        D3DXMATRIX m[3];
+        D3DXMATRIX    m[3];
         propersph::SPH_Calculate_Matrices(m, &l, 1, D3DXVECTOR4(0, 0, 0, 0));
         CHECK(allFinite(m), "proper: all entries finite");
         CHECK(!allZero(m), "proper: a real light produces a non-zero form");
@@ -190,13 +199,12 @@ int main()
         for (int k = 0; k < 3 && sym; ++k)
         {
             const D3DXMATRIX& q = m[k];
-            sym = q(0, 1) == q(1, 0) && q(0, 2) == q(2, 0) && q(1, 2) == q(2, 1)
-               && q(0, 3) == q(3, 0) && q(1, 3) == q(3, 1) && q(2, 3) == q(3, 2);
+            sym = q(0, 1) == q(1, 0) && q(0, 2) == q(2, 0) && q(1, 2) == q(2, 1) && q(0, 3) == q(3, 0) &&
+                  q(1, 3) == q(3, 1) && q(2, 3) == q(3, 2);
         }
         CHECK(sym, "proper: quadratic form symmetric (built from shared coeffs, lines 41-59)");
         CHECK(m[0](0, 0) == -m[0](1, 1), "proper: _11 == -_22 (c1*L22 vs -c1*L22)");
-        CHECK(std::memcmp(&m[0], &m[1], sizeof(D3DXMATRIX)) == 0
-           && std::memcmp(&m[1], &m[2], sizeof(D3DXMATRIX)) == 0,
+        CHECK(std::memcmp(&m[0], &m[1], sizeof(D3DXMATRIX)) == 0 && std::memcmp(&m[1], &m[2], sizeof(D3DXMATRIX)) == 0,
               "proper: white light -> identical R/G/B matrices");
         CHECK(m[0](3, 3) != 0.0f, "proper: DC/L20 term reaches _44");
         CHECK(m[0](2, 3) != 0.0f, "proper: z-aligned light populates the L10 (_34/_43) terms");
@@ -205,7 +213,8 @@ int main()
     // ---- linearity in the intensity term (Diffuse.w scales the SH input) ----
     {
         Engine::Light a = makeLight(0.25f, 0.5f, -1.0f, 0.75f, 0.5f, 0.25f, 1.0f);
-        Engine::Light b = a; b.Diffuse.w = 2.0f;
+        Engine::Light b = a;
+        b.Diffuse.w     = 2.0f;
         D3DXMATRIX ma[3], mb[3];
         propersph::SPH_Calculate_Matrices(ma, &a, 1, D3DXVECTOR4(0, 0, 0, 0));
         propersph::SPH_Calculate_Matrices(mb, &b, 1, D3DXVECTOR4(0, 0, 0, 0));
@@ -213,20 +222,18 @@ int main()
         for (int k = 0; k < 3 && lin; ++k)
             for (int i = 0; i < 4 && lin; ++i)
                 for (int j = 0; j < 4; ++j)
-                    lin = lin && feq(mb[k](i, j), 2.0f * ma[k](i, j),
-                                     1e-4f * (1.0f + std::fabs(ma[k](i, j))));
+                    lin = lin && feq(mb[k](i, j), 2.0f * ma[k](i, j), 1e-4f * (1.0f + std::fabs(ma[k](i, j))));
         CHECK(lin, "proper: doubling Diffuse.w doubles the whole form (epsilon)");
     }
 
     // ---- ambient still accumulates into _44 once per light ------------------
     {
         Engine::Light l = makeLight(0, 1, 0, 0.5f, 0.5f, 0.5f, 1.0f);
-        D3DXMATRIX base[3], amb[3];
+        D3DXMATRIX    base[3], amb[3];
         propersph::SPH_Calculate_Matrices(base, &l, 1, D3DXVECTOR4(0, 0, 0, 0));
-        propersph::SPH_Calculate_Matrices(amb,  &l, 1, D3DXVECTOR4(0.5f, 0.25f, 0.0f, 2.0f));
-        CHECK(feq(amb[0](3, 3), base[0](3, 3) + 1.0f)
-           && feq(amb[1](3, 3), base[1](3, 3) + 0.5f)
-           && feq(amb[2](3, 3), base[2](3, 3)),
+        propersph::SPH_Calculate_Matrices(amb, &l, 1, D3DXVECTOR4(0.5f, 0.25f, 0.0f, 2.0f));
+        CHECK(feq(amb[0](3, 3), base[0](3, 3) + 1.0f) && feq(amb[1](3, 3), base[1](3, 3) + 0.5f) &&
+                  feq(amb[2](3, 3), base[2](3, 3)),
               "proper: _44 gains ambient[ch]*ambient.w on top of the SH term");
         // Every other entry must be untouched by ambient.
         bool rest = true;

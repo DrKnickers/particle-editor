@@ -48,9 +48,13 @@ struct PatchHooks
 // bytes, writing the candidate to `out` on success. `inputPath` names the
 // source for the internal-name warning. Fills `report` (§3.6) whatever the
 // outcome and returns the exit code (ToolIO.h).
-int RunPatch(const std::string& source, const std::string& sourceHash, const std::string& request,
-             const std::wstring& inputPath, const std::wstring& out, const PatchHooks& hooks,
-             nlohmann::json* report);
-}
+int RunPatch(const std::string&  source,
+             const std::string&  sourceHash,
+             const std::string&  request,
+             const std::wstring& inputPath,
+             const std::wstring& out,
+             const PatchHooks&   hooks,
+             nlohmann::json*     report);
+} // namespace host
 
 #endif // TOOL_PATCH_H

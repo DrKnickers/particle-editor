@@ -10,7 +10,8 @@
 
 using nlohmann::json;
 
-namespace host {
+namespace host
+{
 
 bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
 {
@@ -35,7 +36,7 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
         // Canonical defaults (matching the legacy Win32 dialog) unless the
         // live registry is readable.
         LightingValues v;
-        const bool gated = !PersistsUserState();
+        const bool     gated = !PersistsUserState();
         if (!gated)
         {
             if (HKEY hKey = OpenSettingsKeyForRead())
@@ -45,25 +46,26 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
             }
         }
 
-        auto lightJson = [](float intensity, float az, float alt,
-                            DWORD diffuse, DWORD specular) {
+        auto lightJson = [](float intensity, float az, float alt, DWORD diffuse, DWORD specular)
+        {
             return json{
-                {"intensity", intensity}, {"az", az}, {"alt", alt},
-                {"diffuse",  static_cast<int>(diffuse)},
+                {"intensity", intensity},
+                {"az", az},
+                {"alt", alt},
+                {"diffuse", static_cast<int>(diffuse)},
                 {"specular", static_cast<int>(specular)},
             };
         };
         ctx.SendOk(json{
-            {"sun",   lightJson(v.sunIntensity, v.sunZ, v.sunTilt, v.sunDiffuse, v.sunSpecular)},
+            {"sun", lightJson(v.sunIntensity, v.sunZ, v.sunTilt, v.sunDiffuse, v.sunSpecular)},
             {"fill1", lightJson(v.fill1Intensity, v.fill1Z, v.fill1Tilt, v.fill1Diffuse, 0)},
             {"fill2", lightJson(v.fill2Intensity, v.fill2Z, v.fill2Tilt, v.fill2Diffuse, 0)},
-            {"ambient",    static_cast<int>(v.sunAmbient)},
-            {"shadow",     static_cast<int>(v.sunShadow)},
+            {"ambient", static_cast<int>(v.sunAmbient)},
+            {"shadow", static_cast<int>(v.sunShadow)},
             {"forceAlign", v.forceAlign},
         });
         return true;
     }
-
 
     // -------- settings/lighting-force-align/set ----------------------
     //
@@ -75,13 +77,11 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
     if (kind == "settings/lighting-force-align/set")
     {
         const bool enabled = params.value("enabled", kForceAlignDefault);
-        const bool gated = !PersistsUserState();
-        if (!gated)
-            WriteRegDword(kLightForceFillAlignment, enabled ? 1u : 0u);
+        const bool gated   = !PersistsUserState();
+        if (!gated) WriteRegDword(kLightForceFillAlignment, enabled ? 1u : 0u);
         ctx.SendOk(json::object());
         return true;
     }
-
 
     // -------- settings/lighting/set ----------------------------------
     //
@@ -100,7 +100,10 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
         const bool gated = !PersistsUserState();
         if (!gated)
         {
-            auto lf = [&](const char* k) { return params.value(k, json::object()); };
+            auto lf = [&](const char* k)
+            {
+                return params.value(k, json::object());
+            };
             const json sun   = lf("sun");
             const json fill1 = lf("fill1");
             const json fill2 = lf("fill2");
@@ -109,10 +112,10 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
             v.sunIntensity = sun.value("intensity", kSunIntensityDefault);
             v.sunZ         = sun.value("az", kSunZAngleDefault);
             v.sunTilt      = sun.value("alt", kSunTiltDefault);
-            v.sunDiffuse   = static_cast<DWORD>(sun.value("diffuse",  static_cast<int>(SunDiffuseColorDefault())));
+            v.sunDiffuse   = static_cast<DWORD>(sun.value("diffuse", static_cast<int>(SunDiffuseColorDefault())));
             v.sunSpecular  = static_cast<DWORD>(sun.value("specular", static_cast<int>(SunSpecularColorDefault())));
             v.sunAmbient   = static_cast<DWORD>(params.value("ambient", static_cast<int>(SunAmbientColorDefault())));
-            v.sunShadow    = static_cast<DWORD>(params.value("shadow",  static_cast<int>(SunShadowColorDefault())));
+            v.sunShadow    = static_cast<DWORD>(params.value("shadow", static_cast<int>(SunShadowColorDefault())));
 
             v.fill1Intensity = fill1.value("intensity", kFill1IntensityDefault);
             v.fill1Z         = fill1.value("az", kFill1ZAngleDefault);
@@ -135,7 +138,6 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
         ctx.SendOk(json::object());
         return true;
     }
-
 
     // -------- spawner/* -------------------
     //
@@ -160,10 +162,7 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
         if (RefuseWhileTimeline(ctx)) return true;
         // The host's render loop advances the driver's burst state; only
         // forward a trigger while all production borrows are bound.
-        if (m_spawnerDriver
-            && m_pParticleSystem
-            && *m_pParticleSystem
-            && m_engine)
+        if (m_spawnerDriver && m_pParticleSystem && *m_pParticleSystem && m_engine)
         {
             m_spawnerDriver->Trigger(m_pParticleSystem->get(), m_engine);
         }
@@ -210,18 +209,15 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
     // "nothing attached", which then SendErrs loudly on move/place/kill.
     // (The file-op teardowns in BridgeDispatch_File.cpp also null it
     // eagerly, closing the free+realloc aliasing window for that family.)
-    if (kind.rfind("preview/", 0) == 0
-        && m_recordPreviewAttached
-        && m_engine
-        && !m_engine->ResolveInstance(m_recordPreviewAttached))
+    if (kind.rfind("preview/", 0) == 0 && m_recordPreviewAttached && m_engine &&
+        !m_engine->ResolveInstance(m_recordPreviewAttached))
     {
         m_recordPreviewAttached.Reset();
     }
     if (kind.rfind("preview/", 0) == 0 && RefuseWhileTimeline(ctx)) return true;
     if (kind == "preview/attach")
     {
-        if (!m_engine || !m_pParticleSystem || !*m_pParticleSystem
-            || (*m_pParticleSystem)->getEmitters().empty())
+        if (!m_engine || !m_pParticleSystem || !*m_pParticleSystem || (*m_pParticleSystem)->getEmitters().empty())
         {
             ctx.SendErr("preview/attach: no engine or empty particle system");
             return true;
@@ -231,14 +227,13 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
             ctx.SendErr("preview/attach: already attached");
             return true;
         }
-        const int x = params.value("x", 0);
-        const int y = params.value("y", 0);
+        const int   x = params.value("x", 0);
+        const int   y = params.value("y", 0);
         D3DXVECTOR3 pos;
         GetCursorPos3D(m_engine, (short)x, (short)y, pos);
         m_recordPreviewCursor.SetPosition(pos);
-        m_recordPreviewAttached = m_engine->MakeInstanceHandle(
-            m_engine->SpawnParticleSystem(
-                **m_pParticleSystem, &m_recordPreviewCursor));
+        m_recordPreviewAttached =
+            m_engine->MakeInstanceHandle(m_engine->SpawnParticleSystem(**m_pParticleSystem, &m_recordPreviewCursor));
         if (!m_recordPreviewAttached)
         {
             ctx.SendErr("preview/attach: spawn refused");
@@ -254,8 +249,8 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
             ctx.SendErr("preview/move: nothing attached");
             return true;
         }
-        const int x = params.value("x", 0);
-        const int y = params.value("y", 0);
+        const int   x = params.value("x", 0);
+        const int   y = params.value("y", 0);
         D3DXVECTOR3 pos;
         GetCursorPos3D(m_engine, (short)x, (short)y, pos);
         m_recordPreviewCursor.SetPosition(pos);
@@ -297,7 +292,7 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
         return true;
     }
 
-    return false;   // kind not in this domain
+    return false; // kind not in this domain
 }
 
 } // namespace host

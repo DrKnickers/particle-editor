@@ -45,9 +45,8 @@
 static const int kMaxBounceCatchUpSteps = 1024;
 
 // Returns the number of bounces processed (for the unit test).
-inline int BounceCatchUp(float pos[3], float speed[3], const float acc[3],
-                         float& positionTime, float& bounceTime,
-                         float t, float bounciness)
+inline int BounceCatchUp(
+    float pos[3], float speed[3], const float acc[3], float& positionTime, float& bounceTime, float t, float bounciness)
 {
     // A non-finite coefficient behaves like 0: the particle stops at its first
     // ground contact. A non-finite time would never let the loop catch up.
@@ -83,8 +82,7 @@ inline int BounceCatchUp(float pos[3], float speed[3], const float acc[3],
             // We know x(0) is 0, so the problem becomes a lot simpler
             const float delta = 2 * -speed[2] / acc[2];
             const float next  = bounceTime + delta;
-            if (!(delta > 0) || next == bounceTime ||
-                (steps >= kMaxBounceCatchUpSteps && t > next))
+            if (!(delta > 0) || next == bounceTime || (steps >= kMaxBounceCatchUpSteps && t > next))
             {
                 // The next arc goes backwards, is NaN, is too short to advance
                 // time, or would run past the per-update cap: settle on the

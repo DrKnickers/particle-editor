@@ -22,7 +22,7 @@ inline SceneViewport ComputeOverscanViewport(int x, int y, int w, int h)
 {
     const int GBx = (w / 64 > 12) ? (w / 64) : 12;
     const int GBy = (w > 0) ? (GBx * h + w / 2) / w : GBx;
-    return SceneViewport{ x - GBx, y - GBy, w + 2 * GBx, h + 2 * GBy };
+    return SceneViewport{x - GBx, y - GBy, w + 2 * GBx, h + 2 * GBy};
 }
 
 #endif // SCENE_OVERSCAN_H

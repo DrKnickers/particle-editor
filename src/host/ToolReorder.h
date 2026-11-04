@@ -30,8 +30,11 @@ namespace host
 // Runs a reorder of `source` (its bytes and their SHA-256) with `request`'s
 // bytes, writing the candidate to `out` on success. Fills `report` whatever
 // the outcome and returns the exit code (ToolIO.h).
-int RunReorder(const std::string& source, const std::string& sourceHash, const std::string& request,
-               const std::wstring& out, nlohmann::json* report);
-}
+int RunReorder(const std::string&  source,
+               const std::string&  sourceHash,
+               const std::string&  request,
+               const std::wstring& out,
+               nlohmann::json*     report);
+} // namespace host
 
 #endif // TOOL_REORDER_H

@@ -35,12 +35,11 @@
 #include <functional>
 #include <string>
 
-namespace host {
+namespace host
+{
 
 class HostBridgeProxy
-    : public Microsoft::WRL::RuntimeClass<
-          Microsoft::WRL::RuntimeClassFlags<Microsoft::WRL::ClassicCom>,
-          IDispatch>
+    : public Microsoft::WRL::RuntimeClass<Microsoft::WRL::RuntimeClassFlags<Microsoft::WRL::ClassicCom>, IDispatch>
 {
 public:
     using DispatchSyncFn = std::function<std::string(const std::string&)>;
@@ -51,16 +50,20 @@ public:
     // IDispatch
     HRESULT STDMETHODCALLTYPE GetTypeInfoCount(UINT* pctinfo) override;
     HRESULT STDMETHODCALLTYPE GetTypeInfo(UINT iTInfo, LCID lcid, ITypeInfo** ppTInfo) override;
-    HRESULT STDMETHODCALLTYPE GetIDsOfNames(REFIID riid, LPOLESTR* rgszNames, UINT cNames,
-                                            LCID lcid, DISPID* rgDispId) override;
-    HRESULT STDMETHODCALLTYPE Invoke(DISPID dispIdMember, REFIID riid, LCID lcid,
-                                     WORD wFlags, DISPPARAMS* pDispParams,
-                                     VARIANT* pVarResult, EXCEPINFO* pExcepInfo,
-                                     UINT* puArgErr) override;
+    HRESULT STDMETHODCALLTYPE
+    GetIDsOfNames(REFIID riid, LPOLESTR* rgszNames, UINT cNames, LCID lcid, DISPID* rgDispId) override;
+    HRESULT STDMETHODCALLTYPE Invoke(DISPID      dispIdMember,
+                                     REFIID      riid,
+                                     LCID        lcid,
+                                     WORD        wFlags,
+                                     DISPPARAMS* pDispParams,
+                                     VARIANT*    pVarResult,
+                                     EXCEPINFO*  pExcepInfo,
+                                     UINT*       puArgErr) override;
 
 private:
     static constexpr DISPID kDispatchRequestId = 1;
-    DispatchSyncFn m_dispatchSync;
+    DispatchSyncFn          m_dispatchSync;
 };
 
 } // namespace host

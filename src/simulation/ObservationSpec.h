@@ -10,33 +10,37 @@
 
 struct ObservationSpec
 {
-    int schemaVersion = 1;
+    int             schemaVersion = 1;
     PreviewScenario scenario;
     // Schema 2 only: the content-layer stack for this run (absolute folders,
     // UTF-8, front = highest precedence). It replaces whatever stack the run
     // would otherwise use and is never persisted. Present and empty = unmodded.
-    bool hasContentLayers = false;
+    bool                     hasContentLayers = false;
     std::vector<std::string> contentLayers;
-    bool hasCamera = false;
+    bool                     hasCamera = false;
     struct Camera
     {
-        std::array<float, 3> position = { 0, -250, 125 };
-        std::array<float, 3> target = { 0, 0, 0 };
-        std::array<float, 3> up = { 0, 0, 1 };
+        std::array<float, 3> position = {0, -250, 125};
+        std::array<float, 3> target   = {0, 0, 0};
+        std::array<float, 3> up       = {0, 0, 1};
     } camera;
     struct Lifecycle
     {
-        enum class Type { Oneshot, Continuous };
-        Type type = Type::Oneshot;
-        int quietTailFrames = 15;
-        int warmupFrames = 0;
-        int reviewFrames = 1;
+        enum class Type
+        {
+            Oneshot,
+            Continuous
+        };
+        Type type            = Type::Oneshot;
+        int  quietTailFrames = 15;
+        int  warmupFrames    = 0;
+        int  reviewFrames    = 1;
     } lifecycle;
     struct Output
     {
-        int strideInterval = 15;
-        int playbackStride = 0;
-        std::uint64_t maxBytes = 200ull * 1024 * 1024;
+        int           strideInterval = 15;
+        int           playbackStride = 0;
+        std::uint64_t maxBytes       = 200ull * 1024 * 1024;
     } output;
 };
 
@@ -44,7 +48,8 @@ struct ObservationSpec
 inline int ObservationRunCap(const ObservationSpec& spec)
 {
     return spec.lifecycle.type == ObservationSpec::Lifecycle::Type::Continuous
-        ? spec.lifecycle.warmupFrames + spec.lifecycle.reviewFrames : spec.scenario.maxFrames;
+               ? spec.lifecycle.warmupFrames + spec.lifecycle.reviewFrames
+               : spec.scenario.maxFrames;
 }
 
 // Schema 2 is the schema that carries contentLayers, so each implies the
@@ -70,12 +75,12 @@ inline std::string ValidateObservationContentLayers(const ObservationSpec& spec)
     for (size_t i = 0; i < spec.contentLayers.size(); ++i)
     {
         const std::string& layer = spec.contentLayers[i];
-        const std::string field = "contentLayers[" + std::to_string(i) + "]";
+        const std::string  field = "contentLayers[" + std::to_string(i) + "]";
         // Short enough that a layer + Data\Art\Textures\ + a texture name stays
         // inside MAX_PATH, the limit the content lookups run under.
         if (layer.size() < 3 || layer.size() > 160) return field + " must be a folder path of 3 to 160 bytes";
         const bool drive = ((layer[0] >= 'A' && layer[0] <= 'Z') || (layer[0] >= 'a' && layer[0] <= 'z')) &&
-            layer[1] == ':' && (layer[2] == '\\' || layer[2] == '/');
+                           layer[1] == ':' && (layer[2] == '\\' || layer[2] == '/');
         if (!drive) return field + " must be an absolute drive path";
         for (const char c : layer)
             if (static_cast<unsigned char>(c) < 0x20) return field + " must not contain control characters";
@@ -105,7 +110,7 @@ inline std::string ValidateObservationCamera(const ObservationSpec& spec)
 {
     if (!spec.hasCamera) return "";
     const double kLimit = 1.0e6, kMinDistance = 0.01, kMinUp = 1.0e-6, kMinSine = 1.0e-3;
-    const auto& camera = spec.camera;
+    const auto&  camera = spec.camera;
     for (size_t i = 0; i < 3; ++i)
     {
         if (!std::isfinite(camera.position[i])) return "camera.position must be finite";
@@ -150,7 +155,8 @@ inline std::string ValidateObservationSpec(const ObservationSpec& spec)
     {
         if (spec.lifecycle.warmupFrames < 0) return "lifecycle.warmupFrames must not be negative";
         if (spec.lifecycle.reviewFrames < 1) return "lifecycle.reviewFrames must be at least 1";
-        if (static_cast<std::int64_t>(spec.lifecycle.warmupFrames) + spec.lifecycle.reviewFrames > spec.scenario.maxFrames)
+        if (static_cast<std::int64_t>(spec.lifecycle.warmupFrames) + spec.lifecycle.reviewFrames >
+            spec.scenario.maxFrames)
             return "lifecycle.warmupFrames + lifecycle.reviewFrames must not exceed scenario.maxFrames";
     }
     if (spec.output.strideInterval < 1 || spec.output.strideInterval > 600)
@@ -160,7 +166,8 @@ inline std::string ValidateObservationSpec(const ObservationSpec& spec)
     if (spec.output.maxBytes < 1024ull * 1024 || spec.output.maxBytes > 2ull * 1024 * 1024 * 1024)
         return "output.maxBytes must be within [1 MiB, 2 GiB]";
     const int windowMax = spec.lifecycle.type == ObservationSpec::Lifecycle::Type::Continuous
-        ? spec.lifecycle.reviewFrames : ObservationRunCap(spec);
+                              ? spec.lifecycle.reviewFrames
+                              : ObservationRunCap(spec);
     if (windowMax / spec.output.strideInterval + 2 > 64)
         return "output.strideInterval allows more than 64 stride frames";
     return "";

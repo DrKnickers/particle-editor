@@ -23,11 +23,11 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-#include "effect/ParticleSystemIO.h"   // compile contract: the header must stand alone
-#include "effect/AtomicSave.h"         // section I: the shared save path, linked for real
+#include "effect/ParticleSystemIO.h" // compile contract: the header must stand alone
+#include "effect/AtomicSave.h"       // section I: the shared save path, linked for real
 #include "effect/ParticleSystem.h"
 #include "simulation/ParticleSystemInstance.h"
-#include "common/ResourceLimits.h"     // kMaxEmitterTreeDepth (section G)
+#include "common/ResourceLimits.h" // kMaxEmitterTreeDepth (section G)
 #include "common/files.h"
 #include "common/exceptions.h"
 
@@ -43,29 +43,41 @@
 void ParticleSystemInstance::RemoveEmitter(EmitterInstance*) {}
 
 static int g_failed = 0;
-#define CHECK(cond, msg) do {                              \
-    if (cond) { std::printf("  ok: %s\n", msg); }          \
-    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
 using Emitter = ParticleSystem::Emitter;
 
 // ---- unique temp dir (pattern from test_palette_store.cpp) -----------------
-static std::wstring g_tempDir;
+static std::wstring              g_tempDir;
 static std::vector<std::wstring> g_tempFiles;
 
 static bool createTempDir()
 {
     wchar_t tempRoot[MAX_PATH];
-    DWORD n = GetTempPathW(_countof(tempRoot), tempRoot);
+    DWORD   n = GetTempPathW(_countof(tempRoot), tempRoot);
     if (n == 0 || n >= _countof(tempRoot)) return false;
     for (DWORD attempt = 0; attempt < 100; ++attempt)
     {
         wchar_t candidate[MAX_PATH];
-        swprintf_s(candidate, L"%sAloPsIoTest-%lu-%llu-%lu",
-                   tempRoot, GetCurrentProcessId(),
+        swprintf_s(candidate, L"%sAloPsIoTest-%lu-%llu-%lu", tempRoot, GetCurrentProcessId(),
                    (unsigned long long)GetTickCount64(), attempt);
-        if (CreateDirectoryW(candidate, NULL)) { g_tempDir = candidate; return true; }
+        if (CreateDirectoryW(candidate, NULL))
+        {
+            g_tempDir = candidate;
+            return true;
+        }
         if (GetLastError() != ERROR_ALREADY_EXISTS) return false;
     }
     return false;
@@ -90,7 +102,7 @@ static void cleanupTempDir()
 // wexception surfaced; `other` flags a non-wexception escape.
 static bool saveTo(ParticleSystem& ps, const std::wstring& path, bool& other)
 {
-    other = false;
+    other           = false;
     PhysicalFile* f = NULL;
     try
     {
@@ -116,19 +128,36 @@ static bool saveTo(ParticleSystem& ps, const std::wstring& path, bool& other)
 // ParticleSystem(IFile*)). nullptr on wexception; `other` flags anything else.
 static std::unique_ptr<ParticleSystem> loadFrom(const std::wstring& path, bool& other)
 {
-    other = false;
+    other           = false;
     PhysicalFile* f = NULL;
     try
     {
-        f = new PhysicalFile(path);   // READ is the default mode (files.h)
+        f = new PhysicalFile(path); // READ is the default mode (files.h)
     }
-    catch (wexception&) { return nullptr; }
-    catch (...)         { other = true; return nullptr; }
+    catch (wexception&)
+    {
+        return nullptr;
+    }
+    catch (...)
+    {
+        other = true;
+        return nullptr;
+    }
 
     std::unique_ptr<ParticleSystem> ps;
-    try         { ps.reset(new ParticleSystem(f)); }
-    catch (wexception&) { ps.reset(); }
-    catch (...)         { other = true; ps.reset(); }
+    try
+    {
+        ps.reset(new ParticleSystem(f));
+    }
+    catch (wexception&)
+    {
+        ps.reset();
+    }
+    catch (...)
+    {
+        other = true;
+        ps.reset();
+    }
     f->Release();
     return ps;
 }
@@ -149,12 +178,12 @@ static void writeRawBytes(const std::wstring& path, const void* data, unsigned l
 // Length (in nodes) of the longest spawn chain. Roots count as depth 1.
 static size_t maxChainDepth(const ParticleSystem& ps)
 {
-    const std::vector<Emitter*>& es = ps.getEmitters();
-    size_t best = 0;
+    const std::vector<Emitter*>& es   = ps.getEmitters();
+    size_t                       best = 0;
     for (size_t r = 0; r < es.size(); ++r)
     {
-        if (es[r]->parent != NULL) continue;              // start at roots only
-        std::vector<std::pair<size_t, size_t> > stack;    // (index, depth)
+        if (es[r]->parent != NULL) continue;          // start at roots only
+        std::vector<std::pair<size_t, size_t>> stack; // (index, depth)
         stack.push_back(std::make_pair(r, (size_t)1));
         while (!stack.empty())
         {
@@ -166,10 +195,8 @@ static size_t maxChainDepth(const ParticleSystem& ps)
             // validation; bail loudly rather than spin forever.
             if (d > es.size()) return (size_t)-1;
             const Emitter* e = es[u];
-            if (e->spawnDuringLife != (size_t)-1)
-                stack.push_back(std::make_pair(e->spawnDuringLife, d + 1));
-            if (e->spawnOnDeath != (size_t)-1)
-                stack.push_back(std::make_pair(e->spawnOnDeath, d + 1));
+            if (e->spawnDuringLife != (size_t)-1) stack.push_back(std::make_pair(e->spawnDuringLife, d + 1));
+            if (e->spawnOnDeath != (size_t)-1) stack.push_back(std::make_pair(e->spawnOnDeath, d + 1));
         }
     }
     return best;
@@ -177,9 +204,10 @@ static size_t maxChainDepth(const ParticleSystem& ps)
 
 static size_t rootCount(const ParticleSystem& ps)
 {
-    size_t n = 0;
+    size_t                       n  = 0;
     const std::vector<Emitter*>& es = ps.getEmitters();
-    for (size_t i = 0; i < es.size(); ++i) if (es[i]->parent == NULL) ++n;
+    for (size_t i = 0; i < es.size(); ++i)
+        if (es[i]->parent == NULL) ++n;
     return n;
 }
 
@@ -212,14 +240,14 @@ int main()
     {
         ParticleSystem ps;
         ps.setName("IoRoundTrip");
-        Emitter* e = ps.addRootEmitter();
-        e->name          = "IoEm0";
-        e->colorTexture  = "FX\\Io.TGA";
-        e->lifetime      = 3.25f;
-        e->nTriangles    = 7;
+        Emitter* e      = ps.addRootEmitter();
+        e->name         = "IoEm0";
+        e->colorTexture = "FX\\Io.TGA";
+        e->lifetime     = 3.25f;
+        e->nTriangles   = 7;
 
-        const std::wstring path = tempPath(L"roundtrip.alo");
-        bool other = false;
+        const std::wstring path  = tempPath(L"roundtrip.alo");
+        bool               other = false;
         CHECK(saveTo(ps, path, other) && !other, "save to a temp .alo succeeds");
 
         std::unique_ptr<ParticleSystem> rp = loadFrom(path, other);
@@ -243,36 +271,57 @@ int main()
         ps.setName("IoRoundTrip2");
         CHECK(saveTo(ps, path, other) && !other, "overwrite-save succeeds");
         rp = loadFrom(path, other);
-        CHECK(rp != nullptr && !other && rp->getName() == "IoRoundTrip2",
-              "overwritten file loads the NEW image");
+        CHECK(rp != nullptr && !other && rp->getName() == "IoRoundTrip2", "overwritten file loads the NEW image");
     }
 
     // ---- B: load of a nonexistent path -> FileNotFoundException -------------
     {
         const std::wstring missing = g_tempDir + L"\\does-not-exist.alo";
-        bool fnf = false, otherExc = false;
-        try { PhysicalFile* f = new PhysicalFile(missing); f->Release(); }
-        catch (FileNotFoundException&) { fnf = true; }
-        catch (...) { otherExc = true; }
+        bool               fnf = false, otherExc = false;
+        try
+        {
+            PhysicalFile* f = new PhysicalFile(missing);
+            f->Release();
+        }
+        catch (FileNotFoundException&)
+        {
+            fnf = true;
+        }
+        catch (...)
+        {
+            otherExc = true;
+        }
         CHECK(fnf && !otherExc,
               "nonexistent path -> FileNotFoundException (wrapper reports errorOut, files.cpp:53-59)");
 
-        bool other = false;
-        std::unique_ptr<ParticleSystem> rp = loadFrom(missing, other);
+        bool                            other = false;
+        std::unique_ptr<ParticleSystem> rp    = loadFrom(missing, other);
         CHECK(rp == nullptr && !other, "load path returns null (never a crash) for a missing file");
     }
 
     // ---- C: save to an unwritable path -> throws, never silent --------------
     // A path inside a directory that does not exist -> ERROR_PATH_NOT_FOUND.
     {
-        const std::wstring bad = g_tempDir + L"\\no-such-subdir\\out.alo";
-        bool threw = false, otherExc = false;
-        try { PhysicalFile* f = new PhysicalFile(bad, PhysicalFile::WRITE); f->Release(); }
-        catch (FileNotFoundException&) { threw = true; }   // ERROR_PATH_NOT_FOUND branch
-        catch (IOException&)           { threw = true; }   // the generic WRITE-open failure
-        catch (...) { otherExc = true; }
-        CHECK(threw && !otherExc,
-              "unwritable path -> IOException family (wrapper reports errorOut, files.cpp:56-63)");
+        const std::wstring bad   = g_tempDir + L"\\no-such-subdir\\out.alo";
+        bool               threw = false, otherExc = false;
+        try
+        {
+            PhysicalFile* f = new PhysicalFile(bad, PhysicalFile::WRITE);
+            f->Release();
+        }
+        catch (FileNotFoundException&)
+        {
+            threw = true;
+        } // ERROR_PATH_NOT_FOUND branch
+        catch (IOException&)
+        {
+            threw = true;
+        } // the generic WRITE-open failure
+        catch (...)
+        {
+            otherExc = true;
+        }
+        CHECK(threw && !otherExc, "unwritable path -> IOException family (wrapper reports errorOut, files.cpp:56-63)");
 
         ParticleSystem ps;
         ps.setName("NeverWritten");
@@ -284,25 +333,40 @@ int main()
     // ---- D: corrupt file -> BadFileException family, no silent success ------
     {
         const std::wstring garbage = tempPath(L"garbage.alo");
-        static const char junk[] = "This is definitely not an Alamo particle system file.";
+        static const char  junk[]  = "This is definitely not an Alamo particle system file.";
         writeRawBytes(garbage, junk, (unsigned long)sizeof(junk));
 
         bool badFile = false, otherExc = false;
         try
         {
             PhysicalFile* f = new PhysicalFile(garbage);
-            try { ParticleSystem ps(f); }
-            catch (...) { f->Release(); throw; }
+            try
+            {
+                ParticleSystem ps(f);
+            }
+            catch (...)
+            {
+                f->Release();
+                throw;
+            }
             f->Release();
         }
-        catch (BadFileException&) { badFile = true; }   // incl. WrongFileException
-        catch (ReadException&)    { badFile = true; }
-        catch (...) { otherExc = true; }
-        CHECK(badFile && !otherExc,
-              "garbage bytes -> BadFileException/ReadException, no other escape");
+        catch (BadFileException&)
+        {
+            badFile = true;
+        } // incl. WrongFileException
+        catch (ReadException&)
+        {
+            badFile = true;
+        }
+        catch (...)
+        {
+            otherExc = true;
+        }
+        CHECK(badFile && !otherExc, "garbage bytes -> BadFileException/ReadException, no other escape");
 
-        bool other = false;
-        std::unique_ptr<ParticleSystem> rp = loadFrom(garbage, other);
+        bool                            other = false;
+        std::unique_ptr<ParticleSystem> rp    = loadFrom(garbage, other);
         CHECK(rp == nullptr && !other, "load path returns null for a corrupt file");
     }
 
@@ -310,8 +374,8 @@ int main()
     {
         const std::wstring empty = tempPath(L"empty.alo");
         writeRawBytes(empty, NULL, 0);
-        bool other = false;
-        std::unique_ptr<ParticleSystem> rp = loadFrom(empty, other);
+        bool                            other = false;
+        std::unique_ptr<ParticleSystem> rp    = loadFrom(empty, other);
         CHECK(rp == nullptr && !other, "zero-byte file -> null, no foreign exception");
     }
 
@@ -321,20 +385,19 @@ int main()
         ps.setName("TruncateMe");
         ps.addRootEmitter();
         const std::wstring whole = tempPath(L"whole.alo");
-        bool other = false;
+        bool               other = false;
         CHECK(saveTo(ps, whole, other) && !other, "truncation setup: full save succeeds");
 
         // Read the image back and rewrite only the first half.
         {
-            PhysicalFile* f = new PhysicalFile(whole);
+            PhysicalFile*              f = new PhysicalFile(whole);
             std::vector<unsigned char> img(f->size());
             if (!img.empty()) f->read(img.data(), (unsigned long)img.size());
             f->Release();
             const std::wstring half = tempPath(L"half.alo");
             writeRawBytes(half, img.data(), (unsigned long)(img.size() / 2));
             std::unique_ptr<ParticleSystem> rp = loadFrom(half, other);
-            CHECK(rp == nullptr && !other,
-                  "half-truncated .alo -> null via the documented error path");
+            CHECK(rp == nullptr && !other, "half-truncated .alo -> null via the documented error path");
         }
     }
 
@@ -362,25 +425,21 @@ int main()
         // The editing path is deliberately uncapped -- ValidateEmitterGraph
         // runs on load and import only. If this ever fails, the cap moved to
         // the wrong layer and the rest of this section proves nothing.
-        CHECK(maxChainDepth(ps) == over,
-              "deep-chain setup: in-memory chain is cap+40 deep (editing path is uncapped)");
+        CHECK(maxChainDepth(ps) == over, "deep-chain setup: in-memory chain is cap+40 deep (editing path is uncapped)");
 
-        const std::wstring path = tempPath(L"deepchain.alo");
-        bool other = false;
+        const std::wstring path  = tempPath(L"deepchain.alo");
+        bool               other = false;
         CHECK(saveTo(ps, path, other) && !other, "deep-chain: over-deep system saves");
 
         std::unique_ptr<ParticleSystem> rp = loadFrom(path, other);
         CHECK(rp != nullptr && !other, "deep-chain: over-deep file LOADS (clamped, not rejected)");
         if (rp)
         {
-            CHECK(rp->getEmitters().size() == over,
-                  "deep-chain: every emitter survives the clamp (nothing dropped)");
+            CHECK(rp->getEmitters().size() == over, "deep-chain: every emitter survives the clamp (nothing dropped)");
             // The discriminating assertions. Without the cap these read
             // `over` and `1` -- the specific wrong values, not merely "changed".
-            CHECK(maxChainDepth(*rp) == cap,
-                  "deep-chain: reloaded chain is clamped to exactly kMaxEmitterTreeDepth");
-            CHECK(rootCount(*rp) == 2,
-                  "deep-chain: the over-deep tail is re-rooted (cap+40 -> 2 roots)");
+            CHECK(maxChainDepth(*rp) == cap, "deep-chain: reloaded chain is clamped to exactly kMaxEmitterTreeDepth");
+            CHECK(rootCount(*rp) == 2, "deep-chain: the over-deep tail is re-rooted (cap+40 -> 2 roots)");
         }
     }
 
@@ -396,18 +455,16 @@ int main()
         ps.setName("AtCapChain");
         CHECK(buildChain(ps, cap) == cap, "at-cap setup: authored exactly cap emitters");
 
-        const std::wstring path = tempPath(L"atcapchain.alo");
-        bool other = false;
+        const std::wstring path  = tempPath(L"atcapchain.alo");
+        bool               other = false;
         CHECK(saveTo(ps, path, other) && !other, "at-cap: save succeeds");
 
         std::unique_ptr<ParticleSystem> rp = loadFrom(path, other);
         CHECK(rp != nullptr && !other, "at-cap: load succeeds");
         if (rp)
         {
-            CHECK(maxChainDepth(*rp) == cap,
-                  "at-cap: a chain exactly at the cap survives at full depth");
-            CHECK(rootCount(*rp) == 1,
-                  "at-cap: no spurious re-rooting at the boundary");
+            CHECK(maxChainDepth(*rp) == cap, "at-cap: a chain exactly at the cap survives at full depth");
+            CHECK(rootCount(*rp) == 1, "at-cap: no spurious re-rooting at the boundary");
         }
     }
 
@@ -418,14 +475,11 @@ int main()
     // via this helper. Pin the exact derivation: basename, extension
     // stripped, lowercased, '_' for unrepresentable characters.
     {
-        CHECK(DeriveParticleSystemName(L"C:\\Mods\\Art\\PP_Proton_Torpedo_R.alo")
-                  == "pp_proton_torpedo_r",
+        CHECK(DeriveParticleSystemName(L"C:\\Mods\\Art\\PP_Proton_Torpedo_R.alo") == "pp_proton_torpedo_r",
               "derive: basename + strip .alo + lowercase (backslash path)");
-        CHECK(DeriveParticleSystemName(L"C:/Mods/Art/P_Explosion.ALO")
-                  == "p_explosion",
+        CHECK(DeriveParticleSystemName(L"C:/Mods/Art/P_Explosion.ALO") == "p_explosion",
               "derive: forward-slash path + uppercase extension");
-        CHECK(DeriveParticleSystemName(L"noext") == "noext",
-              "derive: no extension leaves the name whole");
+        CHECK(DeriveParticleSystemName(L"noext") == "noext", "derive: no extension leaves the name whole");
         CHECK(DeriveParticleSystemName(L"a.b\\P_Fire.v2.alo") == "p_fire.v2",
               "derive: only the LAST dot is an extension; dotted dirs ignored");
         CHECK(DeriveParticleSystemName(L"D:\\out\\P_Sm\x2603ke.alo") == "p_sm_ke",
@@ -439,8 +493,7 @@ int main()
         bool other = false;
         CHECK(saveTo(ps, path, other) && !other, "derive: stamped save succeeds");
         std::unique_ptr<ParticleSystem> rp = loadFrom(path, other);
-        CHECK(rp != nullptr && !other &&
-                  rp->getName() == "derived_name_check",
+        CHECK(rp != nullptr && !other && rp->getName() == "derived_name_check",
               "derive: reloaded file carries the filename-derived name");
     }
 
@@ -450,12 +503,14 @@ int main()
     // over the destination; any failure leaves the destination untouched and
     // removes the temp.
     {
-        auto exists = [](const std::wstring& p) {
+        auto exists = [](const std::wstring& p)
+        {
             return GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES;
         };
-        auto reloadedName = [](const std::wstring& p) {
-            bool other = false;
-            std::unique_ptr<ParticleSystem> rp = loadFrom(p, other);
+        auto reloadedName = [](const std::wstring& p)
+        {
+            bool                            other = false;
+            std::unique_ptr<ParticleSystem> rp    = loadFrom(p, other);
             return rp && !other ? rp->getName() : std::string("<load failed>");
         };
 
@@ -464,7 +519,7 @@ int main()
         ps.setName("atomic_first");
         const std::wstring dest = tempPath(L"Atomic.alo");
         const std::wstring tmp  = tempPath(L"Atomic.alo.4242.tmp");
-        AtomicSaveOptions options;
+        AtomicSaveOptions  options;
         options.tmpPath = tmp;
 
         std::string err = "stale";
@@ -482,22 +537,21 @@ int main()
 
         // A candidate that fails verification never replaces the destination.
         ps.setName("atomic_third");
-        options.beforeVerify = [](const std::wstring& candidate) {
+        options.beforeVerify = [](const std::wstring& candidate)
+        {
             writeRawBytes(candidate, "junk", 4);
         };
         CHECK(!AtomicWriteParticleSystem(ps, dest, options, &err) && !err.empty(),
               "atomic: a candidate that does not load back is refused with a reason");
         CHECK(!exists(tmp), "atomic: the refused temp is removed");
-        CHECK(reloadedName(dest) == "atomic_second",
-              "atomic: the destination is untouched by the refused save");
+        CHECK(reloadedName(dest) == "atomic_second", "atomic: the destination is untouched by the refused save");
 
         // An unopenable temp fails before anything is written.
         AtomicSaveOptions bad;
         bad.tmpPath = g_tempDir + L"\\no-such-dir\\Atomic.alo.tmp";
         CHECK(!AtomicWriteParticleSystem(ps, dest, bad, &err) && !err.empty(),
               "atomic: an unopenable temp is reported");
-        CHECK(reloadedName(dest) == "atomic_second",
-              "atomic: ...and the destination is untouched");
+        CHECK(reloadedName(dest) == "atomic_second", "atomic: ...and the destination is untouched");
 
         // No tmpPath: the temp defaults to dest + ".tmp" (the autosave name).
         const std::wstring defaultTmp = tempPath(L"Atomic.alo.tmp");
@@ -515,7 +569,8 @@ int main()
     // which this test exe does not have, so a load failure's errorOut text can
     // be empty here; the checks below only require it to have been written.
     {
-        auto exists = [](const std::wstring& p) {
+        auto exists = [](const std::wstring& p)
+        {
             return GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES;
         };
 
@@ -523,16 +578,15 @@ int main()
         ps.addRootEmitter();
         ps.setName("wrapper_save");
         const std::wstring dest = tempPath(L"Wrapper.alo");
-        const std::wstring pidTmp = tempPath(
-            (L"Wrapper.alo." + std::to_wstring(GetCurrentProcessId()) + L".tmp").c_str());
+        const std::wstring pidTmp =
+            tempPath((L"Wrapper.alo." + std::to_wstring(GetCurrentProcessId()) + L".tmp").c_str());
 
         std::string err = "stale";
-        CHECK(SaveParticleSystem(&ps, dest, &err) && err.empty(),
-              "wrapper: save succeeds and clears the error");
+        CHECK(SaveParticleSystem(&ps, dest, &err) && err.empty(), "wrapper: save succeeds and clears the error");
         CHECK(!exists(pidTmp), "wrapper: the per-process temp was renamed away");
         CHECK(SaveParticleSystem(&ps, dest), "wrapper: save works without an error sink");
 
-        err = "stale";
+        err                                = "stale";
         std::unique_ptr<ParticleSystem> rp = LoadParticleSystem(dest, &err);
         CHECK(rp != nullptr && err.empty() && rp->getName() == "wrapper_save",
               "wrapper: load returns the saved system and clears the error");
@@ -541,17 +595,16 @@ int main()
               "wrapper: a null system is refused with a reason");
 
         err = "stale";
-        rp = LoadParticleSystem(g_tempDir + L"\\missing-wrapper.alo", &err);
+        rp  = LoadParticleSystem(g_tempDir + L"\\missing-wrapper.alo", &err);
         CHECK(rp == nullptr && err != "stale", "wrapper: a missing file -> nullptr + error");
 
         const std::wstring garbage = tempPath(L"wrapper-garbage.alo");
         writeRawBytes(garbage, "junk", 4);
         err = "stale";
-        rp = LoadParticleSystem(garbage, &err);
+        rp  = LoadParticleSystem(garbage, &err);
         CHECK(rp == nullptr && err != "stale", "wrapper: a corrupt file -> nullptr + error");
 
-        CHECK(!SaveParticleSystem(&ps, g_tempDir + L"\\no-such-dir\\Wrapper.alo", &err) &&
-                  !err.empty(),
+        CHECK(!SaveParticleSystem(&ps, g_tempDir + L"\\no-such-dir\\Wrapper.alo", &err) && !err.empty(),
               "wrapper: an unwritable destination -> false + error");
 
         rp = LoadParticleSystem(dest);

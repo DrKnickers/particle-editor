@@ -62,8 +62,8 @@ public:
     // matches how users describe an "edit session" on a property
     // panel. The previous 750ms felt twitchy — switching from a text
     // field to a spinner exceeded it.
-    static const DWORD COALESCE_WINDOW_MS = 1500;
-    static const size_t MAX_ENTRIES = 100;
+    static const DWORD  COALESCE_WINDOW_MS = 1500;
+    static const size_t MAX_ENTRIES        = 100;
     // Aggregate byte budget, the companion to the entry cap above.
     // MAX_ENTRIES bounds HOW MANY snapshots are resident and
     // says nothing about their size: a typical snapshot is well under 100 KB
@@ -101,9 +101,11 @@ public:
     // SIZE_MAX if no selection). Returns true if a new entry was
     // pushed; false if the call coalesced into an existing entry or
     // was suppressed by the m_applying guard.
-    bool Capture(const ParticleSystem& sys, size_t selectedIndex,
-                 DWORD coalesceKey, const EditorAux& aux = {},
-                 BudgetRetention retention = BudgetRetention::Normal);
+    bool Capture(const ParticleSystem& sys,
+                 size_t                selectedIndex,
+                 DWORD                 coalesceKey,
+                 const EditorAux&      aux       = {},
+                 BudgetRetention       retention = BudgetRetention::Normal);
 
     // PRE-mutation coalescing variant for the bridge. Callers
     // snapshot BEFORE applying the edit, so the FIRST capture of a rapid
@@ -119,8 +121,10 @@ public:
     // with the current state — correct for legacy's POST-mutation capture
     // (the tail must track the LATEST state), but wrong for PRE-mutation
     // callers (it would overwrite the session-start state we undo back to).
-    bool CapturePreCoalesced(const ParticleSystem& sys, size_t selectedIndex,
-                             DWORD coalesceKey, const EditorAux& aux = {});
+    bool CapturePreCoalesced(const ParticleSystem& sys,
+                             size_t                selectedIndex,
+                             DWORD                 coalesceKey,
+                             const EditorAux&      aux = {});
 
     bool CanUndo() const;
     bool CanRedo() const;
@@ -131,10 +135,8 @@ public:
     // selection-index at capture time.
     // outAux is defaulted to nullptr so callers that don't need the
     // EditorAux side-channel can call Undo/Redo with two args.
-    bool Undo(const std::vector<char>** outSnapshot,
-              size_t* outSelectedIndex, EditorAux* outAux = nullptr);
-    bool Redo(const std::vector<char>** outSnapshot,
-              size_t* outSelectedIndex, EditorAux* outAux = nullptr);
+    bool Undo(const std::vector<char>** outSnapshot, size_t* outSelectedIndex, EditorAux* outAux = nullptr);
+    bool Redo(const std::vector<char>** outSnapshot, size_t* outSelectedIndex, EditorAux* outAux = nullptr);
 
     // Clear all entries (used on file open / new).
     void Clear();
@@ -152,10 +154,10 @@ public:
     // Capture() short-circuits when this is true.
     bool IsApplying() const { return m_applying; }
     void BeginApplying() { m_applying = true; }
-    void EndApplying()   { m_applying = false; }
+    void EndApplying() { m_applying = false; }
 
     // For the menu / toolbar enable-state queries.
-    size_t Depth()  const { return m_entries.size(); }
+    size_t Depth() const { return m_entries.size(); }
     size_t Cursor() const { return m_cursor; }
 
     // True when the live ParticleSystem holds an un-snapshotted edit
@@ -195,20 +197,20 @@ private:
         DWORD             coalesceKey;
         DWORD             timestamp;
         bool              isSavedState;
-        EditorAux         aux;   // ref-object transform at capture
+        EditorAux         aux; // ref-object transform at capture
     };
 
     std::deque<Entry> m_entries;
     // m_cursor points at the entry representing "current state".
     // Undo decrements; redo increments. New captures at cursor==N
     // truncate any redo branch above N before pushing.
-    size_t            m_cursor;
-    bool              m_applying;
+    size_t m_cursor;
+    bool   m_applying;
     // See IsLiveAhead(): tracks whether live is skewed ahead of the tip.
-    bool              m_liveAhead;
+    bool m_liveAhead;
     // Aggregate snapshot budget for this stack; MAX_TOTAL_BYTES unless a
     // test-host override changed it while the stack was empty.
-    size_t            m_maxTotalBytes;
+    size_t m_maxTotalBytes;
 
     // Evict from the front until BOTH caps hold. Called from the two push
     // paths (Capture and CapturePreCoalesced) so they can't drift apart --

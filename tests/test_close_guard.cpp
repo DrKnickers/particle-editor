@@ -17,10 +17,19 @@
 #include <cstdio>
 
 static int g_failed = 0;
-#define CHECK(cond, msg) do {                              \
-    if (cond) { std::printf("  ok: %s\n", msg); }          \
-    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
 int main()
 {
@@ -28,23 +37,27 @@ int main()
 
     // Full truth table over (dirty, ephemeral, testHost) with a live web. Veto
     // iff the lone interactive-with-unsaved-work case.
-    struct Row { bool dirty, ephemeral, testHost, expect; const char* label; };
+    struct Row
+    {
+        bool        dirty, ephemeral, testHost, expect;
+        const char* label;
+    };
     const Row rows[] = {
         // dirty  ephem  test   expect
-        { false, false, false, false, "clean, interactive            -> no veto" },
-        { false, false, true,  false, "clean, test-host              -> no veto" },
-        { false, true,  false, false, "clean, ephemeral              -> no veto" },
-        { false, true,  true,  false, "clean, ephemeral+test-host    -> no veto" },
-        { true,  false, false, true,  "DIRTY, interactive            -> VETO (the one)" },
-        { true,  false, true,  false, "dirty, test-host              -> no veto (no user)" },
-        { true,  true,  false, false, "dirty, ephemeral              -> no veto (no user)" },
-        { true,  true,  true,  false, "dirty, ephemeral+test-host    -> no veto (no user)" },
+        {false, false, false, false, "clean, interactive            -> no veto"},
+        {false, false, true, false, "clean, test-host              -> no veto"},
+        {false, true, false, false, "clean, ephemeral              -> no veto"},
+        {false, true, true, false, "clean, ephemeral+test-host    -> no veto"},
+        {true, false, false, true, "DIRTY, interactive            -> VETO (the one)"},
+        {true, false, true, false, "dirty, test-host              -> no veto (no user)"},
+        {true, true, false, false, "dirty, ephemeral              -> no veto (no user)"},
+        {true, true, true, false, "dirty, ephemeral+test-host    -> no veto (no user)"},
     };
 
     int vetoCount = 0;
     for (const Row& r : rows)
     {
-        bool got = ShouldVetoClose(r.dirty, r.ephemeral, r.testHost, /*webAlive*/true);
+        bool got = ShouldVetoClose(r.dirty, r.ephemeral, r.testHost, /*webAlive*/ true);
         CHECK(got == r.expect, r.label);
         if (got) ++vetoCount;
     }
@@ -53,11 +66,10 @@ int main()
     // the page that would answer the prompt is gone.
     for (const Row& r : rows)
     {
-        bool got = ShouldVetoClose(r.dirty, r.ephemeral, r.testHost, /*webAlive*/false);
+        bool got = ShouldVetoClose(r.dirty, r.ephemeral, r.testHost, /*webAlive*/ false);
         char label[96];
         std::snprintf(label, sizeof(label), "dead web: %s", r.label);
-        CHECK(!got, r.expect ? "dead web: DIRTY, interactive  -> no veto (page can't answer)"
-                             : label);
+        CHECK(!got, r.expect ? "dead web: DIRTY, interactive  -> no veto (page can't answer)" : label);
         if (got) ++vetoCount;
     }
 
@@ -74,12 +86,11 @@ int main()
         const bool discard    = (bits & 2) != 0;
         const bool automation = (bits & 4) != 0;
         const bool testHost   = (bits & 8) != 0;
-        const bool got = ShouldRefuseDocumentReplace(dirty, discard, automation, testHost);
-        const bool expect = dirty && !discard && !automation && !testHost;
-        char label[128];
-        std::snprintf(label, sizeof(label),
-                      "replace dirty=%d discard=%d automation=%d testHost=%d -> %s",
-                      dirty, discard, automation, testHost, expect ? "REFUSE" : "allow");
+        const bool got        = ShouldRefuseDocumentReplace(dirty, discard, automation, testHost);
+        const bool expect     = dirty && !discard && !automation && !testHost;
+        char       label[128];
+        std::snprintf(label, sizeof(label), "replace dirty=%d discard=%d automation=%d testHost=%d -> %s", dirty,
+                      discard, automation, testHost, expect ? "REFUSE" : "allow");
         CHECK(got == expect, label);
         if (got) ++refuseCount;
     }
@@ -88,8 +99,7 @@ int main()
           "a dirty interactive document is protected without a confirmed discard");
     CHECK(!ShouldRefuseDocumentReplace(true, true, false, false),
           "Don't Save (discard confirmed) lets the replace through");
-    CHECK(!ShouldRefuseDocumentReplace(false, false, false, false),
-          "a clean document is replaced without ceremony");
+    CHECK(!ShouldRefuseDocumentReplace(false, false, false, false), "a clean document is replaced without ceremony");
 
     std::printf("%s\n", g_failed ? "=== FAILED ===" : "=== ALL PASS ===");
     std::printf("(%d failure%s)\n", g_failed, g_failed == 1 ? "" : "s");

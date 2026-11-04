@@ -20,10 +20,19 @@
 #include <vector>
 
 static int g_failed = 0;
-#define CHECK(cond, msg) do {                              \
-    if (cond) { std::printf("  ok: %s\n", msg); }          \
-    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
 typedef std::vector<unsigned char> Bytes;
 
@@ -44,9 +53,9 @@ static std::wstring writeParentFile(const Bytes& inner)
     file.insert(file.end(), inner.begin(), inner.end());
     file.insert(file.end(), kSuffix, (unsigned char)0xEE);
 
-    PhysicalFile* w = new PhysicalFile(path, PhysicalFile::WRITE);  // rc=1
+    PhysicalFile* w = new PhysicalFile(path, PhysicalFile::WRITE); // rc=1
     w->write(file.data(), (unsigned long)file.size());
-    w->Release();                                                   // rc=0 -> close
+    w->Release(); // rc=0 -> close
     return path;
 }
 
@@ -62,22 +71,26 @@ int main()
 
     const std::wstring path = writeParentFile(inner);
 
-    PhysicalFile* parent = new PhysicalFile(path, PhysicalFile::READ);     // rc=1
+    PhysicalFile* parent = new PhysicalFile(path, PhysicalFile::READ);            // rc=1
     SubFile*      sub    = new SubFile(parent, (unsigned long)kPrefix, innerLen); // parent rc=2
-    parent->Release();                                                    // parent rc=1 (held by sub)
+    parent->Release();                                                            // parent rc=1 (held by sub)
 
     CHECK(sub->size() == innerLen, "SubFile::size == inner length");
 
     // --- A: oversized read must return exactly innerLen and NOT spill suffix ---
     {
         sub->seek(0);
-        std::vector<unsigned char> buf(innerLen + kSuffix, 0x00);  // way bigger than the sub-view
-        unsigned long n = sub->read(buf.data(), (unsigned long)buf.size());
+        std::vector<unsigned char> buf(innerLen + kSuffix, 0x00); // way bigger than the sub-view
+        unsigned long              n = sub->read(buf.data(), (unsigned long)buf.size());
         CHECK(n == innerLen, "oversized read returns exactly inner length (no over-read)");
         CHECK(std::memcmp(buf.data(), inner.data(), innerLen) == 0, "oversized read content == inner payload");
         bool spilled = false;
         for (unsigned long i = 0; i < kSuffix; ++i)
-            if (buf[innerLen + i] == 0xEE) { spilled = true; break; }
+            if (buf[innerLen + i] == 0xEE)
+            {
+                spilled = true;
+                break;
+            }
         CHECK(!spilled, "no suffix (adjacent-entry) bytes leaked into the buffer");
         CHECK(sub->eof(), "eof() true after consuming the whole sub-view");
     }
@@ -85,14 +98,14 @@ int main()
     // --- B: chunked reads reconstruct the payload exactly, then EOF ---
     {
         sub->seek(0);
-        Bytes got;
+        Bytes         got;
         unsigned char chunk[16];
         for (;;)
         {
             unsigned long n = sub->read(chunk, sizeof(chunk));
             if (n == 0) break;
             got.insert(got.end(), chunk, chunk + n);
-            if (got.size() > innerLen + 64) break;  // runaway guard
+            if (got.size() > innerLen + 64) break; // runaway guard
         }
         CHECK(got.size() == innerLen, "chunked reads total exactly inner length");
         CHECK(got.size() == innerLen && std::memcmp(got.data(), inner.data(), innerLen) == 0,
@@ -111,15 +124,14 @@ int main()
     {
         sub->seek(0);
         std::vector<unsigned char> buf(innerLen, 0x00);
-        unsigned long n = sub->read(buf.data(), innerLen);
+        unsigned long              n = sub->read(buf.data(), innerLen);
         CHECK(n == innerLen, "exact-size read returns inner length");
         CHECK(std::memcmp(buf.data(), inner.data(), innerLen) == 0, "exact-size read content == inner payload");
     }
 
-    sub->Release();              // sub rc=0 -> ~SubFile releases parent -> both freed
+    sub->Release(); // sub rc=0 -> ~SubFile releases parent -> both freed
     DeleteFileW(path.c_str());
 
-    std::printf("%s (%d failure%s)\n", g_failed ? "FAILED" : "PASSED",
-                g_failed, g_failed == 1 ? "" : "s");
+    std::printf("%s (%d failure%s)\n", g_failed ? "FAILED" : "PASSED", g_failed, g_failed == 1 ? "" : "s");
     return g_failed ? 1 : 0;
 }

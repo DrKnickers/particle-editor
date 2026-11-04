@@ -33,7 +33,11 @@ namespace detail
 {
 inline bool FindNonFinite(const json& value, const std::string& path, std::string* where)
 {
-    if (value.is_number_float() && !std::isfinite(value.get<double>())) { *where = path.empty() ? "(root)" : path; return true; }
+    if (value.is_number_float() && !std::isfinite(value.get<double>()))
+    {
+        *where = path.empty() ? "(root)" : path;
+        return true;
+    }
     if (value.is_object())
         for (auto it = value.begin(); it != value.end(); ++it)
             if (FindNonFinite(it.value(), path + "." + it.key(), where)) return true;
@@ -60,11 +64,16 @@ inline bool ParseStrictJson(const std::string& bytes, json* out, std::string* re
         *reason = "the request is UTF-16; save it as UTF-8";
         return false;
     }
-    std::vector<std::set<std::string>> open;   // keys seen, per open object
-    std::string duplicate;
-    auto callback = [&](int, json::parse_event_t event, json& parsed) -> bool {
-        if (event == json::parse_event_t::object_start) open.emplace_back();
-        else if (event == json::parse_event_t::object_end) { if (!open.empty()) open.pop_back(); }
+    std::vector<std::set<std::string>> open; // keys seen, per open object
+    std::string                        duplicate;
+    auto                               callback = [&](int, json::parse_event_t event, json& parsed) -> bool
+    {
+        if (event == json::parse_event_t::object_start)
+            open.emplace_back();
+        else if (event == json::parse_event_t::object_end)
+        {
+            if (!open.empty()) open.pop_back();
+        }
         else if (event == json::parse_event_t::key && !open.empty() && duplicate.empty())
         {
             const std::string key = parsed.get<std::string>();
@@ -128,8 +137,8 @@ struct Resolution
 {
     Refusal     refusal;
     std::string reason;
-    size_t      emitter;      // position in the emitter list, when resolved
-    json        candidates;   // every emitter on the role path: {position, name, mismatched}
+    size_t      emitter;    // position in the emitter list, when resolved
+    json        candidates; // every emitter on the role path: {position, name, mismatched}
 };
 
 namespace detail
@@ -149,7 +158,11 @@ inline bool FindBannedKey(const json& value, std::string* key)
     if (value.is_object())
         for (auto it = value.begin(); it != value.end(); ++it)
         {
-            if (it.key() == "id" || it.key() == "index" || it.key() == "stableId") { *key = it.key(); return true; }
+            if (it.key() == "id" || it.key() == "index" || it.key() == "stableId")
+            {
+                *key = it.key();
+                return true;
+            }
             if (FindBannedKey(it.value(), key)) return true;
         }
     if (value.is_array())
@@ -175,7 +188,7 @@ inline bool Matches(const json& expected, const json& actual)
     {
         if (!expected.is_number()) return false;
         const double v = expected.get<double>();
-        if (!(std::fabs(v) <= 3.4028234663852886e38)) return false;   // beyond float32
+        if (!(std::fabs(v) <= 3.4028234663852886e38)) return false; // beyond float32
         return static_cast<float>(v) == static_cast<float>(actual.get<double>());
     }
     if (actual.is_array())
@@ -192,7 +205,7 @@ inline bool Matches(const json& expected, const json& actual)
             if (!expected.contains(it.key()) || !Matches(expected[it.key()], it.value())) return false;
         return true;
     }
-    return expected == actual;   // string, boolean, null
+    return expected == actual; // string, boolean, null
 }
 
 inline json Candidate(const json& emitters, size_t position, const std::vector<std::string>& mismatched)
@@ -210,7 +223,8 @@ inline Resolution ResolveSelector(const json& selector, const json& dump)
     if (!selector.is_object()) return Refuse(Refusal::Malformed, "the selector must be an object");
     std::string banned;
     if (detail::FindBannedKey(selector, &banned))
-        return Refuse(Refusal::BannedKey, "'" + banned + "' is a position, which shifts under edits; select by rolePath and expected");
+        return Refuse(Refusal::BannedKey,
+                      "'" + banned + "' is a position, which shifts under edits; select by rolePath and expected");
     for (auto it = selector.begin(); it != selector.end(); ++it)
         if (it.key() != "sourceDocumentHash" && it.key() != "rolePath" && it.key() != "expected")
             return Refuse(Refusal::Malformed, "unknown selector key '" + it.key() + "'");
@@ -221,21 +235,20 @@ inline Resolution ResolveSelector(const json& selector, const json& dump)
     const std::string sourceHash = dump.value("sourceDocumentHash", std::string());
     if (sourceHash.empty() || *hash != sourceHash)
         return Refuse(Refusal::HashMismatch, "sourceDocumentHash " + hash->get<std::string>() +
-                      " does not match the source (" + sourceHash + "); inspect it again");
+                                                 " does not match the source (" + sourceHash + "); inspect it again");
 
     const json* path = selector.contains("rolePath") ? &selector["rolePath"] : nullptr;
     if (!path || !path->is_array() || path->empty())
         return Refuse(Refusal::Malformed, "rolePath must be a non-empty array of {role, name} steps");
     for (size_t i = 0; i < path->size(); i++)
     {
-        const json& step = (*path)[i];
-        const std::string at = "rolePath[" + std::to_string(i) + "]";
+        const json&       step = (*path)[i];
+        const std::string at   = "rolePath[" + std::to_string(i) + "]";
         if (!step.is_object() || step.size() != 2 || !step.contains("role") || !step.contains("name") ||
             !step["role"].is_string() || !step["name"].is_string())
             return Refuse(Refusal::Malformed, at + " must be exactly {\"role\": <string>, \"name\": <string>}");
         const std::string role = step["role"].get<std::string>();
-        if (i == 0 && role != "root")
-            return Refuse(Refusal::Malformed, at + " must have role 'root'");
+        if (i == 0 && role != "root") return Refuse(Refusal::Malformed, at + " must have role 'root'");
         if (i > 0 && role != "lifeChild" && role != "deathChild")
             return Refuse(Refusal::Malformed, at + " role must be 'lifeChild' or 'deathChild'");
     }
@@ -247,11 +260,12 @@ inline Resolution ResolveSelector(const json& selector, const json& dump)
     if (!emitters.empty())
         for (auto it = expected->begin(); it != expected->end(); ++it)
             if (!emitters[0].contains(it.key()))
-                return Refuse(Refusal::UnknownExpected, "expected key '" + it.key() + "' is not an inspect emitter key");
+                return Refuse(Refusal::UnknownExpected,
+                              "expected key '" + it.key() + "' is not an inspect emitter key");
 
     // Walk the path. Only roots can share a name; each later step follows one slot.
-    std::vector<size_t> reached;
-    const std::string rootName = (*path)[0]["name"].get<std::string>();
+    std::vector<size_t>      reached;
+    const std::string        rootName = (*path)[0]["name"].get<std::string>();
     std::vector<std::string> rootNames;
     for (size_t i = 0; i < emitters.size(); i++)
     {
@@ -266,10 +280,10 @@ inline Resolution ResolveSelector(const json& selector, const json& dump)
     }
     for (size_t s = 1; s < path->size(); s++)
     {
-        const std::string slot = (*path)[s]["role"] == "lifeChild" ? "spawnDuringLife" : "spawnOnDeath";
-        const std::string name = (*path)[s]["name"].get<std::string>();
+        const std::string   slot = (*path)[s]["role"] == "lifeChild" ? "spawnDuringLife" : "spawnOnDeath";
+        const std::string   name = (*path)[s]["name"].get<std::string>();
         std::vector<size_t> next;
-        json seen = json::array();
+        json                seen = json::array();
         for (size_t at : reached)
         {
             const json& child = emitters[at][slot];
@@ -279,13 +293,14 @@ inline Resolution ResolveSelector(const json& selector, const json& dump)
             if (emitters[c]["name"] == name) next.push_back(c);
         }
         if (next.empty())
-            return Refuse(Refusal::NoMatch, "rolePath[" + std::to_string(s) + "]: no " + (*path)[s]["role"].get<std::string>() +
-                          " named '" + name + "'; the " + slot + " slots there hold " + seen.dump());
+            return Refuse(Refusal::NoMatch, "rolePath[" + std::to_string(s) + "]: no " +
+                                                (*path)[s]["role"].get<std::string>() + " named '" + name + "'; the " +
+                                                slot + " slots there hold " + seen.dump());
         reached = next;
     }
 
     // Filter by `expected`.
-    json candidates = json::array();
+    json                candidates = json::array();
     std::vector<size_t> kept;
     for (size_t at : reached)
     {
@@ -296,11 +311,15 @@ inline Resolution ResolveSelector(const json& selector, const json& dump)
         if (mismatched.empty()) kept.push_back(at);
     }
     if (kept.empty())
-        return Refuse(Refusal::ExpectedMismatch, "the role path reaches " + std::to_string(reached.size()) +
-                      " emitter(s), none with the expected values", candidates);
+        return Refuse(Refusal::ExpectedMismatch,
+                      "the role path reaches " + std::to_string(reached.size()) +
+                          " emitter(s), none with the expected values",
+                      candidates);
     if (kept.size() > 1)
-        return Refuse(Refusal::Ambiguous, std::to_string(kept.size()) +
-                      " emitters match the role path and expected values; add expected fields that tell them apart", candidates);
+        return Refuse(Refusal::Ambiguous,
+                      std::to_string(kept.size()) +
+                          " emitters match the role path and expected values; add expected fields that tell them apart",
+                      candidates);
     Resolution r;
     r.refusal    = Refusal::None;
     r.emitter    = kept[0];

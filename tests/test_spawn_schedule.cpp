@@ -25,10 +25,19 @@
 
 static int g_failed = 0;
 
-#define CHECK(cond, msg) do {                              \
-    if (cond) { std::printf("  ok: %s\n", msg); }          \
-    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
 static void CheckTime(SpawnTimeF got, SpawnTimeF expected, const char* msg)
 {
@@ -46,8 +55,7 @@ static void CheckTime(SpawnTimeF got, SpawnTimeF expected, const char* msg)
 static std::string ReadSource(const std::filesystem::path& path)
 {
     std::ifstream input(path, std::ios::binary);
-    return std::string(std::istreambuf_iterator<char>(input),
-                       std::istreambuf_iterator<char>());
+    return std::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
 }
 
 int main()
@@ -72,8 +80,8 @@ int main()
     // schedule as initial-delay-backed would return the wrong 11.0.
     {
         const SpawnTimeF got = ReconcileNextSpawnTime(11.0f, 10.2f, 0.001f, false);
-        CHECK(got < 11.0f,       "rate increase pulls the scheduled spawn IN");
-        CheckTime(got, 10.201f,  "steady-state schedule pulls in to now + newDelay");
+        CHECK(got < 11.0f, "rate increase pulls the scheduled spawn IN");
+        CheckTime(got, 10.201f, "steady-state schedule pulls in to now + newDelay");
     }
 
     // --- 3. OVERREACH GUARD: never DEFER. The emitter is due in 0.05 s and the
@@ -121,26 +129,32 @@ int main()
     // but it must fail if EmitterInstance stops forwarding provenance or stops
     // transitioning an elapsed/dropped first round to steady state.
     {
-        const std::filesystem::path repoRoot =
-            std::filesystem::path(__FILE__).parent_path().parent_path();
-        const std::string header = ReadSource(repoRoot / "src" / "simulation" / "EmitterInstance.h");
-        const std::string source = ReadSource(repoRoot / "src" / "simulation" / "EmitterInstance.cpp");
+        const std::filesystem::path repoRoot = std::filesystem::path(__FILE__).parent_path().parent_path();
+        const std::string           header   = ReadSource(repoRoot / "src" / "simulation" / "EmitterInstance.h");
+        const std::string           source   = ReadSource(repoRoot / "src" / "simulation" / "EmitterInstance.cpp");
 
         CHECK(!header.empty() && !source.empty(), "production schedule sources are readable");
-        CHECK(std::regex_search(header, std::regex(
-            R"(TimeF\s+m_nextSpawnTime\s*=\s*0\.0f\s*;)")),
-            "m_nextSpawnTime is initialized before the constructor callback");
-        CHECK(std::regex_search(header, std::regex(
-            R"(bool\s+m_nextSpawnUsesInitialDelay\s*=\s*true\s*;)")),
-            "new instances start with initial-delay schedule provenance");
-        CHECK(std::regex_search(source, std::regex(
-            R"(ReconcileNextSpawnTime\s*\(\s*m_nextSpawnTime\s*,\s*GetTimeF\s*\(\s*\)\s*,\s*m_spawnDelay\s*,\s*m_nextSpawnUsesInitialDelay\s*\))")),
+        CHECK(std::regex_search(header, std::regex(R"(TimeF\s+m_nextSpawnTime\s*=\s*0\.0f\s*;)")),
+              "m_nextSpawnTime is initialized before the constructor callback");
+        CHECK(std::regex_search(header, std::regex(R"(bool\s+m_nextSpawnUsesInitialDelay\s*=\s*true\s*;)")),
+              "new instances start with initial-delay schedule provenance");
+        CHECK(
+            std::regex_search(
+                source,
+                std::regex(
+                    R"(ReconcileNextSpawnTime\s*\(\s*m_nextSpawnTime\s*,\s*GetTimeF\s*\(\s*\)\s*,\s*m_spawnDelay\s*,\s*m_nextSpawnUsesInitialDelay\s*\))")),
             "production reconcile call forwards initial-delay provenance");
-        CHECK(std::regex_search(source, std::regex(
-            R"(m_nextSpawnUsesInitialDelay\s*=\s*false\s*;\s*m_nextSpawnTime\s*=\s*currentTime\s*\+\s*GetSpawnDelay\s*\(\s*\))")),
+        CHECK(
+            std::regex_search(
+                source,
+                std::regex(
+                    R"(m_nextSpawnUsesInitialDelay\s*=\s*false\s*;\s*m_nextSpawnTime\s*=\s*currentTime\s*\+\s*GetSpawnDelay\s*\(\s*\))")),
             "a budget-dropped due round transitions to steady-state provenance");
-        CHECK(std::regex_search(source, std::regex(
-            R"(m_nextSpawnUsesInitialDelay\s*=\s*false\s*;\s*m_nextSpawnTime\s*=\s*spawnTime\s*\+\s*GetSpawnDelay\s*\(\s*\))")),
+        CHECK(
+            std::regex_search(
+                source,
+                std::regex(
+                    R"(m_nextSpawnUsesInitialDelay\s*=\s*false\s*;\s*m_nextSpawnTime\s*=\s*spawnTime\s*\+\s*GetSpawnDelay\s*\(\s*\))")),
             "a processed spawn round transitions to steady-state provenance");
     }
 

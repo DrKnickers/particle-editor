@@ -21,19 +21,16 @@ class RocketSpline
 public:
     // SplineClass::Evaluate needs at least this many control points; with fewer it
     // returns false and keeps whatever it computed before.
-    static constexpr int   kMinEvaluatedControlPoints = 3;
+    static constexpr int kMinEvaluatedControlPoints = 3;
     // Evaluate's sample count per segment: ceil(arc length / spacing), clamped here.
-    static constexpr int   kMaxEvaluatedPointsPerSegment = 100;
+    static constexpr int kMaxEvaluatedPointsPerSegment = 100;
     // splinearc stops bisecting once chord and half-chords agree this closely.
     static constexpr float kArcTolerance = 1e-6f;
     // Not in the game: float rounding ends splinearc's recursion long before this on
     // real curves, but a NaN control point would recurse forever.
-    static constexpr int   kMaxArcBisections = 32;
+    static constexpr int kMaxArcBisections = 32;
 
-    void AddControlPoint(const float p[3])
-    {
-        m_controlPoints.push_back({ p[0], p[1], p[2] });
-    }
+    void AddControlPoint(const float p[3]) { m_controlPoints.push_back({p[0], p[1], p[2]}); }
 
     int ControlPointCount() const { return (int)m_controlPoints.size(); }
 
@@ -42,8 +39,7 @@ public:
     // Remove_Control_Point from the end down to `firstIndex`, inclusive.
     void RemoveControlPointsFrom(int firstIndex)
     {
-        if (firstIndex < (int)m_controlPoints.size())
-            m_controlPoints.resize(firstIndex < 0 ? 0 : firstIndex);
+        if (firstIndex < (int)m_controlPoints.size()) m_controlPoints.resize(firstIndex < 0 ? 0 : firstIndex);
     }
 
     // SplineClass::Evaluate(spacing, false): fits the cubics, measures each segment and
@@ -101,7 +97,7 @@ public:
     bool PointFromLength(float distance, float out[3], int& segment) const
     {
         const int segmentCount = (int)m_controlPoints.size() - 1;
-        float segmentStart = 0.0f;
+        float     segmentStart = 0.0f;
         for (int s = 0; s < segmentCount && s < (int)m_arcLength.size(); s++)
         {
             if (distance < segmentStart + m_arcLength[s])
@@ -123,7 +119,10 @@ public:
     const SplineCubic& Cubic(int axis, int segment) const { return m_cubics[axis][segment]; }
 
 private:
-    struct Point { float v[3]; };
+    struct Point
+    {
+        float v[3];
+    };
 
     // SplineClass::calcNaturalCubic: the tridiagonal solve for a natural cubic through
     // the control points, parameterised by index (every segment spans u = 0..1).
@@ -131,7 +130,10 @@ private:
     {
         const int count = (int)m_controlPoints.size();
         const int last  = count - 1;
-        auto x = [&](int i) { return m_controlPoints[i].v[axis]; };
+        auto      x     = [&](int i)
+        {
+            return m_controlPoints[i].v[axis];
+        };
 
         std::vector<float> gamma(count), delta(count), slope(count);
         gamma[0] = 0.5f;
@@ -157,10 +159,7 @@ private:
         }
     }
 
-    float SegmentArcLength(int segment, float u0, float u1) const
-    {
-        return SplineArc(segment, u0, u1, 0);
-    }
+    float SegmentArcLength(int segment, float u0, float u1) const { return SplineArc(segment, u0, u1, 0); }
 
     // SplineClass::splinearc: the chord, or the two half-chords once they agree with it.
     float SplineArc(int segment, float u0, float u1, int depth) const
@@ -174,8 +173,8 @@ private:
         const float uMid = (u0 + u1) * 0.5f;
         EvalSegment(segment, uMid, mid);
         const float halves = Distance(p0, mid) + Distance(p1, mid);
-        const bool  agree  = std::fabs(chord / halves - 1.0f) <= kArcTolerance ||
-                             std::fabs(chord - halves) <= kArcTolerance;
+        const bool  agree =
+            std::fabs(chord / halves - 1.0f) <= kArcTolerance || std::fabs(chord - halves) <= kArcTolerance;
         if (agree || depth >= kMaxArcBisections) return halves;
         return SplineArc(segment, u0, uMid, depth + 1) + SplineArc(segment, uMid, u1, depth + 1);
     }
@@ -187,8 +186,8 @@ private:
     }
 
     std::vector<Point>       m_controlPoints;
-    std::vector<SplineCubic> m_cubics[3];        // per axis, one per segment
-    std::vector<float>       m_arcLength;        // per segment
+    std::vector<SplineCubic> m_cubics[3]; // per axis, one per segment
+    std::vector<float>       m_arcLength; // per segment
     std::vector<Point>       m_evaluatedPoints;
     float                    m_length = 0.0f;
 };

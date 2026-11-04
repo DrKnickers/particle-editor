@@ -18,34 +18,32 @@
 
 #include "host/third_party/nlohmann/json.hpp"
 
-namespace host {
+namespace host
+{
 
 class BridgeDispatcher;
 
 struct BridgeRequestContext
 {
-    BridgeDispatcher&     self;    // member access for moved handler blocks
-    const std::string&    id;      // request id ("" when absent)
-    const std::string&    kind;    // full kind string, exact-match dispatch
-    const nlohmann::json& params;  // request params (object() when absent)
-    nlohmann::json        res;     // response envelope, written via helpers
+    BridgeDispatcher&     self;   // member access for moved handler blocks
+    const std::string&    id;     // request id ("" when absent)
+    const std::string&    kind;   // full kind string, exact-match dispatch
+    const nlohmann::json& params; // request params (object() when absent)
+    nlohmann::json        res;    // response envelope, written via helpers
 
     // Assign the envelope, then patch the id LAST.
     void SetRes(nlohmann::json env)
     {
         res = std::move(env);
-        if (!id.empty()) res["id"] = id; else res["id"] = nullptr;
+        if (!id.empty())
+            res["id"] = id;
+        else
+            res["id"] = nullptr;
     }
     // Transport-level success; `data` is the result payload.
-    void SendOk(const nlohmann::json& data)
-    {
-        SetRes(nlohmann::json{{"type","res"},{"ok",true},{"data",data}});
-    }
+    void SendOk(const nlohmann::json& data) { SetRes(nlohmann::json{{"type", "res"}, {"ok", true}, {"data", data}}); }
     // Transport-level failure; the web side's request() rejects with `msg`.
-    void SendErr(const std::string& msg)
-    {
-        SetRes(nlohmann::json{{"type","res"},{"ok",false},{"error",msg}});
-    }
+    void SendErr(const std::string& msg) { SetRes(nlohmann::json{{"type", "res"}, {"ok", false}, {"error", msg}}); }
 
     // RequireEngine / MarkDirty need BridgeDispatcher's
     // private members, so they're defined in BridgeDispatcher.cpp (the

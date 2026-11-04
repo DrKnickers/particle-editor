@@ -11,7 +11,8 @@
 #include <string>
 #include <vector>
 
-namespace host {
+namespace host
+{
 
 struct HostLaunchOptions
 {
@@ -55,12 +56,12 @@ struct HostLaunchOptions
     // [world-lit] --ambient r,g,b / --sun r,g,b / --sun-intensity f: drive
     // scene lighting in a headless --capture run. Each has* flag is opt-in;
     // when false the engine's ctor-default lighting is left untouched.
-    bool  hasAmbient   = false;
-    float ambient[3]   = {0, 0, 0};
-    bool  hasSun       = false;
-    float sun[3]       = {0, 0, 0};
+    bool  hasAmbient      = false;
+    float ambient[3]      = {0, 0, 0};
+    bool  hasSun          = false;
+    float sun[3]          = {0, 0, 0};
     bool  hasSunIntensity = false;
-    float sunIntensity = 1.0f;
+    float sunIntensity    = 1.0f;
 
     // --drive <script.json>: launch the full editor (no CDP), replay an
     // allowlisted ordered list of bridge commands in-process via
@@ -82,7 +83,7 @@ struct HostLaunchOptions
     std::wstring observeOutputDirectory;
     // Schema-2 spec contentLayers: the run's whole layer stack, never
     // persisted. Unset = the run's usual stack (none, for an observe run).
-    bool hasObserveContentLayers = false;
+    bool                      hasObserveContentLayers = false;
     std::vector<std::wstring> observeContentLayers;
 
     // Performance-audit-only knobs (--perf-trace, --perf-trace-mode,

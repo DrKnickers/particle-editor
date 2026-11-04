@@ -1,7 +1,7 @@
 // AlphaCompositor implementation. See AlphaCompositor.h for the design.
 
 #include "AlphaCompositor.h"
-#include "GdiplusEncode.h"   // host::GdiplusEncoderClsid / host::Base64Encode
+#include "GdiplusEncode.h" // host::GdiplusEncoderClsid / host::Base64Encode
 
 #include <d3d9.h>
 #include <wrl/client.h>
@@ -18,18 +18,18 @@
 #include <stdexcept>
 #include <vector>
 
-namespace host {
+namespace host
+{
 
-namespace {
+namespace
+{
 
 void ThrowIfFailed(HRESULT hr, const char* what)
 {
     if (FAILED(hr))
     {
         char buf[256];
-        _snprintf_s(buf, _TRUNCATE,
-                    "AlphaCompositor: %s failed hr=0x%08lX", what,
-                    static_cast<unsigned long>(hr));
+        _snprintf_s(buf, _TRUNCATE, "AlphaCompositor: %s failed hr=0x%08lX", what, static_cast<unsigned long>(hr));
         throw std::runtime_error(buf);
     }
 }
@@ -38,7 +38,7 @@ void ThrowIfFailed(HRESULT hr, const char* what)
 
 struct AlphaCompositor::Impl
 {
-    Microsoft::WRL::ComPtr<IDirect3DDevice9>  device;
+    Microsoft::WRL::ComPtr<IDirect3DDevice9> device;
     // Shared-handle texture promoted from the
     // prior CreateRenderTarget surface. CreateTexture with USAGE_RENDER
     // TARGET + D3DPOOL_DEFAULT + a non-null pSharedHandle out-param is
@@ -51,22 +51,21 @@ struct AlphaCompositor::Impl
     HANDLE                                    sharedHandle = nullptr;
     Microsoft::WRL::ComPtr<IDirect3DSurface9> offscreenRT;   // sharedTex level-0, ARGB
     Microsoft::WRL::ComPtr<IDirect3DSurface9> sysMemSurface; // D3DPOOL_SYSTEMMEM, readback
-    int      width      = 0;
-    int      height     = 0;
+    int                                       width  = 0;
+    int                                       height = 0;
 
     // The scene rect — the visible viewport sub-region
     // (viewport-client coords) that CaptureSnapshotJpegBase64 / CaptureSnapshot
     // ToFile crop the readback to. Default (0/0/0/0) disables the crop
     // (full RT) — the host-boot default before React dispatches the
     // first layout/scene-rect.
-    int      sceneX = 0;
-    int      sceneY = 0;
-    int      sceneW = 0;
-    int      sceneH = 0;
+    int sceneX = 0;
+    int sceneY = 0;
+    int sceneW = 0;
+    int sceneH = 0;
 };
 
-AlphaCompositor::AlphaCompositor(IDirect3DDevice9* device)
-    : m_impl(std::make_unique<Impl>())
+AlphaCompositor::AlphaCompositor(IDirect3DDevice9* device) : m_impl(std::make_unique<Impl>())
 {
     if (!device) throw std::invalid_argument("AlphaCompositor: null device");
     m_impl->device = device;
@@ -76,20 +75,20 @@ AlphaCompositor::~AlphaCompositor() = default;
 
 AlphaCompositor::Size AlphaCompositor::RenderTargetSizeForObservation() const
 {
-    return { m_impl->width, m_impl->height };
+    return {m_impl->width, m_impl->height};
 }
 
 AlphaCompositor::CropRect AlphaCompositor::ReadbackCropForObservation() const
 {
-    CropRect crop = { 0, 0, m_impl->width, m_impl->height };
+    CropRect crop = {0, 0, m_impl->width, m_impl->height};
     if (m_impl->sceneW > 0 && m_impl->sceneH > 0)
     {
-        crop.x = (m_impl->sceneX < 0) ? 0 : m_impl->sceneX;
-        crop.y = (m_impl->sceneY < 0) ? 0 : m_impl->sceneY;
+        crop.x         = (m_impl->sceneX < 0) ? 0 : m_impl->sceneX;
+        crop.y         = (m_impl->sceneY < 0) ? 0 : m_impl->sceneY;
         const int maxW = m_impl->width - crop.x;
         const int maxH = m_impl->height - crop.y;
-        crop.width = (m_impl->sceneW < maxW) ? m_impl->sceneW : maxW;
-        crop.height = (m_impl->sceneH < maxH) ? m_impl->sceneH : maxH;
+        crop.width     = (m_impl->sceneW < maxW) ? m_impl->sceneW : maxW;
+        crop.height    = (m_impl->sceneH < maxH) ? m_impl->sceneH : maxH;
     }
     return crop;
 }
@@ -125,20 +124,17 @@ void AlphaCompositor::Resize(int w, int h)
         // D3D9Ex (the device-creation path hard-fails otherwise, so this is
         // always the case here). D3DMULTISAMPLE_NONE because GetRenderTargetData
         // rejects multisampled sources; scene AA still handled via texturing.
-        HRESULT hr = m_impl->device->CreateTexture(
-            static_cast<UINT>(w), static_cast<UINT>(h),
-            1 /*levels*/, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8,
-            D3DPOOL_DEFAULT, &newTex, &newHandle);
+        HRESULT hr =
+            m_impl->device->CreateTexture(static_cast<UINT>(w), static_cast<UINT>(h), 1 /*levels*/,
+                                          D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &newTex, &newHandle);
         ThrowIfFailed(hr, "CreateTexture(shared RT)");
         hr = newTex->GetSurfaceLevel(0, &newRT);
         ThrowIfFailed(hr, "GetSurfaceLevel(0)");
 
         // Readback target. SYSTEMMEM is the only pool that
         // GetRenderTargetData can write to.
-        hr = m_impl->device->CreateOffscreenPlainSurface(
-            static_cast<UINT>(w), static_cast<UINT>(h),
-            D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM,
-            &newSys, nullptr);
+        hr = m_impl->device->CreateOffscreenPlainSurface(static_cast<UINT>(w), static_cast<UINT>(h), D3DFMT_A8R8G8B8,
+                                                         D3DPOOL_SYSTEMMEM, &newSys, nullptr);
         ThrowIfFailed(hr, "CreateOffscreenPlainSurface");
     }
     catch (...)
@@ -161,11 +157,10 @@ void AlphaCompositor::Resize(int w, int h)
     m_impl->sharedHandle  = newHandle;
     m_impl->offscreenRT   = std::move(newRT);
     m_impl->sysMemSurface = std::move(newSys);
-    m_impl->width  = w;
-    m_impl->height = h;
+    m_impl->width         = w;
+    m_impl->height        = h;
 
-    fprintf(stderr, "[AlphaCompositor] shared RT %dx%d handle=%p\n",
-            w, h, m_impl->sharedHandle);
+    fprintf(stderr, "[AlphaCompositor] shared RT %dx%d handle=%p\n", w, h, m_impl->sharedHandle);
     fflush(stderr);
 }
 void AlphaCompositor::ReleaseGpuResources()
@@ -181,9 +176,15 @@ void AlphaCompositor::ReleaseGpuResources()
     m_impl->height = 0;
 }
 
-IDirect3DSurface9* AlphaCompositor::GetRenderTarget() const { return m_impl->offscreenRT.Get(); }
+IDirect3DSurface9* AlphaCompositor::GetRenderTarget() const
+{
+    return m_impl->offscreenRT.Get();
+}
 
-HANDLE AlphaCompositor::GetSharedHandle() const { return m_impl->sharedHandle; }
+HANDLE AlphaCompositor::GetSharedHandle() const
+{
+    return m_impl->sharedHandle;
+}
 
 void AlphaCompositor::SetSceneRect(int x, int y, int w, int h)
 {
@@ -221,7 +222,7 @@ bool AlphaCompositor::CaptureSnapshotJpegBase64(std::string& outBase64, int& out
     // also doesn't run, so offscreenRT holds the
     // pre-resize frame — exactly the backdrop the modal wants.
     if (!m_impl->offscreenRT || !m_impl->sysMemSurface) return false;
-    if (m_impl->width <= 0 || m_impl->height <= 0)     return false;
+    if (m_impl->width <= 0 || m_impl->height <= 0) return false;
 
     // Encode the backdrop as JPEG, not PNG. It's only ever shown
     // blurred under Dialog.Overlay's backdrop-blur-sm, so lossy is invisible;
@@ -232,7 +233,7 @@ bool AlphaCompositor::CaptureSnapshotJpegBase64(std::string& outBase64, int& out
     // offline-diff path.)
     CLSID jpegClsid = {};
     if (!host::GdiplusEncoderClsid(L"image/jpeg", jpegClsid)) return false;
-    constexpr int kBackdropJpegQuality = 82;  // blurred backdrop — fidelity is moot
+    constexpr int kBackdropJpegQuality = 82; // blurred backdrop — fidelity is moot
 
 #ifndef NDEBUG
     // [CACHE-DEFERRAL-PERF] / [INSTANT-MODAL] timing anchor. Logs once per
@@ -258,12 +259,12 @@ bool AlphaCompositor::CaptureSnapshotJpegBase64(std::string& outBase64, int& out
     int cropH = srcH;
     if (m_impl->sceneW > 0 && m_impl->sceneH > 0)
     {
-        cropX = (m_impl->sceneX < 0) ? 0 : m_impl->sceneX;
-        cropY = (m_impl->sceneY < 0) ? 0 : m_impl->sceneY;
+        cropX          = (m_impl->sceneX < 0) ? 0 : m_impl->sceneX;
+        cropY          = (m_impl->sceneY < 0) ? 0 : m_impl->sceneY;
         const int maxW = srcW - cropX;
         const int maxH = srcH - cropY;
-        cropW = (m_impl->sceneW < maxW) ? m_impl->sceneW : maxW;
-        cropH = (m_impl->sceneH < maxH) ? m_impl->sceneH : maxH;
+        cropW          = (m_impl->sceneW < maxW) ? m_impl->sceneW : maxW;
+        cropH          = (m_impl->sceneH < maxH) ? m_impl->sceneH : maxH;
         if (cropW <= 0 || cropH <= 0) return false;
     }
 
@@ -276,20 +277,20 @@ bool AlphaCompositor::CaptureSnapshotJpegBase64(std::string& outBase64, int& out
     // captures. This formula is reused VERBATIM by both paths so the encoded
     // size is byte-identical to the prior output (the native dim tests and
     // the backdrop-blur "floor" both depend on it — do not retune lightly).
-    constexpr int kSnapshotMaxEdge   = 1024;  // upper bound on the encoded long edge
-    constexpr int kSnapshotDownscale = 2;     // min downscale factor (windowed snappiness)
-    int dstW = cropW;
-    int dstH = cropH;
+    constexpr int kSnapshotMaxEdge   = 1024; // upper bound on the encoded long edge
+    constexpr int kSnapshotDownscale = 2;    // min downscale factor (windowed snappiness)
+    int           dstW               = cropW;
+    int           dstH               = cropH;
     {
         const int longEdge   = (cropW > cropH) ? cropW : cropH;
         int       targetLong = longEdge / kSnapshotDownscale;
         if (targetLong > kSnapshotMaxEdge) targetLong = kSnapshotMaxEdge;
-        if (targetLong < 1)                targetLong = 1;
+        if (targetLong < 1) targetLong = 1;
         if (targetLong < longEdge)
         {
             const double s = static_cast<double>(targetLong) / longEdge;
-            dstW = static_cast<int>(cropW * s + 0.5);
-            dstH = static_cast<int>(cropH * s + 0.5);
+            dstW           = static_cast<int>(cropW * s + 0.5);
+            dstH           = static_cast<int>(cropH * s + 0.5);
             if (dstW < 1) dstW = 1;
             if (dstH < 1) dstH = 1;
         }
@@ -303,38 +304,34 @@ bool AlphaCompositor::CaptureSnapshotJpegBase64(std::string& outBase64, int& out
     {
         // ComPtr owns the stream (and through it the HGLOBAL) on every return.
         Microsoft::WRL::ComPtr<IStream> stream;
-        if (FAILED(CreateStreamOnHGlobal(nullptr, TRUE, &stream)) || !stream)
-            return false;
+        if (FAILED(CreateStreamOnHGlobal(nullptr, TRUE, &stream)) || !stream) return false;
 
         // JPEG quality EncoderParameter (LONG 1..100). qval must outlive
         // the Save call.
-        ULONG qval = static_cast<ULONG>(kBackdropJpegQuality);
+        ULONG                      qval = static_cast<ULONG>(kBackdropJpegQuality);
         Gdiplus::EncoderParameters encParams;
-        encParams.Count = 1;
+        encParams.Count                       = 1;
         encParams.Parameter[0].Guid           = Gdiplus::EncoderQuality;
         encParams.Parameter[0].Type           = Gdiplus::EncoderParameterValueTypeLong;
         encParams.Parameter[0].NumberOfValues = 1;
         encParams.Parameter[0].Value          = &qval;
 
-        if (bmp->Save(stream.Get(), &jpegClsid, &encParams) != Gdiplus::Ok)
-            return false;
+        if (bmp->Save(stream.Get(), &jpegClsid, &encParams) != Gdiplus::Ok) return false;
 
         LARGE_INTEGER zero = {};
         stream->Seek(zero, STREAM_SEEK_SET, nullptr);
 
         STATSTG stat = {};
-        if (FAILED(stream->Stat(&stat, STATFLAG_NONAME)))
-            return false;
-        const size_t imgBytes = static_cast<size_t>(stat.cbSize.QuadPart);
+        if (FAILED(stream->Stat(&stat, STATFLAG_NONAME))) return false;
+        const size_t         imgBytes = static_cast<size_t>(stat.cbSize.QuadPart);
         std::vector<uint8_t> img(imgBytes);
-        ULONG read = 0;
-        if (FAILED(stream->Read(img.data(), static_cast<ULONG>(imgBytes), &read)) || read != imgBytes)
-            return false;
+        ULONG                read = 0;
+        if (FAILED(stream->Read(img.data(), static_cast<ULONG>(imgBytes), &read)) || read != imgBytes) return false;
         stream.Reset();
 
         outBase64 = host::Base64Encode(img.data(), img.size());
-        outW = dstW;
-        outH = dstH;
+        outW      = dstW;
+        outH      = dstH;
 
 #ifndef NDEBUG
         // [INSTANT-MODAL] Total capture cost (readback → downscale → JPEG
@@ -344,8 +341,7 @@ bool AlphaCompositor::CaptureSnapshotJpegBase64(std::string& outBase64, int& out
         {
             LARGE_INTEGER sT2{};
             QueryPerformanceCounter(&sT2);
-            const double totalMs = (sT2.QuadPart - sT0.QuadPart) * 1000.0 /
-                                   static_cast<double>(sQpf.QuadPart);
+            const double totalMs = (sT2.QuadPart - sT0.QuadPart) * 1000.0 / static_cast<double>(sQpf.QuadPart);
             fprintf(stderr,
                     "[INSTANT-MODAL] snapshotCapture total=%.1f ms path=%s "
                     "(encoded %dx%d from crop %dx%d, jpg=%zu bytes)\n",
@@ -372,24 +368,20 @@ bool AlphaCompositor::CaptureSnapshotJpegBase64(std::string& outBase64, int& out
         // CAN_STRETCHRECT_FROM_TEXTURES; D3DTEXF_LINEAR requires the filter
         // cap. Both are universal on modern HAL but are real preconditions.
         D3DCAPS9 caps = {};
-        if (FAILED(m_impl->device->GetDeviceCaps(&caps)))                  return false;
-        if (!(caps.DevCaps2 & D3DDEVCAPS2_CAN_STRETCHRECT_FROM_TEXTURES))  return false;
+        if (FAILED(m_impl->device->GetDeviceCaps(&caps))) return false;
+        if (!(caps.DevCaps2 & D3DDEVCAPS2_CAN_STRETCHRECT_FROM_TEXTURES)) return false;
         const D3DTEXTUREFILTERTYPE filter =
-            (caps.StretchRectFilterCaps & D3DPTFILTERCAPS_MINFLINEAR)
-                ? D3DTEXF_LINEAR : D3DTEXF_POINT;
+            (caps.StretchRectFilterCaps & D3DPTFILTERCAPS_MINFLINEAR) ? D3DTEXF_LINEAR : D3DTEXF_POINT;
 
         // Destination: a small RT (POOL_DEFAULT, same ARGB, non-MSAA) for the
         // StretchRect, plus a matching SYSTEMMEM surface for the readback.
         Microsoft::WRL::ComPtr<IDirect3DSurface9> smallRT;
-        if (FAILED(m_impl->device->CreateRenderTarget(
-                static_cast<UINT>(dstW), static_cast<UINT>(dstH),
-                D3DFMT_A8R8G8B8, D3DMULTISAMPLE_NONE, 0, FALSE,
-                &smallRT, nullptr)))
+        if (FAILED(m_impl->device->CreateRenderTarget(static_cast<UINT>(dstW), static_cast<UINT>(dstH), D3DFMT_A8R8G8B8,
+                                                      D3DMULTISAMPLE_NONE, 0, FALSE, &smallRT, nullptr)))
             return false;
         Microsoft::WRL::ComPtr<IDirect3DSurface9> smallSys;
-        if (FAILED(m_impl->device->CreateOffscreenPlainSurface(
-                static_cast<UINT>(dstW), static_cast<UINT>(dstH),
-                D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &smallSys, nullptr)))
+        if (FAILED(m_impl->device->CreateOffscreenPlainSurface(static_cast<UINT>(dstW), static_cast<UINT>(dstH),
+                                                               D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &smallSys, nullptr)))
             return false;
 
         // offscreenRT is the engine's *currently bound* slot-0 render target
@@ -403,36 +395,30 @@ bool AlphaCompositor::CaptureSnapshotJpegBase64(std::string& outBase64, int& out
         Microsoft::WRL::ComPtr<IDirect3DSurface9> savedRT;
         if (FAILED(m_impl->device->GetRenderTarget(0, &savedRT)) || !savedRT) return false;
         Microsoft::WRL::ComPtr<IDirect3DSurface9> backBuf;
-        if (FAILED(m_impl->device->GetBackBuffer(
-                0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuf)) || !backBuf)
-            return false;
+        if (FAILED(m_impl->device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuf)) || !backBuf) return false;
 
-        const RECT srcRect{ cropX, cropY, cropX + cropW, cropY + cropH };
-        const RECT dstRect{ 0, 0, dstW, dstH };
+        const RECT srcRect{cropX, cropY, cropX + cropW, cropY + cropH};
+        const RECT dstRect{0, 0, dstW, dstH};
 
         if (FAILED(m_impl->device->SetRenderTarget(0, backBuf.Get()))) return false;
-        const HRESULT stretchHr = m_impl->device->StretchRect(
-            m_impl->offscreenRT.Get(), &srcRect, smallRT.Get(), &dstRect, filter);
-        m_impl->device->SetRenderTarget(0, savedRT.Get());  // restore (single point, unconditional)
+        const HRESULT stretchHr =
+            m_impl->device->StretchRect(m_impl->offscreenRT.Get(), &srcRect, smallRT.Get(), &dstRect, filter);
+        m_impl->device->SetRenderTarget(0, savedRT.Get()); // restore (single point, unconditional)
 
         if (FAILED(stretchHr)) return false;
 
-        if (FAILED(m_impl->device->GetRenderTargetData(smallRT.Get(), smallSys.Get())))
-            return false;
+        if (FAILED(m_impl->device->GetRenderTargetData(smallRT.Get(), smallSys.Get()))) return false;
 
         D3DLOCKED_RECT locked = {};
-        if (FAILED(smallSys->LockRect(&locked, nullptr, D3DLOCK_READONLY)))
-            return false;
+        if (FAILED(smallSys->LockRect(&locked, nullptr, D3DLOCK_READONLY))) return false;
 
-        const int dstStride = dstW * 4;
-        std::vector<uint8_t> smallBuf(static_cast<size_t>(dstStride) *
-                                      static_cast<size_t>(dstH));
+        const int            dstStride = dstW * 4;
+        std::vector<uint8_t> smallBuf(static_cast<size_t>(dstStride) * static_cast<size_t>(dstH));
         {
             const auto* src = static_cast<const uint8_t*>(locked.pBits);
             for (int y = 0; y < dstH; ++y)
                 memcpy(smallBuf.data() + static_cast<size_t>(y) * dstStride,
-                       src + static_cast<size_t>(y) * locked.Pitch,
-                       static_cast<size_t>(dstStride));
+                       src + static_cast<size_t>(y) * locked.Pitch, static_cast<size_t>(dstStride));
         }
         smallSys->UnlockRect();
 
@@ -440,13 +426,11 @@ bool AlphaCompositor::CaptureSnapshotJpegBase64(std::string& outBase64, int& out
         {
             LARGE_INTEGER rT{};
             QueryPerformanceCounter(&rT);
-            const double rMs = (rT.QuadPart - sT0.QuadPart) * 1000.0 /
-                               static_cast<double>(sQpf.QuadPart);
+            const double rMs = (rT.QuadPart - sT0.QuadPart) * 1000.0 / static_cast<double>(sQpf.QuadPart);
             fprintf(stderr,
                     "[CACHE-DEFERRAL-PERF] snapshotReadback=%.3f ms (fast %dx%d "
                     "filter=%s stretchHr=0x%08lX)\n",
-                    rMs, dstW, dstH,
-                    (filter == D3DTEXF_LINEAR) ? "LINEAR" : "POINT",
+                    rMs, dstW, dstH, (filter == D3DTEXF_LINEAR) ? "LINEAR" : "POINT",
                     static_cast<unsigned long>(stretchHr));
             fflush(stderr);
         }
@@ -455,8 +439,7 @@ bool AlphaCompositor::CaptureSnapshotJpegBase64(std::string& outBase64, int& out
         // ARGB Bitmap over the tightly-packed small buffer (alive across the
         // Save call inside encodeBitmap). No GDI+ DrawImage — the GPU already
         // did the resample.
-        Gdiplus::Bitmap smallBmp(dstW, dstH, dstStride, PixelFormat32bppARGB,
-                                 smallBuf.data());
+        Gdiplus::Bitmap smallBmp(dstW, dstH, dstStride, PixelFormat32bppARGB, smallBuf.data());
         if (smallBmp.GetLastStatus() != Gdiplus::Ok) return false;
         return encodeBitmap(&smallBmp, "fast");
     };
@@ -466,23 +449,19 @@ bool AlphaCompositor::CaptureSnapshotJpegBase64(std::string& outBase64, int& out
     // ===== Slow path (fallback): the proven full readback + GDI+
     // downscale. Reached when the device lacks the StretchRect caps or the GPU
     // fast path hit any failure (so the modal still gets its backdrop).
-    HRESULT hr = m_impl->device->GetRenderTargetData(
-        m_impl->offscreenRT.Get(), m_impl->sysMemSurface.Get());
+    HRESULT hr = m_impl->device->GetRenderTargetData(m_impl->offscreenRT.Get(), m_impl->sysMemSurface.Get());
     if (FAILED(hr)) return false;
 
     D3DLOCKED_RECT locked = {};
-    hr = m_impl->sysMemSurface->LockRect(&locked, nullptr, D3DLOCK_READONLY);
+    hr                    = m_impl->sysMemSurface->LockRect(&locked, nullptr, D3DLOCK_READONLY);
     if (FAILED(hr)) return false;
 
 #ifndef NDEBUG
     {
         LARGE_INTEGER rT{};
         QueryPerformanceCounter(&rT);
-        const double rMs = (rT.QuadPart - sT0.QuadPart) * 1000.0 /
-                           static_cast<double>(sQpf.QuadPart);
-        fprintf(stderr,
-                "[CACHE-DEFERRAL-PERF] snapshotReadback=%.3f ms (slow %dx%d)\n",
-                rMs, srcW, srcH);
+        const double rMs = (rT.QuadPart - sT0.QuadPart) * 1000.0 / static_cast<double>(sQpf.QuadPart);
+        fprintf(stderr, "[CACHE-DEFERRAL-PERF] snapshotReadback=%.3f ms (slow %dx%d)\n", rMs, srcW, srcH);
         fflush(stderr);
     }
 #endif
@@ -491,16 +470,13 @@ bool AlphaCompositor::CaptureSnapshotJpegBase64(std::string& outBase64, int& out
 
     // Copy SYSTEMMEM → a local buffer so the LockRect window is as short as
     // possible (we don't hold the lock across PNG encoding, which can be ms).
-    std::vector<uint8_t> rawDib(static_cast<size_t>(stride) *
-                                 static_cast<size_t>(srcH));
+    std::vector<uint8_t> rawDib(static_cast<size_t>(stride) * static_cast<size_t>(srcH));
     {
         const auto* src = static_cast<const uint8_t*>(locked.pBits);
         for (int y = 0; y < srcH; ++y)
         {
-            memcpy(rawDib.data() + static_cast<size_t>(y) *
-                                    static_cast<size_t>(stride),
-                   src + static_cast<size_t>(y) * locked.Pitch,
-                   static_cast<size_t>(stride));
+            memcpy(rawDib.data() + static_cast<size_t>(y) * static_cast<size_t>(stride),
+                   src + static_cast<size_t>(y) * locked.Pitch, static_cast<size_t>(stride));
         }
     }
     m_impl->sysMemSurface->UnlockRect();
@@ -509,13 +485,12 @@ bool AlphaCompositor::CaptureSnapshotJpegBase64(std::string& outBase64, int& out
     // ARGB for the GDI+ Bitmap so PNG encoding writes straight sRGB. scan0
     // points at the crop's top-left pixel and we keep the full source stride,
     // so GDI+ steps row-to-row at the same X offset inside the parent buffer.
-    BYTE* scan0 = const_cast<BYTE*>(rawDib.data()) +
-                  static_cast<size_t>(cropY) * static_cast<size_t>(stride) +
+    BYTE* scan0 = const_cast<BYTE*>(rawDib.data()) + static_cast<size_t>(cropY) * static_cast<size_t>(stride) +
                   static_cast<size_t>(cropX) * 4u;
     Gdiplus::Bitmap srcBmp(cropW, cropH, stride, PixelFormat32bppARGB, scan0);
     if (srcBmp.GetLastStatus() != Gdiplus::Ok) return false;
 
-    Gdiplus::Bitmap* encodeBmp = &srcBmp;
+    Gdiplus::Bitmap*                 encodeBmp = &srcBmp;
     std::unique_ptr<Gdiplus::Bitmap> downscaled;
     if (dstW != cropW || dstH != cropH)
     {
@@ -526,8 +501,8 @@ bool AlphaCompositor::CaptureSnapshotJpegBase64(std::string& outBase64, int& out
         // prefilter cost of the high-quality modes on a large downscale.
         g.SetInterpolationMode(Gdiplus::InterpolationModeBilinear);
         g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
-        if (g.DrawImage(&srcBmp, Gdiplus::Rect(0, 0, dstW, dstH),
-                        0, 0, cropW, cropH, Gdiplus::UnitPixel) != Gdiplus::Ok)
+        if (g.DrawImage(&srcBmp, Gdiplus::Rect(0, 0, dstW, dstH), 0, 0, cropW, cropH, Gdiplus::UnitPixel) !=
+            Gdiplus::Ok)
             return false;
         encodeBmp = downscaled.get();
     }
@@ -542,32 +517,29 @@ bool AlphaCompositor::CaptureSnapshotToFile(const std::wstring& path)
     // Kept as a separate method (rather than refactoring the shared
     // readback) so the proven modal-snapshot path stays untouched.
     if (!m_impl->offscreenRT || !m_impl->sysMemSurface) return false;
-    if (m_impl->width <= 0 || m_impl->height <= 0)       return false;
+    if (m_impl->width <= 0 || m_impl->height <= 0) return false;
 
     CLSID pngClsid = {};
     if (!host::GdiplusEncoderClsid(L"image/png", pngClsid)) return false;
 
-    HRESULT hr = m_impl->device->GetRenderTargetData(
-        m_impl->offscreenRT.Get(), m_impl->sysMemSurface.Get());
+    HRESULT hr = m_impl->device->GetRenderTargetData(m_impl->offscreenRT.Get(), m_impl->sysMemSurface.Get());
     if (FAILED(hr)) return false;
 
     D3DLOCKED_RECT locked = {};
-    hr = m_impl->sysMemSurface->LockRect(&locked, nullptr, D3DLOCK_READONLY);
+    hr                    = m_impl->sysMemSurface->LockRect(&locked, nullptr, D3DLOCK_READONLY);
     if (FAILED(hr)) return false;
 
     const int srcW   = m_impl->width;
     const int srcH   = m_impl->height;
     const int stride = srcW * 4;
 
-    std::vector<uint8_t> rawDib(static_cast<size_t>(stride) *
-                                static_cast<size_t>(srcH));
+    std::vector<uint8_t> rawDib(static_cast<size_t>(stride) * static_cast<size_t>(srcH));
     {
         const auto* src = static_cast<const uint8_t*>(locked.pBits);
         for (int y = 0; y < srcH; ++y)
         {
             memcpy(rawDib.data() + static_cast<size_t>(y) * static_cast<size_t>(stride),
-                   src + static_cast<size_t>(y) * locked.Pitch,
-                   static_cast<size_t>(stride));
+                   src + static_cast<size_t>(y) * locked.Pitch, static_cast<size_t>(stride));
         }
     }
     m_impl->sysMemSurface->UnlockRect();
@@ -578,17 +550,16 @@ bool AlphaCompositor::CaptureSnapshotToFile(const std::wstring& path)
     int cropX = 0, cropY = 0, cropW = srcW, cropH = srcH;
     if (m_impl->sceneW > 0 && m_impl->sceneH > 0)
     {
-        cropX = (m_impl->sceneX < 0) ? 0 : m_impl->sceneX;
-        cropY = (m_impl->sceneY < 0) ? 0 : m_impl->sceneY;
+        cropX          = (m_impl->sceneX < 0) ? 0 : m_impl->sceneX;
+        cropY          = (m_impl->sceneY < 0) ? 0 : m_impl->sceneY;
         const int maxW = srcW - cropX;
         const int maxH = srcH - cropY;
-        cropW = (m_impl->sceneW < maxW) ? m_impl->sceneW : maxW;
-        cropH = (m_impl->sceneH < maxH) ? m_impl->sceneH : maxH;
+        cropW          = (m_impl->sceneW < maxW) ? m_impl->sceneW : maxW;
+        cropH          = (m_impl->sceneH < maxH) ? m_impl->sceneH : maxH;
         if (cropW <= 0 || cropH <= 0) return false;
     }
 
-    BYTE* scan0 = const_cast<BYTE*>(rawDib.data()) +
-                  static_cast<size_t>(cropY) * static_cast<size_t>(stride) +
+    BYTE* scan0 = const_cast<BYTE*>(rawDib.data()) + static_cast<size_t>(cropY) * static_cast<size_t>(stride) +
                   static_cast<size_t>(cropX) * 4u;
     Gdiplus::Bitmap bmp(cropW, cropH, stride, PixelFormat32bppARGB, scan0);
     if (bmp.GetLastStatus() != Gdiplus::Ok) return false;

@@ -16,50 +16,49 @@
 #include <string>
 #include <vector>
 
-#include <windows.h>          // COLORREF (self-contained; don't rely on include order)
+#include <windows.h> // COLORREF (self-contained; don't rely on include order)
 
 #include "SettingsRegistry.h"
 #include "host/third_party/nlohmann/json.hpp"
 
-#include "rendering/engine.h"        // Engine::Camera/Light/LightType, ReferenceObjectStatus, SkydomeSlotStatus, D3DX types
-#include "effect/LinkGroup.h"     // LinkExemptFlags
+#include "rendering/engine.h" // Engine::Camera/Light/LightType, ReferenceObjectStatus, SkydomeSlotStatus, D3DX types
+#include "effect/LinkGroup.h" // LinkExemptFlags
 #include "simulation/SpawnerDriver.h" // SpawnerConfig (returned by value)
 
 class ParticleSystem;
 
 // Emitter duplicate-name adapter, implemented in BridgeDispatcher.cpp using
 // the window-free rule in src/effect/EmitterNaming.h.
-extern std::string GenerateDuplicateName(const ParticleSystem* system,
-                                         const std::string& sourceName);
+extern std::string GenerateDuplicateName(const ParticleSystem* system, const std::string& sourceName);
 
 // CSS color string -> COLORREF (global scope — defined above namespace host
 // in BridgeDispatcher.cpp).
 bool ParseCssColorToColorRef(const std::string& in, COLORREF& out);
 
-namespace host {
+namespace host
+{
 
 // Raw response-envelope builders (async Dispatch path).
 std::string BuildOkResponse(const std::string& id, const nlohmann::json& data);
 std::string BuildErrResponse(const std::string& id, const std::string& error);
 
 // JSON <-> native converters.
-nlohmann::json Vec3ToJson(const D3DXVECTOR3& v);
-nlohmann::json Vec4ToJson(const D3DXVECTOR4& v);
-nlohmann::json CameraToJson(const Engine::Camera& c);
-nlohmann::json LightToJson(const Engine::Light& l);
-D3DXVECTOR3 JsonToVec3(const nlohmann::json& j);
-D3DXVECTOR4 JsonToVec4(const nlohmann::json& j);
+nlohmann::json    Vec3ToJson(const D3DXVECTOR3& v);
+nlohmann::json    Vec4ToJson(const D3DXVECTOR4& v);
+nlohmann::json    CameraToJson(const Engine::Camera& c);
+nlohmann::json    LightToJson(const Engine::Light& l);
+D3DXVECTOR3       JsonToVec3(const nlohmann::json& j);
+D3DXVECTOR4       JsonToVec4(const nlohmann::json& j);
 Engine::LightType ParseLightWhich(const std::string& s);
-const char* RefStatusToString(ReferenceObjectStatus s);
-const char* SkyStatusToString(SkydomeSlotStatus s);
+const char*       RefStatusToString(ReferenceObjectStatus s);
+const char*       SkyStatusToString(SkydomeSlotStatus s);
 
 // Registry-backed persistence (HKCU\Software\AloParticleEditor).
 std::vector<std::wstring> ReadRecentFiles();
 std::vector<std::wstring> WriteRecentFile(const std::wstring& path);
-void PersistSkydomeIndex(int value);
-void PersistSkydomeCustomPath(int slot, const std::wstring& path);
-void PersistSkydomeEnvironment(int context, const std::wstring& primaryName,
-                               const std::wstring& secondaryName);
+void                      PersistSkydomeIndex(int value);
+void                      PersistSkydomeCustomPath(int slot, const std::wstring& path);
+void PersistSkydomeEnvironment(int context, const std::wstring& primaryName, const std::wstring& secondaryName);
 void PersistBackgroundColor(COLORREF color);
 void PersistShowGround(bool enabled);
 void PersistReferenceObjectName(const std::wstring& name);
@@ -70,27 +69,25 @@ void PersistGrid(bool visible, float spacing);
 void PersistSnap(bool enabled);
 
 // Link-group DTO plumbing.
-nlohmann::json LinkExemptFlagsToJsonArray(const LinkExemptFlags& flags);
+nlohmann::json  LinkExemptFlagsToJsonArray(const LinkExemptFlags& flags);
 LinkExemptFlags LinkExemptFlagsFromJsonArray(const nlohmann::json& arr);
-LinkExemptFlags MakeNewlySharedMask(const LinkExemptFlags& oldFlags,
-                                    const LinkExemptFlags& proposed);
+LinkExemptFlags MakeNewlySharedMask(const LinkExemptFlags& oldFlags, const LinkExemptFlags& proposed);
 
 // Tree / state snapshot builders.
 // `depth` is the recursion backstop and is not part of
 // the wire shape -- callers always start a root at 0. ValidateEmitterGraph caps
 // chain depth at load/import, but it is never called from the bridge mutation
 // path, so the serializer refuses to recurse past the same cap on its own.
-nlohmann::json BuildEmitterTreeNode(const ParticleSystem* sys, std::size_t idx,
-                                    std::size_t depth = 0);
-nlohmann::json BuildEngineStateSnapshot(Engine* engine,
-                                        const std::wstring& currentFilePath,
-                                        bool dirty,
+nlohmann::json BuildEmitterTreeNode(const ParticleSystem* sys, std::size_t idx, std::size_t depth = 0);
+nlohmann::json BuildEngineStateSnapshot(Engine*               engine,
+                                        const std::wstring&   currentFilePath,
+                                        bool                  dirty,
                                         const nlohmann::json& spawnerConfig,
-                                        int selectedEmitterId,
-                                        const std::wstring& activeModPath,
-                                        bool leaveParticles,
-                                        bool canUndo,
-                                        bool canRedo,
-                                        bool emitterClipboardHasContent);
+                                        int                   selectedEmitterId,
+                                        const std::wstring&   activeModPath,
+                                        bool                  leaveParticles,
+                                        bool                  canUndo,
+                                        bool                  canRedo,
+                                        bool                  emitterClipboardHasContent);
 
 } // namespace host

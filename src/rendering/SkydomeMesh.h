@@ -29,7 +29,7 @@
 #include <d3d9.h>
 #include <d3dx9.h>
 
-#include "gamedata/AloModel.h"   // AloShaderParam
+#include "gamedata/AloModel.h" // AloShaderParam
 
 class Effect;
 class IShaderManager;
@@ -42,13 +42,13 @@ struct SubMeshGpu
     SubMeshGpu() { D3DXMatrixIdentity(&placement); }
 
     // --- cached CPU data (survives device lost/reset) ---
-    std::string                 shaderName;        // 0x10101, e.g. "Skydome.fx"
-    std::string                 vertexFormatName;  // 0x10002, e.g. "alD3dVertNU2C"
-    std::vector<AloShaderParam> params;            // authored material params
-    std::vector<unsigned char>  vertexBytes;       // transcoded to `stride` (runtime decl)
-    std::vector<unsigned char>  indexBytes;        // uint16 triangle list
-    uint32_t                    stride = 0;        // runtime vertex stride (== decl size)
-    uint32_t                    vertexCount = 0;
+    std::string                 shaderName;         // 0x10101, e.g. "Skydome.fx"
+    std::string                 vertexFormatName;   // 0x10002, e.g. "alD3dVertNU2C"
+    std::vector<AloShaderParam> params;             // authored material params
+    std::vector<unsigned char>  vertexBytes;        // transcoded to `stride` (runtime decl)
+    std::vector<unsigned char>  indexBytes;         // uint16 triangle list
+    uint32_t                    stride         = 0; // runtime vertex stride (== decl size)
+    uint32_t                    vertexCount    = 0;
     uint32_t                    primitiveCount = 0;
 
     // --- object-space placement (from the .alo 0x200 skeleton + 0x600 connections) ---
@@ -59,16 +59,16 @@ struct SubMeshGpu
     // that, the flat additive sun quad is drawn at the dome centre, un-billboarded,
     // and collapses to a 1px additive-white line when viewed edge-on (the artifact
     // long misread as a "closure-meridian seam"). See Engine::RenderSkydomeMesh.
-    D3DXMATRIX                  placement;
-    uint32_t                    billboardMode = 0;
+    D3DXMATRIX placement;
+    uint32_t   billboardMode = 0;
 
     // --- GPU handles (released on device lost; refilled on reset) ---
-    Effect*                         effect = nullptr;  // owned ref (ShaderManager::getShader); NULL => skipped
-    IDirect3DVertexBuffer9*         vb     = nullptr;  // D3DPOOL_DEFAULT
-    IDirect3DIndexBuffer9*          ib     = nullptr;  // D3DPOOL_DEFAULT, INDEX16
-    IDirect3DVertexDeclaration9*    decl   = nullptr;  // borrowed from SkydomeMesh::m_decls; survives reset
-    std::vector<IDirect3DTexture9*> matTextures;       // parallel to `params` (NULL for non-TEXTURE), D3DPOOL_DEFAULT
-    std::vector<D3DXHANDLE>          matHandles;        // parallel to `params`; handles into effect->getD3DEffect()
+    Effect*                         effect = nullptr; // owned ref (ShaderManager::getShader); NULL => skipped
+    IDirect3DVertexBuffer9*         vb     = nullptr; // D3DPOOL_DEFAULT
+    IDirect3DIndexBuffer9*          ib     = nullptr; // D3DPOOL_DEFAULT, INDEX16
+    IDirect3DVertexDeclaration9*    decl   = nullptr; // borrowed from SkydomeMesh::m_decls; survives reset
+    std::vector<IDirect3DTexture9*> matTextures;      // parallel to `params` (NULL for non-TEXTURE), D3DPOOL_DEFAULT
+    std::vector<D3DXHANDLE>         matHandles;       // parallel to `params`; handles into effect->getD3DEffect()
 };
 
 class SkydomeMesh
@@ -76,7 +76,7 @@ class SkydomeMesh
 public:
     SkydomeMesh() = default;
     ~SkydomeMesh();
-    SkydomeMesh(const SkydomeMesh&) = delete;             // owns GPU refs
+    SkydomeMesh(const SkydomeMesh&)            = delete; // owns GPU refs
     SkydomeMesh& operator=(const SkydomeMesh&) = delete;
 
     // Decode + transcode the `.alo` at `aloPath` (resolved via `fm`). CPU only:
@@ -121,17 +121,17 @@ public:
     // Effect, avoiding duplicate OnLostDevice calls through active mesh refs.
     void ReleaseGpuResources() { ReleaseGpuBuffers(); }
 
-    bool   IsEmpty()      const { return m_subMeshes.empty(); }
-    bool   HasResolved()  const;                 // >=1 sub-mesh with a non-NULL effect
+    bool IsEmpty() const { return m_subMeshes.empty(); }
+    bool HasResolved() const; // >=1 sub-mesh with a non-NULL effect
     // >=1 sub-mesh with LIVE DEFAULT-pool buffers and something to draw. Distinct
     // from HasResolved (which only says a shader bound): this is the predicate
     // that cannot be true unless the device really holds the mesh, and it is what
     // makes "delete CreateBuffers" observable.
-    bool   HasGpuBuffers() const;
-    float  ScaleFactor()  const { return m_scaleFactor; }
-    void   SetScaleFactor(float s) { m_scaleFactor = s; }
+    bool  HasGpuBuffers() const;
+    float ScaleFactor() const { return m_scaleFactor; }
+    void  SetScaleFactor(float s) { m_scaleFactor = s; }
 
-    std::vector<SubMeshGpu>&       SubMeshes()       { return m_subMeshes; }
+    std::vector<SubMeshGpu>&       SubMeshes() { return m_subMeshes; }
     const std::vector<SubMeshGpu>& SubMeshes() const { return m_subMeshes; }
 
 private:
@@ -140,17 +140,16 @@ private:
     // Not D3DPOOL-bound: survive device reset (released on Load/Clear replace and
     // in the dtor, NEVER on device-lost).
     std::map<std::string, IDirect3DVertexDeclaration9*> m_decls;
-    float m_scaleFactor = 1.0f;
+    float                                               m_scaleFactor = 1.0f;
 
-    void ReleaseGpuBuffers();   // VB/IB + matTextures (the lost-device set)
-    void ReleaseEffects();      // SAFE_RELEASE the owned Effect* refs
-    void ReleaseDecls();        // Load/Clear replace + dtor (never on device-lost)
+    void ReleaseGpuBuffers(); // VB/IB + matTextures (the lost-device set)
+    void ReleaseEffects();    // SAFE_RELEASE the owned Effect* refs
+    void ReleaseDecls();      // Load/Clear replace + dtor (never on device-lost)
 
     // Build (or fetch the cached) vertex decl for `formatName`. Returns a
     // borrowed pointer owned by m_decls, or NULL if the device call fails.
     // (Stride is gpu.stride, set authoritatively in Load -- not recomputed here.)
-    IDirect3DVertexDeclaration9* GetOrCreateDecl(IDirect3DDevice9* dev,
-                                                 const std::string& formatName);
+    IDirect3DVertexDeclaration9* GetOrCreateDecl(IDirect3DDevice9* dev, const std::string& formatName);
 };
 
 #endif

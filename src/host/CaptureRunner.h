@@ -29,12 +29,14 @@ class ModManager;
 class ParticleSystem;
 class SpawnerDriver;
 
-namespace host {
+namespace host
+{
 
 class AlphaCompositor;
 
 // Copies of the Impl's m_capture* CLI values, in the Impl's field order.
-struct CaptureRunnerParams {
+struct CaptureRunnerParams
+{
     std::wstring captureAlo;
     std::wstring captureRef;
     std::wstring capturePng;
@@ -49,7 +51,8 @@ struct CaptureRunnerParams {
     float        captureSunIntensity  = 1.0f;
 };
 
-class CaptureRunner {
+class CaptureRunner
+{
 public:
     using Params = CaptureRunnerParams;
 
@@ -57,21 +60,26 @@ public:
     // unique_ptr references (not raw pointers) so the moved code's `.get()`,
     // boolean tests, and the file-load `particleSystem = std::move(loaded)`
     // slot assignment stay verbatim.
-    struct Deps {
+    struct Deps
+    {
         std::unique_ptr<Engine>&                engine;
         std::unique_ptr<::ModManager>&          modManager;
         std::unique_ptr<ParticleSystem>&        particleSystem;
         std::unique_ptr<SpawnerDriver>&         spawnerDriver;
         std::unique_ptr<host::AlphaCompositor>& alphaCompositor;
         HWND                                    hMain;
-        const bool&                             uiReady;        // Impl m_uiReady
-        const bool&                             sceneRectSeen;  // Impl m_sceneRectSeen
-        std::function<void()>                   renderD3D9;     // Impl RenderD3D9()
-        std::function<void(const std::string&)> log;            // Impl Log sink
+        const bool&                             uiReady;          // Impl m_uiReady
+        const bool&                             sceneRectSeen;    // Impl m_sceneRectSeen
+        std::function<void()>                   renderD3D9;       // Impl RenderD3D9()
+        std::function<void(const std::string&)> log;              // Impl Log sink
         std::function<bool()>                   fixedCaptureView; // constructor profile, before restore
     };
 
-    enum class TickResult { Running, Done };
+    enum class TickResult
+    {
+        Running,
+        Done
+    };
 
     CaptureRunner(Params params, Deps deps);
 
@@ -118,6 +126,6 @@ private:
     CaptureTicker m_ticker;
 };
 
-}  // namespace host
+} // namespace host
 
-#endif  // HOST_CAPTURE_RUNNER_H
+#endif // HOST_CAPTURE_RUNNER_H

@@ -58,7 +58,7 @@ public:
 
     // Exactly one owner. A copy could outlive the retire and hand out tokens
     // that answer true after teardown, which is the failure this exists to stop.
-    StartupCallbackGuard(const StartupCallbackGuard&) = delete;
+    StartupCallbackGuard(const StartupCallbackGuard&)            = delete;
     StartupCallbackGuard& operator=(const StartupCallbackGuard&) = delete;
 
     ~StartupCallbackGuard() { Retire(); }
@@ -68,7 +68,10 @@ public:
     // Idempotent and one-way. Called from WM_DESTROY — teardown begins long
     // before the destructor runs, and the whole hazard lives in that gap — and
     // again from the destructor for any owner that never saw WM_DESTROY.
-    void Retire() { if (m_live) *m_live = false; }
+    void Retire()
+    {
+        if (m_live) *m_live = false;
+    }
 
     bool Alive() const { return m_live && *m_live; }
 
@@ -76,4 +79,4 @@ private:
     std::shared_ptr<bool> m_live;
 };
 
-}   // namespace host
+} // namespace host

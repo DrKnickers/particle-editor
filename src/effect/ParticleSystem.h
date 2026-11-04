@@ -12,34 +12,34 @@
 #include "common/files.h"
 
 class EmitterInstance;
-struct LinkExemptFlags;   // defined in LinkGroup.h; forward-declared to avoid pulling that header in
+struct LinkExemptFlags; // defined in LinkGroup.h; forward-declared to avoid pulling that header in
 
 class ParticleSystem
 {
 public:
-	// Group types
-	static const int GT_EXACT        = 0;
-	static const int GT_BOX          = 1;
-	static const int GT_CUBE         = 2;
-	static const int GT_SPHERE       = 3;
-	static const int GT_CYLINDER     = 4;
-	static const int NUM_GROUP_TYPES = 5;
+    // Group types
+    static const int GT_EXACT        = 0;
+    static const int GT_BOX          = 1;
+    static const int GT_CUBE         = 2;
+    static const int GT_SPHERE       = 3;
+    static const int GT_CYLINDER     = 4;
+    static const int NUM_GROUP_TYPES = 5;
 
-	// Group IDs
-	static const int GROUP_SPEED    = 0;
-	static const int GROUP_LIFETIME = 1;
-	static const int GROUP_POSITION = 2;
-	static const int NUM_GROUPS     = 3;
+    // Group IDs
+    static const int GROUP_SPEED    = 0;
+    static const int GROUP_LIFETIME = 1;
+    static const int GROUP_POSITION = 2;
+    static const int NUM_GROUPS     = 3;
 
-	// Track IDs
-	static const int TRACK_RED_CHANNEL    = 0;
-	static const int TRACK_GREEN_CHANNEL  = 1;
-	static const int TRACK_BLUE_CHANNEL   = 2;
-	static const int TRACK_ALPHA_CHANNEL  = 3;
-	static const int TRACK_SCALE          = 4;
-	static const int TRACK_INDEX          = 5;
-	static const int TRACK_ROTATION_SPEED = 6;
-	static const int NUM_TRACKS           = 7;
+    // Track IDs
+    static const int TRACK_RED_CHANNEL    = 0;
+    static const int TRACK_GREEN_CHANNEL  = 1;
+    static const int TRACK_BLUE_CHANNEL   = 2;
+    static const int TRACK_ALPHA_CHANNEL  = 3;
+    static const int TRACK_SCALE          = 4;
+    static const int TRACK_INDEX          = 5;
+    static const int TRACK_ROTATION_SPEED = 6;
+    static const int NUM_TRACKS           = 7;
 
     // Blend modes
     static const int BLEND_NONE                = 0;
@@ -77,15 +77,17 @@ public:
     // D3DBLEND_SRCALPHA); the shader-only modes 11/12/13 fall through that switch,
     // so the shader — not the switch — is authoritative. If a shader's SrcBlend
     // changes, update this AND tests/test_blend_mode_classify.cpp.
-    static inline bool blendModeIsAlphaGated(int mode) {
-        switch (mode) {
-            case BLEND_TRANSPARENT:          // 2  PrimAlpha
-            case BLEND_DEPTH_TRANSPARENT:    // 5  PrimDepthSpriteAlpha
-            case BLEND_DIFFUSE_TRANSPARENT:  // 7  PrimDiffuseAlpha
-            case BLEND_BUMP:                 // 11 PrimParticleBumpAlpha
-            case BLEND_SCANLINES:            // 13 PrimAlphaScanlines
+    static inline bool blendModeIsAlphaGated(int mode)
+    {
+        switch (mode)
+        {
+            case BLEND_TRANSPARENT:         // 2  PrimAlpha
+            case BLEND_DEPTH_TRANSPARENT:   // 5  PrimDepthSpriteAlpha
+            case BLEND_DIFFUSE_TRANSPARENT: // 7  PrimDiffuseAlpha
+            case BLEND_BUMP:                // 11 PrimParticleBumpAlpha
+            case BLEND_SCANLINES:           // 13 PrimAlphaScanlines
                 return true;
-            default:                         // incl. 12 PrimDecalBumpAlpha (multiply)
+            default: // incl. 12 PrimDecalBumpAlpha (multiply)
                 return false;
         }
     }
@@ -102,66 +104,66 @@ public:
     static const int EMIT_RANDOM_MESH   = 2;
     static const int EMIT_EVERY_VERTEX  = 3;
 
-	class Emitter
-	{
-	public:
-		struct Track
-		{
-			enum InterpolationType
-			{
-				IT_UNKNOWN = -1,
-				IT_LINEAR  =  0,
-				IT_SMOOTH  =  1,
-				IT_STEP    =  2
-			};
+    class Emitter
+    {
+    public:
+        struct Track
+        {
+            enum InterpolationType
+            {
+                IT_UNKNOWN = -1,
+                IT_LINEAR  = 0,
+                IT_SMOOTH  = 1,
+                IT_STEP    = 2
+            };
 
-			struct Key
-			{
-				float value;
-				float time;
+            struct Key
+            {
+                float value;
+                float time;
 
                 // Used for pure equality
-                bool operator == (const Key& key) const { return time == key.time && value == key.value; }
+                bool operator==(const Key& key) const { return time == key.time && value == key.value; }
 
                 // Used for ordering in the set
-				bool operator <  (const Key& key) const { return time < key.time; }
+                bool operator<(const Key& key) const { return time < key.time; }
 
-				Key() {}
-				Key(const Key& k) : time(k.time), value(k.value) {}
-				Key(float t, float v) : time(t), value(v) {}
-			};
+                Key() {}
+                Key(const Key& k) : time(k.time), value(k.value) {}
+                Key(float t, float v) : time(t), value(v) {}
+            };
 
-			typedef std::multiset<Key>	KeyMap;
+            typedef std::multiset<Key> KeyMap;
 
-			KeyMap			  keys;
-			InterpolationType interpolation;
-		};
+            KeyMap            keys;
+            InterpolationType interpolation;
+        };
 
-		#pragma pack(1)
-		struct Group
-		{
-			unsigned int type;
-			float        minX, minY, minZ;
-			float		 maxX, maxY, maxZ;
-			float		 sideLength;
-			float		 sphereRadius;
-			unsigned int sphereEdge;
-			float		 cylinderRadius;
-			unsigned int cylinderEdge;
-			float		 cylinderHeight;
-			float		 valX, valY, valZ;
-		};
-		#pragma pack()
+#pragma pack(1)
+        struct Group
+        {
+            unsigned int type;
+            float        minX, minY, minZ;
+            float        maxX, maxY, maxZ;
+            float        sideLength;
+            float        sphereRadius;
+            unsigned int sphereEdge;
+            float        cylinderRadius;
+            unsigned int cylinderEdge;
+            float        cylinderHeight;
+            float        valX, valY, valZ;
+        };
+#pragma pack()
 
-		// Emitter hierarchy. Exactly one child of each type per emitter,
-		// not a list — the engine's runtime struct has a single 8-byte
-		// pointer slot for each (`+0x1108` deathChild, `+0x1110` lifeChild,
-		// proved from `StarWarsG.exe::FUN_14015ed60` and `EAW Terrain
-		// Editor.exe::FUN_140134b50`, both 2968-byte writer functions).
-		size_t   spawnOnDeath;
-		size_t   spawnDuringLife;
-		Emitter* parent;
-        bool     visible;   // Not stored, for use in editor only
+        // Emitter hierarchy. Exactly one child of each type per emitter,
+        // not a list — the engine's runtime struct has a single 8-byte
+        // pointer slot for each (`+0x1108` deathChild, `+0x1110` lifeChild,
+        // proved from `StarWarsG.exe::FUN_14015ed60` and `EAW Terrain
+        // Editor.exe::FUN_140134b50`, both 2968-byte writer functions).
+        size_t   spawnOnDeath;
+        size_t   spawnDuringLife;
+        Emitter* parent;
+        bool     visible; // Not stored, for use in editor only
 
         // Stable per-emitter identity (reorder glide). `index` is positional
         // and reshuffles on every structural change; `stableId` is assigned
@@ -179,72 +181,72 @@ public:
         // groups are not produced by any user-visible operation.
         uint32_t linkGroup;
 
-		std::string name;
-		std::string colorTexture;
-		std::string normalTexture;
+        std::string name;
+        std::string colorTexture;
+        std::string normalTexture;
 
-		// Random parameter groups
-		Group groups[NUM_GROUPS];
+        // Random parameter groups
+        Group groups[NUM_GROUPS];
 
-		// Tracks
+        // Tracks
         // Use the 'tracks' array outside of this class. This way you can
         // alias several tracks to the same contents easily.
-		Track  trackContents[NUM_TRACKS];
+        Track  trackContents[NUM_TRACKS];
         Track* tracks[NUM_TRACKS];
 
-		// Properties
-	    bool  linkToSystem;
-		bool  objectSpaceAcceleration;
-		bool  doColorAddGrayscale;
-		bool  affectedByWind;
-		bool  isHeatParticle;
-		bool  isWeatherParticle;
-		bool  hasTail;
-		bool  noDepthTest;
-		bool  randomRotation;
-		bool  randomRotationDirection;
-		bool  isWorldOriented;
-		bool  useBursts;
-		int   emitFromMesh;
-		float gravity;
-		float lifetime;
-		float initialDelay;
-		float burstDelay;
-		float inwardSpeed;
-		float inwardAcceleration;
-		float acceleration[3];
-		float randomScalePerc;
-		float randomLifetimePerc;
-		float weatherCubeSize;
-		float tailSize;
-		float parentLinkStrength;
-		float weatherCubeDistance;
-		float randomRotationAverage;
-		float randomRotationVariance;
-		float randomColors[4];
-		float bounciness;
-		float freezeTime;
-		float skipTime;
-		float emitFromMeshOffset;
-		float weatherFadeoutDistance;
-		unsigned long nBursts;
-		size_t        index;
-		unsigned long blendMode;
-		unsigned long textureSize;
-		unsigned long nParticlesPerSecond;
-		unsigned long nTriangles;
-		unsigned long nParticlesPerBurst;
-		unsigned long groundBehavior;
+        // Properties
+        bool          linkToSystem;
+        bool          objectSpaceAcceleration;
+        bool          doColorAddGrayscale;
+        bool          affectedByWind;
+        bool          isHeatParticle;
+        bool          isWeatherParticle;
+        bool          hasTail;
+        bool          noDepthTest;
+        bool          randomRotation;
+        bool          randomRotationDirection;
+        bool          isWorldOriented;
+        bool          useBursts;
+        int           emitFromMesh;
+        float         gravity;
+        float         lifetime;
+        float         initialDelay;
+        float         burstDelay;
+        float         inwardSpeed;
+        float         inwardAcceleration;
+        float         acceleration[3];
+        float         randomScalePerc;
+        float         randomLifetimePerc;
+        float         weatherCubeSize;
+        float         tailSize;
+        float         parentLinkStrength;
+        float         weatherCubeDistance;
+        float         randomRotationAverage;
+        float         randomRotationVariance;
+        float         randomColors[4];
+        float         bounciness;
+        float         freezeTime;
+        float         skipTime;
+        float         emitFromMeshOffset;
+        float         weatherFadeoutDistance;
+        unsigned long nBursts;
+        size_t        index;
+        unsigned long blendMode;
+        unsigned long textureSize;
+        unsigned long nParticlesPerSecond;
+        unsigned long nTriangles;
+        unsigned long nParticlesPerBurst;
+        unsigned long groundBehavior;
 
-		// These have an unused function
-		bool  unknown15;
-		bool  unknown2b;
-		bool  unknown44;
-		float unknown11;
-		bool  has11;		// 0x11 was in the loaded file; written back only then
-		float unknown3f;
-		unsigned long unknown06;
-		unsigned long unknown49;
+        // These have an unused function
+        bool          unknown15;
+        bool          unknown2b;
+        bool          unknown44;
+        float         unknown11;
+        bool          has11; // 0x11 was in the loaded file; written back only then
+        float         unknown3f;
+        unsigned long unknown06;
+        unsigned long unknown49;
 
         // We need to keep track of instances of this emitter type,
         // in case we delete this emitter type
@@ -252,7 +254,7 @@ public:
         void unregisterEmitterInstance(EmitterInstance* instance);
 
         void write(ChunkWriter& writer) { write(writer, false); }
-        void copy (ChunkWriter& writer) { write(writer, true); }
+        void copy(ChunkWriter& writer) { write(writer, true); }
 
         // The colour channels (1..3, as a bitmask) that the writer marks as
         // explicitly unlocked in chunk 0x0101: unlocked although their saved
@@ -284,45 +286,44 @@ public:
         // is restored as a standalone (non-aliased) track on `*this`
         // — this matches the v1 expectation that the atlas-index
         // curve is intrinsically per-emitter.
-        void copySharedParamsFrom(const Emitter& src,
-                                   const struct LinkExemptFlags& exempt);
+        void copySharedParamsFrom(const Emitter& src, const struct LinkExemptFlags& exempt);
 
         Emitter(const Emitter& emitter);
-		Emitter(ChunkReader& reader);
-		Emitter();
+        Emitter(ChunkReader& reader);
+        Emitter();
         ~Emitter();
 
-	private:
+    private:
         std::set<EmitterInstance*> m_instances;
 
-		void setDefaults();
+        void setDefaults();
         void write(ChunkWriter& writer, bool copy);
 
-		void readProperties(ChunkReader& reader);
-		void readTracks(ChunkReader& reader);
-		void readGroups(ChunkReader& reader);
+        void readProperties(ChunkReader& reader);
+        void readTracks(ChunkReader& reader);
+        void readGroups(ChunkReader& reader);
 
-		void writeProperties(ChunkWriter& writer) const;
-		void writeTracks(ChunkWriter& writer) const;
-		void writeGroups(ChunkWriter& writer) const;
-	};
+        void writeProperties(ChunkWriter& writer) const;
+        void writeTracks(ChunkWriter& writer) const;
+        void writeGroups(ChunkWriter& writer) const;
+    };
 
-	//
-	// Functions
-	//
-	ParticleSystem();
-	ParticleSystem(IFile* file);
-	~ParticleSystem();
-	ParticleSystem(const ParticleSystem&) = delete;
-	ParticleSystem& operator=(const ParticleSystem&) = delete;
+    //
+    // Functions
+    //
+    ParticleSystem();
+    ParticleSystem(IFile* file);
+    ~ParticleSystem();
+    ParticleSystem(const ParticleSystem&)            = delete;
+    ParticleSystem& operator=(const ParticleSystem&) = delete;
 
-	// Write the particle system to a file
-	void write(IFile* file);
+    // Write the particle system to a file
+    void write(IFile* file);
 
-	// Manage emitters
-	Emitter*       addRootEmitter(const ParticleSystem::Emitter& emitter = ParticleSystem::Emitter());
-    Emitter*       addLifetimeEmitter(Emitter* parent, const ParticleSystem::Emitter& emitter = ParticleSystem::Emitter());
-    Emitter*       addDeathEmitter(Emitter* parent, const ParticleSystem::Emitter& emitter = ParticleSystem::Emitter());
+    // Manage emitters
+    Emitter* addRootEmitter(const ParticleSystem::Emitter& emitter = ParticleSystem::Emitter());
+    Emitter* addLifetimeEmitter(Emitter* parent, const ParticleSystem::Emitter& emitter = ParticleSystem::Emitter());
+    Emitter* addDeathEmitter(Emitter* parent, const ParticleSystem::Emitter& emitter = ParticleSystem::Emitter());
 
     // Make the emitter spawn-graph well-formed after loading or importing
     // data that may be malformed: clear out-of-range spawn indices, drop
@@ -348,17 +349,16 @@ public:
     // free name for a clone given its source name — injected so the data layer
     // stays independent of the host's GenerateDuplicateName. Returns the count
     // imported. Used by the host's import/duplicate bridge handler.
-    size_t ImportEmittersFrom(
-        ParticleSystem& source,
-        const std::vector<size_t>& picks,
-        const std::function<std::string(const std::string&)>& makeUniqueName);
+    size_t ImportEmittersFrom(ParticleSystem&                                       source,
+                              const std::vector<size_t>&                            picks,
+                              const std::function<std::string(const std::string&)>& makeUniqueName);
 
     // Insert a copy of `source` directly after `reference` in m_emitters.
     // The new emitter becomes a root (parent=NULL, no spawn-children); existing
     // emitters at index >= reference->index + 1 shift up by one slot, with
     // their parent's spawn-field references updated to match. Used by the
     // "Duplicate Emitter" UI flow.
-    Emitter*       insertEmitterAfter(const Emitter* reference, const ParticleSystem::Emitter& source);
+    Emitter* insertEmitterAfter(const Emitter* reference, const ParticleSystem::Emitter& source);
 
     // Reorder a root emitter (and its full subtree) past the adjacent root
     // in the indicated direction. direction = -1 moves up (toward index 0),
@@ -373,7 +373,7 @@ public:
     //
     // Returns true on success, false if the emitter isn't a root or there's
     // no neighboring root in the requested direction.
-    bool           moveEmitter(Emitter* emitter, int direction);
+    bool moveEmitter(Emitter* emitter, int direction);
 
     // Move `emitter` (must be a root) so its position in the root sequence
     // becomes `targetRootIndex` — i.e., the K-th emitter with parent==NULL,
@@ -388,7 +388,7 @@ public:
     // Returns true on success. Returns false if the emitter isn't a root,
     // the target index is out of range (> count of roots), or the move
     // would be a no-op (target position equals current position).
-    bool           moveEmitterToRootIndex(Emitter* emitter, size_t targetRootIndex);
+    bool moveEmitterToRootIndex(Emitter* emitter, size_t targetRootIndex);
 
     // Move a SET of root emitters so they become contiguous, landing at `gap`
     // (gap K = "before root K"; gap == rootCount = "after last root"),
@@ -396,9 +396,7 @@ public:
     // contiguous selections collapse together. `outNewIds` receives the moved
     // roots' final positional indices (a contiguous run, tree order). Returns
     // false on no-op / out-of-range / empty / non-root selection.
-    bool           reorderManyRootsToIndex(const std::vector<Emitter*>& selection,
-                                           size_t gap,
-                                           std::vector<size_t>& outNewIds);
+    bool reorderManyRootsToIndex(const std::vector<Emitter*>& selection, size_t gap, std::vector<size_t>& outNewIds);
 
     // Reparent `source` so it becomes a child of `target` via target's
     // spawnDuringLife (when useSpawnDuringLife is true) or spawnOnDeath
@@ -419,21 +417,21 @@ public:
     //   - target is in source's subtree (would create a cycle)
     //   - source's current parent is target (slot-switching is out
     //     of scope; refused for the v1 reparent gesture)
-    bool           reparentEmitter(Emitter* source, Emitter* target, bool useSpawnDuringLife);
+    bool reparentEmitter(Emitter* source, Emitter* target, bool useSpawnDuringLife);
 
-    Emitter&       getEmitter(size_t index)       { return *m_emitters[index]; }
+    Emitter&       getEmitter(size_t index) { return *m_emitters[index]; }
     const Emitter& getEmitter(size_t index) const { return *m_emitters[index]; }
-	void           deleteEmitter(Emitter* emitter);
+    void           deleteEmitter(Emitter* emitter);
 
-	// Getters
-	const std::vector<Emitter*>& getEmitters()       const { return m_emitters; }
-	      std::vector<Emitter*>& getEmitters()             { return m_emitters; }
-	const std::string&           getName()           const { return m_name; }
-	bool					 	 getLeaveParticles() const { return m_leaveParticles;  }
+    // Getters
+    const std::vector<Emitter*>& getEmitters() const { return m_emitters; }
+    std::vector<Emitter*>&       getEmitters() { return m_emitters; }
+    const std::string&           getName() const { return m_name; }
+    bool                         getLeaveParticles() const { return m_leaveParticles; }
 
-	// Setters
-	void setName(const std::string& name) { m_name = name; }
-	void setLeaveParticles(bool leave)    { m_leaveParticles = leave; }
+    // Setters
+    void setName(const std::string& name) { m_name = name; }
+    void setLeaveParticles(bool leave) { m_leaveParticles = leave; }
 
     // per-group exempt-set storage. Groups not present in the
     // map use the v1 default exempt set (textures + atlas-index curve +
@@ -446,8 +444,7 @@ public:
     // Read-only enumeration of the stored (non-default) exempt sets, in
     // group-id order -- what chunk 0x0003 persists.
     void forEachLinkExempt(const std::function<void(uint32_t, const LinkExemptFlags&)>& visit) const;
-    void                   setLinkExemptFlags(uint32_t                groupId,
-                                              const LinkExemptFlags&  flags);
+    void setLinkExemptFlags(uint32_t groupId, const LinkExemptFlags& flags);
 
 private:
     // Reassemble m_emitters so roots appear in `newRoots` order, each root's
@@ -455,13 +452,12 @@ private:
     // subtrees), then reassign index = position and rewrite parent spawn-field
     // indices. `roots` is the CURRENT root order (index into it via each root's
     // stored ->index). Shared by moveEmitterToRootIndex and reorderManyRootsToIndex.
-    void reassembleByRootOrder(const std::vector<Emitter*>& roots,
-                               const std::vector<Emitter*>& newRoots);
+    void reassembleByRootOrder(const std::vector<Emitter*>& roots, const std::vector<Emitter*>& newRoots);
 
-	bool			 	                       m_leaveParticles;
-	std::string                                m_name;
-	std::vector<Emitter*>                      m_emitters;
-    std::map<uint32_t, LinkExemptFlags>        m_linkExempts;
-    std::vector<std::string>                   m_graphRepairs;
+    bool                                m_leaveParticles;
+    std::string                         m_name;
+    std::vector<Emitter*>               m_emitters;
+    std::map<uint32_t, LinkExemptFlags> m_linkExempts;
+    std::vector<std::string>            m_graphRepairs;
 };
 #endif

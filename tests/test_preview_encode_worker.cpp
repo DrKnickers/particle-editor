@@ -29,7 +29,7 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#include <objidl.h>    // IStream -- gdiplus.h needs it, and LEAN_AND_MEAN drops it
+#include <objidl.h> // IStream -- gdiplus.h needs it, and LEAN_AND_MEAN drops it
 #include <gdiplus.h>
 
 #include "host/AcceleratorBridge.h"
@@ -40,62 +40,61 @@
 #include <string>
 #include <vector>
 
-namespace host {
+namespace host
+{
 
 struct PreviewQueueWiringTestAccess
 {
-    static std::unique_ptr<BridgeDispatcher> MakeDispatcher(
-        LayoutBroker& layout, AcceleratorBridge& accel)
+    static std::unique_ptr<BridgeDispatcher> MakeDispatcher(LayoutBroker& layout, AcceleratorBridge& accel)
     {
         return std::unique_ptr<BridgeDispatcher>(
-            new BridgeDispatcher(layout, accel,
-                                 BridgeDispatcher::PreviewQueueTestTag{}));
+            new BridgeDispatcher(layout, accel, BridgeDispatcher::PreviewQueueTestTag{}));
     }
 
     static PreviewEncodeWorker& InstallIdleWorker(BridgeDispatcher& dispatcher)
     {
-        dispatcher.m_previewWorker.reset(
-            new PreviewEncodeWorker(NULL, 0,
-                                    PreviewEncodeWorker::NoThreadForTest{}));
+        dispatcher.m_previewWorker.reset(new PreviewEncodeWorker(NULL, 0, PreviewEncodeWorker::NoThreadForTest{}));
         return *dispatcher.m_previewWorker;
     }
 
-    static void SetEpoch(BridgeDispatcher& dispatcher, unsigned epoch)
-    {
-        dispatcher.m_previewEpoch = epoch;
-    }
+    static void SetEpoch(BridgeDispatcher& dispatcher, unsigned epoch) { dispatcher.m_previewEpoch = epoch; }
 
-    static unsigned Epoch(const BridgeDispatcher& dispatcher)
-    {
-        return dispatcher.m_previewEpoch;
-    }
+    static unsigned Epoch(const BridgeDispatcher& dispatcher) { return dispatcher.m_previewEpoch; }
 
-    static size_t Clear(BridgeDispatcher& dispatcher)
-    {
-        return dispatcher.PreviewCacheClear();
-    }
+    static size_t Clear(BridgeDispatcher& dispatcher) { return dispatcher.PreviewCacheClear(); }
 };
 
 } // namespace host
 
 static int g_failed = 0;
-#define CHECK(cond, msg) do {                              \
-    if (cond) { std::printf("  ok: %s\n", msg); }          \
-    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
 // A job carrying a real (if small) BGRA image, so the worker's encode costs
 // real time rather than failing instantly -- an encode that fails fast would
 // drain the batch and make the timing notes above untrue.
 static host::PreviewEncodeWorker::Job makeJob(int i, unsigned epoch)
 {
-    const int w = 256, h = 256;
+    const int                      w = 256, h = 256;
     host::PreviewEncodeWorker::Job j;
-    j.key = "tex" + std::to_string(i) + "|1";
-    j.filename = L"tex.tga";
+    j.key          = "tex" + std::to_string(i) + "|1";
+    j.filename     = L"tex.tga";
     j.flattenAlpha = true;
-    j.srcW = w; j.srcH = h;
-    j.outW = w; j.outH = h;
+    j.srcW         = w;
+    j.srcH         = h;
+    j.outW         = w;
+    j.outH         = h;
     j.bgra.assign(static_cast<size_t>(w) * h * 4, static_cast<uint8_t>(i & 0xFF));
     j.epoch = epoch;
     return j;
@@ -107,7 +106,7 @@ int main()
 {
     std::printf("test_preview_encode_worker\n");
 
-    ULONG_PTR token = 0;
+    ULONG_PTR                    token = 0;
     Gdiplus::GdiplusStartupInput gdiIn;
     Gdiplus::GdiplusStartup(&token, &gdiIn, nullptr);
 
@@ -156,8 +155,7 @@ int main()
         // Never more than the stale half -- catches a predicate inverted or
         // widened to eat the survivors.
         CHECK(dropped <= kBatch, "mixed queue: no more than the stale half is dropped");
-        CHECK(after >= kBatch - 10,
-              "mixed queue: the epoch-4 half survives essentially intact");
+        CHECK(after >= kBatch - 10, "mixed queue: the epoch-4 half survives essentially intact");
         CHECK(before >= after + dropped - 10 && before + 10 >= after + dropped,
               "mixed queue: before ~= after + dropped (accounting holds)");
         w.Finish();
@@ -175,42 +173,36 @@ int main()
 
     // ---- E: the production cache-clear call drops only stale work ------------
     {
-        host::LayoutBroker layout;
-        host::AcceleratorBridge accel;
+        host::LayoutBroker                      layout;
+        host::AcceleratorBridge                 accel;
         std::unique_ptr<host::BridgeDispatcher> dispatcher =
             host::PreviewQueueWiringTestAccess::MakeDispatcher(layout, accel);
-        host::PreviewEncodeWorker& worker =
-            host::PreviewQueueWiringTestAccess::InstallIdleWorker(*dispatcher);
+        host::PreviewEncodeWorker& worker = host::PreviewQueueWiringTestAccess::InstallIdleWorker(*dispatcher);
 
         host::PreviewQueueWiringTestAccess::SetEpoch(*dispatcher, 3u);
-        worker.Enqueue(makeJob(1000, 3u));  // stale after the clear
-        worker.Enqueue(makeJob(1001, 4u));  // current after the clear
+        worker.Enqueue(makeJob(1000, 3u)); // stale after the clear
+        worker.Enqueue(makeJob(1001, 4u)); // current after the clear
 
-        const size_t before = worker.QueuedCount();
-        const size_t dropped =
-            host::PreviewQueueWiringTestAccess::Clear(*dispatcher);
-        const unsigned epoch =
-            host::PreviewQueueWiringTestAccess::Epoch(*dispatcher);
-        const size_t queued = worker.QueuedCount();
+        const size_t   before  = worker.QueuedCount();
+        const size_t   dropped = host::PreviewQueueWiringTestAccess::Clear(*dispatcher);
+        const unsigned epoch   = host::PreviewQueueWiringTestAccess::Epoch(*dispatcher);
+        const size_t   queued  = worker.QueuedCount();
 
         // This second cleanup identifies the survivor, not just its count. A
         // wrong call with epoch 3 also reports dropped=1 and queued=1, but it
         // leaves the stale epoch-3 job; the correct epoch-4 cleanup exposes it.
         const size_t cleanupDropped = worker.DropStaleQueued(4u);
-        const size_t cleanupQueued = worker.QueuedCount();
+        const size_t cleanupQueued  = worker.QueuedCount();
 
-        std::printf(
-            "  production clear observed: before=%zu epoch=%u dropped=%zu "
-            "queued=%zu cleanupDropped=%zu cleanupQueued=%zu\n",
-            before, epoch, dropped, queued, cleanupDropped, cleanupQueued);
+        std::printf("  production clear observed: before=%zu epoch=%u dropped=%zu "
+                    "queued=%zu cleanupDropped=%zu cleanupQueued=%zu\n",
+                    before, epoch, dropped, queued, cleanupDropped, cleanupQueued);
         CHECK(before == 2, "production clear: fixture queues exactly two jobs");
         CHECK(epoch == 4, "production clear: epoch advances exactly from 3 to 4");
         CHECK(dropped == 1, "production clear: exactly one stale job is dropped");
         CHECK(queued == 1, "production clear: exactly one current job survives");
-        CHECK(cleanupDropped == 0,
-              "production clear: survivor already belongs to epoch 4");
-        CHECK(cleanupQueued == 1,
-              "production clear: epoch-4 survivor remains queued");
+        CHECK(cleanupDropped == 0, "production clear: survivor already belongs to epoch 4");
+        CHECK(cleanupQueued == 1, "production clear: epoch-4 survivor remains queued");
     }
 
     Gdiplus::GdiplusShutdown(token);

@@ -24,10 +24,19 @@
 #include <vector>
 
 static int g_failed = 0;
-#define CHECK(cond, msg) do {                              \
-    if (cond) { std::printf("  ok: %s\n", msg); }          \
-    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
 using host::AcceleratorBridge;
 
@@ -38,12 +47,15 @@ struct Dispatch
     int         emits;
     std::string combo;
 };
-static Dispatch dispatch(const AcceleratorBridge& b, UINT vk,
-                         bool ctrl, bool shift, bool alt)
+static Dispatch dispatch(const AcceleratorBridge& b, UINT vk, bool ctrl, bool shift, bool alt)
 {
-    Dispatch d{ false, 0, "" };
+    Dispatch d{false, 0, ""};
     d.handled = b.TryDispatch(vk, ctrl, shift, alt,
-        [&](const std::string& combo) { ++d.emits; d.combo = combo; });
+                              [&](const std::string& combo)
+                              {
+                                  ++d.emits;
+                                  d.combo = combo;
+                              });
     return d;
 }
 
@@ -51,7 +63,7 @@ static Dispatch dispatch(const AcceleratorBridge& b, UINT vk,
 static bool matchesOnly(const char* combo, UINT vk, bool ctrl, bool shift, bool alt)
 {
     AcceleratorBridge b;
-    b.RegisterCombos({ combo });
+    b.RegisterCombos({combo});
     Dispatch hit = dispatch(b, vk, ctrl, shift, alt);
     if (!hit.handled || hit.emits != 1 || hit.combo != combo) return false;
     // The same vk with every OTHER modifier combination must NOT match.
@@ -72,7 +84,7 @@ int main()
     // ---- A: the documented React set (AcceleratorBridge.h header) ----------
     {
         AcceleratorBridge b;
-        b.RegisterCombos({ "Ctrl+S", "Ctrl+Z", "Ctrl+Shift+Z", "Delete", "F5" });
+        b.RegisterCombos({"Ctrl+S", "Ctrl+Z", "Ctrl+Shift+Z", "Delete", "F5"});
 
         Dispatch d = dispatch(b, 'S', true, false, false);
         CHECK(d.handled && d.emits == 1 && d.combo == "Ctrl+S", "Ctrl+S matches and echoes its combo");
@@ -104,21 +116,23 @@ int main()
 
     // ---- B: the full named-key table (VkFromName) --------------------------
     {
-        struct { const char* name; UINT vk; } table[] = {
-            { "Delete", VK_DELETE }, { "Del", VK_DELETE },
-            { "Backspace", VK_BACK }, { "Back", VK_BACK },
-            { "Tab", VK_TAB },
-            { "Enter", VK_RETURN }, { "Return", VK_RETURN },
-            { "Esc", VK_ESCAPE }, { "Escape", VK_ESCAPE },
-            { "Space", VK_SPACE },
-            { "Left", VK_LEFT }, { "Right", VK_RIGHT },
-            { "Up", VK_UP }, { "Down", VK_DOWN },
-            { "Home", VK_HOME }, { "End", VK_END },
-            { "PageUp", VK_PRIOR }, { "PgUp", VK_PRIOR },
-            { "PageDown", VK_NEXT }, { "PgDn", VK_NEXT },
-            { "Insert", VK_INSERT },
-            { "PrintScreen", VK_SNAPSHOT },
-            { "Pause", VK_PAUSE },
+        struct
+        {
+            const char* name;
+            UINT        vk;
+        } table[] = {
+            {"Delete", VK_DELETE},  {"Del", VK_DELETE},
+            {"Backspace", VK_BACK}, {"Back", VK_BACK},
+            {"Tab", VK_TAB},        {"Enter", VK_RETURN},
+            {"Return", VK_RETURN},  {"Esc", VK_ESCAPE},
+            {"Escape", VK_ESCAPE},  {"Space", VK_SPACE},
+            {"Left", VK_LEFT},      {"Right", VK_RIGHT},
+            {"Up", VK_UP},          {"Down", VK_DOWN},
+            {"Home", VK_HOME},      {"End", VK_END},
+            {"PageUp", VK_PRIOR},   {"PgUp", VK_PRIOR},
+            {"PageDown", VK_NEXT},  {"PgDn", VK_NEXT},
+            {"Insert", VK_INSERT},  {"PrintScreen", VK_SNAPSHOT},
+            {"Pause", VK_PAUSE},
         };
         bool all = true;
         for (const auto& row : table)
@@ -137,21 +151,20 @@ int main()
         CHECK(matchesOnly("Ctrl+A", 'A', true, false, false), "letter A maps to VK 'A'");
         CHECK(matchesOnly("Ctrl+7", '7', true, false, false), "digit 7 maps to VK '7'");
         CHECK(matchesOnly("Ctrl+s", 'S', true, false, false), "lowercase key upper-cased before VK lookup");
-        CHECK(matchesOnly("F1",  VK_F1,      false, false, false), "F1 boundary");
+        CHECK(matchesOnly("F1", VK_F1, false, false, false), "F1 boundary");
         CHECK(matchesOnly("F12", VK_F1 + 11, false, false, false), "F12 mid-range");
         CHECK(matchesOnly("F24", VK_F1 + 23, false, false, false), "F24 boundary");
         // "5" is the digit, not F5.
         AcceleratorBridge b;
-        b.RegisterCombos({ "5" });
-        CHECK(dispatch(b, '5', false, false, false).handled
-              && !dispatch(b, VK_F5, false, false, false).handled,
+        b.RegisterCombos({"5"});
+        CHECK(dispatch(b, '5', false, false, false).handled && !dispatch(b, VK_F5, false, false, false).handled,
               "digit '5' is VK '5', not F5");
     }
 
     // ---- D: parse edges -- whitespace, order, case, Control alias ----------
     {
         AcceleratorBridge b;
-        b.RegisterCombos({ " shift + CONTROL + z ", "s+CTRL" });
+        b.RegisterCombos({" shift + CONTROL + z ", "s+CTRL"});
         Dispatch d = dispatch(b, 'Z', true, true, false);
         CHECK(d.handled && d.combo == " shift + CONTROL + z ",
               "modifiers order/case/space-insensitive; ORIGINAL string echoed verbatim");
@@ -159,8 +172,7 @@ int main()
         CHECK(d.handled && d.combo == "s+CTRL", "key-before-modifier order accepted");
         CHECK(matchesOnly("Ctrl+Shift+Alt+X", 'X', true, true, true),
               "triple-modifier combo matches only the exact triple");
-        CHECK(matchesOnly("Alt+Enter", VK_RETURN, false, false, true),
-              "Alt-only combo requires exactly Alt");
+        CHECK(matchesOnly("Alt+Enter", VK_RETURN, false, false, true), "Alt-only combo requires exactly Alt");
     }
 
     // ---- E: unrecognised keys are dropped at registration ------------------
@@ -168,7 +180,7 @@ int main()
     // valid combo registered alongside must keep working.
     {
         AcceleratorBridge b;
-        b.RegisterCombos({ "Ctrl+F25", "F0", "Ctrl+Foo", "Ctrl+", "Ctrl+Shift", "", "Ctrl+K" });
+        b.RegisterCombos({"Ctrl+F25", "F0", "Ctrl+Foo", "Ctrl+", "Ctrl+Shift", "", "Ctrl+K"});
         CHECK(!dispatch(b, VK_F1 + 24, true, false, false).handled, "F25 out of range -> never matches");
         CHECK(!dispatch(b, 0, true, false, false).handled, "vk 0 never matches (dropped combos unreachable)");
         CHECK(!dispatch(b, 0, false, false, false).handled, "empty / modifier-only combos never match");
@@ -179,9 +191,9 @@ int main()
     // ---- F: RegisterCombos replaces the previous list ----------------------
     {
         AcceleratorBridge b;
-        b.RegisterCombos({ "Ctrl+S" });
+        b.RegisterCombos({"Ctrl+S"});
         CHECK(dispatch(b, 'S', true, false, false).handled, "first registration active");
-        b.RegisterCombos({ "Ctrl+D" });
+        b.RegisterCombos({"Ctrl+D"});
         CHECK(!dispatch(b, 'S', true, false, false).handled, "re-registration drops the old list");
         CHECK(dispatch(b, 'D', true, false, false).handled, "re-registration installs the new list");
         b.RegisterCombos({});
@@ -191,7 +203,7 @@ int main()
     // ---- G: duplicates -- first registered match wins, single emission -----
     {
         AcceleratorBridge b;
-        b.RegisterCombos({ "Ctrl+S", "Control+S" });
+        b.RegisterCombos({"Ctrl+S", "Control+S"});
         Dispatch d = dispatch(b, 'S', true, false, false);
         CHECK(d.handled && d.emits == 1 && d.combo == "Ctrl+S",
               "duplicate combos: first match wins, exactly one emission");
@@ -200,8 +212,7 @@ int main()
     // ---- H: an empty bridge (nothing registered) never matches -------------
     {
         AcceleratorBridge b;
-        CHECK(!dispatch(b, 'S', true, false, false).handled
-              && !dispatch(b, VK_DELETE, false, false, false).handled,
+        CHECK(!dispatch(b, 'S', true, false, false).handled && !dispatch(b, VK_DELETE, false, false, false).handled,
               "fresh bridge matches nothing");
     }
 

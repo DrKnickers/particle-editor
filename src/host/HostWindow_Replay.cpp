@@ -7,14 +7,16 @@
 #include "HostWindowImpl.h"
 #include "simulation/ParticleRandom.h"
 
-namespace host {
+namespace host
+{
 
-ParticleReplayController::Hooks HostWindowImpl::BuildReplayHooks(const std::wstring& readbackPath, SpawnPolicy policy,
-                                                                 PinMode pinMode)
+ParticleReplayController::Hooks HostWindowImpl::BuildReplayHooks(const std::wstring& readbackPath,
+                                                                 SpawnPolicy         policy,
+                                                                 PinMode             pinMode)
 {
     ParticleReplayController::Hooks hooks;
-    auto spawnPending = std::make_shared<bool>(false);
-    hooks.admitDevice = [this]()
+    auto                            spawnPending = std::make_shared<bool>(false);
+    hooks.admitDevice                            = [this]()
     {
         return engine && engine->PrepareDeviceForFrame();
     };
@@ -33,10 +35,10 @@ ParticleReplayController::Hooks HostWindowImpl::BuildReplayHooks(const std::wstr
         const bool skydomeOk = engine->SetEmbeddedSkydomeSlotForCapture(1);
         engine->SetGround(false);
         return skydomeOk && !engine->GetGround() && engine->GetSkydomeSlot() == 1 &&
-            engine->IsSkydomeUsingEmbeddedResource() &&
-            engine->GetSkydomePrimaryName().empty() && engine->GetSkydomeSecondaryName().empty() &&
-            !engine->SkydomePrimaryHasGpuBuffers() && !engine->SkydomeSecondaryHasGpuBuffers() &&
-            engine->SkydomeMeshHasGpuBuffers() && !engine->DeviceCallsBlocked();
+               engine->IsSkydomeUsingEmbeddedResource() && engine->GetSkydomePrimaryName().empty() &&
+               engine->GetSkydomeSecondaryName().empty() && !engine->SkydomePrimaryHasGpuBuffers() &&
+               !engine->SkydomeSecondaryHasGpuBuffers() && engine->SkydomeMeshHasGpuBuffers() &&
+               !engine->DeviceCallsBlocked();
     };
     hooks.clearInstances = [this]()
     {
@@ -44,29 +46,38 @@ ParticleReplayController::Hooks HostWindowImpl::BuildReplayHooks(const std::wstr
         engine->InvalidatePausedIdleSkip();
         engine->TakeSpawnRefusal(nullptr);
     };
-    hooks.seed = [](std::uint32_t seed) { ParticleRandom::Seed(seed); };
-    hooks.freezeClock = [](float anchor) { FreezePreviewClockAt(anchor); };
+    hooks.seed = [](std::uint32_t seed)
+    {
+        ParticleRandom::Seed(seed);
+    };
+    hooks.freezeClock = [](float anchor)
+    {
+        FreezePreviewClockAt(anchor);
+    };
     hooks.armSpawn = [this, spawnPending](const PreviewScenario& scenario)
     {
         // Undo replaces this unique_ptr: never retain a document pointer across hooks.
         if (!engine || !spawnerDriver || !particleSystem) return false;
         spawnerDriver->Reset();
         SpawnerConfig config;
-        config.mode = SpawnerConfig::Mode::Manual;
-        config.burstSize = 1;
-        config.position = scenario.spawnPosition;
-        config.velocity = scenario.spawnVelocity;
-        config.jitterPosition = D3DXVECTOR3(0, 0, 0);
-        config.acceleration = D3DXVECTOR3(0, 0, 0);
+        config.mode              = SpawnerConfig::Mode::Manual;
+        config.burstSize         = 1;
+        config.position          = scenario.spawnPosition;
+        config.velocity          = scenario.spawnVelocity;
+        config.jitterPosition    = D3DXVECTOR3(0, 0, 0);
+        config.acceleration      = D3DXVECTOR3(0, 0, 0);
         config.squiggleAmplitude = D3DXVECTOR3(0, 0, 0);
         config.squiggleFrequency = 0.0f;
-        config.maxLifetimeSec = 0.0f;
+        config.maxLifetimeSec    = 0.0f;
         spawnerDriver->SetConfig(config);
         spawnerDriver->Trigger(particleSystem.get(), engine.get());
         *spawnPending = true;
         return !engine->DeviceCallsBlocked();
     };
-    hooks.stepClock = []() { StepPreviewFrames(1); };
+    hooks.stepClock = []()
+    {
+        StepPreviewFrames(1);
+    };
     hooks.tickSpawner = [this, spawnPending, policy]()
     {
         if (!engine || !spawnerDriver || !particleSystem || engine->DeviceCallsBlocked()) return false;
@@ -91,13 +102,16 @@ ParticleReplayController::Hooks HostWindowImpl::BuildReplayHooks(const std::wstr
         engine->Update();
         return engine->CompletedFullUpdateCountForObservation() == before + 1;
     };
-    hooks.render = [this]() { return RenderComposedFrame(false); };
+    hooks.render = [this]()
+    {
+        return RenderComposedFrame(false);
+    };
     if (!readbackPath.empty())
     {
         hooks.readback = [this, readbackPath]()
         {
             return engine && !engine->DeviceCallsBlocked() && alphaCompositor &&
-                alphaCompositor->CaptureSnapshotToFile(readbackPath);
+                   alphaCompositor->CaptureSnapshotToFile(readbackPath);
         };
     }
     return hooks;
@@ -108,4 +122,4 @@ bool HostWindowImpl::TimelineOwnsSimulation() const
     return dispatcher && dispatcher->TimelineActive();
 }
 
-}  // namespace host
+} // namespace host

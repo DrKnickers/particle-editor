@@ -10,10 +10,10 @@
 
 using Microsoft::WRL::ComPtr;
 
-namespace host {
+namespace host
+{
 
-bool EncodeBgraToPngWic(const unsigned char* bgra, int w, int h,
-                        const std::wstring& path)
+bool EncodeBgraToPngWic(const unsigned char* bgra, int w, int h, const std::wstring& path)
 {
     if (!bgra || w <= 0 || h <= 0) return false;
     // Overflow guard (review): the stride/size narrows to UINT below — at
@@ -23,20 +23,16 @@ bool EncodeBgraToPngWic(const unsigned char* bgra, int w, int h,
     if (bytesLL > 0xFFFFFFFFull) return false;
 
     ComPtr<IWICImagingFactory> fac;
-    if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr,
-                                CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&fac))))
+    if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&fac))))
         return false;
 
     ComPtr<IWICStream> stream;
     if (FAILED(fac->CreateStream(&stream))) return false;
-    if (FAILED(stream->InitializeFromFilename(path.c_str(), GENERIC_WRITE)))
-        return false;
+    if (FAILED(stream->InitializeFromFilename(path.c_str(), GENERIC_WRITE))) return false;
 
     ComPtr<IWICBitmapEncoder> enc;
-    if (FAILED(fac->CreateEncoder(GUID_ContainerFormatPng, nullptr, &enc)))
-        return false;
-    if (FAILED(enc->Initialize(stream.Get(), WICBitmapEncoderNoCache)))
-        return false;
+    if (FAILED(fac->CreateEncoder(GUID_ContainerFormatPng, nullptr, &enc))) return false;
+    if (FAILED(enc->Initialize(stream.Get(), WICBitmapEncoderNoCache))) return false;
 
     ComPtr<IWICBitmapFrameEncode> frame;
     ComPtr<IPropertyBag2>         props;
@@ -65,8 +61,7 @@ bool EncodeBgraToPngWic(const unsigned char* bgra, int w, int h,
         props->Write(1, &optInterlace, &vInterlace);
     }
     if (FAILED(frame->Initialize(props.Get()))) return false;
-    if (FAILED(frame->SetSize(static_cast<UINT>(w), static_cast<UINT>(h))))
-        return false;
+    if (FAILED(frame->SetSize(static_cast<UINT>(w), static_cast<UINT>(h)))) return false;
 
     // 32bppBGR: X8 alpha ignored — parity with the GDI+ path's
     // PixelFormat32bppRGB (the alpha byte is undefined after PrintWindow).
@@ -77,11 +72,9 @@ bool EncodeBgraToPngWic(const unsigned char* bgra, int w, int h,
     if (FAILED(frame->SetPixelFormat(&fmt))) return false;
 
     ComPtr<IWICBitmap> bmp;
-    if (FAILED(fac->CreateBitmapFromMemory(
-            static_cast<UINT>(w), static_cast<UINT>(h),
-            GUID_WICPixelFormat32bppBGR, static_cast<UINT>(w) * 4,
-            static_cast<UINT>(w) * 4 * static_cast<UINT>(h),
-            const_cast<BYTE*>(bgra), &bmp)))
+    if (FAILED(fac->CreateBitmapFromMemory(static_cast<UINT>(w), static_cast<UINT>(h), GUID_WICPixelFormat32bppBGR,
+                                           static_cast<UINT>(w) * 4, static_cast<UINT>(w) * 4 * static_cast<UINT>(h),
+                                           const_cast<BYTE*>(bgra), &bmp)))
         return false;
 
     if (FAILED(frame->WriteSource(bmp.Get(), nullptr))) return false;
@@ -90,22 +83,18 @@ bool EncodeBgraToPngWic(const unsigned char* bgra, int w, int h,
     return true;
 }
 
-bool DecodePngToBgraWic(const std::wstring& path, unsigned& w, unsigned& h,
-                        std::vector<unsigned char>& bgra)
+bool DecodePngToBgraWic(const std::wstring& path, unsigned& w, unsigned& h, std::vector<unsigned char>& bgra)
 {
-    ComPtr<IWICImagingFactory> fac;
-    ComPtr<IWICBitmapDecoder> decoder;
+    ComPtr<IWICImagingFactory>    fac;
+    ComPtr<IWICBitmapDecoder>     decoder;
     ComPtr<IWICBitmapFrameDecode> frame;
-    ComPtr<IWICFormatConverter> converter;
-    UINT width = 0, height = 0;
-    if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
-                                IID_PPV_ARGS(&fac))) ||
-        FAILED(fac->CreateDecoderFromFilename(path.c_str(), nullptr, GENERIC_READ,
-                                              WICDecodeMetadataCacheOnDemand, &decoder)) ||
-        FAILED(decoder->GetFrame(0, &frame)) ||
-        FAILED(fac->CreateFormatConverter(&converter)) ||
-        FAILED(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppBGRA,
-                                     WICBitmapDitherTypeNone, nullptr, 0.0,
+    ComPtr<IWICFormatConverter>   converter;
+    UINT                          width = 0, height = 0;
+    if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&fac))) ||
+        FAILED(fac->CreateDecoderFromFilename(path.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand,
+                                              &decoder)) ||
+        FAILED(decoder->GetFrame(0, &frame)) || FAILED(fac->CreateFormatConverter(&converter)) ||
+        FAILED(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppBGRA, WICBitmapDitherTypeNone, nullptr, 0.0,
                                      WICBitmapPaletteTypeCustom)) ||
         FAILED(converter->GetSize(&width, &height)))
         return false;
@@ -113,11 +102,10 @@ bool DecodePngToBgraWic(const std::wstring& path, unsigned& w, unsigned& h,
     const unsigned long long bytesLL = static_cast<unsigned long long>(width) * height * 4ull;
     if (bytesLL == 0 || bytesLL > 0xFFFFFFFFull) return false;
     bgra.resize(static_cast<size_t>(bytesLL));
-    if (FAILED(converter->CopyPixels(nullptr, width * 4, static_cast<UINT>(bytesLL), bgra.data())))
-        return false;
+    if (FAILED(converter->CopyPixels(nullptr, width * 4, static_cast<UINT>(bytesLL), bgra.data()))) return false;
     w = width;
     h = height;
     return true;
 }
 
-}  // namespace host
+} // namespace host

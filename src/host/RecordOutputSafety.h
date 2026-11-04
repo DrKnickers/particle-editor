@@ -22,7 +22,8 @@
 // Pure and header-only (takes an already-enumerated listing, no filesystem
 // calls) so tests/test_record_output_safety.cpp can exercise it directly.
 
-namespace recordsafety {
+namespace recordsafety
+{
 
 // A file a --record publish is allowed to have created itself:
 //   frame_00000.png … frame_99999.png
@@ -58,13 +59,11 @@ inline bool IsRecordArtifactName(const std::wstring& name)
 //
 // Returns true when overwriting is safe. On false, `reason` explains which
 // entry blocked it so the operator can see exactly what was protected.
-inline bool MayReplaceOutputDir(bool exists,
-                                const std::vector<std::wstring>& entries,
-                                std::wstring& reason)
+inline bool MayReplaceOutputDir(bool exists, const std::vector<std::wstring>& entries, std::wstring& reason)
 {
     reason.clear();
-    if (!exists) return true;          // nothing to destroy
-    if (entries.empty()) return true;  // empty dir: safe to replace
+    if (!exists) return true;         // nothing to destroy
+    if (entries.empty()) return true; // empty dir: safe to replace
 
     for (const std::wstring& e : entries)
     {
@@ -74,7 +73,7 @@ inline bool MayReplaceOutputDir(bool exists,
             return false;
         }
     }
-    return true;   // exclusively this pipeline's own prior output
+    return true; // exclusively this pipeline's own prior output
 }
 
 // The same decision for a path the caller has inspected on disk, covering the
@@ -86,11 +85,8 @@ inline bool MayReplaceOutputDir(bool exists,
 //                 path (a stray FILE named `<out>.tmp` must not be deleted).
 // `listed`      — false when the listing failed part-way; an unreadable
 //                 directory is refused rather than treated as empty.
-inline bool MayReplaceRecordDir(bool exists,
-                                bool isDirectory,
-                                bool listed,
-                                const std::vector<std::wstring>& entries,
-                                std::wstring& reason)
+inline bool MayReplaceRecordDir(
+    bool exists, bool isDirectory, bool listed, const std::vector<std::wstring>& entries, std::wstring& reason)
 {
     reason.clear();
     if (!exists) return true;

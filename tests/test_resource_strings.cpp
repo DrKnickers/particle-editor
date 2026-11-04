@@ -23,7 +23,7 @@
 #include <cstdio>
 #include <cwchar>
 
-#include "Resources/resource.h"   // pure #defines — IDS_* / IDR_* / IDB_* / IDI_*
+#include "Resources/resource.h" // pure #defines — IDS_* / IDR_* / IDB_* / IDI_*
 
 static int g_pass = 0;
 static int g_fail = 0;
@@ -31,7 +31,7 @@ static int g_fail = 0;
 static void check_string(HMODULE hMod, UINT id, const wchar_t* name, const wchar_t* expected)
 {
     wchar_t buf[1024];
-    int len = ::LoadStringW(hMod, id, buf, (int)(sizeof(buf) / sizeof(buf[0])));
+    int     len = ::LoadStringW(hMod, id, buf, (int)(sizeof(buf) / sizeof(buf[0])));
     if (len <= 0)
     {
         wprintf(L"  FAIL  %-28s (id %u): LoadString returned %d (empty/missing string)\n", name, id, len);
@@ -77,7 +77,11 @@ int wmain(int argc, wchar_t** argv)
     {
         for (const wchar_t* c : candidates)
         {
-            if (::GetFileAttributesW(c) != INVALID_FILE_ATTRIBUTES) { path = c; break; }
+            if (::GetFileAttributesW(c) != INVALID_FILE_ATTRIBUTES)
+            {
+                path = c;
+                break;
+            }
         }
     }
 
@@ -97,41 +101,42 @@ int wmain(int argc, wchar_t** argv)
     wprintf(L"Loaded: %ls\n\n", path);
 
     wprintf(L"Migrated IDS_* strings (must resolve to their real English text):\n");
-    check_string(hMod, IDS_ERROR_FILE_READ,         L"IDS_ERROR_FILE_READ",         L"Unable to read file");
-    check_string(hMod, IDS_ERROR_FILE_FIND,         L"IDS_ERROR_FILE_FIND",         L"Unable to find file:\n%ls");
-    check_string(hMod, IDS_ERROR_FILE_WRITE,        L"IDS_ERROR_FILE_WRITE",        L"Unable to write file");
-    check_string(hMod, IDS_ERROR_FILE_CORRUPT,      L"IDS_ERROR_FILE_CORRUPT",      L"Bad or corrupted file");
-    check_string(hMod, IDS_ERROR_FILE_FORMAT,       L"IDS_ERROR_FILE_FORMAT",       L"The file is not a particle file");
+    check_string(hMod, IDS_ERROR_FILE_READ, L"IDS_ERROR_FILE_READ", L"Unable to read file");
+    check_string(hMod, IDS_ERROR_FILE_FIND, L"IDS_ERROR_FILE_FIND", L"Unable to find file:\n%ls");
+    check_string(hMod, IDS_ERROR_FILE_WRITE, L"IDS_ERROR_FILE_WRITE", L"Unable to write file");
+    check_string(hMod, IDS_ERROR_FILE_CORRUPT, L"IDS_ERROR_FILE_CORRUPT", L"Bad or corrupted file");
+    check_string(hMod, IDS_ERROR_FILE_FORMAT, L"IDS_ERROR_FILE_FORMAT", L"The file is not a particle file");
     check_string(hMod, IDS_ERROR_XML_PARSER_CREATE, L"IDS_ERROR_XML_PARSER_CREATE", L"Unable to create XML parser");
-    check_string(hMod, IDS_ERROR_XML,               L"IDS_ERROR_XML",               L"%ls at line %d");
-    check_string(hMod, IDS_QUERY_DATA_PATH,         L"IDS_QUERY_DATA_PATH",         L"Please select the Star Wars Empire at War or Forces of Corruption folder that contains the Data folder.");
-    check_string(hMod, IDS_ERROR_FILE_OPEN,         L"IDS_ERROR_FILE_OPEN",         L"Unable to open file:\n%ls");
-    check_string(hMod, IDS_ERROR_FILE_CREATE,       L"IDS_ERROR_FILE_CREATE",       L"Unable to create file:\n%ls");
-    check_string(hMod, IDS_ERROR_RENDERER_RESET,    L"IDS_ERROR_RENDERER_RESET",    L"Unable to reset rendering window");
+    check_string(hMod, IDS_ERROR_XML, L"IDS_ERROR_XML", L"%ls at line %d");
+    check_string(
+        hMod, IDS_QUERY_DATA_PATH, L"IDS_QUERY_DATA_PATH",
+        L"Please select the Star Wars Empire at War or Forces of Corruption folder that contains the Data folder.");
+    check_string(hMod, IDS_ERROR_FILE_OPEN, L"IDS_ERROR_FILE_OPEN", L"Unable to open file:\n%ls");
+    check_string(hMod, IDS_ERROR_FILE_CREATE, L"IDS_ERROR_FILE_CREATE", L"Unable to create file:\n%ls");
+    check_string(hMod, IDS_ERROR_RENDERER_RESET, L"IDS_ERROR_RENDERER_RESET", L"Unable to reset rendering window");
 
     wprintf(L"\nKept live resources (the .rc trim must NOT have dropped these):\n");
-    check_resource(hMod, RT_RCDATA, IDS_SCENEHEAT,         L"IDS_SCENEHEAT (SceneHeat.fx)");
-    check_resource(hMod, RT_RCDATA, IDR_DEFAULT_SHADER,    L"IDR_DEFAULT_SHADER");
-    check_resource(hMod, RT_RCDATA, IDR_SHADER_SKYDOME,    L"IDR_SHADER_SKYDOME");
+    check_resource(hMod, RT_RCDATA, IDS_SCENEHEAT, L"IDS_SCENEHEAT (SceneHeat.fx)");
+    check_resource(hMod, RT_RCDATA, IDR_DEFAULT_SHADER, L"IDR_DEFAULT_SHADER");
+    check_resource(hMod, RT_RCDATA, IDR_SHADER_SKYDOME, L"IDR_SHADER_SKYDOME");
     check_resource(hMod, RT_RCDATA, IDR_SHADER_GROUND_LIT, L"IDR_SHADER_GROUND_LIT");
-    check_resource(hMod, RT_RCDATA, IDB_GROUND,            L"IDB_GROUND (dirt)");
+    check_resource(hMod, RT_RCDATA, IDB_GROUND, L"IDB_GROUND (dirt)");
     // Grass/Sand/Snow are no longer bundled — they load from the user's game
     // install at runtime (proprietary vanilla EaW textures must not ship).
-    check_resource(hMod, RT_RCDATA, IDR_SKYDOME_SPACE,     L"IDR_SKYDOME_SPACE");
-    check_resource(hMod, RT_RCDATA, IDR_SKYDOME_ATMOSPHERE,L"IDR_SKYDOME_ATMOSPHERE");
-    check_resource(hMod, RT_RCDATA, IDR_SKYDOME_SUNSET,    L"IDR_SKYDOME_SUNSET");
-    check_resource(hMod, RT_RCDATA, IDR_SKYDOME_DAWN,      L"IDR_SKYDOME_DAWN");
-    check_resource(hMod, RT_RCDATA, IDR_SKYDOME_NIGHT,     L"IDR_SKYDOME_NIGHT");
-    check_resource(hMod, RT_RCDATA, IDR_SKYDOME_OVERCAST,  L"IDR_SKYDOME_OVERCAST");
-    check_resource(hMod, RT_RCDATA, IDR_SKYDOME_STUDIO,    L"IDR_SKYDOME_STUDIO");
-    check_resource(hMod, RT_RCDATA, IDR_SKYDOME_INDOOR,    L"IDR_SKYDOME_INDOOR");
-    check_resource(hMod, RT_GROUP_ICON, IDI_LOGO,          L"IDI_LOGO (app icon)");
-    check_resource(hMod, RT_BITMAP, IDB_MISSING,           L"IDB_MISSING (placeholder)");
+    check_resource(hMod, RT_RCDATA, IDR_SKYDOME_SPACE, L"IDR_SKYDOME_SPACE");
+    check_resource(hMod, RT_RCDATA, IDR_SKYDOME_ATMOSPHERE, L"IDR_SKYDOME_ATMOSPHERE");
+    check_resource(hMod, RT_RCDATA, IDR_SKYDOME_SUNSET, L"IDR_SKYDOME_SUNSET");
+    check_resource(hMod, RT_RCDATA, IDR_SKYDOME_DAWN, L"IDR_SKYDOME_DAWN");
+    check_resource(hMod, RT_RCDATA, IDR_SKYDOME_NIGHT, L"IDR_SKYDOME_NIGHT");
+    check_resource(hMod, RT_RCDATA, IDR_SKYDOME_OVERCAST, L"IDR_SKYDOME_OVERCAST");
+    check_resource(hMod, RT_RCDATA, IDR_SKYDOME_STUDIO, L"IDR_SKYDOME_STUDIO");
+    check_resource(hMod, RT_RCDATA, IDR_SKYDOME_INDOOR, L"IDR_SKYDOME_INDOOR");
+    check_resource(hMod, RT_GROUP_ICON, IDI_LOGO, L"IDI_LOGO (app icon)");
+    check_resource(hMod, RT_BITMAP, IDB_MISSING, L"IDB_MISSING (placeholder)");
 
     ::FreeLibrary(hMod);
 
     wprintf(L"\n=== ResourceStrings: %d passed, %d failed ===\n", g_pass, g_fail);
-    if (g_fail == 0)
-        wprintf(L"=== ResourceStrings: ALL PASS ===\n");
+    if (g_fail == 0) wprintf(L"=== ResourceStrings: ALL PASS ===\n");
     return g_fail == 0 ? 0 : 1;
 }

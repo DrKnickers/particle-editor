@@ -18,10 +18,12 @@
 #include "HostWindowImpl.h"
 #include "IsolatedWebViewProfile.h"
 
-namespace host {
+namespace host
+{
 
 // ---------- Browser profile helpers ----------
-namespace {
+namespace
+{
 
 // The WebView2 origin allow-list (IsApprovedWebViewOrigin) lives in
 // WebViewOriginPolicy.h so its boundary is unit-tested.
@@ -31,11 +33,14 @@ namespace {
 // return or an exception can never leak it.
 struct CoTaskMemString
 {
-    LPWSTR p = nullptr;
-    CoTaskMemString() = default;
-    CoTaskMemString(const CoTaskMemString&) = delete;
+    LPWSTR p                                           = nullptr;
+    CoTaskMemString()                                  = default;
+    CoTaskMemString(const CoTaskMemString&)            = delete;
     CoTaskMemString& operator=(const CoTaskMemString&) = delete;
-    ~CoTaskMemString() { if (p) CoTaskMemFree(p); }
+    ~CoTaskMemString()
+    {
+        if (p) CoTaskMemFree(p);
+    }
 };
 
 // WebView2 user-data folder under %LOCALAPPDATA%. We use a stable,
@@ -55,8 +60,7 @@ std::wstring ComputeUserDataFolder(bool isolated = false)
     if (isolated) swprintf(pidSuffix, 32, L"-iso-%lu", GetCurrentProcessId());
 
     PWSTR localAppData = nullptr;
-    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &localAppData))
-        && localAppData)
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &localAppData)) && localAppData)
     {
         std::wstring folder = localAppData;
         CoTaskMemFree(localAppData);
@@ -83,16 +87,17 @@ bool IsLiveEditorPid(unsigned long pid)
     if (pid == GetCurrentProcessId()) return true;
     HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
     if (!process) return GetLastError() != ERROR_INVALID_PARAMETER;
-    DWORD exitCode = 0;
-    const bool exited = GetExitCodeProcess(process, &exitCode) && exitCode != STILL_ACTIVE;
-    const std::wstring image = host::ModuleFilePathWith([process](wchar_t* buffer, DWORD capacity)
-    {
-        DWORD size = capacity;
-        if (QueryFullProcessImageNameW(process, 0, buffer, &size))
-            return host::ModuleNameProbeResult{ size, ERROR_SUCCESS };
-        const DWORD error = GetLastError();
-        return host::ModuleNameProbeResult{ error == ERROR_INSUFFICIENT_BUFFER ? capacity : 0, error };
-    });
+    DWORD              exitCode = 0;
+    const bool         exited   = GetExitCodeProcess(process, &exitCode) && exitCode != STILL_ACTIVE;
+    const std::wstring image    = host::ModuleFilePathWith(
+        [process](wchar_t* buffer, DWORD capacity)
+        {
+            DWORD size = capacity;
+            if (QueryFullProcessImageNameW(process, 0, buffer, &size))
+                return host::ModuleNameProbeResult{size, ERROR_SUCCESS};
+            const DWORD error = GetLastError();
+            return host::ModuleNameProbeResult{error == ERROR_INSUFFICIENT_BUFFER ? capacity : 0, error};
+        });
     CloseHandle(process);
     if (exited) return false;
     const std::wstring ours = std::filesystem::path(host::ModuleFilePath()).filename().wstring();
@@ -170,7 +175,7 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
     std::wstring msgKind;
     {
         static const std::wstring kKindNeedle = L"\"kind\":\"";
-        const size_t kp = json.find(kKindNeedle);
+        const size_t              kp          = json.find(kKindNeedle);
         if (kp != std::wstring::npos)
         {
             const size_t vs = kp + kKindNeedle.size();
@@ -240,18 +245,16 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
         if (msg.is_object() && !m_selftestToken.empty())
         {
             const auto tok = msg.find("token");
-            if (tok != msg.end() && tok->is_string()
-                && tok->get_ref<const std::string&>() == m_selftestToken)
+            if (tok != msg.end() && tok->is_string() && tok->get_ref<const std::string&>() == m_selftestToken)
             {
-                const auto ok = msg.find("ok");
-                m_selftestOk = ok != msg.end() && ok->is_boolean() && ok->get<bool>();
+                const auto ok  = msg.find("ok");
+                m_selftestOk   = ok != msg.end() && ok->is_boolean() && ok->get<bool>();
                 m_selftestDone = true;
                 if (!m_selftestOk)
                 {
                     const auto why = msg.find("why");
                     Log("drive: selftest page-side failure: %s\n",
-                        why != msg.end() && why->is_string()
-                            ? why->get_ref<const std::string&>().c_str() : "?");
+                        why != msg.end() && why->is_string() ? why->get_ref<const std::string&>().c_str() : "?");
                 }
             }
         }
@@ -259,21 +262,17 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
     }
     if (msgKind == L"perf/clock-calibration")
     {
-        nlohmann::json msg = nlohmann::json::parse(WideToUtf8(json), nullptr, false);
-        nlohmann::json event = {
-            {"eventName", "clock_calibration"},
-            {"eventType", "instant"},
-            {"hostReceiveQpc", host::perf::NowQpc()},
-            {"hostQpcFrequency", host::perf::QpcFrequency()}
-        };
+        nlohmann::json msg   = nlohmann::json::parse(WideToUtf8(json), nullptr, false);
+        nlohmann::json event = {{"eventName", "clock_calibration"},
+                                {"eventType", "instant"},
+                                {"hostReceiveQpc", host::perf::NowQpc()},
+                                {"hostQpcFrequency", host::perf::QpcFrequency()}};
         if (!msg.is_discarded())
         {
-            if (auto it = msg.find("rendererNowMs"); it != msg.end() && it->is_number())
-                event["rendererNowMs"] = *it;
+            if (auto it = msg.find("rendererNowMs"); it != msg.end() && it->is_number()) event["rendererNowMs"] = *it;
             if (auto it = msg.find("rendererTimeOriginMs"); it != msg.end() && it->is_number())
                 event["rendererTimeOriginMs"] = *it;
-            if (auto it = msg.find("sampleId"); it != msg.end() && it->is_string())
-                event["sampleId"] = *it;
+            if (auto it = msg.find("sampleId"); it != msg.end() && it->is_string()) event["sampleId"] = *it;
         }
         host::perf::Emit(std::move(event));
         return;
@@ -284,8 +283,7 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
         if (!msg.is_discarded())
         {
             nlohmann::json event;
-            if (auto it = msg.find("event"); it != msg.end() && it->is_object())
-                event = *it;
+            if (auto it = msg.find("event"); it != msg.end() && it->is_object()) event = *it;
             if (!event.is_object()) event = nlohmann::json::object();
             if (!event.contains("eventName")) event["eventName"] = "renderer.event";
             if (!event.contains("eventType")) event["eventType"] = "instant";
@@ -296,8 +294,7 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
     }
 
     ++perfWebMsgs;
-    if (!msgKind.empty())
-        ++perfMsgKinds[msgKind];
+    if (!msgKind.empty()) ++perfMsgKinds[msgKind];
 
     // --record per-frame ack: React posts {"type":"ui/frame-acked","frame":N}
     // after a double-rAF (frame N's cursor/state has painted). The record loop
@@ -311,26 +308,23 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
     if (json.find(L"\"type\":\"ui/frame-acked\"") != std::wstring::npos)
     {
         static const std::wstring kFrameNeedle = L"\"frame\":";
-        const size_t fp = json.find(kFrameNeedle);
-        if (fp != std::wstring::npos)
-            m_lastAckedFrame = _wtoi(json.c_str() + fp + kFrameNeedle.size());
+        const size_t              fp           = json.find(kFrameNeedle);
+        if (fp != std::wstring::npos) m_lastAckedFrame = _wtoi(json.c_str() + fp + kFrameNeedle.size());
 
         if (json.find(L"\"cursor\":") != std::wstring::npos)
         {
             nlohmann::json msg = nlohmann::json::parse(WideToUtf8(json), nullptr, false);
-            if (!msg.is_discarded() && msg.is_object() && msg.contains("cursor")
-                && msg["cursor"].is_object())
+            if (!msg.is_discarded() && msg.is_object() && msg.contains("cursor") && msg["cursor"].is_object())
             {
                 nlohmann::json cur = msg["cursor"];
                 // Split the resolved array out of the cursor object so the sidecar
                 // gets cursor:{x,y,vis,press} + resolved:[...] as siblings.
-                m_lastAckResolved = cur.contains("resolved") && cur["resolved"].is_array()
-                                        ? cur["resolved"] : nlohmann::json::array();
+                m_lastAckResolved =
+                    cur.contains("resolved") && cur["resolved"].is_array() ? cur["resolved"] : nlohmann::json::array();
                 cur.erase("resolved");
-                m_lastAckCursor = std::move(cur);
-                const auto frame = msg.find("frame");
-                m_lastAckCursorFrame = frame != msg.end() && frame->is_number_integer()
-                                           ? frame->get<int>() : -1;
+                m_lastAckCursor      = std::move(cur);
+                const auto frame     = msg.find("frame");
+                m_lastAckCursorFrame = frame != msg.end() && frame->is_number_integer() ? frame->get<int>() : -1;
             }
         }
         return;
@@ -343,10 +337,8 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
     // message on the UI thread. Skip their per-message line; the 1 Hz
     // [resize-perf] bridge tally above carries their rates, and every
     // other (low-frequency) kind keeps the full per-message log.
-    const bool highFrequencyKind =
-        msgKind == L"layout/scene-rect" || msgKind == L"viewport/input";
-    if (!highFrequencyKind)
-        Log("[host] WebMsg (%zu chars)\n", json.size());
+    const bool highFrequencyKind = msgKind == L"layout/scene-rect" || msgKind == L"viewport/input";
+    if (!highFrequencyKind) Log("[host] WebMsg (%zu chars)\n", json.size());
     const DWORD rpNow = GetTickCount();
     if (perfMsgLastEmit == 0)
     {
@@ -355,16 +347,13 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
     else if ((rpNow - perfMsgLastEmit) >= 1000)
     {
         // Top-4 kinds by count, formatted "kind=count".
-        std::vector<std::pair<std::wstring, unsigned>> kinds(
-            perfMsgKinds.begin(), perfMsgKinds.end());
-        std::sort(kinds.begin(), kinds.end(),
-                  [](const auto& a, const auto& b) { return a.second > b.second; });
-        char detail[256] = "";
-        size_t off = 0;
+        std::vector<std::pair<std::wstring, unsigned>> kinds(perfMsgKinds.begin(), perfMsgKinds.end());
+        std::sort(kinds.begin(), kinds.end(), [](const auto& a, const auto& b) { return a.second > b.second; });
+        char   detail[256] = "";
+        size_t off         = 0;
         for (size_t i = 0; i < kinds.size() && i < 4; ++i)
         {
-            const int n = _snprintf_s(detail + off, sizeof(detail) - off, _TRUNCATE,
-                                      "%s%ls=%u", i ? " " : "",
+            const int n = _snprintf_s(detail + off, sizeof(detail) - off, _TRUNCATE, "%s%ls=%u", i ? " " : "",
                                       kinds[i].first.c_str(), kinds[i].second);
             if (n < 0) break;
             off += static_cast<size_t>(n);
@@ -372,12 +361,10 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
         Log("[resize-perf] bridge: msgs=%u top[%s] (per ~1s)\n", perfWebMsgs, detail);
         if (host::perf::Enabled())
         {
-            host::perf::Emit({
-                {"eventName", "host.bridge_message_summary"},
-                {"eventType", "counter"},
-                {"messageCount", perfWebMsgs},
-                {"topKinds", detail}
-            });
+            host::perf::Emit({{"eventName", "host.bridge_message_summary"},
+                              {"eventType", "counter"},
+                              {"messageCount", perfWebMsgs},
+                              {"topKinds", detail}});
         }
         perfWebMsgs = 0;
         perfMsgKinds.clear();
@@ -388,11 +375,9 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
     // dispatching it — the capture loop holds its frame counter until React's
     // layout has landed, because that message resizes the engine RT (counting
     // from process start raced it and produced phase-dependent capture sizes).
-    if (msgKind == L"layout/scene-rect")
-        m_sceneRectSeen = true;
+    if (msgKind == L"layout/scene-rect") m_sceneRectSeen = true;
 
-    if (dispatcher)
-        dispatcher->Dispatch(WideToUtf8(json));
+    if (dispatcher) dispatcher->Dispatch(WideToUtf8(json));
 }
 
 // ---------- Browser environment creation ----------
@@ -410,23 +395,19 @@ HRESULT HostWindowImpl::InitWebView2()
     // disjunction: "isolate the profile" and "suppress blocking modals" are the
     // same question — is anyone there? — and they must not drift apart.
     const bool captureIsolation =
-        !IsFullyInteractiveSession(m_runMode == RunMode::Capture,
-                                   IsAutomationMode(),
-                                   useTestHost);
-    std::wstring userDataFolder = m_perfWebViewProfile.empty()
-        ? ComputeUserDataFolder(captureIsolation)
-        : m_perfWebViewProfile;
-    if (!m_perfWebViewProfile.empty())
-        SHCreateDirectoryExW(nullptr, userDataFolder.c_str(), nullptr);
+        !IsFullyInteractiveSession(m_runMode == RunMode::Capture, IsAutomationMode(), useTestHost);
+    std::wstring userDataFolder =
+        m_perfWebViewProfile.empty() ? ComputeUserDataFolder(captureIsolation) : m_perfWebViewProfile;
+    if (!m_perfWebViewProfile.empty()) SHCreateDirectoryExW(nullptr, userDataFolder.c_str(), nullptr);
     Log("[host] WebView2 user-data folder: %ls%s\n", userDataFolder.c_str(),
-        !m_perfWebViewProfile.empty() ? " (perf profile)" :
-        captureIsolation ? " (isolated capture profile)" : "");
+        !m_perfWebViewProfile.empty() ? " (perf profile)"
+        : captureIsolation            ? " (isolated capture profile)"
+                                      : "");
     if (captureIsolation && m_perfWebViewProfile.empty())
     {
         const ULONGLONG sweepStart = GetTickCount64();
-        const int swept = host::SweepStaleIsolatedProfiles(userDataFolder, IsLiveEditorPid);
-        Log("[host] iso-sweep: removed %d stale profile(s) in %llu ms\n",
-            swept, GetTickCount64() - sweepStart);
+        const int       swept      = host::SweepStaleIsolatedProfiles(userDataFolder, IsLiveEditorPid);
+        Log("[host] iso-sweep: removed %d stale profile(s) in %llu ms\n", swept, GetTickCount64() - sweepStart);
     }
 
     // When --test-host is set, pass --remote-debugging-port=9222
@@ -452,8 +433,7 @@ HRESULT HostWindowImpl::InitWebView2()
             // not do, leaving the RenderWidgetHostView node with empty
             // children. Gated by the outer `if (useTestHost)` block —
             // release builds are untouched.
-            opts->put_AdditionalBrowserArguments(
-                L"--remote-debugging-port=9222 --force-renderer-accessibility");
+            opts->put_AdditionalBrowserArguments(L"--remote-debugging-port=9222 --force-renderer-accessibility");
             opts.As(&envOptions);
         }
     }
@@ -464,95 +444,86 @@ HRESULT HostWindowImpl::InitWebView2()
 
     // The production factory checks startupToken before this continuation can
     // touch `this`; the standalone callback test links that exact TU.
-    auto environmentHandler =
-        MakeEnvironmentStartupCallback(
-            startupToken,
-            [this, startupToken](HRESULT envHr, ICoreWebView2Environment* env) -> HRESULT
+    auto environmentHandler = MakeEnvironmentStartupCallback(
+        startupToken,
+        [this, startupToken](HRESULT envHr, ICoreWebView2Environment* env) -> HRESULT
+        {
+            // The adapter has already proved the owner live before this
+            // continuation can log or dereference `this`.
+            if (FAILED(envHr) || !env)
             {
-                // The adapter has already proved the owner live before this
-                // continuation can log or dereference `this`.
-                if (FAILED(envHr) || !env)
+                Log("[host] WebView2 env failed 0x%08lx\n", envHr);
+                // Returning E_FAIL here reported the failure to nobody: the
+                // runtime discards this HRESULT, and Run() already took the
+                // SYNCHRONOUS success from
+                // CreateCoreWebView2EnvironmentWithOptions. The result was a
+                // live window with no UI, no bridge, and exit code 0.
+                // Terminal failure instead, the
+                // same treatment the Compositor::Init failure below gets.
+                FailFatalComposition(FAILED(envHr) ? envHr : E_FAIL); // [[noreturn]]
+            }
+            // Stash for WebResourceRequested.
+            webEnv = env;
+
+            // Composition hosting. Stand up the
+            // host::Compositor (DComp V1 device only, no tree yet — tree
+            // assembly is deferred until inside the composition-controller
+            // completion callback) and create a
+            // CompositionController. Composition is a hard requirement:
+            // on Compositor::Init or the Environment3 QI
+            // failing there is NO HWND fallback — fail with a clear error
+            // and exit rather than leave a black window.
+            m_compositor =
+                std::make_unique<host::Compositor>(hMain, [this](const std::string& s) { Log("%s\n", s.c_str()); });
+            HRESULT chr = m_compositor->Init();
+            if (FAILED(chr))
+            {
+                Log("[host] composition: Compositor::Init failed hr=0x%08lx\n", chr);
+                FailFatalComposition(chr);
+            }
+            if (engine) engine->SetCompositionCompositor(m_compositor.get());
+
+            // QI for Environment3 — exposes
+            // CreateCoreWebView2CompositionController. Confirmed
+            // available in SDK 1.0.3967.48 (ICoreWebView2Environment3
+            // in WebView2.h).
+            ComPtr<ICoreWebView2Environment3> env3;
+            HRESULT                           qihr = env->QueryInterface(IID_PPV_ARGS(&env3));
+            if (FAILED(qihr) || !env3)
+            {
+                Log("[host] composition: QI Environment3 failed hr=0x%08lx\n", qihr);
+                FailFatalComposition(qihr);
+            }
+
+            auto compositionControllerHandler = MakeCompositionControllerStartupCallback(
+                startupToken,
+                [this](HRESULT cHr, ICoreWebView2CompositionController* ctl) -> HRESULT
                 {
-                    Log("[host] WebView2 env failed 0x%08lx\n", envHr);
-                    // Returning E_FAIL here reported the failure to nobody: the
-                    // runtime discards this HRESULT, and Run() already took the
-                    // SYNCHRONOUS success from
-                    // CreateCoreWebView2EnvironmentWithOptions. The result was a
-                    // live window with no UI, no bridge, and exit code 0.
-                    // Terminal failure instead, the
-                    // same treatment the Compositor::Init failure below gets.
-                    FailFatalComposition(FAILED(envHr) ? envHr : E_FAIL);   // [[noreturn]]
-                }
-                // Stash for WebResourceRequested.
-                webEnv = env;
+                    // The controller door uses the same production
+                    // adapter and can dispatch later still.
+                    return OnCompositionControllerReady(cHr, ctl);
+                });
 
-                // Composition hosting. Stand up the
-                // host::Compositor (DComp V1 device only, no tree yet — tree
-                // assembly is deferred until inside the composition-controller
-                // completion callback) and create a
-                // CompositionController. Composition is a hard requirement:
-                // on Compositor::Init or the Environment3 QI
-                // failing there is NO HWND fallback — fail with a clear error
-                // and exit rather than leave a black window.
-                m_compositor = std::make_unique<host::Compositor>(
-                    hMain,
-                    [this](const std::string& s) { Log("%s\n", s.c_str()); });
-                HRESULT chr = m_compositor->Init();
-                if (FAILED(chr))
-                {
-                    Log("[host] composition: Compositor::Init failed hr=0x%08lx\n", chr);
-                    FailFatalComposition(chr);
-                }
-                if (engine)
-                    engine->SetCompositionCompositor(m_compositor.get());
+            Log("[host] composition: CreateCoreWebView2CompositionController dispatching\n");
+            const HRESULT controllerCreateHr =
+                env3->CreateCoreWebView2CompositionController(hMain, compositionControllerHandler.Get());
+            if (ShouldFailCompositionControllerDispatch(controllerCreateHr))
+            {
+                // The environment completion handler's return value is
+                // discarded, so merely returning this HRESULT recreates
+                // one call deeper: a live window, no UI, exit 0.
+                // Promote the synchronous dispatch failure to the same
+                // terminal message used by async controller failures.
+                Log("[host] composition: controller create dispatch FAILED hr=0x%08lx\n", controllerCreateHr);
+                PostMessageW(hMain, WM_APP_COMPOSITION_FATAL, static_cast<WPARAM>(controllerCreateHr), 0);
+            }
+            return controllerCreateHr;
+        });
 
-                // QI for Environment3 — exposes
-                // CreateCoreWebView2CompositionController. Confirmed
-                // available in SDK 1.0.3967.48 (ICoreWebView2Environment3
-                // in WebView2.h).
-                ComPtr<ICoreWebView2Environment3> env3;
-                HRESULT qihr = env->QueryInterface(IID_PPV_ARGS(&env3));
-                if (FAILED(qihr) || !env3)
-                {
-                    Log("[host] composition: QI Environment3 failed hr=0x%08lx\n", qihr);
-                    FailFatalComposition(qihr);
-                }
-
-                auto compositionControllerHandler =
-                    MakeCompositionControllerStartupCallback(
-                        startupToken,
-                        [this](HRESULT cHr,
-                               ICoreWebView2CompositionController* ctl) -> HRESULT
-                        {
-                            // The controller door uses the same production
-                            // adapter and can dispatch later still.
-                            return OnCompositionControllerReady(cHr, ctl);
-                        });
-
-                Log("[host] composition: CreateCoreWebView2CompositionController dispatching\n");
-                const HRESULT controllerCreateHr =
-                    env3->CreateCoreWebView2CompositionController(
-                        hMain, compositionControllerHandler.Get());
-                if (ShouldFailCompositionControllerDispatch(controllerCreateHr))
-                {
-                    // The environment completion handler's return value is
-                    // discarded, so merely returning this HRESULT recreates
-                    // one call deeper: a live window, no UI, exit 0.
-                    // Promote the synchronous dispatch failure to the same
-                    // terminal message used by async controller failures.
-                    Log("[host] composition: controller create dispatch FAILED hr=0x%08lx\n",
-                        controllerCreateHr);
-                    PostMessageW(hMain, WM_APP_COMPOSITION_FATAL,
-                                 static_cast<WPARAM>(controllerCreateHr), 0);
-                }
-                return controllerCreateHr;
-            });
-
-    HRESULT envCreateHr = CreateCoreWebView2EnvironmentWithOptions(
-        nullptr, userDataFolder.c_str(), envOptions.Get(),
-        environmentHandler.Get());
-    Log("[host] CreateCoreWebView2EnvironmentWithOptions returned 0x%08lx (testHost=%d)\n",
-        envCreateHr, useTestHost ? 1 : 0);
+    HRESULT envCreateHr = CreateCoreWebView2EnvironmentWithOptions(nullptr, userDataFolder.c_str(), envOptions.Get(),
+                                                                   environmentHandler.Get());
+    Log("[host] CreateCoreWebView2EnvironmentWithOptions returned 0x%08lx (testHost=%d)\n", envCreateHr,
+        useTestHost ? 1 : 0);
     return envCreateHr;
 }
 
@@ -578,10 +549,10 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     if (SUCCEEDED(controller->QueryInterface(IID_PPV_ARGS(&ctrl2))))
     {
         COREWEBVIEW2_COLOR transparent = {};
-        transparent.A = 0;
-        transparent.R = 0;
-        transparent.G = 0;
-        transparent.B = 0;
+        transparent.A                  = 0;
+        transparent.R                  = 0;
+        transparent.G                  = 0;
+        transparent.B                  = 0;
         ctrl2->put_DefaultBackgroundColor(transparent);
         Log("[host] WebView2 bg => transparent\n");
     }
@@ -650,10 +621,12 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     if (useTestHost && webView)
     {
         ComPtr<HostBridgeProxy> proxy;
-        HRESULT phr = Microsoft::WRL::MakeAndInitialize<HostBridgeProxy>(
+        HRESULT                 phr = Microsoft::WRL::MakeAndInitialize<HostBridgeProxy>(
             &proxy,
-            [this](const std::string& req) -> std::string {
-                if (!dispatcher) {
+            [this](const std::string& req) -> std::string
+            {
+                if (!dispatcher)
+                {
                     return R"({"type":"res","ok":false,"error":"dispatcher not ready"})";
                 }
                 return dispatcher->DispatchSync(req);
@@ -662,14 +635,12 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
         {
             VARIANT proxyVar;
             VariantInit(&proxyVar);
-            proxyVar.vt = VT_DISPATCH;
+            proxyVar.vt       = VT_DISPATCH;
             proxyVar.pdispVal = proxy.Get();
             proxyVar.pdispVal->AddRef();
 
-            HRESULT ahr = webView->AddHostObjectToScript(
-                L"hostBridge", &proxyVar);
-            Log("[host] test-host: AddHostObjectToScript(hostBridge) hr=0x%08lx\n",
-                ahr);
+            HRESULT ahr = webView->AddHostObjectToScript(L"hostBridge", &proxyVar);
+            Log("[host] test-host: AddHostObjectToScript(hostBridge) hr=0x%08lx\n", ahr);
 
             // VariantClear releases the AddRef above; the
             // host-object map inside WebView2 keeps its
@@ -690,15 +661,13 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     // dictionary registered by React via `register-accelerators`.
     controller->add_AcceleratorKeyPressed(
         Callback<ICoreWebView2AcceleratorKeyPressedEventHandler>(
-            [this](ICoreWebView2Controller* /*sender*/,
-                   ICoreWebView2AcceleratorKeyPressedEventArgs* args) -> HRESULT
+            [this](ICoreWebView2Controller* /*sender*/, ICoreWebView2AcceleratorKeyPressedEventArgs* args) -> HRESULT
             {
                 COREWEBVIEW2_KEY_EVENT_KIND kind = {};
                 args->get_KeyEventKind(&kind);
                 // Only react on key-down events; KEY_UP events are
                 // intentionally ignored (no repeat firing).
-                if (kind != COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN &&
-                    kind != COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN)
+                if (kind != COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN && kind != COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN)
                 {
                     return S_OK;
                 }
@@ -709,22 +678,21 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                 // event handler context — reads the current physical
                 // key state at the moment of the event.
                 bool ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-                bool shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
-                bool alt   = (GetKeyState(VK_MENU)    & 0x8000) != 0;
+                bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+                bool alt   = (GetKeyState(VK_MENU) & 0x8000) != 0;
 
                 bool matched = accelerator.TryDispatch(vk, ctrl, shift, alt,
-                    [this](const std::string& combo)
-                    {
-                        Log("[Accel] combo=%s\n", combo.c_str());
-                        if (dispatcher)
-                            dispatcher->EmitAcceleratorPressed(combo);
-                    });
+                                                       [this](const std::string& combo)
+                                                       {
+                                                           Log("[Accel] combo=%s\n", combo.c_str());
+                                                           if (dispatcher) dispatcher->EmitAcceleratorPressed(combo);
+                                                       });
 
-                if (matched)
-                    args->put_Handled(TRUE);
+                if (matched) args->put_Handled(TRUE);
 
                 return S_OK;
-            }).Get(),
+            })
+            .Get(),
         &accelKeyTok);
     Log("[host] AcceleratorKeyPressed handler registered\n");
 
@@ -736,24 +704,24 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     // navigation, then on every document.title assignment.
     if (webView)
     {
-        webView->add_DocumentTitleChanged(
-            Callback<ICoreWebView2DocumentTitleChangedEventHandler>(
-                [this](ICoreWebView2* sender, IUnknown* /*args*/) -> HRESULT
-                {
-                    LPWSTR title = nullptr;
-                    HRESULT thr = sender->get_DocumentTitle(&title);
-                    if (SUCCEEDED(thr) && title)
-                    {
-                        SetWindowTextW(hMain, title);
-                        CoTaskMemFree(title);
-                    }
-                    else
-                    {
-                        Log("[host] get_DocumentTitle failed hr=0x%08lx\n", thr);
-                    }
-                    return S_OK;
-                }).Get(),
-            &docTitleTok);
+        webView->add_DocumentTitleChanged(Callback<ICoreWebView2DocumentTitleChangedEventHandler>(
+                                              [this](ICoreWebView2* sender, IUnknown* /*args*/) -> HRESULT
+                                              {
+                                                  LPWSTR  title = nullptr;
+                                                  HRESULT thr   = sender->get_DocumentTitle(&title);
+                                                  if (SUCCEEDED(thr) && title)
+                                                  {
+                                                      SetWindowTextW(hMain, title);
+                                                      CoTaskMemFree(title);
+                                                  }
+                                                  else
+                                                  {
+                                                      Log("[host] get_DocumentTitle failed hr=0x%08lx\n", thr);
+                                                  }
+                                                  return S_OK;
+                                              })
+                                              .Get(),
+                                          &docTitleTok);
         Log("[host] DocumentTitleChanged handler registered\n");
     }
 
@@ -784,13 +752,11 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     // Subscribe to JS → host messages.
     // Stash the registration token in the member
     // webMessageTok so WM_DESTROY can explicitly unsubscribe.
-    if (host::perf::Enabled())
-        prodNavUrl = AppendQueryParam(prodNavUrl, L"perfTrace=1");
+    if (host::perf::Enabled()) prodNavUrl = AppendQueryParam(prodNavUrl, L"perfTrace=1");
 
     webView->add_WebMessageReceived(
         Callback<ICoreWebView2WebMessageReceivedEventHandler>(
-            [this](ICoreWebView2*,
-                   ICoreWebView2WebMessageReceivedEventArgs* args) noexcept -> HRESULT
+            [this](ICoreWebView2*, ICoreWebView2WebMessageReceivedEventArgs* args) noexcept -> HRESULT
             {
                 // No exception may unwind into WebView2's COM dispatcher:
                 // the dispatcher's own guard turns a
@@ -811,17 +777,19 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                     // the control flow granted exactly that on a COM error.
                     // No confirmed origin, no dispatch.
                     CoTaskMemString src;
-                    const HRESULT srcHr = args->get_Source(&src.p);
+                    const HRESULT   srcHr = args->get_Source(&src.p);
                     if (FAILED(srcHr) || !src.p)
                     {
                         Log("[host] G11: dropped WebMessage — source unavailable "
-                            "(hr=0x%08lx)\n", (unsigned long)srcHr);
+                            "(hr=0x%08lx)\n",
+                            (unsigned long)srcHr);
                         return S_OK;
                     }
                     if (!IsApprovedWebViewOrigin(src.p, useDevUi))
                     {
                         Log("[host] G11: dropped WebMessage from untrusted "
-                            "source %ls\n", src.p);
+                            "source %ls\n",
+                            src.p);
                         return S_OK;
                     }
                     // Size cap on both ingress paths.
@@ -835,12 +803,13 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                         const size_t n = wcslen(s);
                         if (ShouldAcceptWebMessage(n, kMaxWebMessageChars)) return false;
                         Log("[host] dropped %s WebMessage — %zu chars exceeds the "
-                            "%zu-char cap\n", which, n, kMaxWebMessageChars);
+                            "%zu-char cap\n",
+                            which, n, kMaxWebMessageChars);
                         return true;
                     };
 
                     CoTaskMemString raw;
-                    HRESULT hr1 = args->TryGetWebMessageAsString(&raw.p);
+                    HRESULT         hr1 = args->TryGetWebMessageAsString(&raw.p);
                     if (SUCCEEDED(hr1) && raw.p)
                     {
                         if (!oversized(raw.p, "string")) OnWebMessage(raw.p);
@@ -853,17 +822,15 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                         // dedicated log so we can tell the difference
                         // between "no event" and "event but parse failed".
                         CoTaskMemString json;
-                        HRESULT hr2 = args->get_WebMessageAsJson(&json.p);
+                        HRESULT         hr2 = args->get_WebMessageAsJson(&json.p);
                         if (SUCCEEDED(hr2) && json.p)
                         {
-                            Log("[host] WMR JSON-only (%zu chars), hr1=0x%08lx\n",
-                                wcslen(json.p), hr1);
+                            Log("[host] WMR JSON-only (%zu chars), hr1=0x%08lx\n", wcslen(json.p), hr1);
                             if (!oversized(json.p, "json")) OnWebMessage(json.p);
                         }
                         else
                         {
-                            Log("[host] WMR empty: hr1=0x%08lx hr2=0x%08lx\n",
-                                hr1, hr2);
+                            Log("[host] WMR empty: hr1=0x%08lx hr2=0x%08lx\n", hr1, hr2);
                         }
                     }
                 }
@@ -876,7 +843,9 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                     Log("[bridge] WebMessageReceived: swallowed unknown exception\n");
                 }
                 return S_OK;
-            }).Get(), &webMessageTok);
+            })
+            .Get(),
+        &webMessageTok);
 
     // Navigation / new-window / permission policy. Registered
     // BEFORE the Navigate() call below so the very first (legitimate) load is
@@ -886,8 +855,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     // NOT cancelled; only off-origin navigations are.
     webView->add_NavigationStarting(
         Callback<ICoreWebView2NavigationStartingEventHandler>(
-            [this](ICoreWebView2*,
-                   ICoreWebView2NavigationStartingEventArgs* args) -> HRESULT
+            [this](ICoreWebView2*, ICoreWebView2NavigationStartingEventArgs* args) -> HRESULT
             {
                 // FAIL CLOSED, same as the WebMessage source check above: a
                 // failing/empty get_Uri used to skip the whole block WITHOUT
@@ -895,12 +863,13 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                 // to proceed. An unidentifiable target
                 // is exactly the one to refuse — the app's own load reports its
                 // URI fine, so cancelling here costs nothing legitimate.
-                LPWSTR uri = nullptr;
+                LPWSTR        uri   = nullptr;
                 const HRESULT uriHr = args->get_Uri(&uri);
                 if (FAILED(uriHr) || !uri)
                 {
                     Log("[host] G11: cancelled navigation — URI unavailable "
-                        "(hr=0x%08lx)\n", (unsigned long)uriHr);
+                        "(hr=0x%08lx)\n",
+                        (unsigned long)uriHr);
                     args->put_Cancel(TRUE);
                     if (uri) CoTaskMemFree(uri);
                     return S_OK;
@@ -912,32 +881,36 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                 }
                 CoTaskMemFree(uri);
                 return S_OK;
-            }).Get(), &navStartingTok);
+            })
+            .Get(),
+        &navStartingTok);
 
     // Deny all popups: the editor is a single-window app, so any window.open /
     // target=_blank is unwanted. put_Handled(TRUE) tells WebView2 we took
     // ownership; by creating no window the request is effectively dropped.
     webView->add_NewWindowRequested(
         Callback<ICoreWebView2NewWindowRequestedEventHandler>(
-            [this](ICoreWebView2*,
-                   ICoreWebView2NewWindowRequestedEventArgs* args) -> HRESULT
+            [this](ICoreWebView2*, ICoreWebView2NewWindowRequestedEventArgs* args) -> HRESULT
             {
                 Log("[host] G11: denied new-window request\n");
                 args->put_Handled(TRUE);
                 return S_OK;
-            }).Get(), &newWindowTok);
+            })
+            .Get(),
+        &newWindowTok);
 
     // Deny every permission request (geolocation, camera, mic, clipboard,
     // notifications, …): the editor needs none of them.
     webView->add_PermissionRequested(
         Callback<ICoreWebView2PermissionRequestedEventHandler>(
-            [this](ICoreWebView2*,
-                   ICoreWebView2PermissionRequestedEventArgs* args) -> HRESULT
+            [this](ICoreWebView2*, ICoreWebView2PermissionRequestedEventArgs* args) -> HRESULT
             {
                 Log("[host] G11: denied permission request\n");
                 args->put_State(COREWEBVIEW2_PERMISSION_STATE_DENY);
                 return S_OK;
-            }).Get(), &permissionTok);
+            })
+            .Get(),
+        &permissionTok);
 
     // Serve the embedded React bundle. app.local is no longer a
     // SetVirtualHostNameToFolderMapping folder host — the bundle is compiled
@@ -950,44 +923,42 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     // !useDevUi.
     if (!useDevUi)
     {
-        const HRESULT filtHr = webView->AddWebResourceRequestedFilter(
-            L"https://app.local/*", COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL);
+        const HRESULT filtHr =
+            webView->AddWebResourceRequestedFilter(L"https://app.local/*", COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL);
         if (FAILED(filtHr))
         {
-            Log("[host] AddWebResourceRequestedFilter(app.local) failed hr=0x%08lx\n",
-                filtHr);
+            Log("[host] AddWebResourceRequestedFilter(app.local) failed hr=0x%08lx\n", filtHr);
             return filtHr;
         }
         const HRESULT wrrHr = webView->add_WebResourceRequested(
             Callback<ICoreWebView2WebResourceRequestedEventHandler>(
-                [this](ICoreWebView2*,
-                       ICoreWebView2WebResourceRequestedEventArgs* args) -> HRESULT
+                [this](ICoreWebView2*, ICoreWebView2WebResourceRequestedEventArgs* args) -> HRESULT
                 {
                     // Synthesize a no-body response (used for 404/500). Defined
                     // FIRST so every early-out can deliver a real HTTP status:
                     // leaving args->Response null lets the runtime resolve the
                     // request itself, which for app.local is exactly the failed
                     // network load this handler exists to replace.
-                    auto makeStatusResponse =
-                        [this, args](int code, PCWSTR reason) -> HRESULT
+                    auto makeStatusResponse = [this, args](int code, PCWSTR reason) -> HRESULT
                     {
                         if (!webEnv) return S_OK;
                         ComPtr<ICoreWebView2WebResourceResponse> resp;
-                        const HRESULT hr = webEnv->CreateWebResourceResponse(
-                            nullptr, code, reason, L"", &resp);
+                        const HRESULT hr = webEnv->CreateWebResourceResponse(nullptr, code, reason, L"", &resp);
                         if (SUCCEEDED(hr) && resp)
                         {
                             const HRESULT pr = args->put_Response(resp.Get());
                             if (FAILED(pr))
                                 Log("[host] app.local: put_Response(%d) failed "
-                                    "hr=0x%08lx\n", code, pr);
+                                    "hr=0x%08lx\n",
+                                    code, pr);
                         }
                         else
                             // Nothing better to do — the request falls through to the
                             // runtime's default handling — but log it so a mystery
                             // network error is attributable.
                             Log("[host] app.local: could not synthesize %d response "
-                                "hr=0x%08lx\n", code, hr);
+                                "hr=0x%08lx\n",
+                                code, hr);
                         return S_OK;
                     };
 
@@ -997,8 +968,8 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                     ComPtr<ICoreWebView2WebResourceRequest> req;
                     if (FAILED(args->get_Request(&req)) || !req)
                         return makeStatusResponse(500, L"Internal Server Error");
-                    LPWSTR rawUri = nullptr;
-                    const HRESULT uriHr = req->get_Uri(&rawUri);
+                    LPWSTR        rawUri = nullptr;
+                    const HRESULT uriHr  = req->get_Uri(&rawUri);
                     if (FAILED(uriHr) || !rawUri)
                     {
                         if (rawUri) CoTaskMemFree(rawUri);
@@ -1011,37 +982,38 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                     // Reduce the URI to an embedded-asset key: drop the
                     // scheme+host prefix, drop any ?query / #fragment, and map
                     // "" or "/" to the entry document.
-                    std::wstring path = uri;
+                    std::wstring   path    = uri;
                     const wchar_t* kOrigin = L"https://app.local";
-                    if (_wcsnicmp(path.c_str(), kOrigin, wcslen(kOrigin)) == 0)
-                        path.erase(0, wcslen(kOrigin));
+                    if (_wcsnicmp(path.c_str(), kOrigin, wcslen(kOrigin)) == 0) path.erase(0, wcslen(kOrigin));
                     const size_t q = path.find_first_of(L"?#");
                     if (q != std::wstring::npos) path.erase(q);
                     if (path.empty() || path == L"/") path = L"/index.html";
 
                     const host::EmbeddedAsset* assets = host::EmbeddedWebAssets();
-                    const size_t count = host::EmbeddedWebAssetCount();
-                    const host::EmbeddedAsset* hit = nullptr;
+                    const size_t               count  = host::EmbeddedWebAssetCount();
+                    const host::EmbeddedAsset* hit    = nullptr;
                     for (size_t i = 0; i < count; ++i)
-                        if (path == assets[i].urlPath) { hit = &assets[i]; break; }
+                        if (path == assets[i].urlPath)
+                        {
+                            hit = &assets[i];
+                            break;
+                        }
                     if (!hit)
                     {
                         Log("[host] app.local embedded 404: %ls\n", path.c_str());
                         return makeStatusResponse(404, L"Not Found");
                     }
 
-                    HMODULE hMod = GetModuleHandle(nullptr);
-                    HRSRC hRes = FindResource(
-                        hMod, MAKEINTRESOURCE(hit->resourceId), RT_RCDATA);
-                    HGLOBAL hData = hRes ? LoadResource(hMod, hRes) : nullptr;
-                    const DWORD size = hRes ? SizeofResource(hMod, hRes) : 0;
-                    void* data = hData ? LockResource(hData) : nullptr;
+                    HMODULE     hMod  = GetModuleHandle(nullptr);
+                    HRSRC       hRes  = FindResource(hMod, MAKEINTRESOURCE(hit->resourceId), RT_RCDATA);
+                    HGLOBAL     hData = hRes ? LoadResource(hMod, hRes) : nullptr;
+                    const DWORD size  = hRes ? SizeofResource(hMod, hRes) : 0;
+                    void*       data  = hData ? LockResource(hData) : nullptr;
                     if (!data || !size)
                     {
                         // The manifest named a resource the exe doesn't carry —
                         // a generator/rc mismatch, not a normal miss.
-                        Log("[host] app.local embedded resource %d unreadable (%ls)\n",
-                            hit->resourceId, path.c_str());
+                        Log("[host] app.local embedded resource %d unreadable (%ls)\n", hit->resourceId, path.c_str());
                         return makeStatusResponse(500, L"Internal Server Error");
                     }
 
@@ -1049,26 +1021,24 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                     // stream; the RCDATA block stays valid for the process
                     // lifetime, so no lifetime coupling to worry about.
                     ComPtr<IStream> stream;
-                    stream.Attach(SHCreateMemStream(
-                        static_cast<const BYTE*>(data), size));
+                    stream.Attach(SHCreateMemStream(static_cast<const BYTE*>(data), size));
                     if (!stream) return makeStatusResponse(500, L"Internal Server Error");
 
                     if (!webEnv) return S_OK;
                     ComPtr<ICoreWebView2WebResourceResponse> resp;
-                    const HRESULT rHr = webEnv->CreateWebResourceResponse(
-                        stream.Get(), 200, L"OK", hit->responseHeaders, &resp);
+                    const HRESULT                            rHr =
+                        webEnv->CreateWebResourceResponse(stream.Get(), 200, L"OK", hit->responseHeaders, &resp);
                     if (FAILED(rHr) || !resp)
                     {
-                        Log("[host] CreateWebResourceResponse failed hr=0x%08lx (%ls)\n",
-                            rHr, path.c_str());
+                        Log("[host] CreateWebResourceResponse failed hr=0x%08lx (%ls)\n", rHr, path.c_str());
                         return makeStatusResponse(500, L"Internal Server Error");
                     }
                     const HRESULT pr = args->put_Response(resp.Get());
-                    if (FAILED(pr))
-                        Log("[host] app.local: put_Response failed hr=0x%08lx (%ls)\n",
-                            pr, path.c_str());
+                    if (FAILED(pr)) Log("[host] app.local: put_Response failed hr=0x%08lx (%ls)\n", pr, path.c_str());
                     return S_OK;
-                }).Get(), &webResourceTok);
+                })
+                .Get(),
+            &webResourceTok);
         // This handler is load-bearing: without it app.local has no responder and
         // the first navigation reproduces the blank-window / ERR_NAME_NOT_RESOLVED
         // failure this change eliminates. A failed registration must therefore be
@@ -1087,25 +1057,25 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     // before Navigate so the first load is observed; token removed in WM_DESTROY.
     webView->add_NavigationCompleted(
         Callback<ICoreWebView2NavigationCompletedEventHandler>(
-            [this](ICoreWebView2*,
-                   ICoreWebView2NavigationCompletedEventArgs* args) -> HRESULT
+            [this](ICoreWebView2*, ICoreWebView2NavigationCompletedEventArgs* args) -> HRESULT
             {
-                BOOL ok = FALSE;
+                BOOL                          ok  = FALSE;
                 COREWEBVIEW2_WEB_ERROR_STATUS err = COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN;
                 if (args)
                 {
                     args->get_IsSuccess(&ok);
                     args->get_WebErrorStatus(&err);
                 }
-                Log("[capture] NavigationCompleted (success=%d webErrorStatus=%d)\n",
-                    ok ? 1 : 0, static_cast<int>(err));
+                Log("[capture] NavigationCompleted (success=%d webErrorStatus=%d)\n", ok ? 1 : 0,
+                    static_cast<int>(err));
                 // A crash-recovery Reload() ends at the page's app/ready (or
                 // its deadline), not here: a navigation can complete while
                 // React never boots.
-                if (m_webReloadPending)
-                    Log("[webview] reload navigation completed (success=%d)\n", ok ? 1 : 0);
+                if (m_webReloadPending) Log("[webview] reload navigation completed (success=%d)\n", ok ? 1 : 0);
                 return S_OK;
-            }).Get(), &navCompletedTok);
+            })
+            .Get(),
+        &navCompletedTok);
 
     // Renderer / browser process failure. Without this a
     // crashed renderer left a dead page — and with a dirty document a window
@@ -1115,12 +1085,13 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     {
         const HRESULT pfHr = webView->add_ProcessFailed(
             Callback<ICoreWebView2ProcessFailedEventHandler>(
-                [this](ICoreWebView2*,
-                       ICoreWebView2ProcessFailedEventArgs* args) noexcept -> HRESULT
+                [this](ICoreWebView2*, ICoreWebView2ProcessFailedEventArgs* args) noexcept -> HRESULT
                 {
                     OnWebProcessFailed(args);
                     return S_OK;
-                }).Get(), &processFailedTok);
+                })
+                .Get(),
+            &processFailedTok);
         if (FAILED(pfHr))
             Log("[webview] add_ProcessFailed failed hr=0x%08lx (crash recovery off)\n",
                 static_cast<unsigned long>(pfHr));
@@ -1132,9 +1103,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     if (useDevUi)
     {
         Log("[host] dev-ui: Navigate to Vite dev server\n");
-        m_appNavUrl = host::perf::Enabled()
-            ? L"http://localhost:5174/?perfTrace=1"
-            : L"http://localhost:5174/";
+        m_appNavUrl = host::perf::Enabled() ? L"http://localhost:5174/?perfTrace=1" : L"http://localhost:5174/";
     }
     else
     {
@@ -1165,13 +1134,11 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
 // after step 3 keeps interactive chrome usable, but is fatal for automation.
 // ---------------------------------------------------------------------
 // ---------- Composition controller readiness ----------
-HRESULT HostWindowImpl::OnCompositionControllerReady(
-    HRESULT chr, ICoreWebView2CompositionController* ctl)
+HRESULT HostWindowImpl::OnCompositionControllerReady(HRESULT chr, ICoreWebView2CompositionController* ctl)
 {
     if (FAILED(chr) || !ctl)
     {
-        Log("[host] composition: controller completion FAILED hr=0x%08lx ctl=%p\n",
-            chr, static_cast<void*>(ctl));
+        Log("[host] composition: controller completion FAILED hr=0x%08lx ctl=%p\n", chr, static_cast<void*>(ctl));
         // Composition is required (no HWND fallback): signal a fatal error
         // on the next message-loop iteration. PostMessage so this callback
         // can unwind first.
@@ -1197,7 +1164,7 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
     // documented way to get the base controller interface from a
     // composition controller.
     ComPtr<ICoreWebView2Controller> baseController;
-    HRESULT qihr = ctl->QueryInterface(IID_PPV_ARGS(&baseController));
+    HRESULT                         qihr = ctl->QueryInterface(IID_PPV_ARGS(&baseController));
     if (FAILED(qihr) || !baseController)
     {
         Log("[host] composition: QI to ICoreWebView2Controller failed hr=0x%08lx\n", qihr);
@@ -1234,12 +1201,11 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
         {
             UINT dpi = GetDpiForWindow(hMain);
             if (dpi == 0) dpi = 96;
-            double scale = static_cast<double>(dpi) / 96.0;
-            HRESULT shr = ctrl3->put_RasterizationScale(scale);
+            double  scale = static_cast<double>(dpi) / 96.0;
+            HRESULT shr   = ctrl3->put_RasterizationScale(scale);
             if (FAILED(shr))
             {
-                Log("[host] composition: put_RasterizationScale(%.2f) hr=0x%08lx (non-fatal)\n",
-                    scale, shr);
+                Log("[host] composition: put_RasterizationScale(%.2f) hr=0x%08lx (non-fatal)\n", scale, shr);
             }
         }
     }
@@ -1251,18 +1217,18 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
     // and return it from WM_SETCURSOR in MainWndProc. Without
     // this the cursor stays as the Win32 default arrow regardless
     // of what WebView2 wants — link affordance lost.
-    HRESULT chrCur = ctl->add_CursorChanged(
-        Callback<ICoreWebView2CursorChangedEventHandler>(
-            [this](ICoreWebView2CompositionController* sender, IUnknown*) -> HRESULT
-            {
-                HCURSOR hc = nullptr;
-                if (sender && SUCCEEDED(sender->get_Cursor(&hc)))
-                {
-                    m_webViewCursor = hc;
-                }
-                return S_OK;
-            }).Get(),
-        &m_cursorChangedTok);
+    HRESULT chrCur = ctl->add_CursorChanged(Callback<ICoreWebView2CursorChangedEventHandler>(
+                                                [this](ICoreWebView2CompositionController* sender, IUnknown*) -> HRESULT
+                                                {
+                                                    HCURSOR hc = nullptr;
+                                                    if (sender && SUCCEEDED(sender->get_Cursor(&hc)))
+                                                    {
+                                                        m_webViewCursor = hc;
+                                                    }
+                                                    return S_OK;
+                                                })
+                                                .Get(),
+                                            &m_cursorChangedTok);
     if (FAILED(chrCur))
     {
         Log("[host] composition: add_CursorChanged hr=0x%08lx (non-fatal)\n", chrCur);
@@ -1305,18 +1271,17 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
         // SetSize corrupts the surface; a later positive-size WM_SIZE re-seeds.
         RECT r;
         GetClientRect(hMain, &r);
-        const int clientW = r.right  - r.left;
+        const int clientW = r.right - r.left;
         const int clientH = r.bottom - r.top;
-        if (!IsIconic(hMain) && clientW > 0 && clientH > 0)
-            m_compositor->SetSize(clientW, clientH);
+        if (!IsIconic(hMain) && clientW > 0 && clientH > 0) m_compositor->SetSize(clientW, clientH);
 
         // Attach engine visual behind WebView2. Missing preview pixels keep
         // interactive editing available with a notice; automation must fail.
         if (engine && engine->GetSharedTextureHandle())
         {
-            HANDLE sharedTex = engine->GetSharedTextureHandle();
-            LUID   engineLuid = engine->GetAdapterLuid();
-            HRESULT ehr = m_compositor->AttachEngineVisual(sharedTex, clientW, clientH, engineLuid);
+            HANDLE  sharedTex  = engine->GetSharedTextureHandle();
+            LUID    engineLuid = engine->GetAdapterLuid();
+            HRESULT ehr        = m_compositor->AttachEngineVisual(sharedTex, clientW, clientH, engineLuid);
             if (FAILED(ehr))
             {
                 Log("[host] composition: AttachEngineVisual hr=0x%08lx — engine visual NOT attached\n", ehr);
@@ -1327,10 +1292,10 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
         else
         {
             Log("[host] composition: skipping AttachEngineVisual (engine=%p sharedHandle=%p) — no engine pixels\n",
-                engine.get(),
-                engine ? engine->GetSharedTextureHandle() : nullptr);
+                engine.get(), engine ? engine->GetSharedTextureHandle() : nullptr);
             MarkViewportUnavailable(engine ? "The graphics preview has no shared frame surface."
-                                           : "The 3D engine could not be initialized.", E_FAIL);
+                                           : "The 3D engine could not be initialized.",
+                                    E_FAIL);
             if (m_compositionFatalPending) return E_FAIL;
         }
 
@@ -1415,8 +1380,7 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
     // PROGRAMMATIC reason = "the host asked, don't traverse to a
     // particular child first." Equivalent to focusing the WebView's
     // root document body.
-    HRESULT fhr = baseController->MoveFocus(
-        COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
+    HRESULT fhr = baseController->MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
     if (FAILED(fhr))
     {
         Log("[host] composition: initial MoveFocus hr=0x%08lx (non-fatal)\n", fhr);
@@ -1451,7 +1415,7 @@ void HostWindowImpl::ForwardMouseToCompositionWebView2(UINT msg, WPARAM wp, LPAR
 {
     if (!m_compositionController) return;
 
-    POINT pt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
+    POINT  pt        = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
     UINT32 mouseData = 0;
     if (msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL)
     {
@@ -1473,32 +1437,30 @@ void HostWindowImpl::ForwardMouseToCompositionWebView2(UINT msg, WPARAM wp, LPAR
     //  the forwarder doesn't forward them. The 99-test suite doesn't
     //  exercise XButton.)
     auto virtualKeys = static_cast<COREWEBVIEW2_MOUSE_EVENT_VIRTUAL_KEYS>(
-        LOWORD(wp) & (MK_LBUTTON | MK_RBUTTON | MK_SHIFT |
-                      MK_CONTROL | MK_MBUTTON));
+        LOWORD(wp) & (MK_LBUTTON | MK_RBUTTON | MK_SHIFT | MK_CONTROL | MK_MBUTTON));
 
-    m_compositionController->SendMouseInput(
-        static_cast<COREWEBVIEW2_MOUSE_EVENT_KIND>(msg),
-        virtualKeys,
-        mouseData,
-        pt);
+    m_compositionController->SendMouseInput(static_cast<COREWEBVIEW2_MOUSE_EVENT_KIND>(msg), virtualKeys, mouseData,
+                                            pt);
 
     // Capture: any button-down captures, any button-up that leaves
     // wParam with no buttons held releases.
     switch (msg)
     {
-    case WM_LBUTTONDOWN: case WM_LBUTTONDBLCLK:
-    case WM_RBUTTONDOWN: case WM_RBUTTONDBLCLK:
-    case WM_MBUTTONDOWN: case WM_MBUTTONDBLCLK:
-        SetCapture(hMain);
-        break;
-    case WM_LBUTTONUP: case WM_RBUTTONUP: case WM_MBUTTONUP:
-        if ((wp & (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON)) == 0)
-        {
-            ReleaseCapture();
-        }
-        break;
-    default:
-        break;
+        case WM_LBUTTONDOWN:
+        case WM_LBUTTONDBLCLK:
+        case WM_RBUTTONDOWN:
+        case WM_RBUTTONDBLCLK:
+        case WM_MBUTTONDOWN:
+        case WM_MBUTTONDBLCLK: SetCapture(hMain); break;
+        case WM_LBUTTONUP:
+        case WM_RBUTTONUP:
+        case WM_MBUTTONUP:
+            if ((wp & (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON)) == 0)
+            {
+                ReleaseCapture();
+            }
+            break;
+        default: break;
     }
 }
 

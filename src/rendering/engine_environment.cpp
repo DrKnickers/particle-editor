@@ -17,9 +17,9 @@
 #include "common/exceptions.h"
 #include "common/utils.h"
 #include "Resources/resource.h"
-#include "common/ResourceLimits.h"   // kMaxTextureAssetBytes (asset-read caps)
-#include "gamedata/AssetPathSafety.h"   // IsLocalCustomAssetPath (remote-path refusal)
-#include "gamedata/AloModel.h"          // AloShaderParam members (ApplyAloMaterialParams)
+#include "common/ResourceLimits.h"    // kMaxTextureAssetBytes (asset-read caps)
+#include "gamedata/AssetPathSafety.h" // IsLocalCustomAssetPath (remote-path refusal)
+#include "gamedata/AloModel.h"        // AloShaderParam members (ApplyAloMaterialParams)
 
 using namespace std;
 
@@ -28,15 +28,15 @@ using namespace std;
 // The IDR_SKYDOME_* RCDATA entries live in ParticleEditor.rc; if one is missing,
 // FindResource returns NULL and ReloadSkydomeTexture returns false.
 static const int kSkydomeBundledResources[Engine::kSkydomeBundledCount] = {
-    0,                       // 0: Off
-    IDR_SKYDOME_SPACE,       // 1
-    IDR_SKYDOME_ATMOSPHERE,  // 2
-    IDR_SKYDOME_SUNSET,      // 3
-    IDR_SKYDOME_DAWN,        // 4
-    IDR_SKYDOME_NIGHT,       // 5
-    IDR_SKYDOME_OVERCAST,    // 6
-    IDR_SKYDOME_STUDIO,      // 7
-    IDR_SKYDOME_INDOOR,      // 8
+    0,                      // 0: Off
+    IDR_SKYDOME_SPACE,      // 1
+    IDR_SKYDOME_ATMOSPHERE, // 2
+    IDR_SKYDOME_SUNSET,     // 3
+    IDR_SKYDOME_DAWN,       // 4
+    IDR_SKYDOME_NIGHT,      // 5
+    IDR_SKYDOME_OVERCAST,   // 6
+    IDR_SKYDOME_STUDIO,     // 7
+    IDR_SKYDOME_INDOOR,     // 8
 };
 
 // Parallel table of in-archive paths for slots 1-8. Routed
@@ -47,15 +47,15 @@ static const int kSkydomeBundledResources[Engine::kSkydomeBundledCount] = {
 // falls back to the procedural RCDATA at kSkydomeBundledResources[slot] so
 // the slot still renders something useful.
 static const char* const kSkydomeBundledGamePaths[Engine::kSkydomeBundledCount] = {
-    NULL,                                              // 0: Solid colour
-    "DATA\\ART\\TEXTURES\\W_SKYSTORM01.DDS",           // 1: Storm
-    "DATA\\ART\\TEXTURES\\W_SKY_MURK_CLOUDS.DDS",      // 2: Murky Clouds
-    "DATA\\ART\\TEXTURES\\W_SKY_SMOG_CLOUDS.DDS",      // 3: Smog Clouds
-    "DATA\\ART\\TEXTURES\\W_SKYBLUE_HORIZON.DDS",      // 4: Blue Horizon
-    "DATA\\ART\\TEXTURES\\W_SKYBLUE01.DDS",            // 5: Blue Sky
-    "DATA\\ART\\TEXTURES\\W_SKYORANGE_HORIZON.DDS",    // 6: Orange Horizon
-    "DATA\\ART\\TEXTURES\\W_SKYORANGE00.DDS",          // 7: Orange Sky
-    "DATA\\ART\\TEXTURES\\W_SKYSTORM_VOLCANIC00.DDS",  // 8: Volcanic Storm
+    NULL,                                             // 0: Solid colour
+    "DATA\\ART\\TEXTURES\\W_SKYSTORM01.DDS",          // 1: Storm
+    "DATA\\ART\\TEXTURES\\W_SKY_MURK_CLOUDS.DDS",     // 2: Murky Clouds
+    "DATA\\ART\\TEXTURES\\W_SKY_SMOG_CLOUDS.DDS",     // 3: Smog Clouds
+    "DATA\\ART\\TEXTURES\\W_SKYBLUE_HORIZON.DDS",     // 4: Blue Horizon
+    "DATA\\ART\\TEXTURES\\W_SKYBLUE01.DDS",           // 5: Blue Sky
+    "DATA\\ART\\TEXTURES\\W_SKYORANGE_HORIZON.DDS",   // 6: Orange Horizon
+    "DATA\\ART\\TEXTURES\\W_SKYORANGE00.DDS",         // 7: Orange Sky
+    "DATA\\ART\\TEXTURES\\W_SKYSTORM_VOLCANIC00.DDS", // 8: Volcanic Storm
 };
 
 // Public getters so main.cpp can build thumbnails without duplicating the tables.
@@ -72,9 +72,9 @@ const char* const* Engine::GetSkydomeBundledGamePaths()
 // Helper: try to load a texture from a file resolved via FileManager. Returns
 // the texture (caller owns one ref) on success, NULL on miss. Used by both
 // the curated slot path and the custom slot path.
-static IDirect3DTexture9* LoadTextureViaFileManager(IDirect3DDevice9* pDevice,
-                                                      IFileManager& fileManager,
-                                                      const std::string& path)
+static IDirect3DTexture9* LoadTextureViaFileManager(IDirect3DDevice9*  pDevice,
+                                                    IFileManager&      fileManager,
+                                                    const std::string& path)
 {
     IFile* file = fileManager.getFile(path);
     if (file == NULL) return NULL;
@@ -99,24 +99,18 @@ static IDirect3DTexture9* LoadTextureViaFileManager(IDirect3DDevice9* pDevice,
 // Render-golden captures need one source whose pixels cannot vary with the
 // installed game or active mod. This intentionally loads bundled slot 1
 // straight from the executable's RCDATA, bypassing FileManager.
-static bool LoadEmbeddedSkydomeSlotOne(IDirect3DDevice9* pDevice,
-                                       IDirect3DTexture9** ppTexture)
+static bool LoadEmbeddedSkydomeSlotOne(IDirect3DDevice9* pDevice, IDirect3DTexture9** ppTexture)
 {
     HMODULE hMod = GetModuleHandle(NULL);
-    HRSRC hRes = FindResource(
-        hMod,
-        MAKEINTRESOURCE(kSkydomeBundledResources[1]),
-        RT_RCDATA);
+    HRSRC   hRes = FindResource(hMod, MAKEINTRESOURCE(kSkydomeBundledResources[1]), RT_RCDATA);
     if (!hRes) return false;
-    HGLOBAL hData = LoadResource(hMod, hRes);
-    DWORD dwSize = SizeofResource(hMod, hRes);
-    void* pData = hData ? LockResource(hData) : NULL;
+    HGLOBAL hData  = LoadResource(hMod, hRes);
+    DWORD   dwSize = SizeofResource(hMod, hRes);
+    void*   pData  = hData ? LockResource(hData) : NULL;
     if (!pData || !dwSize) return false;
-    const HRESULT hr = D3DXCreateTextureFromFileInMemory(
-        pDevice, pData, dwSize, ppTexture);
+    const HRESULT hr = D3DXCreateTextureFromFileInMemory(pDevice, pData, dwSize, ppTexture);
     return SUCCEEDED(hr) && *ppTexture != NULL;
 }
-
 
 // Ground-texture bundled-resource lookup table. 0 = "no bundled
 // resource". Kept in this .cpp (rather than the header) so the .rc IDs
@@ -129,12 +123,12 @@ static bool LoadEmbeddedSkydomeSlotOne(IDirect3DDevice9* pDevice,
 // below (see ReloadGroundTexture / IsGroundSlotAvailable). Slot 4 is the
 // procedural solid colour; 5..7 are user-supplied custom paths only.
 static const UINT kGroundTextureResourceIds[Engine::kGroundTextureCount] = {
-    IDB_GROUND,         // 0 dirt (bundled editor default)
-    0,                  // 1 grass — game-sourced (W_TEMPGRND00.DDS)
-    0,                  // 2 sand  — game-sourced (W_SAND00.DDS)
-    0,                  // 3 snow  — game-sourced (W_SNOW_RGH.DDS)
-    0,                  // 4 solid color (procedural — see m_groundSolidColor)
-    0, 0, 0,            // 5..7 — empty bundled, user-supplied only
+    IDB_GROUND,       // 0 dirt (bundled editor default)
+    0,                // 1 grass — game-sourced (W_TEMPGRND00.DDS)
+    0,                // 2 sand  — game-sourced (W_SAND00.DDS)
+    0,                // 3 snow  — game-sourced (W_SNOW_RGH.DDS)
+    0,                // 4 solid color (procedural — see m_groundSolidColor)
+    0,          0, 0, // 5..7 — empty bundled, user-supplied only
 };
 
 // Base-colour leaf names resolved from the user's game install
@@ -143,11 +137,14 @@ static const UINT kGroundTextureResourceIds[Engine::kGroundTextureCount] = {
 // ReloadGroundNormalTexture. NULL = the slot has no game source (dirt is
 // bundled; solid/custom slots resolve by colour/path instead).
 static const char* const kGroundTextureGameLeaf[Engine::kGroundTextureCount] = {
-    NULL,                // 0 dirt — bundled editor default
-    "W_TEMPGRND00.DDS",  // 1 grass
-    "W_SAND00.DDS",      // 2 sand
-    "W_SNOW_RGH.DDS",    // 3 snow
-    NULL, NULL, NULL, NULL,
+    NULL,               // 0 dirt — bundled editor default
+    "W_TEMPGRND00.DDS", // 1 grass
+    "W_SAND00.DDS",     // 2 sand
+    "W_SNOW_RGH.DDS",   // 3 snow
+    NULL,
+    NULL,
+    NULL,
+    NULL,
 };
 
 // Average colour of a ground-texture image, read from a 1×1 SCRATCH copy — the
@@ -164,8 +161,8 @@ static COLORREF ReadScratch1x1Average(IDirect3DTexture9* pTex)
     D3DLOCKED_RECT lr;
     if (SUCCEEDED(pTex->LockRect(0, &lr, NULL, D3DLOCK_READONLY)))
     {
-        DWORD argb = *(DWORD*)lr.pBits;   // D3DFMT_A8R8G8B8
-        avg = RGB((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF);
+        DWORD argb = *(DWORD*)lr.pBits; // D3DFMT_A8R8G8B8
+        avg        = RGB((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF);
         pTex->UnlockRect(0);
     }
     pTex->Release();
@@ -175,9 +172,8 @@ static COLORREF ReadScratch1x1Average(IDirect3DTexture9* pTex)
 static COLORREF AverageColorFromMemory(IDirect3DDevice9* pDevice, const void* data, DWORD size)
 {
     IDirect3DTexture9* pTex = NULL;
-    if (FAILED(D3DXCreateTextureFromFileInMemoryEx(
-            pDevice, data, size, 1, 1, 1, 0, D3DFMT_A8R8G8B8,
-            D3DPOOL_SCRATCH, D3DX_FILTER_TRIANGLE, D3DX_FILTER_NONE, 0, NULL, NULL, &pTex)))
+    if (FAILED(D3DXCreateTextureFromFileInMemoryEx(pDevice, data, size, 1, 1, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_SCRATCH,
+                                                   D3DX_FILTER_TRIANGLE, D3DX_FILTER_NONE, 0, NULL, NULL, &pTex)))
         return RGB(128, 128, 128);
     return ReadScratch1x1Average(pTex);
 }
@@ -185,9 +181,8 @@ static COLORREF AverageColorFromMemory(IDirect3DDevice9* pDevice, const void* da
 static COLORREF AverageColorFromFile(IDirect3DDevice9* pDevice, const std::wstring& path)
 {
     IDirect3DTexture9* pTex = NULL;
-    if (FAILED(D3DXCreateTextureFromFileExW(
-            pDevice, path.c_str(), 1, 1, 1, 0, D3DFMT_A8R8G8B8,
-            D3DPOOL_SCRATCH, D3DX_FILTER_TRIANGLE, D3DX_FILTER_NONE, 0, NULL, NULL, &pTex)))
+    if (FAILED(D3DXCreateTextureFromFileExW(pDevice, path.c_str(), 1, 1, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_SCRATCH,
+                                            D3DX_FILTER_TRIANGLE, D3DX_FILTER_NONE, 0, NULL, NULL, &pTex)))
         return RGB(128, 128, 128);
     return ReadScratch1x1Average(pTex);
 }
@@ -195,15 +190,14 @@ static COLORREF AverageColorFromFile(IDirect3DDevice9* pDevice, const std::wstri
 // Internal: load a texture from a custom file path. Returns true and writes
 // *ppOut on success; false leaves *ppOut untouched. pAvgOut (optional) receives
 // the texture's average colour.
-static bool LoadGroundTextureFromFile(IDirect3DDevice9*       pDevice,
-                                       const std::wstring&     path,
-                                       IDirect3DTexture9**     ppOut,
-                                       COLORREF*               pAvgOut = NULL)
+static bool LoadGroundTextureFromFile(IDirect3DDevice9*   pDevice,
+                                      const std::wstring& path,
+                                      IDirect3DTexture9** ppOut,
+                                      COLORREF*           pAvgOut = NULL)
 {
     if (pDevice == NULL || path.empty() || ppOut == NULL) return false;
     IDirect3DTexture9* pNew = NULL;
-    if (FAILED(D3DXCreateTextureFromFileW(pDevice, path.c_str(), &pNew)))
-        return false;
+    if (FAILED(D3DXCreateTextureFromFileW(pDevice, path.c_str(), &pNew))) return false;
     *ppOut = pNew;
     if (pAvgOut) *pAvgOut = AverageColorFromFile(pDevice, path);
     return true;
@@ -213,21 +207,20 @@ static bool LoadGroundTextureFromFile(IDirect3DDevice9*       pDevice,
 // Returns true and writes *ppOut on success; false leaves *ppOut
 // untouched. resourceId == 0 means "no bundled default" (e.g. an
 // empty user-only slot) and is treated as failure.
-static bool LoadGroundTextureFromResource(IDirect3DDevice9*    pDevice,
-                                           UINT                 resourceId,
-                                           IDirect3DTexture9**  ppOut,
-                                           COLORREF*            pAvgOut = NULL)
+static bool LoadGroundTextureFromResource(IDirect3DDevice9*   pDevice,
+                                          UINT                resourceId,
+                                          IDirect3DTexture9** ppOut,
+                                          COLORREF*           pAvgOut = NULL)
 {
     if (pDevice == NULL || resourceId == 0 || ppOut == NULL) return false;
-    HMODULE  hMod  = GetModuleHandle(NULL);
-    HRSRC    hRes  = FindResource(hMod, MAKEINTRESOURCE(resourceId), RT_RCDATA);
-    HGLOBAL  hData = (hRes != NULL) ? LoadResource(hMod, hRes) : NULL;
-    void*    pData = (hData != NULL) ? LockResource(hData)     : NULL;
-    DWORD    dwSize = (hRes != NULL) ? SizeofResource(hMod, hRes) : 0;
+    HMODULE hMod   = GetModuleHandle(NULL);
+    HRSRC   hRes   = FindResource(hMod, MAKEINTRESOURCE(resourceId), RT_RCDATA);
+    HGLOBAL hData  = (hRes != NULL) ? LoadResource(hMod, hRes) : NULL;
+    void*   pData  = (hData != NULL) ? LockResource(hData) : NULL;
+    DWORD   dwSize = (hRes != NULL) ? SizeofResource(hMod, hRes) : 0;
     if (pData == NULL || dwSize == 0) return false;
     IDirect3DTexture9* pNew = NULL;
-    if (FAILED(D3DXCreateTextureFromFileInMemory(pDevice, pData, dwSize, &pNew)))
-        return false;
+    if (FAILED(D3DXCreateTextureFromFileInMemory(pDevice, pData, dwSize, &pNew))) return false;
     *ppOut = pNew;
     if (pAvgOut) *pAvgOut = AverageColorFromMemory(pDevice, pData, dwSize);
     return true;
@@ -242,20 +235,21 @@ static bool LoadGroundTextureFromResource(IDirect3DDevice9*    pDevice,
 // Tries DATA\ART\TEXTURES\<leaf> first, then bare <leaf> (mods that stash the
 // texture flat). Returns false with *ppOut untouched on any miss/decode failure
 // — the caller's graceful-degradation signal (no install ⇒ slot unavailable).
-static bool LoadGroundTextureViaFileManager(IDirect3DDevice9*    pDevice,
-                                             IFileManager&        fileManager,
-                                             const char*          leaf,
-                                             IDirect3DTexture9**  ppOut,
-                                             COLORREF*            pAvgOut = NULL)
+static bool LoadGroundTextureViaFileManager(IDirect3DDevice9*   pDevice,
+                                            IFileManager&       fileManager,
+                                            const char*         leaf,
+                                            IDirect3DTexture9** ppOut,
+                                            COLORREF*           pAvgOut = NULL)
 {
     if (pDevice == NULL || leaf == NULL || ppOut == NULL) return false;
     IFile* file = fileManager.getFile(std::string("DATA\\ART\\TEXTURES\\") + leaf);
-    if (file == NULL) file = fileManager.getFile(leaf);   // mod may stash it flat
+    if (file == NULL) file = fileManager.getFile(leaf); // mod may stash it flat
     if (file == NULL) return false;
     std::vector<unsigned char> bytes;
     try
     {
-        bytes = ReadAndReleaseCapped(file, kMaxTextureAssetBytes);   // exact-byte read (size-capped); Releases the file ref
+        bytes =
+            ReadAndReleaseCapped(file, kMaxTextureAssetBytes); // exact-byte read (size-capped); Releases the file ref
     }
     catch (...)
     {
@@ -267,12 +261,10 @@ static bool LoadGroundTextureViaFileManager(IDirect3DDevice9*    pDevice,
         return false;
     }
     IDirect3DTexture9* pNew = NULL;
-    if (FAILED(D3DXCreateTextureFromFileInMemory(pDevice, bytes.data(),
-                                                 (unsigned long)bytes.size(), &pNew)))
+    if (FAILED(D3DXCreateTextureFromFileInMemory(pDevice, bytes.data(), (unsigned long)bytes.size(), &pNew)))
         return false;
     *ppOut = pNew;
-    if (pAvgOut)
-        *pAvgOut = AverageColorFromMemory(pDevice, bytes.data(), (DWORD)bytes.size());
+    if (pAvgOut) *pAvgOut = AverageColorFromMemory(pDevice, bytes.data(), (DWORD)bytes.size());
     return true;
 }
 
@@ -280,9 +272,7 @@ static bool LoadGroundTextureViaFileManager(IDirect3DDevice9*    pDevice,
 // Used by the "Solid Color" slot (kGroundSolidColorSlot). One-pixel
 // tile is enough because the ground is sampled with WRAP wrap-mode —
 // every texel across the entire ground reads back the same colour.
-static bool CreateSolidColorTexture(IDirect3DDevice9*    pDevice,
-                                     COLORREF             color,
-                                     IDirect3DTexture9**  ppOut)
+static bool CreateSolidColorTexture(IDirect3DDevice9* pDevice, COLORREF color, IDirect3DTexture9** ppOut)
 {
     if (pDevice == NULL || ppOut == NULL) return false;
     IDirect3DTexture9* pNew = NULL;
@@ -295,8 +285,7 @@ static bool CreateSolidColorTexture(IDirect3DDevice9*    pDevice,
     // dynamic usage so the 1×1 fill below is legal under D3D9Ex; the
     // texture is still recreated in Engine::Reset via ReloadGroundTexture
     // (DEFAULT/dynamic resources are lost on device reset).
-    if (FAILED(pDevice->CreateTexture(1, 1, 1, D3DUSAGE_DYNAMIC, D3DFMT_A8R8G8B8,
-                                       D3DPOOL_DEFAULT, &pNew, NULL)))
+    if (FAILED(pDevice->CreateTexture(1, 1, 1, D3DUSAGE_DYNAMIC, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &pNew, NULL)))
         return false;
     D3DLOCKED_RECT lr;
     if (FAILED(pNew->LockRect(0, &lr, NULL, D3DLOCK_DISCARD)))
@@ -304,10 +293,8 @@ static bool CreateSolidColorTexture(IDirect3DDevice9*    pDevice,
         pNew->Release();
         return false;
     }
-    DWORD argb = (DWORD)(0xFFu) << 24
-               | (DWORD)GetRValue(color) << 16
-               | (DWORD)GetGValue(color) <<  8
-               | (DWORD)GetBValue(color);
+    DWORD argb =
+        (DWORD)(0xFFu) << 24 | (DWORD)GetRValue(color) << 16 | (DWORD)GetGValue(color) << 8 | (DWORD)GetBValue(color);
     *(DWORD*)lr.pBits = argb;
     pNew->UnlockRect(0);
     *ppOut = pNew;
@@ -317,23 +304,19 @@ static bool CreateSolidColorTexture(IDirect3DDevice9*    pDevice,
 // ---------- Ground texture selection ----------
 bool Engine::ReloadGroundTexture()
 {
-    if (m_pDevice == NULL) return false;   // pre-init guard
+    if (m_pDevice == NULL) return false; // pre-init guard
 
     // Solid-color slot — procedural texture from m_groundSolidColor.
     if (m_groundTextureIndex == kGroundSolidColorSlot)
     {
         IDirect3DTexture9* pNew = NULL;
-        if (!CreateSolidColorTexture(m_pDevice, m_groundSolidColor, &pNew))
-            return false;
+        if (!CreateSolidColorTexture(m_pDevice, m_groundSolidColor, &pNew)) return false;
         SAFE_RELEASE(m_pGroundTexture);
         m_pGroundTexture = pNew;
-        m_groundColor = m_groundSolidColor;   // solid slot: the colour IS the floor
+        m_groundColor    = m_groundSolidColor; // solid slot: the colour IS the floor
 #ifndef NDEBUG
-        printf("[Ground] solid-color slot=%d color=#%02X%02X%02X\n",
-               m_groundTextureIndex,
-               GetRValue(m_groundSolidColor),
-               GetGValue(m_groundSolidColor),
-               GetBValue(m_groundSolidColor));
+        printf("[Ground] solid-color slot=%d color=#%02X%02X%02X\n", m_groundTextureIndex,
+               GetRValue(m_groundSolidColor), GetGValue(m_groundSolidColor), GetBValue(m_groundSolidColor));
         fflush(stdout);
 #endif
         return true;
@@ -342,15 +325,14 @@ bool Engine::ReloadGroundTexture()
     // Resolution order: custom path → game-sourced leaf (grass/sand/snow,
     // resolved from the user's install) → bundled resource (dirt only) →
     // on all-failure, fall back to slot 0 (dirt, always loadable from RCDATA).
-    IDirect3DTexture9* pNew = NULL;
+    IDirect3DTexture9*  pNew = NULL;
     const std::wstring& path = m_groundSlotCustomPaths[m_groundTextureIndex];
     if (!path.empty())
     {
         if (!LoadGroundTextureFromFile(m_pDevice, path, &pNew, &m_groundColor))
         {
 #ifndef NDEBUG
-            printf("[Ground] custom path failed for slot=%d; trying game/bundled\n",
-                   m_groundTextureIndex);
+            printf("[Ground] custom path failed for slot=%d; trying game/bundled\n", m_groundTextureIndex);
             fflush(stdout);
 #endif
         }
@@ -358,12 +340,10 @@ bool Engine::ReloadGroundTexture()
     if (pNew == NULL)
     {
         const char* leaf = kGroundTextureGameLeaf[m_groundTextureIndex];
-        if (leaf != NULL &&
-            !LoadGroundTextureViaFileManager(m_pDevice, m_fileManager, leaf, &pNew, &m_groundColor))
+        if (leaf != NULL && !LoadGroundTextureViaFileManager(m_pDevice, m_fileManager, leaf, &pNew, &m_groundColor))
         {
 #ifndef NDEBUG
-            printf("[Ground] game texture '%s' not resolved for slot=%d; falling back\n",
-                   leaf, m_groundTextureIndex);
+            printf("[Ground] game texture '%s' not resolved for slot=%d; falling back\n", leaf, m_groundTextureIndex);
             fflush(stdout);
 #endif
             // Release-visible signal ONLY for the corrupt-install case: the slot
@@ -374,8 +354,9 @@ bool Engine::ReloadGroundTexture()
             {
                 char msg[256];
                 _snprintf_s(msg, sizeof(msg), _TRUNCATE,
-                    "[Ground] slot=%d game texture '%s' is present but failed to decode; "
-                    "using dirt (file may be corrupt).\n", m_groundTextureIndex, leaf);
+                            "[Ground] slot=%d game texture '%s' is present but failed to decode; "
+                            "using dirt (file may be corrupt).\n",
+                            m_groundTextureIndex, leaf);
                 OutputDebugStringA(msg);
             }
         }
@@ -383,14 +364,12 @@ bool Engine::ReloadGroundTexture()
     if (pNew == NULL)
     {
         UINT bundledId = kGroundTextureResourceIds[m_groundTextureIndex];
-        if (bundledId != 0)
-            LoadGroundTextureFromResource(m_pDevice, bundledId, &pNew, &m_groundColor);
+        if (bundledId != 0) LoadGroundTextureFromResource(m_pDevice, bundledId, &pNew, &m_groundColor);
     }
     if (pNew == NULL)
     {
 #ifndef NDEBUG
-        printf("[Ground] slot=%d empty/failed; falling back to default\n",
-               m_groundTextureIndex);
+        printf("[Ground] slot=%d empty/failed; falling back to default\n", m_groundTextureIndex);
         fflush(stdout);
 #endif
         if (m_groundTextureIndex != 0)
@@ -398,7 +377,7 @@ bool Engine::ReloadGroundTexture()
             m_groundTextureIndex = 0;
             return ReloadGroundTexture();
         }
-        return false;                       // dirt itself failed → engine is in trouble
+        return false; // dirt itself failed → engine is in trouble
     }
     // Release the prior texture only after the new one is in hand —
     // ensures we don't have a transient null window where a paint
@@ -406,9 +385,9 @@ bool Engine::ReloadGroundTexture()
     SAFE_RELEASE(m_pGroundTexture);
     m_pGroundTexture = pNew;
 #ifndef NDEBUG
-    const char* src = !m_groundSlotCustomPaths[m_groundTextureIndex].empty() ? "custom"
-                    : (kGroundTextureGameLeaf[m_groundTextureIndex] != NULL)  ? "game"
-                    :                                                           "bundled";
+    const char* src = !m_groundSlotCustomPaths[m_groundTextureIndex].empty()   ? "custom"
+                      : (kGroundTextureGameLeaf[m_groundTextureIndex] != NULL) ? "game"
+                                                                               : "bundled";
     printf("[Ground] texture set slot=%d source=%s\n", m_groundTextureIndex, src);
     fflush(stdout);
 #endif
@@ -429,8 +408,8 @@ bool Engine::SetGroundTexture(int index)
     // Fast-path: already at this slot AND we have a valid texture.
     if (index == m_groundTextureIndex && m_pGroundTexture != NULL) return true;
     m_groundTextureIndex = index;
-    bool ok = ReloadGroundTexture();
-    ReloadGroundNormalTexture();   // re-resolve the slot's companion _bc map
+    bool ok              = ReloadGroundTexture();
+    ReloadGroundNormalTexture(); // re-resolve the slot's companion _bc map
     // ReloadGroundTexture returns true when the dirt fallback loaded. That is
     // healthy renderer state, but it is not success for the requested slot.
     // Preserve both facts: GetGroundTexture() reports the reached slot and this
@@ -462,7 +441,7 @@ bool Engine::SetGroundSlotCustomPath(int slot, const std::wstring& path)
             m_groundTextureIndex = 0;
         }
         bool ok = ReloadGroundTexture();
-        ReloadGroundNormalTexture();   // re-resolve the slot's companion _bc map
+        ReloadGroundNormalTexture(); // re-resolve the slot's companion _bc map
         return ok;
     }
     return true;
@@ -478,23 +457,23 @@ const std::wstring& Engine::GetGroundSlotCustomPath(int slot) const
 bool Engine::IsGroundSlotEmpty(int slot) const
 {
     if (slot < 0 || slot >= kGroundTextureCount) return true;
-    if (slot == kGroundSolidColorSlot) return false;   // always populated procedurally
+    if (slot == kGroundSolidColorSlot) return false; // always populated procedurally
     if (!m_groundSlotCustomPaths[slot].empty()) return false;
     return kGroundTextureResourceIds[slot] == 0;
 }
 
 bool Engine::IsGroundSlotAvailable(int slot) const
 {
-    if (slot < 0 || slot >= kGroundTextureCount)  return false;
-    if (slot == kGroundSolidColorSlot)            return true;    // procedural — always
-    if (!m_groundSlotCustomPaths[slot].empty())   return true;    // user path (optimistic, as today)
-    if (kGroundTextureResourceIds[slot] != 0)     return true;    // bundled (dirt)
-    if (kGroundTextureGameLeaf[slot] != NULL)                     // game-sourced (grass/sand/snow)
+    if (slot < 0 || slot >= kGroundTextureCount) return false;
+    if (slot == kGroundSolidColorSlot) return true;          // procedural — always
+    if (!m_groundSlotCustomPaths[slot].empty()) return true; // user path (optimistic, as today)
+    if (kGroundTextureResourceIds[slot] != 0) return true;   // bundled (dirt)
+    if (kGroundTextureGameLeaf[slot] != NULL)                // game-sourced (grass/sand/snow)
     {
         EnsureGroundSlotResolvable();
         return m_groundSlotResolvable[slot];
     }
-    return false;                                                 // empty user slot
+    return false; // empty user slot
 }
 
 void Engine::EnsureGroundSlotResolvable() const
@@ -503,12 +482,11 @@ void Engine::EnsureGroundSlotResolvable() const
     // GetContentRoots() is a complete invalidation key). Cheap getFile()+Release()
     // probe per game leaf — no decode.
     const std::vector<std::wstring>& roots = m_fileManager.GetContentRoots();
-    if (m_groundSlotResolvableValid && roots == m_groundSlotResolvableRoots)
-        return;
+    if (m_groundSlotResolvableValid && roots == m_groundSlotResolvableRoots) return;
     for (int i = 0; i < kGroundTextureCount; ++i)
     {
-        const char* leaf = kGroundTextureGameLeaf[i];
-        bool resolvable = false;
+        const char* leaf       = kGroundTextureGameLeaf[i];
+        bool        resolvable = false;
         if (leaf != NULL)
         {
             // FileManager::getFile swallows its own IOExceptions and returns
@@ -520,8 +498,12 @@ void Engine::EnsureGroundSlotResolvable() const
             try
             {
                 IFile* f = m_fileManager.getFile(std::string("DATA\\ART\\TEXTURES\\") + leaf);
-                if (f == NULL) f = m_fileManager.getFile(leaf);   // mod may stash it flat
-                if (f != NULL) { f->Release(); resolvable = true; }
+                if (f == NULL) f = m_fileManager.getFile(leaf); // mod may stash it flat
+                if (f != NULL)
+                {
+                    f->Release();
+                    resolvable = true;
+                }
             }
             catch (...)
             {
@@ -533,9 +515,8 @@ void Engine::EnsureGroundSlotResolvable() const
     m_groundSlotResolvableRoots = roots;
     m_groundSlotResolvableValid = true;
 #ifndef NDEBUG
-    printf("[Ground] resolvable probe: grass=%d sand=%d snow=%d (mod-roots=%u)\n",
-           m_groundSlotResolvable[1], m_groundSlotResolvable[2], m_groundSlotResolvable[3],
-           (unsigned)roots.size());
+    printf("[Ground] resolvable probe: grass=%d sand=%d snow=%d (mod-roots=%u)\n", m_groundSlotResolvable[1],
+           m_groundSlotResolvable[2], m_groundSlotResolvable[3], (unsigned)roots.size());
     fflush(stdout);
 #endif
 }
@@ -546,8 +527,7 @@ bool Engine::SetGroundSolidColor(COLORREF color)
     m_groundSolidColor = color;
     // If the solid-colour slot is currently selected, regenerate the
     // texture so the colour change shows immediately.
-    if (m_groundTextureIndex == kGroundSolidColorSlot)
-        return ReloadGroundTexture();
+    if (m_groundTextureIndex == kGroundSolidColorSlot) return ReloadGroundTexture();
     return true;
 }
 
@@ -561,11 +541,10 @@ void Engine::InitSkydomeMesh()
 {
     // Vertex declaration — not pool-bound, survives device Reset.
     D3DVERTEXELEMENT9 decl[] = {
-        {0, offsetof(SkydomeVertex, Position),  D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0},
-        {0, offsetof(SkydomeVertex, Normal),    D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL,   0},
-        {0, offsetof(SkydomeVertex, TexCoord),  D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0},
-        D3DDECL_END()
-    };
+        {0, offsetof(SkydomeVertex, Position), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0},
+        {0, offsetof(SkydomeVertex, Normal), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL, 0},
+        {0, offsetof(SkydomeVertex, TexCoord), D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0},
+        D3DDECL_END()};
     if (FAILED(m_pDevice->CreateVertexDeclaration(decl, &m_pSkydomeDecl)))
         throw runtime_error("Unable to create skydome mesh");
 
@@ -581,8 +560,8 @@ void Engine::InitSkydomeMesh()
 // re-emit it every time rather than caching.
 void Engine::CreateSkydomeMeshBuffers()
 {
-    const int lon = kSkydomeLongSegments;
-    const int lat = kSkydomeLatSegments;
+    const int lon       = kSkydomeLongSegments;
+    const int lat       = kSkydomeLatSegments;
     const int vertCount = (lon + 1) * (lat + 1);
     const int triCount  = lon * lat * 2;
     m_skydomeIndexCount = triCount * 3;
@@ -598,25 +577,25 @@ void Engine::CreateSkydomeMeshBuffers()
     std::vector<SkydomeVertex> verts(vertCount);
     for (int j = 0; j <= lat; ++j)
     {
-        const float v     = float(j) / float(lat);
-        const float theta = v * D3DX_PI;             // 0..pi (pole to pole)
+        const float v        = float(j) / float(lat);
+        const float theta    = v * D3DX_PI; // 0..pi (pole to pole)
         const float sinTheta = sinf(theta);
         const float cosTheta = cosf(theta);
         for (int i = 0; i <= lon; ++i)
         {
-            const float u   = float(i) / float(lon);
-            const float phi = u * 2.0f * D3DX_PI;   // 0..2pi
-            const float sinPhi = sinf(phi);
-            const float cosPhi = cosf(phi);
-            SkydomeVertex& vx = verts[j * (lon + 1) + i];
-            vx.Position = D3DXVECTOR3(sinTheta * cosPhi, sinTheta * sinPhi, cosTheta);
-            vx.Normal   = vx.Position;
-            vx.TexCoord = D3DXVECTOR2(u, v);
+            const float    u      = float(i) / float(lon);
+            const float    phi    = u * 2.0f * D3DX_PI; // 0..2pi
+            const float    sinPhi = sinf(phi);
+            const float    cosPhi = cosf(phi);
+            SkydomeVertex& vx     = verts[j * (lon + 1) + i];
+            vx.Position           = D3DXVECTOR3(sinTheta * cosPhi, sinTheta * sinPhi, cosTheta);
+            vx.Normal             = vx.Position;
+            vx.TexCoord           = D3DXVECTOR2(u, v);
         }
     }
 
     std::vector<uint16_t> idx(m_skydomeIndexCount);
-    int k = 0;
+    int                   k = 0;
     for (int j = 0; j < lat; ++j)
     {
         for (int i = 0; i < lon; ++i)
@@ -625,30 +604,30 @@ void Engine::CreateSkydomeMeshBuffers()
             uint16_t b = a + 1;
             uint16_t c = uint16_t((j + 1) * (lon + 1) + i);
             uint16_t d = c + 1;
-            idx[k++] = a; idx[k++] = c; idx[k++] = b;
-            idx[k++] = b; idx[k++] = c; idx[k++] = d;
+            idx[k++]   = a;
+            idx[k++]   = c;
+            idx[k++]   = b;
+            idx[k++]   = b;
+            idx[k++]   = c;
+            idx[k++]   = d;
         }
     }
 
     // VB — D3DPOOL_DEFAULT for D3D9Ex compatibility.
-    if (FAILED(m_pDevice->CreateVertexBuffer(
-        UINT(verts.size() * sizeof(SkydomeVertex)),
-        D3DUSAGE_WRITEONLY, 0, D3DPOOL_DEFAULT, &m_pSkydomeVB, NULL)))
+    if (FAILED(m_pDevice->CreateVertexBuffer(UINT(verts.size() * sizeof(SkydomeVertex)), D3DUSAGE_WRITEONLY, 0,
+                                             D3DPOOL_DEFAULT, &m_pSkydomeVB, NULL)))
         throw runtime_error("Unable to create skydome mesh");
     void* pVB = NULL;
-    if (FAILED(m_pSkydomeVB->Lock(0, 0, &pVB, 0)))
-        throw runtime_error("Unable to create skydome mesh");
+    if (FAILED(m_pSkydomeVB->Lock(0, 0, &pVB, 0))) throw runtime_error("Unable to create skydome mesh");
     memcpy(pVB, verts.data(), verts.size() * sizeof(SkydomeVertex));
     m_pSkydomeVB->Unlock();
 
     // IB — D3DPOOL_DEFAULT for D3D9Ex compatibility.
-    if (FAILED(m_pDevice->CreateIndexBuffer(
-        UINT(idx.size() * sizeof(uint16_t)),
-        D3DUSAGE_WRITEONLY, D3DFMT_INDEX16, D3DPOOL_DEFAULT, &m_pSkydomeIB, NULL)))
+    if (FAILED(m_pDevice->CreateIndexBuffer(UINT(idx.size() * sizeof(uint16_t)), D3DUSAGE_WRITEONLY, D3DFMT_INDEX16,
+                                            D3DPOOL_DEFAULT, &m_pSkydomeIB, NULL)))
         throw runtime_error("Unable to create skydome mesh");
     void* pIB = NULL;
-    if (FAILED(m_pSkydomeIB->Lock(0, 0, &pIB, 0)))
-        throw runtime_error("Unable to create skydome mesh");
+    if (FAILED(m_pSkydomeIB->Lock(0, 0, &pIB, 0))) throw runtime_error("Unable to create skydome mesh");
     memcpy(pIB, idx.data(), idx.size() * sizeof(uint16_t));
     m_pSkydomeIB->Unlock();
 
@@ -668,8 +647,8 @@ void Engine::ReleaseSkydomeMeshBuffers()
 
 void Engine::InitSkydomeEffect()
 {
-    HMODULE hMod  = GetModuleHandle(NULL);
-    HRSRC   hRes  = FindResource(hMod, MAKEINTRESOURCE(IDR_SHADER_SKYDOME), RT_RCDATA);
+    HMODULE hMod = GetModuleHandle(NULL);
+    HRSRC   hRes = FindResource(hMod, MAKEINTRESOURCE(IDR_SHADER_SKYDOME), RT_RCDATA);
     if (!hRes) return;
     HGLOBAL hData  = LoadResource(hMod, hRes);
     DWORD   dwSize = SizeofResource(hMod, hRes);
@@ -677,13 +656,11 @@ void Engine::InitSkydomeEffect()
     if (!pData || !dwSize) return;
 
     LPD3DXBUFFER pErrors = NULL;
-    HRESULT hr = D3DXCreateEffect(m_pDevice, pData, dwSize, NULL, NULL, 0, NULL,
-                                  &m_pSkydomeEffect, &pErrors);
+    HRESULT      hr      = D3DXCreateEffect(m_pDevice, pData, dwSize, NULL, NULL, 0, NULL, &m_pSkydomeEffect, &pErrors);
     if (FAILED(hr))
     {
 #ifndef NDEBUG
-        if (pErrors) fprintf(stderr, "[Skydome] effect compile failed: %s\n",
-                             (const char*)pErrors->GetBufferPointer());
+        if (pErrors) fprintf(stderr, "[Skydome] effect compile failed: %s\n", (const char*)pErrors->GetBufferPointer());
 #endif
         SAFE_RELEASE(pErrors);
         m_pSkydomeEffect = NULL;
@@ -700,14 +677,13 @@ bool Engine::ReloadSkydomeTexture(int slot)
     SAFE_RELEASE(m_pSkydomeTexture);
     if (m_skydomeUsesEmbeddedResource)
     {
-        if (slot == 1 &&
-            LoadEmbeddedSkydomeSlotOne(m_pDevice, &m_pSkydomeTexture))
+        if (slot == 1 && LoadEmbeddedSkydomeSlotOne(m_pDevice, &m_pSkydomeTexture))
         {
             return true;
         }
         // A failed oracle reload must not leave source identity claiming that
         // an embedded texture is live. Full Reset reaches this path too.
-        m_skydomeIndex = kSkydomeOffSlot;
+        m_skydomeIndex                = kSkydomeOffSlot;
         m_skydomeUsesEmbeddedResource = false;
         SAFE_RELEASE(m_pSkydomeTexture);
         return false;
@@ -727,8 +703,8 @@ bool Engine::ReloadSkydomeTexture(int slot)
             m_pSkydomeTexture = LoadTextureViaFileManager(m_pDevice, m_fileManager, gamePath);
             if (m_pSkydomeTexture != NULL) return true;
         }
-        HMODULE hMod   = GetModuleHandle(NULL);
-        HRSRC   hRes   = FindResource(hMod, MAKEINTRESOURCE(kSkydomeBundledResources[slot]), RT_RCDATA);
+        HMODULE hMod = GetModuleHandle(NULL);
+        HRSRC   hRes = FindResource(hMod, MAKEINTRESOURCE(kSkydomeBundledResources[slot]), RT_RCDATA);
         if (!hRes) return false;
         HGLOBAL hData  = LoadResource(hMod, hRes);
         DWORD   dwSize = SizeofResource(hMod, hRes);
@@ -748,17 +724,15 @@ bool Engine::ReloadSkydomeTexture(int slot)
         // outside the game roots), fall back to direct file I/O so legacy
         // absolute-path custom slots keep working.
         std::string narrowPath = WideToAnsi(path);
-        m_pSkydomeTexture = LoadTextureViaFileManager(m_pDevice, m_fileManager, narrowPath);
+        m_pSkydomeTexture      = LoadTextureViaFileManager(m_pDevice, m_fileManager, narrowPath);
         if (m_pSkydomeTexture != NULL) return true;
         // D3DPOOL_MANAGED → D3DPOOL_DEFAULT.
         // D3D9Ex disallows the managed pool. Custom-slot textures are
         // re-loaded from disk via Engine::Reset → ReloadSkydomeTexture
         // (called with m_skydomeIndex) when the device is reset.
-        return SUCCEEDED(D3DXCreateTextureFromFileEx(
-            m_pDevice, path.c_str(),
-            D3DX_DEFAULT, D3DX_DEFAULT, D3DX_DEFAULT, 0, D3DFMT_UNKNOWN,
-            D3DPOOL_DEFAULT, D3DX_DEFAULT, D3DX_DEFAULT, 0, NULL, NULL,
-            &m_pSkydomeTexture));
+        return SUCCEEDED(D3DXCreateTextureFromFileEx(m_pDevice, path.c_str(), D3DX_DEFAULT, D3DX_DEFAULT, D3DX_DEFAULT,
+                                                     0, D3DFMT_UNKNOWN, D3DPOOL_DEFAULT, D3DX_DEFAULT, D3DX_DEFAULT, 0,
+                                                     NULL, NULL, &m_pSkydomeTexture));
     }
     return false;
 }
@@ -773,8 +747,8 @@ void Engine::RenderSkydome()
     // Save render state so the skydome pass doesn't pollute the rest of the frame.
     DWORD oldZWrite, oldZEnable, oldCull;
     m_pDevice->GetRenderState(D3DRS_ZWRITEENABLE, &oldZWrite);
-    m_pDevice->GetRenderState(D3DRS_ZENABLE,      &oldZEnable);
-    m_pDevice->GetRenderState(D3DRS_CULLMODE,     &oldCull);
+    m_pDevice->GetRenderState(D3DRS_ZENABLE, &oldZEnable);
+    m_pDevice->GetRenderState(D3DRS_CULLMODE, &oldCull);
     // Save the vertex declaration too. It is NOT part of the ID3DXEffect
     // state block (Begin/End won't restore it), so the skydome's declaration
     // (SkydomeVertex — position/normal/texcoord, NO diffuse-colour element)
@@ -787,10 +761,12 @@ void Engine::RenderSkydome()
     IDirect3DVertexDeclaration9* oldDecl = NULL;
     m_pDevice->GetVertexDeclaration(&oldDecl);
     m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-    m_pDevice->SetRenderState(D3DRS_ZENABLE,      D3DZB_FALSE);
-    m_pDevice->SetRenderState(D3DRS_CULLMODE,     D3DCULL_CCW); // we're inside the sphere; Y↔Z swap in InitSkydomeMesh reversed handedness so the inside-facing triangles are now CCW
+    m_pDevice->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+    m_pDevice->SetRenderState(D3DRS_CULLMODE,
+                              D3DCULL_CCW); // we're inside the sphere; Y↔Z swap in InitSkydomeMesh reversed handedness
+                                            // so the inside-facing triangles are now CCW
 
-    m_pSkydomeEffect->SetMatrix (m_hSkydomeWVP, &wvp);
+    m_pSkydomeEffect->SetMatrix(m_hSkydomeWVP, &wvp);
     m_pSkydomeEffect->SetTexture(m_hSkydomeTex, m_pSkydomeTexture);
 
     UINT passes = 0;
@@ -802,10 +778,7 @@ void Engine::RenderSkydome()
         m_pDevice->SetStreamSource(0, m_pSkydomeVB, 0, sizeof(SkydomeVertex));
         m_pDevice->SetIndices(m_pSkydomeIB);
         const UINT vertCount = (kSkydomeLongSegments + 1) * (kSkydomeLatSegments + 1);
-        m_pDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0,
-                                        vertCount,
-                                        0,
-                                        m_skydomeIndexCount / 3);
+        m_pDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, vertCount, 0, m_skydomeIndexCount / 3);
         m_pSkydomeEffect->EndPass();
     }
     m_pSkydomeEffect->End();
@@ -817,8 +790,8 @@ void Engine::RenderSkydome()
     if (oldDecl) oldDecl->Release();
 
     m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE, oldZWrite);
-    m_pDevice->SetRenderState(D3DRS_ZENABLE,      oldZEnable);
-    m_pDevice->SetRenderState(D3DRS_CULLMODE,     oldCull);
+    m_pDevice->SetRenderState(D3DRS_ZENABLE, oldZEnable);
+    m_pDevice->SetRenderState(D3DRS_CULLMODE, oldCull);
 }
 
 // The blend mode a dome sub-mesh's shader expects. The game .fxo set this
@@ -826,12 +799,17 @@ void Engine::RenderSkydome()
 // applies it. MeshAdditive* -> ONE/ONE (space starfields); MeshAlpha* ->
 // SRCALPHA/INVSRCALPHA (land ring/horizon overlays); everything else (Skydome,
 // MeshGloss base) -> opaque.
-enum SkydomeBlend { SKYBLEND_OPAQUE, SKYBLEND_ADDITIVE, SKYBLEND_ALPHA };
+enum SkydomeBlend
+{
+    SKYBLEND_OPAQUE,
+    SKYBLEND_ADDITIVE,
+    SKYBLEND_ALPHA
+};
 
 static SkydomeBlend SkydomeBlendFor(const std::string& shaderName)
 {
     if (_strnicmp(shaderName.c_str(), "MeshAdditive", 12) == 0) return SKYBLEND_ADDITIVE;
-    if (_strnicmp(shaderName.c_str(), "MeshAlpha",     9) == 0) return SKYBLEND_ALPHA;
+    if (_strnicmp(shaderName.c_str(), "MeshAlpha", 9) == 0) return SKYBLEND_ALPHA;
     return SKYBLEND_OPAQUE;
 }
 
@@ -845,10 +823,10 @@ static SkydomeBlend SkydomeBlendFor(const std::string& shaderName)
 // stay inline at each call site.
 // Non-static: declared in engine_internal.h (also called by the
 // reference-object path in engine_reference.cpp).
-void ApplyAloMaterialParams(ID3DXEffect* fx,
-                                   const std::vector<AloShaderParam>& params,
-                                   const std::vector<D3DXHANDLE>& matHandles,
-                                   const std::vector<IDirect3DTexture9*>& matTextures)
+void ApplyAloMaterialParams(ID3DXEffect*                           fx,
+                            const std::vector<AloShaderParam>&     params,
+                            const std::vector<D3DXHANDLE>&         matHandles,
+                            const std::vector<IDirect3DTexture9*>& matTextures)
 {
     for (size_t i = 0; i < params.size(); ++i)
     {
@@ -887,11 +865,12 @@ static D3DXMATRIX MakeSkydomeBillboardWorld(const D3DXVECTOR3& eyePos,
 {
     // Bone object-space position -> world (through the dome's scale+translate).
     D3DXVECTOR3 cObj(placement._41, placement._42, placement._43);
-    D3DXVECTOR3 center; D3DXVec3TransformCoord(&center, &cObj, &domeWorld);
+    D3DXVECTOR3 center;
+    D3DXVec3TransformCoord(&center, &cObj, &domeWorld);
 
     // Uniform dome scale = length of domeWorld's first basis row (sf,sf,sf).
     const D3DXVECTOR3 row0(domeWorld._11, domeWorld._12, domeWorld._13);
-    const float sf = D3DXVec3Length(&row0);
+    const float       sf = D3DXVec3Length(&row0);
 
     // Spherical billboard basis facing the eye (point-at-eye, not view-plane: the
     // sun is a single off-centre point on a camera-locked sphere). The quad lies in
@@ -900,7 +879,7 @@ static D3DXMATRIX MakeSkydomeBillboardWorld(const D3DXVECTOR3& eyePos,
     // (inverse view-rotation) -- that screen-aligns a center-anchored quad; this
     // off-centre point needs to point AT the eye.
     D3DXVECTOR3 normal = eyePos - center;
-    if (D3DXVec3Length(&normal) < 1e-4f) normal = D3DXVECTOR3(0, 1, 0);   // sun at the eye (bone @ origin)
+    if (D3DXVec3Length(&normal) < 1e-4f) normal = D3DXVECTOR3(0, 1, 0); // sun at the eye (bone @ origin)
     D3DXVec3Normalize(&normal, &normal);
     // right = up x normal. If eyeUp is (near-)parallel to normal (camera ~directly
     // over/under the sun) OR degenerate (zero), the cross collapses -> fall back to
@@ -911,13 +890,24 @@ static D3DXMATRIX MakeSkydomeBillboardWorld(const D3DXVECTOR3& eyePos,
     if (D3DXVec3Length(&right) < 1e-4f) D3DXVec3Cross(&right, &D3DXVECTOR3(1, 0, 0), &normal);
     if (D3DXVec3Length(&right) < 1e-4f) D3DXVec3Cross(&right, &D3DXVECTOR3(0, 1, 0), &normal);
     D3DXVec3Normalize(&right, &right);
-    D3DXVECTOR3 up; D3DXVec3Cross(&up, &normal, &right); D3DXVec3Normalize(&up, &up);
+    D3DXVECTOR3 up;
+    D3DXVec3Cross(&up, &normal, &right);
+    D3DXVec3Normalize(&up, &up);
 
-    D3DXMATRIX w; D3DXMatrixIdentity(&w);
-    w._11 = right.x  * sf; w._12 = right.y  * sf; w._13 = right.z  * sf;   // local X -> right
-    w._21 = normal.x * sf; w._22 = normal.y * sf; w._23 = normal.z * sf;   // local Y -> normal (verts Y==0)
-    w._31 = up.x     * sf; w._32 = up.y     * sf; w._33 = up.z     * sf;   // local Z -> up
-    w._41 = center.x;      w._42 = center.y;      w._43 = center.z;        // sun world position
+    D3DXMATRIX w;
+    D3DXMatrixIdentity(&w);
+    w._11 = right.x * sf;
+    w._12 = right.y * sf;
+    w._13 = right.z * sf; // local X -> right
+    w._21 = normal.x * sf;
+    w._22 = normal.y * sf;
+    w._23 = normal.z * sf; // local Y -> normal (verts Y==0)
+    w._31 = up.x * sf;
+    w._32 = up.y * sf;
+    w._33 = up.z * sf; // local Z -> up
+    w._41 = center.x;
+    w._42 = center.y;
+    w._43 = center.z; // sun world position
     return w;
 }
 
@@ -934,11 +924,11 @@ void Engine::RenderSkydomeMesh(SkydomeMesh& mesh, const D3DXMATRIX& world)
     // sub-mesh gets a camera-facing world), so they are computed inside the loop.
     DWORD oldAlphaBlend, oldSrcBlend, oldDestBlend, oldZWrite, oldZEnable, oldCull;
     m_pDevice->GetRenderState(D3DRS_ALPHABLENDENABLE, &oldAlphaBlend);
-    m_pDevice->GetRenderState(D3DRS_SRCBLEND,         &oldSrcBlend);
-    m_pDevice->GetRenderState(D3DRS_DESTBLEND,        &oldDestBlend);
-    m_pDevice->GetRenderState(D3DRS_ZWRITEENABLE,     &oldZWrite);
-    m_pDevice->GetRenderState(D3DRS_ZENABLE,          &oldZEnable);
-    m_pDevice->GetRenderState(D3DRS_CULLMODE,         &oldCull);
+    m_pDevice->GetRenderState(D3DRS_SRCBLEND, &oldSrcBlend);
+    m_pDevice->GetRenderState(D3DRS_DESTBLEND, &oldDestBlend);
+    m_pDevice->GetRenderState(D3DRS_ZWRITEENABLE, &oldZWrite);
+    m_pDevice->GetRenderState(D3DRS_ZENABLE, &oldZEnable);
+    m_pDevice->GetRenderState(D3DRS_CULLMODE, &oldCull);
     IDirect3DVertexDeclaration9* oldDecl = NULL;
     m_pDevice->GetVertexDeclaration(&oldDecl);
 
@@ -947,102 +937,99 @@ void Engine::RenderSkydomeMesh(SkydomeMesh& mesh, const D3DXMATRIX& world)
     // top -- so layering is correct regardless of the .alo's sub-mesh order.
     for (int phase = 0; phase < 2; ++phase)
     {
-      const bool opaquePhase = (phase == 0);
-      for (SubMeshGpu& sub : mesh.SubMeshes())
-      {
-        if (sub.effect == NULL || sub.vb == NULL || sub.ib == NULL || sub.decl == NULL)
-            continue;
-        const SkydomeBlend blend = SkydomeBlendFor(sub.shaderName);
-        if ((blend == SKYBLEND_OPAQUE) != opaquePhase)
-            continue;   // opaque sub-meshes in phase 0, blended in phase 1
-
-        // Render state the shader expects (the game .fxo may NOT set it itself --
-        // ALAMO_STATE_BLOCKS -- so we set it regardless). Every dome
-        // layer is a camera-centred background: depth test+write OFF (drawn first,
-        // ground/particles paint over it) and CULL_NONE (one triangle per view ray
-        // -> no overdraw, sidesteps the unknown .alo winding). Blend per shader
-        // intent: additive (MeshAdditive) adds, alpha (MeshAlpha) src-over, else opaque.
-        m_pDevice->SetRenderState(D3DRS_ZENABLE,      D3DZB_FALSE);
-        m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-        m_pDevice->SetRenderState(D3DRS_CULLMODE,     D3DCULL_NONE);
-        switch (blend)
+        const bool opaquePhase = (phase == 0);
+        for (SubMeshGpu& sub : mesh.SubMeshes())
         {
-            case SKYBLEND_ADDITIVE:
-                m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-                m_pDevice->SetRenderState(D3DRS_SRCBLEND,         D3DBLEND_ONE);
-                m_pDevice->SetRenderState(D3DRS_DESTBLEND,        D3DBLEND_ONE);
-                break;
-            case SKYBLEND_ALPHA:
-                m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-                m_pDevice->SetRenderState(D3DRS_SRCBLEND,         D3DBLEND_SRCALPHA);
-                m_pDevice->SetRenderState(D3DRS_DESTBLEND,        D3DBLEND_INVSRCALPHA);
-                break;
-            default: // SKYBLEND_OPAQUE (Skydome, MeshGloss base)
-                m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-                break;
-        }
+            if (sub.effect == NULL || sub.vb == NULL || sub.ib == NULL || sub.decl == NULL) continue;
+            const SkydomeBlend blend = SkydomeBlendFor(sub.shaderName);
+            if ((blend == SKYBLEND_OPAQUE) != opaquePhase) continue; // opaque sub-meshes in phase 0, blended in phase 1
 
-        ID3DXEffect* fx = sub.effect->getD3DEffect();   // AddRef'd
-        const Effect::Handles& h = sub.effect->getHandles();
-
-        // Per-sub-mesh world. A billboard bone (the star dome's sun glow) is placed
-        // at its bone position and RE-ORIENTED to face the camera, so its flat
-        // additive quad never collapses to an edge-on 1px line. Every other sub-mesh
-        // keeps the dome world verbatim -- byte-identical to the prior behaviour, so
-        // no existing/mod dome render changes (the dome meshes are authored in object
-        // space on near-identity bones; only the sun rides a 0x206 billboard bone).
-        D3DXMATRIX subWorld = (sub.billboardMode != 0)
-            ? MakeSkydomeBillboardWorld(m_eye.Position, m_eye.Up, sub.placement, world)
-            : world;
-        D3DXMATRIX subWvp = subWorld * m_view * m_projection;
-
-        // Engine semantics: the verbatim particle binding template (Engine::Render)
-        // but with the REAL world matrix -- the dome shaders compute world_pos /
-        // world_normal for SH diffuse + (MeshGloss) specular -- not the identity the
-        // particle path uses. Handles a shader doesn't declare are NULL -> no-op.
-        D3DXVECTOR4 eyePos(m_eye.Position.x, m_eye.Position.y, m_eye.Position.z, 1.0f);
-        fx->SetMatrix(h.hWorld,               &subWorld);
-        fx->SetMatrix(h.hWorldViewProjection, &subWvp);
-        fx->SetVector(h.hEyePosition,         &eyePos);
-        fx->SetVector(h.hGlobalAmbient,       &m_ambient);
-        fx->SetVector(h.hDirLightVec0,        &m_lights[0].Position);
-        fx->SetVector(h.hDirLightObjVec0,     &m_lights[0].Position);
-        fx->SetVector(h.hDirLightDiffuse,     &m_lights[0].Diffuse);
-        fx->SetVector(h.hDirLightSpecular,    &m_lights[0].Specular);
-        fx->SetMatrixArray(h.hSphLightAll,    m_sphLightAll,  3);
-        fx->SetMatrixArray(h.hSphLightFill,   m_sphLightFill, 3);
-        fx->SetFloat(h.hTime,                 GetTimeF());
-
-        // Authored material params (index-parallel handles) -> samplers via the
-        // .fx Texture=(X) link. Skips params absent from this shader (NULL handle).
-        ApplyAloMaterialParams(fx, sub.params, sub.matHandles, sub.matTextures);
-
-        m_pDevice->SetVertexDeclaration(sub.decl);
-        m_pDevice->SetStreamSource(0, sub.vb, 0, sub.stride);
-        m_pDevice->SetIndices(sub.ib);
-
-        UINT passes = 0;
-        fx->Begin(&passes, 0);
-        for (UINT pass = 0; pass < passes; ++pass)
-        {
-            fx->BeginPass(pass);
-#ifndef NDEBUG
+            // Render state the shader expects (the game .fxo may NOT set it itself --
+            // ALAMO_STATE_BLOCKS -- so we set it regardless). Every dome
+            // layer is a camera-centred background: depth test+write OFF (drawn first,
+            // ground/particles paint over it) and CULL_NONE (one triangle per view ray
+            // -> no overdraw, sidesteps the unknown .alo winding). Blend per shader
+            // intent: additive (MeshAdditive) adds, alpha (MeshAlpha) src-over, else opaque.
+            m_pDevice->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+            m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+            m_pDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+            switch (blend)
             {
-                DWORD zw = 0, ab = 0, cm = 0;
-                m_pDevice->GetRenderState(D3DRS_ZWRITEENABLE,     &zw);
-                m_pDevice->GetRenderState(D3DRS_ALPHABLENDENABLE, &ab);
-                m_pDevice->GetRenderState(D3DRS_CULLMODE,         &cm);
-                fprintf(stderr, "[SkyDraw] %s pass %u/%u zwrite=%lu ablend=%lu cull=%lu prims=%u\n",
-                        sub.shaderName.c_str(), pass + 1, passes, zw, ab, cm, sub.primitiveCount);
+                case SKYBLEND_ADDITIVE:
+                    m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+                    m_pDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+                    m_pDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+                    break;
+                case SKYBLEND_ALPHA:
+                    m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+                    m_pDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+                    m_pDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+                    break;
+                default: // SKYBLEND_OPAQUE (Skydome, MeshGloss base)
+                    m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+                    break;
             }
+
+            ID3DXEffect*           fx = sub.effect->getD3DEffect(); // AddRef'd
+            const Effect::Handles& h  = sub.effect->getHandles();
+
+            // Per-sub-mesh world. A billboard bone (the star dome's sun glow) is placed
+            // at its bone position and RE-ORIENTED to face the camera, so its flat
+            // additive quad never collapses to an edge-on 1px line. Every other sub-mesh
+            // keeps the dome world verbatim -- byte-identical to the prior behaviour, so
+            // no existing/mod dome render changes (the dome meshes are authored in object
+            // space on near-identity bones; only the sun rides a 0x206 billboard bone).
+            D3DXMATRIX subWorld = (sub.billboardMode != 0)
+                                      ? MakeSkydomeBillboardWorld(m_eye.Position, m_eye.Up, sub.placement, world)
+                                      : world;
+            D3DXMATRIX subWvp   = subWorld * m_view * m_projection;
+
+            // Engine semantics: the verbatim particle binding template (Engine::Render)
+            // but with the REAL world matrix -- the dome shaders compute world_pos /
+            // world_normal for SH diffuse + (MeshGloss) specular -- not the identity the
+            // particle path uses. Handles a shader doesn't declare are NULL -> no-op.
+            D3DXVECTOR4 eyePos(m_eye.Position.x, m_eye.Position.y, m_eye.Position.z, 1.0f);
+            fx->SetMatrix(h.hWorld, &subWorld);
+            fx->SetMatrix(h.hWorldViewProjection, &subWvp);
+            fx->SetVector(h.hEyePosition, &eyePos);
+            fx->SetVector(h.hGlobalAmbient, &m_ambient);
+            fx->SetVector(h.hDirLightVec0, &m_lights[0].Position);
+            fx->SetVector(h.hDirLightObjVec0, &m_lights[0].Position);
+            fx->SetVector(h.hDirLightDiffuse, &m_lights[0].Diffuse);
+            fx->SetVector(h.hDirLightSpecular, &m_lights[0].Specular);
+            fx->SetMatrixArray(h.hSphLightAll, m_sphLightAll, 3);
+            fx->SetMatrixArray(h.hSphLightFill, m_sphLightFill, 3);
+            fx->SetFloat(h.hTime, GetTimeF());
+
+            // Authored material params (index-parallel handles) -> samplers via the
+            // .fx Texture=(X) link. Skips params absent from this shader (NULL handle).
+            ApplyAloMaterialParams(fx, sub.params, sub.matHandles, sub.matTextures);
+
+            m_pDevice->SetVertexDeclaration(sub.decl);
+            m_pDevice->SetStreamSource(0, sub.vb, 0, sub.stride);
+            m_pDevice->SetIndices(sub.ib);
+
+            UINT passes = 0;
+            fx->Begin(&passes, 0);
+            for (UINT pass = 0; pass < passes; ++pass)
+            {
+                fx->BeginPass(pass);
+#ifndef NDEBUG
+                {
+                    DWORD zw = 0, ab = 0, cm = 0;
+                    m_pDevice->GetRenderState(D3DRS_ZWRITEENABLE, &zw);
+                    m_pDevice->GetRenderState(D3DRS_ALPHABLENDENABLE, &ab);
+                    m_pDevice->GetRenderState(D3DRS_CULLMODE, &cm);
+                    fprintf(stderr, "[SkyDraw] %s pass %u/%u zwrite=%lu ablend=%lu cull=%lu prims=%u\n",
+                            sub.shaderName.c_str(), pass + 1, passes, zw, ab, cm, sub.primitiveCount);
+                }
 #endif
-            m_pDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0,
-                                            sub.vertexCount, 0, sub.primitiveCount);
-            fx->EndPass();
+                m_pDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, sub.vertexCount, 0, sub.primitiveCount);
+                fx->EndPass();
+            }
+            fx->End();
+            fx->Release();
         }
-        fx->End();
-        fx->Release();
-      }
     }
 
     // Restore the saved delta. Stream-source / indices are intentionally NOT
@@ -1050,11 +1037,11 @@ void Engine::RenderSkydomeMesh(SkydomeMesh& mesh, const D3DXMATRIX& world)
     m_pDevice->SetVertexDeclaration(oldDecl);
     if (oldDecl) oldDecl->Release();
     m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, oldAlphaBlend);
-    m_pDevice->SetRenderState(D3DRS_SRCBLEND,         oldSrcBlend);
-    m_pDevice->SetRenderState(D3DRS_DESTBLEND,        oldDestBlend);
-    m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE,     oldZWrite);
-    m_pDevice->SetRenderState(D3DRS_ZENABLE,          oldZEnable);
-    m_pDevice->SetRenderState(D3DRS_CULLMODE,         oldCull);
+    m_pDevice->SetRenderState(D3DRS_SRCBLEND, oldSrcBlend);
+    m_pDevice->SetRenderState(D3DRS_DESTBLEND, oldDestBlend);
+    m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE, oldZWrite);
+    m_pDevice->SetRenderState(D3DRS_ZENABLE, oldZEnable);
+    m_pDevice->SetRenderState(D3DRS_CULLMODE, oldCull);
 }
 
 // ---------- Game sky composition ----------
@@ -1063,7 +1050,7 @@ void Engine::RenderSkydomeMesh(SkydomeMesh& mesh, const D3DXMATRIX& world)
 // otherwise falls back to the simple-background sphere (bundled / custom / solid).
 void Engine::RenderSkydomes()
 {
-    const bool primaryReady   = !m_skydomePrimaryMesh.IsEmpty()   && m_skydomePrimaryMesh.HasResolved();
+    const bool primaryReady   = !m_skydomePrimaryMesh.IsEmpty() && m_skydomePrimaryMesh.HasResolved();
     const bool secondaryReady = !m_skydomeSecondaryMesh.IsEmpty() && m_skydomeSecondaryMesh.HasResolved();
 
     if (primaryReady || secondaryReady)
@@ -1076,15 +1063,11 @@ void Engine::RenderSkydomes()
         //         it MUST add after the opaque base or the base overwrites it (the bug
         //         this fixes: secondary-first buried the nebula under the star sphere).
         //  Land:  primary = full sky-dome; secondary = partial overlay (rings/horizon).
-        const bool primaryFirst = true;
-        SkydomeMesh* order[2] = {
-            primaryFirst ? &m_skydomePrimaryMesh   : &m_skydomeSecondaryMesh,
-            primaryFirst ? &m_skydomeSecondaryMesh : &m_skydomePrimaryMesh
-        };
-        const bool ready[2] = {
-            primaryFirst ? primaryReady   : secondaryReady,
-            primaryFirst ? secondaryReady : primaryReady
-        };
+        const bool   primaryFirst = true;
+        SkydomeMesh* order[2]     = {primaryFirst ? &m_skydomePrimaryMesh : &m_skydomeSecondaryMesh,
+                                     primaryFirst ? &m_skydomeSecondaryMesh : &m_skydomePrimaryMesh};
+        const bool   ready[2]     = {primaryFirst ? primaryReady : secondaryReady,
+                                     primaryFirst ? secondaryReady : primaryReady};
 
         D3DXMATRIX t;
         D3DXMatrixTranslation(&t, m_eye.Position.x, m_eye.Position.y, m_eye.Position.z);
@@ -1092,7 +1075,7 @@ void Engine::RenderSkydomes()
         {
             if (!ready[i]) continue;
             const float sf = order[i]->ScaleFactor();
-            D3DXMATRIX s, world;
+            D3DXMATRIX  s, world;
             D3DXMatrixScaling(&s, sf, sf, sf);
             world = s * t;
             RenderSkydomeMesh(*order[i], world);
@@ -1100,8 +1083,7 @@ void Engine::RenderSkydomes()
         return;
     }
 
-    if (m_skydomeIndex != kSkydomeOffSlot && m_pSkydomeTexture != NULL && m_pSkydomeEffect != NULL)
-        RenderSkydome();
+    if (m_skydomeIndex != kSkydomeOffSlot && m_pSkydomeTexture != NULL && m_pSkydomeEffect != NULL) RenderSkydome();
 }
 
 // Re-drive Load->Resolve->CreateBuffers for both slots from the current
@@ -1111,23 +1093,22 @@ void Engine::RenderSkydomes()
 void Engine::RebuildSkydomeMeshes()
 {
     MapEnvironment env;
-    ResolveMapEnvironment(EnsureSkydomeLists(), m_skydomeContext,
-                          m_skydomePrimaryName, m_skydomeSecondaryName, env);
+    ResolveMapEnvironment(EnsureSkydomeLists(), m_skydomeContext, m_skydomePrimaryName, m_skydomeSecondaryName, env);
 
-    SkydomeMesh* meshes[2]    = { &m_skydomePrimaryMesh, &m_skydomeSecondaryMesh };
-    const SkydomeRef* refs[2]  = { &env.primary, &env.secondary };
-    const bool has[2]         = { env.hasPrimary, env.hasSecondary };
+    SkydomeMesh*      meshes[2] = {&m_skydomePrimaryMesh, &m_skydomeSecondaryMesh};
+    const SkydomeRef* refs[2]   = {&env.primary, &env.secondary};
+    const bool        has[2]    = {env.hasPrimary, env.hasSecondary};
     // The chosen Name decides None-vs-LoadFailed: an empty Name is simply
     // "no dome", a non-empty Name that doesn't resolve/load is a failure the
     // picker must surface (it otherwise silently falls back to solid colour).
-    const std::string* names[2] = { &m_skydomePrimaryName, &m_skydomeSecondaryName };
-    SkydomeSlotStatus* status[2] = { &m_skydomePrimaryStatus, &m_skydomeSecondaryStatus };
+    const std::string* names[2]  = {&m_skydomePrimaryName, &m_skydomeSecondaryName};
+    SkydomeSlotStatus* status[2] = {&m_skydomePrimaryStatus, &m_skydomeSecondaryStatus};
 
     for (int i = 0; i < 2; ++i)
     {
         if (names[i]->empty())
         {
-            meshes[i]->Clear();   // deselected slot -> empty (no FileManager probe)
+            meshes[i]->Clear(); // deselected slot -> empty (no FileManager probe)
             *status[i] = SkydomeSlotStatus::None;
             continue;
         }
@@ -1140,7 +1121,7 @@ void Engine::RebuildSkydomeMeshes()
             continue;
         }
         const std::string aloPath = "Data\\Art\\Models\\" + refs[i]->modelPath;
-        if (!meshes[i]->Load(m_fileManager, aloPath))   // Load() Clear()s on failure
+        if (!meshes[i]->Load(m_fileManager, aloPath)) // Load() Clear()s on failure
         {
             *status[i] = SkydomeSlotStatus::LoadFailed;
             continue;
@@ -1169,7 +1150,7 @@ void Engine::RebuildSkydomeMeshes()
 
 // Public selection entry (bridge + startup restore). Stores the choice
 // and rebuilds both meshes immediately.
-void Engine::SetSkydomeEnvironment(SkydomeContext context,
+void Engine::SetSkydomeEnvironment(SkydomeContext     context,
                                    const std::string& primaryName,
                                    const std::string& secondaryName)
 {
@@ -1184,18 +1165,20 @@ void Engine::SetSkydomeEnvironment(SkydomeContext context,
 // the game/mod's skydome lists (device-free; safe before the device exists). Reads
 // the EnsureSkydomeLists() cache so a picker-open right after a mod switch costs no
 // extra GameObjectFiles scan.
-void Engine::EnumerateSkydomeNames(SkydomeContext context,
+void Engine::EnumerateSkydomeNames(SkydomeContext            context,
                                    std::vector<std::string>& outPrimary,
                                    std::vector<std::string>& outSecondary)
 {
     outPrimary.clear();
     outSecondary.clear();
-    const int primAxis = (context == SkydomeContext::Land) ? (int)SkydomeAxis::LandPrimary   : (int)SkydomeAxis::SpacePrimary;
-    const int secAxis  = (context == SkydomeContext::Land) ? (int)SkydomeAxis::LandSecondary : (int)SkydomeAxis::SpaceSecondary;
+    const int primAxis =
+        (context == SkydomeContext::Land) ? (int)SkydomeAxis::LandPrimary : (int)SkydomeAxis::SpacePrimary;
+    const int secAxis =
+        (context == SkydomeContext::Land) ? (int)SkydomeAxis::LandSecondary : (int)SkydomeAxis::SpaceSecondary;
 
     const std::array<std::vector<SkydomeRef>, kNumSkydomeAxes>& lists = EnsureSkydomeLists();
     for (const SkydomeRef& r : lists[primAxis]) outPrimary.push_back(r.name);
-    for (const SkydomeRef& r : lists[secAxis])  outSecondary.push_back(r.name);
+    for (const SkydomeRef& r : lists[secAxis]) outSecondary.push_back(r.name);
 }
 
 // ---------- Ground lighting ----------
@@ -1209,17 +1192,16 @@ void Engine::InitGroundEffect()
     {
         static const D3DVERTEXELEMENT9 decl[] = {
             {0, offsetof(GroundVertex, Position), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0},
-            {0, offsetof(GroundVertex, Normal),   D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL,   0},
+            {0, offsetof(GroundVertex, Normal), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL, 0},
             {0, offsetof(GroundVertex, TexCoord), D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0},
-            {0, offsetof(GroundVertex, Tangent),  D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TANGENT,  0},
+            {0, offsetof(GroundVertex, Tangent), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TANGENT, 0},
             {0, offsetof(GroundVertex, Binormal), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_BINORMAL, 0},
-            D3DDECL_END()
-        };
+            D3DDECL_END()};
         m_pDevice->CreateVertexDeclaration(decl, &m_pGroundDecl);
     }
 
-    HMODULE hMod   = GetModuleHandle(NULL);
-    HRSRC   hRes   = FindResource(hMod, MAKEINTRESOURCE(IDR_SHADER_GROUND_LIT), RT_RCDATA);
+    HMODULE hMod = GetModuleHandle(NULL);
+    HRSRC   hRes = FindResource(hMod, MAKEINTRESOURCE(IDR_SHADER_GROUND_LIT), RT_RCDATA);
     if (!hRes) return;
     HGLOBAL hData  = LoadResource(hMod, hRes);
     DWORD   dwSize = SizeofResource(hMod, hRes);
@@ -1227,13 +1209,12 @@ void Engine::InitGroundEffect()
     if (!pData || !dwSize) return;
 
     LPD3DXBUFFER pErrors = NULL;
-    HRESULT hr = D3DXCreateEffect(m_pDevice, pData, dwSize, NULL, NULL, 0, NULL,
-                                  &m_pGroundEffect, &pErrors);
+    HRESULT      hr      = D3DXCreateEffect(m_pDevice, pData, dwSize, NULL, NULL, 0, NULL, &m_pGroundEffect, &pErrors);
     if (FAILED(hr))
     {
 #ifndef NDEBUG
-        if (pErrors) fprintf(stderr, "[GroundLit] effect compile failed: %s\n",
-                             (const char*)pErrors->GetBufferPointer());
+        if (pErrors)
+            fprintf(stderr, "[GroundLit] effect compile failed: %s\n", (const char*)pErrors->GetBufferPointer());
 #endif
         SAFE_RELEASE(pErrors);
         m_pGroundEffect = NULL;
@@ -1276,8 +1257,8 @@ void Engine::CreateGroundFlatNormal()
 {
     SAFE_RELEASE(m_pGroundFlatNormalTexture);
     if (m_pDevice == NULL) return;
-    if (FAILED(m_pDevice->CreateTexture(1, 1, 1, D3DUSAGE_DYNAMIC, D3DFMT_A8R8G8B8,
-                                        D3DPOOL_DEFAULT, &m_pGroundFlatNormalTexture, NULL)))
+    if (FAILED(m_pDevice->CreateTexture(1, 1, 1, D3DUSAGE_DYNAMIC, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT,
+                                        &m_pGroundFlatNormalTexture, NULL)))
     {
         m_pGroundFlatNormalTexture = NULL;
         return;
@@ -1302,32 +1283,30 @@ void Engine::ReloadGroundNormalTexture()
     SAFE_RELEASE(m_pGroundNormalTexture);
     if (m_pDevice == NULL) return;
 
-    std::string normalLeaf;     // bundled-vanilla slots: known base + _bc.dds
+    std::string normalLeaf; // bundled-vanilla slots: known base + _bc.dds
     switch (m_groundTextureIndex)
     {
-        case 1: normalLeaf = "W_TEMPGRND00_bc.dds"; break;  // grass
-        case 2: normalLeaf = "W_SAND00_bc.dds";     break;  // sand
-        case 3: normalLeaf = "W_SNOW_RGH_bc.dds";   break;  // snow
+        case 1:  normalLeaf = "W_TEMPGRND00_bc.dds"; break; // grass
+        case 2:  normalLeaf = "W_SAND00_bc.dds"; break;     // sand
+        case 3:  normalLeaf = "W_SNOW_RGH_bc.dds"; break;   // snow
         default: break;
     }
-    std::string customDerived;  // custom slots: <custombase>_bc.<ext> next to it
-    if (normalLeaf.empty()
-        && m_groundTextureIndex >= 0 && m_groundTextureIndex < kGroundTextureCount
-        && !m_groundSlotCustomPaths[m_groundTextureIndex].empty())
+    std::string customDerived; // custom slots: <custombase>_bc.<ext> next to it
+    if (normalLeaf.empty() && m_groundTextureIndex >= 0 && m_groundTextureIndex < kGroundTextureCount &&
+        !m_groundSlotCustomPaths[m_groundTextureIndex].empty())
     {
         const std::wstring& base = m_groundSlotCustomPaths[m_groundTextureIndex];
-        size_t dot = base.find_last_of(L'.');
-        std::wstring derived = (dot == std::wstring::npos)
-            ? base + L"_bc"
-            : base.substr(0, dot) + L"_bc" + base.substr(dot);
+        size_t              dot  = base.find_last_of(L'.');
+        std::wstring        derived =
+            (dot == std::wstring::npos) ? base + L"_bc" : base.substr(0, dot) + L"_bc" + base.substr(dot);
         customDerived = WideToAnsi(derived);
     }
 
     if (!normalLeaf.empty())
     {
-        std::string path = "DATA\\ART\\TEXTURES\\" + normalLeaf;
+        std::string path       = "DATA\\ART\\TEXTURES\\" + normalLeaf;
         m_pGroundNormalTexture = LoadTextureViaFileManager(m_pDevice, m_fileManager, path);
-        if (m_pGroundNormalTexture == NULL)   // mod may stash it loose by leaf name
+        if (m_pGroundNormalTexture == NULL) // mod may stash it loose by leaf name
             m_pGroundNormalTexture = LoadTextureViaFileManager(m_pDevice, m_fileManager, normalLeaf);
     }
     else if (!customDerived.empty())
@@ -1345,37 +1324,37 @@ void Engine::ReloadGroundNormalTexture()
 // per-pixel light/half vectors — matching the game's object-space bump path.
 void Engine::RenderGroundLit()
 {
-    static const D3DXMATRIX Identity(1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1);
-    D3DXMATRIX wvp = Identity * m_view * m_projection;
+    static const D3DXMATRIX Identity(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+    D3DXMATRIX              wvp = Identity * m_view * m_projection;
 
     static const float TEXTURE_SCALE  = 256;
     static const float MAP_SIZE       = 80;
     static const float UNITS_PER_CELL = 20;
-    const float z = m_groundZ;
-    const float h = UNITS_PER_CELL * MAP_SIZE / 2.0f;
-    const float u = MAP_SIZE * UNITS_PER_CELL / TEXTURE_SCALE;
-    const D3DXVECTOR3 N(0,0,1), T(1,0,0), B(0,1,0);
+    const float        z              = m_groundZ;
+    const float        h              = UNITS_PER_CELL * MAP_SIZE / 2.0f;
+    const float        u              = MAP_SIZE * UNITS_PER_CELL / TEXTURE_SCALE;
+    const D3DXVECTOR3  N(0, 0, 1), T(1, 0, 0), B(0, 1, 0);
     const GroundVertex quad[4] = {
-        {D3DXVECTOR3(-h,-h,z), N, D3DXVECTOR2(0,0), T, B},
-        {D3DXVECTOR3( h,-h,z), N, D3DXVECTOR2(u,0), T, B},
-        {D3DXVECTOR3(-h, h,z), N, D3DXVECTOR2(0,u), T, B},
-        {D3DXVECTOR3( h, h,z), N, D3DXVECTOR2(u,u), T, B},
+        {D3DXVECTOR3(-h, -h, z), N, D3DXVECTOR2(0, 0), T, B},
+        {D3DXVECTOR3(h, -h, z), N, D3DXVECTOR2(u, 0), T, B},
+        {D3DXVECTOR3(-h, h, z), N, D3DXVECTOR2(0, u), T, B},
+        {D3DXVECTOR3(h, h, z), N, D3DXVECTOR2(u, u), T, B},
     };
 
     D3DXVECTOR3 lightVec(m_lights[0].Position.x, m_lights[0].Position.y, m_lights[0].Position.z);
     D3DXVec3Normalize(&lightVec, &lightVec);
     D3DXVECTOR3 eyePos(m_eye.Position.x, m_eye.Position.y, m_eye.Position.z);
 
-    m_pGroundEffect->SetMatrix     (m_hGroundWVP,           &wvp);
-    m_pGroundEffect->SetMatrix     (m_hGroundWorld,         &Identity);
-    m_pGroundEffect->SetMatrixArray(m_hGroundSphFill,       m_sphLightFill, 3);
-    m_pGroundEffect->SetValue      (m_hGroundLightObjVec,   &lightVec, sizeof(D3DXVECTOR3));
-    m_pGroundEffect->SetVector     (m_hGroundLightDiffuse,  &m_lights[0].Diffuse);
-    m_pGroundEffect->SetVector     (m_hGroundLightSpecular, &m_lights[0].Specular);
-    m_pGroundEffect->SetValue      (m_hGroundEyeObjPos,     &eyePos, sizeof(D3DXVECTOR3));
-    m_pGroundEffect->SetTexture    (m_hGroundBaseTex,       m_pGroundTexture);
-    m_pGroundEffect->SetTexture    (m_hGroundNormalTex,
-        m_pGroundNormalTexture ? m_pGroundNormalTexture : m_pGroundFlatNormalTexture);
+    m_pGroundEffect->SetMatrix(m_hGroundWVP, &wvp);
+    m_pGroundEffect->SetMatrix(m_hGroundWorld, &Identity);
+    m_pGroundEffect->SetMatrixArray(m_hGroundSphFill, m_sphLightFill, 3);
+    m_pGroundEffect->SetValue(m_hGroundLightObjVec, &lightVec, sizeof(D3DXVECTOR3));
+    m_pGroundEffect->SetVector(m_hGroundLightDiffuse, &m_lights[0].Diffuse);
+    m_pGroundEffect->SetVector(m_hGroundLightSpecular, &m_lights[0].Specular);
+    m_pGroundEffect->SetValue(m_hGroundEyeObjPos, &eyePos, sizeof(D3DXVECTOR3));
+    m_pGroundEffect->SetTexture(m_hGroundBaseTex, m_pGroundTexture);
+    m_pGroundEffect->SetTexture(m_hGroundNormalTex,
+                                m_pGroundNormalTexture ? m_pGroundNormalTexture : m_pGroundFlatNormalTexture);
 
     // The vertex declaration is NOT captured by the effect state block, so it
     // must be restored or the particle draws lose their diffuse-colour stream
@@ -1426,7 +1405,7 @@ bool Engine::SetEmbeddedSkydomeSlotForCapture(int index)
 {
     if (DeviceCallsBlocked() || index != 1)
     {
-        m_skydomeIndex = kSkydomeOffSlot;
+        m_skydomeIndex                = kSkydomeOffSlot;
         m_skydomeUsesEmbeddedResource = false;
         SAFE_RELEASE(m_pSkydomeTexture);
         return false;
@@ -1474,9 +1453,8 @@ const std::wstring& Engine::GetSkydomeCustomPath(int slot) const
 
 bool Engine::IsSkydomeSlotEmpty(int slot) const
 {
-    if (slot == kSkydomeOffSlot) return false;       // Off is "selectable", not empty
-    if (slot < kSkydomeBundledCount) return false;   // bundled always populated
-    if (slot < kSkydomeSlotCount)
-        return m_skydomeCustomSlotPaths[slot - kSkydomeFirstCustomSlot].empty();
+    if (slot == kSkydomeOffSlot) return false;     // Off is "selectable", not empty
+    if (slot < kSkydomeBundledCount) return false; // bundled always populated
+    if (slot < kSkydomeSlotCount) return m_skydomeCustomSlotPaths[slot - kSkydomeFirstCustomSlot].empty();
     return true;
 }

@@ -65,7 +65,8 @@
 // fine because we don't dereference it in the header.)
 struct ICoreWebView2CompositionController;
 
-namespace host {
+namespace host
+{
 
 // Preserve which composed-frame operation produced an HRESULT. A failure while
 // re-opening the D3D9 shared handle is retryable: the next resize/frame may
@@ -82,22 +83,16 @@ enum class ComposedFrameStage
 struct ComposedFrameResult
 {
     ComposedFrameStage stage;
-    HRESULT hr;
+    HRESULT            hr;
 
-    static ComposedFrameResult NoFrame() noexcept
-    {
-        return { ComposedFrameStage::NoFrame, S_FALSE };
-    }
+    static ComposedFrameResult NoFrame() noexcept { return {ComposedFrameStage::NoFrame, S_FALSE}; }
 
     static ComposedFrameResult SharedHandleFailure(HRESULT failure) noexcept
     {
-        return { ComposedFrameStage::SharedHandle, failure };
+        return {ComposedFrameStage::SharedHandle, failure};
     }
 
-    static ComposedFrameResult PresentResult(HRESULT result) noexcept
-    {
-        return { ComposedFrameStage::Present1, result };
-    }
+    static ComposedFrameResult PresentResult(HRESULT result) noexcept { return {ComposedFrameStage::Present1, result}; }
 };
 
 enum class ComposedFrameAction
@@ -110,24 +105,18 @@ enum class ComposedFrameAction
 // Pure policy seam used by HostWindow's production frame coordinator and the
 // device-state unit. The stage check is load-bearing: even an exact
 // DXGI_ERROR_DEVICE_REMOVED from the shared-handle path remains retryable.
-inline ComposedFrameAction ClassifyComposedFrameResult(
-    const ComposedFrameResult& result) noexcept
+inline ComposedFrameAction ClassifyComposedFrameResult(const ComposedFrameResult& result) noexcept
 {
-    if (result.stage == ComposedFrameStage::NoFrame)
-        return ComposedFrameAction::Continue;
-    if (result.stage == ComposedFrameStage::SharedHandle)
-        return ComposedFrameAction::Retry;
+    if (result.stage == ComposedFrameStage::NoFrame) return ComposedFrameAction::Continue;
+    if (result.stage == ComposedFrameStage::SharedHandle) return ComposedFrameAction::Retry;
 
-    if (result.hr == DXGI_ERROR_DEVICE_REMOVED ||
-        result.hr == DXGI_ERROR_DEVICE_HUNG ||
+    if (result.hr == DXGI_ERROR_DEVICE_REMOVED || result.hr == DXGI_ERROR_DEVICE_HUNG ||
         result.hr == DXGI_ERROR_DEVICE_RESET)
     {
         return ComposedFrameAction::RestartRequired;
     }
 
-    return FAILED(result.hr)
-        ? ComposedFrameAction::Retry
-        : ComposedFrameAction::Continue;
+    return FAILED(result.hr) ? ComposedFrameAction::Retry : ComposedFrameAction::Continue;
 }
 
 class Compositor
@@ -208,10 +197,7 @@ public:
     // Mismatch returns DXGI_ERROR_GRAPHICS_VIDPN_SOURCE_IN_USE so the
     // caller can distinguish LUID failure from other failure modes;
     // composition mode stays intact, engine visual is NOT attached.
-    HRESULT AttachEngineVisual(HANDLE sharedTexture,
-                               int    w,
-                               int    h,
-                               LUID   engineAdapterLuid) noexcept;
+    HRESULT AttachEngineVisual(HANDLE sharedTexture, int w, int h, LUID engineAdapterLuid) noexcept;
 
     // Per-frame composite step. Called from HostWindow's RenderD3D9
     // path AFTER engine->Render() + engine->WaitEndFrameQuery() under
@@ -233,8 +219,7 @@ public:
     // The typed result retains the operation that produced the HRESULT:
     // expected no-frame, retryable shared-handle work, or Present1. The host
     // uses that provenance to keep D3D11 failures out of D3D9Ex recovery.
-    ComposedFrameResult CompositeEngineFrame(
-        HANDLE currentSharedHandle) noexcept;
+    ComposedFrameResult CompositeEngineFrame(HANDLE currentSharedHandle) noexcept;
 
     // [resize-perf] While set, CompositeEngineFrame presents with
     // DXGI_PRESENT_DO_NOT_WAIT and skips the frame (NoFrame, pending
@@ -263,9 +248,7 @@ public:
     // after OpenSharedResource (the engine knows the actual size; the
     // caller's hint may be stale). Pass 0, 0 if you don't have a
     // hint; ignored either way.
-    HRESULT RefreshEngineSharedHandle(HANDLE sharedTexture,
-                                      int    hintW,
-                                      int    hintH) noexcept;
+    HRESULT RefreshEngineSharedHandle(HANDLE sharedTexture, int hintW, int hintH) noexcept;
 
     // Scene-rect transform on the engine
     // visual. Constrains the DComp engine visual to the scene-rect

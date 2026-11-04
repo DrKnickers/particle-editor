@@ -6,36 +6,37 @@
 
 #include "CaptureRunner.h"
 
-#include "AlphaCompositor.h"   // CaptureSnapshotToFile
+#include "AlphaCompositor.h" // CaptureSnapshotToFile
 #include "CaptureGoldenProfile.h"
-#include "HostRunUtil.h"       // PerfQpcNow/PerfQpcFreq/QpcMs/DeriveSibling
+#include "HostRunUtil.h" // PerfQpcNow/PerfQpcFreq/QpcMs/DeriveSibling
 #include "SettingsRegistry.h"
-#include "WindowCapture.h"     // host::CaptureWindowToPng (the ticker's composite hook)
+#include "WindowCapture.h" // host::CaptureWindowToPng (the ticker's composite hook)
 
 #include "gamedata/ModManager.h"
 #include "effect/ParticleSystem.h"
-#include "effect/ParticleSystemIO.h"   // LoadParticleSystem
+#include "effect/ParticleSystemIO.h" // LoadParticleSystem
 #include "simulation/SpawnerDriver.h"
 #include "simulation/ParticleRandom.h"
-#include "rendering/engine.h"             // Engine, FreezePreviewClockAt, StepPreviewFrames
-#include "common/utils.h"              // WideToAnsi
+#include "rendering/engine.h" // Engine, FreezePreviewClockAt, StepPreviewFrames
+#include "common/utils.h"     // WideToAnsi
 
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
 
-namespace host {
+namespace host
+{
 
 std::function<bool()> CaptureRunner::MakeFixedCaptureView(Engine& engine)
 {
-    const Engine::Camera camera = engine.GetCamera();
-    const COLORREF background = engine.GetBackground();
-    const D3DXVECTOR4 ambient = engine.GetAmbient();
-    const Engine::Light sun = engine.GetLight(Engine::LT_SUN);
-    const Engine::Light fill1 = engine.GetLight(Engine::LT_FILL1);
-    const Engine::Light fill2 = engine.GetLight(Engine::LT_FILL2);
-    const D3DXVECTOR3 gravity = engine.GetGravity();
+    const Engine::Camera camera     = engine.GetCamera();
+    const COLORREF       background = engine.GetBackground();
+    const D3DXVECTOR4    ambient    = engine.GetAmbient();
+    const Engine::Light  sun        = engine.GetLight(Engine::LT_SUN);
+    const Engine::Light  fill1      = engine.GetLight(Engine::LT_FILL1);
+    const Engine::Light  fill2      = engine.GetLight(Engine::LT_FILL2);
+    const D3DXVECTOR3    gravity    = engine.GetGravity();
     return [&engine, camera, background, ambient, sun, fill1, fill2, gravity]()
     {
         if (engine.DeviceCallsBlocked()) return false;
@@ -62,7 +63,7 @@ std::function<bool()> CaptureRunner::MakeFixedCaptureView(Engine& engine)
 // discipline as HostWindowImpl::Log) so moved Log(...) sites are verbatim.
 void CaptureRunner::Log(const char* fmt, ...)
 {
-    char buf[2048];
+    char    buf[2048];
     va_list ap;
     va_start(ap, fmt);
     _vsnprintf_s(buf, sizeof(buf), _TRUNCATE, fmt, ap);
@@ -71,28 +72,20 @@ void CaptureRunner::Log(const char* fmt, ...)
 }
 
 CaptureRunner::CaptureRunner(Params params, Deps deps)
-    : m_params(std::move(params)), m_deps(std::move(deps)),
-      m_ticker(m_params.captureFrames, m_params.capturePng)
+    : m_params(std::move(params)), m_deps(std::move(deps)), m_ticker(m_params.captureFrames, m_params.capturePng)
 {
-    m_ticker.SetHooks(
-        [](int ms) { Sleep(ms); },
-        [] {
-            const LONGLONG freq = PerfQpcFreq();
-            return freq > 0 ? QpcMs(PerfQpcNow(), freq) : -1.0;   // QPC dead: no clock
-        },
-        [this] { return m_deps.uiReady; },
-        [this] { return m_deps.sceneRectSeen; },
-        [] { StepPreviewFrames(1); },
-        m_deps.log);
-    m_ticker.SetCaptureHooks(
-        [this](const std::wstring& path) {
-            return m_deps.alphaCompositor &&
-                   m_deps.alphaCompositor->CaptureSnapshotToFile(path);
-        },
-        [this](const std::wstring& path) {
-            return host::CaptureWindowToPng(m_deps.hMain, path);
-        },
-        [this] { return WaitForUiAndSettle(); });
+    m_ticker.SetHooks([](int ms) { Sleep(ms); },
+                      []
+                      {
+                          const LONGLONG freq = PerfQpcFreq();
+                          return freq > 0 ? QpcMs(PerfQpcNow(), freq) : -1.0; // QPC dead: no clock
+                      },
+                      [this] { return m_deps.uiReady; }, [this] { return m_deps.sceneRectSeen; },
+                      [] { StepPreviewFrames(1); }, m_deps.log);
+    m_ticker.SetCaptureHooks([this](const std::wstring& path)
+                             { return m_deps.alphaCompositor && m_deps.alphaCompositor->CaptureSnapshotToFile(path); },
+                             [this](const std::wstring& path) { return host::CaptureWindowToPng(m_deps.hMain, path); },
+                             [this] { return WaitForUiAndSettle(); });
 }
 
 void CaptureRunner::Init()
@@ -138,7 +131,8 @@ void CaptureRunner::Init()
                 D3DXVECTOR3 wmin, wmax;
                 if (!engine->GetReferenceObjectBounds(wmin, wmax))
                 {
-                    Log("[capture] reference object '%ls' resolved status Ok but no renderable geometry (device/resolve issue)\n",
+                    Log("[capture] reference object '%ls' resolved status Ok but no renderable geometry "
+                        "(device/resolve issue)\n",
                         m_params.captureRef.c_str());
                     m_ticker.MarkFailed();
                 }
@@ -154,15 +148,14 @@ void CaptureRunner::Init()
                     // FOV (D3DXToRadian(45), see engine.cpp SetSceneViewport /
                     // ResetParameters), so size dist off that same fovY.
                     {
-                        D3DXVECTOR3 center((wmin.x + wmax.x) * 0.5f,
-                                           (wmin.y + wmax.y) * 0.5f,
+                        D3DXVECTOR3 center((wmin.x + wmax.x) * 0.5f, (wmin.y + wmax.y) * 0.5f,
                                            (wmin.z + wmax.z) * 0.5f);
-                        D3DXVECTOR3 diag = wmax - wmin;
-                        float radius = 0.5f * D3DXVec3Length(&diag);
-                        if (radius < 1.0f) radius = 1.0f;   // degenerate-bounds guard
+                        D3DXVECTOR3 diag   = wmax - wmin;
+                        float       radius = 0.5f * D3DXVec3Length(&diag);
+                        if (radius < 1.0f) radius = 1.0f; // degenerate-bounds guard
 
                         const float fovY = D3DXToRadian(45.0f);
-                        float dist = radius / tanf(0.5f * fovY) * 1.6f;  // 1.6 = framing margin
+                        float       dist = radius / tanf(0.5f * fovY) * 1.6f; // 1.6 = framing margin
 
                         // 3/4 view in the editor's Z-up RH space: look down at an
                         // angle from -Y so the ground plane (z=0) is visible.
@@ -174,9 +167,9 @@ void CaptureRunner::Init()
                         cam.Target   = center;
                         cam.Up       = D3DXVECTOR3(0.0f, 0.0f, 1.0f);
                         engine->SetCamera(cam);
-                        Log("[capture] fit camera: center=(%.1f,%.1f,%.1f) radius=%.1f dist=%.1f eye=(%.1f,%.1f,%.1f)\n",
-                            center.x, center.y, center.z, radius, dist,
-                            cam.Position.x, cam.Position.y, cam.Position.z);
+                        Log("[capture] fit camera: center=(%.1f,%.1f,%.1f) radius=%.1f dist=%.1f "
+                            "eye=(%.1f,%.1f,%.1f)\n",
+                            center.x, center.y, center.z, radius, dist, cam.Position.x, cam.Position.y, cam.Position.z);
                     }
                     const size_t shadowCount = engine->ReferenceShadowSubMeshCount();
                     if (shadowCount > 0)
@@ -186,28 +179,29 @@ void CaptureRunner::Init()
                     }
                     else
                     {
-                        Log("[capture] WARNING: reference object '%ls' has NO shadow-volume sub-meshes - captured image will show no model shadow\n",
+                        Log("[capture] WARNING: reference object '%ls' has NO shadow-volume sub-meshes - captured "
+                            "image will show no model shadow\n",
                             m_params.captureRef.c_str());
                     }
-                }  // else (bounds resolved)
+                } // else (bounds resolved)
             }
             else
             {
-                const char* reason =
-                    (refStatus == ReferenceObjectStatus::Skinned)      ? "skinned mesh — not supported" :
-                    (refStatus == ReferenceObjectStatus::ModelMissing) ? "model file not found in the active mod/base" :
-                    (refStatus == ReferenceObjectStatus::LoadFailed)   ? "model failed to load (corrupt or non-mesh .alo)" :
-                                                                         "unknown name / mod not active";
-                Log("[capture] ERROR: reference object '%ls' did not resolve (%s)\n",
-                    m_params.captureRef.c_str(), reason);
+                const char* reason = (refStatus == ReferenceObjectStatus::Skinned) ? "skinned mesh — not supported"
+                                     : (refStatus == ReferenceObjectStatus::ModelMissing)
+                                         ? "model file not found in the active mod/base"
+                                     : (refStatus == ReferenceObjectStatus::LoadFailed)
+                                         ? "model failed to load (corrupt or non-mesh .alo)"
+                                         : "unknown name / mod not active";
+                Log("[capture] ERROR: reference object '%ls' did not resolve (%s)\n", m_params.captureRef.c_str(),
+                    reason);
                 m_ticker.MarkFailed();
             }
         }
         if (m_params.captureSkydomeSlot > 0)
         {
             const bool sok = engine->SetSkydomeSlot(m_params.captureSkydomeSlot);
-            Log("[capture] skydome slot %d -> %s\n",
-                m_params.captureSkydomeSlot, sok ? "ok" : "FAILED");
+            Log("[capture] skydome slot %d -> %s\n", m_params.captureSkydomeSlot, sok ? "ok" : "FAILED");
         }
     }
     else
@@ -216,10 +210,8 @@ void CaptureRunner::Init()
         // use the requested environment.
         if (m_params.captureGoldenProfile)
         {
-            engine->SetSkydomeEnvironment(
-                engine->GetSkydomeContext(), std::string(), std::string());
-            if (!m_deps.fixedCaptureView || !m_deps.fixedCaptureView())
-                m_ticker.MarkFailed();
+            engine->SetSkydomeEnvironment(engine->GetSkydomeContext(), std::string(), std::string());
+            if (!m_deps.fixedCaptureView || !m_deps.fixedCaptureView()) m_ticker.MarkFailed();
         }
 
         // Select the mod that owns this .alo BEFORE loading, so the mod's
@@ -235,9 +227,9 @@ void CaptureRunner::Init()
             for (const auto& mod : modManager->GetMods())
             {
                 const size_t n = mod.path.size();
-                if (n > 0 && _wcsnicmp(m_params.captureAlo.c_str(), mod.path.c_str(), n) == 0
-                    && (m_params.captureAlo.size() == n
-                        || m_params.captureAlo[n] == L'\\' || m_params.captureAlo[n] == L'/'))
+                if (n > 0 && _wcsnicmp(m_params.captureAlo.c_str(), mod.path.c_str(), n) == 0 &&
+                    (m_params.captureAlo.size() == n || m_params.captureAlo[n] == L'\\' ||
+                     m_params.captureAlo[n] == L'/'))
                 {
                     modManager->SelectMod(mod.path);
                     Log("[capture] selected mod for .alo: %ls\n", mod.path.c_str());
@@ -245,16 +237,14 @@ void CaptureRunner::Init()
                     break;
                 }
             }
-            if (!matched)
-                Log("[capture] no mod matched .alo path — using base-game/restored textures\n");
+            if (!matched) Log("[capture] no mod matched .alo path — using base-game/restored textures\n");
         }
 
-        std::string err;
+        std::string                     err;
         std::unique_ptr<ParticleSystem> loaded = LoadParticleSystem(m_params.captureAlo, &err);
         if (!loaded)
         {
-            Log("[capture] LoadParticleSystem(%ls) failed: %s\n",
-                m_params.captureAlo.c_str(), err.c_str());
+            Log("[capture] LoadParticleSystem(%ls) failed: %s\n", m_params.captureAlo.c_str(), err.c_str());
             m_ticker.MarkFailed();
         }
         else
@@ -274,7 +264,7 @@ void CaptureRunner::Init()
                 cfg.mode           = SpawnerConfig::Mode::Manual;
                 cfg.burstSize      = 1;
                 cfg.position       = D3DXVECTOR3(0.0f, 0.0f, 0.0f);
-                cfg.maxLifetimeSec = 0.0f;  // no cap — emit through the capture
+                cfg.maxLifetimeSec = 0.0f; // no cap — emit through the capture
                 spawnerDriver->SetConfig(cfg);
                 // Deterministic sim for the render-golden lane, same recipe as
                 // the --record path (ClipRunner):
@@ -290,7 +280,7 @@ void CaptureRunner::Init()
                 //      explicitly at the frozen anchor; zero-delta render ticks
                 //      are true no-ops so paused interactive scenes stay paused.
                 ParticleRandom::Seed(ParticleRandom::kAutomationSeed);
-                FreezePreviewClockAt(0.0f);   // fixed anchor: m_time-consuming shaders render identical every run
+                FreezePreviewClockAt(0.0f); // fixed anchor: m_time-consuming shaders render identical every run
                 spawnerDriver->Trigger(particleSystem.get(), engine.get());
                 spawnerDriver->Tick(1.0f / 60.0f, particleSystem.get(), engine.get());
             }
@@ -300,12 +290,10 @@ void CaptureRunner::Init()
             if (m_params.captureSkydomeSlot > 0)
             {
                 const bool sok = m_params.captureGoldenProfile
-                    ? engine->SetEmbeddedSkydomeSlotForCapture(m_params.captureSkydomeSlot)
-                    : engine->SetSkydomeSlot(m_params.captureSkydomeSlot);
-                Log("[capture] skydome slot %d -> %s\n",
-                    m_params.captureSkydomeSlot, sok ? "ok" : "FAILED");
-                if (m_params.captureGoldenProfile && !sok)
-                    m_ticker.MarkFailed();
+                                     ? engine->SetEmbeddedSkydomeSlotForCapture(m_params.captureSkydomeSlot)
+                                     : engine->SetSkydomeSlot(m_params.captureSkydomeSlot);
+                Log("[capture] skydome slot %d -> %s\n", m_params.captureSkydomeSlot, sok ? "ok" : "FAILED");
+                if (m_params.captureGoldenProfile && !sok) m_ticker.MarkFailed();
             }
             if (ShouldReadCaptureRegistryOverrides(m_params.captureGoldenProfile))
             {
@@ -330,25 +318,40 @@ void CaptureRunner::Init()
                 // raw uint32 bit pattern (read back via (int)). Absent keys = no change.
                 // Lets a headless sweep render R(theta) for the de-flicker metric.
                 {
-                    DWORD raw = 0;
-                    int yawC = 0, pitchC = 0; DWORD distR = 0;
-                    bool haveYaw = false, havePitch = false, haveDist = false;
+                    DWORD raw  = 0;
+                    int   yawC = 0, pitchC = 0;
+                    DWORD distR   = 0;
+                    bool  haveYaw = false, havePitch = false, haveDist = false;
                     if (HKEY hKey = OpenSettingsKeyForRead())
                     {
-                        if (ReadRegDword(hKey, L"CaptureCamYaw",   raw)) { yawC   = (int)raw; haveYaw   = true; }
-                        if (ReadRegDword(hKey, L"CaptureCamPitch", raw)) { pitchC = (int)raw; havePitch = true; }
-                        if (ReadRegDword(hKey, L"CaptureCamDist",  raw)) { distR  = raw;      haveDist  = true; }
+                        if (ReadRegDword(hKey, L"CaptureCamYaw", raw))
+                        {
+                            yawC    = (int)raw;
+                            haveYaw = true;
+                        }
+                        if (ReadRegDword(hKey, L"CaptureCamPitch", raw))
+                        {
+                            pitchC    = (int)raw;
+                            havePitch = true;
+                        }
+                        if (ReadRegDword(hKey, L"CaptureCamDist", raw))
+                        {
+                            distR    = raw;
+                            haveDist = true;
+                        }
                         RegCloseKey(hKey);
                     }
                     if (haveYaw || havePitch || haveDist)
                     {
                         Engine::Camera cam = engine->GetCamera();
-                        D3DXVECTOR3 up = cam.Up; D3DXVec3Normalize(&up, &up);
+                        D3DXVECTOR3    up  = cam.Up;
+                        D3DXVec3Normalize(&up, &up);
                         D3DXVECTOR3 diff = cam.Position - cam.Target;
                         if (haveDist && distR > 0) diff *= (float)distR / 1000.0f;
                         if (haveYaw)
                         {
-                            D3DXMATRIX r; D3DXMatrixRotationAxis(&r, &up, D3DXToRadian((float)yawC / 100.0f));
+                            D3DXMATRIX r;
+                            D3DXMatrixRotationAxis(&r, &up, D3DXToRadian((float)yawC / 100.0f));
                             D3DXVec3TransformCoord(&diff, &diff, &r);
                         }
                         if (havePitch)
@@ -356,11 +359,13 @@ void CaptureRunner::Init()
                             // right = up x diff; degenerate (zero-length) when the view is
                             // (near-)parallel to Up, i.e. looking straight down/up -- pitch is
                             // then undefined, so skip it rather than normalize a garbage/NaN axis.
-                            D3DXVECTOR3 right; D3DXVec3Cross(&right, &up, &diff);
+                            D3DXVECTOR3 right;
+                            D3DXVec3Cross(&right, &up, &diff);
                             if (D3DXVec3Length(&right) > 1e-4f)
                             {
                                 D3DXVec3Normalize(&right, &right);
-                                D3DXMATRIX r; D3DXMatrixRotationAxis(&r, &right, D3DXToRadian((float)pitchC / 100.0f));
+                                D3DXMATRIX r;
+                                D3DXMatrixRotationAxis(&r, &right, D3DXToRadian((float)pitchC / 100.0f));
                                 D3DXVec3TransformCoord(&diff, &diff, &r);
                             }
                             else
@@ -368,25 +373,22 @@ void CaptureRunner::Init()
                         }
                         cam.Position = cam.Target + diff;
                         engine->SetCamera(cam);
-                        Log("[capture] cam yaw=%.2f pitch=%.2f dist=x%.3f\n",
-                            (float)yawC / 100.0f, (float)pitchC / 100.0f, haveDist ? distR / 1000.0f : 1.0f);
+                        Log("[capture] cam yaw=%.2f pitch=%.2f dist=x%.3f\n", (float)yawC / 100.0f,
+                            (float)pitchC / 100.0f, haveDist ? distR / 1000.0f : 1.0f);
                     }
                 }
             }
             else
             {
                 engine->SetGround(false);
-                const bool groundOk = !engine->GetGround();
+                const bool groundOk  = !engine->GetGround();
                 const bool skydomeOk = engine->GetSkydomeSlot() == 1;
-                const bool sourceOk = engine->IsSkydomeUsingEmbeddedResource();
+                const bool sourceOk  = engine->IsSkydomeUsingEmbeddedResource();
                 const bool gameDomesClear =
-                    engine->GetSkydomePrimaryName().empty() &&
-                    engine->GetSkydomeSecondaryName().empty() &&
-                    !engine->SkydomePrimaryHasGpuBuffers() &&
-                    !engine->SkydomeSecondaryHasGpuBuffers();
+                    engine->GetSkydomePrimaryName().empty() && engine->GetSkydomeSecondaryName().empty() &&
+                    !engine->SkydomePrimaryHasGpuBuffers() && !engine->SkydomeSecondaryHasGpuBuffers();
                 const bool skydomeMeshOk = engine->SkydomeMeshHasGpuBuffers();
-                if (!m_ticker.Failed() && groundOk && skydomeOk && sourceOk &&
-                    gameDomesClear && skydomeMeshOk)
+                if (!m_ticker.Failed() && groundOk && skydomeOk && sourceOk && gameDomesClear && skydomeMeshOk)
                 {
                     fputs("[capture-profile] golden capture-registry-overrides=skipped "
                           "showGround=0 skydome=1 source=embedded gameDomes=0 skydomeMesh=1\n",
@@ -399,24 +401,17 @@ void CaptureRunner::Init()
                     // Gating on it would make a GPU swap fail the lane, which
                     // is a reason to investigate, not a reason to go red.
                     printf("[capture-profile] golden adapter=%s vendor=0x%lX device=0x%lX\n",
-                           engine->GetAdapterDescription(),
-                           engine->GetAdapterVendorId(),
-                           engine->GetAdapterDeviceId());
+                           engine->GetAdapterDescription(), engine->GetAdapterVendorId(), engine->GetAdapterDeviceId());
                     fflush(stdout);
                     Log("[capture-profile] golden adapter=%s vendor=0x%lX device=0x%lX\n",
-                        engine->GetAdapterDescription(),
-                        engine->GetAdapterVendorId(),
-                        engine->GetAdapterDeviceId());
+                        engine->GetAdapterDescription(), engine->GetAdapterVendorId(), engine->GetAdapterDeviceId());
                 }
                 else
                 {
                     Log("[capture-profile] golden canonical-view=FAILED showGround=%d "
                         "skydome=%d source=%s gameDomes=%d skydomeMesh=%d\n",
-                        engine->GetGround() ? 1 : 0,
-                        engine->GetSkydomeSlot(),
-                        sourceOk ? "embedded" : "other",
-                        gameDomesClear ? 0 : 1,
-                        skydomeMeshOk ? 1 : 0);
+                        engine->GetGround() ? 1 : 0, engine->GetSkydomeSlot(), sourceOk ? "embedded" : "other",
+                        gameDomesClear ? 0 : 1, skydomeMeshOk ? 1 : 0);
                     m_ticker.MarkFailed();
                 }
             }
@@ -428,33 +423,30 @@ void CaptureRunner::Init()
             // shader's per-vertex response can be verified offline.
             if (m_params.captureHasAmbient)
             {
-                engine->SetAmbient(D3DXVECTOR4(m_params.captureAmbient[0],
-                                               m_params.captureAmbient[1],
+                engine->SetAmbient(D3DXVECTOR4(m_params.captureAmbient[0], m_params.captureAmbient[1],
                                                m_params.captureAmbient[2], 1.0f));
-                Log("[capture] ambient %.3f,%.3f,%.3f\n",
-                    m_params.captureAmbient[0], m_params.captureAmbient[1], m_params.captureAmbient[2]);
+                Log("[capture] ambient %.3f,%.3f,%.3f\n", m_params.captureAmbient[0], m_params.captureAmbient[1],
+                    m_params.captureAmbient[2]);
             }
             if (m_params.captureHasSun)
             {
-                const float intensity = m_params.captureHasSunI ? m_params.captureSunIntensity : 1.0f;
-                const float zr = D3DXToRadian(0.0f);
-                const float tr = D3DXToRadian(45.0f);
-                const float c  = cosf(tr);
-                Engine::Light L = {};
-                L.Position  = D3DXVECTOR4(c * cosf(zr), c * sinf(zr), sinf(tr), 0.0f);
-                L.Direction = D3DXVECTOR4(0, 0, 0, 0);
-                L.Diffuse   = D3DXVECTOR4(m_params.captureSun[0] * intensity,
-                                          m_params.captureSun[1] * intensity,
-                                          m_params.captureSun[2] * intensity, 1.0f);
-                L.Specular  = D3DXVECTOR4(m_params.captureSun[0] * intensity,
-                                          m_params.captureSun[1] * intensity,
-                                          m_params.captureSun[2] * intensity, 1.0f);
+                const float   intensity = m_params.captureHasSunI ? m_params.captureSunIntensity : 1.0f;
+                const float   zr        = D3DXToRadian(0.0f);
+                const float   tr        = D3DXToRadian(45.0f);
+                const float   c         = cosf(tr);
+                Engine::Light L         = {};
+                L.Position              = D3DXVECTOR4(c * cosf(zr), c * sinf(zr), sinf(tr), 0.0f);
+                L.Direction             = D3DXVECTOR4(0, 0, 0, 0);
+                L.Diffuse  = D3DXVECTOR4(m_params.captureSun[0] * intensity, m_params.captureSun[1] * intensity,
+                                         m_params.captureSun[2] * intensity, 1.0f);
+                L.Specular = D3DXVECTOR4(m_params.captureSun[0] * intensity, m_params.captureSun[1] * intensity,
+                                         m_params.captureSun[2] * intensity, 1.0f);
                 engine->SetLight(Engine::LT_SUN, L);
-                Log("[capture] sun %.3f,%.3f,%.3f intensity=%.3f\n",
-                    m_params.captureSun[0], m_params.captureSun[1], m_params.captureSun[2], intensity);
+                Log("[capture] sun %.3f,%.3f,%.3f intensity=%.3f\n", m_params.captureSun[0], m_params.captureSun[1],
+                    m_params.captureSun[2], intensity);
             }
-            Log("[capture] loaded %ls; spawned instance; rendering %d frames -> %ls\n",
-                m_params.captureAlo.c_str(), m_params.captureFrames, m_params.capturePng.c_str());
+            Log("[capture] loaded %ls; spawned instance; rendering %d frames -> %ls\n", m_params.captureAlo.c_str(),
+                m_params.captureFrames, m_params.capturePng.c_str());
         }
     }
 
@@ -470,23 +462,28 @@ void CaptureRunner::Init()
             engine->SetReferenceObject(refName);
             engine->SetReferenceObjectVisible(true);
             const ReferenceObjectStatus rs = engine->GetReferenceObjectStatus();
-            Log("[redbug] ref object '%s' status=%d shadowSubMeshes=%zu\n",
-                refName, (int)rs, engine->ReferenceShadowSubMeshCount());
+            Log("[redbug] ref object '%s' status=%d shadowSubMeshes=%zu\n", refName, (int)rs,
+                engine->ReferenceShadowSubMeshCount());
             D3DXVECTOR3 wmin, wmax;
             if (rs == ReferenceObjectStatus::Ok && engine->GetReferenceObjectBounds(wmin, wmax))
             {
                 // Fit camera to the ref-object AABB (mirrors the --capture-ref framing) so
                 // both the model+shadow and the origin-spawned particles are in view.
-                D3DXVECTOR3 center((wmin.x+wmax.x)*0.5f,(wmin.y+wmax.y)*0.5f,(wmin.z+wmax.z)*0.5f);
-                D3DXVECTOR3 diag = wmax - wmin;
-                float radius = 0.5f * D3DXVec3Length(&diag); if (radius < 1.0f) radius = 1.0f;
+                D3DXVECTOR3 center((wmin.x + wmax.x) * 0.5f, (wmin.y + wmax.y) * 0.5f, (wmin.z + wmax.z) * 0.5f);
+                D3DXVECTOR3 diag   = wmax - wmin;
+                float       radius = 0.5f * D3DXVec3Length(&diag);
+                if (radius < 1.0f) radius = 1.0f;
                 const float fovY = D3DXToRadian(45.0f);
-                float dist = radius / tanf(0.5f * fovY) * 1.6f;
-                D3DXVECTOR3 dir(0.7f,-0.7f,0.5f); D3DXVec3Normalize(&dir,&dir);
-                Engine::Camera cam; cam.Position = center + dir*dist; cam.Target = center; cam.Up = D3DXVECTOR3(0,0,1);
+                float       dist = radius / tanf(0.5f * fovY) * 1.6f;
+                D3DXVECTOR3 dir(0.7f, -0.7f, 0.5f);
+                D3DXVec3Normalize(&dir, &dir);
+                Engine::Camera cam;
+                cam.Position = center + dir * dist;
+                cam.Target   = center;
+                cam.Up       = D3DXVECTOR3(0, 0, 1);
                 engine->SetCamera(cam);
-                Log("[redbug] fit camera center=(%.1f,%.1f,%.1f) radius=%.1f dist=%.1f\n",
-                    center.x,center.y,center.z,radius,dist);
+                Log("[redbug] fit camera center=(%.1f,%.1f,%.1f) radius=%.1f dist=%.1f\n", center.x, center.y, center.z,
+                    radius, dist);
             }
             else
             {
@@ -498,7 +495,8 @@ void CaptureRunner::Init()
                 // and the durable guard fails. Don't
                 // hard-fail here — that would also kill a valid-but-still-resolving object.
                 Log("[redbug] ref object '%s' not resolved at startup (status=%d); camera fit "
-                    "skipped, will resolve during the render loop\n", refName, (int)rs);
+                    "skipped, will resolve during the render loop\n",
+                    refName, (int)rs);
             }
         }
         char shadowBuf[8];
@@ -521,18 +519,16 @@ void CaptureRunner::Init()
         char mbuf[64];
         if (GetEnvironmentVariableA("ALO_CAPTURE_CAM_DIST_MULT", mbuf, sizeof(mbuf)) > 0)
         {
-            float mult = (float)atof(mbuf);
+            float       mult = (float)atof(mbuf);
             D3DXVECTOR3 wmin, wmax;
             if (mult > 0.0f && engine->GetReferenceObjectBounds(wmin, wmax))
             {
-                D3DXVECTOR3 center((wmin.x + wmax.x) * 0.5f,
-                                   (wmin.y + wmax.y) * 0.5f,
-                                   (wmin.z + wmax.z) * 0.5f);
-                D3DXVECTOR3 diag = wmax - wmin;
-                float radius = 0.5f * D3DXVec3Length(&diag);
+                D3DXVECTOR3 center((wmin.x + wmax.x) * 0.5f, (wmin.y + wmax.y) * 0.5f, (wmin.z + wmax.z) * 0.5f);
+                D3DXVECTOR3 diag   = wmax - wmin;
+                float       radius = 0.5f * D3DXVec3Length(&diag);
                 if (radius < 1.0f) radius = 1.0f;
                 const float fovY = D3DXToRadian(45.0f);
-                float dist = radius / tanf(0.5f * fovY) * 1.6f * mult;
+                float       dist = radius / tanf(0.5f * fovY) * 1.6f * mult;
                 D3DXVECTOR3 dir(0.7f, -0.7f, 0.5f);
                 D3DXVec3Normalize(&dir, &dir);
                 Engine::Camera cam;
@@ -540,8 +536,8 @@ void CaptureRunner::Init()
                 cam.Target   = center;
                 cam.Up       = D3DXVECTOR3(0.0f, 0.0f, 1.0f);
                 engine->SetCamera(cam);
-                Log("[shadow-repro] cam-dist-mult=%.2f -> dist=%.1f eye=(%.1f,%.1f,%.1f)\n",
-                    mult, dist, cam.Position.x, cam.Position.y, cam.Position.z);
+                Log("[shadow-repro] cam-dist-mult=%.2f -> dist=%.1f eye=(%.1f,%.1f,%.1f)\n", mult, dist, cam.Position.x,
+                    cam.Position.y, cam.Position.z);
             }
         }
     }
@@ -563,8 +559,7 @@ void CaptureRunner::Init()
             const int iw = (int)(0.66f * fv.Width);
             const int ih = (int)(0.62f * fv.Height);
             engine->SetSceneViewport(ix, iy, iw, ih);
-            Log("[shadow-repro] sub-viewport x=%d y=%d w=%d h=%d (was %ux%u)\n",
-                ix, iy, iw, ih, fv.Width, fv.Height);
+            Log("[shadow-repro] sub-viewport x=%d y=%d w=%d h=%d (was %ux%u)\n", ix, iy, iw, ih, fv.Width, fv.Height);
         }
     }
 #endif
@@ -572,25 +567,24 @@ void CaptureRunner::Init()
 
 CaptureRunner::TickResult CaptureRunner::Tick()
 {
-    return m_ticker.Tick() == CaptureTicker::Result::Done ? TickResult::Done
-                                                           : TickResult::Running;
+    return m_ticker.Tick() == CaptureTicker::Result::Done ? TickResult::Done : TickResult::Running;
 }
 
 CaptureTicker::UiWait CaptureRunner::WaitForUiAndSettle()
 {
     const bool& m_uiReady = m_deps.uiReady;
-    bool quit = false;
+    bool        quit      = false;
 
     // Gate the composite on the app/ready first-paint signal so it captures
     // real chrome, not a blank WebView surface. The per-PID-isolated WebView2
     // profile makes every run a genuine browser cold start, so the wait is
     // real: pump + render while waiting; cap at 30s so a hung UI still yields
     // a best-effort (clearly-named) image.
-    const LONGLONG qf = PerfQpcFreq();          // cache once (freq==0 guard)
-    const LONGLONG waitStart = PerfQpcNow();
+    const LONGLONG qf           = PerfQpcFreq(); // cache once (freq==0 guard)
+    const LONGLONG waitStart    = PerfQpcNow();
     const double   kUiTimeoutMs = 30000.0;
-    bool timedOut = false;
-    int  waitIters = 0;
+    bool           timedOut     = false;
+    int            waitIters    = 0;
     while (!m_uiReady && !quit)
     {
         // Drain FIRST — DispatchMessage is what delivers WebView2's
@@ -603,13 +597,15 @@ CaptureTicker::UiWait CaptureRunner::WaitForUiAndSettle()
             if (mw.message == WM_QUIT) quit = true;
         }
         if (m_uiReady || quit) break;
-        const double elapsedMs = qf > 0
-            ? QpcMs(PerfQpcNow() - waitStart, qf)
-            : static_cast<double>(++waitIters) * 16.0;  // QPC-dead fallback
-        if (elapsedMs >= kUiTimeoutMs) { timedOut = true; break; }
-        RenderD3D9();  // keep the composed surface coherent while waiting
-        MsgWaitForMultipleObjectsEx(0, nullptr, 16,
-                                    QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+        const double elapsedMs =
+            qf > 0 ? QpcMs(PerfQpcNow() - waitStart, qf) : static_cast<double>(++waitIters) * 16.0; // QPC-dead fallback
+        if (elapsedMs >= kUiTimeoutMs)
+        {
+            timedOut = true;
+            break;
+        }
+        RenderD3D9(); // keep the composed surface coherent while waiting
+        MsgWaitForMultipleObjectsEx(0, nullptr, 16, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
     }
 
     // Settle: after a positive signal, pump + render ~150 ms so
@@ -631,18 +627,14 @@ CaptureTicker::UiWait CaptureRunner::WaitForUiAndSettle()
                 if (mw.message == WM_QUIT) quit = true;
             }
             if (quit) break;
-            const double settleMs = qf > 0
-                ? QpcMs(PerfQpcNow() - settleStart, qf)
-                : static_cast<double>(i) * 16.0;
+            const double settleMs = qf > 0 ? QpcMs(PerfQpcNow() - settleStart, qf) : static_cast<double>(i) * 16.0;
             if (settleMs >= 150.0) break;
             RenderD3D9();
             Sleep(16);
         }
     }
 
-    const double waitedMs = qf > 0
-        ? QpcMs(PerfQpcNow() - waitStart, qf)
-        : static_cast<double>(waitIters) * 16.0;
+    const double waitedMs = qf > 0 ? QpcMs(PerfQpcNow() - waitStart, qf) : static_cast<double>(waitIters) * 16.0;
 
     CaptureTicker::UiWait result;
     result.uiReady  = m_uiReady;
@@ -651,4 +643,4 @@ CaptureTicker::UiWait CaptureRunner::WaitForUiAndSettle()
     return result;
 }
 
-}  // namespace host
+} // namespace host

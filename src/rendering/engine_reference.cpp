@@ -11,25 +11,25 @@
 // file-scope statics moved with their consumers; helpers shared across
 // TUs are declared in engine_internal.h with one definition.
 
-#include <cctype>      // tolower (hardpoint bone matching)
-#include <cmath>       // fabsf (manipulator math)
-#include <cstdio>      // fprintf/snprintf (shadow-leak probe, readouts)
-#include <cstdlib>     // getenv (ALO_* probes)
+#include <cctype>  // tolower (hardpoint bone matching)
+#include <cmath>   // fabsf (manipulator math)
+#include <cstdio>  // fprintf/snprintf (shadow-leak probe, readouts)
+#include <cstdlib> // getenv (ALO_* probes)
 
 #include "engine.h"
 #include "engine_internal.h"
 #include "common/exceptions.h"
 #include "common/utils.h"
 #include "Resources/resource.h"
-#include "simulation/EmitterInstance.h"      // EmitterInstance::Vertex (world-line/tri/ribbon draws)
-#include "simulation/ParticleSystemInstance.h"   // projectile shots (match-projectile spawner)
-#include "simulation/ProjectileShot.h"           // ProjectileShotModelAxes
-#include "GizmoSizing.h"          // pure screen-uniform gizmo-handle formula
-#include "PlaneHandle.h"          // pure ground-plane handle math
-#include "GizmoRibbon.h"          // camera-facing ribbon quad expansion
-#include "RingFade.h"             // ring back-face alpha falloff
-#include "SelectionBoxStyle.h"    // selection-box bracket/dash geometry
-#include "ReferenceObjectWorld.h" // pure reference-object world-matrix builder
+#include "simulation/EmitterInstance.h"        // EmitterInstance::Vertex (world-line/tri/ribbon draws)
+#include "simulation/ParticleSystemInstance.h" // projectile shots (match-projectile spawner)
+#include "simulation/ProjectileShot.h"         // ProjectileShotModelAxes
+#include "GizmoSizing.h"                       // pure screen-uniform gizmo-handle formula
+#include "PlaneHandle.h"                       // pure ground-plane handle math
+#include "GizmoRibbon.h"                       // camera-facing ribbon quad expansion
+#include "RingFade.h"                          // ring back-face alpha falloff
+#include "SelectionBoxStyle.h"                 // selection-box bracket/dash geometry
+#include "ReferenceObjectWorld.h"              // pure reference-object world-matrix builder
 
 using namespace std;
 
@@ -53,11 +53,15 @@ D3DXMATRIX Engine::ReferenceObjectWorldFrom(const D3DXVECTOR3& pos, const D3DXVE
 
 // Committed transform -> the PICK uses this (the exact, snapped value).
 D3DXMATRIX Engine::ReferenceObjectWorld() const
-{ return ReferenceObjectWorldFrom(m_referencePosition, m_referenceRotation); }
+{
+    return ReferenceObjectWorldFrom(m_referencePosition, m_referenceRotation);
+}
 
-// Eased "display" transform -> the RENDER uses this (smooth motion). 
+// Eased "display" transform -> the RENDER uses this (smooth motion).
 D3DXMATRIX Engine::ReferenceObjectDisplayWorld() const
-{ return ReferenceObjectWorldFrom(m_displayPosition, m_displayRotation); }
+{
+    return ReferenceObjectWorldFrom(m_displayPosition, m_displayRotation);
+}
 
 // Ease the render-only display transform toward the committed one once per
 // frame (exponential smoothing off WallTimeF, so it stays smooth even when the
@@ -71,8 +75,8 @@ void Engine::EaseReferenceDisplay()
     // high-refresh display the frame interval is below GetTickCount's resolution,
     // so consecutive frames would read dt==0 and collapse the ease to an instant snap.
     const long long nowQpc = EngQpcNow();
-    float dt = (m_displayLastQpc == 0) ? 0.0f : (float)(EngQpcUs(m_displayLastQpc, nowQpc) * 1.0e-6);
-    m_displayLastQpc = nowQpc;
+    float           dt     = (m_displayLastQpc == 0) ? 0.0f : (float)(EngQpcUs(m_displayLastQpc, nowQpc) * 1.0e-6);
+    m_displayLastQpc       = nowQpc;
 
     // During a live gizmo drag the committed transform already tracks the cursor
     // 1:1 at input cadence, so easing the RENDER transform only makes the object
@@ -81,7 +85,8 @@ void Engine::EaseReferenceDisplay()
     // The ease exists for DISCRETE jumps -- spinners, keyboard nudge, undo, file
     // load -- all of which leave m_activeManip NONE. The QPC clock is refreshed
     // above, so the first post-release frame eases from the true rest pose.
-    if (m_activeManip.kind != ManipHandle::NONE) {
+    if (m_activeManip.kind != ManipHandle::NONE)
+    {
         m_displayPosition = m_referencePosition;
         m_displayRotation = m_referenceRotation;
         return;
@@ -90,20 +95,22 @@ void Engine::EaseReferenceDisplay()
     if (dt < 0.0f) dt = 0.0f;
     if (dt > 0.1f) dt = 0.1f;
 
-    constexpr float kEaseTau = 0.09f;   // time constant (s); ~95% caught up in ~3*tau
-    const float k = (dt <= 0.0f) ? 0.0f : (1.0f - expf(-dt / kEaseTau));
+    constexpr float kEaseTau = 0.09f; // time constant (s); ~95% caught up in ~3*tau
+    const float     k        = (dt <= 0.0f) ? 0.0f : (1.0f - expf(-dt / kEaseTau));
 
-    D3DXVECTOR3 dp = m_referencePosition - m_displayPosition;
+    D3DXVECTOR3 dp      = m_referencePosition - m_displayPosition;
     const float snapGap = 8.0f * ReferenceGizmoHandleLength();
-    if (k <= 0.0f || D3DXVec3Length(&dp) > snapGap) {        // first frame / paused / teleport -> snap
+    if (k <= 0.0f || D3DXVec3Length(&dp) > snapGap)
+    { // first frame / paused / teleport -> snap
         m_displayPosition = m_referencePosition;
         m_displayRotation = m_referenceRotation;
         return;
     }
     m_displayPosition += dp * k;
-    auto easeAngle = [k](float disp, float target) -> float {
+    auto easeAngle = [k](float disp, float target) -> float
+    {
         float d = target - disp;
-        while (d >  180.0f) d -= 360.0f;
+        while (d > 180.0f) d -= 360.0f;
         while (d < -180.0f) d += 360.0f;
         return disp + d * k;
     };
@@ -120,12 +127,10 @@ void Engine::EaseReferenceDisplay()
 // save/restore so the particle draw is unaffected. No-op when none loaded/resolved.
 void Engine::RenderReferenceObject()
 {
-    if (!m_referenceObjectVisible)
-        return;
-    if (m_referenceObjectMesh.IsEmpty() || !m_referenceObjectMesh.HasResolved())
-        return;
+    if (!m_referenceObjectVisible) return;
+    if (m_referenceObjectMesh.IsEmpty() || !m_referenceObjectMesh.HasResolved()) return;
 
-    const D3DXMATRIX objectWorld = ReferenceObjectDisplayWorld();   // eased (render)
+    const D3DXMATRIX objectWorld = ReferenceObjectDisplayWorld(); // eased (render)
 
     // [refZ] Env-gated trace of the reference-object placement at the draw -- the
     // diagnostic that root-caused the "land unit floats above the ground" report
@@ -141,29 +146,26 @@ void Engine::RenderReferenceObject()
         static int s_refz = 0;
         if ((s_refz++ % 30) == 0)
         {
-            D3DXVECTOR3 omn(0,0,0), omx(0,0,0);
+            D3DXVECTOR3 omn(0, 0, 0), omx(0, 0, 0);
             m_referenceObjectMesh.GetBoundingBox(omn, omx);
             fprintf(stderr,
-                "[refZ] f=%d name=%s vis=%d sel=%d scale=%.3f refPos=(%.3f,%.3f,%.3f) "
-                "dispPos=(%.3f,%.3f,%.3f) worldT=(%.3f,%.3f,%.3f) groundZ=%.3f objAABBz=[%.3f..%.3f]\n",
-                s_refz, m_referenceObjectName.c_str(),
-                m_referenceObjectVisible ? 1 : 0, m_referenceObjectSelected ? 1 : 0,
-                m_referenceScaleFactor,
-                m_referencePosition.x, m_referencePosition.y, m_referencePosition.z,
-                m_displayPosition.x, m_displayPosition.y, m_displayPosition.z,
-                objectWorld._41, objectWorld._42, objectWorld._43,
-                m_groundZ, omn.z, omx.z);
+                    "[refZ] f=%d name=%s vis=%d sel=%d scale=%.3f refPos=(%.3f,%.3f,%.3f) "
+                    "dispPos=(%.3f,%.3f,%.3f) worldT=(%.3f,%.3f,%.3f) groundZ=%.3f objAABBz=[%.3f..%.3f]\n",
+                    s_refz, m_referenceObjectName.c_str(), m_referenceObjectVisible ? 1 : 0,
+                    m_referenceObjectSelected ? 1 : 0, m_referenceScaleFactor, m_referencePosition.x,
+                    m_referencePosition.y, m_referencePosition.z, m_displayPosition.x, m_displayPosition.y,
+                    m_displayPosition.z, objectWorld._41, objectWorld._42, objectWorld._43, m_groundZ, omn.z, omx.z);
             fflush(stderr);
         }
     }
 
     DWORD oldAlphaBlend, oldSrcBlend, oldDestBlend, oldZWrite, oldZEnable, oldCull;
     m_pDevice->GetRenderState(D3DRS_ALPHABLENDENABLE, &oldAlphaBlend);
-    m_pDevice->GetRenderState(D3DRS_SRCBLEND,         &oldSrcBlend);
-    m_pDevice->GetRenderState(D3DRS_DESTBLEND,        &oldDestBlend);
-    m_pDevice->GetRenderState(D3DRS_ZWRITEENABLE,     &oldZWrite);
-    m_pDevice->GetRenderState(D3DRS_ZENABLE,          &oldZEnable);
-    m_pDevice->GetRenderState(D3DRS_CULLMODE,         &oldCull);
+    m_pDevice->GetRenderState(D3DRS_SRCBLEND, &oldSrcBlend);
+    m_pDevice->GetRenderState(D3DRS_DESTBLEND, &oldDestBlend);
+    m_pDevice->GetRenderState(D3DRS_ZWRITEENABLE, &oldZWrite);
+    m_pDevice->GetRenderState(D3DRS_ZENABLE, &oldZEnable);
+    m_pDevice->GetRenderState(D3DRS_CULLMODE, &oldCull);
     IDirect3DVertexDeclaration9* oldDecl = NULL;
     m_pDevice->GetVertexDeclaration(&oldDecl);
 
@@ -184,22 +186,19 @@ void Engine::RenderReferenceObject()
     // of resting at its placement: scaled like the resting model and turned the way
     // the game turns a shot's model, its -Y along the flight (simulation/ProjectileShot.h).
     // The shots carry no shadow.
-    const bool shotMode = !ReferenceRestsInScene();
+    const bool              shotMode = !ReferenceRestsInScene();
     std::vector<D3DXMATRIX> shotWorlds;
     if (shotMode)
         for (const auto& inst : m_instances)
         {
-            if (!inst || !inst->IsProjectileShotLive())
-                continue;
-            const D3DXVECTOR3& d = inst->GetShotDirection();
-            const float dir[3] = { d.x, d.y, d.z };
-            float ax[3], ay[3], az[3];
+            if (!inst || !inst->IsProjectileShotLive()) continue;
+            const D3DXVECTOR3& d      = inst->GetShotDirection();
+            const float        dir[3] = {d.x, d.y, d.z};
+            float              ax[3], ay[3], az[3];
             ProjectileShotModelAxes(dir, ax, ay, az);
             const D3DXVECTOR3 p = inst->GetPosition();
-            D3DXMATRIX frame(ax[0], ax[1], ax[2], 0.0f,
-                             ay[0], ay[1], ay[2], 0.0f,
-                             az[0], az[1], az[2], 0.0f,
-                             p.x,   p.y,   p.z,   1.0f);
+            D3DXMATRIX frame(ax[0], ax[1], ax[2], 0.0f, ay[0], ay[1], ay[2], 0.0f, az[0], az[1], az[2], 0.0f, p.x, p.y,
+                             p.z, 1.0f);
             D3DXMATRIX scale;
             D3DXMatrixScaling(&scale, m_referenceScaleFactor, m_referenceScaleFactor, m_referenceScaleFactor);
             shotWorlds.push_back(scale * frame);
@@ -207,28 +206,25 @@ void Engine::RenderReferenceObject()
 
     for (int phase = 0; phase < 2; ++phase)
     {
-      const bool opaquePhase = (phase == 0);
-      if (!shotMode)
-          DrawReferenceObjectPhase(objectWorld, opaquePhase, eyePos);
-      for (const D3DXMATRIX& shotWorld : shotWorlds)
-          DrawReferenceObjectPhase(shotWorld, opaquePhase, eyePos);
-    }     // phase loop
+        const bool opaquePhase = (phase == 0);
+        if (!shotMode) DrawReferenceObjectPhase(objectWorld, opaquePhase, eyePos);
+        for (const D3DXMATRIX& shotWorld : shotWorlds) DrawReferenceObjectPhase(shotWorld, opaquePhase, eyePos);
+    } // phase loop
 
     m_pDevice->SetVertexDeclaration(oldDecl);
     if (oldDecl) oldDecl->Release();
     m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, oldAlphaBlend);
-    m_pDevice->SetRenderState(D3DRS_SRCBLEND,         oldSrcBlend);
-    m_pDevice->SetRenderState(D3DRS_DESTBLEND,        oldDestBlend);
-    m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE,     oldZWrite);
-    m_pDevice->SetRenderState(D3DRS_ZENABLE,          oldZEnable);
-    m_pDevice->SetRenderState(D3DRS_CULLMODE,         oldCull);
+    m_pDevice->SetRenderState(D3DRS_SRCBLEND, oldSrcBlend);
+    m_pDevice->SetRenderState(D3DRS_DESTBLEND, oldDestBlend);
+    m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE, oldZWrite);
+    m_pDevice->SetRenderState(D3DRS_ZENABLE, oldZEnable);
+    m_pDevice->SetRenderState(D3DRS_CULLMODE, oldCull);
 }
 
 // One opaque or transparent pass of the reference object placed at objectWorld:
 // the unit (mi == 0) then each hardpoint attach model. The caller owns render-state
 // save/restore.
-void Engine::DrawReferenceObjectPhase(const D3DXMATRIX& objectWorld, bool opaquePhase,
-                                      const D3DXVECTOR4& eyePos)
+void Engine::DrawReferenceObjectPhase(const D3DXMATRIX& objectWorld, bool opaquePhase, const D3DXVECTOR4& eyePos)
 {
     // Draw the unit (mi == 0) then each hardpoint attach model, both in this
     // phase. worldBase = objectWorld for the unit, or attachBone * objectWorld for an
@@ -236,130 +232,127 @@ void Engine::DrawReferenceObjectPhase(const D3DXMATRIX& objectWorld, bool opaque
     // its own additive/alpha layers (turret glows) blend over the assembled unit.
     for (size_t mi = 0; mi <= m_referenceAttachments.size(); ++mi)
     {
-    ReferenceObjectMesh& refMesh = (mi == 0) ? m_referenceObjectMesh
-                                             : m_referenceAttachments[mi - 1]->mesh;
-    const D3DXMATRIX worldBase   = (mi == 0) ? objectWorld
-                                             : (m_referenceAttachments[mi - 1]->boneMatrix * objectWorld);
-    for (RefSubMeshGpu& sub : refMesh.SubMeshes())
-    {
-      if (sub.effect == NULL || sub.vb == NULL || sub.ib == NULL || sub.decl == NULL)
-          continue;
-      const bool subOpaque = (sub.renderClass == ALO_RC_OPAQUE);
-      if (subOpaque != opaquePhase)
-          continue;   // opaque sub-meshes in phase 0, additive/alpha in phase 1
+        ReferenceObjectMesh& refMesh = (mi == 0) ? m_referenceObjectMesh : m_referenceAttachments[mi - 1]->mesh;
+        const D3DXMATRIX     worldBase =
+            (mi == 0) ? objectWorld : (m_referenceAttachments[mi - 1]->boneMatrix * objectWorld);
+        for (RefSubMeshGpu& sub : refMesh.SubMeshes())
+        {
+            if (sub.effect == NULL || sub.vb == NULL || sub.ib == NULL || sub.decl == NULL) continue;
+            const bool subOpaque = (sub.renderClass == ALO_RC_OPAQUE);
+            if (subOpaque != opaquePhase) continue; // opaque sub-meshes in phase 0, additive/alpha in phase 1
 
-      m_pDevice->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
-      if (subOpaque)
-      {
-          m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE,     TRUE);
-          m_pDevice->SetRenderState(D3DRS_CULLMODE,         D3DCULL_CW);
-          m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-      }
-      else
-      {
-          m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE,     FALSE);
-          m_pDevice->SetRenderState(D3DRS_CULLMODE,         D3DCULL_NONE);
-          m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-          if (sub.renderClass == ALO_RC_ADDITIVE)
-          {
-              m_pDevice->SetRenderState(D3DRS_SRCBLEND,  D3DBLEND_ONE);
-              m_pDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
-          }
-          else // ALO_RC_ALPHA
-          {
-              m_pDevice->SetRenderState(D3DRS_SRCBLEND,  D3DBLEND_SRCALPHA);
-              m_pDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-          }
-      }
+            m_pDevice->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+            if (subOpaque)
+            {
+                m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+                m_pDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_CW);
+                m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+            }
+            else
+            {
+                m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+                m_pDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+                m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+                if (sub.renderClass == ALO_RC_ADDITIVE)
+                {
+                    m_pDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+                    m_pDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+                }
+                else // ALO_RC_ALPHA
+                {
+                    m_pDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+                    m_pDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+                }
+            }
 
-      D3DXMATRIX world = sub.placement * worldBase;
-      D3DXMATRIX wvp   = world * m_view * m_projection;
+            D3DXMATRIX world = sub.placement * worldBase;
+            D3DXMATRIX wvp   = world * m_view * m_projection;
 
-      // Object-space eye + light for the bump shader's tangent-space lighting
-      // (m_eyePosObj / m_light0ObjVector). These equal the world values only at
-      // identity world; transform by inverse-world so the bump + specular stay
-      // correct once the object is moved/rotated (picker spinners / gizmo).
-      D3DXMATRIX invWorld;
-      if (!D3DXMatrixInverse(&invWorld, NULL, &world))   // singular (a degenerate bone matrix)
-          D3DXMatrixIdentity(&invWorld);                 // sane fallback: obj-space == world-space
-      const D3DXVECTOR3 lightDir3(m_lights[0].Position.x, m_lights[0].Position.y, m_lights[0].Position.z);
-      D3DXVECTOR3 eyeObj3, lightObj3;
-      D3DXVec3TransformCoord(&eyeObj3, &m_eye.Position, &invWorld);   // point
-      D3DXVec3TransformNormal(&lightObj3, &lightDir3, &invWorld);     // direction
-      const D3DXVECTOR4 eyeObj  (eyeObj3.x,   eyeObj3.y,   eyeObj3.z,   1.0f);
-      const D3DXVECTOR4 lightObj(lightObj3.x, lightObj3.y, lightObj3.z, 0.0f);
+            // Object-space eye + light for the bump shader's tangent-space lighting
+            // (m_eyePosObj / m_light0ObjVector). These equal the world values only at
+            // identity world; transform by inverse-world so the bump + specular stay
+            // correct once the object is moved/rotated (picker spinners / gizmo).
+            D3DXMATRIX invWorld;
+            if (!D3DXMatrixInverse(&invWorld, NULL, &world)) // singular (a degenerate bone matrix)
+                D3DXMatrixIdentity(&invWorld);               // sane fallback: obj-space == world-space
+            const D3DXVECTOR3 lightDir3(m_lights[0].Position.x, m_lights[0].Position.y, m_lights[0].Position.z);
+            D3DXVECTOR3       eyeObj3, lightObj3;
+            D3DXVec3TransformCoord(&eyeObj3, &m_eye.Position, &invWorld); // point
+            D3DXVec3TransformNormal(&lightObj3, &lightDir3, &invWorld);   // direction
+            const D3DXVECTOR4 eyeObj(eyeObj3.x, eyeObj3.y, eyeObj3.z, 1.0f);
+            const D3DXVECTOR4 lightObj(lightObj3.x, lightObj3.y, lightObj3.z, 0.0f);
 
-      ID3DXEffect* fx = sub.effect->getD3DEffect();   // AddRef'd
-      const Effect::Handles& h = sub.effect->getHandles();
+            ID3DXEffect*           fx = sub.effect->getD3DEffect(); // AddRef'd
+            const Effect::Handles& h  = sub.effect->getHandles();
 
-      fx->SetMatrix(h.hWorld,               &world);
-      fx->SetMatrix(h.hWorldViewProjection, &wvp);
-      fx->SetVector(h.hEyePosition,         &eyePos);
-      fx->SetVector(h.hEyeObjPosition,      &eyeObj);     // m_eyePosObj (was unbound -> wrong specular when rotated)
-      fx->SetVector(h.hGlobalAmbient,       &m_ambient);
-      fx->SetVector(h.hDirLightVec0,        &m_lights[0].Position);
-      fx->SetVector(h.hDirLightObjVec0,     &lightObj);   // object-space light dir (was world)
-      fx->SetVector(h.hDirLightDiffuse,     &m_lights[0].Diffuse);
-      fx->SetVector(h.hDirLightSpecular,    &m_lights[0].Specular);
-      fx->SetMatrixArray(h.hSphLightAll,    m_sphLightAll,  3);
-      fx->SetMatrixArray(h.hSphLightFill,   m_sphLightFill, 3);
-      fx->SetFloat(h.hTime,                 GetTimeF());
-      // Distance fade: mirror the particle path (EmitterInstance::Render). The
-      // editor never authors real DISTANCE_FADE_VALS, so a mesh shader that
-      // strips the baked default reads (0,0) -> Compute_Distance_Fade == 0 and
-      // the mesh previews at reduced alpha. Force (0,1) = no fade -> full alpha;
-      // a no-op on stock shaders whose baked default already resolves to 1.0.
-      if (h.hDistanceFadeVals)
-      {
-          D3DXVECTOR4 distanceFade(0.0f, 1.0f, 0.0f, 0.0f);   // (0,1)=no fade; editor-only, engine sets real vals in-game
-          fx->SetVector(h.hDistanceFadeVals, &distanceFade);
-      }
+            fx->SetMatrix(h.hWorld, &world);
+            fx->SetMatrix(h.hWorldViewProjection, &wvp);
+            fx->SetVector(h.hEyePosition, &eyePos);
+            fx->SetVector(h.hEyeObjPosition, &eyeObj); // m_eyePosObj (was unbound -> wrong specular when rotated)
+            fx->SetVector(h.hGlobalAmbient, &m_ambient);
+            fx->SetVector(h.hDirLightVec0, &m_lights[0].Position);
+            fx->SetVector(h.hDirLightObjVec0, &lightObj); // object-space light dir (was world)
+            fx->SetVector(h.hDirLightDiffuse, &m_lights[0].Diffuse);
+            fx->SetVector(h.hDirLightSpecular, &m_lights[0].Specular);
+            fx->SetMatrixArray(h.hSphLightAll, m_sphLightAll, 3);
+            fx->SetMatrixArray(h.hSphLightFill, m_sphLightFill, 3);
+            fx->SetFloat(h.hTime, GetTimeF());
+            // Distance fade: mirror the particle path (EmitterInstance::Render). The
+            // editor never authors real DISTANCE_FADE_VALS, so a mesh shader that
+            // strips the baked default reads (0,0) -> Compute_Distance_Fade == 0 and
+            // the mesh previews at reduced alpha. Force (0,1) = no fade -> full alpha;
+            // a no-op on stock shaders whose baked default already resolves to 1.0.
+            if (h.hDistanceFadeVals)
+            {
+                D3DXVECTOR4 distanceFade(0.0f, 1.0f, 0.0f,
+                                         0.0f); // (0,1)=no fade; editor-only, engine sets real vals in-game
+                fx->SetVector(h.hDistanceFadeVals, &distanceFade);
+            }
 
-      // Skinned (RSkin) sub-mesh: render in BIND POSE. The RSkin VS uses
-      // m_viewProj (world->clip) + a float4x3 m_skinMatrixArray[24] bone palette
-      // (P = mul(In.Pos, palette[Normal.w])), NOT m_world / m_worldViewProj. At
-      // bind pose every bone's skin matrix collapses to the object world (verified
-      // against the alo-viewer's invBind*current build), so bind a UNIFORM
-      // objectWorld palette -> P = mul(In.Pos, objectWorld) = world. The .alo
-      // skinned verts are model-space, so `world` here == objectWorld (placement
-      // is identity for skinned).
-      if (sub.skinned && h.hSkinMatrixArray)
-      {
-          D3DXMATRIX palette[24];
-          for (int b = 0; b < 24; ++b) palette[b] = world;
-          fx->SetMatrix(h.hViewProjection, &m_viewProjection);
-          fx->SetMatrixArray(h.hSkinMatrixArray, palette, 24);
-      }
+            // Skinned (RSkin) sub-mesh: render in BIND POSE. The RSkin VS uses
+            // m_viewProj (world->clip) + a float4x3 m_skinMatrixArray[24] bone palette
+            // (P = mul(In.Pos, palette[Normal.w])), NOT m_world / m_worldViewProj. At
+            // bind pose every bone's skin matrix collapses to the object world (verified
+            // against the alo-viewer's invBind*current build), so bind a UNIFORM
+            // objectWorld palette -> P = mul(In.Pos, objectWorld) = world. The .alo
+            // skinned verts are model-space, so `world` here == objectWorld (placement
+            // is identity for skinned).
+            if (sub.skinned && h.hSkinMatrixArray)
+            {
+                D3DXMATRIX palette[24];
+                for (int b = 0; b < 24; ++b) palette[b] = world;
+                fx->SetMatrix(h.hViewProjection, &m_viewProjection);
+                fx->SetMatrixArray(h.hSkinMatrixArray, palette, 24);
+            }
 
-      ApplyAloMaterialParams(fx, sub.params, sub.matHandles, sub.matTextures);
+            ApplyAloMaterialParams(fx, sub.params, sub.matHandles, sub.matTextures);
 
-      m_pDevice->SetVertexDeclaration(sub.decl);
-      m_pDevice->SetStreamSource(0, sub.vb, 0, sub.stride);
-      m_pDevice->SetIndices(sub.ib);
+            m_pDevice->SetVertexDeclaration(sub.decl);
+            m_pDevice->SetStreamSource(0, sub.vb, 0, sub.stride);
+            m_pDevice->SetIndices(sub.ib);
 
-      UINT passes = 0;
-      fx->Begin(&passes, 0);
-      for (UINT pass = 0; pass < passes; ++pass)
-      {
-          fx->BeginPass(pass);
+            UINT passes = 0;
+            fx->Begin(&passes, 0);
+            for (UINT pass = 0; pass < passes; ++pass)
+            {
+                fx->BeginPass(pass);
 #ifndef NDEBUG
-          if (sub.primitiveCount > 0)
-          {
-              DWORD zw = 0, cm = 0;
-              m_pDevice->GetRenderState(D3DRS_ZWRITEENABLE, &zw);
-              m_pDevice->GetRenderState(D3DRS_CULLMODE,     &cm);
-              fprintf(stderr, "[RefObjDraw] %s pass %u/%u zwrite=%lu cull=%lu prims=%u\n",
-                      sub.shaderName.c_str(), pass + 1, passes, zw, cm, sub.primitiveCount);
-          }
+                if (sub.primitiveCount > 0)
+                {
+                    DWORD zw = 0, cm = 0;
+                    m_pDevice->GetRenderState(D3DRS_ZWRITEENABLE, &zw);
+                    m_pDevice->GetRenderState(D3DRS_CULLMODE, &cm);
+                    fprintf(stderr, "[RefObjDraw] %s pass %u/%u zwrite=%lu cull=%lu prims=%u\n", sub.shaderName.c_str(),
+                            pass + 1, passes, zw, cm, sub.primitiveCount);
+                }
 #endif
-          m_pDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0,
-                                          sub.vertexCount, 0, sub.primitiveCount);
-          fx->EndPass();
-      }
-      fx->End();
-      fx->Release();
-    }   // sub-mesh loop
-    }   // mesh loop (unit + attachments)
+                m_pDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, sub.vertexCount, 0, sub.primitiveCount);
+                fx->EndPass();
+            }
+            fx->End();
+            fx->Release();
+        } // sub-mesh loop
+    } // mesh loop (unit + attachments)
 }
 
 // ---------- Object catalog ----------
@@ -407,8 +400,7 @@ void Engine::BuildCatalogSync()
 // the finished catalog. Safe to call every frame; early-returns when built/building.
 void Engine::StartCatalogBuildIfNeeded()
 {
-    if (!m_catalogWanted || m_referenceCatalogBuilt || m_catalogBuilding.load())
-        return;
+    if (!m_catalogWanted || m_referenceCatalogBuilt || m_catalogBuilding.load()) return;
 
     const std::vector<std::wstring> basepaths = m_fileManager.GetBasepaths();
     const std::vector<std::wstring> roots     = m_fileManager.GetContentRoots();
@@ -419,29 +411,30 @@ void Engine::StartCatalogBuildIfNeeded()
     // does NOT invalidate.
     m_catalogContextRoots = roots;
 
-    if (m_catalogThread.joinable()) m_catalogThread.join();   // a prior build, already harvested
+    if (m_catalogThread.joinable()) m_catalogThread.join(); // a prior build, already harvested
     m_catalogBuilding.store(true);
-    m_catalogThread = std::thread([this, basepaths, roots, gen]()
-    {
-        auto cat = std::make_unique<GameObjectCatalog>();
-        try
+    m_catalogThread = std::thread(
+        [this, basepaths, roots, gen]()
         {
-            FileManager isoFm(basepaths);          // own MEG handles; ctor throws on empty MEGs
-            isoFm.SetLayers(roots);                // replicate the FULL content-root stack
-            BuildGameObjectCatalog(isoFm, *cat);   // O(content) XML parse, OFF the UI thread
-        }
-        catch (...)
-        {
-            // Isolated-FM construction / parse failed -> publish an empty catalog
-            // (the picker shows an empty list, never a crash in the worker).
-        }
-        {
-            std::lock_guard<std::mutex> lock(m_catalogMutex);
-            m_pendingCatalog    = std::move(cat);
-            m_pendingCatalogGen = gen;
-        }
-        m_catalogBuilding.store(false);
-    });
+            auto cat = std::make_unique<GameObjectCatalog>();
+            try
+            {
+                FileManager isoFm(basepaths);        // own MEG handles; ctor throws on empty MEGs
+                isoFm.SetLayers(roots);              // replicate the FULL content-root stack
+                BuildGameObjectCatalog(isoFm, *cat); // O(content) XML parse, OFF the UI thread
+            }
+            catch (...)
+            {
+                // Isolated-FM construction / parse failed -> publish an empty catalog
+                // (the picker shows an empty list, never a crash in the worker).
+            }
+            {
+                std::lock_guard<std::mutex> lock(m_catalogMutex);
+                m_pendingCatalog    = std::move(cat);
+                m_pendingCatalogGen = gen;
+            }
+            m_catalogBuilding.store(false);
+        });
 }
 
 // Host calls this right after Update(): true once when a finished catalog was
@@ -473,7 +466,7 @@ void Engine::EnumerateReferenceObjects(std::vector<GameObjectRef>& out)
     m_catalogWanted = true;
     out.clear();
     for (const GameObjectRef& r : m_referenceCatalog.objects)
-        if (IsPickerListed(r))   // profile role != Excluded && fieldable (heroes exempt)
+        if (IsPickerListed(r)) // profile role != Excluded && fieldable (heroes exempt)
             out.push_back(r);
 }
 
@@ -510,13 +503,17 @@ void Engine::SetReferenceObject(const std::string& name)
     // still names the object the live transform belongs to -- and is genuinely empty
     // only at true startup, where keeping the restored transform is correct.
     {
-        auto lower = [](std::string s) { for (char& c : s) c = (char)tolower((unsigned char)c); return s; };
-        const std::string oldKey = lower(m_referenceDesiredName);  // object the live transform belongs to
-        const std::string newKey = lower(name);                    // incoming pick
-        bool changed = false;
-        const reftransform::Xform next = reftransform::OnSwap(
-            m_referenceTransforms, oldKey, newKey,
-            reftransform::Xform{ m_referencePosition, m_referenceRotation }, changed);
+        auto lower = [](std::string s)
+        {
+            for (char& c : s) c = (char)tolower((unsigned char)c);
+            return s;
+        };
+        const std::string         oldKey  = lower(m_referenceDesiredName); // object the live transform belongs to
+        const std::string         newKey  = lower(name);                   // incoming pick
+        bool                      changed = false;
+        const reftransform::Xform next =
+            reftransform::OnSwap(m_referenceTransforms, oldKey, newKey,
+                                 reftransform::Xform{m_referencePosition, m_referenceRotation}, changed);
         if (changed)
         {
             m_referencePosition = next.pos;
@@ -529,16 +526,15 @@ void Engine::SetReferenceObject(const std::string& name)
         }
     }
 
-    m_referenceDesiredName = name;   // the INTENT (persisted); shown value is resolved below
-    if (!name.empty())
-        m_referenceObjectVisible = true;
+    m_referenceDesiredName = name; // the INTENT (persisted); shown value is resolved below
+    if (!name.empty()) m_referenceObjectVisible = true;
     // Auto-select on an explicit pick so the manipulator gizmo appears immediately. A
     // desired name that resolves present keeps this true (ResolveDesiredReference's
     // present branch doesn't touch selection); an absent/None/deferred desired is
     // force-deselected inside ResolveDesiredReference. The lock is intentionally STICKY +
     // persisted (do NOT clear m_referenceLocked here, or the startup restore is wiped).
     m_referenceObjectSelected = RefLockResolveSelected(!name.empty(), m_referenceLocked);
-    m_hoverManip = ManipHandle();
+    m_hoverManip              = ManipHandle();
     ResolveDesiredReference();
 }
 
@@ -548,8 +544,7 @@ void Engine::SetReferenceObject(const std::string& name)
 size_t Engine::ReferenceShadowSubMeshCount() const
 {
     size_t count = m_referenceObjectMesh.ShadowSubMeshes().size();
-    for (const auto& att : m_referenceAttachments)
-        count += att->mesh.ShadowSubMeshes().size();
+    for (const auto& att : m_referenceAttachments) count += att->mesh.ShadowSubMeshes().size();
     return count;
 }
 
@@ -559,26 +554,28 @@ size_t Engine::ReferenceShadowSubMeshCount() const
 // can frame the actual on-screen extent (rotation/scale-aware).
 bool Engine::GetReferenceObjectBounds(D3DXVECTOR3& outMin, D3DXVECTOR3& outMax) const
 {
-    if (m_referenceObjectMesh.IsEmpty() || !m_referenceObjectMesh.HasResolved())
-        return false;
+    if (m_referenceObjectMesh.IsEmpty() || !m_referenceObjectMesh.HasResolved()) return false;
     D3DXVECTOR3 omin, omax;
     if (!m_referenceObjectMesh.GetBoundingBox(omin, omax)) return false;
 
-    const D3DXMATRIX world = ReferenceObjectWorld();
+    const D3DXMATRIX  world      = ReferenceObjectWorld();
     const D3DXVECTOR3 corners[8] = {
-        D3DXVECTOR3(omin.x, omin.y, omin.z), D3DXVECTOR3(omax.x, omin.y, omin.z),
-        D3DXVECTOR3(omin.x, omax.y, omin.z), D3DXVECTOR3(omax.x, omax.y, omin.z),
-        D3DXVECTOR3(omin.x, omin.y, omax.z), D3DXVECTOR3(omax.x, omin.y, omax.z),
+        D3DXVECTOR3(omin.x, omin.y, omin.z), D3DXVECTOR3(omax.x, omin.y, omin.z), D3DXVECTOR3(omin.x, omax.y, omin.z),
+        D3DXVECTOR3(omax.x, omax.y, omin.z), D3DXVECTOR3(omin.x, omin.y, omax.z), D3DXVECTOR3(omax.x, omin.y, omax.z),
         D3DXVECTOR3(omin.x, omax.y, omax.z), D3DXVECTOR3(omax.x, omax.y, omax.z),
     };
-    D3DXVECTOR3 wmin( 1e30f,  1e30f,  1e30f);
+    D3DXVECTOR3 wmin(1e30f, 1e30f, 1e30f);
     D3DXVECTOR3 wmax(-1e30f, -1e30f, -1e30f);
     for (const auto& c : corners)
     {
         D3DXVECTOR3 w;
         D3DXVec3TransformCoord(&w, &c, &world);
-        wmin.x = (std::min)(wmin.x, w.x); wmin.y = (std::min)(wmin.y, w.y); wmin.z = (std::min)(wmin.z, w.z);
-        wmax.x = (std::max)(wmax.x, w.x); wmax.y = (std::max)(wmax.y, w.y); wmax.z = (std::max)(wmax.z, w.z);
+        wmin.x = (std::min)(wmin.x, w.x);
+        wmin.y = (std::min)(wmin.y, w.y);
+        wmin.z = (std::min)(wmin.z, w.z);
+        wmax.x = (std::max)(wmax.x, w.x);
+        wmax.y = (std::max)(wmax.y, w.y);
+        wmax.z = (std::max)(wmax.z, w.z);
     }
     outMin = wmin;
     outMax = wmax;
@@ -616,26 +613,26 @@ void Engine::ResolveDesiredReference()
     if (!m_referenceCatalogBuilt && !m_referenceDesiredName.empty())
     {
         m_referenceObjectName.clear();
-        SetReferenceObjectSelected(false);   // deselect: hides gizmo + aborts any in-flight drag
+        SetReferenceObjectSelected(false); // deselect: hides gizmo + aborts any in-flight drag
         ResetReferenceRenderState();
         m_catalogWanted         = true;
-        m_referenceMeshDeferred = true;      // Update() retries this fn on catalog-ready
+        m_referenceMeshDeferred = true; // Update() retries this fn on catalog-ready
         return;
     }
 
-    m_referenceMeshDeferred = false;
+    m_referenceMeshDeferred    = false;
     const std::string resolved = m_referenceCatalogBuilt
-        ? ResolveReferenceName(m_referenceCatalog.objects, m_referenceDesiredName)
-        : std::string();                     // desired empty -> "" regardless
-    m_referenceObjectName = resolved;
+                                     ? ResolveReferenceName(m_referenceCatalog.objects, m_referenceDesiredName)
+                                     : std::string(); // desired empty -> "" regardless
+    m_referenceObjectName      = resolved;
 
-    if (resolved.empty())                    // explicit None, or absent-from-this-stack
+    if (resolved.empty()) // explicit None, or absent-from-this-stack
     {
-        SetReferenceObjectSelected(false);   // honest None: deselect
+        SetReferenceObjectSelected(false); // honest None: deselect
         ResetReferenceRenderState();
         return;
     }
-    RebuildReferenceObjectMesh();            // present: load it (may set LoadFailed for a bad .alo)
+    RebuildReferenceObjectMesh(); // present: load it (may set LoadFailed for a bad .alo)
 }
 
 // Resolve the selected Name -> model path -> load. The probe (only on the
@@ -644,14 +641,14 @@ void Engine::ResolveDesiredReference()
 // Resolve + CreateBuffers no-op until the device is valid; Load (CPU) always runs.
 void Engine::RebuildReferenceObjectMesh()
 {
-    m_referenceAttachments.clear();   // rebuilt below iff the unit mounts hardpoint models
-    ClearReferenceParticles(/*keepSources=*/false);   // reloaded below for a projectile
+    m_referenceAttachments.clear();                 // rebuilt below iff the unit mounts hardpoint models
+    ClearReferenceParticles(/*keepSources=*/false); // reloaded below for a projectile
     // Reset the render scale at the TOP so every exit path (empty-name clear,
     // deferred catalog-not-built return, LoadFailed, successful resolve) leaves no
     // stale scale from a previously-selected object. (A mod/submod switch now clears via
     // ResetReferenceRenderState through ResolveDesiredReference, so Rebuild's deferred
     // return is a fallback.) Overwritten from the catalog only on a successful resolve below.
-    m_referenceScaleFactor = 1.0f;
+    m_referenceScaleFactor  = 1.0f;
     m_referenceIsProjectile = false;
     m_referenceProjectile   = ReferenceProjectileInfo();
 
@@ -669,10 +666,10 @@ void Engine::RebuildReferenceObjectMesh()
     // synchronously here, or a submod switch with a selected object would freeze the UI.
     if (!m_referenceCatalogBuilt)
     {
-        m_catalogWanted         = true;   // Update() launches the build after its harvest
+        m_catalogWanted         = true; // Update() launches the build after its harvest
         m_referenceMeshDeferred = true;
         m_referenceObjectMesh.Clear();
-        m_referenceObjectStatus = ReferenceObjectStatus::None;   // nothing renders until ready
+        m_referenceObjectStatus = ReferenceObjectStatus::None; // nothing renders until ready
         return;
     }
     m_referenceMeshDeferred = false;
@@ -681,28 +678,28 @@ void Engine::RebuildReferenceObjectMesh()
     // Alamo engine resolves Names case-insensitively) but stores original casing
     // for display, so a persisted/cross-mod name with different casing must still
     // resolve. Adopt the catalog's canonical casing so the snapshot converges.
-    std::string modelPath;
+    std::string          modelPath;
     const GameObjectRef* selected = nullptr;
     for (const GameObjectRef& r : m_referenceCatalog.objects)
         if (_stricmp(r.name.c_str(), m_referenceObjectName.c_str()) == 0)
         {
-            modelPath = r.modelPath;
+            modelPath             = r.modelPath;
             m_referenceObjectName = r.name;
-            selected = &r;
+            selected              = &r;
             // Successful catalog resolve -> adopt the per-object render scale.
             m_referenceScaleFactor = r.scaleFactor;
             if (r.role == ObjRole::Projectile)
             {
-                m_referenceIsProjectile             = true;
-                m_referenceProjectile.speedPerFrame = r.projectileSpeed;
-                m_referenceProjectile.range         = r.projectileRange;
-                m_referenceProjectile.category      = r.projectileCategory;
-                m_referenceProjectile.turnRateDegPerFrame = r.projectileTurnRate;
-                m_referenceProjectile.bombFallAccel       = r.projectileBombFallAccel;
-                m_referenceProjectile.grenadeGravity      = r.projectileGrenadeGravity;
-                m_referenceProjectile.grenadeLobMod       = r.projectileGrenadeLobMod;
-                m_referenceProjectile.grenadeCanLobSlower = r.projectileGrenadeLobSlower;
-                m_referenceProjectile.maxLifetimeSec      = r.projectileMaxLifetimeSec;
+                m_referenceIsProjectile                      = true;
+                m_referenceProjectile.speedPerFrame          = r.projectileSpeed;
+                m_referenceProjectile.range                  = r.projectileRange;
+                m_referenceProjectile.category               = r.projectileCategory;
+                m_referenceProjectile.turnRateDegPerFrame    = r.projectileTurnRate;
+                m_referenceProjectile.bombFallAccel          = r.projectileBombFallAccel;
+                m_referenceProjectile.grenadeGravity         = r.projectileGrenadeGravity;
+                m_referenceProjectile.grenadeLobMod          = r.projectileGrenadeLobMod;
+                m_referenceProjectile.grenadeCanLobSlower    = r.projectileGrenadeLobSlower;
+                m_referenceProjectile.maxLifetimeSec         = r.projectileMaxLifetimeSec;
                 m_referenceProjectile.rocketStraightDistance = r.projectileRocketStraightDistance;
                 m_referenceProjectile.rocketCurveDistance    = r.projectileRocketCurveDistance;
                 m_referenceProjectile.rocketCurveOffset      = r.projectileRocketCurveOffset;
@@ -726,9 +723,17 @@ void Engine::RebuildReferenceObjectMesh()
     // are damaged-state (hide them so the unit renders intact) + the attach models to
     // mount. Bone names match the .alo CASE-INSENSITIVELY -> fold to lower for the
     // ReferenceObjectMesh hide-set + bone lookup.
-    auto lower = [](std::string s) { for (char& c : s) c = (char)tolower((unsigned char)c); return s; };
+    auto lower = [](std::string s)
+    {
+        for (char& c : s) c = (char)tolower((unsigned char)c);
+        return s;
+    };
     std::set<std::string> hideBones;
-    struct AttachReq { std::string model; std::string bone; };
+    struct AttachReq
+    {
+        std::string model;
+        std::string bone;
+    };
     std::vector<AttachReq> attach;
     if (selected)
         for (const std::string& hpName : selected->hardpointNames)
@@ -736,15 +741,15 @@ void Engine::RebuildReferenceObjectMesh()
             auto it = m_referenceCatalog.hardpoints.find(lower(hpName));
             if (it == m_referenceCatalog.hardpoints.end()) continue;
             const HardPointDef& d = it->second;
-            if (!d.damageDecalBone.empty())     hideBones.insert(lower(d.damageDecalBone));
+            if (!d.damageDecalBone.empty()) hideBones.insert(lower(d.damageDecalBone));
             if (!d.damageParticlesBone.empty()) hideBones.insert(lower(d.damageParticlesBone));
-            if (!d.collisionMeshBone.empty())   hideBones.insert(lower(d.collisionMeshBone));
+            if (!d.collisionMeshBone.empty()) hideBones.insert(lower(d.collisionMeshBone));
             // A hardpoint with no Model_To_Attach mounts nothing; one with no
             // Attachment_Bone has nowhere to mount (GetBoneObjectMatrix("") would
             // also alias an unnamed .alo bone) -- skip both rather than push a useless
             // or mis-placeable request.
             if (!d.modelToAttach.empty() && !d.attachmentBone.empty())
-                attach.push_back({ d.modelToAttach, d.attachmentBone });
+                attach.push_back({d.modelToAttach, d.attachmentBone});
         }
     // A bone that is a live mount point (some hardpoint's Attachment_Bone) must
     // never be hidden -- even when another hardpoint lists the SAME bone as its
@@ -758,8 +763,7 @@ void Engine::RebuildReferenceObjectMesh()
     // A projectile drawn only by particles: its model is a particle system, or a
     // skeleton of particle proxies. There is no mesh to load; the particles are the
     // object, so it shows when at least one of them loads.
-    if (selected && selected->role == ObjRole::Projectile &&
-        selected->modelContent != ModelContent::Mesh)
+    if (selected && selected->role == ObjRole::Projectile && selected->modelContent != ModelContent::Mesh)
     {
         m_referenceObjectMesh.Clear();
         LoadReferenceParticleSources(*selected, aloPath);
@@ -767,8 +771,8 @@ void Engine::RebuildReferenceObjectMesh()
             m_referenceObjectStatus = ReferenceObjectStatus::Ok;
         else
             m_referenceObjectStatus = (ProbeModelSkinned(m_fileManager, modelPath) == ModelProbeResult::NotFound)
-                ? ReferenceObjectStatus::ModelMissing
-                : ReferenceObjectStatus::LoadFailed;
+                                          ? ReferenceObjectStatus::ModelMissing
+                                          : ReferenceObjectStatus::LoadFailed;
         return;
     }
 
@@ -823,7 +827,8 @@ void Engine::RebuildReferenceObjectMesh()
             if (m_pDevice != NULL)
             {
                 if (!att->mesh.Resolve(m_shaderManager, m_pDevice))
-                    continue;   // nothing resolved -> don't mount an invisible attachment (Resolve logs per-sub-mesh in Debug)
+                    continue; // nothing resolved -> don't mount an invisible attachment (Resolve logs per-sub-mesh in
+                              // Debug)
                 att->mesh.CreateBuffers(m_pDevice, m_fileManager);
             }
             att->boneMatrix = boneMat;
@@ -855,10 +860,10 @@ void Engine::RebuildReferenceObjectMesh()
                 {
                     char buf[512];
                     snprintf(buf, sizeof(buf),
-                        "[shadow] reference object '%s': %zu shadow-volume sub-mesh(es) but none "
-                        "resolved (MeshShadowVolume.fx/RSkinShadowVolume.fx not found in active "
-                        "content) - no model shadow will render\n",
-                        m_referenceObjectName.c_str(), shadowSubs.size());
+                             "[shadow] reference object '%s': %zu shadow-volume sub-mesh(es) but none "
+                             "resolved (MeshShadowVolume.fx/RSkinShadowVolume.fx not found in active "
+                             "content) - no model shadow will render\n",
+                             m_referenceObjectName.c_str(), shadowSubs.size());
                     OutputDebugStringA(buf);
                     printf("%s", buf);
                 }
@@ -877,9 +882,7 @@ void Engine::RebuildReferenceObjectMesh()
     // reads "not supported", and anything else (corrupt / non-mesh) "couldn't load".
     m_referenceObjectMesh.Clear();
     const ModelProbeResult probe = ProbeModelSkinned(m_fileManager, modelPath);
-    m_referenceObjectStatus =
-        (probe == ModelProbeResult::SkinnedUnsupported) ? ReferenceObjectStatus::Skinned
-      : (probe == ModelProbeResult::NotFound)           ? ReferenceObjectStatus::ModelMissing
-      :                                                   ReferenceObjectStatus::LoadFailed;
+    m_referenceObjectStatus      = (probe == ModelProbeResult::SkinnedUnsupported) ? ReferenceObjectStatus::Skinned
+                                   : (probe == ModelProbeResult::NotFound)         ? ReferenceObjectStatus::ModelMissing
+                                                                                   : ReferenceObjectStatus::LoadFailed;
 }
-

@@ -21,10 +21,7 @@ class MouseCursor : public Object3D
     LARGE_INTEGER m_frequency;
 
 public:
-    void SetPosition(const D3DXVECTOR3& position)
-    {
-        m_position = position;
-    }
+    void SetPosition(const D3DXVECTOR3& position) { m_position = position; }
 
     void UpdateVelocity()
     {
@@ -33,19 +30,19 @@ public:
 
         D3DXVECTOR3 dx = m_position - m_oldPosition;
         float       dt = (float)(time.QuadPart - m_updated.QuadPart) / (float)m_frequency.QuadPart;
-        m_velocity = dx / dt;
+        m_velocity     = dx / dt;
 
         m_oldPosition = m_position;
         m_updated     = time;
     }
 
-    MouseCursor() : Object3D(NULL, D3DXVECTOR3(0,0,0))
+    MouseCursor() : Object3D(NULL, D3DXVECTOR3(0, 0, 0))
     {
         QueryPerformanceFrequency(&m_frequency);
         // Seed m_updated so the first UpdateVelocity() dt is a real
         // frame delta, not (now - garbage) → bogus first-frame velocity.
         QueryPerformanceCounter(&m_updated);
-        m_oldPosition = D3DXVECTOR3(0,0,0);
+        m_oldPosition = D3DXVECTOR3(0, 0, 0);
     }
 };
 

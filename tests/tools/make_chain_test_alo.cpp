@@ -34,18 +34,26 @@
 void ParticleSystemInstance::RemoveEmitter(EmitterInstance*) {}
 
 static int g_failed = 0;
-#define CHECK(cond, msg) do { \
-    if (cond) { std::printf("  ok: %s\n", msg); } \
-    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
 using Emitter = ParticleSystem::Emitter;
 
 static void printSpawn(const char* tag, const Emitter* e)
 {
-    std::printf("  %-10s name=%-10s bursts=%d nBursts=%lu perBurst=%lu perSec=%lu life=%.2f\n",
-        tag, e->name.c_str(), (int)e->useBursts, e->nBursts,
-        e->nParticlesPerBurst, e->nParticlesPerSecond, e->lifetime);
+    std::printf("  %-10s name=%-10s bursts=%d nBursts=%lu perBurst=%lu perSec=%lu life=%.2f\n", tag, e->name.c_str(),
+                (int)e->useBursts, e->nBursts, e->nParticlesPerBurst, e->nParticlesPerSecond, e->lifetime);
 }
 
 // Bound a chain emitter's spawn output so depth-3 per-particle multiplication
@@ -56,7 +64,7 @@ static void clampSpawn(Emitter* e, unsigned long perSecCap, unsigned long perBur
     if (e->useBursts)
     {
         if (e->nParticlesPerBurst > perBurstCap) e->nParticlesPerBurst = perBurstCap;
-        if (e->nBursts == 0 || e->nBursts > 3) e->nBursts = 3;  // 0 = infinite: cap it
+        if (e->nBursts == 0 || e->nBursts > 3) e->nBursts = 3; // 0 = infinite: cap it
     }
 }
 
@@ -71,7 +79,7 @@ int main(int argc, char** argv)
     const std::wstring outPath(argv[2], argv[2] + strlen(argv[2]));
 
     // ---- Load vanilla (editor loader: parses, validates the graph). ----
-    IFile* in = new PhysicalFile(inPath, PhysicalFile::READ);
+    IFile*         in = new PhysicalFile(inPath, PhysicalFile::READ);
     ParticleSystem ps(in);
     in->Release();
 
@@ -81,19 +89,19 @@ int main(int argc, char** argv)
 
     Emitter* smoke  = em[0];
     Emitter* detail = em[1];
-    Emitter* root   = em[2];   // first 'default' sparkle emitter
-    CHECK(smoke->name  == "Smoke",   "emitter 0 is Smoke");
-    CHECK(detail->name == "detail",  "emitter 1 is detail");
-    CHECK(root->name   == "default", "emitter 2 is default (chain root)");
+    Emitter* root   = em[2]; // first 'default' sparkle emitter
+    CHECK(smoke->name == "Smoke", "emitter 0 is Smoke");
+    CHECK(detail->name == "detail", "emitter 1 is detail");
+    CHECK(root->name == "default", "emitter 2 is default (chain root)");
     for (Emitter* e : em) CHECK(e->parent == NULL, "vanilla emitter is a root");
 
     std::printf("vanilla spawn params:\n");
-    printSpawn("root",   root);
+    printSpawn("root", root);
     printSpawn("detail", detail);
-    printSpawn("smoke",  smoke);
+    printSpawn("smoke", smoke);
 
     // ---- Rewire via the editor's validated op. ----
-    CHECK(ps.reparentEmitter(detail, root,  true), "reparent detail under default (life)");
+    CHECK(ps.reparentEmitter(detail, root, true), "reparent detail under default (life)");
     CHECK(ps.reparentEmitter(smoke, detail, true), "reparent Smoke under detail (life)");
 
     // ---- Bound the combinatorics (v1 lesson). ----
@@ -101,13 +109,13 @@ int main(int argc, char** argv)
     // particles that live only 0.08 s, so at a low rate gen-3 could emit ZERO
     // particles and read as a false "depth stops at 2". 30/sec ≈ 2.4 particles
     // per 0.08 s window — reliably visible, still bounded (~tens per volley).
-    clampSpawn(root,   6,  4);
-    clampSpawn(detail, 6,  4);
-    clampSpawn(smoke,  30, 3);
+    clampSpawn(root, 6, 4);
+    clampSpawn(detail, 6, 4);
+    clampSpawn(smoke, 30, 3);
     std::printf("clamped spawn params:\n");
-    printSpawn("root",   root);
+    printSpawn("root", root);
     printSpawn("detail", detail);
-    printSpawn("smoke",  smoke);
+    printSpawn("smoke", smoke);
 
     // ---- Write with the editor's writer. ----
     IFile* out = new PhysicalFile(outPath, PhysicalFile::WRITE);
@@ -115,7 +123,7 @@ int main(int argc, char** argv)
     out->Release();
 
     // ---- Round-trip: reload our own output, assert the chain survived. ----
-    IFile* back = new PhysicalFile(outPath, PhysicalFile::READ);
+    IFile*         back = new PhysicalFile(outPath, PhysicalFile::READ);
     ParticleSystem rt(back);
     back->Release();
 
@@ -125,14 +133,13 @@ int main(int argc, char** argv)
     {
         CHECK(r[2]->spawnDuringLife == 1, "default.life -> detail");
         CHECK(r[1]->spawnDuringLife == 0, "detail.life -> Smoke");
-        CHECK(r[1]->parent == r[2],       "detail.parent == default");
-        CHECK(r[0]->parent == r[1],       "Smoke.parent == detail (depth 3)");
-        CHECK(r[0]->spawnDuringLife == (size_t)-1 && r[0]->spawnOnDeath == (size_t)-1,
-              "Smoke is a leaf");
+        CHECK(r[1]->parent == r[2], "detail.parent == default");
+        CHECK(r[0]->parent == r[1], "Smoke.parent == detail (depth 3)");
+        CHECK(r[0]->spawnDuringLife == (size_t)-1 && r[0]->spawnOnDeath == (size_t)-1, "Smoke is a leaf");
         CHECK(r[3]->parent == NULL && r[4]->parent == NULL && r[5]->parent == NULL,
               "controls (default x2, flash) untouched roots");
-        CHECK(r[2]->nParticlesPerSecond <= 6 && r[1]->nParticlesPerSecond <= 6
-              && r[0]->nParticlesPerSecond <= 30, "clamps persisted");
+        CHECK(r[2]->nParticlesPerSecond <= 6 && r[1]->nParticlesPerSecond <= 6 && r[0]->nParticlesPerSecond <= 30,
+              "clamps persisted");
     }
 
     std::printf("\n=== %s ===\n", g_failed == 0 ? "v3 chain file VERIFIED" : "FAILED");

@@ -32,8 +32,15 @@
 void ParticleSystemInstance::RemoveEmitter(EmitterInstance*) {}
 
 static int g_fail = 0;
-#define CHECK(cond) do { if (!(cond)) { \
-    std::printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #cond); ++g_fail; } } while (0)
+#define CHECK(cond)                                                                                                    \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (!(cond))                                                                                                   \
+        {                                                                                                              \
+            std::printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #cond);                                                \
+            ++g_fail;                                                                                                  \
+        }                                                                                                              \
+    } while (0)
 
 static std::wstring GetEnv(const wchar_t* name, bool* hadValue)
 {
@@ -44,25 +51,20 @@ static std::wstring GetEnv(const wchar_t* name, bool* hadValue)
         return L"";
     }
     std::vector<wchar_t> buf(needed);
-    const DWORD got = GetEnvironmentVariableW(name, buf.data(), needed);
-    *hadValue = got > 0 && got < needed;
+    const DWORD          got = GetEnvironmentVariableW(name, buf.data(), needed);
+    *hadValue                = got > 0 && got < needed;
     return *hadValue ? std::wstring(buf.data(), got) : std::wstring();
 }
 
 class EnvGuard
 {
 public:
-    EnvGuard(const wchar_t* name, const std::wstring& value)
-        : m_name(name), m_old(GetEnv(name, &m_hadOld))
+    EnvGuard(const wchar_t* name, const std::wstring& value) : m_name(name), m_old(GetEnv(name, &m_hadOld))
     {
         CHECK(SetEnvironmentVariableW(m_name.c_str(), value.c_str()) != FALSE);
     }
 
-    ~EnvGuard()
-    {
-        SetEnvironmentVariableW(
-            m_name.c_str(), m_hadOld ? m_old.c_str() : NULL);
-    }
+    ~EnvGuard() { SetEnvironmentVariableW(m_name.c_str(), m_hadOld ? m_old.c_str() : NULL); }
 
 private:
     std::wstring m_name;
@@ -75,19 +77,16 @@ class TempTree
 public:
     TempTree()
     {
-        wchar_t base[MAX_PATH] = {};
-        const DWORD n = GetTempPathW(MAX_PATH, base);
+        wchar_t     base[MAX_PATH] = {};
+        const DWORD n              = GetTempPathW(MAX_PATH, base);
         CHECK(n > 0 && n < MAX_PATH);
         if (n == 0 || n >= MAX_PATH) return;
 
         for (unsigned int attempt = 0; attempt < 100; ++attempt)
         {
             wchar_t leaf[96] = {};
-            swprintf_s(
-                leaf, L"AloAutosaveRecoverTest-%lu-%llu-%u",
-                (unsigned long)GetCurrentProcessId(),
-                (unsigned long long)GetTickCount64(),
-                attempt);
+            swprintf_s(leaf, L"AloAutosaveRecoverTest-%lu-%llu-%u", (unsigned long)GetCurrentProcessId(),
+                       (unsigned long long)GetTickCount64(), attempt);
             m_root = base;
             if (!m_root.empty() && m_root.back() != L'\\') m_root += L'\\';
             m_root += leaf;
@@ -107,7 +106,7 @@ public:
     }
 
     const std::wstring& Root() const { return m_root; }
-    std::wstring AutosaveDir() const { return m_root + L"\\AloParticleEditor"; }
+    std::wstring        AutosaveDir() const { return m_root + L"\\AloParticleEditor"; }
 
 private:
     std::wstring m_root;
@@ -115,12 +114,10 @@ private:
 
 static bool WriteRaw(const std::wstring& path, const std::vector<unsigned char>& bytes)
 {
-    HANDLE h = CreateFileW(path.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
-                           FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE h = CreateFileW(path.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (h == INVALID_HANDLE_VALUE) return false;
-    DWORD written = 0;
-    const BOOL ok = WriteFile(
-        h, bytes.empty() ? NULL : bytes.data(), (DWORD)bytes.size(), &written, NULL);
+    DWORD      written = 0;
+    const BOOL ok      = WriteFile(h, bytes.empty() ? NULL : bytes.data(), (DWORD)bytes.size(), &written, NULL);
     CloseHandle(h);
     return ok != FALSE && written == bytes.size();
 }
@@ -128,16 +125,15 @@ static bool WriteRaw(const std::wstring& path, const std::vector<unsigned char>&
 static std::vector<unsigned char> ReadRaw(const std::wstring& path)
 {
     std::vector<unsigned char> out;
-    HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL,
-                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE                     h =
+        CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (h == INVALID_HANDLE_VALUE) return out;
     const DWORD size = GetFileSize(h, NULL);
     if (size != INVALID_FILE_SIZE)
     {
         out.resize(size);
         DWORD read = 0;
-        if (!ReadFile(h, out.data(), size, &read, NULL) || read != size)
-            out.clear();
+        if (!ReadFile(h, out.data(), size, &read, NULL) || read != size) out.clear();
     }
     CloseHandle(h);
     return out;
@@ -146,20 +142,18 @@ static std::vector<unsigned char> ReadRaw(const std::wstring& path)
 static bool IsRegularFile(const std::wstring& path)
 {
     const DWORD attr = GetFileAttributesW(path.c_str());
-    return attr != INVALID_FILE_ATTRIBUTES
-        && (attr & FILE_ATTRIBUTE_DIRECTORY) == 0;
+    return attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY) == 0;
 }
 
 static void SetLastWriteTicks(const std::wstring& path, ULONGLONG ticks)
 {
-    HANDLE h = CreateFileW(path.c_str(), FILE_WRITE_ATTRIBUTES,
-                           FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+    HANDLE h = CreateFileW(path.c_str(), FILE_WRITE_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                            NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     CHECK(h != INVALID_HANDLE_VALUE);
     if (h == INVALID_HANDLE_VALUE) return;
     ULARGE_INTEGER u;
-    u.QuadPart = ticks;
-    FILETIME ft = { u.LowPart, u.HighPart };
+    u.QuadPart  = ticks;
+    FILETIME ft = {u.LowPart, u.HighPart};
     CHECK(SetFileTime(h, NULL, NULL, &ft) != FALSE);
     CloseHandle(h);
 }
@@ -169,44 +163,35 @@ static ULONGLONG NowTicks()
     FILETIME ft = {};
     GetSystemTimeAsFileTime(&ft);
     ULARGE_INTEGER u;
-    u.LowPart = ft.dwLowDateTime;
+    u.LowPart  = ft.dwLowDateTime;
     u.HighPart = ft.dwHighDateTime;
     return u.QuadPart;
 }
 
-static std::wstring MakeName(DWORD pid, unsigned long long creation,
-                             const wchar_t* suffix)
+static std::wstring MakeName(DWORD pid, unsigned long long creation, const wchar_t* suffix)
 {
     wchar_t name[128] = {};
-    swprintf_s(name, L"autosave-%lu-%016llx%ls",
-               (unsigned long)pid, creation, suffix);
+    swprintf_s(name, L"autosave-%lu-%016llx%ls", (unsigned long)pid, creation, suffix);
     return name;
 }
 
-static std::wstring FindCurrentPath(const std::wstring& dir,
-                                    bool recent, bool stable, bool meta)
+static std::wstring FindCurrentPath(const std::wstring& dir, bool recent, bool stable, bool meta)
 {
-    WIN32_FIND_DATAW fd = {};
+    WIN32_FIND_DATAW   fd      = {};
     const std::wstring pattern = dir + L"\\autosave-*";
-    HANDLE find = FindFirstFileW(pattern.c_str(), &fd);
+    HANDLE             find    = FindFirstFileW(pattern.c_str(), &fd);
     if (find == INVALID_HANDLE_VALUE) return L"";
     std::wstring found;
     do
     {
-        const Autosave::AutosaveName name =
-            Autosave::ClassifyAutosaveName(fd.cFileName);
-        if (name.pid == GetCurrentProcessId()
-            && name.hasCreationTime
-            && !name.isTmp
-            && name.isRecent == recent
-            && name.isStable == stable
-            && name.isMeta == meta)
+        const Autosave::AutosaveName name = Autosave::ClassifyAutosaveName(fd.cFileName);
+        if (name.pid == GetCurrentProcessId() && name.hasCreationTime && !name.isTmp && name.isRecent == recent &&
+            name.isStable == stable && name.isMeta == meta)
         {
             found = dir + L"\\" + fd.cFileName;
             break;
         }
-    }
-    while (FindNextFileW(find, &fd));
+    } while (FindNextFileW(find, &fd));
     FindClose(find);
     return found;
 }
@@ -230,14 +215,13 @@ static std::unique_ptr<ParticleSystem> LoadSystem(const std::wstring& path)
 
 static void CorruptRecoveryCandidate(const std::wstring& candidate)
 {
-    const unsigned char corrupt[] = { 0x09, 0x00, 0x00 };
-    WriteRaw(candidate, std::vector<unsigned char>(
-        corrupt, corrupt + sizeof(corrupt)));
+    const unsigned char corrupt[] = {0x09, 0x00, 0x00};
+    WriteRaw(candidate, std::vector<unsigned char>(corrupt, corrupt + sizeof(corrupt)));
 }
 
 static DWORD DefinitelyDeadPid()
 {
-    const DWORD candidates[] = { 0xFFFFFFFEUL, 0xFFFFFFFCUL, 0x7FFFFFFCUL };
+    const DWORD candidates[] = {0xFFFFFFFEUL, 0xFFFFFFFCUL, 0x7FFFFFFCUL};
     for (DWORD pid : candidates)
     {
         HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
@@ -249,8 +233,7 @@ static DWORD DefinitelyDeadPid()
 
 static std::wstring Uppercase(std::wstring value)
 {
-    std::transform(value.begin(), value.end(), value.begin(),
-                   [](wchar_t c) { return (wchar_t)towupper(c); });
+    std::transform(value.begin(), value.end(), value.begin(), [](wchar_t c) { return (wchar_t)towupper(c); });
     return value;
 }
 
@@ -262,32 +245,29 @@ enum class LegacyProcessProbeMode
 };
 
 static LegacyProcessProbeMode g_legacyProcessProbeMode;
-static DWORD g_legacyProcessProbePid = 0;
+static DWORD                  g_legacyProcessProbePid = 0;
 
-static host::ModuleNameProbeResult ProbeLegacyProcessName(DWORD pid,
-                                                          wchar_t* buffer,
-                                                          DWORD capacity)
+static host::ModuleNameProbeResult ProbeLegacyProcessName(DWORD pid, wchar_t* buffer, DWORD capacity)
 {
     std::wstring path;
     if (pid == g_legacyProcessProbePid)
     {
         if (g_legacyProcessProbeMode == LegacyProcessProbeMode::QueryFails)
-            return host::ModuleNameProbeResult{ 0, ERROR_ACCESS_DENIED };
+            return host::ModuleNameProbeResult{0, ERROR_ACCESS_DENIED};
         path = L"C:\\Sibling\\ParticleEditor.exe";
     }
     else if (pid == GetCurrentProcessId())
     {
         if (g_legacyProcessProbeMode == LegacyProcessProbeMode::OwnNameFails)
-            return host::ModuleNameProbeResult{ 0, ERROR_ACCESS_DENIED };
+            return host::ModuleNameProbeResult{0, ERROR_ACCESS_DENIED};
         path = L"C:\\Current\\ParticleEditor.exe";
     }
     else
     {
-        return host::ModuleNameProbeResult{ 0, ERROR_INVALID_PARAMETER };
+        return host::ModuleNameProbeResult{0, ERROR_INVALID_PARAMETER};
     }
 
-    if (path.size() >= capacity)
-        return host::ModuleNameProbeResult{ capacity, ERROR_INSUFFICIENT_BUFFER };
+    if (path.size() >= capacity) return host::ModuleNameProbeResult{capacity, ERROR_INSUFFICIENT_BUFFER};
     std::copy(path.begin(), path.end(), buffer);
     return host::ModuleNameProbeResult{
         static_cast<DWORD>(path.size()),
@@ -297,12 +277,11 @@ static host::ModuleNameProbeResult ProbeLegacyProcessName(DWORD pid,
 
 static PROCESS_INFORMATION StartLiveSibling()
 {
-    STARTUPINFOW startup = {};
-    startup.cb = sizeof(startup);
-    PROCESS_INFORMATION process = {};
-    wchar_t command[] = L"cmd.exe /d /c ping -n 30 127.0.0.1 >nul";
-    if (!CreateProcessW(NULL, command, NULL, NULL, FALSE, CREATE_NO_WINDOW,
-                        NULL, NULL, &startup, &process))
+    STARTUPINFOW startup          = {};
+    startup.cb                    = sizeof(startup);
+    PROCESS_INFORMATION process   = {};
+    wchar_t             command[] = L"cmd.exe /d /c ping -n 30 127.0.0.1 >nul";
+    if (!CreateProcessW(NULL, command, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &startup, &process))
         process = {};
     return process;
 }
@@ -336,37 +315,26 @@ int main()
 
     // New grammar: exact PID + 16-hex creation FILETIME + suffix.
     {
-        const auto recent =
-            ClassifyAutosaveName(L"autosave-1234-01dbee4f1234abcd-recent.alo");
+        const auto recent = ClassifyAutosaveName(L"autosave-1234-01dbee4f1234abcd-recent.alo");
         CHECK(recent.pid == 1234 && recent.isRecent && recent.hasCreationTime);
         CHECK(recent.creationTime100ns == 0x01dbee4f1234abcdULL);
 
-        const auto stableTmp =
-            ClassifyAutosaveName(L"AUTOSAVE-77-ABCDEF0123456789-STABLE.ALO.TMP");
+        const auto stableTmp = ClassifyAutosaveName(L"AUTOSAVE-77-ABCDEF0123456789-STABLE.ALO.TMP");
         CHECK(stableTmp.pid == 77 && stableTmp.isStable && stableTmp.isTmp);
         CHECK(stableTmp.hasCreationTime);
         CHECK(stableTmp.creationTime100ns == 0xABCDEF0123456789ULL);
 
-        const auto meta =
-            ClassifyAutosaveName(L"autosave-5-0000000000000001.meta");
+        const auto meta = ClassifyAutosaveName(L"autosave-5-0000000000000001.meta");
         CHECK(meta.pid == 5 && meta.isMeta && meta.hasCreationTime);
 
         // The concrete values that break malformed/overflow acceptance.
-        CHECK(ClassifyAutosaveName(
-            L"autosave-4294967295-0000000000000001-recent.alo").pid
-            == 0xFFFFFFFFUL);
-        CHECK(ClassifyAutosaveName(
-            L"autosave-4294967296-0000000000000001-recent.alo").pid == 0);
-        CHECK(ClassifyAutosaveName(
-            L"autosave-1-000000000000001-recent.alo").pid == 0);   // 15 hex
-        CHECK(ClassifyAutosaveName(
-            L"autosave-1-00000000000000001-recent.alo").pid == 0); // 17 hex
-        CHECK(ClassifyAutosaveName(
-            L"autosave-1-0000000000000000-recent.alo").pid == 0);  // zero token
-        CHECK(ClassifyAutosaveName(
-            L"autosave-1-000000000000000g-recent.alo").pid == 0);
-        CHECK(ClassifyAutosaveName(
-            L"autosave-1-0000000000000001-recent.alo.tmp.tmp").pid == 0);
+        CHECK(ClassifyAutosaveName(L"autosave-4294967295-0000000000000001-recent.alo").pid == 0xFFFFFFFFUL);
+        CHECK(ClassifyAutosaveName(L"autosave-4294967296-0000000000000001-recent.alo").pid == 0);
+        CHECK(ClassifyAutosaveName(L"autosave-1-000000000000001-recent.alo").pid == 0);   // 15 hex
+        CHECK(ClassifyAutosaveName(L"autosave-1-00000000000000001-recent.alo").pid == 0); // 17 hex
+        CHECK(ClassifyAutosaveName(L"autosave-1-0000000000000000-recent.alo").pid == 0);  // zero token
+        CHECK(ClassifyAutosaveName(L"autosave-1-000000000000000g-recent.alo").pid == 0);
+        CHECK(ClassifyAutosaveName(L"autosave-1-0000000000000001-recent.alo.tmp.tmp").pid == 0);
         CHECK(ClassifyAutosaveName(L"autosave-1234-bogus.alo.tmp").pid == 0);
         CHECK(ClassifyAutosaveName(nullptr).pid == 0);
     }
@@ -380,17 +348,15 @@ int main()
     ParticleSystem original;
     original.setName("AutosaveOriginal");
     ParticleSystem::Emitter* originalEmitter = original.addRootEmitter();
-    originalEmitter->name = "OriginalEmitter";
+    originalEmitter->name                    = "OriginalEmitter";
 
-    CHECK(Autosave::Write(original, L"C:\\Effects\\original.alo",
-                          Autosave::Tier::Recent));
-    CHECK(Autosave::Write(original, L"C:\\Effects\\original.alo",
-                          Autosave::Tier::Stable));
+    CHECK(Autosave::Write(original, L"C:\\Effects\\original.alo", Autosave::Tier::Recent));
+    CHECK(Autosave::Write(original, L"C:\\Effects\\original.alo", Autosave::Tier::Stable));
 
-    const std::wstring dir = tree.AutosaveDir();
+    const std::wstring dir           = tree.AutosaveDir();
     const std::wstring currentRecent = FindCurrentPath(dir, true, false, false);
     const std::wstring currentStable = FindCurrentPath(dir, false, true, false);
-    const std::wstring currentMeta = FindCurrentPath(dir, false, false, true);
+    const std::wstring currentMeta   = FindCurrentPath(dir, false, false, true);
     CHECK(IsRegularFile(currentRecent));
     CHECK(IsRegularFile(currentStable));
     CHECK(IsRegularFile(currentMeta));
@@ -405,39 +371,36 @@ int main()
     // survive. A verify-after-replace implementation changes these bytes.
     ParticleSystem replacement;
     replacement.setName("AutosaveReplacement");
-    ParticleSystem::Emitter* replacementEmitter = replacement.addRootEmitter();
-    replacementEmitter->name = "ReplacementEmitter";
+    ParticleSystem::Emitter* replacementEmitter          = replacement.addRootEmitter();
+    replacementEmitter->name                             = "ReplacementEmitter";
     const std::vector<unsigned char> beforeFailedHandoff = ReadRaw(currentRecent);
     CHECK(!beforeFailedHandoff.empty());
     Autosave::SetRecoveryCandidateHookForTest(CorruptRecoveryCandidate);
-    CHECK(!Autosave::WriteRecoveryHandoff(
-        replacement, L"C:\\Effects\\replacement.alo"));
+    CHECK(!Autosave::WriteRecoveryHandoff(replacement, L"C:\\Effects\\replacement.alo"));
     Autosave::SetRecoveryCandidateHookForTest(NULL);
     CHECK(ReadRaw(currentRecent) == beforeFailedHandoff);
     CHECK(!IsRegularFile(currentRecent + L".tmp"));
 
-    CHECK(Autosave::WriteRecoveryHandoff(
-        replacement, L"C:\\Effects\\replacement.alo"));
+    CHECK(Autosave::WriteRecoveryHandoff(replacement, L"C:\\Effects\\replacement.alo"));
     std::unique_ptr<ParticleSystem> loaded = LoadSystem(currentRecent);
     CHECK(loaded != nullptr);
     if (loaded)
     {
         CHECK(loaded->getName() == "AutosaveReplacement");
         CHECK(loaded->getEmitters().size() == 1);
-        if (loaded->getEmitters().size() == 1)
-            CHECK(loaded->getEmitters()[0]->name == "ReplacementEmitter");
+        if (loaded->getEmitters().size() == 1) CHECK(loaded->getEmitters()[0]->name == "ReplacementEmitter");
     }
 
     // Defense in depth for an aliased/crafted pending record: Windows path
     // comparison is case-insensitive, and DeleteOrphan must never remove a
     // current-session tier/meta.
     Autosave::OrphanSession aliased = {};
-    aliased.pid = GetCurrentProcessId();
-    aliased.creationTime100ns = currentName.creationTime100ns;
-    aliased.hasCreationTime = true;
-    aliased.recentPath = Uppercase(currentRecent);
-    aliased.stablePath = Uppercase(currentStable);
-    aliased.metaPath = Uppercase(currentMeta);
+    aliased.pid                     = GetCurrentProcessId();
+    aliased.creationTime100ns       = currentName.creationTime100ns;
+    aliased.hasCreationTime         = true;
+    aliased.recentPath              = Uppercase(currentRecent);
+    aliased.stablePath              = Uppercase(currentStable);
+    aliased.metaPath                = Uppercase(currentMeta);
     Autosave::DeleteOrphan(aliased);
     CHECK(IsRegularFile(currentRecent));
     CHECK(IsRegularFile(currentStable));
@@ -448,7 +411,7 @@ int main()
     // delete these exact paths.
     const ULONGLONG dayTicks = 24ULL * 60ULL * 60ULL * 10000000ULL;
     SetLastWriteTicks(currentRecent, NowTicks() - 31ULL * dayTicks);
-    CHECK(WriteRaw(currentRecent + L".tmp", { 1, 2, 3, 4 }));
+    CHECK(WriteRaw(currentRecent + L".tmp", {1, 2, 3, 4}));
     Autosave::OrphanSession scanned = {};
     CHECK(!Autosave::ScanForOrphan(&scanned));
     CHECK(IsRegularFile(currentRecent));
@@ -466,7 +429,7 @@ int main()
     if (liveSibling.hProcess != NULL)
     {
         CloseHandle(liveSibling.hThread);
-        g_legacyProcessProbePid = liveSibling.dwProcessId;
+        g_legacyProcessProbePid              = liveSibling.dwProcessId;
         const LegacyProcessProbeMode modes[] = {
             LegacyProcessProbeMode::QueryFails,
             LegacyProcessProbeMode::BasenameMatches,
@@ -480,8 +443,7 @@ int main()
         for (size_t i = 0; i < sizeof(modes) / sizeof(modes[0]); ++i)
         {
             const std::wstring legacyLive =
-                dir + L"\\autosave-" + std::to_wstring(liveSibling.dwProcessId)
-                + L"-recent.alo";
+                dir + L"\\autosave-" + std::to_wstring(liveSibling.dwProcessId) + L"-recent.alo";
             CHECK(CopyFileW(currentRecent.c_str(), legacyLive.c_str(), FALSE) != FALSE);
             SetLastWriteTicks(legacyLive, NowTicks());
             g_legacyProcessProbeMode = modes[i];
@@ -508,16 +470,14 @@ int main()
     {
         // the exact production push: a fresh dead-session `.tmp` is
         // deleted immediately. Removing sweepList.push_back leaves this file.
-        const std::wstring deadTmp =
-            dir + L"\\" + MakeName(deadPid, 1, L"-recent.alo") + L".tmp";
-        CHECK(WriteRaw(deadTmp, { 9, 8, 7 }));
+        const std::wstring deadTmp = dir + L"\\" + MakeName(deadPid, 1, L"-recent.alo") + L".tmp";
+        CHECK(WriteRaw(deadTmp, {9, 8, 7}));
         CHECK(!Autosave::ScanForOrphan(&scanned));
         CHECK(!IsRegularFile(deadTmp));
 
         // Legacy PID-only recovery remains compatible under its conservative
         // liveness policy.
-        const std::wstring legacy =
-            dir + L"\\autosave-" + std::to_wstring(deadPid) + L"-recent.alo";
+        const std::wstring legacy = dir + L"\\autosave-" + std::to_wstring(deadPid) + L"-recent.alo";
         CHECK(CopyFileW(currentRecent.c_str(), legacy.c_str(), FALSE) != FALSE);
         SetLastWriteTicks(legacy, NowTicks());
         CHECK(Autosave::ScanForOrphan(&scanned));
@@ -531,16 +491,12 @@ int main()
     // orphan, and two such tokens never merge into one session. Make the stable
     // session newer so the exact expected result is deterministic.
     unsigned long long oldCreationA = currentName.creationTime100ns ^ 1ULL;
-    if (oldCreationA == 0 || oldCreationA == currentName.creationTime100ns)
-        oldCreationA = 1;
+    if (oldCreationA == 0 || oldCreationA == currentName.creationTime100ns) oldCreationA = 1;
     unsigned long long oldCreationB = oldCreationA + 1;
-    if (oldCreationB == 0 || oldCreationB == currentName.creationTime100ns)
-        ++oldCreationB;
+    if (oldCreationB == 0 || oldCreationB == currentName.creationTime100ns) ++oldCreationB;
 
-    const std::wstring oldRecent =
-        dir + L"\\" + MakeName(GetCurrentProcessId(), oldCreationA, L"-recent.alo");
-    const std::wstring oldStable =
-        dir + L"\\" + MakeName(GetCurrentProcessId(), oldCreationB, L"-stable.alo");
+    const std::wstring oldRecent = dir + L"\\" + MakeName(GetCurrentProcessId(), oldCreationA, L"-recent.alo");
+    const std::wstring oldStable = dir + L"\\" + MakeName(GetCurrentProcessId(), oldCreationB, L"-stable.alo");
     CHECK(CopyFileW(currentRecent.c_str(), oldRecent.c_str(), FALSE) != FALSE);
     CHECK(CopyFileW(currentRecent.c_str(), oldStable.c_str(), FALSE) != FALSE);
     const ULONGLONG now = NowTicks();
@@ -569,7 +525,9 @@ int main()
     CHECK(!IsRegularFile(currentStable));
     CHECK(!IsRegularFile(currentMeta));
 
-    if (g_fail == 0) std::printf("=== AutosaveRecover: ALL PASS ===\n");
-    else             std::printf("=== AutosaveRecover: %d FAILURE(S) ===\n", g_fail);
+    if (g_fail == 0)
+        std::printf("=== AutosaveRecover: ALL PASS ===\n");
+    else
+        std::printf("=== AutosaveRecover: %d FAILURE(S) ===\n", g_fail);
     return g_fail == 0 ? 0 : 1;
 }

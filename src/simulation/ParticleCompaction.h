@@ -8,9 +8,9 @@
 #include <vector>
 
 template <typename Primitive, typename ParticlePtr>
-size_t CompactKilledParticleSlots(std::vector<Primitive>& primitives,
+size_t CompactKilledParticleSlots(std::vector<Primitive>&   primitives,
                                   std::vector<ParticlePtr>& particleIndex,
-                                  const std::set<size_t>& kills)
+                                  const std::set<size_t>&   kills)
 {
     if (kills.empty())
     {
@@ -19,9 +19,9 @@ size_t CompactKilledParticleSlots(std::vector<Primitive>& primitives,
 
     assert(primitives.size() == particleIndex.size());
 
-    const size_t originalSize = primitives.size();
-    size_t write = *kills.begin();
-    std::set<size_t>::const_iterator kill = kills.begin();
+    const size_t                     originalSize = primitives.size();
+    size_t                           write        = *kills.begin();
+    std::set<size_t>::const_iterator kill         = kills.begin();
 
     for (size_t read = write; read < originalSize; ++read)
     {
@@ -38,7 +38,7 @@ size_t CompactKilledParticleSlots(std::vector<Primitive>& primitives,
 
         if (write != read)
         {
-            primitives[write] = std::move(primitives[read]);
+            primitives[write]    = std::move(primitives[read]);
             particleIndex[write] = particleIndex[read];
         }
         particleIndex[write]->m_indicesIndex = write;

@@ -15,7 +15,8 @@
 // The fix is to start the profile empty. Header-only so
 // tests/test_isolated_webview_profile.cpp can drive it against a temp directory.
 
-namespace host {
+namespace host
+{
 
 // Only ever wipes a folder whose leaf names an isolated profile; anything else is left
 // alone and returned unchanged.
@@ -27,8 +28,7 @@ inline bool IsIsolatedProfileLeaf(const std::filesystem::path& folder)
 // Returns a folder that exists and is empty: the given per-PID folder wiped, or a fresh
 // sibling named with `salt` when the wipe fails (a stray runtime process from the earlier
 // owner of this PID can still hold files open).
-inline std::filesystem::path FreshIsolatedProfileFolder(const std::filesystem::path& folder,
-                                                        unsigned long long salt)
+inline std::filesystem::path FreshIsolatedProfileFolder(const std::filesystem::path& folder, unsigned long long salt)
 {
     if (!IsIsolatedProfileLeaf(folder)) return folder;
     std::error_code error;
@@ -48,8 +48,7 @@ inline std::filesystem::path FreshIsolatedProfileFolder(const std::filesystem::p
 // The PID an isolated profile folder is named for. The leaf must be exactly `stem` + <pid>
 // or `stem` + <pid> + "-" + <salt>, digits only; any other shape returns 0, which is never
 // an editor's PID (it is the idle process).
-inline unsigned long IsolatedProfileOwnerPid(const std::filesystem::path& folder,
-                                             const std::wstring& stem)
+inline unsigned long IsolatedProfileOwnerPid(const std::filesystem::path& folder, const std::wstring& stem)
 {
     const std::wstring leaf = folder.filename().wstring();
     if (stem.empty() || leaf.compare(0, stem.size(), stem) != 0) return 0;
@@ -59,7 +58,7 @@ inline unsigned long IsolatedProfileOwnerPid(const std::filesystem::path& folder
         return from;
     };
     const size_t pidBegin = stem.size();
-    const size_t pidEnd = digitsEnd(pidBegin);
+    const size_t pidEnd   = digitsEnd(pidBegin);
     if (pidEnd == pidBegin || pidEnd - pidBegin > 10) return 0;
     if (pidEnd != leaf.size())
     {
@@ -77,20 +76,18 @@ inline unsigned long IsolatedProfileOwnerPid(const std::filesystem::path& folder
 // directories named with ownFolder's stem are candidates; files, junctions and symlinks are
 // skipped. Returns how many were removed.
 template <class IsOwnerLive>
-inline int SweepStaleIsolatedProfiles(const std::filesystem::path& ownFolder,
-                                      IsOwnerLive isOwnerLive)
+inline int SweepStaleIsolatedProfiles(const std::filesystem::path& ownFolder, IsOwnerLive isOwnerLive)
 {
     if (!IsIsolatedProfileLeaf(ownFolder)) return 0;
-    const std::wstring leaf = ownFolder.filename().wstring();
-    const std::wstring stem = leaf.substr(0, leaf.find(L"WebView2-iso-") + 13);
+    const std::wstring                 leaf = ownFolder.filename().wstring();
+    const std::wstring                 stem = leaf.substr(0, leaf.find(L"WebView2-iso-") + 13);
     std::vector<std::filesystem::path> stale;
-    std::error_code error;
-    for (std::filesystem::directory_iterator it(ownFolder.parent_path(), error), end;
-         !error && it != end; it.increment(error))
+    std::error_code                    error;
+    for (std::filesystem::directory_iterator it(ownFolder.parent_path(), error), end; !error && it != end;
+         it.increment(error))
     {
         std::error_code typeError;
-        if (it->symlink_status(typeError).type() != std::filesystem::file_type::directory)
-            continue;
+        if (it->symlink_status(typeError).type() != std::filesystem::file_type::directory) continue;
         const unsigned long pid = IsolatedProfileOwnerPid(it->path(), stem);
         if (pid != 0 && !isOwnerLive(pid)) stale.push_back(it->path());
     }

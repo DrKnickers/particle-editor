@@ -44,25 +44,26 @@
 
 // Autosave::OrphanSession is held by value in the recovery stash.
 #include "effect/Autosave.h"
-#include "effect/UndoStack.h"   // full def needed for UndoStack::EditorAux in ApplyUndoSnapshot
-#include "effect/ParticleSystem.h"   // full def needed for ParticleSystem::Emitter* in getEmitterById
-#include "simulation/MouseCursor.h"       // by-value record-preview anchor (preview/* record kinds)
-#include "simulation/SpawnerDriver.h"     // dispatcher-owned clamped SpawnerConfig
-#include "simulation/ReplayPlayClock.h"   // timeline play anchor
-#include "PreviewEncodeWorker.h"   // async texture-preview encode
-#include "ParticleReplayController.h"     // the timeline session's replay
+#include "effect/UndoStack.h"           // full def needed for UndoStack::EditorAux in ApplyUndoSnapshot
+#include "effect/ParticleSystem.h"      // full def needed for ParticleSystem::Emitter* in getEmitterById
+#include "simulation/MouseCursor.h"     // by-value record-preview anchor (preview/* record kinds)
+#include "simulation/SpawnerDriver.h"   // dispatcher-owned clamped SpawnerConfig
+#include "simulation/ReplayPlayClock.h" // timeline play anchor
+#include "PreviewEncodeWorker.h"        // async texture-preview encode
+#include "ParticleReplayController.h"   // the timeline session's replay
 
 class Engine;
 class ParticleSystemInstance;
 class IFileManager;
 class ModManager;
 
-namespace host {
+namespace host
+{
 
 class AcceleratorBridge;
 class LayoutBroker;
 class InputDispatcher;
-struct BridgeRequestContext;   // BridgeRequestContext.h (per-request handler context)
+struct BridgeRequestContext; // BridgeRequestContext.h (per-request handler context)
 
 class BridgeDispatcher
 {
@@ -83,8 +84,12 @@ public:
     // (CDP port, a11y determinism). It ORs into every persist gate; the three
     // WriteRecentFile (MRU) sites gate on PersistsUserState(), which folds this
     // flag together with the test-host settings gate.
-    BridgeDispatcher(Engine* engine, LayoutBroker& layout, AcceleratorBridge& accel,
-                     EmitFn emit, bool useTestHost = false, bool automationMode = false);
+    BridgeDispatcher(Engine*            engine,
+                     LayoutBroker&      layout,
+                     AcceleratorBridge& accel,
+                     EmitFn             emit,
+                     bool               useTestHost    = false,
+                     bool               automationMode = false);
 
     // Sets / replaces the live Engine pointer. The host can install this
     // before or after the Engine is constructed; null is treated as
@@ -99,13 +104,10 @@ public:
     struct ReplayProofIgnoredPushCounts
     {
         std::uint64_t overloadGuard = 0;
-        std::uint64_t msaaLevel = 0;
+        std::uint64_t msaaLevel     = 0;
         std::uint64_t estimatedLoad = 0;
     };
-    const ReplayProofIgnoredPushCounts& IgnoredReplayProofSettingsPushes() const
-    {
-        return m_replayProofIgnoredPushes;
-    }
+    const ReplayProofIgnoredPushCounts& IgnoredReplayProofSettingsPushes() const { return m_replayProofIgnoredPushes; }
 
     // Inject the UndoStack used to service `undo/perform` requests.
     // Stack is constructed by HostWindow alongside the Engine. Null is
@@ -148,7 +150,7 @@ public:
     }
     // The replay proof's E12 wraps the session's hooks with its own checks.
     const TimelineHooksFactory& TimelineHooks() const { return m_timelineHooks; }
-    void SetTimelineHooks(TimelineHooksFactory factory) { m_timelineHooks = std::move(factory); }
+    void                        SetTimelineHooks(TimelineHooksFactory factory) { m_timelineHooks = std::move(factory); }
     // The variation the next replay uses (E12 replays the proof's seed).
     void SetTimelineSeed(std::uint32_t seed);
     bool TimelineActive() const { return m_timeline.active; }
@@ -172,7 +174,10 @@ public:
     // ShutdownPreviewWorker joins the worker — MUST run before
     // GdiplusShutdown (the worker encodes via GDI+).
     void DrainPreviewResults();
-    void ShutdownPreviewWorker() { if (m_previewWorker) m_previewWorker->Finish(); }
+    void ShutdownPreviewWorker()
+    {
+        if (m_previewWorker) m_previewWorker->Finish();
+    }
     // Enable the record-only emit throttle. Set true ONLY for a
     // --record run (never --drive). See m_recordEmitThrottle.
     void SetRecordEmitThrottle(bool on) { m_recordEmitThrottle = on; }
@@ -210,9 +215,7 @@ public:
     // Null pointers are tolerated — the affected handlers fall back to
     // a friendly ok:false envelope. Wired exactly once by HostWindow
     // after constructing the unique_ptrs in WM_CREATE.
-    void BindHostState(std::unique_ptr<ParticleSystem>* ppSystem,
-                       SpawnerDriver*                   spawner,
-                       IFileManager*                    fileManager)
+    void BindHostState(std::unique_ptr<ParticleSystem>* ppSystem, SpawnerDriver* spawner, IFileManager* fileManager)
     {
         m_pParticleSystem = ppSystem;
         m_spawnerDriver   = spawner;
@@ -233,10 +236,7 @@ public:
     // instance before swapping `*m_pParticleSystem` — the old instance
     // can't outlive the system it was spawned from. Wired alongside
     // `BindHostState`.
-    void BindAttachedSystem(ParticleSystemInstanceHandle* pAttached)
-    {
-        m_pAttachedParticleSystem = pAttached;
-    }
+    void BindAttachedSystem(ParticleSystemInstanceHandle* pAttached) { m_pAttachedParticleSystem = pAttached; }
 
     // Capture the currently-bound ParticleSystem as the "saved" baseline
     // for the dirty-bit content-compare in ApplyUndoSnapshot. Called
@@ -345,8 +345,8 @@ public:
     // (engine/set/*, engine/action/clear, engine/action/rescale-system).
     // SetDirty(false) is called in file/new, file/open, file/save
     // success paths. Both transitions emit dirty/changed.
-    void SetDirty(bool dirty);
-    bool GetDirty() const { return m_dirty; }
+    void                SetDirty(bool dirty);
+    bool                GetDirty() const { return m_dirty; }
     const std::wstring& GetCurrentFilePath() const { return m_currentFilePath; }
 
     // Emits an `accelerator/pressed` event to React with the matched combo
@@ -360,7 +360,7 @@ public:
     // WebView2 message channel isn't saturated.
     void EmitCursorPosition3D(float x, float y, float z);
 
-    void EmitManipulatorDrag(const nlohmann::json& payload);   // readout pill
+    void EmitManipulatorDrag(const nlohmann::json& payload); // readout pill
 
     // Native frame-X on a dirty doc emits `app/close-requested` so
     // React pops the same Save/Discard/Cancel prompt File→Exit uses (the host
@@ -379,9 +379,10 @@ private:
     // oracle. Always declared (never macro-selected), so production and test
     // compile the same class layout. Unlike the normal constructor, this skips
     // registry/config initialization that is irrelevant to PreviewCacheClear.
-    struct PreviewQueueTestTag {};
-    BridgeDispatcher(LayoutBroker& layout, AcceleratorBridge& accel,
-                     PreviewQueueTestTag)
+    struct PreviewQueueTestTag
+    {
+    };
+    BridgeDispatcher(LayoutBroker& layout, AcceleratorBridge& accel, PreviewQueueTestTag)
         : m_engine(nullptr), m_layout(layout), m_accel(accel), m_emit()
     {
     }
@@ -390,9 +391,10 @@ private:
     // Deterministic construction seam for the spawner-config production-call
     // oracle. Its members stay header-visible so the standalone harness can
     // compose the real mutations and resolver without linking this host TU.
-    struct SpawnerConfigTestTag {};
-    BridgeDispatcher(LayoutBroker& layout, AcceleratorBridge& accel,
-                     SpawnerConfigTestTag, Engine* engine = nullptr)
+    struct SpawnerConfigTestTag
+    {
+    };
+    BridgeDispatcher(LayoutBroker& layout, AcceleratorBridge& accel, SpawnerConfigTestTag, Engine* engine = nullptr)
         : m_engine(engine), m_layout(layout), m_accel(accel), m_emit()
     {
     }
@@ -416,20 +418,20 @@ private:
         if (!params.is_object()) return cfg;
 
         const std::string mode = params.value("mode", std::string("auto"));
-        cfg.mode = mode == "manual" ? SpawnerConfig::Mode::Manual : SpawnerConfig::Mode::Auto;
-        cfg.enabled        = params.value("enabled", false);
-        cfg.burstSize      = params.value("burstSize", 1);
-        cfg.spacingSec     = params.value("spacingSec", 0.0f);
-        cfg.intervalSec    = params.value("intervalSec", 10.0f);
-        cfg.position       = SpawnerJsonToVec3(params.value("position", nlohmann::json::array()));
-        cfg.velocity       = SpawnerJsonToVec3(params.value("velocity", nlohmann::json::array()));
-        cfg.maxLifetimeSec = params.value("maxLifetimeSec", 5.0f);
-        cfg.jitterPosition = SpawnerJsonToVec3(params.value("jitterPosition", nlohmann::json::array()));
-        cfg.acceleration = SpawnerJsonToVec3(params.value("acceleration", nlohmann::json::array()));
-        cfg.squiggleAmplitude = SpawnerJsonToVec3(params.value("squiggleAmplitude", nlohmann::json::array()));
-        cfg.squiggleFrequency = params.value("squiggleFrequency", 1.0f);
-        cfg.matchProjectile   = params.value("matchProjectile", false);
-        cfg.targetPosition    = SpawnerJsonToVec3(params.value("targetPosition", nlohmann::json::array()));
+        cfg.mode               = mode == "manual" ? SpawnerConfig::Mode::Manual : SpawnerConfig::Mode::Auto;
+        cfg.enabled            = params.value("enabled", false);
+        cfg.burstSize          = params.value("burstSize", 1);
+        cfg.spacingSec         = params.value("spacingSec", 0.0f);
+        cfg.intervalSec        = params.value("intervalSec", 10.0f);
+        cfg.position           = SpawnerJsonToVec3(params.value("position", nlohmann::json::array()));
+        cfg.velocity           = SpawnerJsonToVec3(params.value("velocity", nlohmann::json::array()));
+        cfg.maxLifetimeSec     = params.value("maxLifetimeSec", 5.0f);
+        cfg.jitterPosition     = SpawnerJsonToVec3(params.value("jitterPosition", nlohmann::json::array()));
+        cfg.acceleration       = SpawnerJsonToVec3(params.value("acceleration", nlohmann::json::array()));
+        cfg.squiggleAmplitude  = SpawnerJsonToVec3(params.value("squiggleAmplitude", nlohmann::json::array()));
+        cfg.squiggleFrequency  = params.value("squiggleFrequency", 1.0f);
+        cfg.matchProjectile    = params.value("matchProjectile", false);
+        cfg.targetPosition     = SpawnerJsonToVec3(params.value("targetPosition", nlohmann::json::array()));
         return cfg;
     }
 
@@ -439,23 +441,23 @@ private:
     {
         const auto vec3 = [](const D3DXVECTOR3& value)
         {
-            return nlohmann::json::array({ value.x, value.y, value.z });
+            return nlohmann::json::array({value.x, value.y, value.z});
         };
         return nlohmann::json{
-            {"mode",              m_spawnerConfig.mode == SpawnerConfig::Mode::Manual ? "manual" : "auto"},
-            {"enabled",           m_spawnerConfig.enabled},
-            {"burstSize",         m_spawnerConfig.burstSize},
-            {"spacingSec",        m_spawnerConfig.spacingSec},
-            {"intervalSec",       m_spawnerConfig.intervalSec},
-            {"position",          vec3(m_spawnerConfig.position)},
-            {"velocity",          vec3(m_spawnerConfig.velocity)},
-            {"maxLifetimeSec",    m_spawnerConfig.maxLifetimeSec},
-            {"jitterPosition",    vec3(m_spawnerConfig.jitterPosition)},
-            {"acceleration",      vec3(m_spawnerConfig.acceleration)},
+            {"mode", m_spawnerConfig.mode == SpawnerConfig::Mode::Manual ? "manual" : "auto"},
+            {"enabled", m_spawnerConfig.enabled},
+            {"burstSize", m_spawnerConfig.burstSize},
+            {"spacingSec", m_spawnerConfig.spacingSec},
+            {"intervalSec", m_spawnerConfig.intervalSec},
+            {"position", vec3(m_spawnerConfig.position)},
+            {"velocity", vec3(m_spawnerConfig.velocity)},
+            {"maxLifetimeSec", m_spawnerConfig.maxLifetimeSec},
+            {"jitterPosition", vec3(m_spawnerConfig.jitterPosition)},
+            {"acceleration", vec3(m_spawnerConfig.acceleration)},
             {"squiggleAmplitude", vec3(m_spawnerConfig.squiggleAmplitude)},
             {"squiggleFrequency", m_spawnerConfig.squiggleFrequency},
-            {"matchProjectile",   m_spawnerConfig.matchProjectile},
-            {"targetPosition",    vec3(m_spawnerConfig.targetPosition)},
+            {"matchProjectile", m_spawnerConfig.matchProjectile},
+            {"targetPosition", vec3(m_spawnerConfig.targetPosition)},
             // Host-computed, read-only: the game wouldn't fire the reference projectile
             // at this target (a grenade out of lob range), so neither does the preview.
             {"projectileOutOfReach", IsProjectileTargetOutOfReach(m_spawnerConfig, m_engine)},
@@ -504,18 +506,18 @@ private:
     // (response written via ctx).
     // DispatchInternal calls all eleven in sequence; kinds are exact-match and
     // mutually exclusive, so call order carries no semantics.
-    friend struct BridgeRequestContext;   // RequireEngine/MarkDirty need privates
-    bool TryDispatchEngine  (BridgeRequestContext& ctx);
+    friend struct BridgeRequestContext; // RequireEngine/MarkDirty need privates
+    bool TryDispatchEngine(BridgeRequestContext& ctx);
     bool TryDispatchEmitters(BridgeRequestContext& ctx);
     bool TryDispatchEmitterProperties(BridgeRequestContext& ctx);
     bool TryDispatchEmitterTracks(BridgeRequestContext& ctx);
     bool TryDispatchLinkGroups(BridgeRequestContext& ctx);
     bool TryDispatchEmitterClipboard(BridgeRequestContext& ctx);
-    bool TryDispatchFile    (BridgeRequestContext& ctx);  // + autosave/undo
-    bool TryDispatchAssets  (BridgeRequestContext& ctx);  // textures/mods
-    bool TryDispatchShell   (BridgeRequestContext& ctx);  // window/layout/viewport/host/app/debug/stats/…
-    bool TryDispatchSpawner (BridgeRequestContext& ctx);  // + settings
-    bool TryDispatchTimeline(BridgeRequestContext& ctx);  // timeline/*
+    bool TryDispatchFile(BridgeRequestContext& ctx);     // + autosave/undo
+    bool TryDispatchAssets(BridgeRequestContext& ctx);   // textures/mods
+    bool TryDispatchShell(BridgeRequestContext& ctx);    // window/layout/viewport/host/app/debug/stats/…
+    bool TryDispatchSpawner(BridgeRequestContext& ctx);  // + settings
+    bool TryDispatchTimeline(BridgeRequestContext& ctx); // timeline/*
 
     // ---- Timeline session state (BridgeDispatch_Timeline.cpp) ----
     // Everything a replay depends on besides the frame number. A slot whose
@@ -525,52 +527,52 @@ private:
     // replaces the document pointer.
     struct TimelineInputs
     {
-        const ParticleSystem* document = nullptr;
-        std::uint64_t documentChanges = 0;
-        std::uint64_t documentEdits = 0;
-        std::uint32_t seed = 0;
-        bool          guardEnabled = true;
-        int           guardLimit = 0;
-        double        estimate = 0.0;
-        float         camera[9] = {};
-        bool operator==(const TimelineInputs& other) const;
+        const ParticleSystem* document        = nullptr;
+        std::uint64_t         documentChanges = 0;
+        std::uint64_t         documentEdits   = 0;
+        std::uint32_t         seed            = 0;
+        bool                  guardEnabled    = true;
+        int                   guardLimit      = 0;
+        double                estimate        = 0.0;
+        float                 camera[9]       = {};
+        bool                  operator==(const TimelineInputs& other) const;
     };
     struct TimelineSession
     {
-        bool active = false;
-        bool playing = false;
-        bool loop = false;
-        bool stale = false;     // the last replay failed; retried next slot
-        bool empty = false;     // the document has no emitters to spawn
-        bool refused = false;   // the overload guard refused the spawn
-        int  frame = 0;
-        std::uint64_t revision = 0;      // re-replays for changed inputs
-        TimelineInputs replayed;         // inputs of the frame on screen
-        ReplayPlayAnchor anchor;
-        std::int64_t lastEmitTicks = 0;
-        bool  savedPaused = false;       // free-run clock to restore on end
-        float savedTime = 0.0f;
-        float bakedCamera[9] = {};       // the camera the frame's billboards hold
-        std::int64_t retryTicks = 0;     // the last stale retry (backoff)
-        bool replaying = false;          // a replay or play step is running
-        bool endPending = false;         // an end arrived during one
+        bool                                      active   = false;
+        bool                                      playing  = false;
+        bool                                      loop     = false;
+        bool                                      stale    = false; // the last replay failed; retried next slot
+        bool                                      empty    = false; // the document has no emitters to spawn
+        bool                                      refused  = false; // the overload guard refused the spawn
+        int                                       frame    = 0;
+        std::uint64_t                             revision = 0; // re-replays for changed inputs
+        TimelineInputs                            replayed;     // inputs of the frame on screen
+        ReplayPlayAnchor                          anchor;
+        std::int64_t                              lastEmitTicks  = 0;
+        bool                                      savedPaused    = false; // free-run clock to restore on end
+        float                                     savedTime      = 0.0f;
+        float                                     bakedCamera[9] = {};    // the camera the frame's billboards hold
+        std::int64_t                              retryTicks     = 0;     // the last stale retry (backoff)
+        bool                                      replaying      = false; // a replay or play step is running
+        bool                                      endPending     = false; // an end arrived during one
         std::unique_ptr<ParticleReplayController> controller;
     };
     TimelineSession      m_timeline;
     TimelineHooksFactory m_timelineHooks;
-    bool                 m_timelineAllowed = false;
+    bool                 m_timelineAllowed     = false;
     bool                 m_timelineTellsEditor = false;
-    bool                 m_timelineSeeded = false;
-    std::uint32_t        m_timelineSeed = 0;
+    bool                 m_timelineSeeded      = false;
+    std::uint32_t        m_timelineSeed        = 0;
     // A gated kind's reply while the timeline owns the simulation.
-    bool RefuseWhileTimeline(BridgeRequestContext& ctx);
-    TimelineInputs CurrentTimelineInputs() const;
+    bool            RefuseWhileTimeline(BridgeRequestContext& ctx);
+    TimelineInputs  CurrentTimelineInputs() const;
     PreviewScenario TimelineScenario() const;
     // Replays to `frame` from a reset, or forward from the current frame
     // when nothing changed. Presents the destination. False marks stale.
-    bool ReplayTimelineTo(int frame);
+    bool           ReplayTimelineTo(int frame);
     nlohmann::json TimelineStateJson() const;
-    void EmitTimelineState();
+    void           EmitTimelineState();
 
     // Emits a `dirty/changed` event with the current m_dirty value.
     void EmitDirtyChanged();
@@ -596,8 +598,7 @@ private:
     // in UndoStack::BeginApplying/EndApplying so the swap doesn't
     // recursively trigger Capture(). Caller is responsible for emitting
     // engine/state/changed + emitters/tree/changed after this returns.
-    void ApplyUndoSnapshot(const std::vector<char>& buf, size_t selIdx,
-                           const UndoStack::EditorAux& aux);
+    void ApplyUndoSnapshot(const std::vector<char>& buf, size_t selIdx, const UndoStack::EditorAux& aux);
 
     // Single source of truth for a PRE-mutation undo capture:
     // snapshots the live ParticleSystem + selection (as the captureUndo
@@ -607,9 +608,7 @@ private:
     // still captures (aux stays {0,0,0}) instead of dereferencing null.
     // Preserves both capture paths: coalesceKey!=0 -> CapturePreCoalesced,
     // else -> Capture, matching the lambda it replaces.
-    void CaptureUndoPoint(
-        DWORD coalesceKey,
-        UndoStack::BudgetRetention retention = UndoStack::BudgetRetention::Normal);
+    void CaptureUndoPoint(DWORD coalesceKey, UndoStack::BudgetRetention retention = UndoStack::BudgetRetention::Normal);
 
     // ---- Promoted DispatchInternal helpers ----
     // Formerly lambdas defined mid-ladder inside DispatchInternal; promoted to
@@ -624,7 +623,7 @@ private:
     // structural deletion, then resolve the new positional wire id afterward.
     // A missing survivor clears selection; an unchanged position emits nothing.
     unsigned int selectedEmitterStableId() const;
-    void reconcileSelectionAfterDeletion(unsigned int stableId);
+    void         reconcileSelectionAfterDeletion(unsigned int stableId);
     // PRE-mutation undo capture; forwards to CaptureUndoPoint (which folds in
     // the engine's ref-transform aux). coalesceKey 0 = never coalesce
     // (structural ops must never fold across an add/delete/move).
@@ -655,8 +654,8 @@ private:
     // composes with their own undo/dirty semantics.
     void EnforceSingleMemberLinkGroups();
 
-    Engine*            m_engine;
-    bool m_replayProofOwnsSettings = false;
+    Engine*                      m_engine;
+    bool                         m_replayProofOwnsSettings = false;
     ReplayProofIgnoredPushCounts m_replayProofIgnoredPushes;
     // [guard-config] Last config applied via engine/set/overload-guard —
     // reapplied by SetEngine (see above).
@@ -665,20 +664,20 @@ private:
     int  m_overloadGuardMaxParticles = 15'000;
     // [hard-guard] Last estimate pushed via engine/set/estimated-load —
     // cached + reapplied by SetEngine, mirroring the guard config.
-    bool   m_estimatedLoadCached      = false;
-    double m_estimatedLoadPerInstance = 0.0;
+    bool               m_estimatedLoadCached      = false;
+    double             m_estimatedLoadPerInstance = 0.0;
     LayoutBroker&      m_layout;
     AcceleratorBridge& m_accel;
     EmitFn             m_emit;
 
     // Mirrors HostWindow's `--test-host` flag — gates the registry-backed
     // settings handlers to deterministic defaults (see ctor comment).
-    bool               m_testHost = false;
+    bool m_testHost = false;
 
     // Automation mode: ORs into every persist gate + guards the MRU writes so a
     // --drive or --record run performs NO registry writes (without enabling the
     // test-host-only CDP/a11y behaviors). Set once at construction.
-    bool               m_automationMode = false;
+    bool m_automationMode = false;
 
     // True when this run may write user-visible persistent state (the
     // recent-files MRU): not automation mode, and not a --test-host run
@@ -698,9 +697,9 @@ private:
     // --drive (a drive-assert reads state via DriveRunner and must see every
     // change). Panels still update at ~30 Hz — visually identical for a <=60fps
     // clip, and the record's end-hold captures the settled state.
-    bool               m_recordEmitThrottle = false;
-    unsigned long long m_lastTreeEmitTick   = 0;
-    unsigned long long m_lastStateEmitTick  = 0;
+    bool                                m_recordEmitThrottle  = false;
+    unsigned long long                  m_lastTreeEmitTick    = 0;
+    unsigned long long                  m_lastStateEmitTick   = 0;
     static constexpr unsigned long long kRecordEmitThrottleMs = 33;
 
     // Live-mode trailing coalesce: interactive drags
@@ -715,9 +714,9 @@ private:
     // assert the ~30 Hz cadence) and NOT in --drive (m_automationMode, which
     // covers drive and record: a drive-assert must see every change, per the
     // throttle note above).
-    bool               m_stateEmitPending = false;
-    bool               m_treeEmitPending  = false;
-    static constexpr unsigned long long kEmitCoalesceMs = 16;
+    bool                                m_stateEmitPending = false;
+    bool                                m_treeEmitPending  = false;
+    static constexpr unsigned long long kEmitCoalesceMs    = 16;
 
     // Unconditional builders behind the coalesce gates.
     void EmitEngineStateChangedNow();
@@ -730,7 +729,7 @@ private:
     // disturbing the a11y harness (which never sets the env var, so its
     // plain `--test-host` launch stays deterministic). Read once; default
     // false.
-    bool               m_settingsLive = false;
+    bool m_settingsLive = false;
 
     // When true, EmitStatsTick is a no-op and React's
     // StatusBar receives a stats/frozen-changed event so it clears
@@ -739,29 +738,28 @@ private:
     // spec beforeEach hooks to freeze the StatusBar's volatile
     // FPS / Emitters / Particles / cursor values for deterministic
     // UIA goldens; harmless in non-test mode (default false).
-    bool               m_statsFrozen = false;
-    UndoStack*         m_undo     = nullptr;
-    HWND               m_hostHwnd = nullptr;
-    bool               m_externalLaunchAllowed = false;  // see SetExternalLaunchAllowed
-    ::ModManager*      m_modManager = nullptr;  // mods/* surface
-    InputDispatcher*   m_input      = nullptr;  // viewport/input
+    bool             m_statsFrozen           = false;
+    UndoStack*       m_undo                  = nullptr;
+    HWND             m_hostHwnd              = nullptr;
+    bool             m_externalLaunchAllowed = false;   // see SetExternalLaunchAllowed
+    ::ModManager*    m_modManager            = nullptr; // mods/* surface
+    InputDispatcher* m_input                 = nullptr; // viewport/input
 
     // Preview LRU + in-flight dedupe + epoch (see DrainPreviewResults).
     // Key = "<filename>|<0/1 flattenAlpha>" (maxBound is a handler constant).
     // Epoch bumps on mod-stack changes (next to ClearBridgeThumbCache) so a
     // result encoded pre-switch can never populate the post-switch cache.
-    struct PreviewCacheEntry {
+    struct PreviewCacheEntry
+    {
         std::string status, dataUri;
-        int srcW = 0, srcH = 0;
+        int         srcW = 0, srcH = 0;
     };
-    std::list<std::pair<std::string, PreviewCacheEntry>> m_previewLru;  // front = MRU
-    std::map<std::string,
-             std::list<std::pair<std::string, PreviewCacheEntry>>::iterator>
-                        m_previewLruIdx;
-    std::set<std::string> m_previewInFlight;
-    unsigned            m_previewEpoch = 0;
-    static constexpr size_t kPreviewLruCap = 64;
-    std::unique_ptr<host::PreviewEncodeWorker> m_previewWorker;
+    std::list<std::pair<std::string, PreviewCacheEntry>>                                  m_previewLru; // front = MRU
+    std::map<std::string, std::list<std::pair<std::string, PreviewCacheEntry>>::iterator> m_previewLruIdx;
+    std::set<std::string>                                                                 m_previewInFlight;
+    unsigned                                                                              m_previewEpoch = 0;
+    static constexpr size_t                                                               kPreviewLruCap = 64;
+    std::unique_ptr<host::PreviewEncodeWorker>                                            m_previewWorker;
     void PreviewCachePut(const std::string& key, PreviewCacheEntry entry);
     // Mod-stack change: drop everything + bump the epoch so in-flight
     // worker results (old stack's pixels) are discarded on arrival.
@@ -780,9 +778,7 @@ private:
         // Their results would be discarded on arrival anyway, so dropping them
         // here costs nothing and is the only thing keeping the two structures
         // in step.
-        return m_previewWorker
-            ? m_previewWorker->DropStaleQueued(m_previewEpoch)
-            : 0;
+        return m_previewWorker ? m_previewWorker->DropStaleQueued(m_previewEpoch) : 0;
     }
 
     // host-state plumbing — pointers borrowed from HostWindow.
@@ -799,15 +795,15 @@ private:
     // HostWindowImpl::m_attachedParticleSystem so file/new + file/open
     // can drop the cursor-bound instance before its parent system goes
     // away. Engine pointer is already cached in m_engine.
-    ParticleSystemInstanceHandle*    m_pAttachedParticleSystem = nullptr;
+    ParticleSystemInstanceHandle* m_pAttachedParticleSystem = nullptr;
 
     // [record-preview] Cursor-bound preview instance for the preview/*
     // record kinds (BridgeDispatch_SpawnerLighting.cpp) — the scripted mirror of
     // the native Shift-hover spawn. The anchor is a dispatcher-lifetime
     // Object3D (instances parented to it never outlive it); the tokenized
     // handle is cleared by preview/place (detach) and preview/kill.
-    MouseCursor                      m_recordPreviewCursor;
-    ParticleSystemInstanceHandle     m_recordPreviewAttached;
+    MouseCursor                  m_recordPreviewCursor;
+    ParticleSystemInstanceHandle m_recordPreviewAttached;
 
     // Editor-level file state. Owned here
     // rather than on Engine because they're editor concerns (not
@@ -828,7 +824,7 @@ private:
     // the bridge's PRE-mutation captureUndo convention — the cursor
     // after undo lands on the pre-mutation snapshot, not the
     // post-save snapshot, so the legacy isSavedState flag misses.
-    std::vector<char>         m_savedSnapshot;
+    std::vector<char> m_savedSnapshot;
 
     // autosave crash-recovery. `autosave/check-recovery` scans
     // %TEMP%\AloParticleEditor\ for an orphan from a crashed prior process
@@ -839,8 +835,8 @@ private:
     // leaves the stash intact so the other tier / next launch can still recover.
     // `m_hasPendingOrphan` guards an empty stash (recover
     // with no prior check, or a double recover).
-    Autosave::OrphanSession   m_pendingOrphan{};
-    bool                      m_hasPendingOrphan = false;
+    Autosave::OrphanSession m_pendingOrphan{};
+    bool                    m_hasPendingOrphan = false;
 
     // Single parsed-and-clamped spawner config for every snapshot/event and
     // for the driverless Vitest / partial-wiring path. A bound driver is always

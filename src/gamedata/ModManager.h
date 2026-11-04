@@ -37,7 +37,7 @@
 #include <string>
 #include <vector>
 
-#include "ModScan.h"   // LayerRef + the Win32 nested-layer scan
+#include "ModScan.h" // LayerRef + the Win32 nested-layer scan
 
 class Engine;
 class IFileManager;
@@ -47,12 +47,12 @@ class IFileManager;
 // shared core folder; see ModLayers.h).
 struct ModEntry
 {
-    std::wstring path;        // full path, e.g. D:\...\corruption\Mods\MyMod
-    std::wstring folderName;  // "MyMod"
-    std::wstring nickname;    // user-set, may be empty (read from registry)
-    bool         isFoC;       // true if under corruption\Mods, false if under GameData\Mods
-    bool         rootHasArt;  // the mod root itself carries a Data\Art tree
-    std::vector<LayerRef> nested;  // child folders with a Data\Art tree
+    std::wstring          path;       // full path, e.g. D:\...\corruption\Mods\MyMod
+    std::wstring          folderName; // "MyMod"
+    std::wstring          nickname;   // user-set, may be empty (read from registry)
+    bool                  isFoC;      // true if under corruption\Mods, false if under GameData\Mods
+    bool                  rootHasArt; // the mod root itself carries a Data\Art tree
+    std::vector<LayerRef> nested;     // child folders with a Data\Art tree
 };
 
 class ModManager
@@ -63,9 +63,7 @@ public:
     // registry writes (LastLayers/LastMod) so such a run never rewrites the
     // daily driver's persisted mod stack. HostWindow and BridgeDispatcher carry
     // related automation/persistence state under their own ownership.
-    ModManager(IFileManager* fileManager,
-               const std::vector<std::wstring>& gameRoots,
-               bool suppressPersistence = false);
+    ModManager(IFileManager* fileManager, const std::vector<std::wstring>& gameRoots, bool suppressPersistence = false);
 
     // Late-bound engine pointer. Required before the first SelectMod
     // that needs to take visible effect (shader + texture reload).
@@ -107,8 +105,9 @@ public:
     // outError, when supplied, receives a human-readable reason on failure so
     // the caller can say WHICH failure occurred — the UI's fallback text blames
     // the shader reload, which is the wrong diagnosis for a registry problem.
-    bool SetLayerStack(const std::vector<std::wstring>& absoluteLayers, bool allowPersist = true,
-                       std::string* outError = nullptr);
+    bool SetLayerStack(const std::vector<std::wstring>& absoluteLayers,
+                       bool                             allowPersist = true,
+                       std::string*                     outError     = nullptr);
 
     // Read-only accessors.
     const std::vector<ModEntry>& GetMods() const { return m_mods; }
@@ -125,7 +124,7 @@ public:
     std::wstring GetPrimaryLayerPath() const { return m_primaryLayerPath; }
 
 private:
-    bool                      m_suppressPersistence = false;  // headless run: no registry writes
+    bool                      m_suppressPersistence = false; // headless run: no registry writes
     IFileManager*             m_fileManager;
     Engine*                   m_engine = nullptr;
     std::vector<std::wstring> m_gameRoots;

@@ -42,6 +42,6 @@ std::string SaveToBytes(ParticleSystem& system);
 // Writes `bytes` to a unique sibling, then renames it over `path`. Nothing is
 // left behind on failure.
 bool WriteFileAtomically(const std::wstring& path, const std::string& bytes);
-}
+} // namespace host
 
 #endif // TOOL_IO_H

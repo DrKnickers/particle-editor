@@ -11,7 +11,8 @@
 //
 // Pure and header-only so tests/test_resize_slack_policy.cpp can exercise it.
 
-namespace resizeslack {
+namespace resizeslack
+{
 
 // Steps of 128 px cost about one reset per 128 px of drag instead of one per
 // pixel, and hold at most 127 px of unseen target per axis.

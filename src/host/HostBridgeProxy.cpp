@@ -17,13 +17,14 @@
 
 #include <cstring>
 #include <stdexcept>
-#include "StringConv.h"   // host::Utf8ToWide / WideToUtf8 (shared host copy)
-#include "BridgeWire.h"   // SerializeBridgeEnvelope (non-throwing on invalid UTF-8)
+#include "StringConv.h" // host::Utf8ToWide / WideToUtf8 (shared host copy)
+#include "BridgeWire.h" // SerializeBridgeEnvelope (non-throwing on invalid UTF-8)
 #include "host/third_party/nlohmann/json.hpp"
 
 #pragma comment(lib, "OleAut32.lib")
 
-namespace host {
+namespace host
+{
 
 HRESULT HostBridgeProxy::RuntimeClassInitialize(DispatchSyncFn dispatchSync)
 {
@@ -37,16 +38,14 @@ HRESULT STDMETHODCALLTYPE HostBridgeProxy::GetTypeInfoCount(UINT* pctinfo)
     return S_OK;
 }
 
-HRESULT STDMETHODCALLTYPE HostBridgeProxy::GetTypeInfo(UINT /*iTInfo*/, LCID /*lcid*/,
-                                                       ITypeInfo** ppTInfo)
+HRESULT STDMETHODCALLTYPE HostBridgeProxy::GetTypeInfo(UINT /*iTInfo*/, LCID /*lcid*/, ITypeInfo** ppTInfo)
 {
     if (ppTInfo) *ppTInfo = nullptr;
     return E_NOTIMPL;
 }
 
-HRESULT STDMETHODCALLTYPE HostBridgeProxy::GetIDsOfNames(REFIID /*riid*/, LPOLESTR* rgszNames,
-                                                        UINT cNames, LCID /*lcid*/,
-                                                        DISPID* rgDispId)
+HRESULT STDMETHODCALLTYPE
+HostBridgeProxy::GetIDsOfNames(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID /*lcid*/, DISPID* rgDispId)
 {
     if (!rgszNames || !rgDispId || cNames == 0) return E_INVALIDARG;
 
@@ -60,23 +59,24 @@ HRESULT STDMETHODCALLTYPE HostBridgeProxy::GetIDsOfNames(REFIID /*riid*/, LPOLES
         else
         {
             rgDispId[i] = DISPID_UNKNOWN;
-            hr = DISP_E_UNKNOWNNAME;
+            hr          = DISP_E_UNKNOWNNAME;
         }
     }
     return hr;
 }
 
-HRESULT STDMETHODCALLTYPE HostBridgeProxy::Invoke(DISPID dispIdMember, REFIID /*riid*/,
-                                                  LCID /*lcid*/, WORD wFlags,
+HRESULT STDMETHODCALLTYPE HostBridgeProxy::Invoke(DISPID dispIdMember,
+                                                  REFIID /*riid*/,
+                                                  LCID /*lcid*/,
+                                                  WORD        wFlags,
                                                   DISPPARAMS* pDispParams,
-                                                  VARIANT* pVarResult,
+                                                  VARIANT*    pVarResult,
                                                   EXCEPINFO* /*pExcepInfo*/,
                                                   UINT* /*puArgErr*/)
 {
     if (dispIdMember != kDispatchRequestId) return DISP_E_MEMBERNOTFOUND;
     if (!(wFlags & DISPATCH_METHOD)) return DISP_E_MEMBERNOTFOUND;
-    if (!pDispParams || pDispParams->cArgs != 1 || !pDispParams->rgvarg)
-        return DISP_E_BADPARAMCOUNT;
+    if (!pDispParams || pDispParams->cArgs != 1 || !pDispParams->rgvarg) return DISP_E_BADPARAMCOUNT;
 
     // DISPPARAMS args are reverse-ordered (rightmost arg at index 0). We
     // have only one arg, so rgvarg[0] is unambiguous.
@@ -110,8 +110,8 @@ HRESULT STDMETHODCALLTYPE HostBridgeProxy::Invoke(DISPID dispIdMember, REFIID /*
             // can carry non-UTF-8 bytes, and a default dump() would throw
             // again from inside this catch, out of IDispatch::Invoke.
             res = SerializeBridgeEnvelope(nlohmann::json{
-                {"type",  "res"},
-                {"ok",    false},
+                {"type", "res"},
+                {"ok", false},
                 {"error", e.what() ? e.what() : "(no message)"},
             });
         }
@@ -125,12 +125,12 @@ HRESULT STDMETHODCALLTYPE HostBridgeProxy::Invoke(DISPID dispIdMember, REFIID /*
     // for empty input; SysAllocStringLen(data(), 0) yields a "" BSTR (data() on an
     // empty std::wstring is a valid pointer to the NUL terminator).
     const std::wstring wres = host::Utf8ToWide(res);
-    BSTR bres = SysAllocStringLen(wres.data(), static_cast<UINT>(wres.size()));
+    BSTR               bres = SysAllocStringLen(wres.data(), static_cast<UINT>(wres.size()));
 
     if (pVarResult)
     {
         VariantInit(pVarResult);
-        pVarResult->vt = VT_BSTR;
+        pVarResult->vt      = VT_BSTR;
         pVarResult->bstrVal = bres;
     }
     else

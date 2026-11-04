@@ -1,7 +1,8 @@
 #include "ParticleReplayController.h"
 #include <utility>
 
-namespace host {
+namespace host
+{
 
 ParticleReplayController::ParticleReplayController(const PreviewScenario& scenario, Hooks hooks)
     : m_scenario(scenario), m_hooks(std::move(hooks))
@@ -48,13 +49,12 @@ bool ParticleReplayController::SeekTo(int frame, bool renderIntermediate)
 {
     if (frame < 0 || frame > m_scenario.maxFrames) return false;
     const int acceptedFrame = m_frame;
-    bool ok = Reset();
-    for (int i = 1; ok && i <= frame; ++i)
-        ok = Advance(i == frame || renderIntermediate);
+    bool      ok            = Reset();
+    for (int i = 1; ok && i <= frame; ++i) ok = Advance(i == frame || renderIntermediate);
     if (ok && frame == 0) ok = RenderAndReadback();
     // Hooks mutate the simulation, but a failed seek has no accepted destination.
     if (!ok) m_frame = acceptedFrame;
     return ok;
 }
 
-}  // namespace host
+} // namespace host

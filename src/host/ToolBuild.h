@@ -42,6 +42,6 @@ struct BuildHooks
 // success. Fills `report` whatever the outcome and returns the exit code
 // (ToolIO.h).
 int RunBuild(const std::string& spec, const std::wstring& out, const BuildHooks& hooks, nlohmann::json* report);
-}
+} // namespace host
 
 #endif // TOOL_BUILD_H

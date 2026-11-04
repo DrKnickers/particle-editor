@@ -8,7 +8,7 @@
 #include <cstdio>
 #include <string>
 
-static int g_fail = 0;
+static int  g_fail = 0;
 static void ok(bool c, const char* m)
 {
     printf(c ? "  ok: %s\n" : "  FAIL: %s\n", m);
@@ -21,7 +21,7 @@ int main()
     using host::WideToUtf8;
 
     // --- empty-string paths (HostBridgeProxy's old srcLen==0 / res.empty() branches) ---
-    ok(Utf8ToWide(std::string()).empty(),  "Utf8ToWide(\"\") -> empty wstring");
+    ok(Utf8ToWide(std::string()).empty(), "Utf8ToWide(\"\") -> empty wstring");
     ok(WideToUtf8(std::wstring()).empty(), "WideToUtf8(L\"\") -> empty string");
 
     // --- ASCII round-trip ---
@@ -33,7 +33,8 @@ int main()
     // --- multi-byte UTF-8 round-trip (é = C3 A9 [2B], € = E2 82 AC [3B]) ---
     {
         // Split the literal so the \xAC hex escape doesn't greedily eat the '5'.
-        const std::string s = "caf\xC3\xA9 costs \xE2\x82\xAC" "5";
+        const std::string  s = "caf\xC3\xA9 costs \xE2\x82\xAC"
+                               "5";
         const std::wstring w = Utf8ToWide(s);
         ok(!w.empty() && w.size() < s.size(), "multi-byte UTF-8 decodes to fewer wchars than bytes");
         ok(WideToUtf8(w) == s, "multi-byte UTF-8 round-trips byte-for-byte");
@@ -41,7 +42,7 @@ int main()
 
     // --- embedded NUL: length-based conversion preserves interior NULs ---
     {
-        const std::string s("a\0b", 3);  // 3 bytes, interior NUL
+        const std::string  s("a\0b", 3); // 3 bytes, interior NUL
         const std::wstring w = Utf8ToWide(s);
         ok(w.size() == 3, "embedded NUL: 3 bytes -> 3 wchars (size-based, not -1)");
         const std::string back = WideToUtf8(w);

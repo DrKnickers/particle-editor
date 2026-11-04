@@ -4,17 +4,17 @@
 #include <string>
 
 // Convert an ANSI string to a wide (UCS-2) string
-std::wstring AnsiToWide(const char* cstr);
+std::wstring        AnsiToWide(const char* cstr);
 static std::wstring AnsiToWide(const std::string& str)
 {
-	return AnsiToWide(str.c_str());
+    return AnsiToWide(str.c_str());
 }
 
 // Convert  a wide (UCS-2) string to an an ANSI string
-std::string WideToAnsi(const wchar_t* cstr,     const char* defChar = " ");
+std::string        WideToAnsi(const wchar_t* cstr, const char* defChar = " ");
 static std::string WideToAnsi(const std::wstring& str, const char* defChar = " ")
 {
-	return WideToAnsi(str.c_str(), defChar);
+    return WideToAnsi(str.c_str(), defChar);
 }
 
 std::wstring LoadString(UINT id, ...);

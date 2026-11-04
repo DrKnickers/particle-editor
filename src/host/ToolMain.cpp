@@ -37,8 +37,8 @@ const wchar_t* kUsage =
 std::vector<std::wstring> CommandLineArgs()
 {
     std::vector<std::wstring> args;
-    int count = 0;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &count);
+    int                       count = 0;
+    LPWSTR*                   argv  = CommandLineToArgvW(GetCommandLineW(), &count);
     if (!argv) return args;
     for (int i = 0; i < count; i++) args.push_back(argv[i]);
     LocalFree(argv);
@@ -64,7 +64,7 @@ int Inspect(const std::wstring& input, const std::wstring& output)
     }
     std::string bytes;
     if (int code = ReadSource(input, &bytes)) return code;
-    std::string error;
+    std::string                     error;
     std::unique_ptr<ParticleSystem> system = ParseSource(bytes, &error);
     if (!system)
     {
@@ -72,7 +72,7 @@ int Inspect(const std::wstring& input, const std::wstring& output)
         return kExitSource;
     }
     nlohmann::json dump = particle_json::ParticleSystemJson(*system);
-    std::string path, reason;
+    std::string    path, reason;
     if (particle_json::FindInvalidInspectValue(dump, &path, &reason))
     {
         fprintf(stderr, "[tool] the source holds a value inspect cannot report: %s %s\n", path.c_str(), reason.c_str());
@@ -86,8 +86,8 @@ int Inspect(const std::wstring& input, const std::wstring& output)
         fwprintf(stderr, L"[tool] cannot write %ls (error %lu)\n", output.c_str(), GetLastError());
         return kExitIo;
     }
-    fprintf(stderr, "[tool] verb=inspect exit=0 emitters=%zu sourceDocumentHash=%s\n",
-            system->getEmitters().size(), hash.c_str());
+    fprintf(stderr, "[tool] verb=inspect exit=0 emitters=%zu sourceDocumentHash=%s\n", system->getEmitters().size(),
+            hash.c_str());
     return kExitOk;
 }
 
@@ -110,11 +110,16 @@ int Validate(const std::wstring& input, const std::wstring& output)
         return kExitUsage;
     }
     nlohmann::json findings = nlohmann::json::array();
-    nlohmann::json report = {
-        {"schema", 1}, {"verb", "validate"}, {"sourceDocumentHash", nullptr}, {"internalName", nullptr},
-        {"derivedName", DeriveParticleSystemName(input)}, {"canonical", nullptr}, {"textureResolution", "unverified"},
+    nlohmann::json report   = {
+        {"schema", 1},
+        {"verb", "validate"},
+        {"sourceDocumentHash", nullptr},
+        {"internalName", nullptr},
+        {"derivedName", DeriveParticleSystemName(input)},
+        {"canonical", nullptr},
+        {"textureResolution", "unverified"},
     };
-    std::string bytes;
+    std::string                     bytes;
     std::unique_ptr<ParticleSystem> system;
     if (ReadSource(input, &bytes) != kExitOk)
         findings.push_back(Finding("error", "read-failed", "the source could not be read"));
@@ -136,9 +141,11 @@ int Validate(const std::wstring& input, const std::wstring& output)
         if (particle_json::FindInvalidInspectValue(particle_json::ParticleSystemJson(*system), &path, &reason))
             findings.push_back(Finding("error", "invalid-value", reason, path));
         if (system->getName() != report["derivedName"].get<std::string>())
-            findings.push_back(Finding("warning", "internal-name",
-                "the internal name '" + system->getName() + "' differs from '" + report["derivedName"].get<std::string>() +
-                "', the name the file name gives; the game registers the effect under the internal name"));
+            findings.push_back(
+                Finding("warning", "internal-name",
+                        "the internal name '" + system->getName() + "' differs from '" +
+                            report["derivedName"].get<std::string>() +
+                            "', the name the file name gives; the game registers the effect under the internal name"));
         const std::vector<ParticleSystem::Emitter*>& emitters = system->getEmitters();
         for (size_t i = 0; i < emitters.size(); i++)
         {
@@ -148,8 +155,9 @@ int Validate(const std::wstring& input, const std::wstring& output)
                 const EditResult atlas = ClassifyAtlasIndex(*emitters[i], key.value);
                 if (atlas.outcome == EditOutcome::OutOfGrid)
                     findings.push_back(Finding("advisory", "atlas-out-of-grid", atlas.reason,
-                        "emitters[" + std::to_string(i) + "].tracks[" + std::to_string(ParticleSystem::TRACK_INDEX) +
-                        "].keys[" + std::to_string(k) + "]"));
+                                               "emitters[" + std::to_string(i) + "].tracks[" +
+                                                   std::to_string(ParticleSystem::TRACK_INDEX) + "].keys[" +
+                                                   std::to_string(k) + "]"));
                 k++;
             }
         }
@@ -157,8 +165,8 @@ int Validate(const std::wstring& input, const std::wstring& output)
     }
     bool valid = true;
     for (const nlohmann::json& finding : findings) valid = valid && finding["severity"] != "error";
-    const int code = valid ? kExitOk : kExitSource;
-    report["valid"] = valid;
+    const int code     = valid ? kExitOk : kExitSource;
+    report["valid"]    = valid;
     report["exitCode"] = code;
     report["findings"] = findings;
     // A name that is not UTF-8 is already an error finding; replace its bytes
@@ -168,29 +176,46 @@ int Validate(const std::wstring& input, const std::wstring& output)
         fwprintf(stderr, L"[tool] cannot write %ls (error %lu)\n", output.c_str(), GetLastError());
         return kExitIo;
     }
-    fprintf(stderr, "[tool] verb=validate exit=%d valid=%s findings=%zu\n", code, valid ? "true" : "false", findings.size());
+    fprintf(stderr, "[tool] verb=validate exit=%d valid=%s findings=%zu\n", code, valid ? "true" : "false",
+            findings.size());
     return code;
 }
 
 // The request verbs (patch, reorder): the four paths must name four different
 // files. The report is written for every outcome once they do.
-typedef int (*RequestRunner)(const std::string& source, const std::string& hash, const std::string& request,
-                             const std::wstring& input, const std::wstring& output, nlohmann::json* report);
+typedef int (*RequestRunner)(const std::string&  source,
+                             const std::string&  hash,
+                             const std::string&  request,
+                             const std::wstring& input,
+                             const std::wstring& output,
+                             nlohmann::json*     report);
 
-int RunPatchVerb(const std::string& source, const std::string& hash, const std::string& request,
-                 const std::wstring& input, const std::wstring& output, nlohmann::json* report)
+int RunPatchVerb(const std::string&  source,
+                 const std::string&  hash,
+                 const std::string&  request,
+                 const std::wstring& input,
+                 const std::wstring& output,
+                 nlohmann::json*     report)
 {
     return RunPatch(source, hash, request, input, output, PatchHooks(), report);
 }
 
-int RunReorderVerb(const std::string& source, const std::string& hash, const std::string& request,
-                   const std::wstring&, const std::wstring& output, nlohmann::json* report)
+int RunReorderVerb(const std::string& source,
+                   const std::string& hash,
+                   const std::string& request,
+                   const std::wstring&,
+                   const std::wstring& output,
+                   nlohmann::json*     report)
 {
     return RunReorder(source, hash, request, output, report);
 }
 
-int RequestVerb(const char* verb, RequestRunner runner, const std::wstring& input, const std::wstring& request,
-                const std::wstring& output, const std::wstring& reportPath)
+int RequestVerb(const char*         verb,
+                RequestRunner       runner,
+                const std::wstring& input,
+                const std::wstring& request,
+                const std::wstring& output,
+                const std::wstring& reportPath)
 {
     const std::wstring* paths[] = {&input, &request, &output, &reportPath};
     for (int i = 0; i < 4; i++)
@@ -201,25 +226,40 @@ int RequestVerb(const char* verb, RequestRunner runner, const std::wstring& inpu
                 return kExitUsage;
             }
     nlohmann::json report;
-    int code = kExitOk;
-    std::string source, requestBytes, error;
+    int            code = kExitOk;
+    std::string    source, requestBytes, error;
     if (!ReadFileBytes(input, &source, &error))
     {
-        code = kExitSource;
-        report = {{"schema", 1}, {"verb", verb}, {"outcome", "refused"}, {"exitCode", code},
-                  {"refusal", {{"category", "source-invalid"}, {"reason", "the source could not be read: " + error}, {"op", nullptr}}}};
+        code   = kExitSource;
+        report = {
+            {"schema", 1},
+            {"verb", verb},
+            {"outcome", "refused"},
+            {"exitCode", code},
+            {"refusal",
+             {{"category", "source-invalid"}, {"reason", "the source could not be read: " + error}, {"op", nullptr}}}};
     }
     else if (!ReadFileBytes(request, &requestBytes, &error))
     {
-        code = kExitUsage;
-        report = {{"schema", 1}, {"verb", verb}, {"outcome", "refused"}, {"exitCode", code},
-                  {"refusal", {{"category", "request-malformed"}, {"reason", "the request could not be read: " + error}, {"op", nullptr}}}};
+        code   = kExitUsage;
+        report = {{"schema", 1},
+                  {"verb", verb},
+                  {"outcome", "refused"},
+                  {"exitCode", code},
+                  {"refusal",
+                   {{"category", "request-malformed"},
+                    {"reason", "the request could not be read: " + error},
+                    {"op", nullptr}}}};
     }
     else if (const std::string hash = Sha256Hex(source); hash.empty())
     {
-        code = kExitInternal;
-        report = {{"schema", 1}, {"verb", verb}, {"outcome", "refused"}, {"exitCode", code},
-                  {"refusal", {{"category", "internal"}, {"reason", "the source could not be hashed"}, {"op", nullptr}}}};
+        code   = kExitInternal;
+        report = {
+            {"schema", 1},
+            {"verb", verb},
+            {"outcome", "refused"},
+            {"exitCode", code},
+            {"refusal", {{"category", "internal"}, {"reason", "the source could not be hashed"}, {"op", nullptr}}}};
     }
     else
         code = runner(source, hash, requestBytes, input, output, &report);
@@ -231,8 +271,9 @@ int RequestVerb(const char* verb, RequestRunner runner, const std::wstring& inpu
         return kExitIo;
     }
     fprintf(stderr, "[tool] verb=%s exit=%d", verb, code);
-    if (report.contains("refusal")) fprintf(stderr, " %s: %s", report["refusal"]["category"].get<std::string>().c_str(),
-                                            report["refusal"]["reason"].get<std::string>().c_str());
+    if (report.contains("refusal"))
+        fprintf(stderr, " %s: %s", report["refusal"]["category"].get<std::string>().c_str(),
+                report["refusal"]["reason"].get<std::string>().c_str());
     fprintf(stderr, "\n");
     return code;
 }
@@ -251,13 +292,20 @@ int BuildVerb(const std::wstring& specPath, const std::wstring& output, const st
                 return kExitUsage;
             }
     nlohmann::json report;
-    int code = kExitOk;
-    std::string spec, error;
+    int            code = kExitOk;
+    std::string    spec, error;
     if (!ReadFileBytes(specPath, &spec, &error))
     {
-        code = kExitUsage;
-        report = {{"schema", 1}, {"verb", "build"}, {"outcome", "refused"}, {"exitCode", code},
-                  {"refusal", {{"category", "spec-malformed"}, {"reason", "the spec could not be read: " + error}, {"emitter", nullptr}, {"op", nullptr}}}};
+        code   = kExitUsage;
+        report = {{"schema", 1},
+                  {"verb", "build"},
+                  {"outcome", "refused"},
+                  {"exitCode", code},
+                  {"refusal",
+                   {{"category", "spec-malformed"},
+                    {"reason", "the spec could not be read: " + error},
+                    {"emitter", nullptr},
+                    {"op", nullptr}}}};
     }
     else
         code = RunBuild(spec, output, BuildHooks(), &report);
@@ -267,8 +315,9 @@ int BuildVerb(const std::wstring& specPath, const std::wstring& output, const st
         return kExitIo;
     }
     fprintf(stderr, "[tool] verb=build exit=%d", code);
-    if (report.contains("refusal")) fprintf(stderr, " %s: %s", report["refusal"]["category"].get<std::string>().c_str(),
-                                            report["refusal"]["reason"].get<std::string>().c_str());
+    if (report.contains("refusal"))
+        fprintf(stderr, " %s: %s", report["refusal"]["category"].get<std::string>().c_str(),
+                report["refusal"]["reason"].get<std::string>().c_str());
     fprintf(stderr, "\n");
     return code;
 }
@@ -295,8 +344,8 @@ int Index(const std::vector<std::wstring>& args)
         return kExitUsage;
     }
     nlohmann::json records;
-    std::string error;
-    const int code = RunIndex(stack, &records, &error);
+    std::string    error;
+    const int      code = RunIndex(stack, &records, &error);
     if (code != kExitOk)
     {
         fprintf(stderr, "[tool] verb=index exit=%d %s\n", code, error.c_str());
@@ -320,7 +369,8 @@ int Run(const std::vector<std::wstring>& args)
     // GUI run mode.
     if (args.size() < 3 || args[1] != L"--tool")
     {
-        fwprintf(stderr, L"[tool] --tool must be the first argument and cannot be combined with other run modes\n%ls", kUsage);
+        fwprintf(stderr, L"[tool] --tool must be the first argument and cannot be combined with other run modes\n%ls",
+                 kUsage);
         return kExitUsage;
     }
     if (args[2] == L"inspect" && args.size() == 6 && args[4] == L"--out" && !args[3].empty() && !args[5].empty())
@@ -330,14 +380,13 @@ int Run(const std::vector<std::wstring>& args)
     if (args[2] == L"patch" && args.size() == 9 && args[5] == L"--out" && args[7] == L"--report" && !args[3].empty() &&
         !args[4].empty() && !args[6].empty() && !args[8].empty())
         return RequestVerb("patch", RunPatchVerb, args[3], args[4], args[6], args[8]);
-    if (args[2] == L"reorder" && args.size() == 9 && args[5] == L"--out" && args[7] == L"--report" && !args[3].empty() &&
-        !args[4].empty() && !args[6].empty() && !args[8].empty())
+    if (args[2] == L"reorder" && args.size() == 9 && args[5] == L"--out" && args[7] == L"--report" &&
+        !args[3].empty() && !args[4].empty() && !args[6].empty() && !args[8].empty())
         return RequestVerb("reorder", RunReorderVerb, args[3], args[4], args[6], args[8]);
     if (args[2] == L"build" && args.size() == 8 && args[4] == L"--out" && args[6] == L"--report" && !args[3].empty() &&
         !args[5].empty() && !args[7].empty())
         return BuildVerb(args[3], args[5], args[7]);
-    if (args[2] == L"index" && args.size() >= 6 && args[3] == L"--out" && !args[4].empty())
-        return Index(args);
+    if (args[2] == L"index" && args.size() >= 6 && args[3] == L"--out" && !args[4].empty()) return Index(args);
     fwprintf(stderr, L"[tool] unrecognised arguments\n%ls", kUsage);
     return kExitUsage;
 }

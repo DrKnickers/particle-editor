@@ -12,18 +12,19 @@
 
 #include "WindowCapture.h"
 
-#include <objbase.h>   // IStream / IUnknown for GDI+ (matches HostWindow.cpp)
+#include <objbase.h> // IStream / IUnknown for GDI+ (matches HostWindow.cpp)
 #include <gdiplus.h>
-#include "GdiplusEncode.h"   // host::GdiplusEncoderClsid (DRY cpp-host-1)
-#include <cstdio>      // fwprintf / stderr for SnapWindowOneShot diagnostics
-#include <algorithm>   // std::clamp (MaxLumaInRect region)
-#include <vector>      // grabbed pixel buffers
+#include "GdiplusEncode.h" // host::GdiplusEncoderClsid (DRY cpp-host-1)
+#include <cstdio>          // fwprintf / stderr for SnapWindowOneShot diagnostics
+#include <algorithm>       // std::clamp (MaxLumaInRect region)
+#include <vector>          // grabbed pixel buffers
 
 #ifndef PW_RENDERFULLCONTENT
 #define PW_RENDERFULLCONTENT 0x00000002
 #endif
 
-namespace host {
+namespace host
+{
 
 // PNG encoder-CLSID lookup now shared via host/GdiplusEncode.h — this used
 // to keep its own uncached copy.
@@ -50,25 +51,30 @@ bool GrabWindowPixels(HWND hwnd, std::vector<unsigned char>& bgra, int& w, int& 
     if (!s_mem) s_mem = CreateCompatibleDC(screen);
     if (s_mem && (!s_bmp || s_w != w || s_h != h))
     {
-        if (s_bmp) { DeleteObject(s_bmp); s_bmp = nullptr; }
+        if (s_bmp)
+        {
+            DeleteObject(s_bmp);
+            s_bmp = nullptr;
+        }
         s_bmp = CreateCompatibleBitmap(screen, w, h);
-        s_w = w; s_h = h;
+        s_w   = w;
+        s_h   = h;
     }
 
     bool ok = false;
     if (s_mem && s_bmp)
     {
-        HGDIOBJ oldb  = SelectObject(s_mem, s_bmp);
-        const BOOL pw = PrintWindow(hwnd, s_mem, PW_RENDERFULLCONTENT);
+        HGDIOBJ    oldb = SelectObject(s_mem, s_bmp);
+        const BOOL pw   = PrintWindow(hwnd, s_mem, PW_RENDERFULLCONTENT);
         SelectObject(s_mem, oldb);
         if (pw)
         {
-            BITMAPINFO bi = {};
+            BITMAPINFO bi              = {};
             bi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
             bi.bmiHeader.biWidth       = w;
-            bi.bmiHeader.biHeight      = -h;  // top-down rows
+            bi.bmiHeader.biHeight      = -h; // top-down rows
             bi.bmiHeader.biPlanes      = 1;
-            bi.bmiHeader.biBitCount    = 32;  // BGRA
+            bi.bmiHeader.biBitCount    = 32; // BGRA
             bi.bmiHeader.biCompression = BI_RGB;
             bgra.resize(static_cast<size_t>(w) * h * 4);
             ok = (GetDIBits(s_mem, s_bmp, 0, h, bgra.data(), &bi, DIB_RGB_COLORS) == h);
@@ -86,8 +92,7 @@ bool EncodeBgraToPng(const unsigned char* bgra, int w, int h, const std::wstring
     // 32bppRGB: the X8 alpha byte from the DDB is ignored (undefined after
     // PrintWindow); output parity vs the old HBITMAP path was checked with a
     // per-frame SSIM comparison.
-    Gdiplus::Bitmap gb(w, h, w * 4, PixelFormat32bppRGB,
-                       const_cast<BYTE*>(bgra));
+    Gdiplus::Bitmap gb(w, h, w * 4, PixelFormat32bppRGB, const_cast<BYTE*>(bgra));
     return gb.Save(path.c_str(), &clsid, nullptr) == Gdiplus::Ok;
 }
 
@@ -98,13 +103,12 @@ bool CaptureWindowToPng(HWND hwnd, const std::wstring& path)
     // allocation fails, so a capture under handle exhaustion is never saved
     // as a valid-but-BLANK PNG.
     std::vector<unsigned char> bgra;
-    int w = 0, h = 0;
+    int                        w = 0, h = 0;
     if (!GrabWindowPixels(hwnd, bgra, w, h)) return false;
     return EncodeBgraToPng(bgra.data(), w, h, path);
 }
 
-int MaxLumaInRect(const unsigned char* bgra, int w, int h,
-                  double x0, double y0, double x1, double y1)
+int MaxLumaInRect(const unsigned char* bgra, int w, int h, double x0, double y0, double x1, double y1)
 {
     if (!bgra || w <= 0 || h <= 0) return -1;
     const int rx0 = std::clamp(static_cast<int>(x0 * w), 0, w);
@@ -118,7 +122,7 @@ int MaxLumaInRect(const unsigned char* bgra, int w, int h,
         const unsigned char* row = bgra + (static_cast<size_t>(y) * w + rx0) * 4;
         for (int x = rx0; x < rx1; ++x, row += 4)
         {
-            const int s = row[0] + row[1] + row[2];  // B+G+R
+            const int s = row[0] + row[1] + row[2]; // B+G+R
             if (s > best) best = s;
         }
     }
@@ -128,7 +132,7 @@ int MaxLumaInRect(const unsigned char* bgra, int w, int h,
 int ProbeWindowMaxLuma(HWND hwnd, double x0, double y0, double x1, double y1)
 {
     std::vector<unsigned char> bgra;
-    int w = 0, h = 0;
+    int                        w = 0, h = 0;
     if (!GrabWindowPixels(hwnd, bgra, w, h)) return -1;
     return MaxLumaInRect(bgra.data(), w, h, x0, y0, x1, y1);
 }
@@ -155,7 +159,7 @@ int SnapWindowOneShot(const wchar_t* windowClass, const std::wstring& path)
     }
 
     Gdiplus::GdiplusStartupInput gdiplusStartupInput;
-    ULONG_PTR gdiplusToken = 0;
+    ULONG_PTR                    gdiplusToken = 0;
     if (Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, nullptr) != Gdiplus::Ok)
     {
         fwprintf(stderr, L"snap-window: GDI+ startup failed\n");
@@ -164,9 +168,13 @@ int SnapWindowOneShot(const wchar_t* windowClass, const std::wstring& path)
     const bool ok = CaptureWindowToPng(hwnd, path);
     if (gdiplusToken) Gdiplus::GdiplusShutdown(gdiplusToken);
 
-    if (!ok) { fwprintf(stderr, L"snap-window: capture failed -> %ls\n", path.c_str()); return 1; }
+    if (!ok)
+    {
+        fwprintf(stderr, L"snap-window: capture failed -> %ls\n", path.c_str());
+        return 1;
+    }
     fwprintf(stderr, L"snap-window: wrote %ls\n", path.c_str());
     return 0;
 }
 
-}  // namespace host
+} // namespace host

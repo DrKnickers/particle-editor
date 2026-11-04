@@ -17,7 +17,7 @@
 #include <memory>
 #include <string>
 
-#include "common/utils.h"  // WideToAnsi (DeriveParticleSystemName)
+#include "common/utils.h" // WideToAnsi (DeriveParticleSystemName)
 
 class ParticleSystem;
 
@@ -33,7 +33,7 @@ class ParticleSystem;
 inline std::string DeriveParticleSystemName(const std::wstring& path)
 {
     std::wstring name = path;
-    size_t pos = name.find_last_of(L"\\/");
+    size_t       pos  = name.find_last_of(L"\\/");
     if (pos != std::wstring::npos) name = name.substr(pos + 1);
     pos = name.find_last_of(L'.');
     if (pos != std::wstring::npos) name = name.substr(0, pos);
@@ -44,8 +44,7 @@ inline std::string DeriveParticleSystemName(const std::wstring& path)
 // Read `path` into a fresh ParticleSystem. Returns nullptr on failure.
 // If `errorOut` is non-null, it receives a UTF-8 description of the
 // failure (best-effort; empty when the system returned non-null).
-std::unique_ptr<ParticleSystem> LoadParticleSystem(const std::wstring& path,
-                                                   std::string* errorOut = nullptr);
+std::unique_ptr<ParticleSystem> LoadParticleSystem(const std::wstring& path, std::string* errorOut = nullptr);
 
 // Write `system` to `path` using PhysicalFile. Returns false on
 // failure. The caller is expected to have populated the system's
@@ -55,7 +54,6 @@ std::unique_ptr<ParticleSystem> LoadParticleSystem(const std::wstring& path,
 // must stamp `setName(DeriveParticleSystemName(path))` first (legacy
 // DoSaveFile parity — see the helper's comment above). `errorOut`
 // mirrors LoadParticleSystem's contract.
-bool SaveParticleSystem(ParticleSystem* system, const std::wstring& path,
-                        std::string* errorOut = nullptr);
+bool SaveParticleSystem(ParticleSystem* system, const std::wstring& path, std::string* errorOut = nullptr);
 
 #endif // PARTICLE_SYSTEM_IO_H

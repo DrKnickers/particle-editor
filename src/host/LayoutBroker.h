@@ -22,7 +22,8 @@
 
 class Engine;
 
-namespace host {
+namespace host
+{
 
 class AlphaCompositor;
 // DComp tree compositor (owns the engine
@@ -161,9 +162,16 @@ public:
     // changed, web-stamped) back-dates the start clock to the CSS origin across
     // the IPC hop. A no-op when no DComp compositor is attached (e.g.
     // headless --capture).
-    void StartSceneAnim(int fromX, int fromY, int fromW, int fromH,
-                        int toX, int toY, int toW, int toH,
-                        double durationMs, double msElapsedAtSend);
+    void StartSceneAnim(int    fromX,
+                        int    fromY,
+                        int    fromW,
+                        int    fromH,
+                        int    toX,
+                        int    toY,
+                        int    toW,
+                        int    toH,
+                        double durationMs,
+                        double msElapsedAtSend);
 
     // Advance an in-flight scene anim to `qpcNow` (QueryPerformanceCounter ticks,
     // the host render clock). Applies the time-lerped rect through the internal
@@ -245,33 +253,33 @@ private:
     Compositor* m_dcompCompositor = nullptr;
     // Scene rect in MAIN-HWND-CLIENT coords. (0/0/0/0)
     // disables the compositor mask.
-    int     m_sceneX = 0;
-    int     m_sceneY = 0;
-    int     m_sceneW = 0;
-    int     m_sceneH = 0;
+    int m_sceneX = 0;
+    int m_sceneY = 0;
+    int m_sceneW = 0;
+    int m_sceneH = 0;
     // Track the last applied size so we only fire a (relatively
     // expensive) D3D9 device Reset when the size actually changed.
-    int     m_lastW;
-    int     m_lastH;
+    int m_lastW;
+    int m_lastH;
     // last viewport rect (in main-client coords).
-    int     m_lastX = 0;
-    int     m_lastY = 0;
+    int m_lastX = 0;
+    int m_lastY = 0;
     // main's client size at the last Apply.
-    int     m_lastClientW = 0;
-    int     m_lastClientH = 0;
+    int m_lastClientW = 0;
+    int m_lastClientH = 0;
 
     // [resize-perf] m_resetW/H track the popup size at the
     // last completed engine reset so SettleDeferredReset can tell whether
     // a per-tick reset failed (m_lastW/H ≠ m_resetW/H) without poking at
     // the engine's presentation parameters.
-    int     m_resetW = 0;
-    int     m_resetH = 0;
+    int m_resetW = 0;
+    int m_resetH = 0;
 
     // [resize-perf] The size last given to the popup (0 = none yet or
     // collapsed), which is m_lastW/H except under resize slack.
-    int     m_popupW = 0;
-    int     m_popupH = 0;
-    bool    m_resizeSlack = false;
+    int  m_popupW      = 0;
+    int  m_popupH      = 0;
+    bool m_resizeSlack = false;
 
     // In-flight dock-slide interpolation. `active` is false when idle.
     // Rects are MAIN-HWND-CLIENT device px (held as float so the per-frame lerp
@@ -279,9 +287,9 @@ private:
     // count back-dated to the CSS origin; `durMs` is the CSS duration.
     struct ViewportAnim
     {
-        bool      active   = false;
+        bool      active = false;
         float     fromX = 0, fromY = 0, fromW = 0, fromH = 0;
-        float     toX   = 0, toY   = 0, toW   = 0, toH   = 0;
+        float     toX = 0, toY = 0, toW = 0, toH = 0;
         long long startQpc = 0;
         double    durMs    = 0.0;
     };

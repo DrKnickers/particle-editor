@@ -9,7 +9,7 @@
 #include "common/utils.h"
 
 #include <windows.h>
-#include <shlobj.h>      // SHGetFolderPathW
+#include <shlobj.h> // SHGetFolderPathW
 #include <algorithm>
 #include <cwctype>
 #include <cstdio>
@@ -19,11 +19,12 @@
 #pragma comment(lib, "Shell32.lib")
 
 using namespace TexturePalette;
-using std::wstring;
-using std::vector;
 using std::unordered_map;
+using std::vector;
+using std::wstring;
 
-namespace {
+namespace
+{
 
 // Lowercase a wstring in-place using the C locale. INI section keys
 // derive from the lowercased mod path so that the user opening
@@ -43,7 +44,7 @@ wstring EncodeSlotMask(uint8_t mask)
 {
     if ((mask & (SLOT_COLOR | SLOT_BUMP)) == (SLOT_COLOR | SLOT_BUMP)) return L"color,bump";
     if (mask & SLOT_COLOR) return L"color";
-    if (mask & SLOT_BUMP)  return L"bump";
+    if (mask & SLOT_BUMP) return L"bump";
     return L"";
 }
 
@@ -51,7 +52,7 @@ uint8_t DecodeSlotMask(const wstring& s)
 {
     uint8_t m = SLOT_NONE;
     if (s.find(L"color") != wstring::npos) m |= SLOT_COLOR;
-    if (s.find(L"bump")  != wstring::npos) m |= SLOT_BUMP;
+    if (s.find(L"bump") != wstring::npos) m |= SLOT_BUMP;
     return m;
 }
 
@@ -85,8 +86,7 @@ uint64_t Now()
 wstring AppDataDir()
 {
     wchar_t buf[MAX_PATH];
-    if (SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, SHGFP_TYPE_CURRENT, buf) == S_OK)
-        return wstring(buf);
+    if (SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, SHGFP_TYPE_CURRENT, buf) == S_OK) return wstring(buf);
     return wstring();
 }
 
@@ -96,7 +96,7 @@ wstring PaletteDir()
     // directory must already exist (IniPath's CreateDirectoryW is single-level;
     // the test pre-creates its temp dir).
     wchar_t overrideBuf[MAX_PATH];
-    DWORD n = GetEnvironmentVariableW(L"ALO_PALETTE_DIR", overrideBuf, _countof(overrideBuf));
+    DWORD   n = GetEnvironmentVariableW(L"ALO_PALETTE_DIR", overrideBuf, _countof(overrideBuf));
     if (n > 0 && n < _countof(overrideBuf)) return wstring(overrideBuf, n);
     if (n >= _countof(overrideBuf))
     {
@@ -110,12 +110,11 @@ wstring PaletteDir()
     return appData + L"\\AloParticleEditor";
 }
 
-wstring IniGetString(const wstring& iniPath, const wstring& section,
-                     const wstring& key, const wstring& defaultValue)
+wstring IniGetString(const wstring& iniPath, const wstring& section, const wstring& key, const wstring& defaultValue)
 {
     wchar_t buf[2048];
-    DWORD n = GetPrivateProfileStringW(section.c_str(), key.c_str(), defaultValue.c_str(),
-                                       buf, _countof(buf), iniPath.c_str());
+    DWORD   n = GetPrivateProfileStringW(section.c_str(), key.c_str(), defaultValue.c_str(), buf, _countof(buf),
+                                         iniPath.c_str());
     return wstring(buf, n);
 }
 
@@ -144,7 +143,7 @@ void IniEraseSection(const wstring& iniPath, const wstring& section)
 #ifndef NDEBUG
 void DbgPrintf(const char* fmt, ...)
 {
-    char buf[512];
+    char    buf[512];
     va_list ap;
     va_start(ap, fmt);
     vsprintf_s(buf, fmt, ap);
@@ -160,14 +159,9 @@ void DbgPrintf(const char*, ...) {}
 // ============================================================================
 // Store
 
-Store::Store()
-    : m_iniPathChecked(false)
-{
-}
+Store::Store() : m_iniPathChecked(false) {}
 
-Store::~Store()
-{
-}
+Store::~Store() {}
 
 Store& Store::Instance()
 {
@@ -193,7 +187,11 @@ wstring Store::IniPath() const
     m_iniPathChecked = true;
 
     const wstring dir = PaletteDir();
-    if (dir.empty()) { m_iniPathCache.clear(); return m_iniPathCache; }
+    if (dir.empty())
+    {
+        m_iniPathCache.clear();
+        return m_iniPathCache;
+    }
 
     CreateDirectoryW(dir.c_str(), NULL);
     m_iniPathCache = dir + L"\\texture-palettes.ini";
@@ -202,10 +200,10 @@ wstring Store::IniPath() const
 
 wstring Store::SectionFor(const wstring& modPath) const
 {
-    const wstring lowered = LowercaseCopy(modPath);
-    const std::string utf8 = WideToAnsi(lowered);
-    const unsigned long h = crc32(utf8.c_str(), utf8.size());
-    wchar_t buf[24];
+    const wstring       lowered = LowercaseCopy(modPath);
+    const std::string   utf8    = WideToAnsi(lowered);
+    const unsigned long h       = crc32(utf8.c_str(), utf8.size());
+    wchar_t             buf[24];
     swprintf_s(buf, L"mod=%08lx", h);
     return wstring(buf);
 }
@@ -219,8 +217,7 @@ void Store::SetActiveMod(const wstring& modPath)
         // user toggling between Unmodded and ModA should still find
         // ModA's palette intact when they switch back. Section wiping
         // is reserved for Reset View Settings (ClearActiveMod).
-        DbgPrintf("[Palette] mod switch from='%s' to=unmodded\n",
-                  WideToAnsi(m_activeMod).c_str());
+        DbgPrintf("[Palette] mod switch from='%s' to=unmodded\n", WideToAnsi(m_activeMod).c_str());
         m_activeMod.clear();
         return;
     }
@@ -237,10 +234,8 @@ void Store::SetActiveMod(const wstring& modPath)
     m_activeMod = modPath;
     LoadOrInit(modPath);
 
-    DbgPrintf("[Palette] mod switch from='%s' to='%s' loadedEntries=%zu\n",
-              WideToAnsi(oldMod).c_str(),
-              WideToAnsi(modPath).c_str(),
-              m_byMod[newKey].entries.size());
+    DbgPrintf("[Palette] mod switch from='%s' to='%s' loadedEntries=%zu\n", WideToAnsi(oldMod).c_str(),
+              WideToAnsi(modPath).c_str(), m_byMod[newKey].entries.size());
 }
 
 void Store::ClearActiveMod()
@@ -259,7 +254,7 @@ void Store::ClearActiveMod()
 Store::ModPalette& Store::LoadOrInit(const wstring& modPath)
 {
     const wstring key = LowercaseCopy(modPath);
-    auto it = m_byMod.find(key);
+    auto          it  = m_byMod.find(key);
     if (it != m_byMod.end()) return it->second;
 
     ModPalette mp;
@@ -268,7 +263,7 @@ Store::ModPalette& Store::LoadOrInit(const wstring& modPath)
     const wstring iniPath = m_ephemeral ? wstring() : IniPath();
     if (!iniPath.empty())
     {
-        const wstring section = SectionFor(modPath);
+        const wstring section   = SectionFor(modPath);
         const wstring filterStr = IniGetString(iniPath, section, L"Filter", L"Color");
         if (filterStr == L"Bump") mp.filter = SLOT_BUMP;
 
@@ -279,8 +274,8 @@ Store::ModPalette& Store::LoadOrInit(const wstring& modPath)
         {
             wchar_t key2[32];
             swprintf_s(key2, L"Pin%d", i);
-            wstring v = IniGetString(iniPath, section, key2, L"");
-            size_t pipe = v.find(L'|');
+            wstring v    = IniGetString(iniPath, section, key2, L"");
+            size_t  pipe = v.find(L'|');
             if (pipe == wstring::npos) continue;
             const wstring name = v.substr(0, pipe);
             const wstring mask = v.substr(pipe + 1);
@@ -292,8 +287,8 @@ Store::ModPalette& Store::LoadOrInit(const wstring& modPath)
             const uint8_t m = DecodeSlotMask(mask);
             if (m == SLOT_NONE)
             {
-                DbgPrintf("[Palette] dropped pin '%s' with bad slot mask '%s'\n",
-                          WideToAnsi(name).c_str(), WideToAnsi(mask).c_str());
+                DbgPrintf("[Palette] dropped pin '%s' with bad slot mask '%s'\n", WideToAnsi(name).c_str(),
+                          WideToAnsi(mask).c_str());
                 continue;
             }
             Entry e;
@@ -311,8 +306,8 @@ Store::ModPalette& Store::LoadOrInit(const wstring& modPath)
         {
             wchar_t key2[32];
             swprintf_s(key2, L"Recent%d", i);
-            wstring v = IniGetString(iniPath, section, key2, L"");
-            size_t pipe1 = v.find(L'|');
+            wstring v     = IniGetString(iniPath, section, key2, L"");
+            size_t  pipe1 = v.find(L'|');
             if (pipe1 == wstring::npos) continue;
             size_t pipe2 = v.find(L'|', pipe1 + 1);
             if (pipe2 == wstring::npos) continue;
@@ -326,8 +321,8 @@ Store::ModPalette& Store::LoadOrInit(const wstring& modPath)
             const uint8_t m = DecodeSlotMask(mask);
             if (m == SLOT_NONE)
             {
-                DbgPrintf("[Palette] dropped recent '%s' with bad slot mask '%s'\n",
-                          WideToAnsi(name).c_str(), WideToAnsi(mask).c_str());
+                DbgPrintf("[Palette] dropped recent '%s' with bad slot mask '%s'\n", WideToAnsi(name).c_str(),
+                          WideToAnsi(mask).c_str());
                 continue;
             }
             Entry e;
@@ -347,7 +342,7 @@ SlotMask Store::ActiveFilter() const
 {
     if (m_activeMod.empty()) return SLOT_COLOR;
     const wstring key = LowercaseCopy(m_activeMod);
-    auto it = m_byMod.find(key);
+    auto          it  = m_byMod.find(key);
     if (it == m_byMod.end()) return SLOT_COLOR;
     return it->second.filter;
 }
@@ -379,11 +374,10 @@ void Store::TouchRecent(const wstring& filename, SlotMask usedAs)
     {
         if (e.filename == filename)
         {
-            e.slotMask  |= (uint8_t)usedAs;
+            e.slotMask |= (uint8_t)usedAs;
             e.lastUsedNs = Now();
             FlushMod(m_activeMod, mp);
-            DbgPrintf("[Palette] touch recent name='%s' slot=%s (existing)\n",
-                      WideToAnsi(filename).c_str(),
+            DbgPrintf("[Palette] touch recent name='%s' slot=%s (existing)\n", WideToAnsi(filename).c_str(),
                       usedAs == SLOT_COLOR ? "Color" : "Bump");
             return;
         }
@@ -417,16 +411,14 @@ void Store::TouchRecent(const wstring& filename, SlotMask usedAs)
         }
         if (oldestIdx != (size_t)-1)
         {
-            DbgPrintf("[Palette] evicted oldest recent '%s'\n",
-                      WideToAnsi(mp.entries[oldestIdx].filename).c_str());
+            DbgPrintf("[Palette] evicted oldest recent '%s'\n", WideToAnsi(mp.entries[oldestIdx].filename).c_str());
             mp.entries.erase(mp.entries.begin() + oldestIdx);
         }
     }
 
     mp.entries.push_back(e);
     FlushMod(m_activeMod, mp);
-    DbgPrintf("[Palette] touch recent name='%s' slot=%s (new)\n",
-              WideToAnsi(filename).c_str(),
+    DbgPrintf("[Palette] touch recent name='%s' slot=%s (new)\n", WideToAnsi(filename).c_str(),
               usedAs == SLOT_COLOR ? "Color" : "Bump");
 }
 
@@ -446,8 +438,7 @@ bool Store::TogglePin(const wstring& filename)
                 e.isPinned   = false;
                 e.lastUsedNs = Now();
                 FlushMod(m_activeMod, mp);
-                DbgPrintf("[Palette] toggle pin name='%s' newState=false\n",
-                          WideToAnsi(filename).c_str());
+                DbgPrintf("[Palette] toggle pin name='%s' newState=false\n", WideToAnsi(filename).c_str());
                 return true;
             }
             else
@@ -459,14 +450,12 @@ bool Store::TogglePin(const wstring& filename)
                 }
                 if (pinCount >= MAX_PINS)
                 {
-                    DbgPrintf("[Palette] pin rejected (full): '%s'\n",
-                              WideToAnsi(filename).c_str());
+                    DbgPrintf("[Palette] pin rejected (full): '%s'\n", WideToAnsi(filename).c_str());
                     return false;
                 }
                 e.isPinned = true;
                 FlushMod(m_activeMod, mp);
-                DbgPrintf("[Palette] toggle pin name='%s' newState=true\n",
-                          WideToAnsi(filename).c_str());
+                DbgPrintf("[Palette] toggle pin name='%s' newState=true\n", WideToAnsi(filename).c_str());
                 return true;
             }
         }
@@ -479,7 +468,7 @@ vector<Entry> Store::Pins(SlotMask filter) const
     vector<Entry> out;
     if (m_activeMod.empty()) return out;
     const wstring key = LowercaseCopy(m_activeMod);
-    auto it = m_byMod.find(key);
+    auto          it  = m_byMod.find(key);
     if (it == m_byMod.end()) return out;
     for (const Entry& e : it->second.entries)
     {
@@ -493,15 +482,13 @@ vector<Entry> Store::Recents(SlotMask filter) const
     vector<Entry> out;
     if (m_activeMod.empty()) return out;
     const wstring key = LowercaseCopy(m_activeMod);
-    auto it = m_byMod.find(key);
+    auto          it  = m_byMod.find(key);
     if (it == m_byMod.end()) return out;
     for (const Entry& e : it->second.entries)
     {
         if (!e.isPinned && (e.slotMask & filter)) out.push_back(e);
     }
-    std::sort(out.begin(), out.end(), [](const Entry& a, const Entry& b) {
-        return a.lastUsedNs > b.lastUsedNs;
-    });
+    std::sort(out.begin(), out.end(), [](const Entry& a, const Entry& b) { return a.lastUsedNs > b.lastUsedNs; });
     return out;
 }
 
@@ -521,13 +508,14 @@ void Store::FlushMod(const wstring& modPath, const ModPalette& mp) const
     IniSet(iniPath, section, L"Path", modPath);
     IniSet(iniPath, section, L"Filter", mp.filter == SLOT_BUMP ? L"Bump" : L"Color");
 
-    int pinIdx = 0, recentIdx = 0;
+    int                  pinIdx = 0, recentIdx = 0;
     vector<const Entry*> recentSorted;
     for (const Entry& e : mp.entries)
     {
         if (e.isPinned)
         {
-            wchar_t key[32]; swprintf_s(key, L"Pin%d", pinIdx++);
+            wchar_t key[32];
+            swprintf_s(key, L"Pin%d", pinIdx++);
             wstring val = e.filename + L"|" + EncodeSlotMask(e.slotMask);
             IniSet(iniPath, section, key, val);
         }
@@ -540,11 +528,13 @@ void Store::FlushMod(const wstring& modPath, const ModPalette& mp) const
               [](const Entry* a, const Entry* b) { return a->lastUsedNs > b->lastUsedNs; });
     for (const Entry* e : recentSorted)
     {
-        wchar_t key[32]; swprintf_s(key, L"Recent%d", recentIdx++);
-        wchar_t tsBuf[32]; swprintf_s(tsBuf, L"%llu", (unsigned long long)e->lastUsedNs);
+        wchar_t key[32];
+        swprintf_s(key, L"Recent%d", recentIdx++);
+        wchar_t tsBuf[32];
+        swprintf_s(tsBuf, L"%llu", (unsigned long long)e->lastUsedNs);
         wstring val = e->filename + L"|" + EncodeSlotMask(e->slotMask) + L"|" + tsBuf;
         IniSet(iniPath, section, key, val);
     }
-    IniSetInt(iniPath, section, L"PinCount",    pinIdx);
+    IniSetInt(iniPath, section, L"PinCount", pinIdx);
     IniSetInt(iniPath, section, L"RecentCount", recentIdx);
 }

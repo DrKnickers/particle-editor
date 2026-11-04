@@ -10,32 +10,36 @@ using namespace std;
 // throws. Takes ownership of the IFile* reference.
 vector<unsigned char> ReadAndReleaseCapped(IFile* file, unsigned long maxBytes)
 {
-	if (file == NULL) throw ReadException();
-	const unsigned long size = file->size();
-	// Reject empty OR oversized before allocating (maxBytes == 0 disables the cap).
-	if (size == 0 || (maxBytes != 0 && size > maxBytes)) { file->Release(); throw ReadException(); }
-	vector<unsigned char> bytes(size);
-	unsigned long got;
-	try
-	{
-		got = file->read(bytes.data(), size);
-	}
-	catch (...)
-	{
-		// PhysicalFile::read throws on a ReadFile failure (I/O error, vanished
-		// volume). Without this, the throw skipped the Release below and leaked
-		// the file's HANDLE on every failed load attempt.
-		file->Release();
-		throw;
-	}
-	file->Release();
-	if (got != size) throw ReadException();
-	return bytes;
+    if (file == NULL) throw ReadException();
+    const unsigned long size = file->size();
+    // Reject empty OR oversized before allocating (maxBytes == 0 disables the cap).
+    if (size == 0 || (maxBytes != 0 && size > maxBytes))
+    {
+        file->Release();
+        throw ReadException();
+    }
+    vector<unsigned char> bytes(size);
+    unsigned long         got;
+    try
+    {
+        got = file->read(bytes.data(), size);
+    }
+    catch (...)
+    {
+        // PhysicalFile::read throws on a ReadFile failure (I/O error, vanished
+        // volume). Without this, the throw skipped the Release below and leaked
+        // the file's HANDLE on every failed load attempt.
+        file->Release();
+        throw;
+    }
+    file->Release();
+    if (got != size) throw ReadException();
+    return bytes;
 }
 
 vector<unsigned char> ReadAndRelease(IFile* file)
 {
-	return ReadAndReleaseCapped(file, 0);
+    return ReadAndReleaseCapped(file, 0);
 }
 
 //
@@ -43,76 +47,77 @@ vector<unsigned char> ReadAndRelease(IFile* file)
 //
 unsigned long PhysicalFile::read(void* buffer, unsigned long size)
 {
-	SetFilePointer(hFile, m_position, NULL, FILE_BEGIN);
-	if (!ReadFile(hFile, buffer, size, &size, NULL))
-	{
-		throw ReadException();
-	}
-	m_position = min(m_position + size, m_size);
-	return size;
+    SetFilePointer(hFile, m_position, NULL, FILE_BEGIN);
+    if (!ReadFile(hFile, buffer, size, &size, NULL))
+    {
+        throw ReadException();
+    }
+    m_position = min(m_position + size, m_size);
+    return size;
 }
 
 unsigned long PhysicalFile::write(const void* buffer, unsigned long size)
 {
-	SetFilePointer(hFile, m_position, NULL, FILE_BEGIN);
-	const unsigned long requested = size;
-	if (!WriteFile(hFile, buffer, size, &size, NULL))
-	{
-		throw WriteException();
-	}
-	// A SHORT write is a failed write. WriteFile can succeed while writing
-	// fewer bytes than asked (a full disk or quota being the realistic case),
-	// and callers that discard the returned count would silently produce a
-	// truncated file: ChunkWriter checks the count on payload writes but not
-	// on the four chunk-header backpatches, and the last of those is the final
-	// write in a save. The atomic-save path then sees no exception, treats the
-	// save as successful, and renames the malformed temp over the user's
-	// document. Throwing here makes every call site safe at once.
-	if (size != requested)
-	{
-		throw WriteException();
-	}
-	m_size     = GetFileSize(hFile, NULL);
-	m_position = min(m_position + size, m_size);
-	return size;
+    SetFilePointer(hFile, m_position, NULL, FILE_BEGIN);
+    const unsigned long requested = size;
+    if (!WriteFile(hFile, buffer, size, &size, NULL))
+    {
+        throw WriteException();
+    }
+    // A SHORT write is a failed write. WriteFile can succeed while writing
+    // fewer bytes than asked (a full disk or quota being the realistic case),
+    // and callers that discard the returned count would silently produce a
+    // truncated file: ChunkWriter checks the count on payload writes but not
+    // on the four chunk-header backpatches, and the last of those is the final
+    // write in a save. The atomic-save path then sees no exception, treats the
+    // save as successful, and renames the malformed temp over the user's
+    // document. Throwing here makes every call site safe at once.
+    if (size != requested)
+    {
+        throw WriteException();
+    }
+    m_size     = GetFileSize(hFile, NULL);
+    m_position = min(m_position + size, m_size);
+    return size;
 }
 
 void PhysicalFile::Flush()
 {
-	// Push the written bytes through the OS cache to the device, so a save
-	// that is about to replace the user's document survives a power loss or
-	// crash right after the rename.
-	if (!FlushFileBuffers(hFile))
-	{
-		throw WriteException();
-	}
+    // Push the written bytes through the OS cache to the device, so a save
+    // that is about to replace the user's document survives a power loss or
+    // crash right after the rename.
+    if (!FlushFileBuffers(hFile))
+    {
+        throw WriteException();
+    }
 }
 
 PhysicalFile::PhysicalFile(const wstring& filename, Mode mode)
 {
-	DWORD dwDesiredAccess       = (mode == WRITE ? GENERIC_WRITE : GENERIC_READ);
-	DWORD dwCreationDisposition = (mode == WRITE ? CREATE_ALWAYS : OPEN_EXISTING);
-	hFile = CreateFile(filename.c_str(), dwDesiredAccess, FILE_SHARE_READ, NULL, dwCreationDisposition, FILE_ATTRIBUTE_NORMAL, NULL);
-	if (hFile == INVALID_HANDLE_VALUE)
-	{
-		DWORD error = GetLastError();
-		if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND)
-		{
-			throw FileNotFoundException(filename);
-		}
-		if (mode == WRITE)
-		{
+    DWORD dwDesiredAccess       = (mode == WRITE ? GENERIC_WRITE : GENERIC_READ);
+    DWORD dwCreationDisposition = (mode == WRITE ? CREATE_ALWAYS : OPEN_EXISTING);
+    hFile = CreateFile(filename.c_str(), dwDesiredAccess, FILE_SHARE_READ, NULL, dwCreationDisposition,
+                       FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE)
+    {
+        DWORD error = GetLastError();
+        if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND)
+        {
+            throw FileNotFoundException(filename);
+        }
+        if (mode == WRITE)
+        {
             throw IOException(LoadString(IDS_ERROR_FILE_CREATE, filename.c_str()));
-		}
+        }
         throw IOException(LoadString(IDS_ERROR_FILE_OPEN, filename.c_str()));
-	}
-	m_size     = GetFileSize(hFile, NULL);
-	m_position = 0;
+    }
+    m_size     = GetFileSize(hFile, NULL);
+    m_position = 0;
 }
 
 PhysicalFile::~PhysicalFile()
 {
-	CloseHandle(hFile);
+    CloseHandle(hFile);
 }
 
 //
@@ -120,43 +125,43 @@ PhysicalFile::~PhysicalFile()
 //
 unsigned long SubFile::read(void* buffer, unsigned long size)
 {
-	// Clamp the request to the bytes remaining INSIDE this sub-view. Without
-	// this, a read larger than the sub-file (e.g. XMLTree::parse's 32 KB chunks
-	// on a small packed XML) spills into the adjacent MEG entry's bytes, handing
-	// trailing garbage to the caller -- which broke MEG-packed XML parsing
-	// (skydome lists resolved but failed to parse). Exact-size reads
-	// (ReadAndRelease) are unaffected: size already equals the remaining bytes.
-	const unsigned long remaining = (m_position < m_size) ? (m_size - m_position) : 0;
-	if (size > remaining) size = remaining;
-	if (size == 0) return 0;
-	m_file->seek(m_start + m_position);
-	size = m_file->read(buffer, size);
-	m_position = min(m_position + size, m_size);
-	return size;
+    // Clamp the request to the bytes remaining INSIDE this sub-view. Without
+    // this, a read larger than the sub-file (e.g. XMLTree::parse's 32 KB chunks
+    // on a small packed XML) spills into the adjacent MEG entry's bytes, handing
+    // trailing garbage to the caller -- which broke MEG-packed XML parsing
+    // (skydome lists resolved but failed to parse). Exact-size reads
+    // (ReadAndRelease) are unaffected: size already equals the remaining bytes.
+    const unsigned long remaining = (m_position < m_size) ? (m_size - m_position) : 0;
+    if (size > remaining) size = remaining;
+    if (size == 0) return 0;
+    m_file->seek(m_start + m_position);
+    size       = m_file->read(buffer, size);
+    m_position = min(m_position + size, m_size);
+    return size;
 }
 
 unsigned long SubFile::write(const void* buffer, unsigned long size)
 {
-	m_file->seek(m_start + m_position);
-	size = m_file->write(buffer, size);
-	m_size = m_file->size();
-	m_position = min(m_position + size, m_size);
-	return size;
+    m_file->seek(m_start + m_position);
+    size       = m_file->write(buffer, size);
+    m_size     = m_file->size();
+    m_position = min(m_position + size, m_size);
+    return size;
 }
 
 SubFile::SubFile(IFile* file, unsigned long start, unsigned long size)
 {
-	m_file     = file;
-	m_size     = size;
-	m_start    = start;
-	m_position = 0;
+    m_file     = file;
+    m_size     = size;
+    m_start    = start;
+    m_position = 0;
 
-	m_file->AddRef();
+    m_file->AddRef();
 }
 
 SubFile::~SubFile()
 {
-	m_file->Release();
+    m_file->Release();
 }
 
 //
@@ -164,15 +169,15 @@ SubFile::~SubFile()
 //
 unsigned long MemoryFile::read(void* buffer, unsigned long size)
 {
-	// `m_size - m_position` underflows (both unsigned) if m_position
-	// somehow exceeds m_size, yielding a huge clamp and an OOB memcpy. Guard
-	// the remaining-bytes computation, mirroring SubFile::read above.
-	const unsigned long remaining = (m_position < m_size) ? (m_size - m_position) : 0;
-	if (size > remaining) size = remaining;
-	if (size == 0) return 0;
+    // `m_size - m_position` underflows (both unsigned) if m_position
+    // somehow exceeds m_size, yielding a huge clamp and an OOB memcpy. Guard
+    // the remaining-bytes computation, mirroring SubFile::read above.
+    const unsigned long remaining = (m_position < m_size) ? (m_size - m_position) : 0;
+    if (size > remaining) size = remaining;
+    if (size == 0) return 0;
     memcpy(buffer, &m_data[m_position], size);
-	m_position = m_position + size;
-	return size;
+    m_position = m_position + size;
+    return size;
 }
 
 unsigned long MemoryFile::write(const void* buffer, unsigned long size)
@@ -189,8 +194,8 @@ unsigned long MemoryFile::write(const void* buffer, unsigned long size)
         m_size = m_position + size;
     }
     memcpy(&m_data[m_position], buffer, size);
-	m_position = m_position + size;
-	return size;
+    m_position = m_position + size;
+    return size;
 }
 
 MemoryFile::MemoryFile()
@@ -202,5 +207,5 @@ MemoryFile::MemoryFile()
 
 MemoryFile::~MemoryFile()
 {
-	free(m_data);
+    free(m_data);
 }

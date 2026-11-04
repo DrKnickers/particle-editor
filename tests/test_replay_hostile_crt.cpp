@@ -5,8 +5,8 @@
 
 int main()
 {
-    int failed = 0;
-    uint64_t calls = 99;
+    int      failed = 0;
+    uint64_t calls  = 99;
     if (RunReplayHostileCrt(0, calls) || calls != 0) ++failed;
     for (uint32_t iterations : {1u, 37u, 301u})
     {

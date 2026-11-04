@@ -6,24 +6,16 @@ namespace host
 // The render-golden profile is deliberately narrower than general capture.
 // It is an internal particle-capture contract with one canonical skydome; it
 // must never silently change normal launches or reference-object captures.
-inline bool IsGoldenProfileRequestValid(bool goldenProfile,
-                                        bool hasCaptureAlo,
-                                        bool hasCapturePng,
-                                        bool hasCaptureRef,
-                                        int captureSkydomeSlot)
+inline bool IsGoldenProfileRequestValid(
+    bool goldenProfile, bool hasCaptureAlo, bool hasCapturePng, bool hasCaptureRef, int captureSkydomeSlot)
 {
-    return !goldenProfile ||
-           (hasCaptureAlo &&
-            hasCapturePng &&
-            !hasCaptureRef &&
-            captureSkydomeSlot == 1);
+    return !goldenProfile || (hasCaptureAlo && hasCapturePng && !hasCaptureRef && captureSkydomeSlot == 1);
 }
 
 // Test-host and render-golden runs both need constructor defaults rather than
 // the interactive user's persisted view state. Ordinary interactive/capture
 // runs retain the existing restore behavior.
-inline bool ShouldRestorePersistedViewSettings(bool useTestHost,
-                                               bool goldenProfile)
+inline bool ShouldRestorePersistedViewSettings(bool useTestHost, bool goldenProfile)
 {
     return !useTestHost && !goldenProfile;
 }

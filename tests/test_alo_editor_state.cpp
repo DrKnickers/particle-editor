@@ -34,10 +34,19 @@
 void ParticleSystemInstance::RemoveEmitter(EmitterInstance*) {}
 
 static int g_failed = 0;
-#define CHECK(cond, msg) do {                              \
-    if (cond) { std::printf("  ok: %s\n", msg); }          \
-    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
 using Emitter = ParticleSystem::Emitter;
 using Track   = ParticleSystem::Emitter::Track;
@@ -61,8 +70,14 @@ static ParticleSystem* load(const Bytes& image)
     if (!image.empty()) f->write(image.data(), (unsigned long)image.size());
     f->seek(0);
     ParticleSystem* ps = NULL;
-    try { ps = new ParticleSystem(f); }
-    catch (...) { ps = NULL; }
+    try
+    {
+        ps = new ParticleSystem(f);
+    }
+    catch (...)
+    {
+        ps = NULL;
+    }
     f->Release();
     return ps;
 }
@@ -121,33 +136,32 @@ int main()
     // ---------------------------------------------------------------- (a)
     std::printf("[0x11] read, copied and written back only when present\n");
     {
-        const float kLifetime  = 1234.5f;   // sentinel to locate the 0x0F mini-chunk
+        const float kLifetime  = 1234.5f; // sentinel to locate the 0x0F mini-chunk
         const float kUnknown11 = 0.625f;
 
         ParticleSystem ps;
-        Emitter* src = ps.addRootEmitter();
-        src->lifetime  = kLifetime;
+        Emitter*       src = ps.addRootEmitter();
+        src->lifetime      = kLifetime;
         // setDefaults zeroes these two, which keeps the image (and its
         // byte-identity re-save) deterministic.
-        CHECK(!src->unknown2b && src->unknown49 == 0,
-              "a default emitter has unknown2b / unknown49 zeroed");
+        CHECK(!src->unknown2b && src->unknown49 == 0, "a default emitter has unknown2b / unknown49 zeroed");
         const Bytes plain = serialize(ps);
 
-        Bytes lifetimeMini = { 0x0F, 0x04 };
-        const Bytes lf = floatBytes(kLifetime);
+        Bytes       lifetimeMini = {0x0F, 0x04};
+        const Bytes lf           = floatBytes(kLifetime);
         lifetimeMini.insert(lifetimeMini.end(), lf.begin(), lf.end());
         const size_t at = find(plain, lifetimeMini);
         CHECK(at != (size_t)-1, "0x0F mini-chunk located in the serialized image");
 
-        Bytes mini11 = { 0x11, 0x04 };
-        const Bytes uf = floatBytes(kUnknown11);
+        Bytes       mini11 = {0x11, 0x04};
+        const Bytes uf     = floatBytes(kUnknown11);
         mini11.insert(mini11.end(), uf.begin(), uf.end());
         CHECK(find(plain, mini11) == (size_t)-1, "a system that never had 0x11 doesn't write one");
 
         if (at != (size_t)-1)
         {
-            const Bytes patched = insertAt(plain, at + lifetimeMini.size(), mini11);
-            ParticleSystem* rp = load(patched);
+            const Bytes     patched = insertAt(plain, at + lifetimeMini.size(), mini11);
+            ParticleSystem* rp      = load(patched);
             CHECK(rp != NULL, "image with 0x11 after 0x0F loads");
             if (rp != NULL)
             {
@@ -161,9 +175,11 @@ int main()
                     if (resaved[i] != patched[i])
                     {
                         std::printf("    first difference at byte %zu of %zu/%zu\n", i, resaved.size(), patched.size());
-                        for (size_t k = (i > 16 ? i - 16 : 0); k < i + 16 && k < resaved.size(); k++) std::printf("%02x%s", resaved[k], k == i ? "*" : " ");
+                        for (size_t k = (i > 16 ? i - 16 : 0); k < i + 16 && k < resaved.size(); k++)
+                            std::printf("%02x%s", resaved[k], k == i ? "*" : " ");
                         std::printf("\n");
-                        for (size_t k = (i > 16 ? i - 16 : 0); k < i + 16 && k < patched.size(); k++) std::printf("%02x%s", patched[k], k == i ? "*" : " ");
+                        for (size_t k = (i > 16 ? i - 16 : 0); k < i + 16 && k < patched.size(); k++)
+                            std::printf("%02x%s", patched[k], k == i ? "*" : " ");
                         std::printf("\n");
                         break;
                     }
@@ -191,7 +207,10 @@ int main()
                         pastedOk = pasted.has11 && pasted.unknown11 == kUnknown11;
                     }
                 }
-                catch (...) { pastedOk = false; }
+                catch (...)
+                {
+                    pastedOk = false;
+                }
                 f->Release();
                 CHECK(pastedOk, "clipboard copy keeps 0x11");
                 delete rp;
@@ -203,13 +222,13 @@ int main()
     std::printf("[unlock] an unlocked channel stays unlocked across save + reload\n");
     {
         ParticleSystem base;
-        base.addRootEmitter();   // G, B, A locked to R (the default)
+        base.addRootEmitter(); // G, B, A locked to R (the default)
         const size_t baseSize = serialize(base).size();
 
         // Green unlocked with keys identical to red's.
         ParticleSystem ps;
-        Emitter* e = ps.addRootEmitter();
-        e->tracks[1] = &e->trackContents[1];
+        Emitter*       e  = ps.addRootEmitter();
+        e->tracks[1]      = &e->trackContents[1];
         const Bytes image = serialize(ps);
         CHECK(image.size() == baseSize + 12, "unlocked-but-identical channel adds one 12-byte editor chunk");
         ParticleSystem* rp = load(image);
@@ -227,15 +246,15 @@ int main()
         // Unlocked and different from every earlier channel: the reader
         // already keeps it unlocked, so no chunk is written.
         ParticleSystem diff;
-        Emitter* d = diff.addRootEmitter();
-        d->tracks[1] = &d->trackContents[1];
+        Emitter*       d = diff.addRootEmitter();
+        d->tracks[1]     = &d->trackContents[1];
         setLastKey(d->trackContents[1], 0.2f);
         CHECK(serialize(diff).size() == baseSize, "unlocked and different: no editor chunk");
 
         // Different in memory but identical once quantized to a byte on save
         // (0.5 * 255 and 0.499 * 255 both truncate to 127): still recorded.
         ParticleSystem quant;
-        Emitter* q = quant.addRootEmitter();
+        Emitter*       q = quant.addRootEmitter();
         setLastKey(q->trackContents[0], 0.5f);
         q->tracks[2] = &q->trackContents[2];
         setLastKey(q->trackContents[2], 0.499f);
@@ -249,20 +268,19 @@ int main()
     std::printf("[const write] the lifetime group is normalized on a copy\n");
     {
         ParticleSystem ps;
-        Emitter* e = ps.addRootEmitter();
-        e->lifetime           = 2.0f;
-        e->randomLifetimePerc = 0.25f;
+        Emitter*       e                               = ps.addRootEmitter();
+        e->lifetime                                    = 2.0f;
+        e->randomLifetimePerc                          = 0.25f;
         e->groups[ParticleSystem::GROUP_LIFETIME].minY = 7.0f;
         e->groups[ParticleSystem::GROUP_LIFETIME].maxY = 9.0f;
-        const Bytes image = serialize(ps);
+        const Bytes image                              = serialize(ps);
         CHECK(e->groups[ParticleSystem::GROUP_LIFETIME].minY == 7.0f &&
-              e->groups[ParticleSystem::GROUP_LIFETIME].maxY == 9.0f,
+                  e->groups[ParticleSystem::GROUP_LIFETIME].maxY == 9.0f,
               "write leaves the emitter's lifetime group untouched");
         ParticleSystem* rp = load(image);
-        CHECK(rp != NULL &&
-              rp->getEmitters()[0]->groups[ParticleSystem::GROUP_LIFETIME].minY == 1.5f &&
-              rp->getEmitters()[0]->groups[ParticleSystem::GROUP_LIFETIME].maxY == 2.0f &&
-              rp->getEmitters()[0]->groups[ParticleSystem::GROUP_LIFETIME].type == 1,
+        CHECK(rp != NULL && rp->getEmitters()[0]->groups[ParticleSystem::GROUP_LIFETIME].minY == 1.5f &&
+                  rp->getEmitters()[0]->groups[ParticleSystem::GROUP_LIFETIME].maxY == 2.0f &&
+                  rp->getEmitters()[0]->groups[ParticleSystem::GROUP_LIFETIME].type == 1,
               "the written lifetime group is still the normalized one");
         delete rp;
     }

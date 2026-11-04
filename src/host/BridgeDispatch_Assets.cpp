@@ -5,18 +5,19 @@
 #include "BridgeDispatchShared.h"
 #include "BridgeRequestContext.h"
 
-#include "PerfTrace.h"            // host::perf spans (palette/thumbnail, get-preview)
-#include "StringConv.h"           // host::Utf8ToWide / WideToUtf8
-#include "gamedata/ModManager.h"        // mods/list, mods/refresh, mods/set-layers
+#include "PerfTrace.h"              // host::perf spans (palette/thumbnail, get-preview)
+#include "StringConv.h"             // host::Utf8ToWide / WideToUtf8
+#include "gamedata/ModManager.h"    // mods/list, mods/refresh, mods/set-layers
 #include "palette/TexturePalette.h" // textures/palette/*
 
-#include "HostMessages.h"         // WM_APP_PREVIEW_READY (textures/get-preview)
+#include "HostMessages.h" // WM_APP_PREVIEW_READY (textures/get-preview)
 
-#include <commdlg.h>              // GetOpenFileNameW (textures/browse)
+#include <commdlg.h> // GetOpenFileNameW (textures/browse)
 
 using nlohmann::json;
 
-namespace host {
+namespace host
+{
 
 bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
 {
@@ -37,40 +38,39 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
     //
     // Helper closure for serialising a mods/list payload (used by both
     // mods/list and mods/refresh — same response shape).
-    auto buildModsListPayload = [this]() -> json {
-        json modsArr = json::array();
-        json layersArr = json::array();   // flat catalog: mods (with Data\Art) + nested
-        const auto& mods = m_modManager->GetMods();
+    auto buildModsListPayload = [this]() -> json
+    {
+        json        modsArr   = json::array();
+        json        layersArr = json::array(); // flat catalog: mods (with Data\Art) + nested
+        const auto& mods      = m_modManager->GetMods();
         for (const auto& m : mods)
         {
             const std::string modPath = WideToUtf8(m.path);
             modsArr.push_back(json{
-                {"path",       modPath},
+                {"path", modPath},
                 {"folderName", WideToUtf8(m.folderName)},
-                {"nickname",   WideToUtf8(m.nickname)},
-                {"isFoC",      m.isFoC},
+                {"nickname", WideToUtf8(m.nickname)},
+                {"isFoC", m.isFoC},
                 {"rootHasArt", m.rootHasArt},
             });
-            const std::string label = m.nickname.empty() ? WideToUtf8(m.folderName)
-                                                          : WideToUtf8(m.nickname);
+            const std::string label = m.nickname.empty() ? WideToUtf8(m.folderName) : WideToUtf8(m.nickname);
             if (m.rootHasArt)
-                layersArr.push_back(json{{"path", modPath}, {"label", label},
-                                         {"isFoC", m.isFoC}, {"kind", "mod"}});
+                layersArr.push_back(json{{"path", modPath}, {"label", label}, {"isFoC", m.isFoC}, {"kind", "mod"}});
             for (const auto& n : m.nested)
                 layersArr.push_back(json{{"path", WideToUtf8(n.path)},
                                          {"label", WideToUtf8(n.label)},
                                          {"parentLabel", label},
                                          {"parentPath", modPath},
-                                         {"isFoC", m.isFoC}, {"kind", "nested"}});
+                                         {"isFoC", m.isFoC},
+                                         {"kind", "nested"}});
         }
         json stackArr = json::array();
-        for (const auto& p : m_modManager->GetLayerStack())
-            stackArr.push_back(WideToUtf8(p));
+        for (const auto& p : m_modManager->GetLayerStack()) stackArr.push_back(WideToUtf8(p));
         const std::wstring primary = m_modManager->GetPrimaryLayerPath();
         return json{
-            {"mods",       modsArr},
-            {"layers",     layersArr},
-            {"stack",      stackArr},
+            {"mods", modsArr},
+            {"layers", layersArr},
+            {"stack", stackArr},
             {"activePath", primary.empty() ? json(nullptr) : json(WideToUtf8(primary))},
         };
     };
@@ -118,11 +118,15 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
         // Nested-ok result (see BridgeRequestContext.h): the success path
         // also returns ctx.SendOk({ok,stack}) where ok may itself be false;
         // caller reads nested ok, so failure stays the same shape.
-        if (!m_modManager) { ctx.SendOk(json{{"ok", false}, {"error", "ModManager not bound"}}); return true; }
-        auto currentStackJson = [this]() {
+        if (!m_modManager)
+        {
+            ctx.SendOk(json{{"ok", false}, {"error", "ModManager not bound"}});
+            return true;
+        }
+        auto currentStackJson = [this]()
+        {
             json stack = json::array();
-            for (const auto& p : m_modManager->GetLayerStack())
-                stack.push_back(WideToUtf8(p));
+            for (const auto& p : m_modManager->GetLayerStack()) stack.push_back(WideToUtf8(p));
             return stack;
         };
         // A layer change mutates FileManager roots and the active texture
@@ -139,7 +143,7 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
             return true;
         }
         std::vector<std::wstring> paths;
-        auto pit = params.find("paths");
+        auto                      pit = params.find("paths");
         if (pit != params.end() && pit->is_array())
             for (const auto& e : *pit)
                 if (e.is_string()) paths.push_back(Utf8ToWide(e.get<std::string>()));
@@ -150,7 +154,7 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
         // "the mod shaders failed to reload" — which is an actively misleading
         // diagnosis when the real problem was the registry write.
         std::string err;
-        bool ok = m_modManager->SetLayerStack(paths, !(m_testHost && !m_settingsLive), &err);
+        bool        ok = m_modManager->SetLayerStack(paths, !(m_testHost && !m_settingsLive), &err);
         TexturePalette::ClearBridgeThumbCache();
         // Same lifecycle for the preview LRU: a same-named texture from
         // the new stack must not serve the old stack's pixels. The epoch bump
@@ -162,7 +166,6 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
         ctx.SendOk(resp);
         return true;
     }
-
 
     // -------- textures/browse --------
     //
@@ -176,8 +179,7 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
     if (kind == "textures/browse")
     {
         std::string slot = "color";
-        if (auto sit = params.find("slot"); sit != params.end() && sit->is_string())
-            slot = sit->get<std::string>();
+        if (auto sit = params.find("slot"); sit != params.end() && sit->is_string()) slot = sit->get<std::string>();
 
         // Initial dir: active mod's texture folder → mod root → none
         // (dialog opens at its default if all are unavailable).
@@ -187,26 +189,29 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
             const std::wstring mod = m_modManager->GetPrimaryLayerPath();
             if (!mod.empty())
             {
-                auto isDir = [](const std::wstring& p) -> bool {
+                auto isDir = [](const std::wstring& p) -> bool
+                {
                     DWORD a = GetFileAttributesW(p.c_str());
                     return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY) != 0;
                 };
                 const std::wstring texDir = mod + L"\\Data\\Art\\Textures";
-                if (isDir(texDir))   initialDir = texDir;
-                else if (isDir(mod)) initialDir = mod;
+                if (isDir(texDir))
+                    initialDir = texDir;
+                else if (isDir(mod))
+                    initialDir = mod;
             }
         }
 
-        wchar_t buf[MAX_PATH] = {};
-        OPENFILENAMEW ofn = {};
-        ofn.lStructSize     = sizeof(ofn);
-        ofn.hwndOwner       = m_hostHwnd;
-        ofn.lpstrFile       = buf;
-        ofn.nMaxFile        = MAX_PATH;
-        ofn.lpstrFilter     = L"Texture Files (*.tga;*.dds)\0*.tga;*.dds\0All Files (*.*)\0*.*\0\0";
-        ofn.lpstrTitle      = (slot == "bump") ? L"Select bump texture" : L"Select color texture";
-        ofn.lpstrInitialDir = initialDir.empty() ? nullptr : initialDir.c_str();
-        ofn.Flags           = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
+        wchar_t       buf[MAX_PATH] = {};
+        OPENFILENAMEW ofn           = {};
+        ofn.lStructSize             = sizeof(ofn);
+        ofn.hwndOwner               = m_hostHwnd;
+        ofn.lpstrFile               = buf;
+        ofn.nMaxFile                = MAX_PATH;
+        ofn.lpstrFilter             = L"Texture Files (*.tga;*.dds)\0*.tga;*.dds\0All Files (*.*)\0*.*\0\0";
+        ofn.lpstrTitle              = (slot == "bump") ? L"Select bump texture" : L"Select color texture";
+        ofn.lpstrInitialDir         = initialDir.empty() ? nullptr : initialDir.c_str();
+        ofn.Flags                   = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
 
         if (!GetOpenFileNameW(&ofn))
         {
@@ -218,13 +223,12 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
 
         // Store only the basename — matches the colorTexture /
         // normalTexture field convention (legacy strips path via strrchr).
-        const std::wstring full = buf;
-        const size_t slash = full.find_last_of(L"\\/");
-        const std::wstring base = (slash == std::wstring::npos) ? full : full.substr(slash + 1);
+        const std::wstring full  = buf;
+        const size_t       slash = full.find_last_of(L"\\/");
+        const std::wstring base  = (slash == std::wstring::npos) ? full : full.substr(slash + 1);
         ctx.SendOk(json{{"filename", WideToUtf8(base)}});
         return true;
     }
-
 
     // -------- textures/palette/* --------
     //
@@ -234,29 +238,28 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
     if (kind == "textures/palette/list")
     {
         std::string slot = "color";
-        if (auto it = params.find("slot"); it != params.end() && it->is_string())
-            slot = it->get<std::string>();
-        const TexturePalette::SlotMask mask =
-            (slot == "bump") ? TexturePalette::SLOT_BUMP : TexturePalette::SLOT_COLOR;
+        if (auto it = params.find("slot"); it != params.end() && it->is_string()) slot = it->get<std::string>();
+        const TexturePalette::SlotMask mask = (slot == "bump") ? TexturePalette::SLOT_BUMP : TexturePalette::SLOT_COLOR;
 
         auto& store = TexturePalette::Store::Instance();
-        store.SetActiveFilter(mask);  // slot-aware default (persists per-mod)
+        store.SetActiveFilter(mask); // slot-aware default (persists per-mod)
 
-        auto toArray = [](const std::vector<TexturePalette::Entry>& entries) {
+        auto toArray = [](const std::vector<TexturePalette::Entry>& entries)
+        {
             json arr = json::array();
             for (const TexturePalette::Entry& e : entries)
                 arr.push_back(json{
                     {"filename", WideToUtf8(e.filename)},
-                    {"pinned",   e.isPinned},
+                    {"pinned", e.isPinned},
                     {"slotMask", (int)e.slotMask},
                 });
             return arr;
         };
 
         ctx.SendOk(json{
-            {"hasMod",  store.HasActiveMod()},
-            {"filter",  slot},
-            {"pins",    toArray(store.Pins(mask))},
+            {"hasMod", store.HasActiveMod()},
+            {"filter", slot},
+            {"pins", toArray(store.Pins(mask))},
             {"recents", toArray(store.Recents(mask))},
         });
         return true;
@@ -265,23 +268,21 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
     if (kind == "textures/palette/thumbnail")
     {
         std::string filename;
-        if (auto it = params.find("filename"); it != params.end() && it->is_string())
-            filename = it->get<std::string>();
+        if (auto it = params.find("filename"); it != params.end() && it->is_string()) filename = it->get<std::string>();
 
         std::unique_ptr<host::perf::Span> span;
         if (host::perf::Enabled())
-            span = std::make_unique<host::perf::Span>("bridge.texture_thumbnail", nlohmann::json{
-                {"filename", filename}
-            });
-        IDirect3DDevice9* dev = m_engine ? m_engine->GetDevice() : nullptr;
-        const TexturePalette::ThumbnailResult t = TexturePalette::GetThumbnail(
-            Utf8ToWide(filename), m_fileManager, dev);
-        const char* status =
-            t.status == TexturePalette::ThumbStatus::Ok      ? "ok"      :
-            t.status == TexturePalette::ThumbStatus::Missing ? "missing" : "broken";
+            span =
+                std::make_unique<host::perf::Span>("bridge.texture_thumbnail", nlohmann::json{{"filename", filename}});
+        IDirect3DDevice9*                     dev = m_engine ? m_engine->GetDevice() : nullptr;
+        const TexturePalette::ThumbnailResult t =
+            TexturePalette::GetThumbnail(Utf8ToWide(filename), m_fileManager, dev);
+        const char* status = t.status == TexturePalette::ThumbStatus::Ok        ? "ok"
+                             : t.status == TexturePalette::ThumbStatus::Missing ? "missing"
+                                                                                : "broken";
         ctx.SendOk(json{
             {"dataUri", t.dataUri.empty() ? json(nullptr) : json(t.dataUri)},
-            {"status",  status},
+            {"status", status},
         });
         if (span) span->End(status);
         return true;
@@ -290,8 +291,7 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
     if (kind == "textures/get-preview")
     {
         std::string filename;
-        if (auto it = params.find("filename"); it != params.end() && it->is_string())
-            filename = it->get<std::string>();
+        if (auto it = params.find("filename"); it != params.end() && it->is_string()) filename = it->get<std::string>();
         // Default true: force every pixel fully opaque (alpha=255) so ADDITIVE
         // atlas frames (RGB content, alpha ~0) are visible. The picker passes
         // false to honor the texture's real alpha.
@@ -301,10 +301,8 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
 
         std::unique_ptr<host::perf::Span> span;
         if (host::perf::Enabled())
-            span = std::make_unique<host::perf::Span>("bridge.texture_preview", nlohmann::json{
-                {"filename", filename},
-                {"flattenAlpha", flattenAlpha}
-            });
+            span = std::make_unique<host::perf::Span>(
+                "bridge.texture_preview", nlohmann::json{{"filename", filename}, {"flattenAlpha", flattenAlpha}});
 
         // LRU hit: full result, synchronously — repeats cost nothing.
         const std::string cacheKey = filename + (flattenAlpha ? "|1" : "|0");
@@ -314,8 +312,7 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
             m_previewLru.splice(m_previewLru.begin(), m_previewLru, hit->second);
             const PreviewCacheEntry& e = hit->second->second;
             if (e.status == "ok")
-                ctx.SendOk(json{{"status", "ok"}, {"dataUri", e.dataUri},
-                            {"srcW", e.srcW}, {"srcH", e.srcH}});
+                ctx.SendOk(json{{"status", "ok"}, {"dataUri", e.dataUri}, {"srcW", e.srcW}, {"srcH", e.srcH}});
             else
                 ctx.SendOk(json{{"status", e.status}});
             if (span) span->End(e.status + "-cached");
@@ -335,9 +332,9 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
         // D3DX decode to SCRATCH, flatten, one packed copy. The measured-heavy
         // PNG encode + base64 goes to the worker; the response is `pending`
         // and `textures/preview-ready` fires when the dataUri is cached.
-        IDirect3DDevice9* dev = m_engine ? m_engine->GetDevice() : nullptr;
-        TexturePalette::PreviewPixels px = TexturePalette::DecodeTexturePreviewBgra(
-            Utf8ToWide(filename), m_fileManager, dev, 1024, flattenAlpha);
+        IDirect3DDevice9*             dev = m_engine ? m_engine->GetDevice() : nullptr;
+        TexturePalette::PreviewPixels px =
+            TexturePalette::DecodeTexturePreviewBgra(Utf8ToWide(filename), m_fileManager, dev, 1024, flattenAlpha);
         if (px.status != "ok")
         {
             // Terminal failures answer (and cache) immediately — no encode.
@@ -348,16 +345,17 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
         }
 
         if (!m_previewWorker)
-            m_previewWorker = std::make_unique<host::PreviewEncodeWorker>(
-                m_hostHwnd, WM_APP_PREVIEW_READY);
+            m_previewWorker = std::make_unique<host::PreviewEncodeWorker>(m_hostHwnd, WM_APP_PREVIEW_READY);
         host::PreviewEncodeWorker::Job job;
-        job.key = cacheKey;
-        job.filename = Utf8ToWide(filename);
+        job.key          = cacheKey;
+        job.filename     = Utf8ToWide(filename);
         job.flattenAlpha = flattenAlpha;
-        job.srcW = px.srcW; job.srcH = px.srcH;
-        job.outW = px.outW; job.outH = px.outH;
-        job.bgra = std::move(px.bgra);
-        job.epoch = m_previewEpoch;
+        job.srcW         = px.srcW;
+        job.srcH         = px.srcH;
+        job.outW         = px.outW;
+        job.outH         = px.outH;
+        job.bgra         = std::move(px.bgra);
+        job.epoch        = m_previewEpoch;
         m_previewInFlight.insert(cacheKey);
         m_previewWorker->Enqueue(std::move(job));
         ctx.SendOk(json{{"status", "pending"}});
@@ -368,11 +366,10 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
     if (kind == "textures/palette/toggle-pin")
     {
         std::string filename;
-        if (auto it = params.find("filename"); it != params.end() && it->is_string())
-            filename = it->get<std::string>();
+        if (auto it = params.find("filename"); it != params.end() && it->is_string()) filename = it->get<std::string>();
 
-        const std::wstring wf = Utf8ToWide(filename);
-        auto& store = TexturePalette::Store::Instance();
+        const std::wstring wf    = Utf8ToWide(filename);
+        auto&              store = TexturePalette::Store::Instance();
         if (!store.TogglePin(wf))
         {
             // The only user-reachable failure (entry exists + mod active) is
@@ -388,10 +385,18 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
         // slot, so check both filters).
         bool pinned = false;
         for (const TexturePalette::Entry& e : store.Pins(TexturePalette::SLOT_COLOR))
-            if (e.filename == wf) { pinned = true; break; }
+            if (e.filename == wf)
+            {
+                pinned = true;
+                break;
+            }
         if (!pinned)
             for (const TexturePalette::Entry& e : store.Pins(TexturePalette::SLOT_BUMP))
-                if (e.filename == wf) { pinned = true; break; }
+                if (e.filename == wf)
+                {
+                    pinned = true;
+                    break;
+                }
         ctx.SendOk(json{{"ok", true}, {"pinned", pinned}});
         return true;
     }
@@ -400,20 +405,16 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx)
     {
         std::string filename;
         std::string slot = "color";
-        if (auto it = params.find("filename"); it != params.end() && it->is_string())
-            filename = it->get<std::string>();
-        if (auto it = params.find("slot"); it != params.end() && it->is_string())
-            slot = it->get<std::string>();
-        const TexturePalette::SlotMask mask =
-            (slot == "bump") ? TexturePalette::SLOT_BUMP : TexturePalette::SLOT_COLOR;
+        if (auto it = params.find("filename"); it != params.end() && it->is_string()) filename = it->get<std::string>();
+        if (auto it = params.find("slot"); it != params.end() && it->is_string()) slot = it->get<std::string>();
+        const TexturePalette::SlotMask mask = (slot == "bump") ? TexturePalette::SLOT_BUMP : TexturePalette::SLOT_COLOR;
 
         TexturePalette::Store::Instance().TouchRecent(Utf8ToWide(filename), mask);
         ctx.SendOk(json{{"ok", true}});
         return true;
     }
 
-
-    return false;   // kind not in this domain
+    return false; // kind not in this domain
 }
 
 } // namespace host

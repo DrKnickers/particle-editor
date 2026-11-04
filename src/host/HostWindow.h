@@ -29,7 +29,8 @@ class ITextureManager;
 class IShaderManager;
 class IFileManager;
 
-namespace host {
+namespace host
+{
 
 struct HostWindowImpl;
 
@@ -40,12 +41,12 @@ struct HostWindowImpl;
 class HostWindow
 {
 public:
-    HostWindow(HINSTANCE hInstance,
-               ITextureManager& textureManager,
-               IShaderManager&  shaderManager,
-               IFileManager&    fileManager,
+    HostWindow(HINSTANCE                        hInstance,
+               ITextureManager&                 textureManager,
+               IShaderManager&                  shaderManager,
+               IFileManager&                    fileManager,
                const std::vector<std::wstring>& gameRoots,
-               const HostLaunchOptions& options);
+               const HostLaunchOptions&         options);
     ~HostWindow();
 
     HostWindow(const HostWindow&)            = delete;
@@ -57,7 +58,7 @@ public:
     int Run(int nCmdShow);
 
 private:
-    std::unique_ptr<HostWindowImpl> m_impl;  // see HostWindowImpl.h
+    std::unique_ptr<HostWindowImpl> m_impl; // see HostWindowImpl.h
 };
 
 } // namespace host

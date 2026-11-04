@@ -29,4 +29,4 @@ inline bool ShouldAcceptWebMessage(std::size_t chars, std::size_t cap)
     return chars <= cap;
 }
 
-#endif  // HOST_WEBMESSAGE_INGRESS_POLICY_H
+#endif // HOST_WEBMESSAGE_INGRESS_POLICY_H

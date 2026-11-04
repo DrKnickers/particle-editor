@@ -77,9 +77,11 @@
 #include <cstdio>
 
 // ---------- Composition state and transforms ----------
-namespace host {
+namespace host
+{
 
-namespace {
+namespace
+{
 
 // Format an HRESULT into a string for logging. Matches the format
 // spike uses ([SPIKE-ERROR] ... hr=0x%08lX).
@@ -98,13 +100,13 @@ std::string FormatHresult(HRESULT hr)
 // scoped to this single translation unit.
 struct Compositor::Impl
 {
-    HWND  hwnd = nullptr;        // self-init like the siblings below.
-    Compositor::LogFn log{};     // self-init like the siblings below.
+    HWND              hwnd = nullptr; // self-init like the siblings below.
+    Compositor::LogFn log{};          // self-init like the siblings below.
 
-    Microsoft::WRL::ComPtr<IDCompositionDevice>  device;
-    Microsoft::WRL::ComPtr<IDCompositionTarget>  target;
-    Microsoft::WRL::ComPtr<IDCompositionVisual>  rootVisual;
-    Microsoft::WRL::ComPtr<IDCompositionVisual>  webviewVisual;
+    Microsoft::WRL::ComPtr<IDCompositionDevice> device;
+    Microsoft::WRL::ComPtr<IDCompositionTarget> target;
+    Microsoft::WRL::ComPtr<IDCompositionVisual> rootVisual;
+    Microsoft::WRL::ComPtr<IDCompositionVisual> webviewVisual;
 
     // The WebView2 composition controller that owns the
     // RootVisualTarget binding. Retained so the dtor can clear the
@@ -113,8 +115,8 @@ struct Compositor::Impl
     // webviewVisual would dangle. Set by AttachWebView2.
     Microsoft::WRL::ComPtr<ICoreWebView2CompositionController> controller;
 
-    int  lastW = 0;
-    int  lastH = 0;
+    int  lastW     = 0;
+    int  lastH     = 0;
     bool treeBuilt = false;
 
     // engine D3D11 / DXGI bridge + visual.
@@ -126,13 +128,13 @@ struct Compositor::Impl
     // AlphaCompositor + Engine teardown later (HostWindow.cpp WM_DESTROY
     // order) releases the D3D9 side. See Compositor.h's engine-visual
     // block for lifecycle.
-    Microsoft::WRL::ComPtr<ID3D11Device>          d3d11Device;
-    Microsoft::WRL::ComPtr<ID3D11DeviceContext>   d3d11Context;
-    Microsoft::WRL::ComPtr<IDXGIFactory2>         dxgiFactory;
-    Microsoft::WRL::ComPtr<IDXGISwapChain1>       engineSwapChain;
-    Microsoft::WRL::ComPtr<ID3D11Texture2D>       engineBackBuffer;
-    Microsoft::WRL::ComPtr<ID3D11Texture2D>       sharedTexD3D11;
-    Microsoft::WRL::ComPtr<IDCompositionVisual>   engineVisual;
+    Microsoft::WRL::ComPtr<ID3D11Device>        d3d11Device;
+    Microsoft::WRL::ComPtr<ID3D11DeviceContext> d3d11Context;
+    Microsoft::WRL::ComPtr<IDXGIFactory2>       dxgiFactory;
+    Microsoft::WRL::ComPtr<IDXGISwapChain1>     engineSwapChain;
+    Microsoft::WRL::ComPtr<ID3D11Texture2D>     engineBackBuffer;
+    Microsoft::WRL::ComPtr<ID3D11Texture2D>     sharedTexD3D11;
+    Microsoft::WRL::ComPtr<IDCompositionVisual> engineVisual;
 
     // Cache + flag for AttachEngineVisual idempotence + lazy
     // handle/size detection in CompositeEngineFrame.
@@ -163,12 +165,12 @@ struct Compositor::Impl
     // [resize-perf] pendingQuiet carries the caller's quiet flag
     // (per-frame anim applies skip the transform log) across the
     // deferral.
-    bool pendingTransform  = false;
-    bool pendingQuiet      = false;
-    int  pendingX          = 0;
-    int  pendingY          = 0;
-    int  pendingW          = 0;
-    int  pendingH          = 0;
+    bool pendingTransform = false;
+    bool pendingQuiet     = false;
+    int  pendingX         = 0;
+    int  pendingY         = 0;
+    int  pendingW         = 0;
+    int  pendingH         = 0;
     // [resize-perf] SetPresentWithoutWait: skip, don't block, on a full queue.
     bool presentWithoutWait = false;
 
@@ -196,16 +198,16 @@ struct Compositor::Impl
     Microsoft::WRL::ComPtr<IDXGIFactory2>       backingFactory;
     Microsoft::WRL::ComPtr<IDXGISwapChain1>     backingSwapChain;
     Microsoft::WRL::ComPtr<IDCompositionVisual> backingVisual;
-    COLORREF backingColor      = 0;
-    bool     backingColorValid = false;   // a colour has been pushed at least once
-    bool     backingInTree     = false;   // backingVisual added to rootVisual
+    COLORREF                                    backingColor      = 0;
+    bool                                        backingColorValid = false; // a colour has been pushed at least once
+    bool                                        backingInTree     = false; // backingVisual added to rootVisual
 
     // Backing helpers (defined after the struct, like ApplyTransform).
-    HRESULT EnsureBackingDevice();   // own D3D11 device + DXGI factory
-    HRESULT EnsureBackingVisual();   // 1x1 swapchain + DComp visual, inserted rearmost
-    HRESULT PaintBacking(COLORREF color);  // clear the 1x1 backbuffer + Present
-    void    InsertBackingRearmost();       // (re)prepend the backing as child 0
-    void    ApplyBackingTransform();       // scale 1x1 → full client (no Commit)
+    HRESULT EnsureBackingDevice();        // own D3D11 device + DXGI factory
+    HRESULT EnsureBackingVisual();        // 1x1 swapchain + DComp visual, inserted rearmost
+    HRESULT PaintBacking(COLORREF color); // clear the 1x1 backbuffer + Present
+    void    InsertBackingRearmost();      // (re)prepend the backing as child 0
+    void    ApplyBackingTransform();      // scale 1x1 → full client (no Commit)
 
     void LogLine(const std::string& s) const
     {
@@ -251,13 +253,9 @@ HRESULT Compositor::Impl::ApplyTransform(int x, int y, int w, int h, bool quiet)
     // coords because the visual has zero offset). The clip is the
     // scene-rect rectangle in absolute host-client coords:
     // (left=x, top=y, right=x+w, bottom=y+h).
-    D2D_RECT_F clip = {
-        static_cast<float>(x),
-        static_cast<float>(y),
-        static_cast<float>(x + w),
-        static_cast<float>(y + h)
-    };
-    hr = engineVisual->SetClip(clip);
+    D2D_RECT_F clip = {static_cast<float>(x), static_cast<float>(y), static_cast<float>(x + w),
+                       static_cast<float>(y + h)};
+    hr              = engineVisual->SetClip(clip);
     if (FAILED(hr))
     {
         LogLine("[COMP-engine-fail] ApplyTransform SetClip hr=" + FormatHresult(hr));
@@ -279,9 +277,8 @@ HRESULT Compositor::Impl::ApplyTransform(int x, int y, int w, int h, bool quiet)
     if (!quiet)
     {
         char buf[160];
-        snprintf(buf, sizeof(buf),
-                 "[COMP-engine-transform] clip=(%d,%d,%d,%d) (absolute host-client)",
-                 x, y, x + w, y + h);
+        snprintf(buf, sizeof(buf), "[COMP-engine-transform] clip=(%d,%d,%d,%d) (absolute host-client)", x, y, x + w,
+                 y + h);
         LogLine(buf);
     }
     return S_OK;
@@ -307,22 +304,21 @@ HRESULT Compositor::Impl::EnsureBackingDevice()
         flags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
         const D3D_FEATURE_LEVEL wanted[] = {
-            D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0,
-            D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_10_0,
+            D3D_FEATURE_LEVEL_11_1,
+            D3D_FEATURE_LEVEL_11_0,
+            D3D_FEATURE_LEVEL_10_1,
+            D3D_FEATURE_LEVEL_10_0,
         };
         D3D_FEATURE_LEVEL got = D3D_FEATURE_LEVEL_11_0;
-        hr = D3D11CreateDevice(
-            nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags,
-            wanted, _countof(wanted), D3D11_SDK_VERSION,
-            backingDevice.GetAddressOf(), &got, backingContext.GetAddressOf());
+        hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags, wanted, _countof(wanted),
+                               D3D11_SDK_VERSION, backingDevice.GetAddressOf(), &got, backingContext.GetAddressOf());
 #ifndef NDEBUG
         if (FAILED(hr))
         {
             flags &= ~D3D11_CREATE_DEVICE_DEBUG;
-            hr = D3D11CreateDevice(
-                nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags,
-                wanted, _countof(wanted), D3D11_SDK_VERSION,
-                backingDevice.GetAddressOf(), &got, backingContext.GetAddressOf());
+            hr =
+                D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags, wanted, _countof(wanted),
+                                  D3D11_SDK_VERSION, backingDevice.GetAddressOf(), &got, backingContext.GetAddressOf());
         }
 #endif
         if (FAILED(hr) || !backingDevice)
@@ -373,9 +369,9 @@ void Compositor::Impl::ApplyBackingTransform()
     // Scale the 1x1 swapchain content to the full client. Column-major
     // D2D_MATRIX_3X2_F {_11,_12,_21,_22,_31,_32}: pure scale (sx, sy).
     // Clamp to >=1 so a pre-SetSize call doesn't collapse to a zero matrix.
-    const float sx = static_cast<float>(lastW > 0 ? lastW : 1);
-    const float sy = static_cast<float>(lastH > 0 ? lastH : 1);
-    D2D_MATRIX_3X2_F m = { sx, 0.0f, 0.0f, sy, 0.0f, 0.0f };
+    const float      sx = static_cast<float>(lastW > 0 ? lastW : 1);
+    const float      sy = static_cast<float>(lastH > 0 ? lastH : 1);
+    D2D_MATRIX_3X2_F m  = {sx, 0.0f, 0.0f, sy, 0.0f, 0.0f};
     backingVisual->SetTransform(m);
 }
 
@@ -395,18 +391,18 @@ HRESULT Compositor::Impl::EnsureBackingVisual()
     // bottom layer; the theme bg is a solid colour. Format/effect match
     // the engine swapchain so the DComp path is identical.
     DXGI_SWAP_CHAIN_DESC1 sc = {};
-    sc.Width  = 1;
-    sc.Height = 1;
-    sc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-    sc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    sc.BufferCount = 2;
-    sc.SampleDesc.Count = 1;
-    sc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
-    sc.AlphaMode  = DXGI_ALPHA_MODE_IGNORE;
-    sc.Scaling    = DXGI_SCALING_STRETCH;
+    sc.Width                 = 1;
+    sc.Height                = 1;
+    sc.Format                = DXGI_FORMAT_B8G8R8A8_UNORM;
+    sc.BufferUsage           = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    sc.BufferCount           = 2;
+    sc.SampleDesc.Count      = 1;
+    sc.SwapEffect            = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+    sc.AlphaMode             = DXGI_ALPHA_MODE_IGNORE;
+    sc.Scaling               = DXGI_SCALING_STRETCH;
 
-    hr = backingFactory->CreateSwapChainForComposition(
-        backingDevice.Get(), &sc, nullptr, backingSwapChain.GetAddressOf());
+    hr = backingFactory->CreateSwapChainForComposition(backingDevice.Get(), &sc, nullptr,
+                                                       backingSwapChain.GetAddressOf());
     if (FAILED(hr) || !backingSwapChain)
     {
         LogLine("[COMP-backing-fail] CreateSwapChainForComposition hr=" + FormatHresult(hr));
@@ -428,8 +424,8 @@ HRESULT Compositor::Impl::EnsureBackingVisual()
         return hr;
     }
 
-    ApplyBackingTransform();   // scale to current client
-    InsertBackingRearmost();   // child 0 (behind engine + webview)
+    ApplyBackingTransform(); // scale to current client
+    InsertBackingRearmost(); // child 0 (behind engine + webview)
     LogLine("[COMP-backing] backing visual created + inserted rearmost (behind engine)");
     return S_OK;
 }
@@ -444,7 +440,7 @@ HRESULT Compositor::Impl::PaintBacking(COLORREF color)
     // + recreate the RTV each paint rather than caching a stale view.
     // Recolour only happens on theme change, so this is not hot.
     Microsoft::WRL::ComPtr<ID3D11Texture2D> bb;
-    HRESULT hr = backingSwapChain->GetBuffer(0, IID_PPV_ARGS(bb.GetAddressOf()));
+    HRESULT                                 hr = backingSwapChain->GetBuffer(0, IID_PPV_ARGS(bb.GetAddressOf()));
     if (FAILED(hr) || !bb)
     {
         LogLine("[COMP-backing-fail] backing GetBuffer(0) hr=" + FormatHresult(hr));
@@ -461,12 +457,12 @@ HRESULT Compositor::Impl::PaintBacking(COLORREF color)
         GetRValue(color) / 255.0f,
         GetGValue(color) / 255.0f,
         GetBValue(color) / 255.0f,
-        1.0f,   // opaque backing
+        1.0f, // opaque backing
     };
     backingContext->ClearRenderTargetView(rtv.Get(), rgba);
 
     DXGI_PRESENT_PARAMETERS pp = {};
-    hr = backingSwapChain->Present1(0, 0, &pp);
+    hr                         = backingSwapChain->Present1(0, 0, &pp);
     if (FAILED(hr))
     {
         LogLine("[COMP-backing-fail] backing Present1 hr=" + FormatHresult(hr));
@@ -476,8 +472,7 @@ HRESULT Compositor::Impl::PaintBacking(COLORREF color)
 }
 
 // ---------- Visual tree lifecycle ----------
-Compositor::Compositor(HWND hostHwnd, LogFn log) noexcept
-    : m_impl(std::make_unique<Impl>())
+Compositor::Compositor(HWND hostHwnd, LogFn log) noexcept : m_impl(std::make_unique<Impl>())
 {
     m_impl->hwnd = hostHwnd;
     m_impl->log  = std::move(log);
@@ -526,8 +521,8 @@ HRESULT Compositor::Init()
     //
     // V2 factory function, V1 IID — same shape as WebView2APISample and
     // dxgi_spike.cpp:InitDComp. The spike confirmed V1 works on this rig.
-    constexpr int   kInitAttempts  = 4;    // 1 try + 3 retries
-    constexpr DWORD kInitBackoffMs = 120;  // ~360 ms worst case before fatal
+    constexpr int   kInitAttempts  = 4;   // 1 try + 3 retries
+    constexpr DWORD kInitBackoffMs = 120; // ~360 ms worst case before fatal
 
     // Test-only fault injection: force the first N attempts to fail with the real
     // CRD HRESULT so the retry+recovery path can be exercised on a healthy box.
@@ -536,51 +531,44 @@ HRESULT Compositor::Init()
     int injectFail = 0;
     {
         wchar_t buf[16] = {};
-        DWORD n = GetEnvironmentVariableW(L"ALO_COMP_INIT_FAIL_FIRST", buf, 16);
+        DWORD   n       = GetEnvironmentVariableW(L"ALO_COMP_INIT_FAIL_FIRST", buf, 16);
         if (n > 0 && n < 16)
         {
             // Stop accumulating once the count exceeds kInitAttempts — any larger
             // value means "fail every attempt" and this bounds injectFail well
             // below INT_MAX (no signed overflow on a long numeric string).
-            for (DWORD i = 0; i < n && buf[i] >= L'0' && buf[i] <= L'9' &&
-                              injectFail <= kInitAttempts; ++i)
+            for (DWORD i = 0; i < n && buf[i] >= L'0' && buf[i] <= L'9' && injectFail <= kInitAttempts; ++i)
                 injectFail = injectFail * 10 + (buf[i] - L'0');
         }
         if (injectFail > 0)
-            m_impl->LogLine("[COMP] fault-injection active: fail first " +
-                            std::to_string(injectFail) + " attempt(s)");
+            m_impl->LogLine("[COMP] fault-injection active: fail first " + std::to_string(injectFail) + " attempt(s)");
     }
 
     HRESULT hr = E_FAIL;
     for (int attempt = 1; attempt <= kInitAttempts; ++attempt)
     {
-        const std::string tag = " (attempt " + std::to_string(attempt) + "/" +
-                                std::to_string(kInitAttempts) + ")";
+        const std::string tag = " (attempt " + std::to_string(attempt) + "/" + std::to_string(kInitAttempts) + ")";
         if (attempt <= injectFail)
         {
-            hr = HRESULT_FROM_WIN32(ERROR_INVALID_STATE);  // == 0x8007139F
+            hr = HRESULT_FROM_WIN32(ERROR_INVALID_STATE); // == 0x8007139F
         }
         else
         {
-            hr = DCompositionCreateDevice2(
-                nullptr, IID_PPV_ARGS(m_impl->device.ReleaseAndGetAddressOf()));
+            hr = DCompositionCreateDevice2(nullptr, IID_PPV_ARGS(m_impl->device.ReleaseAndGetAddressOf()));
             // A reported success with a null device is NOT a success — treat it as
             // a failure so it retries and, if it never resolves, the caller still
             // goes fatal (rather than proceeding with no compositor).
-            if (SUCCEEDED(hr) && !m_impl->device)
-                hr = E_POINTER;
+            if (SUCCEEDED(hr) && !m_impl->device) hr = E_POINTER;
             if (SUCCEEDED(hr))
             {
                 m_impl->LogLine("[COMP-init] DComp V1 device created" + tag);
                 return S_OK;
             }
         }
-        m_impl->LogLine("[COMP-fail] DCompositionCreateDevice2 hr=" +
-                        FormatHresult(hr) + tag);
-        if (attempt < kInitAttempts)
-            Sleep(kInitBackoffMs);
+        m_impl->LogLine("[COMP-fail] DCompositionCreateDevice2 hr=" + FormatHresult(hr) + tag);
+        if (attempt < kInitAttempts) Sleep(kInitBackoffMs);
     }
-    return hr;  // all attempts failed — caller goes fatal (final fallback)
+    return hr; // all attempts failed — caller goes fatal (final fallback)
 }
 
 HRESULT Compositor::AttachWebView2(ICoreWebView2CompositionController* ctl)
@@ -605,8 +593,7 @@ HRESULT Compositor::AttachWebView2(ICoreWebView2CompositionController* ctl)
     // Create the target. Topmost=TRUE matches the spike's BuildVisualTree
     // and the WebView2APISample. An earlier attempt tried both TRUE and FALSE;
     // topmost wasn't the failure mode but matches the working sample.
-    hr = m_impl->device->CreateTargetForHwnd(
-        m_impl->hwnd, TRUE, m_impl->target.GetAddressOf());
+    hr = m_impl->device->CreateTargetForHwnd(m_impl->hwnd, TRUE, m_impl->target.GetAddressOf());
     if (FAILED(hr))
     {
         m_impl->LogLine("[COMP-fail] CreateTargetForHwnd hr=" + FormatHresult(hr));
@@ -724,10 +711,8 @@ HRESULT Compositor::SetSize(int width, int height)
         return hr;
     }
 
-    D2D_RECT_F clip = { 0.0f, 0.0f,
-                        static_cast<float>(width),
-                        static_cast<float>(height) };
-    hr = m_impl->rootVisual->SetClip(clip);
+    D2D_RECT_F clip = {0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)};
+    hr              = m_impl->rootVisual->SetClip(clip);
     if (FAILED(hr))
     {
         m_impl->LogLine("[COMP-fail] SetClip hr=" + FormatHresult(hr));
@@ -757,7 +742,7 @@ HRESULT Compositor::SetBackingColor(COLORREF color) noexcept
     // Always cache so a call that races ahead of AttachWebView2 (the tree
     // isn't built yet) is applied later via the deferred-apply hook at the
     // end of AttachWebView2.
-    const bool unchanged = (m_impl->backingColorValid && m_impl->backingColor == color);
+    const bool unchanged      = (m_impl->backingColorValid && m_impl->backingColor == color);
     m_impl->backingColor      = color;
     m_impl->backingColorValid = true;
 
@@ -768,11 +753,11 @@ HRESULT Compositor::SetBackingColor(COLORREF color) noexcept
     }
     if (unchanged && m_impl->backingInTree)
     {
-        return S_OK;   // idempotent — same colour, already showing
+        return S_OK; // idempotent — same colour, already showing
     }
 
     HRESULT hr = m_impl->EnsureBackingVisual();
-    if (FAILED(hr)) return hr;   // already logged [COMP-backing-fail]
+    if (FAILED(hr)) return hr; // already logged [COMP-backing-fail]
 
     hr = m_impl->PaintBacking(color);
     if (FAILED(hr)) return hr;
@@ -785,9 +770,8 @@ HRESULT Compositor::SetBackingColor(COLORREF color) noexcept
     }
 
     char buf[96];
-    snprintf(buf, sizeof(buf),
-             "[COMP-backing] recolor #%02X%02X%02X applied (rearmost visual)",
-             GetRValue(color), GetGValue(color), GetBValue(color));
+    snprintf(buf, sizeof(buf), "[COMP-backing] recolor #%02X%02X%02X applied (rearmost visual)", GetRValue(color),
+             GetGValue(color), GetBValue(color));
     m_impl->LogLine(buf);
     return S_OK;
 }
@@ -797,10 +781,7 @@ HRESULT Compositor::SetBackingColor(COLORREF color) noexcept
 // CompositeEngineFrame and RefreshEngineSharedHandle implement the
 // per-frame composite and the resize-handle re-open respectively.
 
-HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
-                                       int    w,
-                                       int    h,
-                                       LUID   engineAdapterLuid) noexcept
+HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture, int w, int h, LUID engineAdapterLuid) noexcept
 {
     if (!sharedTexture || w <= 0 || h <= 0)
     {
@@ -814,9 +795,7 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
     }
 
     // Idempotence — same handle + size, already attached: no-op.
-    if (m_impl->engineVisualAttached &&
-        m_impl->engineHandleCached == sharedTexture &&
-        m_impl->engineWidthCached  == w &&
+    if (m_impl->engineVisualAttached && m_impl->engineHandleCached == sharedTexture && m_impl->engineWidthCached == w &&
         m_impl->engineHeightCached == h)
     {
         m_impl->LogLine("[COMP-engine-init] AttachEngineVisual: already attached with same params, no-op");
@@ -824,7 +803,7 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
     }
 
     HRESULT hr;
-    char buf[192];
+    char    buf[192];
 
     // 1. D3D11 device (lazy create — persists across re-attach with
     // different handle/size since the device is adapter-bound, not
@@ -843,11 +822,9 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
         };
         D3D_FEATURE_LEVEL chosenLevel = D3D_FEATURE_LEVEL_11_0;
 
-        hr = D3D11CreateDevice(
-            nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags,
-            wanted, _countof(wanted), D3D11_SDK_VERSION,
-            m_impl->d3d11Device.GetAddressOf(), &chosenLevel,
-            m_impl->d3d11Context.GetAddressOf());
+        hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags, wanted, _countof(wanted),
+                               D3D11_SDK_VERSION, m_impl->d3d11Device.GetAddressOf(), &chosenLevel,
+                               m_impl->d3d11Context.GetAddressOf());
 #ifndef NDEBUG
         if (FAILED(hr))
         {
@@ -855,13 +832,12 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
             // Mirrors the spike's pattern. Production Debug
             // builds with SDK layers proceed via the first path; Debug
             // builds on a machine without SDK layers fall back here.
-            m_impl->LogLine("[COMP-engine-init] D3D11CreateDevice with DEBUG failed hr=" + FormatHresult(hr) + " — retrying without (SDK layers missing?)");
+            m_impl->LogLine("[COMP-engine-init] D3D11CreateDevice with DEBUG failed hr=" + FormatHresult(hr) +
+                            " — retrying without (SDK layers missing?)");
             flags &= ~D3D11_CREATE_DEVICE_DEBUG;
-            hr = D3D11CreateDevice(
-                nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags,
-                wanted, _countof(wanted), D3D11_SDK_VERSION,
-                m_impl->d3d11Device.GetAddressOf(), &chosenLevel,
-                m_impl->d3d11Context.GetAddressOf());
+            hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags, wanted, _countof(wanted),
+                                   D3D11_SDK_VERSION, m_impl->d3d11Device.GetAddressOf(), &chosenLevel,
+                                   m_impl->d3d11Context.GetAddressOf());
         }
 #endif
         if (FAILED(hr) || !m_impl->d3d11Device)
@@ -871,8 +847,7 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
             m_impl->d3d11Device.Reset();
             return hr;
         }
-        snprintf(buf, sizeof(buf),
-                 "[COMP-engine-init] D3D11 device created (level=0x%X flags=0x%X)",
+        snprintf(buf, sizeof(buf), "[COMP-engine-init] D3D11 device created (level=0x%X flags=0x%X)",
                  static_cast<unsigned>(chosenLevel), flags);
         m_impl->LogLine(buf);
 
@@ -899,13 +874,13 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
                          static_cast<unsigned long>(engineAdapterLuid.LowPart));
                 m_impl->LogLine(buf);
 
-                const bool callerProvidedLuid =
-                    (engineAdapterLuid.HighPart != 0 || engineAdapterLuid.LowPart != 0);
-                if (callerProvidedLuid &&
-                    (desc.AdapterLuid.HighPart != engineAdapterLuid.HighPart ||
-                     desc.AdapterLuid.LowPart  != engineAdapterLuid.LowPart))
+                const bool callerProvidedLuid = (engineAdapterLuid.HighPart != 0 || engineAdapterLuid.LowPart != 0);
+                if (callerProvidedLuid && (desc.AdapterLuid.HighPart != engineAdapterLuid.HighPart ||
+                                           desc.AdapterLuid.LowPart != engineAdapterLuid.LowPart))
                 {
-                    m_impl->LogLine("[COMP-engine-fail] LUID mismatch — engine D3D9Ex and Compositor D3D11 picked different adapters; skipping engine visual attach (composition mode stays, viewport area empty)");
+                    m_impl->LogLine(
+                        "[COMP-engine-fail] LUID mismatch — engine D3D9Ex and Compositor D3D11 picked different "
+                        "adapters; skipping engine visual attach (composition mode stays, viewport area empty)");
                     m_impl->d3d11Context.Reset();
                     m_impl->d3d11Device.Reset();
                     // Distinctive HRESULT so callers can disambiguate
@@ -941,7 +916,8 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
         hr = factory1.As(&m_impl->dxgiFactory);
         if (FAILED(hr) || !m_impl->dxgiFactory)
         {
-            m_impl->LogLine("[COMP-engine-fail] QI IDXGIFactory1→IDXGIFactory2 hr=" + FormatHresult(hr) + " (pre-Win8 system? DXGI 1.2 required for composition)");
+            m_impl->LogLine("[COMP-engine-fail] QI IDXGIFactory1→IDXGIFactory2 hr=" + FormatHresult(hr) +
+                            " (pre-Win8 system? DXGI 1.2 required for composition)");
             return hr;
         }
     }
@@ -956,8 +932,7 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
     // success path at the end of this method.
     m_impl->engineVisualAttached = false;
     m_impl->sharedTexD3D11.Reset();
-    hr = m_impl->d3d11Device->OpenSharedResource(
-        sharedTexture, IID_PPV_ARGS(m_impl->sharedTexD3D11.GetAddressOf()));
+    hr = m_impl->d3d11Device->OpenSharedResource(sharedTexture, IID_PPV_ARGS(m_impl->sharedTexD3D11.GetAddressOf()));
     if (FAILED(hr) || !m_impl->sharedTexD3D11)
     {
         m_impl->LogLine("[COMP-engine-fail] OpenSharedResource hr=" + FormatHresult(hr));
@@ -968,8 +943,8 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
         m_impl->sharedTexD3D11->GetDesc(&desc);
         snprintf(buf, sizeof(buf),
                  "[COMP-engine-open] OpenSharedResource handle=%p texSize=%ux%u fmt=%u bind=0x%X share=0x%X",
-                 sharedTexture, desc.Width, desc.Height,
-                 static_cast<unsigned>(desc.Format), desc.BindFlags, desc.MiscFlags);
+                 sharedTexture, desc.Width, desc.Height, static_cast<unsigned>(desc.Format), desc.BindFlags,
+                 desc.MiscFlags);
         m_impl->LogLine(buf);
     }
 
@@ -977,13 +952,13 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
     // the spike's InitD3D11AndSwapchain exactly — that combination works on the
     // user's RTX 3080 per the spike measurements.
     DXGI_SWAP_CHAIN_DESC1 scDesc = {};
-    scDesc.Width  = static_cast<UINT>(w);
-    scDesc.Height = static_cast<UINT>(h);
-    scDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;       // matches engine's D3DFMT_A8R8G8B8
-    scDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    scDesc.BufferCount = 2;
-    scDesc.SampleDesc.Count = 1;
-    scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+    scDesc.Width                 = static_cast<UINT>(w);
+    scDesc.Height                = static_cast<UINT>(h);
+    scDesc.Format                = DXGI_FORMAT_B8G8R8A8_UNORM; // matches engine's D3DFMT_A8R8G8B8
+    scDesc.BufferUsage           = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    scDesc.BufferCount           = 2;
+    scDesc.SampleDesc.Count      = 1;
+    scDesc.SwapEffect            = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
     // ALPHA_MODE_IGNORE, NOT PREMULTIPLIED.
     //
     // The spike's swapchain used DXGI_ALPHA_MODE_PREMULTIPLIED (its
@@ -1007,21 +982,19 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
     // opaque rectangle at (0,0,W,H); WebView2 chrome composites on
     // top where the WebView2 visual is opaque, transparent regions
     // show full-opacity engine. That's the legacy parity.
-    scDesc.AlphaMode  = DXGI_ALPHA_MODE_IGNORE;
-    scDesc.Scaling    = DXGI_SCALING_STRETCH;          // tolerates engine/swapchain size mismatch
+    scDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
+    scDesc.Scaling   = DXGI_SCALING_STRETCH; // tolerates engine/swapchain size mismatch
 
     m_impl->engineSwapChain.Reset();
     m_impl->engineBackBuffer.Reset();
-    hr = m_impl->dxgiFactory->CreateSwapChainForComposition(
-        m_impl->d3d11Device.Get(), &scDesc, nullptr,
-        m_impl->engineSwapChain.GetAddressOf());
+    hr = m_impl->dxgiFactory->CreateSwapChainForComposition(m_impl->d3d11Device.Get(), &scDesc, nullptr,
+                                                            m_impl->engineSwapChain.GetAddressOf());
     if (FAILED(hr) || !m_impl->engineSwapChain)
     {
         m_impl->LogLine("[COMP-engine-fail] CreateSwapChainForComposition hr=" + FormatHresult(hr));
         return hr;
     }
-    snprintf(buf, sizeof(buf),
-             "[COMP-engine-swap] composition swapchain created %dx%d FLIP_SEQ BGRA8 premul", w, h);
+    snprintf(buf, sizeof(buf), "[COMP-engine-swap] composition swapchain created %dx%d FLIP_SEQ BGRA8 premul", w, h);
     m_impl->LogLine(buf);
 
     hr = m_impl->engineSwapChain->GetBuffer(0, IID_PPV_ARGS(m_impl->engineBackBuffer.GetAddressOf()));
@@ -1090,17 +1063,17 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
     // CompositeEngineFrame checks this tuple against
     // engine->GetSharedTextureHandle() each frame; the resize-handle
     // re-open hooks here too.
-    m_impl->engineHandleCached    = sharedTexture;
-    m_impl->engineWidthCached     = w;
-    m_impl->engineHeightCached    = h;
-    m_impl->engineVisualAttached  = true;
-    m_impl->LogLine("[COMP-engine-attach] engine visual attached (behind WebView2, swapchain content set, tree committed)");
+    m_impl->engineHandleCached   = sharedTexture;
+    m_impl->engineWidthCached    = w;
+    m_impl->engineHeightCached   = h;
+    m_impl->engineVisualAttached = true;
+    m_impl->LogLine(
+        "[COMP-engine-attach] engine visual attached (behind WebView2, swapchain content set, tree committed)");
 
     return S_OK;
 }
 
-ComposedFrameResult Compositor::CompositeEngineFrame(
-    HANDLE currentSharedHandle) noexcept
+ComposedFrameResult Compositor::CompositeEngineFrame(HANDLE currentSharedHandle) noexcept
 {
     // No engine visual attached -> expected no-frame per the documented
     // contract. Host's per-frame loop treats it as "skip the
@@ -1109,8 +1082,7 @@ ComposedFrameResult Compositor::CompositeEngineFrame(
     //   - AttachEngineVisual failed (LUID mismatch, D3D11 device,
     //     OpenSharedResource, swapchain) — composition mode stays
     //     intact, viewport stays empty.
-    if (!m_impl->engineVisualAttached)
-        return ComposedFrameResult::NoFrame();
+    if (!m_impl->engineVisualAttached) return ComposedFrameResult::NoFrame();
 
     // Defensive — engineVisualAttached implies all resources exist,
     // but cover the edge case where teardown is mid-flight on a
@@ -1165,18 +1137,16 @@ ComposedFrameResult Compositor::CompositeEngineFrame(
     // RefreshEngineSharedHandle path above ResizeBuffers'd the
     // swapchain to the texture descriptor's actual size before
     // returning success, so the steady-state invariant holds).
-    m_impl->d3d11Context->CopyResource(
-        m_impl->engineBackBuffer.Get(),
-        m_impl->sharedTexD3D11.Get());
+    m_impl->d3d11Context->CopyResource(m_impl->engineBackBuffer.Get(), m_impl->sharedTexD3D11.Get());
 
     // Present1 with no sync interval — composition rate is throttled
     // by DComp's commit cadence (~60-360 Hz depending on monitor +
     // composition refresh), not by Present rate. Spike measured
     // 0.30 ms total transport at 3440x1440 — Present is essentially
     // free, the spin in WaitEndFrameQuery dominates.
-    DXGI_PRESENT_PARAMETERS pp = {};
-    const UINT presentFlags = m_impl->presentWithoutWait ? DXGI_PRESENT_DO_NOT_WAIT : 0;
-    HRESULT hr = m_impl->engineSwapChain->Present1(0, presentFlags, &pp);
+    DXGI_PRESENT_PARAMETERS pp           = {};
+    const UINT              presentFlags = m_impl->presentWithoutWait ? DXGI_PRESENT_DO_NOT_WAIT : 0;
+    HRESULT                 hr           = m_impl->engineSwapChain->Present1(0, presentFlags, &pp);
     // No buffer free mid-drag: drop this frame; the next tick presents, and
     // the pending transform waits for those pixels.
     if (hr == DXGI_ERROR_WAS_STILL_DRAWING) return ComposedFrameResult::NoFrame();
@@ -1206,15 +1176,11 @@ ComposedFrameResult Compositor::CompositeEngineFrame(
         // unless the pending value matches the cached LAST one (also
         // a common case after a single-tick stall where the pending
         // got queued and immediately overwritten by a no-op).
-        if (m_impl->pendingX != m_impl->engineLastX ||
-            m_impl->pendingY != m_impl->engineLastY ||
-            m_impl->pendingW != m_impl->engineLastTransformW ||
-            m_impl->pendingH != m_impl->engineLastTransformH)
+        if (m_impl->pendingX != m_impl->engineLastX || m_impl->pendingY != m_impl->engineLastY ||
+            m_impl->pendingW != m_impl->engineLastTransformW || m_impl->pendingH != m_impl->engineLastTransformH)
         {
-            (void)m_impl->ApplyTransform(
-                m_impl->pendingX, m_impl->pendingY,
-                m_impl->pendingW, m_impl->pendingH,
-                m_impl->pendingQuiet);
+            (void)m_impl->ApplyTransform(m_impl->pendingX, m_impl->pendingY, m_impl->pendingW, m_impl->pendingH,
+                                         m_impl->pendingQuiet);
             // Best-effort: log and proceed even on failure (the visible
             // result is "scene-rect doesn't update," which is the same
             // shape the user already sees during drag storms — not a
@@ -1229,14 +1195,12 @@ ComposedFrameResult Compositor::CompositeEngineFrame(
     // to span that.
     m_impl->engineFrameCount++;
     DWORD now = GetTickCount();
-    if (m_impl->engineLastFrameLogTick == 0 ||
-        (now - m_impl->engineLastFrameLogTick) >= 1000)
+    if (m_impl->engineLastFrameLogTick == 0 || (now - m_impl->engineLastFrameLogTick) >= 1000)
     {
         m_impl->engineLastFrameLogTick = now;
 
         char buf[256];
-        snprintf(buf, sizeof(buf),
-                 "[COMP-engine-frame] composite n=%llu (1 Hz throttle)",
+        snprintf(buf, sizeof(buf), "[COMP-engine-frame] composite n=%llu (1 Hz throttle)",
                  static_cast<unsigned long long>(m_impl->engineFrameCount));
         m_impl->LogLine(buf);
 
@@ -1246,13 +1210,9 @@ ComposedFrameResult Compositor::CompositeEngineFrame(
         // [COMP-engine-resize] entry, OpenSharedResource silently
         // returned a different texture — the spike's documented
         // wrong-handle failure mode (see InitD3D11AndSwapchain in the spike).
-        snprintf(buf, sizeof(buf),
-                 "[COMP-engine-handle-hash] handle=%p sharedTex=%p backBuffer=%p texSize=%dx%d",
-                 m_impl->engineHandleCached,
-                 m_impl->sharedTexD3D11.Get(),
-                 m_impl->engineBackBuffer.Get(),
-                 m_impl->engineWidthCached,
-                 m_impl->engineHeightCached);
+        snprintf(buf, sizeof(buf), "[COMP-engine-handle-hash] handle=%p sharedTex=%p backBuffer=%p texSize=%dx%d",
+                 m_impl->engineHandleCached, m_impl->sharedTexD3D11.Get(), m_impl->engineBackBuffer.Get(),
+                 m_impl->engineWidthCached, m_impl->engineHeightCached);
         m_impl->LogLine(buf);
     }
 
@@ -1264,11 +1224,9 @@ void Compositor::SetPresentWithoutWait(bool on) noexcept
     m_impl->presentWithoutWait = on;
 }
 
-HRESULT Compositor::RefreshEngineSharedHandle(HANDLE sharedTexture,
-                                              int    hintW,
-                                              int    hintH) noexcept
+HRESULT Compositor::RefreshEngineSharedHandle(HANDLE sharedTexture, int hintW, int hintH) noexcept
 {
-    (void)hintW;  // advisory only — actual size read from texture descriptor
+    (void)hintW; // advisory only — actual size read from texture descriptor
     (void)hintH;
 
     if (!sharedTexture)
@@ -1278,7 +1236,8 @@ HRESULT Compositor::RefreshEngineSharedHandle(HANDLE sharedTexture,
     }
     if (!m_impl->d3d11Device || !m_impl->engineSwapChain)
     {
-        m_impl->LogLine("[COMP-engine-fail] RefreshEngineSharedHandle: D3D11 device or swapchain missing (call AttachEngineVisual first)");
+        m_impl->LogLine("[COMP-engine-fail] RefreshEngineSharedHandle: D3D11 device or swapchain missing (call "
+                        "AttachEngineVisual first)");
         return E_NOT_VALID_STATE;
     }
 
@@ -1286,8 +1245,8 @@ HRESULT Compositor::RefreshEngineSharedHandle(HANDLE sharedTexture,
     // pointed at released D3D9 VRAM and any further CopyResource on
     // it would read garbage.
     m_impl->sharedTexD3D11.Reset();
-    HRESULT hr = m_impl->d3d11Device->OpenSharedResource(
-        sharedTexture, IID_PPV_ARGS(m_impl->sharedTexD3D11.GetAddressOf()));
+    HRESULT hr =
+        m_impl->d3d11Device->OpenSharedResource(sharedTexture, IID_PPV_ARGS(m_impl->sharedTexD3D11.GetAddressOf()));
     if (FAILED(hr) || !m_impl->sharedTexD3D11)
     {
         m_impl->LogLine("[COMP-engine-fail] RefreshEngineSharedHandle: OpenSharedResource hr=" + FormatHresult(hr));
@@ -1317,9 +1276,8 @@ HRESULT Compositor::RefreshEngineSharedHandle(HANDLE sharedTexture,
     if (newW != m_impl->engineWidthCached || newH != m_impl->engineHeightCached)
     {
         m_impl->engineBackBuffer.Reset();
-        hr = m_impl->engineSwapChain->ResizeBuffers(
-            0, static_cast<UINT>(newW), static_cast<UINT>(newH),
-            DXGI_FORMAT_UNKNOWN, 0);
+        hr = m_impl->engineSwapChain->ResizeBuffers(0, static_cast<UINT>(newW), static_cast<UINT>(newH),
+                                                    DXGI_FORMAT_UNKNOWN, 0);
         if (FAILED(hr))
         {
             m_impl->LogLine("[COMP-engine-fail] RefreshEngineSharedHandle: ResizeBuffers hr=" + FormatHresult(hr));
@@ -1329,7 +1287,8 @@ HRESULT Compositor::RefreshEngineSharedHandle(HANDLE sharedTexture,
         hr = m_impl->engineSwapChain->GetBuffer(0, IID_PPV_ARGS(m_impl->engineBackBuffer.GetAddressOf()));
         if (FAILED(hr))
         {
-            m_impl->LogLine("[COMP-engine-fail] RefreshEngineSharedHandle: GetBuffer post-Resize hr=" + FormatHresult(hr));
+            m_impl->LogLine("[COMP-engine-fail] RefreshEngineSharedHandle: GetBuffer post-Resize hr=" +
+                            FormatHresult(hr));
             m_impl->engineHandleCached = nullptr;
             return hr;
         }
@@ -1340,11 +1299,8 @@ HRESULT Compositor::RefreshEngineSharedHandle(HANDLE sharedTexture,
     // line per actual handle change; the 1 Hz throttle on
     // [COMP-engine-frame] doesn't apply here (events are sparse).
     char buf[256];
-    snprintf(buf, sizeof(buf),
-             "[COMP-engine-resize] handle %p -> %p, size %dx%d -> %dx%d",
-             m_impl->engineHandleCached, sharedTexture,
-             m_impl->engineWidthCached, m_impl->engineHeightCached,
-             newW, newH);
+    snprintf(buf, sizeof(buf), "[COMP-engine-resize] handle %p -> %p, size %dx%d -> %dx%d", m_impl->engineHandleCached,
+             sharedTexture, m_impl->engineWidthCached, m_impl->engineHeightCached, newW, newH);
     m_impl->LogLine(buf);
 
     m_impl->engineHandleCached = sharedTexture;
@@ -1426,14 +1382,10 @@ HRESULT Compositor::SetEngineVisualTransform(int x, int y, int w, int h, bool im
     // Compare against the cache (last actually-applied) AND any pending
     // queued transform, so back-to-back identical SetSceneRect events
     // collapse to nothing.
-    const bool sameAsApplied =
-        (x == m_impl->engineLastX && y == m_impl->engineLastY &&
-         w == m_impl->engineLastTransformW &&
-         h == m_impl->engineLastTransformH);
-    const bool sameAsPending =
-        (m_impl->pendingTransform &&
-         x == m_impl->pendingX && y == m_impl->pendingY &&
-         w == m_impl->pendingW && h == m_impl->pendingH);
+    const bool sameAsApplied = (x == m_impl->engineLastX && y == m_impl->engineLastY &&
+                                w == m_impl->engineLastTransformW && h == m_impl->engineLastTransformH);
+    const bool sameAsPending = (m_impl->pendingTransform && x == m_impl->pendingX && y == m_impl->pendingY &&
+                                w == m_impl->pendingW && h == m_impl->pendingH);
     if (sameAsApplied && !m_impl->pendingTransform) return S_OK;
     if (sameAsPending) return S_OK;
 
@@ -1458,11 +1410,11 @@ HRESULT Compositor::SetEngineVisualTransform(int x, int y, int w, int h, bool im
     // and engine rendering at ~100 Hz, this means at most a 1-frame
     // delay between dispatch and visible clip update, never a backlog.
     m_impl->pendingTransform = true;
-    m_impl->pendingQuiet = quiet;
-    m_impl->pendingX = x;
-    m_impl->pendingY = y;
-    m_impl->pendingW = w;
-    m_impl->pendingH = h;
+    m_impl->pendingQuiet     = quiet;
+    m_impl->pendingX         = x;
+    m_impl->pendingY         = y;
+    m_impl->pendingW         = w;
+    m_impl->pendingH         = h;
     return S_OK;
 }
 

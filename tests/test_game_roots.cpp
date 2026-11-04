@@ -8,10 +8,19 @@
 #include <string>
 
 static int g_failed = 0;
-#define CHECK(cond, msg) do {                              \
-    if (cond) { std::printf("  ok: %s\n", msg); }          \
-    else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
-} while (0)
+#define CHECK(cond, msg)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (cond)                                                                                                      \
+        {                                                                                                              \
+            std::printf("  ok: %s\n", msg);                                                                            \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            ++g_failed;                                                                                                \
+            std::printf("  FAIL: %s\n", msg);                                                                          \
+        }                                                                                                              \
+    } while (0)
 
 using gameroots::RootFlavor;
 
@@ -25,14 +34,12 @@ int main()
     CHECK(gameroots::TrimTrailingSlashes(L"") == L"", "TrimTrailingSlashes keeps empty empty");
 
     // Leaf classification is case-insensitive and ignores trailing slashes.
-    CHECK(gameroots::ClassifyGameRoot(L"D:\\Steam\\EaW\\corruption") == RootFlavor::FoC,
-          "corruption is FoC");
+    CHECK(gameroots::ClassifyGameRoot(L"D:\\Steam\\EaW\\corruption") == RootFlavor::FoC, "corruption is FoC");
     CHECK(gameroots::ClassifyGameRoot(L"D:\\Steam\\EaW\\CORRUPTION\\") == RootFlavor::FoC,
           "CORRUPTION\\ is FoC (case + trailing slash)");
     CHECK(gameroots::ClassifyGameRoot(L"D:/Steam/EaW/gamedata/") == RootFlavor::BaseGame,
           "gamedata/ is the base game (forward slashes)");
-    CHECK(gameroots::ClassifyGameRoot(L"D:\\Steam\\EaW\\Mods") == RootFlavor::Other,
-          "an unrelated leaf is neither");
+    CHECK(gameroots::ClassifyGameRoot(L"D:\\Steam\\EaW\\Mods") == RootFlavor::Other, "an unrelated leaf is neither");
     CHECK(gameroots::ClassifyGameRoot(L"GameData") == RootFlavor::BaseGame,
           "a bare leaf with no parent still classifies");
     CHECK(gameroots::ClassifyGameRoot(L"D:\\corruption2") == RootFlavor::Other,
@@ -43,10 +50,8 @@ int main()
           "corruption's sibling is GameData");
     CHECK(gameroots::SiblingGameRoot(L"D:\\Steam\\EaW\\GameData") == L"D:\\Steam\\EaW\\corruption",
           "GameData's sibling is corruption");
-    CHECK(gameroots::SiblingGameRoot(L"D:\\Steam\\EaW\\Other").empty(),
-          "an unrelated root has no sibling");
-    CHECK(gameroots::SiblingGameRoot(L"GameData").empty(),
-          "a root with no parent folder has no sibling");
+    CHECK(gameroots::SiblingGameRoot(L"D:\\Steam\\EaW\\Other").empty(), "an unrelated root has no sibling");
+    CHECK(gameroots::SiblingGameRoot(L"GameData").empty(), "a root with no parent folder has no sibling");
 
     std::printf("%s\n", g_failed ? "=== FAILED ===" : "=== ALL PASS ===");
     return g_failed ? 1 : 0;

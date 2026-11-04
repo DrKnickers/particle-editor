@@ -28,7 +28,7 @@ void ParticleSystem::Emitter::unregisterEmitterInstance(EmitterInstance* instanc
 
 ParticleSystem::Emitter::Emitter()
 {
-	setDefaults();
+    setDefaults();
 }
 
 ParticleSystem::Emitter::Emitter(const Emitter& emitter)
@@ -69,8 +69,7 @@ void ParticleSystem::Emitter::detachFromLinkGroup()
     linkGroup = 0;
 }
 
-void ParticleSystem::Emitter::copySharedParamsFrom(const Emitter&         src,
-                                                    const LinkExemptFlags& exempt)
+void ParticleSystem::Emitter::copySharedParamsFrom(const Emitter& src, const LinkExemptFlags& exempt)
 {
     if (&src == this) return;
 
@@ -194,54 +193,54 @@ void ParticleSystem::Emitter::copySharedParamsFrom(const Emitter&         src,
     stableId        = savedStableId;
 
     // 5) Restore exempt fields per the flags.
-    if (exempt.name)          name          = savedName;
-    if (exempt.colorTexture)  colorTexture  = savedColorTexture;
+    if (exempt.name) name = savedName;
+    if (exempt.colorTexture) colorTexture = savedColorTexture;
     if (exempt.normalTexture) normalTexture = savedNormalTexture;
 
-    if (exempt.linkToSystem)            linkToSystem            = sav_linkToSystem;
+    if (exempt.linkToSystem) linkToSystem = sav_linkToSystem;
     if (exempt.objectSpaceAcceleration) objectSpaceAcceleration = sav_objectSpaceAcceleration;
-    if (exempt.doColorAddGrayscale)     doColorAddGrayscale     = sav_doColorAddGrayscale;
-    if (exempt.affectedByWind)          affectedByWind          = sav_affectedByWind;
-    if (exempt.isHeatParticle)          isHeatParticle          = sav_isHeatParticle;
-    if (exempt.isWeatherParticle)       isWeatherParticle       = sav_isWeatherParticle;
-    if (exempt.hasTail)                 hasTail                 = sav_hasTail;
-    if (exempt.noDepthTest)             noDepthTest             = sav_noDepthTest;
-    if (exempt.randomRotation)          randomRotation          = sav_randomRotation;
+    if (exempt.doColorAddGrayscale) doColorAddGrayscale = sav_doColorAddGrayscale;
+    if (exempt.affectedByWind) affectedByWind = sav_affectedByWind;
+    if (exempt.isHeatParticle) isHeatParticle = sav_isHeatParticle;
+    if (exempt.isWeatherParticle) isWeatherParticle = sav_isWeatherParticle;
+    if (exempt.hasTail) hasTail = sav_hasTail;
+    if (exempt.noDepthTest) noDepthTest = sav_noDepthTest;
+    if (exempt.randomRotation) randomRotation = sav_randomRotation;
     if (exempt.randomRotationDirection) randomRotationDirection = sav_randomRotationDirection;
-    if (exempt.isWorldOriented)         isWorldOriented         = sav_isWorldOriented;
-    if (exempt.useBursts)               useBursts               = sav_useBursts;
-    if (exempt.emitFromMesh)            emitFromMesh            = sav_emitFromMesh;
-    if (exempt.gravity)                 gravity                 = sav_gravity;
-    if (exempt.lifetime)                lifetime                = sav_lifetime;
-    if (exempt.initialDelay)            initialDelay            = sav_initialDelay;
-    if (exempt.burstDelay)              burstDelay              = sav_burstDelay;
-    if (exempt.inwardSpeed)             inwardSpeed             = sav_inwardSpeed;
-    if (exempt.inwardAcceleration)      inwardAcceleration      = sav_inwardAcceleration;
-    if (exempt.randomScalePerc)         randomScalePerc         = sav_randomScalePerc;
-    if (exempt.randomLifetimePerc)      randomLifetimePerc      = sav_randomLifetimePerc;
-    if (exempt.weatherCubeSize)         weatherCubeSize         = sav_weatherCubeSize;
-    if (exempt.tailSize)                tailSize                = sav_tailSize;
-    if (exempt.parentLinkStrength)      parentLinkStrength      = sav_parentLinkStrength;
-    if (exempt.weatherCubeDistance)     weatherCubeDistance     = sav_weatherCubeDistance;
-    if (exempt.randomRotationAverage)   randomRotationAverage   = sav_randomRotationAverage;
-    if (exempt.randomRotationVariance)  randomRotationVariance  = sav_randomRotationVariance;
-    if (exempt.bounciness)              bounciness              = sav_bounciness;
-    if (exempt.freezeTime)              freezeTime              = sav_freezeTime;
-    if (exempt.skipTime)                skipTime                = sav_skipTime;
-    if (exempt.emitFromMeshOffset)      emitFromMeshOffset      = sav_emitFromMeshOffset;
-    if (exempt.weatherFadeoutDistance)  weatherFadeoutDistance  = sav_weatherFadeoutDistance;
-    if (exempt.nBursts)                 nBursts                 = sav_nBursts;
-    if (exempt.blendMode)               blendMode               = sav_blendMode;
-    if (exempt.textureSize)             textureSize             = sav_textureSize;
-    if (exempt.nParticlesPerSecond)     nParticlesPerSecond     = sav_nParticlesPerSecond;
-    if (exempt.nTriangles)              nTriangles              = sav_nTriangles;
-    if (exempt.nParticlesPerBurst)      nParticlesPerBurst      = sav_nParticlesPerBurst;
-    if (exempt.groundBehavior)          groundBehavior          = sav_groundBehavior;
+    if (exempt.isWorldOriented) isWorldOriented = sav_isWorldOriented;
+    if (exempt.useBursts) useBursts = sav_useBursts;
+    if (exempt.emitFromMesh) emitFromMesh = sav_emitFromMesh;
+    if (exempt.gravity) gravity = sav_gravity;
+    if (exempt.lifetime) lifetime = sav_lifetime;
+    if (exempt.initialDelay) initialDelay = sav_initialDelay;
+    if (exempt.burstDelay) burstDelay = sav_burstDelay;
+    if (exempt.inwardSpeed) inwardSpeed = sav_inwardSpeed;
+    if (exempt.inwardAcceleration) inwardAcceleration = sav_inwardAcceleration;
+    if (exempt.randomScalePerc) randomScalePerc = sav_randomScalePerc;
+    if (exempt.randomLifetimePerc) randomLifetimePerc = sav_randomLifetimePerc;
+    if (exempt.weatherCubeSize) weatherCubeSize = sav_weatherCubeSize;
+    if (exempt.tailSize) tailSize = sav_tailSize;
+    if (exempt.parentLinkStrength) parentLinkStrength = sav_parentLinkStrength;
+    if (exempt.weatherCubeDistance) weatherCubeDistance = sav_weatherCubeDistance;
+    if (exempt.randomRotationAverage) randomRotationAverage = sav_randomRotationAverage;
+    if (exempt.randomRotationVariance) randomRotationVariance = sav_randomRotationVariance;
+    if (exempt.bounciness) bounciness = sav_bounciness;
+    if (exempt.freezeTime) freezeTime = sav_freezeTime;
+    if (exempt.skipTime) skipTime = sav_skipTime;
+    if (exempt.emitFromMeshOffset) emitFromMeshOffset = sav_emitFromMeshOffset;
+    if (exempt.weatherFadeoutDistance) weatherFadeoutDistance = sav_weatherFadeoutDistance;
+    if (exempt.nBursts) nBursts = sav_nBursts;
+    if (exempt.blendMode) blendMode = sav_blendMode;
+    if (exempt.textureSize) textureSize = sav_textureSize;
+    if (exempt.nParticlesPerSecond) nParticlesPerSecond = sav_nParticlesPerSecond;
+    if (exempt.nTriangles) nTriangles = sav_nTriangles;
+    if (exempt.nParticlesPerBurst) nParticlesPerBurst = sav_nParticlesPerBurst;
+    if (exempt.groundBehavior) groundBehavior = sav_groundBehavior;
 
     if (exempt.acceleration) memcpy(acceleration, sav_acceleration, sizeof(acceleration));
     if (exempt.randomColors) memcpy(randomColors, sav_randomColors, sizeof(randomColors));
 
-    if (exempt.groupSpeed)    groups[0] = sav_groups[0];
+    if (exempt.groupSpeed) groups[0] = sav_groups[0];
     if (exempt.groupLifetime) groups[1] = sav_groups[1];
     if (exempt.groupPosition) groups[2] = sav_groups[2];
 
@@ -250,13 +249,8 @@ void ParticleSystem::Emitter::copySharedParamsFrom(const Emitter&         src,
     // trackContents[i]. The earlier code did this for TRACK_INDEX
     // only; this generalizes to any exempt track.
     const bool trackExempt[NUM_TRACKS] = {
-        exempt.trackRed,
-        exempt.trackGreen,
-        exempt.trackBlue,
-        exempt.trackAlpha,
-        exempt.trackScale,
-        exempt.trackIndex,
-        exempt.trackRotationSpeed,
+        exempt.trackRed,   exempt.trackGreen, exempt.trackBlue,          exempt.trackAlpha,
+        exempt.trackScale, exempt.trackIndex, exempt.trackRotationSpeed,
     };
     for (int i = 0; i < NUM_TRACKS; i++)
     {
@@ -268,7 +262,11 @@ void ParticleSystem::Emitter::copySharedParamsFrom(const Emitter&         src,
     }
 
     if (exempt.unknown06) unknown06 = sav_unknown06;
-    if (exempt.unknown11) { unknown11 = sav_unknown11; has11 = sav_has11; }
+    if (exempt.unknown11)
+    {
+        unknown11 = sav_unknown11;
+        has11     = sav_has11;
+    }
     if (exempt.unknown15) unknown15 = sav_unknown15;
     if (exempt.unknown2b) unknown2b = sav_unknown2b;
     if (exempt.unknown3f) unknown3f = sav_unknown3f;
@@ -281,11 +279,10 @@ void ParticleSystem::Emitter::copySharedParamsFrom(const Emitter&         src,
     // LinkExemptFlags but its restore line isn't added above.
     // Only asserts on the common easy-to-check fields (most-recent
     // flags); a full check would duplicate the restore code.
-    if (exempt.lifetime)     assert(lifetime     == sav_lifetime);
-    if (exempt.gravity)      assert(gravity      == sav_gravity);
+    if (exempt.lifetime) assert(lifetime == sav_lifetime);
+    if (exempt.gravity) assert(gravity == sav_gravity);
     if (exempt.colorTexture) assert(colorTexture == savedColorTexture);
-    if (exempt.acceleration)
-        assert(memcmp(acceleration, sav_acceleration, sizeof(acceleration)) == 0);
+    if (exempt.acceleration) assert(memcmp(acceleration, sav_acceleration, sizeof(acceleration)) == 0);
     // stableId is IDENTITY (React row keys + FLIP maps key by it) — a clobber
     // here gives two live emitters the same id. Unconditional, unlike the
     // exempt checks above.
@@ -311,109 +308,115 @@ ParticleSystem::Emitter::~Emitter()
 
 void ParticleSystem::Emitter::setDefaults()
 {
-	spawnOnDeath    = -1;
-	spawnDuringLife = -1;
-	parent          = NULL;
+    spawnOnDeath    = -1;
+    spawnDuringLife = -1;
+    parent          = NULL;
     visible         = true;
     linkGroup       = 0;
     stableId        = s_nextEmitterStableId++;
 
-	name          = "default";
-	colorTexture  = "p_particle_master.tga";
-	normalTexture = "p_particle_depth_master.tga";
+    name          = "default";
+    colorTexture  = "p_particle_master.tga";
+    normalTexture = "p_particle_depth_master.tga";
 
-	groups[0].type = 0;
-	groups[0].minX = 0.0f; groups[0].minY = 0.0f; groups[0].minZ = 0.0f;
-	groups[0].maxX = 0.0f; groups[0].maxY = 0.0f; groups[0].maxZ = 0.0f;
-	groups[0].valX = 0.0f; groups[0].valY = 0.0f; groups[0].valZ = 0.0f;
-	groups[0].cylinderEdge   = false;
-	groups[0].cylinderHeight = 0.0f;
-	groups[0].cylinderRadius = 0.0f;
-	groups[0].sphereEdge     = false;
-	groups[0].sphereRadius   = 0.0f;
-	groups[0].sideLength     = 0.0f;
-	groups[2] = groups[1] = groups[0];
+    groups[0].type           = 0;
+    groups[0].minX           = 0.0f;
+    groups[0].minY           = 0.0f;
+    groups[0].minZ           = 0.0f;
+    groups[0].maxX           = 0.0f;
+    groups[0].maxY           = 0.0f;
+    groups[0].maxZ           = 0.0f;
+    groups[0].valX           = 0.0f;
+    groups[0].valY           = 0.0f;
+    groups[0].valZ           = 0.0f;
+    groups[0].cylinderEdge   = false;
+    groups[0].cylinderHeight = 0.0f;
+    groups[0].cylinderRadius = 0.0f;
+    groups[0].sphereEdge     = false;
+    groups[0].sphereRadius   = 0.0f;
+    groups[0].sideLength     = 0.0f;
+    groups[2] = groups[1] = groups[0];
 
-	for (int i = 0; i < NUM_TRACKS; i++)
-	{
+    for (int i = 0; i < NUM_TRACKS; i++)
+    {
         float value;
         switch (i)
         {
             case TRACK_RED_CHANNEL:
             case TRACK_GREEN_CHANNEL:
             case TRACK_BLUE_CHANNEL:
-            case TRACK_ALPHA_CHANNEL:   value =  1.0f; break;
-            case TRACK_SCALE:           value = 20.0f; break;
-            case TRACK_INDEX:           value =  0.0f; break;
-            case TRACK_ROTATION_SPEED:  value =  0.0f; break;
+            case TRACK_ALPHA_CHANNEL:  value = 1.0f; break;
+            case TRACK_SCALE:          value = 20.0f; break;
+            case TRACK_INDEX:          value = 0.0f; break;
+            case TRACK_ROTATION_SPEED: value = 0.0f; break;
         }
         trackContents[i].interpolation = (i == TRACK_INDEX) ? Track::IT_STEP : Track::IT_LINEAR;
-		trackContents[i].keys.insert(Track::Key(  0.0f, value));
-		trackContents[i].keys.insert(Track::Key(100.0f, value));
+        trackContents[i].keys.insert(Track::Key(0.0f, value));
+        trackContents[i].keys.insert(Track::Key(100.0f, value));
         tracks[i] = &trackContents[i];
-	}
+    }
     // Point Green, Blue and Alpha tracks to Red
     tracks[1] = tracks[0];
     tracks[2] = tracks[0];
     tracks[3] = tracks[0];
 
     linkToSystem            = false;
-	randomRotationDirection	= false;
-	doColorAddGrayscale		= false;
-	affectedByWind			= false;
-	isHeatParticle			= false;
-	isWeatherParticle		= false;
-	hasTail					= false;
-	noDepthTest				= false;
-	randomRotation			= false;
-	isWorldOriented			= false;
-	useBursts				= false;
-	objectSpaceAcceleration = false;
-	gravity                =   0.0f;
-	lifetime			   =   1.0f;
-	initialDelay		   =   0.0f;
-	burstDelay			   =   1.0f;
-	inwardAcceleration     =   0.0f;
-	inwardSpeed			   =   0.0f;
-	acceleration[0]		   =   0.0f;
-	acceleration[1]		   =   0.0f;
-	acceleration[2]		   =   0.0f;
-	randomScalePerc		   =   0.0f;
-	randomLifetimePerc	   =   0.0f;
-	weatherCubeSize        = 500.0f;
-	tailSize               =  50.0f;
-	parentLinkStrength    =    0.0f;
-	weatherCubeDistance    =   0.0f;
-	randomRotationVariance =   0.0f;
-	randomRotationAverage  =   0.0f;
-	randomColors[0]		   =   0.0f;
-	randomColors[1]		   =   0.0f;
-	randomColors[2]		   =   0.0f;
-	randomColors[3]		   =   0.0f;
-	bounciness			   =   0.2f;
-	freezeTime			   =   0.0f;
-	skipTime			   =   0.0f;
-	emitFromMeshOffset     =   0.50f;
-	weatherFadeoutDistance = 100.00f;
-	emitFromMesh        = EMIT_DISABLE;
-	index               = 0;
-	blendMode           = 1;
-	textureSize         = 64;
-	nBursts             = 0;
-	nParticlesPerSecond = 1;
-	nTriangles          = 2;
-	nParticlesPerBurst  = 1;
-	groundBehavior      = 0;
+    randomRotationDirection = false;
+    doColorAddGrayscale     = false;
+    affectedByWind          = false;
+    isHeatParticle          = false;
+    isWeatherParticle       = false;
+    hasTail                 = false;
+    noDepthTest             = false;
+    randomRotation          = false;
+    isWorldOriented         = false;
+    useBursts               = false;
+    objectSpaceAcceleration = false;
+    gravity                 = 0.0f;
+    lifetime                = 1.0f;
+    initialDelay            = 0.0f;
+    burstDelay              = 1.0f;
+    inwardAcceleration      = 0.0f;
+    inwardSpeed             = 0.0f;
+    acceleration[0]         = 0.0f;
+    acceleration[1]         = 0.0f;
+    acceleration[2]         = 0.0f;
+    randomScalePerc         = 0.0f;
+    randomLifetimePerc      = 0.0f;
+    weatherCubeSize         = 500.0f;
+    tailSize                = 50.0f;
+    parentLinkStrength      = 0.0f;
+    weatherCubeDistance     = 0.0f;
+    randomRotationVariance  = 0.0f;
+    randomRotationAverage   = 0.0f;
+    randomColors[0]         = 0.0f;
+    randomColors[1]         = 0.0f;
+    randomColors[2]         = 0.0f;
+    randomColors[3]         = 0.0f;
+    bounciness              = 0.2f;
+    freezeTime              = 0.0f;
+    skipTime                = 0.0f;
+    emitFromMeshOffset      = 0.50f;
+    weatherFadeoutDistance  = 100.00f;
+    emitFromMesh            = EMIT_DISABLE;
+    index                   = 0;
+    blendMode               = 1;
+    textureSize             = 64;
+    nBursts                 = 0;
+    nParticlesPerSecond     = 1;
+    nTriangles              = 2;
+    nParticlesPerBurst      = 1;
+    groundBehavior          = 0;
 
-	// These have an unknown function
-	unknown15 = true;
-	unknown2b = false;
-	unknown44 = false;
-	unknown11 =   0.0f;
-	has11     = false;
-	unknown3f =  50.00f;
-	unknown06 = 0;
-	unknown49 = 0;
+    // These have an unknown function
+    unknown15 = true;
+    unknown2b = false;
+    unknown44 = false;
+    unknown11 = 0.0f;
+    has11     = false;
+    unknown3f = 50.00f;
+    unknown06 = 0;
+    unknown49 = 0;
 }
 
 //
@@ -421,7 +424,7 @@ void ParticleSystem::Emitter::setDefaults()
 //
 ParticleSystem::ParticleSystem()
 {
-	m_leaveParticles = true;
+    m_leaveParticles = true;
 }
 
 void ParticleSystem::forEachLinkExempt(const std::function<void(uint32_t, const LinkExemptFlags&)>& visit) const
@@ -436,10 +439,9 @@ const LinkExemptFlags& ParticleSystem::getLinkExemptFlags(uint32_t groupId) cons
     return GetDefaultLinkExemptFlags();
 }
 
-void ParticleSystem::setLinkExemptFlags(uint32_t                 groupId,
-                                         const LinkExemptFlags&   flags)
+void ParticleSystem::setLinkExemptFlags(uint32_t groupId, const LinkExemptFlags& flags)
 {
-    if (groupId == 0) return;                                  // not a valid group
+    if (groupId == 0) return; // not a valid group
     // Normalize: don't store an entry that equals the v1 defaults.
     // Keeps files without customisation byte-identical to the earlier output.
     if (flags == GetDefaultLinkExemptFlags())
@@ -468,22 +470,26 @@ void ParticleSystem::ValidateEmitterGraph()
     std::vector<bool> claimed(n, false);
     for (size_t i = 0; i < n; i++)
     {
-        Emitter* e = m_emitters[i];
-        size_t* slots[2] = { &e->spawnOnDeath, &e->spawnDuringLife };
+        Emitter* e        = m_emitters[i];
+        size_t*  slots[2] = {&e->spawnOnDeath, &e->spawnDuringLife};
         for (size_t s = 0; s < 2; s++)
         {
             const size_t c = *slots[s];
             if (c == (size_t)-1) continue;
             const char* reason = NULL;
-            if      (c >= n)      reason = "out of range";
-            else if (c == i)      reason = "self-link";
-            else if (claimed[c])  reason = "already parented";
+            if (c >= n)
+                reason = "out of range";
+            else if (c == i)
+                reason = "self-link";
+            else if (claimed[c])
+                reason = "already parented";
             if (reason != NULL)
             {
-                printf("[Load] emitter %zu '%s' has invalid spawn index %zu (%s); clearing\n",
-                       i, e->name.c_str(), c, reason); fflush(stdout);
-                snprintf(repair, sizeof(repair), "emitters[%zu].%s: spawn index %zu cleared (%s)",
-                         i, s == 0 ? "spawnOnDeath" : "spawnDuringLife", c, reason);
+                printf("[Load] emitter %zu '%s' has invalid spawn index %zu (%s); clearing\n", i, e->name.c_str(), c,
+                       reason);
+                fflush(stdout);
+                snprintf(repair, sizeof(repair), "emitters[%zu].%s: spawn index %zu cleared (%s)", i,
+                         s == 0 ? "spawnOnDeath" : "spawnDuringLife", c, reason);
                 m_graphRepairs.push_back(repair);
                 *slots[s] = (size_t)-1;
             }
@@ -506,7 +512,7 @@ void ParticleSystem::ValidateEmitterGraph()
     for (size_t root = 0; root < n; root++)
     {
         if (color[root] != 0) continue;
-        std::vector< std::pair<size_t, int> > stack;
+        std::vector<std::pair<size_t, int>> stack;
         color[root] = 1;
         stack.push_back(std::make_pair(root, 0));
         while (!stack.empty())
@@ -519,20 +525,22 @@ void ParticleSystem::ValidateEmitterGraph()
                 stack.pop_back();
                 continue;
             }
-            stack.back().second = slotIdx + 1;   // advance before descending
-            Emitter* e = m_emitters[u];
-            const size_t v = (slotIdx == 0) ? e->spawnOnDeath : e->spawnDuringLife;
+            stack.back().second = slotIdx + 1; // advance before descending
+            Emitter*     e      = m_emitters[u];
+            const size_t v      = (slotIdx == 0) ? e->spawnOnDeath : e->spawnDuringLife;
             if (v == (size_t)-1) continue;
             if (color[v] == 1)
             {
                 // Back-edge into the active path: this link closes a cycle.
-                printf("[Load] emitter %zu '%s' closes a spawn cycle back to %zu; clearing\n",
-                       u, e->name.c_str(), v); fflush(stdout);
-                snprintf(repair, sizeof(repair), "emitters[%zu].%s: spawn index %zu cleared (closes a cycle)",
-                         u, slotIdx == 0 ? "spawnOnDeath" : "spawnDuringLife", v);
+                printf("[Load] emitter %zu '%s' closes a spawn cycle back to %zu; clearing\n", u, e->name.c_str(), v);
+                fflush(stdout);
+                snprintf(repair, sizeof(repair), "emitters[%zu].%s: spawn index %zu cleared (closes a cycle)", u,
+                         slotIdx == 0 ? "spawnOnDeath" : "spawnDuringLife", v);
                 m_graphRepairs.push_back(repair);
-                if (slotIdx == 0) e->spawnOnDeath    = (size_t)-1;
-                else              e->spawnDuringLife = (size_t)-1;
+                if (slotIdx == 0)
+                    e->spawnOnDeath = (size_t)-1;
+                else
+                    e->spawnDuringLife = (size_t)-1;
             }
             else if (stack.size() >= kMaxEmitterTreeDepth)
             {
@@ -543,13 +551,17 @@ void ParticleSystem::ValidateEmitterGraph()
                 // enclosing root loop picks v up as its own DFS start, so the
                 // rest of the chain is re-rooted the same way). Nothing is lost;
                 // an over-deep chain arrives as a series of capped chains.
-                printf("[Load] emitter %zu '%s' exceeds the spawn depth cap %lu at %zu; clearing\n",
-                       u, e->name.c_str(), kMaxEmitterTreeDepth, v); fflush(stdout);
-                snprintf(repair, sizeof(repair), "emitters[%zu].%s: spawn index %zu cleared (exceeds the depth cap %lu)",
-                         u, slotIdx == 0 ? "spawnOnDeath" : "spawnDuringLife", v, kMaxEmitterTreeDepth);
+                printf("[Load] emitter %zu '%s' exceeds the spawn depth cap %lu at %zu; clearing\n", u, e->name.c_str(),
+                       kMaxEmitterTreeDepth, v);
+                fflush(stdout);
+                snprintf(repair, sizeof(repair),
+                         "emitters[%zu].%s: spawn index %zu cleared (exceeds the depth cap %lu)", u,
+                         slotIdx == 0 ? "spawnOnDeath" : "spawnDuringLife", v, kMaxEmitterTreeDepth);
                 m_graphRepairs.push_back(repair);
-                if (slotIdx == 0) e->spawnOnDeath    = (size_t)-1;
-                else              e->spawnDuringLife = (size_t)-1;
+                if (slotIdx == 0)
+                    e->spawnOnDeath = (size_t)-1;
+                else
+                    e->spawnDuringLife = (size_t)-1;
             }
             else if (color[v] == 0)
             {
@@ -564,20 +576,18 @@ void ParticleSystem::ValidateEmitterGraph()
     // Pass 3: rebuild parent pointers from the now acyclic, single-parent
     // spawn links. Reset to NULL (root) first so a stale parent from a link
     // we just cleared can't survive.
-    for (size_t i = 0; i < n; i++)
-        m_emitters[i]->parent = NULL;
+    for (size_t i = 0; i < n; i++) m_emitters[i]->parent = NULL;
     for (size_t i = 0; i < n; i++)
     {
         Emitter* e = m_emitters[i];
-        if (e->spawnOnDeath    != (size_t)-1) m_emitters[e->spawnOnDeath]   ->parent = e;
+        if (e->spawnOnDeath != (size_t)-1) m_emitters[e->spawnOnDeath]->parent = e;
         if (e->spawnDuringLife != (size_t)-1) m_emitters[e->spawnDuringLife]->parent = e;
     }
 }
 
-size_t ParticleSystem::ImportEmittersFrom(
-    ParticleSystem& source,
-    const std::vector<size_t>& picks,
-    const std::function<std::string(const std::string&)>& makeUniqueName)
+size_t ParticleSystem::ImportEmittersFrom(ParticleSystem&                                       source,
+                                          const std::vector<size_t>&                            picks,
+                                          const std::function<std::string(const std::string&)>& makeUniqueName)
 {
     if (picks.empty()) return 0;
 
@@ -585,16 +595,16 @@ size_t ParticleSystem::ImportEmittersFrom(
     // source→destination index map for Pass 2. A clone is a deep copy via
     // the chunk serialiser in copy=true mode (strips runtime / link state).
     std::map<size_t, size_t> srcToDest;
-    std::vector<Emitter*> destEmitters(picks.size(), NULL);
-    size_t imported = 0;
+    std::vector<Emitter*>    destEmitters(picks.size(), NULL);
+    size_t                   imported = 0;
     for (size_t i = 0; i < picks.size(); ++i)
     {
         size_t srcIdx = picks[i];
         if (srcIdx >= source.getEmitters().size()) continue;
         Emitter& srcEmit = source.getEmitter(srcIdx);
 
-        MemoryFile* mf = new MemoryFile;
-        Emitter* placed = NULL;
+        MemoryFile* mf     = new MemoryFile;
+        Emitter*    placed = NULL;
         try
         {
             ChunkWriter w(mf);
@@ -604,7 +614,7 @@ size_t ParticleSystem::ImportEmittersFrom(
             // Braced init avoids the most-vexing-parse on `Emitter clone(r);`.
             Emitter clone{r};
             clone.name = makeUniqueName(clone.name);
-            placed = addRootEmitter(clone);
+            placed     = addRootEmitter(clone);
         }
         catch (...)
         {
@@ -615,7 +625,9 @@ size_t ParticleSystem::ImportEmittersFrom(
             // imports (imported < picks.size()); log the specific drop in debug.
 #ifndef NDEBUG
             printf("[ImportEmittersFrom] dropped pick %zu (src idx %zu): "
-                   "serialize/clone failed\n", i, srcIdx); fflush(stdout);
+                   "serialize/clone failed\n",
+                   i, srcIdx);
+            fflush(stdout);
 #endif
         }
         mf->Release();
@@ -634,8 +646,9 @@ size_t ParticleSystem::ImportEmittersFrom(
     {
         Emitter* dst = destEmitters[i];
         if (dst == NULL) continue;
-        const Emitter& src = source.getEmitter(picks[i]);
-        auto rebind = [&](size_t srcChildIdx) -> size_t {
+        const Emitter& src    = source.getEmitter(picks[i]);
+        auto           rebind = [&](size_t srcChildIdx) -> size_t
+        {
             if (srcChildIdx == (size_t)-1) return (size_t)-1;
             auto it = srcToDest.find(srcChildIdx);
             return (it != srcToDest.end()) ? it->second : (size_t)-1;
@@ -657,13 +670,11 @@ size_t ParticleSystem::ImportEmittersFrom(
     {
         if (destEmitters[i] == NULL) continue;
         uint32_t srcGroup = source.getEmitter(picks[i]).linkGroup;
-        if (srcGroup != 0)
-            byGroup[srcGroup].push_back(destEmitters[i]);
+        if (srcGroup != 0) byGroup[srcGroup].push_back(destEmitters[i]);
     }
     for (auto& kv : byGroup)
     {
-        if (kv.second.size() >= 2)
-            CreateLinkGroup(*this, kv.second);
+        if (kv.second.size() >= 2) CreateLinkGroup(*this, kv.second);
     }
 
     return imported;
@@ -672,9 +683,9 @@ size_t ParticleSystem::ImportEmittersFrom(
 ParticleSystem::Emitter* ParticleSystem::addRootEmitter(const ParticleSystem::Emitter& emitter)
 {
     Emitter* pEmitter = new Emitter(emitter);
-    pEmitter->index = m_emitters.size();
-	m_emitters.push_back(pEmitter);
-	return pEmitter;
+    pEmitter->index   = m_emitters.size();
+    m_emitters.push_back(pEmitter);
+    return pEmitter;
 }
 
 ParticleSystem::Emitter* ParticleSystem::addLifetimeEmitter(Emitter* parent, const ParticleSystem::Emitter& emitter)
@@ -682,12 +693,12 @@ ParticleSystem::Emitter* ParticleSystem::addLifetimeEmitter(Emitter* parent, con
     Emitter* pEmitter = NULL;
     if (parent->spawnDuringLife == -1)
     {
-        pEmitter = new Emitter(emitter);
-        pEmitter->index  = m_emitters.size();
-        pEmitter->parent = parent;
-        pEmitter->useBursts = false;  // Life emitter is never bursts
+        pEmitter                = new Emitter(emitter);
+        pEmitter->index         = m_emitters.size();
+        pEmitter->parent        = parent;
+        pEmitter->useBursts     = false; // Life emitter is never bursts
         parent->spawnDuringLife = pEmitter->index;
-	    m_emitters.push_back(pEmitter);
+        m_emitters.push_back(pEmitter);
     }
     return pEmitter;
 }
@@ -697,13 +708,13 @@ ParticleSystem::Emitter* ParticleSystem::addDeathEmitter(Emitter* parent, const 
     Emitter* pEmitter = NULL;
     if (parent->spawnOnDeath == -1)
     {
-        pEmitter = new Emitter(emitter);
-        pEmitter->index  = m_emitters.size();
-        pEmitter->parent = parent;
-        pEmitter->useBursts = true;  // Death emitter is always infinite bursts
-        pEmitter->nBursts   = 0;
+        pEmitter             = new Emitter(emitter);
+        pEmitter->index      = m_emitters.size();
+        pEmitter->parent     = parent;
+        pEmitter->useBursts  = true; // Death emitter is always infinite bursts
+        pEmitter->nBursts    = 0;
         parent->spawnOnDeath = pEmitter->index;
-	    m_emitters.push_back(pEmitter);
+        m_emitters.push_back(pEmitter);
     }
     return pEmitter;
 }
@@ -732,8 +743,10 @@ ParticleSystem::Emitter* ParticleSystem::insertEmitterAfter(const Emitter* refer
         Emitter* e = m_emitters[i - 1];
         if (e->parent != NULL)
         {
-            if      (e->parent->spawnDuringLife == e->index) e->parent->spawnDuringLife = e->index + 1;
-            else if (e->parent->spawnOnDeath    == e->index) e->parent->spawnOnDeath    = e->index + 1;
+            if (e->parent->spawnDuringLife == e->index)
+                e->parent->spawnDuringLife = e->index + 1;
+            else if (e->parent->spawnOnDeath == e->index)
+                e->parent->spawnOnDeath = e->index + 1;
         }
         e->index = e->index + 1;
     }
@@ -743,7 +756,8 @@ ParticleSystem::Emitter* ParticleSystem::insertEmitterAfter(const Emitter* refer
     return pEmitter;
 }
 
-namespace {
+namespace
+{
 
 // Rewrite each moved emitter's parent spawn-field index to the emitter's new
 // `index`, after a root reorder has permuted m_emitters and reassigned indices.
@@ -760,41 +774,42 @@ namespace {
 // the rewrite lives in exactly one place (the three were hand-copied KEEP-IN-
 // SYNC loops, which is how the swap escaped into all three).
 void rewriteParentSpawnIndices(const std::vector<ParticleSystem::Emitter*>& moved,
-                               const std::vector<size_t>& oldIndices)
+                               const std::vector<size_t>&                   oldIndices)
 {
     std::unordered_map<ParticleSystem::Emitter*, std::pair<size_t, size_t>> origSlots;
     for (ParticleSystem::Emitter* e : moved)
         if (e->parent != NULL)
-            origSlots.emplace(e->parent,
-                std::make_pair(e->parent->spawnDuringLife, e->parent->spawnOnDeath));
+            origSlots.emplace(e->parent, std::make_pair(e->parent->spawnDuringLife, e->parent->spawnOnDeath));
 
     for (size_t k = 0; k < moved.size(); k++)
     {
         ParticleSystem::Emitter* e = moved[k];
         if (e->parent == NULL) continue;
         const std::pair<size_t, size_t>& orig = origSlots[e->parent];
-        if      (orig.first  == oldIndices[k]) e->parent->spawnDuringLife = e->index;
-        else if (orig.second == oldIndices[k]) e->parent->spawnOnDeath    = e->index;
+        if (orig.first == oldIndices[k])
+            e->parent->spawnDuringLife = e->index;
+        else if (orig.second == oldIndices[k])
+            e->parent->spawnOnDeath = e->index;
     }
 }
 
 } // namespace
 
-void ParticleSystem::reassembleByRootOrder(const std::vector<Emitter*>& roots,
-                                           const std::vector<Emitter*>& newRoots)
+void ParticleSystem::reassembleByRootOrder(const std::vector<Emitter*>& roots, const std::vector<Emitter*>& newRoots)
 {
     // Collect each root's subtree in m_emitters vector order. Iterating
     // m_emitters preserves intra-subtree ordering (matches the convention
     // moveEmitter already established for adjacent swaps); pre-order via
     // spawn-field traversal would also work but produces a different
     // ordering when a subtree's emitters aren't contiguous in m_emitters.
-    auto rootOf = [this](Emitter* e) -> Emitter* {
+    auto rootOf = [this](Emitter* e) -> Emitter*
+    {
         while (e->parent != NULL) e = e->parent;
         return e;
     };
 
     std::vector<std::vector<Emitter*>> subtrees(roots.size());
-    std::vector<size_t> rootOrderIdx(m_emitters.size(), (size_t)-1);
+    std::vector<size_t>                rootOrderIdx(m_emitters.size(), (size_t)-1);
     for (size_t i = 0; i < roots.size(); i++) rootOrderIdx[roots[i]->index] = i;
 
     for (size_t i = 0; i < m_emitters.size(); i++)
@@ -809,7 +824,7 @@ void ParticleSystem::reassembleByRootOrder(const std::vector<Emitter*>& roots,
     // each root's subtree.
     std::vector<Emitter*> reordered;
     reordered.reserve(m_emitters.size());
-    std::vector<size_t>   oldIndices;
+    std::vector<size_t> oldIndices;
     oldIndices.reserve(m_emitters.size());
     for (Emitter* r : newRoots)
     {
@@ -849,7 +864,7 @@ bool ParticleSystem::moveEmitter(Emitter* emitter, int direction)
     // between two roots in vector order doesn't get mistaken for a neighbor.
     Emitter* neighbor = NULL;
     Emitter* prevRoot = NULL;
-    bool sawSelf = false;
+    bool     sawSelf  = false;
     for (size_t i = 0; i < m_emitters.size(); i++)
     {
         Emitter* e = m_emitters[i];
@@ -857,7 +872,11 @@ bool ParticleSystem::moveEmitter(Emitter* emitter, int direction)
         if (e == emitter)
         {
             sawSelf = true;
-            if (direction == -1) { neighbor = prevRoot; break; }
+            if (direction == -1)
+            {
+                neighbor = prevRoot;
+                break;
+            }
         }
         else if (sawSelf && direction == 1)
         {
@@ -873,22 +892,24 @@ bool ParticleSystem::moveEmitter(Emitter* emitter, int direction)
     // current intra-subtree ordering — important when a subtree isn't
     // contiguous and the user has implicitly chosen which order siblings
     // appear by some earlier reorder step.
-    auto markSubtree = [&](Emitter* root, std::vector<bool>& mark) {
+    auto markSubtree = [&](Emitter* root, std::vector<bool>& mark)
+    {
         // Iterative DFS to avoid recursion stack worries on large systems.
         std::vector<Emitter*> stack;
         stack.push_back(root);
         while (!stack.empty())
         {
-            Emitter* e = stack.back(); stack.pop_back();
+            Emitter* e = stack.back();
+            stack.pop_back();
             mark[e->index] = true;
             if (e->spawnDuringLife != (size_t)-1) stack.push_back(m_emitters[e->spawnDuringLife]);
-            if (e->spawnOnDeath    != (size_t)-1) stack.push_back(m_emitters[e->spawnOnDeath]);
+            if (e->spawnOnDeath != (size_t)-1) stack.push_back(m_emitters[e->spawnOnDeath]);
         }
     };
 
     std::vector<bool> inA(m_emitters.size(), false);
     std::vector<bool> inB(m_emitters.size(), false);
-    markSubtree(emitter,  inA);
+    markSubtree(emitter, inA);
     markSubtree(neighbor, inB);
 
     // Vector-ordered member lists, plus combined occupied positions.
@@ -896,8 +917,16 @@ bool ParticleSystem::moveEmitter(Emitter* emitter, int direction)
     std::vector<size_t>   occupied;
     for (size_t i = 0; i < m_emitters.size(); i++)
     {
-        if (inA[i]) { subtreeA.push_back(m_emitters[i]); occupied.push_back(i); }
-        if (inB[i]) { subtreeB.push_back(m_emitters[i]); occupied.push_back(i); }
+        if (inA[i])
+        {
+            subtreeA.push_back(m_emitters[i]);
+            occupied.push_back(i);
+        }
+        if (inB[i])
+        {
+            subtreeB.push_back(m_emitters[i]);
+            occupied.push_back(i);
+        }
     }
     std::sort(occupied.begin(), occupied.end());
 
@@ -953,8 +982,8 @@ bool ParticleSystem::moveEmitterToRootIndex(Emitter* emitter, size_t targetRootI
             roots.push_back(m_emitters[i]);
         }
     }
-    if (sourceRootIdx == (size_t)-1) return false;     // not actually a root in this system
-    if (targetRootIndex > roots.size()) return false;  // out of range
+    if (sourceRootIdx == (size_t)-1) return false;    // not actually a root in this system
+    if (targetRootIndex > roots.size()) return false; // out of range
 
     // No-op detection: dropping at gap [sourceRootIdx, sourceRootIdx+1]
     // leaves the layout unchanged. (Gap K means "before root K"; gap == N
@@ -978,9 +1007,9 @@ bool ParticleSystem::moveEmitterToRootIndex(Emitter* emitter, size_t targetRootI
     return true;
 }
 
-bool ParticleSystem::reorderManyRootsToIndex(
-        const std::vector<Emitter*>& selection, size_t gap,
-        std::vector<size_t>& outNewIds)
+bool ParticleSystem::reorderManyRootsToIndex(const std::vector<Emitter*>& selection,
+                                             size_t                       gap,
+                                             std::vector<size_t>&         outNewIds)
 {
     // 1. Current root order (root index = position in this list).
     std::vector<Emitter*> roots;
@@ -988,25 +1017,25 @@ bool ParticleSystem::reorderManyRootsToIndex(
     for (size_t i = 0; i < m_emitters.size(); i++)
         if (m_emitters[i]->parent == NULL) roots.push_back(m_emitters[i]);
     const size_t N = roots.size();
-    if (gap > N) return false;                          // out of range (gap is 0..N)
+    if (gap > N) return false; // out of range (gap is 0..N)
 
     // 2. Map selection -> ascending source root indices. Reject a null /
     //    missing / non-root id, or an empty selection.
     std::vector<char> selFlag(N, 0);
-    std::set<size_t> uniq;                              // dedupe + ascending
+    std::set<size_t>  uniq; // dedupe + ascending
     {
         std::unordered_map<Emitter*, size_t> rootPos;
         for (size_t r = 0; r < N; r++) rootPos[roots[r]] = r;
         for (Emitter* e : selection)
         {
             auto it = rootPos.find(e);
-            if (it == rootPos.end()) return false;      // null, missing, or non-root
+            if (it == rootPos.end()) return false; // null, missing, or non-root
             uniq.insert(it->second);
         }
     }
     if (uniq.empty()) return false;
     std::vector<size_t> selRootIdx(uniq.begin(), uniq.end());
-    const size_t M = selRootIdx.size();
+    const size_t        M = selRootIdx.size();
     for (size_t r : selRootIdx) selFlag[r] = 1;
     const size_t first = selRootIdx.front();
     const size_t last  = selRootIdx.back();
@@ -1025,8 +1054,9 @@ bool ParticleSystem::reorderManyRootsToIndex(
     block.reserve(M);
     for (size_t r = 0; r < N; r++) (selFlag[r] ? block : rest).push_back(roots[r]);
     size_t removedBeforeGap = 0;
-    for (size_t r : selRootIdx) if (r < gap) removedBeforeGap++;
-    const size_t insertAt = gap - removedBeforeGap;
+    for (size_t r : selRootIdx)
+        if (r < gap) removedBeforeGap++;
+    const size_t          insertAt = gap - removedBeforeGap;
     std::vector<Emitter*> newRoots;
     newRoots.reserve(N);
     newRoots.insert(newRoots.end(), rest.begin(), rest.begin() + insertAt);
@@ -1056,8 +1086,7 @@ bool ParticleSystem::reorderManyRootsToIndex(
 // spawn fields) so this function itself can't recurse into a
 // malformed cycle. Bounded by tree depth, which in practice is in
 // the single digits.
-static bool IsInSubtreeOf(const ParticleSystem::Emitter* candidate,
-                          const ParticleSystem::Emitter* ancestor)
+static bool IsInSubtreeOf(const ParticleSystem::Emitter* candidate, const ParticleSystem::Emitter* ancestor)
 {
     if (candidate == NULL || ancestor == NULL) return false;
     const ParticleSystem::Emitter* p = candidate;
@@ -1085,9 +1114,8 @@ bool ParticleSystem::reparentEmitter(Emitter* source, Emitter* target, bool useS
     // itself.
     if (IsInSubtreeOf(target, source)) return false;
 
-    size_t& targetSlot = useSpawnDuringLife ? target->spawnDuringLife
-                                            : target->spawnOnDeath;
-    if (targetSlot != (size_t)-1) return false;     // chosen slot occupied
+    size_t& targetSlot = useSpawnDuringLife ? target->spawnDuringLife : target->spawnOnDeath;
+    if (targetSlot != (size_t)-1) return false; // chosen slot occupied
 
     // Detach from old parent (if any). Compare each slot to source's
     // index explicitly — don't assume Lifetime vs Death; a malformed
@@ -1095,8 +1123,10 @@ bool ParticleSystem::reparentEmitter(Emitter* source, Emitter* target, bool useS
     // referencing source.
     if (source->parent != NULL)
     {
-        if      (source->parent->spawnDuringLife == source->index) source->parent->spawnDuringLife = (size_t)-1;
-        else if (source->parent->spawnOnDeath    == source->index) source->parent->spawnOnDeath    = (size_t)-1;
+        if (source->parent->spawnDuringLife == source->index)
+            source->parent->spawnDuringLife = (size_t)-1;
+        else if (source->parent->spawnOnDeath == source->index)
+            source->parent->spawnOnDeath = (size_t)-1;
     }
 
     // Attach to new parent. m_emitters position and source's index
@@ -1115,25 +1145,32 @@ void ParticleSystem::deleteEmitter(Emitter* emitter)
     // Invalidate its parent references to it
     if (emitter->parent != NULL)
     {
-        if (emitter->parent->spawnDuringLife == emitter->index) {
+        if (emitter->parent->spawnDuringLife == emitter->index)
+        {
             emitter->parent->spawnDuringLife = -1;
-        } else {
+        }
+        else
+        {
             emitter->parent->spawnOnDeath = -1;
         }
     }
 
     // Delete its children
     if (emitter->spawnDuringLife != -1) deleteEmitter(m_emitters[emitter->spawnDuringLife]);
-    if (emitter->spawnOnDeath    != -1) deleteEmitter(m_emitters[emitter->spawnOnDeath]);
+    if (emitter->spawnOnDeath != -1) deleteEmitter(m_emitters[emitter->spawnOnDeath]);
 
     // Adjust indices of the emitters that follow it
     for (size_t i = emitter->index; i < m_emitters.size() - 1; i++)
     {
         Emitter* e = m_emitters[i + 1];
-        if (e->parent != NULL) {
-            if (e->parent->spawnDuringLife == e->index) {
+        if (e->parent != NULL)
+        {
+            if (e->parent->spawnDuringLife == e->index)
+            {
                 e->parent->spawnDuringLife = i;
-            } else {
+            }
+            else
+            {
                 e->parent->spawnOnDeath = i;
             }
         }
@@ -1143,7 +1180,7 @@ void ParticleSystem::deleteEmitter(Emitter* emitter)
     // Remove emitter from list. The Emitter destructor walks m_instances and
     // routes deletion through the owning ParticleSystemInstance, so live
     // EmitterInstance objects don't leave a dangling unique_ptr behind.
-    m_emitters.erase( m_emitters.begin() + emitter->index );
+    m_emitters.erase(m_emitters.begin() + emitter->index);
     delete emitter;
 }
 

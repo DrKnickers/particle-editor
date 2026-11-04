@@ -31,12 +31,13 @@
 // Header-only: a std::ofstream member with inline methods, one line flushed per
 // frame. No .cpp, so no build-registration churn.
 
-namespace host {
+namespace host
+{
 
-class RecordTrace {
+class RecordTrace
+{
 public:
-    explicit RecordTrace(const std::wstring& path)
-        : m_out(path, std::ios::binary | std::ios::trunc) {}
+    explicit RecordTrace(const std::wstring& path) : m_out(path, std::ios::binary | std::ios::trunc) {}
 
     bool Ok() const { return m_out.is_open(); }
 
@@ -50,7 +51,11 @@ public:
     void EndFrame(int idx)
     {
         std::string line = "f" + std::to_string(idx);
-        for (const std::string& t : m_tokens) { line += ' '; line += t; }
+        for (const std::string& t : m_tokens)
+        {
+            line += ' ';
+            line += t;
+        }
         line += '\n';
         m_out.write(line.data(), static_cast<std::streamsize>(line.size()));
         m_out.flush();
@@ -59,7 +64,7 @@ public:
 
 private:
     std::ofstream            m_out;
-    std::vector<std::string> m_tokens;   // current frame, ordered by emission
+    std::vector<std::string> m_tokens; // current frame, ordered by emission
 };
 
-}  // namespace host
+} // namespace host

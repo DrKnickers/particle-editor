@@ -47,7 +47,7 @@ struct LinkExemptFlags
     bool colorTexture;
     bool normalTexture;
     bool name;
-    bool trackIndex;             // TRACK_INDEX curve (atlas sub-frame); default exempt
+    bool trackIndex; // TRACK_INDEX curve (atlas sub-frame); default exempt
 
     // Curves (default shared except trackIndex above).
     bool trackRed;
@@ -109,9 +109,9 @@ struct LinkExemptFlags
     bool skipTime;
     bool emitFromMesh;
     bool emitFromMeshOffset;
-    bool groupSpeed;             // groups[0]
-    bool groupLifetime;          // groups[1]
-    bool groupPosition;          // groups[2]
+    bool groupSpeed;    // groups[0]
+    bool groupLifetime; // groups[1]
+    bool groupPosition; // groups[2]
 
     // Unknown fields — data-model complete so save/restore is symmetric,
     // but the settings dialog doesn't surface them (the editor's
@@ -124,13 +124,12 @@ struct LinkExemptFlags
     bool unknown44;
     bool unknown49;
 
-    LinkExemptFlags();           // sets v1 defaults; see LinkGroup.cpp
+    LinkExemptFlags(); // sets v1 defaults; see LinkGroup.cpp
 
     // Bytewise equality. Used by ParticleSystem::setLinkExemptFlags
     // to normalize on-default entries out of the map.
-    bool operator == (const LinkExemptFlags& other) const;
-    bool operator != (const LinkExemptFlags& other) const
-    { return !(*this == other); }
+    bool operator==(const LinkExemptFlags& other) const;
+    bool operator!=(const LinkExemptFlags& other) const { return !(*this == other); }
 };
 
 // v1 defaults — what new groups (and groups without a per-group entry
@@ -155,16 +154,13 @@ uint32_t AllocateLinkGroupId(const ParticleSystem& system);
 // source; every other member's non-exempt fields are overwritten to
 // match. Requires `members.size() >= 2`; refuses with returned 0 if
 // any member is already in a group, or if too few were supplied.
-uint32_t CreateLinkGroup(ParticleSystem&                                       system,
-                          const std::vector<ParticleSystem::Emitter*>&         members);
+uint32_t CreateLinkGroup(ParticleSystem& system, const std::vector<ParticleSystem::Emitter*>& members);
 
 // Add `joiner` to existing group `groupId`. The joiner's non-exempt
 // fields are overwritten to match the group's canonical member.
 // Refuses (returns false) if joiner is already linked, the group
 // doesn't exist, or arguments are NULL.
-bool JoinLinkGroup(ParticleSystem&            system,
-                    ParticleSystem::Emitter*   joiner,
-                    uint32_t                   groupId);
+bool JoinLinkGroup(ParticleSystem& system, ParticleSystem::Emitter* joiner, uint32_t groupId);
 
 // Remove `member` from its group. If the group would be left with
 // exactly one member after removal, that remaining lone member is
@@ -172,13 +168,11 @@ bool JoinLinkGroup(ParticleSystem&            system,
 // caller does not need to follow up with a Dissolve.
 //
 // Returns true on success, false if member is NULL or unlinked.
-bool LeaveLinkGroup(ParticleSystem&          system,
-                     ParticleSystem::Emitter* member);
+bool LeaveLinkGroup(ParticleSystem& system, ParticleSystem::Emitter* member);
 
 // Return every emitter in `groupId` (empty vector if groupId == 0
 // or no such group exists).
-std::vector<ParticleSystem::Emitter*> GetLinkGroupMembers(
-    const ParticleSystem& system, uint32_t groupId);
+std::vector<ParticleSystem::Emitter*> GetLinkGroupMembers(const ParticleSystem& system, uint32_t groupId);
 
 // Return field names that differ between `a` and `b` (considering
 // only non-exempt fields per `exempt`). Used by the Join confirmation
@@ -187,9 +181,8 @@ std::vector<ParticleSystem::Emitter*> GetLinkGroupMembers(
 // consent. Earlier callers passed no flags (implicit v1 defaults);
 // callers now pass the group's specific flags to get the right
 // answer for groups with custom exempt sets.
-std::vector<std::string> DiffNonExemptParams(
-    const ParticleSystem::Emitter& a,
-    const ParticleSystem::Emitter& b,
-    const LinkExemptFlags&         exempt);
+std::vector<std::string> DiffNonExemptParams(const ParticleSystem::Emitter& a,
+                                             const ParticleSystem::Emitter& b,
+                                             const LinkExemptFlags&         exempt);
 
 #endif // LINKGROUP_H

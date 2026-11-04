@@ -1,0 +1,3 @@
+# Vendored code keeps its upstream formatting.
+src/host/third_party/**
+libs/**

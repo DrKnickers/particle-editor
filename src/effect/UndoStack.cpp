@@ -4,16 +4,11 @@
 #include "common/files.h"
 
 UndoStack::UndoStack(size_t maxTotalBytes)
-    : m_cursor(0)
-    , m_applying(false)
-    , m_liveAhead(false)
-    , m_maxTotalBytes(maxTotalBytes)
+    : m_cursor(0), m_applying(false), m_liveAhead(false), m_maxTotalBytes(maxTotalBytes)
 {
 }
 
-UndoStack::~UndoStack()
-{
-}
+UndoStack::~UndoStack() {}
 
 std::vector<char> UndoStack::Serialize(const ParticleSystem& sys)
 {
@@ -66,8 +61,7 @@ DWORD UndoStack::MakeCoalesceKey(WORD notifyCode, WORD discriminator)
 size_t UndoStack::TotalBytes() const
 {
     size_t n = 0;
-    for (std::deque<Entry>::const_iterator it = m_entries.begin();
-         it != m_entries.end(); ++it)
+    for (std::deque<Entry>::const_iterator it = m_entries.begin(); it != m_entries.end(); ++it)
     {
         n += it->snapshot.size();
     }
@@ -102,9 +96,8 @@ void UndoStack::EvictToBudget(size_t minEntriesToKeep)
     }
 }
 
-bool UndoStack::Capture(const ParticleSystem& sys, size_t selectedIndex,
-                         DWORD coalesceKey, const EditorAux& aux,
-                         BudgetRetention retention)
+bool UndoStack::Capture(
+    const ParticleSystem& sys, size_t selectedIndex, DWORD coalesceKey, const EditorAux& aux, BudgetRetention retention)
 {
     if (m_applying) return false;
 
@@ -127,25 +120,23 @@ bool UndoStack::Capture(const ParticleSystem& sys, size_t selectedIndex,
     // Coalesce: if the previous entry has the same key and we're
     // within the time window, replace its snapshot in place. Skip on
     // key == 0 (structural ops).
-    if (coalesceKey != 0
-        && !m_entries.empty()
-        && m_entries.back().coalesceKey == coalesceKey
-        && (now - m_entries.back().timestamp) <= COALESCE_WINDOW_MS)
+    if (coalesceKey != 0 && !m_entries.empty() && m_entries.back().coalesceKey == coalesceKey &&
+        (now - m_entries.back().timestamp) <= COALESCE_WINDOW_MS)
     {
-        Entry& tail = m_entries.back();
+        Entry& tail        = m_entries.back();
         tail.snapshot      = Serialize(sys);
         tail.selectedIndex = selectedIndex;
         tail.timestamp     = now;
         // POST-mutation REPLACE: the tail tracks the LATEST state, so its aux
         // updates in lockstep with the snapshot.
-        tail.aux           = aux;
+        tail.aux = aux;
         // Don't touch isSavedState — coalescing into a saved entry
         // means we're still at the saved state's content if no real
         // change accumulated, which is fine for most cases. If the
         // coalesced content actually differs we'd want to clear it,
         // but the save-state flag is recomputed against MarkSaved on
         // next save anyway.
-        tail.isSavedState  = false;
+        tail.isSavedState = false;
         return false;
     }
 
@@ -159,15 +150,15 @@ bool UndoStack::Capture(const ParticleSystem& sys, size_t selectedIndex,
     m_entries.push_back(std::move(e));
     m_cursor = m_entries.size();
 
-    const size_t minEntriesToKeep =
-        (retention == BudgetRetention::PreserveImmediatePair) ? 2u : 1u;
+    const size_t minEntriesToKeep = (retention == BudgetRetention::PreserveImmediatePair) ? 2u : 1u;
     EvictToBudget(minEntriesToKeep);
     return true;
 }
 
 bool UndoStack::CapturePreCoalesced(const ParticleSystem& sys,
-                                    size_t selectedIndex, DWORD coalesceKey,
-                                    const EditorAux& aux)
+                                    size_t                selectedIndex,
+                                    DWORD                 coalesceKey,
+                                    const EditorAux&      aux)
 {
     if (m_applying) return false;
 
@@ -184,11 +175,8 @@ bool UndoStack::CapturePreCoalesced(const ParticleSystem& sys,
     // the whole burst (the head-of-history auto-cap in undo/perform snapshots
     // the final live state before stepping back). Mid-redo-branch
     // (cursor < size) we never skip: a fresh edit after an undo must push.
-    if (coalesceKey != 0
-        && m_cursor == m_entries.size()
-        && !m_entries.empty()
-        && m_entries.back().coalesceKey == coalesceKey
-        && (now - m_entries.back().timestamp) <= COALESCE_WINDOW_MS)
+    if (coalesceKey != 0 && m_cursor == m_entries.size() && !m_entries.empty() &&
+        m_entries.back().coalesceKey == coalesceKey && (now - m_entries.back().timestamp) <= COALESCE_WINDOW_MS)
     {
         // SKIP branch: the existing tail ALREADY holds the burst's
         // session-start state (snapshot AND aux) — the exact undo target.
@@ -232,8 +220,7 @@ bool UndoStack::CanRedo() const
     return m_cursor < m_entries.size();
 }
 
-bool UndoStack::Undo(const std::vector<char>** outSnapshot,
-                     size_t* outSelectedIndex, EditorAux* outAux)
+bool UndoStack::Undo(const std::vector<char>** outSnapshot, size_t* outSelectedIndex, EditorAux* outAux)
 {
     if (!CanUndo()) return false;
     // Live will be restored to the returned snapshot by the caller, so it
@@ -241,31 +228,30 @@ bool UndoStack::Undo(const std::vector<char>** outSnapshot,
     m_liveAhead = false;
     m_cursor--;
     const Entry& e = m_entries[m_cursor - 1];
-    if (outSnapshot)         *outSnapshot         = &e.snapshot;
-    if (outSelectedIndex)    *outSelectedIndex    = e.selectedIndex;
-    if (outAux)              *outAux              = e.aux;
+    if (outSnapshot) *outSnapshot = &e.snapshot;
+    if (outSelectedIndex) *outSelectedIndex = e.selectedIndex;
+    if (outAux) *outAux = e.aux;
     return true;
 }
 
-bool UndoStack::Redo(const std::vector<char>** outSnapshot,
-                     size_t* outSelectedIndex, EditorAux* outAux)
+bool UndoStack::Redo(const std::vector<char>** outSnapshot, size_t* outSelectedIndex, EditorAux* outAux)
 {
     if (!CanRedo()) return false;
     // Live will be restored to the returned snapshot by the caller, so it
     // is back in sync with the tip — no pending edit ahead.
-    m_liveAhead = false;
+    m_liveAhead    = false;
     const Entry& e = m_entries[m_cursor];
     m_cursor++;
-    if (outSnapshot)         *outSnapshot         = &e.snapshot;
-    if (outSelectedIndex)    *outSelectedIndex    = e.selectedIndex;
-    if (outAux)              *outAux              = e.aux;
+    if (outSnapshot) *outSnapshot = &e.snapshot;
+    if (outSelectedIndex) *outSelectedIndex = e.selectedIndex;
+    if (outAux) *outAux = e.aux;
     return true;
 }
 
 void UndoStack::Clear()
 {
     m_entries.clear();
-    m_cursor = 0;
+    m_cursor    = 0;
     m_liveAhead = false;
 }
 

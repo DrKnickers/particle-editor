@@ -7,16 +7,16 @@
 #include <cfloat>
 #include <sstream>
 #include <queue>
-#include <cstdlib>     // _set_abort_behavior (headless --capture: no abort dialog)
-#include <ctime>       // time() for launch seed
-#include <crtdbg.h>    // _CrtSetReportMode/File (route Debug asserts to stderr)
-#include <exception>   // std::set_terminate (log unhandled exceptions headlessly)
+#include <cstdlib>   // _set_abort_behavior (headless --capture: no abort dialog)
+#include <ctime>     // time() for launch seed
+#include <crtdbg.h>  // _CrtSetReportMode/File (route Debug asserts to stderr)
+#include <exception> // std::set_terminate (log unhandled exceptions headlessly)
 #include <fstream>
 #include <filesystem>
 #include "host/PreviewScenarioJson.h"
 #include "host/ObservationSpecJson.h"
 #include "host/third_party/nlohmann/json.hpp"
-#include <cstdio>      // fwprintf / fprintf CLI diagnostics
+#include <cstdio> // fwprintf / fprintf CLI diagnostics
 
 #include "common/exceptions.h"
 #include "palette/TexturePalette.h"
@@ -45,9 +45,9 @@
 #include "host/ToolMain.h"
 #include "host/CaptureGoldenProfile.h"
 #include "host/WindowCapture.h"
-#include "host/WebViewModalPolicy.h"  // IsFullyInteractiveSession — gate the pre-host data-path picker
-#include "host/SettingsRegistry.h"    // GameDataPath read/write
-#include "gamedata/GameRoots.h"                // GameData / corruption sibling root
+#include "host/WebViewModalPolicy.h" // IsFullyInteractiveSession — gate the pre-host data-path picker
+#include "host/SettingsRegistry.h"   // GameDataPath read/write
+#include "gamedata/GameRoots.h"      // GameData / corruption sibling root
 
 #include <shlobj.h>
 #include <shlwapi.h>
@@ -66,17 +66,16 @@ using namespace std;
 // own guard.
 #include "simulation/MouseCursor.h"
 
-
 // EaW Gold Pack on Steam splits assets across "GameData" (base EaW) and
 // "corruption" (FoC). Pointing the editor at one means missing textures from
 // the other. If we detect either, also include the sibling.
 static void AddSiblingGamePath(vector<wstring>& paths, const wstring& picked)
 {
-	const wstring sibling = gameroots::SiblingGameRoot(picked);
-	if (!sibling.empty() && PathIsDirectory(sibling.c_str()))
-	{
-		paths.push_back(sibling);
-	}
+    const wstring sibling = gameroots::SiblingGameRoot(picked);
+    if (!sibling.empty() && PathIsDirectory(sibling.c_str()))
+    {
+        paths.push_back(sibling);
+    }
 }
 
 //
@@ -96,1330 +95,1413 @@ static void AddSiblingGamePath(vector<wstring>& paths, const wstring& picked)
 // or has the wrong type, so a fresh registry preserves today's behavior.
 // Writes happen on every change; matches LastMod / ModNickname.
 
-
-static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv, vector<wstring>* outGameRoots = NULL, bool interactive = true )
+static FileManager* createFileManager(HWND                   hWnd,
+                                      const vector<wstring>& argv,
+                                      vector<wstring>*       outGameRoots = NULL,
+                                      bool                   interactive  = true)
 {
-	auto valueCountForOption = [](const std::wstring& arg) -> size_t
-	{
-		if (arg == L"--drive" ||
-		    arg == L"--perf-trace" ||
-		    arg == L"--perf-trace-mode" ||
-		    arg == L"--perf-artifact-dir" ||
-		    arg == L"--perf-webview-profile" ||
-		    arg == L"--gen-singleton-link-fixture" ||
-		    arg == L"--gen-a11y-fixture" ||
-		    arg == L"--gen-smoke-test" ||
-		    arg == L"--frames" ||
-		    arg == L"--skydome" ||
-		    arg == L"--ambient" ||
-		    arg == L"--sun" ||
-		    arg == L"--sun-intensity" ||
-		    arg == L"--smoke-color" ||
-		    arg == L"--smoke-spin")
-			return 1;
-		if (arg == L"--capture" || arg == L"--capture-ref" ||
-            arg == L"--replay-proof" || arg == L"--observe" || arg == L"--gen-replay-proof-fixture")
-			return 2;
-		if (arg == L"--gen-houdini-validation-fixture" || arg == L"--gen-houdini-review-fixture")
-			return 3;
-		if (arg == L"--snap-window")
-			return 1;
-		return 0;
-	};
+    auto valueCountForOption = [](const std::wstring& arg) -> size_t
+    {
+        if (arg == L"--drive" || arg == L"--perf-trace" || arg == L"--perf-trace-mode" ||
+            arg == L"--perf-artifact-dir" || arg == L"--perf-webview-profile" ||
+            arg == L"--gen-singleton-link-fixture" || arg == L"--gen-a11y-fixture" || arg == L"--gen-smoke-test" ||
+            arg == L"--frames" || arg == L"--skydome" || arg == L"--ambient" || arg == L"--sun" ||
+            arg == L"--sun-intensity" || arg == L"--smoke-color" || arg == L"--smoke-spin")
+            return 1;
+        if (arg == L"--capture" || arg == L"--capture-ref" || arg == L"--replay-proof" || arg == L"--observe" ||
+            arg == L"--gen-replay-proof-fixture")
+            return 2;
+        if (arg == L"--gen-houdini-validation-fixture" || arg == L"--gen-houdini-review-fixture") return 3;
+        if (arg == L"--snap-window") return 1;
+        return 0;
+    };
 
-	// Search for the Empire at War path
-	vector<wstring> EmpireAtWarPaths;
-	if (argv.size() > 1)
-	{
-		// Override on the command line; use that
-		for (size_t i = 1; i < argv.size(); i++)
-		{
-			const size_t valueCount = valueCountForOption(argv[i]);
-			if (valueCount > 0)
-			{
-				i += (std::min)(valueCount, argv.size() - i - 1);
-				continue;
-			}
-			if (!argv[i].empty() && argv[i][0] == L'-') continue;
-			if (PathIsDirectory(argv[i].c_str()))
-			{
-    			EmpireAtWarPaths.push_back(argv[i]);
+    // Search for the Empire at War path
+    vector<wstring> EmpireAtWarPaths;
+    if (argv.size() > 1)
+    {
+        // Override on the command line; use that
+        for (size_t i = 1; i < argv.size(); i++)
+        {
+            const size_t valueCount = valueCountForOption(argv[i]);
+            if (valueCount > 0)
+            {
+                i += (std::min)(valueCount, argv.size() - i - 1);
+                continue;
             }
-		}
-	}
+            if (!argv[i].empty() && argv[i][0] == L'-') continue;
+            if (PathIsDirectory(argv[i].c_str()))
+            {
+                EmpireAtWarPaths.push_back(argv[i]);
+            }
+        }
+    }
 
-	if (EmpireAtWarPaths.empty())
-	{
-		// Try the previously-saved game path
-		if (HKEY hKey = host::OpenSettingsKeyForRead())
-		{
-			// ReadRegSz terminates the value itself: a stored REG_SZ need not
-			// carry its own NUL.
-			const wstring savedPath = host::ReadRegSz(hKey, host::kRegGameDataPath);
-			if (!savedPath.empty())
-			{
-				EmpireAtWarPaths.push_back(savedPath);
-				AddSiblingGamePath(EmpireAtWarPaths, savedPath);
-			}
-			RegCloseKey(hKey);
-		}
+    if (EmpireAtWarPaths.empty())
+    {
+        // Try the previously-saved game path
+        if (HKEY hKey = host::OpenSettingsKeyForRead())
+        {
+            // ReadRegSz terminates the value itself: a stored REG_SZ need not
+            // carry its own NUL.
+            const wstring savedPath = host::ReadRegSz(hKey, host::kRegGameDataPath);
+            if (!savedPath.empty())
+            {
+                EmpireAtWarPaths.push_back(savedPath);
+                AddSiblingGamePath(EmpireAtWarPaths, savedPath);
+            }
+            RegCloseKey(hKey);
+        }
 
-		// Fall back to the current directory
-		TCHAR buffer[MAX_PATH];
-		GetCurrentDirectory(MAX_PATH, buffer);
-		EmpireAtWarPaths.push_back(buffer);
-	}
-	FileManager* fileManager = NULL;
-	wstring pickedPath;
+        // Fall back to the current directory
+        TCHAR buffer[MAX_PATH];
+        GetCurrentDirectory(MAX_PATH, buffer);
+        EmpireAtWarPaths.push_back(buffer);
+    }
+    FileManager* fileManager = NULL;
+    wstring      pickedPath;
 
-	while (fileManager == NULL)
-	{
-		for (size_t i = 0; i < EmpireAtWarPaths.size(); i++)
-		{
-			if (*EmpireAtWarPaths[i].rbegin() != '\\') EmpireAtWarPaths[i] += '\\';
-		}
+    while (fileManager == NULL)
+    {
+        for (size_t i = 0; i < EmpireAtWarPaths.size(); i++)
+        {
+            if (*EmpireAtWarPaths[i].rbegin() != '\\') EmpireAtWarPaths[i] += '\\';
+        }
 
-		try
-		{
-			// Initialize the file manager
-			fileManager = new FileManager( EmpireAtWarPaths );
-		}
-		catch (FileNotFoundException&)
-		{
-			// Headless/automation launches (--capture/--drive/--record/--test-host)
-			// have no user to answer a folder picker — it would hang the run. Fail
-			// cleanly (main exits -1); the missing data path is on stderr + the log.
-			if (!interactive)
-			{
-				fwprintf(stderr, L"[host] game data path not found and no interactive session to prompt for one — exiting\n");
-				fileManager = NULL;
-				break;
-			}
-			// This path didn't work; ask the user to select a path
+        try
+        {
+            // Initialize the file manager
+            fileManager = new FileManager(EmpireAtWarPaths);
+        }
+        catch (FileNotFoundException&)
+        {
+            // Headless/automation launches (--capture/--drive/--record/--test-host)
+            // have no user to answer a folder picker — it would hang the run. Fail
+            // cleanly (main exits -1); the missing data path is on stderr + the log.
+            if (!interactive)
+            {
+                fwprintf(stderr,
+                         L"[host] game data path not found and no interactive session to prompt for one — exiting\n");
+                fileManager = NULL;
+                break;
+            }
+            // This path didn't work; ask the user to select a path
             const wstring title = LoadString(IDS_QUERY_DATA_PATH);
 
-			BROWSEINFO bi;
-			bi.hwndOwner      = hWnd;
-			bi.pidlRoot       = NULL;
-			bi.pszDisplayName = NULL;
-			bi.lpszTitle      = title.c_str();
-			bi.ulFlags        = BIF_RETURNONLYFSDIRS;
-			bi.lpfn           = NULL;
-			LPITEMIDLIST pidl = SHBrowseForFolder(&bi);
-			if (pidl == NULL)
-			{
-				fileManager = NULL;
-				break;
-			}
+            BROWSEINFO bi;
+            bi.hwndOwner      = hWnd;
+            bi.pidlRoot       = NULL;
+            bi.pszDisplayName = NULL;
+            bi.lpszTitle      = title.c_str();
+            bi.ulFlags        = BIF_RETURNONLYFSDIRS;
+            bi.lpfn           = NULL;
+            LPITEMIDLIST pidl = SHBrowseForFolder(&bi);
+            if (pidl == NULL)
+            {
+                fileManager = NULL;
+                break;
+            }
 
-			TCHAR path[MAX_PATH];
-			if (SHGetPathFromIDList( pidl, path ))
-			{
-				EmpireAtWarPaths.push_back(path);
-				AddSiblingGamePath(EmpireAtWarPaths, path);
-				pickedPath = path;
-			}
-			CoTaskMemFree(pidl);
-		}
-	}
+            TCHAR path[MAX_PATH];
+            if (SHGetPathFromIDList(pidl, path))
+            {
+                EmpireAtWarPaths.push_back(path);
+                AddSiblingGamePath(EmpireAtWarPaths, path);
+                pickedPath = path;
+            }
+            CoTaskMemFree(pidl);
+        }
+    }
 
-	// If the user picked a path that worked, persist it for next launch.
-	// --drive (ephemeral) must NOT persist — scan argv directly since the
-	// driveScriptPath local is out of scope inside createFileManager.
-	bool driveMode = false, recordMode = false;
-	for (const std::wstring& a : argv) { if (a == L"--drive") driveMode = true; if (a == L"--record") recordMode = true; }
-	const bool replayMode = std::find(argv.begin(), argv.end(), L"--replay-proof") != argv.end();
-	const bool observeMode = std::find(argv.begin(), argv.end(), L"--observe") != argv.end();
-	const bool automationMode = driveMode || recordMode || replayMode || observeMode;
-	if (fileManager != NULL && !pickedPath.empty() && !automationMode)
-	{
-		host::WriteRegSz(host::kRegGameDataPath, pickedPath);   // non-empty here
-	}
-	if (outGameRoots != NULL && fileManager != NULL)
-	{
-		*outGameRoots = EmpireAtWarPaths;
-	}
-	return fileManager;
+    // If the user picked a path that worked, persist it for next launch.
+    // --drive (ephemeral) must NOT persist — scan argv directly since the
+    // driveScriptPath local is out of scope inside createFileManager.
+    bool driveMode = false, recordMode = false;
+    for (const std::wstring& a : argv)
+    {
+        if (a == L"--drive") driveMode = true;
+        if (a == L"--record") recordMode = true;
+    }
+    const bool replayMode     = std::find(argv.begin(), argv.end(), L"--replay-proof") != argv.end();
+    const bool observeMode    = std::find(argv.begin(), argv.end(), L"--observe") != argv.end();
+    const bool automationMode = driveMode || recordMode || replayMode || observeMode;
+    if (fileManager != NULL && !pickedPath.empty() && !automationMode)
+    {
+        host::WriteRegSz(host::kRegGameDataPath, pickedPath); // non-empty here
+    }
+    if (outGameRoots != NULL && fileManager != NULL)
+    {
+        *outGameRoots = EmpireAtWarPaths;
+    }
+    return fileManager;
 }
-
 
 static vector<wstring> parseCommandLine()
 {
-	vector<wstring> argv;
-	TCHAR* cmdline = GetCommandLine();
+    vector<wstring> argv;
+    TCHAR*          cmdline = GetCommandLine();
 
-	bool quoted = false;
-	wstring arg;
-	for (TCHAR* p = cmdline; p == cmdline || *(p - 1) != '\0'; p++)
-	{
-		if (*p == '\0' || (*p == ' ' && !quoted))
-		{
-			if (arg != L"")
-			{
-				argv.push_back(arg);
-				arg = L"";
-			}
-		}
-		else if (*p == '"') quoted = !quoted;
-		else arg += *p;
-	}
-	return argv;
+    bool    quoted = false;
+    wstring arg;
+    for (TCHAR* p = cmdline; p == cmdline || *(p - 1) != '\0'; p++)
+    {
+        if (*p == '\0' || (*p == ' ' && !quoted))
+        {
+            if (arg != L"")
+            {
+                argv.push_back(arg);
+                arg = L"";
+            }
+        }
+        else if (*p == '"')
+            quoted = !quoted;
+        else
+            arg += *p;
+    }
+    return argv;
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 {
-	// `--tool`: the window-free authoring tool. Checked before anything else,
-	// the Debug console included, so a tool run never opens a window.
-	if (host::IsToolCommandLine())
-		return host::RunToolMain();
+    // `--tool`: the window-free authoring tool. Checked before anything else,
+    // the Debug console included, so a tool run never opens a window.
+    if (host::IsToolCommandLine()) return host::RunToolMain();
 
 #ifndef NDEBUG
-	AllocConsole();
-	freopen("CONOUT$", "w", stdout);
+    AllocConsole();
+    freopen("CONOUT$", "w", stdout);
 #endif
 
-	// Stable AppUserModelID. Without one, Windows derives a taskbar
-	// identity from the .exe path; if the same path was previously
-	// run with a different (or missing) icon, the taskbar caches a
-	// generic glyph and stubbornly reuses it. Pinning an explicit ID
-	// here gives the editor its own slot keyed off this name, so the
-	// taskbar pulls the current WM_SETICON / WNDCLASS icon instead.
-	// Loaded dynamically because the prototype lives in shell32 from
-	// Windows 7 onwards.
-	if (HMODULE hShell32 = GetModuleHandleW(L"shell32.dll"))
-	{
-		typedef HRESULT (WINAPI *PFN_SetAppId)(PCWSTR);
-		PFN_SetAppId pSet = (PFN_SetAppId)GetProcAddress(hShell32, "SetCurrentProcessExplicitAppUserModelID");
-		if (pSet) pSet(L"DrKnickers.AloParticleEditor");
-	}
+    // Stable AppUserModelID. Without one, Windows derives a taskbar
+    // identity from the .exe path; if the same path was previously
+    // run with a different (or missing) icon, the taskbar caches a
+    // generic glyph and stubbornly reuses it. Pinning an explicit ID
+    // here gives the editor its own slot keyed off this name, so the
+    // taskbar pulls the current WM_SETICON / WNDCLASS icon instead.
+    // Loaded dynamically because the prototype lives in shell32 from
+    // Windows 7 onwards.
+    if (HMODULE hShell32 = GetModuleHandleW(L"shell32.dll"))
+    {
+        typedef HRESULT(WINAPI * PFN_SetAppId)(PCWSTR);
+        PFN_SetAppId pSet = (PFN_SetAppId)GetProcAddress(hShell32, "SetCurrentProcessExplicitAppUserModelID");
+        if (pSet) pSet(L"DrKnickers.AloParticleEditor");
+    }
 
-	// The WebView2 + D3D9 host is the ONLY UI. We build the
-	// three managers the (now-dead) legacy main() built (so the host can
-	// construct Engine identically) and run host::Run unconditionally; no
-	// legacy WNDCLASS / windows are registered. The `--legacy` / `--legacy-ui`
-	// / `--new-ui` flags are gone — an unknown flag is simply ignored.
-	{
-		const std::vector<std::wstring> argv = parseCommandLine();
-		bool devUi    = false;
-		bool testHost = false;
-		// --gen-singleton-link-fixture <path>: one-shot CLI to produce a
-		// .alo file with a known legacy singleton link group. Used
-		// to exercise the load-time enforcement sweep at file/open.
-		// Since the production save path always runs through
-		// post-mutation enforcement (which would have demoted the
-		// singleton already), no other code path can produce such a
-		// file. This flag bypasses BridgeDispatcher entirely and
-		// constructs the singleton state directly via the
-		// ParticleSystem API + SaveParticleSystem.
-		std::wstring genSingletonLinkFixturePath;
-		std::wstring genA11yFixturePath;
-		std::wstring genReplayFixtureKind, genReplayFixturePath;
-		// --gen-houdini-validation-fixture <kind> <texture-name> <path>: one
-		// emitter showing one generated texture (effect/HoudiniValidationFixture.h).
-		std::wstring genHoudiniFixtureKind, genHoudiniFixtureTexture, genHoudiniFixturePath;
-		// --gen-houdini-review-fixture: the same, lifted off the ground for the game.
-		bool genHoudiniFixtureReview = false;
-		std::wstring replayScenarioPath, replayOutputDirectory;
-		// --observe <observation.json> <out-dir>: fixed-profile lifecycle capture.
-		std::wstring observeSpecPath, observeOutputDirectory;
-		bool replayConflict = false;
-		std::wstring genSmokeTestPath;   // [shaded-smoke] all-three test particle
-		// [shaded-smoke] --smoke-color <warm|grey>: color ramp for the gen-smoke-test
-		// plume. warm (default) = white->orange->red (proves vivid tint); grey =
-		// light->dark grey (reads as real CoH-style smoke). Shader is tint-agnostic;
-		// this only sets the demo fixture's per-life RGB tracks.
-		int          smokeColorMode = 0;   // 0 = warm, 1 = grey
-		// [shaded-smoke] --smoke-spin <on|off>: per-sprite rotation for the gen-smoke-test
-		// plume. on (default) keeps randomRotation; off zeroes the spin so a directional
-		// (lit-from-the-right) shader stays anchored across all puffs (option (c) demo).
-		int          smokeSpin = 1;        // 1 = spin (default), 0 = no spin
-		// --capture <alo> <png> [--frames N]:
-		// headless render-fidelity capture. Loads <alo>, renders N frames,
-		// writes the engine's render target to <png>, exits. Implies the
-		// --new-ui host path (it owns the engine). See src/host/Run.h.
-		std::wstring captureAlo;
-		// --capture-ref <objectName> <png>: render a game reference object
-		// (with its shadow) headlessly instead of a particle system.
-		std::wstring captureRef;
-		std::wstring capturePng;
-		std::wstring snapWindowPath;   // --snap-window <png>: screenshot the running editor, then exit
-		bool         snapWindowFlagSeen = false;  // --snap-window present (with or without a path)
-		// Default ~180 frames ≈ 3 s of sim (loop paces ~16 ms/frame) so a
-		// freshly-spawned effect has time to fill before the snapshot.
-		int          captureFrames = 180;
-		// --skydome <slot>: render the capture with a background skydome
-		// (0 = Off / solid colour — the default; 1-8 bundled scenes).
-		int          captureSkydome = 0;
-		// --golden-profile: internal render-oracle profile. Valid only for a
-		// particle --capture with the canonical --skydome 1 view.
-		bool         captureGoldenProfile = false;
-		// [world-lit] --ambient r,g,b / --sun r,g,b / --sun-intensity f:
-		// drive scene lighting in a headless --capture run so a lit shader's
-		// response can be verified offline. Each is opt-in; unset leaves the
-		// engine's ctor-default lighting untouched.
-		bool         captureHasAmbient = false; float captureAmbient[3] = {0,0,0};
-		bool         captureHasSun = false;     float captureSun[3] = {0,0,0};
-		bool         captureHasSunI = false;    float captureSunIntensity = 1.0f;
-		// --drive <script.json>: scripted non-CDP composite capture, then exit.
-		std::wstring driveScriptPath;
-		// --record <timeline.json>: scripted deterministic clip recording (PNG
-		// sequence), then exit. Ephemeral like --drive (no persistence).
-		std::wstring recordScriptPath;
-		std::wstring perfTracePath;
-		std::wstring perfTraceMode;
-		std::wstring perfArtifactDir;
-		std::wstring perfWebViewProfile;
-		for (size_t i = 1; i < argv.size(); ++i)
-		{
-			for (const wchar_t* mode : {L"--capture", L"--capture-ref", L"--drive", L"--record",
-									   L"--snap-window", L"--test-host", L"--dev-ui",
-									   L"--gen-a11y-fixture", L"--gen-singleton-link-fixture", L"--gen-smoke-test",
-									   L"--gen-houdini-validation-fixture", L"--gen-houdini-review-fixture"})
-				if (argv[i] == mode) replayConflict = true;
-			if (argv[i] == L"--dev-ui")    devUi    = true;
-			if (argv[i] == L"--test-host") testHost = true;
-			if (argv[i] == L"--perf-trace")
-			{
-				if (i + 1 >= argv.size())
-				{
-					fwprintf(stderr, L"--perf-trace requires a <path>\n");
-					return 2;
-				}
-				perfTracePath = argv[i + 1];
-				++i;
-				continue;
-			}
-			if (argv[i] == L"--perf-trace-mode")
-			{
-				if (i + 1 >= argv.size())
-				{
-					fwprintf(stderr, L"--perf-trace-mode requires off, null, or file\n");
-					return 2;
-				}
-				perfTraceMode = argv[i + 1];
-				++i;
-				continue;
-			}
-			if (argv[i] == L"--perf-artifact-dir")
-			{
-				if (i + 1 >= argv.size())
-				{
-					fwprintf(stderr, L"--perf-artifact-dir requires a <path>\n");
-					return 2;
-				}
-				perfArtifactDir = argv[i + 1];
-				++i;
-				continue;
-			}
-			if (argv[i] == L"--perf-webview-profile")
-			{
-				if (i + 1 >= argv.size())
-				{
-					fwprintf(stderr, L"--perf-webview-profile requires a <path>\n");
-					return 2;
-				}
-				perfWebViewProfile = argv[i + 1];
-				++i;
-				continue;
-			}
-			if (argv[i] == L"--drive")
-			{
-				// Require an explicit path: a bare --drive must NOT fall through
-				// to a normal (persisting) launch — that would half-arm ephemeral
-				// mode (the GameDataPath scan keys off the bare token) and clobber
-				// the daily driver's settings. Fail loudly instead.
-				if (i + 1 >= argv.size())
-				{
-					fwprintf(stderr, L"--drive requires a <script.json> path\n");
-					return 2;
-				}
-				driveScriptPath = argv[i + 1];
-				++i;
-				continue;
-			}
-			if (argv[i] == L"--record")
-			{
-				// Require an explicit <timeline.json> path, same as --drive: a
-				// bare --record half-arms ephemeral mode (the GameDataPath scan
-				// keys off the bare token) and would clobber the daily driver.
-				if (i + 1 >= argv.size())
-				{
-					fwprintf(stderr, L"--record requires a <timeline.json> path\n");
-					return 2;
-				}
-				recordScriptPath = argv[i + 1];
-				++i;
-				continue;
-			}
-			if (argv[i] == L"--gen-singleton-link-fixture" && i + 1 < argv.size())
-			{
-				genSingletonLinkFixturePath = argv[i + 1];
-			}
-			if (argv[i] == L"--gen-a11y-fixture" && i + 1 < argv.size())
-			{
-				genA11yFixturePath = argv[i + 1];
-			}
-			if (argv[i] == L"--gen-smoke-test" && i + 1 < argv.size())
-			{
-				genSmokeTestPath = argv[i + 1];
-			}
-			if (argv[i] == L"--replay-proof" || argv[i] == L"--observe" || argv[i] == L"--gen-replay-proof-fixture")
-			{
-				if (i + 2 >= argv.size() || argv[i + 1].empty() || argv[i + 2].empty() ||
-					argv[i + 1][0] == L'-' || argv[i + 2][0] == L'-')
-				{
-					fwprintf(stderr, L"%s requires two values\n", argv[i].c_str());
-					return 2;
-				}
-				if (argv[i] == L"--replay-proof")
-				{
-					replayScenarioPath = argv[i + 1];
-					replayOutputDirectory = argv[i + 2];
-				}
-				else if (argv[i] == L"--observe")
-				{
-					observeSpecPath = argv[i + 1];
-					observeOutputDirectory = argv[i + 2];
-				}
-				else
-				{
-					genReplayFixtureKind = argv[i + 1];
-					genReplayFixturePath = argv[i + 2];
-					if (genReplayFixtureKind != L"weather" && genReplayFixtureKind != L"guard" &&
-						genReplayFixtureKind != L"late-flash" && genReplayFixtureKind != L"guard-short" &&
-						genReplayFixtureKind != L"death-child" && genReplayFixtureKind != L"child-starve" &&
-						genReplayFixtureKind != L"budget-bailout" && genReplayFixtureKind != L"budget-bailout-skip" &&
-						genReplayFixtureKind != L"index-cap" && genReplayFixtureKind != L"wide" &&
-						genReplayFixtureKind != L"missing-texture")
-					{
-						fwprintf(stderr, L"--gen-replay-proof-fixture requires weather, guard, late-flash, guard-short, death-child, child-starve, budget-bailout, budget-bailout-skip, index-cap, wide or missing-texture\n");
-						return 2;
-					}
-				}
-				i += 2;
-				continue;
-			}
-			if (argv[i] == L"--gen-houdini-validation-fixture" || argv[i] == L"--gen-houdini-review-fixture")
-			{
-				houdinifixture::Kind kind = houdinifixture::Kind::Puff;
-				// ASCII first: the ANSI conversion best-fits some wide characters to letters.
-				if (i + 3 >= argv.size() || argv[i + 3].empty() || argv[i + 3][0] == L'-' ||
-					!houdinifixture::ParseKind(argv[i + 1], kind) ||
-					std::any_of(argv[i + 2].begin(), argv[i + 2].end(), [](wchar_t c) { return c > 0x7F; }) ||
-					!houdinifixture::IsTextureName(WideToAnsi(argv[i + 2])))
-				{
-					fwprintf(stderr, L"%ls requires <puff|ring|fireball|smoke4|smoke8|fireball8> <texture.tga|.dds> <out.alo>\n", argv[i].c_str());
-					return 2;
-				}
-				genHoudiniFixtureKind = argv[i + 1];
-				genHoudiniFixtureTexture = argv[i + 2];
-				genHoudiniFixturePath = argv[i + 3];
-				genHoudiniFixtureReview = argv[i] == L"--gen-houdini-review-fixture";
-				i += 3;
-				continue;
-			}
-			if (argv[i] == L"--capture" && i + 2 < argv.size())
-			{
-				captureAlo = argv[i + 1];
-				capturePng = argv[i + 2];
-			}
-			if (argv[i] == L"--capture-ref" && i + 2 < argv.size())
-			{
-				captureRef = argv[i + 1];
-				capturePng = argv[i + 2];
-			}
-			if (argv[i] == L"--snap-window")
-			{
-				snapWindowFlagSeen = true;
-				if (i + 1 < argv.size()) snapWindowPath = argv[i + 1];
-			}
-			if (argv[i] == L"--frames" && i + 1 < argv.size())
-			{
-				captureFrames = _wtoi(argv[i + 1].c_str());
-			}
-			// --skydome <slot>: apply a background skydome in --capture mode
-			// (0 = Off / solid colour, 1-8 bundled).
-			if (argv[i] == L"--skydome" && i + 1 < argv.size())
-			{
-				captureSkydome = _wtoi(argv[i + 1].c_str());
-			}
-			if (argv[i] == L"--golden-profile")
-			{
-				captureGoldenProfile = true;
-			}
-			// [world-lit] --ambient r,g,b: scene ambient (0..1 floats).
-			if (argv[i] == L"--ambient" && i + 1 < argv.size())
-			{
-				if (swscanf_s(argv[i + 1].c_str(), L"%f,%f,%f",
-				              &captureAmbient[0], &captureAmbient[1], &captureAmbient[2]) == 3)
-					captureHasAmbient = true;
-				else
-					fwprintf(stderr, L"--ambient: expected r,g,b floats, got '%s' -- ignored\n", argv[i + 1].c_str());
-			}
-			// [world-lit] --sun r,g,b: sun diffuse colour (0..1 floats).
-			if (argv[i] == L"--sun" && i + 1 < argv.size())
-			{
-				if (swscanf_s(argv[i + 1].c_str(), L"%f,%f,%f",
-				              &captureSun[0], &captureSun[1], &captureSun[2]) == 3)
-					captureHasSun = true;
-				else
-					fwprintf(stderr, L"--sun: expected r,g,b floats, got '%s' -- ignored\n", argv[i + 1].c_str());
-			}
-			// [world-lit] --sun-intensity f: scalar folded into the sun colour.
-			// Validate with swscanf_s (not _wtof, which silently returns 0.0 on
-			// garbage -> a black sun with no warning).
-			if (argv[i] == L"--sun-intensity" && i + 1 < argv.size())
-			{
-				float sunI = 0.0f;
-				if (swscanf_s(argv[i + 1].c_str(), L"%f", &sunI) == 1)
-				{
-					captureSunIntensity = sunI;
-					captureHasSunI = true;
-				}
-				else
-					fwprintf(stderr, L"--sun-intensity: expected a float, got '%s' -- ignored\n", argv[i + 1].c_str());
-			}
-		}
-		auto readEnvW = [](const wchar_t* name) -> std::wstring
-		{
-			wchar_t value[32768] = {};
-			const DWORD n = GetEnvironmentVariableW(name, value, static_cast<DWORD>(std::size(value)));
-			if (n == 0 || n >= std::size(value)) return L"";
-			return std::wstring(value, n);
-		};
-		if (perfTracePath.empty())      perfTracePath = readEnvW(L"ALO_PERF_TRACE");
-		if (perfTraceMode.empty())      perfTraceMode = readEnvW(L"ALO_PERF_TRACE_MODE");
-		if (perfArtifactDir.empty())    perfArtifactDir = readEnvW(L"ALO_PERF_ARTIFACT_DIR");
-		if (perfWebViewProfile.empty()) perfWebViewProfile = readEnvW(L"ALO_PERF_WEBVIEW_PROFILE");
-		// The flag itself sets replayConflict, so the replay check below can't
-		// tell a second mode apart from it; check the others by name.
-		if (!genHoudiniFixturePath.empty() &&
-			(!replayScenarioPath.empty() || !observeSpecPath.empty() || !genReplayFixturePath.empty() ||
-			 !captureAlo.empty() || !capturePng.empty() || !captureRef.empty() ||
-			 !driveScriptPath.empty() || !recordScriptPath.empty() || snapWindowFlagSeen ||
-			 testHost || devUi || !genSingletonLinkFixturePath.empty() ||
-			 !genA11yFixturePath.empty() || !genSmokeTestPath.empty()))
-		{
-			fwprintf(stderr, L"--gen-houdini-validation-fixture / --gen-houdini-review-fixture cannot be combined with other run modes\n");
-			return 2;
-		}
-		if ((!replayScenarioPath.empty() || !observeSpecPath.empty() || !genReplayFixturePath.empty()) &&
-			(replayConflict || !captureAlo.empty() || !capturePng.empty() || !captureRef.empty() ||
-			 !driveScriptPath.empty() || !recordScriptPath.empty() || snapWindowFlagSeen ||
-			 testHost || devUi || !genSingletonLinkFixturePath.empty() ||
-			 !genA11yFixturePath.empty() || !genSmokeTestPath.empty() ||
-			 (!replayScenarioPath.empty() && !genReplayFixturePath.empty()) ||
-			 (!observeSpecPath.empty() && (!replayScenarioPath.empty() || !genReplayFixturePath.empty()))))
-		{
-			fwprintf(stderr, L"replay proof and observe flags cannot be combined with other run modes\n");
-			return 2;
-		}
-		// --drive and --capture/--capture-ref are mutually-exclusive one-shots
-		// (both arm a captureMode-style branch). Reject the combination loudly
-		// rather than run an ambiguous mix. Checked BEFORE the capture/capture-ref
-		// warning so an already-rejected run doesn't also print that noise.
-		if (!driveScriptPath.empty() &&
-		    (!captureAlo.empty() || !capturePng.empty() || !captureRef.empty()))
-		{
-			fwprintf(stderr, L"--drive cannot be combined with --capture/--capture-ref\n");
-			return 2;
-		}
-		// --record is likewise a mutually-exclusive one-shot.
-		if (!recordScriptPath.empty() &&
-		    (!driveScriptPath.empty() || !captureAlo.empty() || !capturePng.empty() || !captureRef.empty()))
-		{
-			fwprintf(stderr, L"--record cannot be combined with --drive/--capture/--capture-ref\n");
-			return 2;
-		}
-		// Warn when both --capture and --capture-ref are supplied: --capture-ref
-		// wins (last write to capturePng, captureRef takes the branch in HostWindow).
-		// This used to be a silent surprise; make it explicit so operators notice.
-		if (!captureAlo.empty() && !captureRef.empty())
-			fprintf(stderr, "warning: both --capture and --capture-ref supplied; using --capture-ref\n");
-		if (!host::IsGoldenProfileRequestValid(
-		        captureGoldenProfile,
-		        !captureAlo.empty(),
-		        !capturePng.empty(),
-		        !captureRef.empty(),
-		        captureSkydome))
-		{
-			fwprintf(stderr,
-			         L"--golden-profile requires --capture <alo> <png> --skydome 1 "
-			         L"and cannot be used with --capture-ref\n");
-			return 2;
-		}
-		// Clamp a garbage/zero --frames back to the default.
-		if (captureFrames < 1) captureFrames = 180;
-		// A headless --capture must NEVER pop a modal CRT assert/abort dialog
-		// -- it hangs the run AND disrupts the user's screen (and tells us nothing).
-		// Route Debug asserts/errors + unhandled exceptions to stderr (captured to
-		// the redirect file) so a crash is diagnosable headlessly. Interactive Debug
-		// launches keep their dialogs.
+    // The WebView2 + D3D9 host is the ONLY UI. We build the
+    // three managers the (now-dead) legacy main() built (so the host can
+    // construct Engine identically) and run host::Run unconditionally; no
+    // legacy WNDCLASS / windows are registered. The `--legacy` / `--legacy-ui`
+    // / `--new-ui` flags are gone — an unknown flag is simply ignored.
+    {
+        const std::vector<std::wstring> argv     = parseCommandLine();
+        bool                            devUi    = false;
+        bool                            testHost = false;
+        // --gen-singleton-link-fixture <path>: one-shot CLI to produce a
+        // .alo file with a known legacy singleton link group. Used
+        // to exercise the load-time enforcement sweep at file/open.
+        // Since the production save path always runs through
+        // post-mutation enforcement (which would have demoted the
+        // singleton already), no other code path can produce such a
+        // file. This flag bypasses BridgeDispatcher entirely and
+        // constructs the singleton state directly via the
+        // ParticleSystem API + SaveParticleSystem.
+        std::wstring genSingletonLinkFixturePath;
+        std::wstring genA11yFixturePath;
+        std::wstring genReplayFixtureKind, genReplayFixturePath;
+        // --gen-houdini-validation-fixture <kind> <texture-name> <path>: one
+        // emitter showing one generated texture (effect/HoudiniValidationFixture.h).
+        std::wstring genHoudiniFixtureKind, genHoudiniFixtureTexture, genHoudiniFixturePath;
+        // --gen-houdini-review-fixture: the same, lifted off the ground for the game.
+        bool         genHoudiniFixtureReview = false;
+        std::wstring replayScenarioPath, replayOutputDirectory;
+        // --observe <observation.json> <out-dir>: fixed-profile lifecycle capture.
+        std::wstring observeSpecPath, observeOutputDirectory;
+        bool         replayConflict = false;
+        std::wstring genSmokeTestPath; // [shaded-smoke] all-three test particle
+        // [shaded-smoke] --smoke-color <warm|grey>: color ramp for the gen-smoke-test
+        // plume. warm (default) = white->orange->red (proves vivid tint); grey =
+        // light->dark grey (reads as real CoH-style smoke). Shader is tint-agnostic;
+        // this only sets the demo fixture's per-life RGB tracks.
+        int smokeColorMode = 0; // 0 = warm, 1 = grey
+        // [shaded-smoke] --smoke-spin <on|off>: per-sprite rotation for the gen-smoke-test
+        // plume. on (default) keeps randomRotation; off zeroes the spin so a directional
+        // (lit-from-the-right) shader stays anchored across all puffs (option (c) demo).
+        int smokeSpin = 1; // 1 = spin (default), 0 = no spin
+        // --capture <alo> <png> [--frames N]:
+        // headless render-fidelity capture. Loads <alo>, renders N frames,
+        // writes the engine's render target to <png>, exits. Implies the
+        // --new-ui host path (it owns the engine). See src/host/Run.h.
+        std::wstring captureAlo;
+        // --capture-ref <objectName> <png>: render a game reference object
+        // (with its shadow) headlessly instead of a particle system.
+        std::wstring captureRef;
+        std::wstring capturePng;
+        std::wstring snapWindowPath;             // --snap-window <png>: screenshot the running editor, then exit
+        bool         snapWindowFlagSeen = false; // --snap-window present (with or without a path)
+        // Default ~180 frames ≈ 3 s of sim (loop paces ~16 ms/frame) so a
+        // freshly-spawned effect has time to fill before the snapshot.
+        int captureFrames = 180;
+        // --skydome <slot>: render the capture with a background skydome
+        // (0 = Off / solid colour — the default; 1-8 bundled scenes).
+        int captureSkydome = 0;
+        // --golden-profile: internal render-oracle profile. Valid only for a
+        // particle --capture with the canonical --skydome 1 view.
+        bool captureGoldenProfile = false;
+        // [world-lit] --ambient r,g,b / --sun r,g,b / --sun-intensity f:
+        // drive scene lighting in a headless --capture run so a lit shader's
+        // response can be verified offline. Each is opt-in; unset leaves the
+        // engine's ctor-default lighting untouched.
+        bool  captureHasAmbient   = false;
+        float captureAmbient[3]   = {0, 0, 0};
+        bool  captureHasSun       = false;
+        float captureSun[3]       = {0, 0, 0};
+        bool  captureHasSunI      = false;
+        float captureSunIntensity = 1.0f;
+        // --drive <script.json>: scripted non-CDP composite capture, then exit.
+        std::wstring driveScriptPath;
+        // --record <timeline.json>: scripted deterministic clip recording (PNG
+        // sequence), then exit. Ephemeral like --drive (no persistence).
+        std::wstring recordScriptPath;
+        std::wstring perfTracePath;
+        std::wstring perfTraceMode;
+        std::wstring perfArtifactDir;
+        std::wstring perfWebViewProfile;
+        for (size_t i = 1; i < argv.size(); ++i)
+        {
+            for (const wchar_t* mode :
+                 {L"--capture", L"--capture-ref", L"--drive", L"--record", L"--snap-window", L"--test-host",
+                  L"--dev-ui", L"--gen-a11y-fixture", L"--gen-singleton-link-fixture", L"--gen-smoke-test",
+                  L"--gen-houdini-validation-fixture", L"--gen-houdini-review-fixture"})
+                if (argv[i] == mode) replayConflict = true;
+            if (argv[i] == L"--dev-ui") devUi = true;
+            if (argv[i] == L"--test-host") testHost = true;
+            if (argv[i] == L"--perf-trace")
+            {
+                if (i + 1 >= argv.size())
+                {
+                    fwprintf(stderr, L"--perf-trace requires a <path>\n");
+                    return 2;
+                }
+                perfTracePath = argv[i + 1];
+                ++i;
+                continue;
+            }
+            if (argv[i] == L"--perf-trace-mode")
+            {
+                if (i + 1 >= argv.size())
+                {
+                    fwprintf(stderr, L"--perf-trace-mode requires off, null, or file\n");
+                    return 2;
+                }
+                perfTraceMode = argv[i + 1];
+                ++i;
+                continue;
+            }
+            if (argv[i] == L"--perf-artifact-dir")
+            {
+                if (i + 1 >= argv.size())
+                {
+                    fwprintf(stderr, L"--perf-artifact-dir requires a <path>\n");
+                    return 2;
+                }
+                perfArtifactDir = argv[i + 1];
+                ++i;
+                continue;
+            }
+            if (argv[i] == L"--perf-webview-profile")
+            {
+                if (i + 1 >= argv.size())
+                {
+                    fwprintf(stderr, L"--perf-webview-profile requires a <path>\n");
+                    return 2;
+                }
+                perfWebViewProfile = argv[i + 1];
+                ++i;
+                continue;
+            }
+            if (argv[i] == L"--drive")
+            {
+                // Require an explicit path: a bare --drive must NOT fall through
+                // to a normal (persisting) launch — that would half-arm ephemeral
+                // mode (the GameDataPath scan keys off the bare token) and clobber
+                // the daily driver's settings. Fail loudly instead.
+                if (i + 1 >= argv.size())
+                {
+                    fwprintf(stderr, L"--drive requires a <script.json> path\n");
+                    return 2;
+                }
+                driveScriptPath = argv[i + 1];
+                ++i;
+                continue;
+            }
+            if (argv[i] == L"--record")
+            {
+                // Require an explicit <timeline.json> path, same as --drive: a
+                // bare --record half-arms ephemeral mode (the GameDataPath scan
+                // keys off the bare token) and would clobber the daily driver.
+                if (i + 1 >= argv.size())
+                {
+                    fwprintf(stderr, L"--record requires a <timeline.json> path\n");
+                    return 2;
+                }
+                recordScriptPath = argv[i + 1];
+                ++i;
+                continue;
+            }
+            if (argv[i] == L"--gen-singleton-link-fixture" && i + 1 < argv.size())
+            {
+                genSingletonLinkFixturePath = argv[i + 1];
+            }
+            if (argv[i] == L"--gen-a11y-fixture" && i + 1 < argv.size())
+            {
+                genA11yFixturePath = argv[i + 1];
+            }
+            if (argv[i] == L"--gen-smoke-test" && i + 1 < argv.size())
+            {
+                genSmokeTestPath = argv[i + 1];
+            }
+            if (argv[i] == L"--replay-proof" || argv[i] == L"--observe" || argv[i] == L"--gen-replay-proof-fixture")
+            {
+                if (i + 2 >= argv.size() || argv[i + 1].empty() || argv[i + 2].empty() || argv[i + 1][0] == L'-' ||
+                    argv[i + 2][0] == L'-')
+                {
+                    fwprintf(stderr, L"%s requires two values\n", argv[i].c_str());
+                    return 2;
+                }
+                if (argv[i] == L"--replay-proof")
+                {
+                    replayScenarioPath    = argv[i + 1];
+                    replayOutputDirectory = argv[i + 2];
+                }
+                else if (argv[i] == L"--observe")
+                {
+                    observeSpecPath        = argv[i + 1];
+                    observeOutputDirectory = argv[i + 2];
+                }
+                else
+                {
+                    genReplayFixtureKind = argv[i + 1];
+                    genReplayFixturePath = argv[i + 2];
+                    if (genReplayFixtureKind != L"weather" && genReplayFixtureKind != L"guard" &&
+                        genReplayFixtureKind != L"late-flash" && genReplayFixtureKind != L"guard-short" &&
+                        genReplayFixtureKind != L"death-child" && genReplayFixtureKind != L"child-starve" &&
+                        genReplayFixtureKind != L"budget-bailout" && genReplayFixtureKind != L"budget-bailout-skip" &&
+                        genReplayFixtureKind != L"index-cap" && genReplayFixtureKind != L"wide" &&
+                        genReplayFixtureKind != L"missing-texture")
+                    {
+                        fwprintf(stderr, L"--gen-replay-proof-fixture requires weather, guard, late-flash, "
+                                         L"guard-short, death-child, child-starve, budget-bailout, "
+                                         L"budget-bailout-skip, index-cap, wide or missing-texture\n");
+                        return 2;
+                    }
+                }
+                i += 2;
+                continue;
+            }
+            if (argv[i] == L"--gen-houdini-validation-fixture" || argv[i] == L"--gen-houdini-review-fixture")
+            {
+                houdinifixture::Kind kind = houdinifixture::Kind::Puff;
+                // ASCII first: the ANSI conversion best-fits some wide characters to letters.
+                if (i + 3 >= argv.size() || argv[i + 3].empty() || argv[i + 3][0] == L'-' ||
+                    !houdinifixture::ParseKind(argv[i + 1], kind) ||
+                    std::any_of(argv[i + 2].begin(), argv[i + 2].end(), [](wchar_t c) { return c > 0x7F; }) ||
+                    !houdinifixture::IsTextureName(WideToAnsi(argv[i + 2])))
+                {
+                    fwprintf(
+                        stderr,
+                        L"%ls requires <puff|ring|fireball|smoke4|smoke8|fireball8> <texture.tga|.dds> <out.alo>\n",
+                        argv[i].c_str());
+                    return 2;
+                }
+                genHoudiniFixtureKind    = argv[i + 1];
+                genHoudiniFixtureTexture = argv[i + 2];
+                genHoudiniFixturePath    = argv[i + 3];
+                genHoudiniFixtureReview  = argv[i] == L"--gen-houdini-review-fixture";
+                i += 3;
+                continue;
+            }
+            if (argv[i] == L"--capture" && i + 2 < argv.size())
+            {
+                captureAlo = argv[i + 1];
+                capturePng = argv[i + 2];
+            }
+            if (argv[i] == L"--capture-ref" && i + 2 < argv.size())
+            {
+                captureRef = argv[i + 1];
+                capturePng = argv[i + 2];
+            }
+            if (argv[i] == L"--snap-window")
+            {
+                snapWindowFlagSeen = true;
+                if (i + 1 < argv.size()) snapWindowPath = argv[i + 1];
+            }
+            if (argv[i] == L"--frames" && i + 1 < argv.size())
+            {
+                captureFrames = _wtoi(argv[i + 1].c_str());
+            }
+            // --skydome <slot>: apply a background skydome in --capture mode
+            // (0 = Off / solid colour, 1-8 bundled).
+            if (argv[i] == L"--skydome" && i + 1 < argv.size())
+            {
+                captureSkydome = _wtoi(argv[i + 1].c_str());
+            }
+            if (argv[i] == L"--golden-profile")
+            {
+                captureGoldenProfile = true;
+            }
+            // [world-lit] --ambient r,g,b: scene ambient (0..1 floats).
+            if (argv[i] == L"--ambient" && i + 1 < argv.size())
+            {
+                if (swscanf_s(argv[i + 1].c_str(), L"%f,%f,%f", &captureAmbient[0], &captureAmbient[1],
+                              &captureAmbient[2]) == 3)
+                    captureHasAmbient = true;
+                else
+                    fwprintf(stderr, L"--ambient: expected r,g,b floats, got '%s' -- ignored\n", argv[i + 1].c_str());
+            }
+            // [world-lit] --sun r,g,b: sun diffuse colour (0..1 floats).
+            if (argv[i] == L"--sun" && i + 1 < argv.size())
+            {
+                if (swscanf_s(argv[i + 1].c_str(), L"%f,%f,%f", &captureSun[0], &captureSun[1], &captureSun[2]) == 3)
+                    captureHasSun = true;
+                else
+                    fwprintf(stderr, L"--sun: expected r,g,b floats, got '%s' -- ignored\n", argv[i + 1].c_str());
+            }
+            // [world-lit] --sun-intensity f: scalar folded into the sun colour.
+            // Validate with swscanf_s (not _wtof, which silently returns 0.0 on
+            // garbage -> a black sun with no warning).
+            if (argv[i] == L"--sun-intensity" && i + 1 < argv.size())
+            {
+                float sunI = 0.0f;
+                if (swscanf_s(argv[i + 1].c_str(), L"%f", &sunI) == 1)
+                {
+                    captureSunIntensity = sunI;
+                    captureHasSunI      = true;
+                }
+                else
+                    fwprintf(stderr, L"--sun-intensity: expected a float, got '%s' -- ignored\n", argv[i + 1].c_str());
+            }
+        }
+        auto readEnvW = [](const wchar_t* name) -> std::wstring
+        {
+            wchar_t     value[32768] = {};
+            const DWORD n            = GetEnvironmentVariableW(name, value, static_cast<DWORD>(std::size(value)));
+            if (n == 0 || n >= std::size(value)) return L"";
+            return std::wstring(value, n);
+        };
+        if (perfTracePath.empty()) perfTracePath = readEnvW(L"ALO_PERF_TRACE");
+        if (perfTraceMode.empty()) perfTraceMode = readEnvW(L"ALO_PERF_TRACE_MODE");
+        if (perfArtifactDir.empty()) perfArtifactDir = readEnvW(L"ALO_PERF_ARTIFACT_DIR");
+        if (perfWebViewProfile.empty()) perfWebViewProfile = readEnvW(L"ALO_PERF_WEBVIEW_PROFILE");
+        // The flag itself sets replayConflict, so the replay check below can't
+        // tell a second mode apart from it; check the others by name.
+        if (!genHoudiniFixturePath.empty() &&
+            (!replayScenarioPath.empty() || !observeSpecPath.empty() || !genReplayFixturePath.empty() ||
+             !captureAlo.empty() || !capturePng.empty() || !captureRef.empty() || !driveScriptPath.empty() ||
+             !recordScriptPath.empty() || snapWindowFlagSeen || testHost || devUi ||
+             !genSingletonLinkFixturePath.empty() || !genA11yFixturePath.empty() || !genSmokeTestPath.empty()))
+        {
+            fwprintf(stderr, L"--gen-houdini-validation-fixture / --gen-houdini-review-fixture cannot be combined with "
+                             L"other run modes\n");
+            return 2;
+        }
+        if ((!replayScenarioPath.empty() || !observeSpecPath.empty() || !genReplayFixturePath.empty()) &&
+            (replayConflict || !captureAlo.empty() || !capturePng.empty() || !captureRef.empty() ||
+             !driveScriptPath.empty() || !recordScriptPath.empty() || snapWindowFlagSeen || testHost || devUi ||
+             !genSingletonLinkFixturePath.empty() || !genA11yFixturePath.empty() || !genSmokeTestPath.empty() ||
+             (!replayScenarioPath.empty() && !genReplayFixturePath.empty()) ||
+             (!observeSpecPath.empty() && (!replayScenarioPath.empty() || !genReplayFixturePath.empty()))))
+        {
+            fwprintf(stderr, L"replay proof and observe flags cannot be combined with other run modes\n");
+            return 2;
+        }
+        // --drive and --capture/--capture-ref are mutually-exclusive one-shots
+        // (both arm a captureMode-style branch). Reject the combination loudly
+        // rather than run an ambiguous mix. Checked BEFORE the capture/capture-ref
+        // warning so an already-rejected run doesn't also print that noise.
+        if (!driveScriptPath.empty() && (!captureAlo.empty() || !capturePng.empty() || !captureRef.empty()))
+        {
+            fwprintf(stderr, L"--drive cannot be combined with --capture/--capture-ref\n");
+            return 2;
+        }
+        // --record is likewise a mutually-exclusive one-shot.
+        if (!recordScriptPath.empty() &&
+            (!driveScriptPath.empty() || !captureAlo.empty() || !capturePng.empty() || !captureRef.empty()))
+        {
+            fwprintf(stderr, L"--record cannot be combined with --drive/--capture/--capture-ref\n");
+            return 2;
+        }
+        // Warn when both --capture and --capture-ref are supplied: --capture-ref
+        // wins (last write to capturePng, captureRef takes the branch in HostWindow).
+        // This used to be a silent surprise; make it explicit so operators notice.
+        if (!captureAlo.empty() && !captureRef.empty())
+            fprintf(stderr, "warning: both --capture and --capture-ref supplied; using --capture-ref\n");
+        if (!host::IsGoldenProfileRequestValid(captureGoldenProfile, !captureAlo.empty(), !capturePng.empty(),
+                                               !captureRef.empty(), captureSkydome))
+        {
+            fwprintf(stderr, L"--golden-profile requires --capture <alo> <png> --skydome 1 "
+                             L"and cannot be used with --capture-ref\n");
+            return 2;
+        }
+        // Clamp a garbage/zero --frames back to the default.
+        if (captureFrames < 1) captureFrames = 180;
+        // A headless --capture must NEVER pop a modal CRT assert/abort dialog
+        // -- it hangs the run AND disrupts the user's screen (and tells us nothing).
+        // Route Debug asserts/errors + unhandled exceptions to stderr (captured to
+        // the redirect file) so a crash is diagnosable headlessly. Interactive Debug
+        // launches keep their dialogs.
 #ifndef NDEBUG
-		if (((!captureAlo.empty() || !captureRef.empty()) && !capturePng.empty()) ||
-			!replayScenarioPath.empty() || !observeSpecPath.empty() || !genReplayFixturePath.empty() ||
-			!genHoudiniFixturePath.empty())
-		{
-			setvbuf(stderr, nullptr, _IONBF, 0);   // unbuffered: pre-crash traces survive a terminate
-			_set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
-			_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
-			_CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
-			_CrtSetReportMode(_CRT_ERROR,  _CRTDBG_MODE_FILE);
-			_CrtSetReportFile(_CRT_ERROR,  _CRTDBG_FILE_STDERR);
-			std::set_terminate([]() {
-				fprintf(stderr, "[capture] FATAL: std::terminate (unhandled exception)\n");
-				try { if (auto e = std::current_exception()) std::rethrow_exception(e); }
-				catch (wexception& we) { fwprintf(stderr, L"  wexception: %ls\n", we.wwhat()); }
-				catch (const std::exception& ex) { fprintf(stderr, "  std::exception: %s\n", ex.what()); }
-				catch (...) { fprintf(stderr, "  (non-std exception)\n"); }
-				fflush(stderr);
-				_exit(3);
-			});
-		}
+        if (((!captureAlo.empty() || !captureRef.empty()) && !capturePng.empty()) || !replayScenarioPath.empty() ||
+            !observeSpecPath.empty() || !genReplayFixturePath.empty() || !genHoudiniFixturePath.empty())
+        {
+            setvbuf(stderr, nullptr, _IONBF, 0); // unbuffered: pre-crash traces survive a terminate
+            _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+            _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+            _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+            _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+            _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+            std::set_terminate(
+                []()
+                {
+                    fprintf(stderr, "[capture] FATAL: std::terminate (unhandled exception)\n");
+                    try
+                    {
+                        if (auto e = std::current_exception()) std::rethrow_exception(e);
+                    }
+                    catch (wexception& we)
+                    {
+                        fwprintf(stderr, L"  wexception: %ls\n", we.wwhat());
+                    }
+                    catch (const std::exception& ex)
+                    {
+                        fprintf(stderr, "  std::exception: %s\n", ex.what());
+                    }
+                    catch (...)
+                    {
+                        fprintf(stderr, "  (non-std exception)\n");
+                    }
+                    fflush(stderr);
+                    _exit(3);
+                });
+        }
 #endif
-		if (!genSingletonLinkFixturePath.empty())
-		{
-			auto sys = std::make_unique<ParticleSystem>();
-			sys->addRootEmitter();
-			sys->addRootEmitter();
-			auto& emitters = sys->getEmitters();
-			if (emitters.size() < 2 || !emitters[0] || !emitters[1])
-			{
-				fwprintf(stderr, L"gen-singleton-link-fixture: failed to add 2 root emitters\n");
-				return 2;
-			}
-			// Put both in link group 1 (transient — valid 2-member
-			// state), then manually demote emitter 0 back to 0.
-			// Result on disk: emitter 0 at linkGroup=0, emitter 1
-			// alone at linkGroup=1 — the legacy "singleton group"
-			// state that file/open's enforcement sweep must demote.
-			emitters[0]->linkGroup = 1;
-			emitters[1]->linkGroup = 1;
-			emitters[0]->linkGroup = 0;
-			std::string err;
-			const bool ok = SaveParticleSystem(sys.get(), genSingletonLinkFixturePath, &err);
-			if (!ok)
-			{
-				fwprintf(stderr, L"gen-singleton-link-fixture: SaveParticleSystem failed: %hs\n",
-				         err.c_str());
-				return 2;
-			}
-			fwprintf(stderr, L"gen-singleton-link-fixture: wrote %s "
-			                 L"(emitter 0 linkGroup=0, emitter 1 linkGroup=1 — singleton)\n",
-			         genSingletonLinkFixturePath.c_str());
-			return 0;
-		}
-		// [shaded-smoke] --gen-smoke-test <path>: one root emitter set up to exercise the
-		// all-three shaded-smoke shader -- blendMode 5 (Depth Transparent -> PrimDepthSpriteAlpha.fx),
-		// big scale, several particles spread across a box, randomRotation on (so a single capture
-		// shows varied sprite angles), and a per-life color ramp (young warm -> old red) on UN-aliased
-		// R/G/B/A tracks (so per-particle tint is visible). Textures keep the default names so a mod
-		// can override them (color + dome normal). Bypasses BridgeDispatcher; uses the API directly.
-		if (!genSmokeTestPath.empty())
-		{
-			typedef ParticleSystem PS;
-			typedef PS::Emitter::Track Track;
-			auto sys = std::make_unique<ParticleSystem>();
-			PS::Emitter* e = sys->addRootEmitter();
-			if (e == nullptr) { fwprintf(stderr, L"gen-smoke-test: failed to add root emitter\n"); return 2; }
-			e->blendMode           = PS::BLEND_TRANSPARENT;   // 2 -> PrimAlpha.fx (plain alpha blend, honors
-			                                                   // per-pixel output alpha; depth-transparent
-			                                                   // mode 5 squared the soft overlap)
-			e->lifetime            = 4.0f;
-			e->nParticlesPerSecond = 6;
-			e->useBursts           = false;
-			e->randomRotation      = true;     // varied spin angles -> per-sprite rotation visible
-			e->noDepthTest         = true;     // smoke: no depth test -> overlapping soft orbs composite
-			                                   // cleanly (depth-test in mode 5 hard-intersects quad footprints)
-			// Engine: m_baseRotation = average * (1 + rand(-variance, variance)), in TURNS
-			// (angle = 2*PI*rotation). With average 0 the variance is moot -> every sprite
-			// starts at angle 0. average 0.5 / variance 1.0 => baseRotation in [0,1] turn =
-			// a full 0..360 deg random start-angle spread. (randomRotation=true means the
-			// rotation-SPEED track is ignored, so the start angle is the only spin source.)
-			e->randomRotationAverage  = 0.5f;
-			e->randomRotationVariance = 1.0f;
-			e->textureSize         = 1;       // ATLAS FRAME COUNT (textureSizeSqrt=floor(sqrt)), NOT pixels!
-			                                   // 1 => 1x1 atlas => quad UVs span the FULL 0..1. (256 gave a
-			                                   // 16x16 atlas => each particle sampled a 1/16 UV tile => the
-			                                   // near-constant-UV bug that broke all per-pixel lighting.)
-			// spawn spread across the view (wide in X, tall in Z, thin in depth Y)
-			e->groups[PS::GROUP_POSITION].type = PS::GT_BOX;
-			e->groups[PS::GROUP_POSITION].minX = -90.0f; e->groups[PS::GROUP_POSITION].maxX = 90.0f;
-			e->groups[PS::GROUP_POSITION].minY = -10.0f; e->groups[PS::GROUP_POSITION].maxY = 10.0f;
-			e->groups[PS::GROUP_POSITION].minZ = -50.0f; e->groups[PS::GROUP_POSITION].maxZ = 50.0f;
+        if (!genSingletonLinkFixturePath.empty())
+        {
+            auto sys = std::make_unique<ParticleSystem>();
+            sys->addRootEmitter();
+            sys->addRootEmitter();
+            auto& emitters = sys->getEmitters();
+            if (emitters.size() < 2 || !emitters[0] || !emitters[1])
+            {
+                fwprintf(stderr, L"gen-singleton-link-fixture: failed to add 2 root emitters\n");
+                return 2;
+            }
+            // Put both in link group 1 (transient — valid 2-member
+            // state), then manually demote emitter 0 back to 0.
+            // Result on disk: emitter 0 at linkGroup=0, emitter 1
+            // alone at linkGroup=1 — the legacy "singleton group"
+            // state that file/open's enforcement sweep must demote.
+            emitters[0]->linkGroup = 1;
+            emitters[1]->linkGroup = 1;
+            emitters[0]->linkGroup = 0;
+            std::string err;
+            const bool  ok = SaveParticleSystem(sys.get(), genSingletonLinkFixturePath, &err);
+            if (!ok)
+            {
+                fwprintf(stderr, L"gen-singleton-link-fixture: SaveParticleSystem failed: %hs\n", err.c_str());
+                return 2;
+            }
+            fwprintf(stderr,
+                     L"gen-singleton-link-fixture: wrote %s "
+                     L"(emitter 0 linkGroup=0, emitter 1 linkGroup=1 — singleton)\n",
+                     genSingletonLinkFixturePath.c_str());
+            return 0;
+        }
+        // [shaded-smoke] --gen-smoke-test <path>: one root emitter set up to exercise the
+        // all-three shaded-smoke shader -- blendMode 5 (Depth Transparent -> PrimDepthSpriteAlpha.fx),
+        // big scale, several particles spread across a box, randomRotation on (so a single capture
+        // shows varied sprite angles), and a per-life color ramp (young warm -> old red) on UN-aliased
+        // R/G/B/A tracks (so per-particle tint is visible). Textures keep the default names so a mod
+        // can override them (color + dome normal). Bypasses BridgeDispatcher; uses the API directly.
+        if (!genSmokeTestPath.empty())
+        {
+            typedef ParticleSystem     PS;
+            typedef PS::Emitter::Track Track;
+            auto                       sys = std::make_unique<ParticleSystem>();
+            PS::Emitter*               e   = sys->addRootEmitter();
+            if (e == nullptr)
+            {
+                fwprintf(stderr, L"gen-smoke-test: failed to add root emitter\n");
+                return 2;
+            }
+            e->blendMode = PS::BLEND_TRANSPARENT; // 2 -> PrimAlpha.fx (plain alpha blend, honors
+                                                  // per-pixel output alpha; depth-transparent
+                                                  // mode 5 squared the soft overlap)
+            e->lifetime            = 4.0f;
+            e->nParticlesPerSecond = 6;
+            e->useBursts           = false;
+            e->randomRotation      = true; // varied spin angles -> per-sprite rotation visible
+            e->noDepthTest         = true; // smoke: no depth test -> overlapping soft orbs composite
+                                           // cleanly (depth-test in mode 5 hard-intersects quad footprints)
+            // Engine: m_baseRotation = average * (1 + rand(-variance, variance)), in TURNS
+            // (angle = 2*PI*rotation). With average 0 the variance is moot -> every sprite
+            // starts at angle 0. average 0.5 / variance 1.0 => baseRotation in [0,1] turn =
+            // a full 0..360 deg random start-angle spread. (randomRotation=true means the
+            // rotation-SPEED track is ignored, so the start angle is the only spin source.)
+            e->randomRotationAverage  = 0.5f;
+            e->randomRotationVariance = 1.0f;
+            e->textureSize            = 1; // ATLAS FRAME COUNT (textureSizeSqrt=floor(sqrt)), NOT pixels!
+                                           // 1 => 1x1 atlas => quad UVs span the FULL 0..1. (256 gave a
+                                           // 16x16 atlas => each particle sampled a 1/16 UV tile => the
+                                           // near-constant-UV bug that broke all per-pixel lighting.)
+            // spawn spread across the view (wide in X, tall in Z, thin in depth Y)
+            e->groups[PS::GROUP_POSITION].type = PS::GT_BOX;
+            e->groups[PS::GROUP_POSITION].minX = -90.0f;
+            e->groups[PS::GROUP_POSITION].maxX = 90.0f;
+            e->groups[PS::GROUP_POSITION].minY = -10.0f;
+            e->groups[PS::GROUP_POSITION].maxY = 10.0f;
+            e->groups[PS::GROUP_POSITION].minZ = -50.0f;
+            e->groups[PS::GROUP_POSITION].maxZ = 50.0f;
 
-			// [shaded-smoke] DENSE RISING PLUME override (later writes win). A compact
-			// source slab at the bottom of frame + upward Z speed + zero gravity makes a
-			// tapering smoke column; high spawn rate + growing scale make it read dense.
-			// Kept within the capture camera's framed band (X ~+/-90, Z ~-50..+50).
-			e->lifetime            = 4.0f;
-			e->nParticlesPerSecond = 40;     // was 6 -> dense overlap into a column
-			e->gravity             = 0.0f;   // rising smoke must not fall back down
-			e->groups[PS::GROUP_POSITION].minX = -16.0f; e->groups[PS::GROUP_POSITION].maxX = 16.0f;
-			e->groups[PS::GROUP_POSITION].minY = -10.0f; e->groups[PS::GROUP_POSITION].maxY = 10.0f;
-			e->groups[PS::GROUP_POSITION].minZ = -46.0f; e->groups[PS::GROUP_POSITION].maxZ = -34.0f;
-			// initial velocity: mostly up (Z), small lateral drift -> natural turbulence.
-			// rise over 4 s life ~= Z*4 = 48..72 units, so from base ~-40 the column tops
-			// out around +10..+30 (in frame) before the particle dies.
-			e->groups[PS::GROUP_SPEED].type = PS::GT_BOX;
-			e->groups[PS::GROUP_SPEED].minX = -4.0f; e->groups[PS::GROUP_SPEED].maxX = 4.0f;
-			e->groups[PS::GROUP_SPEED].minY = -3.0f; e->groups[PS::GROUP_SPEED].maxY = 3.0f;
-			e->groups[PS::GROUP_SPEED].minZ = 12.0f; e->groups[PS::GROUP_SPEED].maxZ = 18.0f;
-			auto setTrack = [&](int id, float v0, float v1, Track::InterpolationType it)
-			{
-				e->trackContents[id].keys.clear();
-				e->trackContents[id].interpolation = it;
-				e->trackContents[id].keys.insert(Track::Key(0.0f, v0));
-				e->trackContents[id].keys.insert(Track::Key(100.0f, v1));
-				e->tracks[id] = &e->trackContents[id];   // un-alias from the Red channel
-			};
-			setTrack(PS::TRACK_SCALE,          35.0f, 50.0f, Track::IT_LINEAR);
-			setTrack(PS::TRACK_RED_CHANNEL,     1.0f, 1.0f,  Track::IT_LINEAR);
-			setTrack(PS::TRACK_GREEN_CHANNEL,   1.0f, 0.15f, Track::IT_LINEAR);
-			setTrack(PS::TRACK_BLUE_CHANNEL,    0.7f, 0.05f, Track::IT_LINEAR);
-			setTrack(PS::TRACK_ALPHA_CHANNEL,   0.9f, 0.9f,  Track::IT_LINEAR);
-			setTrack(PS::TRACK_ROTATION_SPEED,  0.0f, 0.0f,  Track::IT_LINEAR);
-			// [shaded-smoke] plume overrides of the tracks set above (later writes win):
-			setTrack(PS::TRACK_SCALE,         25.0f, 90.0f, Track::IT_LINEAR);  // billow wider as it rises
-			setTrack(PS::TRACK_ALPHA_CHANNEL,  0.85f, 0.0f, Track::IT_LINEAR);  // dissipate at the top
-			// color mode from --smoke-color (parsed here to avoid touching the arg loop):
-			// 0/warm (default, white->orange->red, set above) vs 1/grey (real-smoke look).
-			for (size_t a = 1; a < argv.size(); ++a)
-				if (argv[a] == L"--smoke-color" && a + 1 < argv.size())
-					smokeColorMode = (argv[a + 1] == L"grey" || argv[a + 1] == L"gray") ? 1 : 0;
-			if (smokeColorMode == 1)
-			{
-				setTrack(PS::TRACK_RED_CHANNEL,   0.90f, 0.40f, Track::IT_LINEAR);
-				setTrack(PS::TRACK_GREEN_CHANNEL, 0.90f, 0.40f, Track::IT_LINEAR);
-				setTrack(PS::TRACK_BLUE_CHANNEL,  0.92f, 0.42f, Track::IT_LINEAR);
-			}
-			// spin mode from --smoke-spin (parsed here like --smoke-color): on (default) vs
-			// off. off zeroes per-sprite rotation so a directional shader's lit side stays
-			// anchored across every puff -- the option (c) demo for "light from the right".
-			for (size_t a = 1; a < argv.size(); ++a)
-				if (argv[a] == L"--smoke-spin" && a + 1 < argv.size())
-					smokeSpin = (argv[a + 1] == L"off" || argv[a + 1] == L"0") ? 0 : 1;
-			if (smokeSpin == 0)
-			{
-				e->randomRotation         = false;
-				e->randomRotationVariance = 0.0f;
-			}
-			// [bump-spin test] --bumpspin: reconfigure the generated emitter into a clean
-			// GEOMETRIC-SPIN bump test -- mode 11, textureSize=1, the arrow+dome test textures,
-			// a few large stationary sprites spinning continuously via the rotation-speed track
-			// (randomRotation=false). Proves bump + spin + world-light headlessly (capture two frames:
-			// the arrow turns; whether the dome's lit crescent stays sun-anchored answers the (B) Q).
-			bool bumpSpin = false;
-			for (size_t a = 1; a < argv.size(); ++a) if (argv[a] == L"--bumpspin") bumpSpin = true;
-			if (bumpSpin)
-			{
-				e->blendMode           = 11;                       // Bump -> PrimParticleBumpAlpha.fx
-				e->colorTexture        = "zz_bumptest_base0.tga";  // arrow base (shows spin)
-				e->normalTexture       = "zz_bumptest_nm.tga";     // dome normal (shows bump)
-				e->textureSize         = 1;
-				e->lifetime            = 12.0f;
-				e->nParticlesPerSecond = 2;
-				e->gravity             = 0.0f;
-				e->noDepthTest         = true;
-				e->randomRotation      = false;                    // continuous spin from the speed track
-				e->groups[PS::GROUP_POSITION].type = PS::GT_BOX;
-				e->groups[PS::GROUP_POSITION].minX = -70; e->groups[PS::GROUP_POSITION].maxX = 70;
-				e->groups[PS::GROUP_POSITION].minY =  -5; e->groups[PS::GROUP_POSITION].maxY =  5;
-				e->groups[PS::GROUP_POSITION].minZ = -35; e->groups[PS::GROUP_POSITION].maxZ = 35;
-				e->groups[PS::GROUP_SPEED].type = PS::GT_EXACT;
-				e->groups[PS::GROUP_SPEED].valX = 0; e->groups[PS::GROUP_SPEED].valY = 0; e->groups[PS::GROUP_SPEED].valZ = 0;
-				setTrack(PS::TRACK_SCALE,         40.0f, 40.0f, Track::IT_LINEAR);
-				setTrack(PS::TRACK_RED_CHANNEL,    1.0f,  1.0f,  Track::IT_LINEAR);
-				setTrack(PS::TRACK_GREEN_CHANNEL,  1.0f,  1.0f,  Track::IT_LINEAR);
-				setTrack(PS::TRACK_BLUE_CHANNEL,   1.0f,  1.0f,  Track::IT_LINEAR);
-				setTrack(PS::TRACK_ALPHA_CHANNEL,  1.0f,  1.0f,  Track::IT_LINEAR);
-				setTrack(PS::TRACK_ROTATION_SPEED, 1.0f,  1.0f,  Track::IT_LINEAR);  // continuous spin
-			}
-			// [bump-spin SINGLE] --bumpspin1: like --bumpspin but exactly ONE large, centered,
-			// long-lived sprite (single burst of 1 at the EXACT origin). Two captures at different
-			// --frames then show the SAME sprite at two clean, NON-overlapping spin phases -> the
-			// decisive test (does the lit crescent track the spin or stay sun-anchored?).
-			bool bumpSpin1 = false;
-			for (size_t a = 1; a < argv.size(); ++a) if (argv[a] == L"--bumpspin1") bumpSpin1 = true;
-			if (bumpSpin1)
-			{
-				e->blendMode           = 11;                       // Bump -> PrimParticleBumpAlpha.fx
-				e->colorTexture        = "zz_bumptest_base0.tga";  // arrow base (shows spin phase)
-				e->normalTexture       = "zz_bumptest_nm.tga";     // dome normal (the lit crescent)
-				e->textureSize         = 1;
-				e->lifetime            = 600.0f;                   // persists across the whole capture
-				e->initialDelay        = 0.0f;
-				e->gravity             = 0.0f;
-				e->noDepthTest         = true;
-				e->randomRotation      = false;                    // continuous spin from the speed track
-				e->useBursts           = true;                     // a single burst...
-				e->nBursts             = 1;                        // ...fired once...
-				e->nParticlesPerBurst  = 1;                        // ...of exactly one particle
-				e->burstDelay          = 10000.0f;                 // no second burst during any capture
-				e->groups[PS::GROUP_POSITION].type = PS::GT_EXACT; // single centered point at origin
-				e->groups[PS::GROUP_POSITION].valX = 0; e->groups[PS::GROUP_POSITION].valY = 0; e->groups[PS::GROUP_POSITION].valZ = 0;
-				e->groups[PS::GROUP_SPEED].type = PS::GT_EXACT;
-				e->groups[PS::GROUP_SPEED].valX = 0; e->groups[PS::GROUP_SPEED].valY = 0; e->groups[PS::GROUP_SPEED].valZ = 0;
-				setTrack(PS::TRACK_SCALE,         60.0f, 60.0f, Track::IT_LINEAR);  // large, fills the frame
-				setTrack(PS::TRACK_RED_CHANNEL,    1.0f,  1.0f,  Track::IT_LINEAR);
-				setTrack(PS::TRACK_GREEN_CHANNEL,  1.0f,  1.0f,  Track::IT_LINEAR);
-				setTrack(PS::TRACK_BLUE_CHANNEL,   1.0f,  1.0f,  Track::IT_LINEAR);
-				setTrack(PS::TRACK_ALPHA_CHANNEL,  1.0f,  1.0f,  Track::IT_LINEAR);
-				setTrack(PS::TRACK_ROTATION_SPEED, 1.0f,  1.0f,  Track::IT_LINEAR);  // continuous spin
-			}
-			// [bump-spin GRID] --bumpspin-grid: a DETERMINISTIC 4x3 constellation of large,
-			// OFF-CENTER, overlapping, continuously-spinning mode-11 sprites at FIXED positions.
-			// Camera-orbit flicker only manifests on off-center / reprojecting sprites (a centered
-			// billboard at the look-at target is invariant under yaw -- proven empirically), so this
-			// is the harness's PRIMARY flicker scene. Fixed positions + single burst-of-1 per cell =>
-			// identical particle layout at every camera-yaw step (no random spawn churn to pollute
-			// the inter-frame difference metric).
-			bool bumpGrid = false;
-			for (size_t a = 1; a < argv.size(); ++a) if (argv[a] == L"--bumpspin-grid") bumpGrid = true;
-			if (bumpGrid)
-			{
-				const float gx[4] = { -52.0f, -17.0f, 17.0f, 52.0f };
-				const float gz[3] = { -30.0f, 0.0f, 30.0f };
-				auto cfgCell = [](PS::Emitter* em, float x, float z)
-				{
-					em->blendMode          = 11;                       // Bump -> PrimParticleBumpAlpha.fx
-					em->colorTexture       = "zz_bumptest_base0.tga";  // arrow base (spin landmark)
-					em->normalTexture      = "zz_bumptest_nm.tga";     // dome normal (puffy relief)
-					em->textureSize        = 1;
-					em->lifetime           = 600.0f;                   // persists across the whole capture
-					em->initialDelay       = 0.0f;
-					em->gravity            = 0.0f;
-					em->noDepthTest        = true;
-					em->randomRotation     = false;                    // continuous spin from the speed track
-					em->useBursts          = true;
-					em->nBursts            = 1;
-					em->nParticlesPerBurst = 1;
-					em->burstDelay         = 10000.0f;                 // no second burst during any capture
-					em->groups[PS::GROUP_POSITION].type = PS::GT_EXACT;
-					em->groups[PS::GROUP_POSITION].valX = x; em->groups[PS::GROUP_POSITION].valY = 0.0f; em->groups[PS::GROUP_POSITION].valZ = z;
-					em->groups[PS::GROUP_SPEED].type = PS::GT_EXACT;
-					em->groups[PS::GROUP_SPEED].valX = 0.0f; em->groups[PS::GROUP_SPEED].valY = 0.0f; em->groups[PS::GROUP_SPEED].valZ = 0.0f;
-					const int   ids[6] = { PS::TRACK_SCALE, PS::TRACK_RED_CHANNEL, PS::TRACK_GREEN_CHANNEL,
-					                       PS::TRACK_BLUE_CHANNEL, PS::TRACK_ALPHA_CHANNEL, PS::TRACK_ROTATION_SPEED };
-					const float val[6] = { 40.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };  // scale, rgb, alpha, spin
-					for (int t = 0; t < 6; ++t)
-					{
-						int id = ids[t];
-						em->trackContents[id].keys.clear();
-						em->trackContents[id].interpolation = Track::IT_LINEAR;
-						em->trackContents[id].keys.insert(Track::Key(0.0f,   val[t]));
-						em->trackContents[id].keys.insert(Track::Key(100.0f, val[t]));
-						em->tracks[id] = &em->trackContents[id];
-					}
-				};
-				bool first = true;
-				for (int ix = 0; ix < 4; ++ix)
-					for (int iz = 0; iz < 3; ++iz)
-					{
-						PS::Emitter* em = first ? e : sys->addRootEmitter();
-						first = false;
-						if (em == nullptr)
-						{
-							// A short grid silently invalidates the flicker metric (it relies on
-							// the full fixed 4x3 layout) -- fail loudly like the single path above.
-							fwprintf(stderr, L"gen-smoke-test: --bumpspin-grid failed to add root emitter (cell %d,%d)\n", ix, iz);
-							return 2;
-						}
-						cfgCell(em, gx[ix], gz[iz]);
-					}
-			}
-			std::string err;
-			if (!SaveParticleSystem(sys.get(), genSmokeTestPath, &err))
-			{
-				fwprintf(stderr, L"gen-smoke-test: SaveParticleSystem failed: %hs\n", err.c_str());
-				return 2;
-			}
-			// Report the ACTUAL root blendMode (the bump flags override it to 11; the base
-			// smoke is 2 -- the old hardcoded "blendMode 5" was stale) and the emitter count
-			// (the grid produces 12).
-			fwprintf(stderr, L"gen-smoke-test: wrote %s (root blendMode %d, %zu emitter(s))\n",
-			         genSmokeTestPath.c_str(), (int)e->blendMode, sys->getEmitters().size());
-			return 0;
-		}
-		if (!genHoudiniFixturePath.empty())
-		{
-			using PS = ParticleSystem;
-			houdinifixture::Kind kind = houdinifixture::Kind::Puff;
-			houdinifixture::ParseKind(genHoudiniFixtureKind, kind);
-			auto system = std::make_unique<PS>();
-			system->setName(DeriveParticleSystemName(genHoudiniFixturePath));
-			auto* e = system->addRootEmitter();
-			if (!e) return 3;
-			houdinifixture::Configure(e, kind, WideToAnsi(genHoudiniFixtureTexture),
-				genHoudiniFixtureReview ? houdinifixture::kReviewLift : 0.0f);
-			std::string error;
-			if (!SaveParticleSystem(system.get(), genHoudiniFixturePath, &error))
-			{
-				fprintf(stderr, "houdini fixture save: %s\n", error.c_str());
-				return 3;
-			}
-			// Report what the file holds, not what was asked for.
-			auto loaded = LoadParticleSystem(genHoudiniFixturePath, &error);
-			if (!loaded || loaded->getEmitters().size() != 1)
-			{
-				fprintf(stderr, "houdini fixture reload: %s\n", loaded ? "expected one emitter" : error.c_str());
-				return 3;
-			}
-			const auto* r = loaded->getEmitters()[0];
-			nlohmann::json index = nlohmann::json::array();
-			for (const auto& key : r->tracks[PS::TRACK_INDEX]->keys) index.push_back({key.time, key.value});
-			const nlohmann::json fields = {{"kind", houdinifixture::KindName(kind)}, {"reloaded", true},
-				{"colorTexture", r->colorTexture}, {"normalTexture", r->normalTexture},
-				{"blendMode", r->blendMode}, {"textureSize", r->textureSize}, {"lifetime", r->lifetime},
-				{"nBursts", r->nBursts}, {"lift", r->groups[PS::GROUP_POSITION].valZ}, {"nParticlesPerBurst", r->nParticlesPerBurst},
-				{"indexInterpolation", r->tracks[PS::TRACK_INDEX]->interpolation}, {"index", index}};
-			printf("[houdini-fixture] %s\n", fields.dump().c_str());
-			return 0;
-		}
-		if (!genReplayFixturePath.empty() && genReplayFixtureKind != L"weather" && genReplayFixtureKind != L"guard")
-		{
-			using PS = ParticleSystem;
-			using Track = PS::Emitter::Track;
-			auto system = std::make_unique<PS>();
-			system->setName(DeriveParticleSystemName(genReplayFixturePath));
-			const auto configure = [](PS::Emitter* e, const char* name, unsigned long count, float lifetime)
-			{
-				e->name = name;
-				e->colorTexture = "tests\\fixtures\\bumptest\\zz_bumpgold_rock.tga";
-				e->normalTexture = "tests\\fixtures\\bumptest\\zz_bumptest_nm.tga";
-				e->blendMode = PS::BLEND_BUMP;
-				e->textureSize = 1;
-				e->useBursts = true;
-				e->nBursts = 1;
-				e->nParticlesPerBurst = count;
-				e->nParticlesPerSecond = 0;
-				e->initialDelay = 0;
-				e->skipTime = 0;
-				e->burstDelay = 10000;
-				e->lifetime = lifetime;
-				e->gravity = 0;
-				e->freezeTime = 0;
-				e->randomLifetimePerc = 0;
-				e->randomScalePerc = 0;
-				e->isWeatherParticle = false;
-				e->groups[PS::GROUP_POSITION].type = PS::GT_BOX;
-				auto& g = e->groups[PS::GROUP_POSITION];
-				g.minX = -8; g.maxX = 8;
-				g.minY = -8; g.maxY = 8;
-				g.minZ = -8; g.maxZ = 8;
-				e->groups[PS::GROUP_SPEED].type = PS::GT_EXACT;
-				e->groups[PS::GROUP_SPEED].valX = 0;
-				e->groups[PS::GROUP_SPEED].valY = 0;
-				e->groups[PS::GROUP_SPEED].valZ = 0;
-				// Defaults alias RGBA to red; separate the tracks before authoring a tint.
-				for (int track : {PS::TRACK_SCALE, PS::TRACK_RED_CHANNEL, PS::TRACK_GREEN_CHANNEL,
-								  PS::TRACK_BLUE_CHANNEL, PS::TRACK_ALPHA_CHANNEL})
-				{
-					e->tracks[track] = &e->trackContents[track];
-					e->tracks[track]->interpolation = Track::IT_LINEAR;
-					e->tracks[track]->keys.clear();
-					const float value = track == PS::TRACK_SCALE ? 8.0f : 1.0f;
-					e->tracks[track]->keys.insert(Track::Key(0, value));
-					e->tracks[track]->keys.insert(Track::Key(100, value));
-				}
-			};
-			const auto setTrack = [](PS::Emitter* e, int track, float value)
-			{
-				e->tracks[track]->keys.clear();
-				e->tracks[track]->keys.insert(Track::Key(0, value));
-				e->tracks[track]->keys.insert(Track::Key(100, value));
-			};
-			auto* root = system->addRootEmitter();
-			if (!root) return 3;
-			if (genReplayFixtureKind == L"late-flash")
-			{
-				// The look must read without telemetry: a grey alpha-blended smoke cloud and a
-				// bright additive orange flash, both on the soft procedural disc. The rock atlas
-				// (red <= 127) made both read as asteroids and hid the flash inside the cloud.
-				const char* softTexture = "tests\\fixtures\\observe\\zz_observe_soft.tga";
-				configure(root, "core", 64, 1.0f);
-				root->colorTexture = softTexture;
-				root->blendMode = PS::BLEND_TRANSPARENT;
-				auto& g = root->groups[PS::GROUP_POSITION];
-				g.minX = -40; g.maxX = 40;
-				g.minY = -20; g.maxY = 20;
-				g.minZ = -40; g.maxZ = 40;
-				root->groups[PS::GROUP_SPEED].valZ = 1;
-				setTrack(root, PS::TRACK_SCALE, 24);
-				for (int track : {PS::TRACK_RED_CHANNEL, PS::TRACK_GREEN_CHANNEL, PS::TRACK_BLUE_CHANNEL})
-					setTrack(root, track, 0.5f);
-				setTrack(root, PS::TRACK_ALPHA_CHANNEL, 0.25f);
-				auto* flash = system->addRootEmitter();
-				if (!flash) return 3;
-				configure(flash, "flash", 8, 0.5f);
-				flash->colorTexture = softTexture;
-				flash->blendMode = PS::BLEND_ADDITIVE;
-				flash->initialDelay = 0.75f;
-				setTrack(flash, PS::TRACK_SCALE, 40);
-				setTrack(flash, PS::TRACK_GREEN_CHANNEL, 0.5f);
-				setTrack(flash, PS::TRACK_BLUE_CHANNEL, 0.125f);
-			}
-			else if (genReplayFixtureKind == L"guard-short" || genReplayFixtureKind == L"index-cap")
-				configure(root, "burst", genReplayFixtureKind == L"guard-short" ? 2048 : 20000, 0.5f);
-			else if (genReplayFixtureKind == L"missing-texture")
-			{
-				// The missing texture is first requested mid-pass: a during-life child is
-				// constructed (and requests its textures) when its delayed parent first
-				// spawns, so its own zero delay leaves its first frame at the parent's.
-				configure(root, "parent", 4, 0.5f);
-				root->initialDelay = 0.5f;
-				auto* child = system->addLifetimeEmitter(root);
-				if (!child) return 3;
-				configure(child, "missing-child", 1, 0.25f);
-				child->colorTexture = "tests\\fixtures\\observe\\zz_observe_absent.tga";
-				child->useBursts = false;
-				child->nParticlesPerSecond = 30;
-				root->spawnDuringLife = child->index;
-			}
-			else if (genReplayFixtureKind == L"wide")
-			{
-				// 4096 one-particle roots: every telemetry line carries 4096 per-emitter
-				// counts, so a tight byte budget refuses during collection.
-				char name[16];
-				for (int i = 0; i < 4096; ++i)
-				{
-					auto* e = i == 0 ? root : system->addRootEmitter();
-					if (!e) return 3;
-					sprintf_s(name, sizeof(name), "wide-%04d", i);
-					configure(e, name, 1, 0.25f);
-				}
-			}
-			else if (genReplayFixtureKind == L"death-child" || genReplayFixtureKind == L"child-starve")
-			{
-				const bool starve = genReplayFixtureKind == L"child-starve";
-				configure(root, "parent", starve ? 200 : 8, starve ? 0.5f : 0.25f);
-				if (starve)
-				{
-					auto* life = system->addLifetimeEmitter(root);
-					if (!life) return 3;
-					configure(life, "lifetime-child", 1, 0.25f);
-					life->useBursts = false;
-					life->nParticlesPerSecond = 60;
-					root->spawnDuringLife = life->index;
-				}
-				auto* death = system->addDeathEmitter(root);
-				if (!death) return 3;
-				// addDeathEmitter defaults to infinite bursts; the constructor must emit once
-				// before KillParticle immediately detaches and stops the death emitter.
-				configure(death, "death-child", 1, 0.75f);
-				root->spawnOnDeath = death->index;
-			}
-			else
-			{
-				configure(root, "budget-burst", 1000, 0.5f);
-				// Positive delay avoids spending the budget in the frame-0 constructor.
-				root->initialDelay = 0.0078125f;
-				auto* catchup = system->addRootEmitter();
-				if (!catchup) return 3;
-				configure(catchup, "catch-up", 1, 0.5f);
-				// Finite bursts at the engine's 0.01 s floor share the spawn-round loop with
-				// continuous emitters, so a round due after the burst above spends the budget
-				// takes the SpawnBudgetExhausted bailout, yet the emitter still finishes and
-				// the run can end on its quiet tail (a continuous root never would).
-				catchup->nBursts = 30;
-				catchup->burstDelay = 0.01f;
-				catchup->initialDelay = root->initialDelay;
-				catchup->skipTime = genReplayFixtureKind == L"budget-bailout-skip" ? 0.25f : 0.0f;
-			}
-			std::string error;
-			if (!SaveParticleSystem(system.get(), genReplayFixturePath, &error))
-			{
-				fprintf(stderr, "replay fixture save: %s\n", error.c_str());
-				return 3;
-			}
-			auto loaded = LoadParticleSystem(genReplayFixturePath, &error);
-			if (!loaded)
-			{
-				fprintf(stderr, "replay fixture reload: %s\n", error.c_str());
-				return 3;
-			}
-			nlohmann::json emitters = nlohmann::json::array();
-			size_t roots = 0;
-			for (const auto* e : loaded->getEmitters())
-			{
-				if (!e->parent) ++roots;
-				const auto& position = e->groups[PS::GROUP_POSITION];
-				const auto& speed = e->groups[PS::GROUP_SPEED];
-				const auto link = [](size_t index) -> long long { return index == (size_t)-1 ? -1 : static_cast<long long>(index); };
-				emitters.push_back({
-					{"name", e->name}, {"parent", e->parent ? link(e->parent->index) : -1},
-					{"spawnDuringLife", link(e->spawnDuringLife)}, {"spawnOnDeath", link(e->spawnOnDeath)},
-					{"colorTexture", e->colorTexture}, {"normalTexture", e->normalTexture},
-					{"blendMode", e->blendMode}, {"textureSize", e->textureSize},
-					{"useBursts", e->useBursts}, {"nBursts", e->nBursts},
-					{"nParticlesPerBurst", e->nParticlesPerBurst}, {"nParticlesPerSecond", e->nParticlesPerSecond},
-					{"initialDelay", e->initialDelay}, {"skipTime", e->skipTime}, {"burstDelay", e->burstDelay},
-					{"lifetime", e->lifetime}, {"gravity", e->gravity}, {"freezeTime", e->freezeTime},
-					{"randomLifetimePerc", e->randomLifetimePerc}, {"randomScalePerc", e->randomScalePerc},
-					{"isWeatherParticle", e->isWeatherParticle}, {"positionGroup", position.type},
-					{"positionMin", {position.minX, position.minY, position.minZ}},
-					{"positionMax", {position.maxX, position.maxY, position.maxZ}},
-					{"speedGroup", speed.type}, {"speed", {speed.valX, speed.valY, speed.valZ}},
-					{"scale", e->tracks[PS::TRACK_SCALE]->keys.begin()->value},
-					{"red", e->tracks[PS::TRACK_RED_CHANNEL]->keys.begin()->value},
-					{"green", e->tracks[PS::TRACK_GREEN_CHANNEL]->keys.begin()->value},
-					{"blue", e->tracks[PS::TRACK_BLUE_CHANNEL]->keys.begin()->value},
-					{"alpha", e->tracks[PS::TRACK_ALPHA_CHANNEL]->keys.begin()->value}
-				});
-			}
-			nlohmann::json fields = {{"kind", WideToAnsi(genReplayFixtureKind)}, {"reloaded", true},
-				{"emitterCount", loaded->getEmitters().size()}, {"rootCount", roots}, {"emitters", emitters}};
-			printf("[replay-fixture] %s\n", fields.dump().c_str());
-			return 0;
-		}
-		if (!genReplayFixturePath.empty())
-		{
-			using PS = ParticleSystem;
-			using Track = PS::Emitter::Track;
-			auto system = std::make_unique<PS>();
-			system->setName(DeriveParticleSystemName(genReplayFixturePath));
-			auto* e = system->addRootEmitter();
-			if (!e) return 3;
-			const bool weather = genReplayFixtureKind == L"weather";
-			e->colorTexture = "tests\\fixtures\\bumptest\\zz_bumpgold_rock.tga";
-			e->normalTexture = "tests\\fixtures\\bumptest\\zz_bumptest_nm.tga";
-			e->blendMode = PS::BLEND_BUMP;
-			e->textureSize = 1;
-			e->useBursts = true;
-			e->nBursts = 1;
-			e->nParticlesPerBurst = weather ? 64 : 2048;
-			e->nParticlesPerSecond = weather ? 64 : 0;
-			e->initialDelay = 0;
-			e->skipTime = 0;
-			e->burstDelay = 10000;
-			e->lifetime = 600;
-			e->gravity = 0;
-			e->isWeatherParticle = weather;
-			e->weatherCubeSize = weather ? 128.0f : 0.0f;
-			e->weatherCubeDistance = weather ? 200.0f : 0.0f;
-			e->groups[PS::GROUP_POSITION].type = PS::GT_BOX;
-			auto& g = e->groups[PS::GROUP_POSITION];
-			g.minX = -80; g.maxX = 80;
-			g.minY = -20; g.maxY = 20;
-			g.minZ = -40; g.maxZ = 40;
-			e->groups[PS::GROUP_SPEED].type = PS::GT_EXACT;
-			e->groups[PS::GROUP_SPEED].valX = 0;
-			e->groups[PS::GROUP_SPEED].valY = 0;
-			e->groups[PS::GROUP_SPEED].valZ = 0;
-			for (int track : {PS::TRACK_SCALE, PS::TRACK_RED_CHANNEL, PS::TRACK_GREEN_CHANNEL,
-							  PS::TRACK_BLUE_CHANNEL, PS::TRACK_ALPHA_CHANNEL})
-			{
-				e->tracks[track]->interpolation = Track::IT_LINEAR;
-				e->tracks[track]->keys.clear();
-				const float value = track == PS::TRACK_SCALE ? 8.0f : 1.0f;
-				e->tracks[track]->keys.insert(Track::Key(0, value));
-				e->tracks[track]->keys.insert(Track::Key(1, value));
-			}
-			std::string error;
-			if (!SaveParticleSystem(system.get(), genReplayFixturePath, &error))
-			{
-				fprintf(stderr, "replay fixture save: %s\n", error.c_str());
-				return 3;
-			}
-			// Attest the persisted definition, not the object supplied to the writer.
-			auto loaded = LoadParticleSystem(genReplayFixturePath, &error);
-			if (!loaded || loaded->getEmitters().size() != 1)
-			{
-				fprintf(stderr, "replay fixture reload: %s\n", error.c_str());
-				return 3;
-			}
-			e = loaded->getEmitters()[0];
-			nlohmann::json fields = {
-				{"kind", weather ? "weather" : "guard"}, {"reloaded", true},
-				{"colorTexture", e->colorTexture}, {"normalTexture", e->normalTexture},
-				{"useBursts", e->useBursts}, {"nBursts", e->nBursts},
-				{"nParticlesPerBurst", e->nParticlesPerBurst}, {"nParticlesPerSecond", e->nParticlesPerSecond},
-				{"initialDelay", e->initialDelay}, {"skipTime", e->skipTime},
-				{"burstDelay", e->burstDelay}, {"lifetime", e->lifetime}, {"gravity", e->gravity},
-				{"isWeatherParticle", e->isWeatherParticle}, {"weatherCubeSize", e->weatherCubeSize},
-				{"weatherCubeDistance", e->weatherCubeDistance},
-				{"positionGroup", e->groups[PS::GROUP_POSITION].type},
-				{"scale", e->tracks[PS::TRACK_SCALE]->keys.begin()->value},
-				{"alpha", e->tracks[PS::TRACK_ALPHA_CHANNEL]->keys.begin()->value}
-			};
-			printf("[replay-fixture] %s\n", fields.dump().c_str());
-			return 0;
-		}
-		// --gen-a11y-fixture <path>: one-shot CLI to produce a
-		// .alo file with a 3-emitter tree (1 root + 1 lifetime child + 1
-		// death child). Used by the a11y specs so every surface driver's
-		// beforeEach can open a deterministic file with enough tree depth to
-		// exercise ArrowRight expand (kbd-arrow-tree-expanded) as well as the
-		// simpler single-row surfaces. Bypasses BridgeDispatcher; uses the
-		// ParticleSystem API directly (addRootEmitter / addLifetimeEmitter /
-		// addDeathEmitter) and saves via SaveParticleSystem.
-		if (!genA11yFixturePath.empty())
-		{
-			auto sys = std::make_unique<ParticleSystem>();
-			// Root emitter
-			ParticleSystem::Emitter* root = sys->addRootEmitter();
-			if (root == nullptr)
-			{
-				fwprintf(stderr, L"gen-a11y-fixture: failed to add root emitter\n");
-				return 2;
-			}
-			// Lifetime child (spawns during root's life)
-			ParticleSystem::Emitter* lifetimeChild = sys->addLifetimeEmitter(root);
-			if (lifetimeChild == nullptr)
-			{
-				fwprintf(stderr, L"gen-a11y-fixture: failed to add lifetime child emitter\n");
-				return 2;
-			}
-			// Death child (spawns on root's death)
-			ParticleSystem::Emitter* deathChild = sys->addDeathEmitter(root);
-			if (deathChild == nullptr)
-			{
-				fwprintf(stderr, L"gen-a11y-fixture: failed to add death child emitter\n");
-				return 2;
-			}
-			std::string err;
-			const bool ok = SaveParticleSystem(sys.get(), genA11yFixturePath, &err);
-			if (!ok)
-			{
-				fwprintf(stderr, L"gen-a11y-fixture: SaveParticleSystem failed: %hs\n",
-				         err.c_str());
-				return 2;
-			}
-			const auto& emitters = sys->getEmitters();
-			fwprintf(stderr,
-			         L"gen-a11y-fixture: wrote %s "
-			         L"(%zu emitters: root[0], lifetime-child[1], death-child[2])\n",
-			         genA11yFixturePath.c_str(),
-			         emitters.size());
-			return 0;
-		}
-		// --snap-window <png>: capture the already-running editor's composed window
-		// (PrintWindow PW_RENDERFULLCONTENT on the AloHostMain top-level window) to a
-		// PNG, then exit. No engine/WebView2 is created — it only screenshots an
-		// existing window. Class literal kept in lockstep with kHostWindowClassName
-		// (HostWindow.cpp).
-		//
-		// A bare --snap-window (flag present, no <png> path arg) must error out
-		// rather than silently fall through and boot the full interactive editor.
-		if (snapWindowFlagSeen && snapWindowPath.empty())
-		{
-			fwprintf(stderr, L"--snap-window requires a <png> path\n");
-			return 2;
-		}
-		if (!snapWindowPath.empty())
-		{
-			return host::SnapWindowOneShot(L"AloHostMain", snapWindowPath);
-		}
-		// capture gameRoots so the host can build its
-		// ModManager. createFileManager already discovers them
-		// internally; pass &gameRoots to extract.
-		std::vector<std::wstring> gameRoots;
-		const bool interactiveSession = IsFullyInteractiveSession(
-			!captureAlo.empty() || !captureRef.empty(),
-			!driveScriptPath.empty() || !recordScriptPath.empty() || !replayScenarioPath.empty() || !observeSpecPath.empty(),
-			testHost);
-		// Fresh variation per interactive launch; the stepped state preserves srand plus
-		// one discarded draw. Automation keeps the default seed.
-		ParticleRandom::Seed(ParticleRandom::LaunchSeed(interactiveSession, static_cast<std::uint32_t>(time(nullptr))));
-		if (!replayScenarioPath.empty())
-		{
-			std::ifstream input(std::filesystem::path(replayScenarioPath), std::ios::binary);
-			const std::string text((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
-			PreviewScenario scenario;
-			const std::string error = input.bad() || !input.is_open()
-				? "scenario file could not be read" : host::ParsePreviewScenario(text, scenario);
-			if (!error.empty())
-			{
-				fprintf(stderr, "[replay-proof] scenario: %s\n", error.c_str());
-				std::error_code ec;
-				std::filesystem::create_directories(replayOutputDirectory, ec);
-				const auto out = std::filesystem::path(replayOutputDirectory);
-				std::ofstream log(out / (L"host-replay-proof-" + std::to_wstring(GetCurrentProcessId()) + L".log"));
-				log << "[replay-proof] hook=scenario frame=-1 exit=2 " << error << "\n";
-				const auto temp = out / L"report.json.tmp";
-				std::ofstream report(temp, std::ios::binary);
-				report << nlohmann::json{{"schemaVersion", 1}, {"exitCode", 2},
-					{"failure", {{"hook", "scenario"}, {"frame", -1}, {"message", error}}}}.dump(2);
-				report.close();
-				MoveFileExW(temp.c_str(), (out / L"report.json").c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
-				return 2;
-			}
-			ParticleRandom::Seed(scenario.seed);
-		}
-		bool hasObserveContentLayers = false;
-		std::vector<std::wstring> observeContentLayers;
-		if (!observeSpecPath.empty())
-		{
-			std::ifstream input(std::filesystem::path(observeSpecPath), std::ios::binary);
-			const std::string text((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
-			ObservationSpec spec;
-			std::string error = input.bad() || !input.is_open()
-				? "spec file could not be read" : host::ParseObservationSpec(text, spec);
-			if (error.empty()) error = ValidateObservationSpec(spec);
-			if (!error.empty())
-			{
-				fprintf(stderr, "[observe] spec: %s\n", error.c_str());
-				return 2;
-			}
-			// SetLayerStack quietly skips a missing layer, which would observe
-			// the wrong content, so a missing folder fails the run here. The
-			// probe uses the form FileManager builds its content roots from.
-			for (size_t i = 0; i < spec.contentLayers.size(); ++i)
-			{
-				const std::wstring layer = host::Utf8ToWide(spec.contentLayers[i]);
-				if (layer.empty() || !PathIsDirectoryW((modlayers::CanonicalizeLayerPath(layer) + L"\\").c_str()))
-				{
-					fprintf(stderr, "[observe] spec: contentLayers[%zu] is not an existing folder\n", i);
-					return 2;
-				}
-				observeContentLayers.push_back(layer);
-			}
-			hasObserveContentLayers = spec.hasContentLayers;
-			ParticleRandom::Seed(spec.scenario.seed);
-		}
-		FileManager* fileManager = createFileManager(NULL, argv, &gameRoots, interactiveSession);
-		if (fileManager == NULL)
-		{
-			// User cancelled the data-path picker. Exit cleanly with the
-			// same -1 sentinel.
-			return -1;
-		}
-		TextureManager textureManager(fileManager, kTextureBasePath);
-		ShaderManager  shaderManager (fileManager, "Data\\Art\\Shaders\\");
-		host::HostLaunchOptions launch;
-		launch.useDevUi             = devUi;
-		launch.useTestHost          = testHost;
-		launch.captureAlo           = captureAlo;
-		launch.capturePng           = capturePng;
-		launch.captureFrames        = captureFrames;
-		launch.captureSkydome       = captureSkydome;
-		launch.captureGoldenProfile = captureGoldenProfile;
-		launch.captureRef           = captureRef;
-		launch.hasAmbient           = captureHasAmbient;
-		launch.ambient[0] = captureAmbient[0]; launch.ambient[1] = captureAmbient[1]; launch.ambient[2] = captureAmbient[2];
-		launch.hasSun               = captureHasSun;
-		launch.sun[0] = captureSun[0]; launch.sun[1] = captureSun[1]; launch.sun[2] = captureSun[2];
-		launch.hasSunIntensity      = captureHasSunI;
-		launch.sunIntensity         = captureSunIntensity;
-		launch.driveScriptPath      = driveScriptPath;
-		launch.recordScriptPath     = recordScriptPath;
-		launch.replayScenarioPath   = replayScenarioPath;
-		launch.replayOutputDirectory = replayOutputDirectory;
-		launch.observeSpecPath       = observeSpecPath;
-		launch.observeOutputDirectory = observeOutputDirectory;
-		launch.hasObserveContentLayers = hasObserveContentLayers;
-		launch.observeContentLayers  = observeContentLayers;
-		launch.perfTracePath        = perfTracePath;
-		launch.perfTraceMode        = perfTraceMode;
-		launch.perfArtifactDir      = perfArtifactDir;
-		launch.perfWebViewProfile   = perfWebViewProfile;
-		int hostResult = host::Run(hInstance, SW_SHOWDEFAULT,
-		                           textureManager, shaderManager, *fileManager,
-		                           gameRoots, launch);
-		delete fileManager;
+            // [shaded-smoke] DENSE RISING PLUME override (later writes win). A compact
+            // source slab at the bottom of frame + upward Z speed + zero gravity makes a
+            // tapering smoke column; high spawn rate + growing scale make it read dense.
+            // Kept within the capture camera's framed band (X ~+/-90, Z ~-50..+50).
+            e->lifetime                        = 4.0f;
+            e->nParticlesPerSecond             = 40;   // was 6 -> dense overlap into a column
+            e->gravity                         = 0.0f; // rising smoke must not fall back down
+            e->groups[PS::GROUP_POSITION].minX = -16.0f;
+            e->groups[PS::GROUP_POSITION].maxX = 16.0f;
+            e->groups[PS::GROUP_POSITION].minY = -10.0f;
+            e->groups[PS::GROUP_POSITION].maxY = 10.0f;
+            e->groups[PS::GROUP_POSITION].minZ = -46.0f;
+            e->groups[PS::GROUP_POSITION].maxZ = -34.0f;
+            // initial velocity: mostly up (Z), small lateral drift -> natural turbulence.
+            // rise over 4 s life ~= Z*4 = 48..72 units, so from base ~-40 the column tops
+            // out around +10..+30 (in frame) before the particle dies.
+            e->groups[PS::GROUP_SPEED].type = PS::GT_BOX;
+            e->groups[PS::GROUP_SPEED].minX = -4.0f;
+            e->groups[PS::GROUP_SPEED].maxX = 4.0f;
+            e->groups[PS::GROUP_SPEED].minY = -3.0f;
+            e->groups[PS::GROUP_SPEED].maxY = 3.0f;
+            e->groups[PS::GROUP_SPEED].minZ = 12.0f;
+            e->groups[PS::GROUP_SPEED].maxZ = 18.0f;
+            auto setTrack                   = [&](int id, float v0, float v1, Track::InterpolationType it)
+            {
+                e->trackContents[id].keys.clear();
+                e->trackContents[id].interpolation = it;
+                e->trackContents[id].keys.insert(Track::Key(0.0f, v0));
+                e->trackContents[id].keys.insert(Track::Key(100.0f, v1));
+                e->tracks[id] = &e->trackContents[id]; // un-alias from the Red channel
+            };
+            setTrack(PS::TRACK_SCALE, 35.0f, 50.0f, Track::IT_LINEAR);
+            setTrack(PS::TRACK_RED_CHANNEL, 1.0f, 1.0f, Track::IT_LINEAR);
+            setTrack(PS::TRACK_GREEN_CHANNEL, 1.0f, 0.15f, Track::IT_LINEAR);
+            setTrack(PS::TRACK_BLUE_CHANNEL, 0.7f, 0.05f, Track::IT_LINEAR);
+            setTrack(PS::TRACK_ALPHA_CHANNEL, 0.9f, 0.9f, Track::IT_LINEAR);
+            setTrack(PS::TRACK_ROTATION_SPEED, 0.0f, 0.0f, Track::IT_LINEAR);
+            // [shaded-smoke] plume overrides of the tracks set above (later writes win):
+            setTrack(PS::TRACK_SCALE, 25.0f, 90.0f, Track::IT_LINEAR);        // billow wider as it rises
+            setTrack(PS::TRACK_ALPHA_CHANNEL, 0.85f, 0.0f, Track::IT_LINEAR); // dissipate at the top
+            // color mode from --smoke-color (parsed here to avoid touching the arg loop):
+            // 0/warm (default, white->orange->red, set above) vs 1/grey (real-smoke look).
+            for (size_t a = 1; a < argv.size(); ++a)
+                if (argv[a] == L"--smoke-color" && a + 1 < argv.size())
+                    smokeColorMode = (argv[a + 1] == L"grey" || argv[a + 1] == L"gray") ? 1 : 0;
+            if (smokeColorMode == 1)
+            {
+                setTrack(PS::TRACK_RED_CHANNEL, 0.90f, 0.40f, Track::IT_LINEAR);
+                setTrack(PS::TRACK_GREEN_CHANNEL, 0.90f, 0.40f, Track::IT_LINEAR);
+                setTrack(PS::TRACK_BLUE_CHANNEL, 0.92f, 0.42f, Track::IT_LINEAR);
+            }
+            // spin mode from --smoke-spin (parsed here like --smoke-color): on (default) vs
+            // off. off zeroes per-sprite rotation so a directional shader's lit side stays
+            // anchored across every puff -- the option (c) demo for "light from the right".
+            for (size_t a = 1; a < argv.size(); ++a)
+                if (argv[a] == L"--smoke-spin" && a + 1 < argv.size())
+                    smokeSpin = (argv[a + 1] == L"off" || argv[a + 1] == L"0") ? 0 : 1;
+            if (smokeSpin == 0)
+            {
+                e->randomRotation         = false;
+                e->randomRotationVariance = 0.0f;
+            }
+            // [bump-spin test] --bumpspin: reconfigure the generated emitter into a clean
+            // GEOMETRIC-SPIN bump test -- mode 11, textureSize=1, the arrow+dome test textures,
+            // a few large stationary sprites spinning continuously via the rotation-speed track
+            // (randomRotation=false). Proves bump + spin + world-light headlessly (capture two frames:
+            // the arrow turns; whether the dome's lit crescent stays sun-anchored answers the (B) Q).
+            bool bumpSpin = false;
+            for (size_t a = 1; a < argv.size(); ++a)
+                if (argv[a] == L"--bumpspin") bumpSpin = true;
+            if (bumpSpin)
+            {
+                e->blendMode                       = 11;                      // Bump -> PrimParticleBumpAlpha.fx
+                e->colorTexture                    = "zz_bumptest_base0.tga"; // arrow base (shows spin)
+                e->normalTexture                   = "zz_bumptest_nm.tga";    // dome normal (shows bump)
+                e->textureSize                     = 1;
+                e->lifetime                        = 12.0f;
+                e->nParticlesPerSecond             = 2;
+                e->gravity                         = 0.0f;
+                e->noDepthTest                     = true;
+                e->randomRotation                  = false; // continuous spin from the speed track
+                e->groups[PS::GROUP_POSITION].type = PS::GT_BOX;
+                e->groups[PS::GROUP_POSITION].minX = -70;
+                e->groups[PS::GROUP_POSITION].maxX = 70;
+                e->groups[PS::GROUP_POSITION].minY = -5;
+                e->groups[PS::GROUP_POSITION].maxY = 5;
+                e->groups[PS::GROUP_POSITION].minZ = -35;
+                e->groups[PS::GROUP_POSITION].maxZ = 35;
+                e->groups[PS::GROUP_SPEED].type    = PS::GT_EXACT;
+                e->groups[PS::GROUP_SPEED].valX    = 0;
+                e->groups[PS::GROUP_SPEED].valY    = 0;
+                e->groups[PS::GROUP_SPEED].valZ    = 0;
+                setTrack(PS::TRACK_SCALE, 40.0f, 40.0f, Track::IT_LINEAR);
+                setTrack(PS::TRACK_RED_CHANNEL, 1.0f, 1.0f, Track::IT_LINEAR);
+                setTrack(PS::TRACK_GREEN_CHANNEL, 1.0f, 1.0f, Track::IT_LINEAR);
+                setTrack(PS::TRACK_BLUE_CHANNEL, 1.0f, 1.0f, Track::IT_LINEAR);
+                setTrack(PS::TRACK_ALPHA_CHANNEL, 1.0f, 1.0f, Track::IT_LINEAR);
+                setTrack(PS::TRACK_ROTATION_SPEED, 1.0f, 1.0f, Track::IT_LINEAR); // continuous spin
+            }
+            // [bump-spin SINGLE] --bumpspin1: like --bumpspin but exactly ONE large, centered,
+            // long-lived sprite (single burst of 1 at the EXACT origin). Two captures at different
+            // --frames then show the SAME sprite at two clean, NON-overlapping spin phases -> the
+            // decisive test (does the lit crescent track the spin or stay sun-anchored?).
+            bool bumpSpin1 = false;
+            for (size_t a = 1; a < argv.size(); ++a)
+                if (argv[a] == L"--bumpspin1") bumpSpin1 = true;
+            if (bumpSpin1)
+            {
+                e->blendMode                       = 11;                      // Bump -> PrimParticleBumpAlpha.fx
+                e->colorTexture                    = "zz_bumptest_base0.tga"; // arrow base (shows spin phase)
+                e->normalTexture                   = "zz_bumptest_nm.tga";    // dome normal (the lit crescent)
+                e->textureSize                     = 1;
+                e->lifetime                        = 600.0f; // persists across the whole capture
+                e->initialDelay                    = 0.0f;
+                e->gravity                         = 0.0f;
+                e->noDepthTest                     = true;
+                e->randomRotation                  = false;        // continuous spin from the speed track
+                e->useBursts                       = true;         // a single burst...
+                e->nBursts                         = 1;            // ...fired once...
+                e->nParticlesPerBurst              = 1;            // ...of exactly one particle
+                e->burstDelay                      = 10000.0f;     // no second burst during any capture
+                e->groups[PS::GROUP_POSITION].type = PS::GT_EXACT; // single centered point at origin
+                e->groups[PS::GROUP_POSITION].valX = 0;
+                e->groups[PS::GROUP_POSITION].valY = 0;
+                e->groups[PS::GROUP_POSITION].valZ = 0;
+                e->groups[PS::GROUP_SPEED].type    = PS::GT_EXACT;
+                e->groups[PS::GROUP_SPEED].valX    = 0;
+                e->groups[PS::GROUP_SPEED].valY    = 0;
+                e->groups[PS::GROUP_SPEED].valZ    = 0;
+                setTrack(PS::TRACK_SCALE, 60.0f, 60.0f, Track::IT_LINEAR); // large, fills the frame
+                setTrack(PS::TRACK_RED_CHANNEL, 1.0f, 1.0f, Track::IT_LINEAR);
+                setTrack(PS::TRACK_GREEN_CHANNEL, 1.0f, 1.0f, Track::IT_LINEAR);
+                setTrack(PS::TRACK_BLUE_CHANNEL, 1.0f, 1.0f, Track::IT_LINEAR);
+                setTrack(PS::TRACK_ALPHA_CHANNEL, 1.0f, 1.0f, Track::IT_LINEAR);
+                setTrack(PS::TRACK_ROTATION_SPEED, 1.0f, 1.0f, Track::IT_LINEAR); // continuous spin
+            }
+            // [bump-spin GRID] --bumpspin-grid: a DETERMINISTIC 4x3 constellation of large,
+            // OFF-CENTER, overlapping, continuously-spinning mode-11 sprites at FIXED positions.
+            // Camera-orbit flicker only manifests on off-center / reprojecting sprites (a centered
+            // billboard at the look-at target is invariant under yaw -- proven empirically), so this
+            // is the harness's PRIMARY flicker scene. Fixed positions + single burst-of-1 per cell =>
+            // identical particle layout at every camera-yaw step (no random spawn churn to pollute
+            // the inter-frame difference metric).
+            bool bumpGrid = false;
+            for (size_t a = 1; a < argv.size(); ++a)
+                if (argv[a] == L"--bumpspin-grid") bumpGrid = true;
+            if (bumpGrid)
+            {
+                const float gx[4]   = {-52.0f, -17.0f, 17.0f, 52.0f};
+                const float gz[3]   = {-30.0f, 0.0f, 30.0f};
+                auto        cfgCell = [](PS::Emitter* em, float x, float z)
+                {
+                    em->blendMode                       = 11;                      // Bump -> PrimParticleBumpAlpha.fx
+                    em->colorTexture                    = "zz_bumptest_base0.tga"; // arrow base (spin landmark)
+                    em->normalTexture                   = "zz_bumptest_nm.tga";    // dome normal (puffy relief)
+                    em->textureSize                     = 1;
+                    em->lifetime                        = 600.0f; // persists across the whole capture
+                    em->initialDelay                    = 0.0f;
+                    em->gravity                         = 0.0f;
+                    em->noDepthTest                     = true;
+                    em->randomRotation                  = false; // continuous spin from the speed track
+                    em->useBursts                       = true;
+                    em->nBursts                         = 1;
+                    em->nParticlesPerBurst              = 1;
+                    em->burstDelay                      = 10000.0f; // no second burst during any capture
+                    em->groups[PS::GROUP_POSITION].type = PS::GT_EXACT;
+                    em->groups[PS::GROUP_POSITION].valX = x;
+                    em->groups[PS::GROUP_POSITION].valY = 0.0f;
+                    em->groups[PS::GROUP_POSITION].valZ = z;
+                    em->groups[PS::GROUP_SPEED].type    = PS::GT_EXACT;
+                    em->groups[PS::GROUP_SPEED].valX    = 0.0f;
+                    em->groups[PS::GROUP_SPEED].valY    = 0.0f;
+                    em->groups[PS::GROUP_SPEED].valZ    = 0.0f;
+                    const int   ids[6] = {PS::TRACK_SCALE,        PS::TRACK_RED_CHANNEL,   PS::TRACK_GREEN_CHANNEL,
+                                          PS::TRACK_BLUE_CHANNEL, PS::TRACK_ALPHA_CHANNEL, PS::TRACK_ROTATION_SPEED};
+                    const float val[6] = {40.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f}; // scale, rgb, alpha, spin
+                    for (int t = 0; t < 6; ++t)
+                    {
+                        int id = ids[t];
+                        em->trackContents[id].keys.clear();
+                        em->trackContents[id].interpolation = Track::IT_LINEAR;
+                        em->trackContents[id].keys.insert(Track::Key(0.0f, val[t]));
+                        em->trackContents[id].keys.insert(Track::Key(100.0f, val[t]));
+                        em->tracks[id] = &em->trackContents[id];
+                    }
+                };
+                bool first = true;
+                for (int ix = 0; ix < 4; ++ix)
+                    for (int iz = 0; iz < 3; ++iz)
+                    {
+                        PS::Emitter* em = first ? e : sys->addRootEmitter();
+                        first           = false;
+                        if (em == nullptr)
+                        {
+                            // A short grid silently invalidates the flicker metric (it relies on
+                            // the full fixed 4x3 layout) -- fail loudly like the single path above.
+                            fwprintf(stderr,
+                                     L"gen-smoke-test: --bumpspin-grid failed to add root emitter (cell %d,%d)\n", ix,
+                                     iz);
+                            return 2;
+                        }
+                        cfgCell(em, gx[ix], gz[iz]);
+                    }
+            }
+            std::string err;
+            if (!SaveParticleSystem(sys.get(), genSmokeTestPath, &err))
+            {
+                fwprintf(stderr, L"gen-smoke-test: SaveParticleSystem failed: %hs\n", err.c_str());
+                return 2;
+            }
+            // Report the ACTUAL root blendMode (the bump flags override it to 11; the base
+            // smoke is 2 -- the old hardcoded "blendMode 5" was stale) and the emitter count
+            // (the grid produces 12).
+            fwprintf(stderr, L"gen-smoke-test: wrote %s (root blendMode %d, %zu emitter(s))\n",
+                     genSmokeTestPath.c_str(), (int)e->blendMode, sys->getEmitters().size());
+            return 0;
+        }
+        if (!genHoudiniFixturePath.empty())
+        {
+            using PS                  = ParticleSystem;
+            houdinifixture::Kind kind = houdinifixture::Kind::Puff;
+            houdinifixture::ParseKind(genHoudiniFixtureKind, kind);
+            auto system = std::make_unique<PS>();
+            system->setName(DeriveParticleSystemName(genHoudiniFixturePath));
+            auto* e = system->addRootEmitter();
+            if (!e) return 3;
+            houdinifixture::Configure(e, kind, WideToAnsi(genHoudiniFixtureTexture),
+                                      genHoudiniFixtureReview ? houdinifixture::kReviewLift : 0.0f);
+            std::string error;
+            if (!SaveParticleSystem(system.get(), genHoudiniFixturePath, &error))
+            {
+                fprintf(stderr, "houdini fixture save: %s\n", error.c_str());
+                return 3;
+            }
+            // Report what the file holds, not what was asked for.
+            auto loaded = LoadParticleSystem(genHoudiniFixturePath, &error);
+            if (!loaded || loaded->getEmitters().size() != 1)
+            {
+                fprintf(stderr, "houdini fixture reload: %s\n", loaded ? "expected one emitter" : error.c_str());
+                return 3;
+            }
+            const auto*    r     = loaded->getEmitters()[0];
+            nlohmann::json index = nlohmann::json::array();
+            for (const auto& key : r->tracks[PS::TRACK_INDEX]->keys) index.push_back({key.time, key.value});
+            const nlohmann::json fields = {{"kind", houdinifixture::KindName(kind)},
+                                           {"reloaded", true},
+                                           {"colorTexture", r->colorTexture},
+                                           {"normalTexture", r->normalTexture},
+                                           {"blendMode", r->blendMode},
+                                           {"textureSize", r->textureSize},
+                                           {"lifetime", r->lifetime},
+                                           {"nBursts", r->nBursts},
+                                           {"lift", r->groups[PS::GROUP_POSITION].valZ},
+                                           {"nParticlesPerBurst", r->nParticlesPerBurst},
+                                           {"indexInterpolation", r->tracks[PS::TRACK_INDEX]->interpolation},
+                                           {"index", index}};
+            printf("[houdini-fixture] %s\n", fields.dump().c_str());
+            return 0;
+        }
+        if (!genReplayFixturePath.empty() && genReplayFixtureKind != L"weather" && genReplayFixtureKind != L"guard")
+        {
+            using PS    = ParticleSystem;
+            using Track = PS::Emitter::Track;
+            auto system = std::make_unique<PS>();
+            system->setName(DeriveParticleSystemName(genReplayFixturePath));
+            const auto configure = [](PS::Emitter* e, const char* name, unsigned long count, float lifetime)
+            {
+                e->name                            = name;
+                e->colorTexture                    = "tests\\fixtures\\bumptest\\zz_bumpgold_rock.tga";
+                e->normalTexture                   = "tests\\fixtures\\bumptest\\zz_bumptest_nm.tga";
+                e->blendMode                       = PS::BLEND_BUMP;
+                e->textureSize                     = 1;
+                e->useBursts                       = true;
+                e->nBursts                         = 1;
+                e->nParticlesPerBurst              = count;
+                e->nParticlesPerSecond             = 0;
+                e->initialDelay                    = 0;
+                e->skipTime                        = 0;
+                e->burstDelay                      = 10000;
+                e->lifetime                        = lifetime;
+                e->gravity                         = 0;
+                e->freezeTime                      = 0;
+                e->randomLifetimePerc              = 0;
+                e->randomScalePerc                 = 0;
+                e->isWeatherParticle               = false;
+                e->groups[PS::GROUP_POSITION].type = PS::GT_BOX;
+                auto& g                            = e->groups[PS::GROUP_POSITION];
+                g.minX                             = -8;
+                g.maxX                             = 8;
+                g.minY                             = -8;
+                g.maxY                             = 8;
+                g.minZ                             = -8;
+                g.maxZ                             = 8;
+                e->groups[PS::GROUP_SPEED].type    = PS::GT_EXACT;
+                e->groups[PS::GROUP_SPEED].valX    = 0;
+                e->groups[PS::GROUP_SPEED].valY    = 0;
+                e->groups[PS::GROUP_SPEED].valZ    = 0;
+                // Defaults alias RGBA to red; separate the tracks before authoring a tint.
+                for (int track : {PS::TRACK_SCALE, PS::TRACK_RED_CHANNEL, PS::TRACK_GREEN_CHANNEL,
+                                  PS::TRACK_BLUE_CHANNEL, PS::TRACK_ALPHA_CHANNEL})
+                {
+                    e->tracks[track]                = &e->trackContents[track];
+                    e->tracks[track]->interpolation = Track::IT_LINEAR;
+                    e->tracks[track]->keys.clear();
+                    const float value = track == PS::TRACK_SCALE ? 8.0f : 1.0f;
+                    e->tracks[track]->keys.insert(Track::Key(0, value));
+                    e->tracks[track]->keys.insert(Track::Key(100, value));
+                }
+            };
+            const auto setTrack = [](PS::Emitter* e, int track, float value)
+            {
+                e->tracks[track]->keys.clear();
+                e->tracks[track]->keys.insert(Track::Key(0, value));
+                e->tracks[track]->keys.insert(Track::Key(100, value));
+            };
+            auto* root = system->addRootEmitter();
+            if (!root) return 3;
+            if (genReplayFixtureKind == L"late-flash")
+            {
+                // The look must read without telemetry: a grey alpha-blended smoke cloud and a
+                // bright additive orange flash, both on the soft procedural disc. The rock atlas
+                // (red <= 127) made both read as asteroids and hid the flash inside the cloud.
+                const char* softTexture = "tests\\fixtures\\observe\\zz_observe_soft.tga";
+                configure(root, "core", 64, 1.0f);
+                root->colorTexture                 = softTexture;
+                root->blendMode                    = PS::BLEND_TRANSPARENT;
+                auto& g                            = root->groups[PS::GROUP_POSITION];
+                g.minX                             = -40;
+                g.maxX                             = 40;
+                g.minY                             = -20;
+                g.maxY                             = 20;
+                g.minZ                             = -40;
+                g.maxZ                             = 40;
+                root->groups[PS::GROUP_SPEED].valZ = 1;
+                setTrack(root, PS::TRACK_SCALE, 24);
+                for (int track : {PS::TRACK_RED_CHANNEL, PS::TRACK_GREEN_CHANNEL, PS::TRACK_BLUE_CHANNEL})
+                    setTrack(root, track, 0.5f);
+                setTrack(root, PS::TRACK_ALPHA_CHANNEL, 0.25f);
+                auto* flash = system->addRootEmitter();
+                if (!flash) return 3;
+                configure(flash, "flash", 8, 0.5f);
+                flash->colorTexture = softTexture;
+                flash->blendMode    = PS::BLEND_ADDITIVE;
+                flash->initialDelay = 0.75f;
+                setTrack(flash, PS::TRACK_SCALE, 40);
+                setTrack(flash, PS::TRACK_GREEN_CHANNEL, 0.5f);
+                setTrack(flash, PS::TRACK_BLUE_CHANNEL, 0.125f);
+            }
+            else if (genReplayFixtureKind == L"guard-short" || genReplayFixtureKind == L"index-cap")
+                configure(root, "burst", genReplayFixtureKind == L"guard-short" ? 2048 : 20000, 0.5f);
+            else if (genReplayFixtureKind == L"missing-texture")
+            {
+                // The missing texture is first requested mid-pass: a during-life child is
+                // constructed (and requests its textures) when its delayed parent first
+                // spawns, so its own zero delay leaves its first frame at the parent's.
+                configure(root, "parent", 4, 0.5f);
+                root->initialDelay = 0.5f;
+                auto* child        = system->addLifetimeEmitter(root);
+                if (!child) return 3;
+                configure(child, "missing-child", 1, 0.25f);
+                child->colorTexture        = "tests\\fixtures\\observe\\zz_observe_absent.tga";
+                child->useBursts           = false;
+                child->nParticlesPerSecond = 30;
+                root->spawnDuringLife      = child->index;
+            }
+            else if (genReplayFixtureKind == L"wide")
+            {
+                // 4096 one-particle roots: every telemetry line carries 4096 per-emitter
+                // counts, so a tight byte budget refuses during collection.
+                char name[16];
+                for (int i = 0; i < 4096; ++i)
+                {
+                    auto* e = i == 0 ? root : system->addRootEmitter();
+                    if (!e) return 3;
+                    sprintf_s(name, sizeof(name), "wide-%04d", i);
+                    configure(e, name, 1, 0.25f);
+                }
+            }
+            else if (genReplayFixtureKind == L"death-child" || genReplayFixtureKind == L"child-starve")
+            {
+                const bool starve = genReplayFixtureKind == L"child-starve";
+                configure(root, "parent", starve ? 200 : 8, starve ? 0.5f : 0.25f);
+                if (starve)
+                {
+                    auto* life = system->addLifetimeEmitter(root);
+                    if (!life) return 3;
+                    configure(life, "lifetime-child", 1, 0.25f);
+                    life->useBursts           = false;
+                    life->nParticlesPerSecond = 60;
+                    root->spawnDuringLife     = life->index;
+                }
+                auto* death = system->addDeathEmitter(root);
+                if (!death) return 3;
+                // addDeathEmitter defaults to infinite bursts; the constructor must emit once
+                // before KillParticle immediately detaches and stops the death emitter.
+                configure(death, "death-child", 1, 0.75f);
+                root->spawnOnDeath = death->index;
+            }
+            else
+            {
+                configure(root, "budget-burst", 1000, 0.5f);
+                // Positive delay avoids spending the budget in the frame-0 constructor.
+                root->initialDelay = 0.0078125f;
+                auto* catchup      = system->addRootEmitter();
+                if (!catchup) return 3;
+                configure(catchup, "catch-up", 1, 0.5f);
+                // Finite bursts at the engine's 0.01 s floor share the spawn-round loop with
+                // continuous emitters, so a round due after the burst above spends the budget
+                // takes the SpawnBudgetExhausted bailout, yet the emitter still finishes and
+                // the run can end on its quiet tail (a continuous root never would).
+                catchup->nBursts      = 30;
+                catchup->burstDelay   = 0.01f;
+                catchup->initialDelay = root->initialDelay;
+                catchup->skipTime     = genReplayFixtureKind == L"budget-bailout-skip" ? 0.25f : 0.0f;
+            }
+            std::string error;
+            if (!SaveParticleSystem(system.get(), genReplayFixturePath, &error))
+            {
+                fprintf(stderr, "replay fixture save: %s\n", error.c_str());
+                return 3;
+            }
+            auto loaded = LoadParticleSystem(genReplayFixturePath, &error);
+            if (!loaded)
+            {
+                fprintf(stderr, "replay fixture reload: %s\n", error.c_str());
+                return 3;
+            }
+            nlohmann::json emitters = nlohmann::json::array();
+            size_t         roots    = 0;
+            for (const auto* e : loaded->getEmitters())
+            {
+                if (!e->parent) ++roots;
+                const auto& position = e->groups[PS::GROUP_POSITION];
+                const auto& speed    = e->groups[PS::GROUP_SPEED];
+                const auto  link     = [](size_t index) -> long long
+                {
+                    return index == (size_t)-1 ? -1 : static_cast<long long>(index);
+                };
+                emitters.push_back({{"name", e->name},
+                                    {"parent", e->parent ? link(e->parent->index) : -1},
+                                    {"spawnDuringLife", link(e->spawnDuringLife)},
+                                    {"spawnOnDeath", link(e->spawnOnDeath)},
+                                    {"colorTexture", e->colorTexture},
+                                    {"normalTexture", e->normalTexture},
+                                    {"blendMode", e->blendMode},
+                                    {"textureSize", e->textureSize},
+                                    {"useBursts", e->useBursts},
+                                    {"nBursts", e->nBursts},
+                                    {"nParticlesPerBurst", e->nParticlesPerBurst},
+                                    {"nParticlesPerSecond", e->nParticlesPerSecond},
+                                    {"initialDelay", e->initialDelay},
+                                    {"skipTime", e->skipTime},
+                                    {"burstDelay", e->burstDelay},
+                                    {"lifetime", e->lifetime},
+                                    {"gravity", e->gravity},
+                                    {"freezeTime", e->freezeTime},
+                                    {"randomLifetimePerc", e->randomLifetimePerc},
+                                    {"randomScalePerc", e->randomScalePerc},
+                                    {"isWeatherParticle", e->isWeatherParticle},
+                                    {"positionGroup", position.type},
+                                    {"positionMin", {position.minX, position.minY, position.minZ}},
+                                    {"positionMax", {position.maxX, position.maxY, position.maxZ}},
+                                    {"speedGroup", speed.type},
+                                    {"speed", {speed.valX, speed.valY, speed.valZ}},
+                                    {"scale", e->tracks[PS::TRACK_SCALE]->keys.begin()->value},
+                                    {"red", e->tracks[PS::TRACK_RED_CHANNEL]->keys.begin()->value},
+                                    {"green", e->tracks[PS::TRACK_GREEN_CHANNEL]->keys.begin()->value},
+                                    {"blue", e->tracks[PS::TRACK_BLUE_CHANNEL]->keys.begin()->value},
+                                    {"alpha", e->tracks[PS::TRACK_ALPHA_CHANNEL]->keys.begin()->value}});
+            }
+            nlohmann::json fields = {{"kind", WideToAnsi(genReplayFixtureKind)},
+                                     {"reloaded", true},
+                                     {"emitterCount", loaded->getEmitters().size()},
+                                     {"rootCount", roots},
+                                     {"emitters", emitters}};
+            printf("[replay-fixture] %s\n", fields.dump().c_str());
+            return 0;
+        }
+        if (!genReplayFixturePath.empty())
+        {
+            using PS    = ParticleSystem;
+            using Track = PS::Emitter::Track;
+            auto system = std::make_unique<PS>();
+            system->setName(DeriveParticleSystemName(genReplayFixturePath));
+            auto* e = system->addRootEmitter();
+            if (!e) return 3;
+            const bool weather                 = genReplayFixtureKind == L"weather";
+            e->colorTexture                    = "tests\\fixtures\\bumptest\\zz_bumpgold_rock.tga";
+            e->normalTexture                   = "tests\\fixtures\\bumptest\\zz_bumptest_nm.tga";
+            e->blendMode                       = PS::BLEND_BUMP;
+            e->textureSize                     = 1;
+            e->useBursts                       = true;
+            e->nBursts                         = 1;
+            e->nParticlesPerBurst              = weather ? 64 : 2048;
+            e->nParticlesPerSecond             = weather ? 64 : 0;
+            e->initialDelay                    = 0;
+            e->skipTime                        = 0;
+            e->burstDelay                      = 10000;
+            e->lifetime                        = 600;
+            e->gravity                         = 0;
+            e->isWeatherParticle               = weather;
+            e->weatherCubeSize                 = weather ? 128.0f : 0.0f;
+            e->weatherCubeDistance             = weather ? 200.0f : 0.0f;
+            e->groups[PS::GROUP_POSITION].type = PS::GT_BOX;
+            auto& g                            = e->groups[PS::GROUP_POSITION];
+            g.minX                             = -80;
+            g.maxX                             = 80;
+            g.minY                             = -20;
+            g.maxY                             = 20;
+            g.minZ                             = -40;
+            g.maxZ                             = 40;
+            e->groups[PS::GROUP_SPEED].type    = PS::GT_EXACT;
+            e->groups[PS::GROUP_SPEED].valX    = 0;
+            e->groups[PS::GROUP_SPEED].valY    = 0;
+            e->groups[PS::GROUP_SPEED].valZ    = 0;
+            for (int track : {PS::TRACK_SCALE, PS::TRACK_RED_CHANNEL, PS::TRACK_GREEN_CHANNEL, PS::TRACK_BLUE_CHANNEL,
+                              PS::TRACK_ALPHA_CHANNEL})
+            {
+                e->tracks[track]->interpolation = Track::IT_LINEAR;
+                e->tracks[track]->keys.clear();
+                const float value = track == PS::TRACK_SCALE ? 8.0f : 1.0f;
+                e->tracks[track]->keys.insert(Track::Key(0, value));
+                e->tracks[track]->keys.insert(Track::Key(1, value));
+            }
+            std::string error;
+            if (!SaveParticleSystem(system.get(), genReplayFixturePath, &error))
+            {
+                fprintf(stderr, "replay fixture save: %s\n", error.c_str());
+                return 3;
+            }
+            // Attest the persisted definition, not the object supplied to the writer.
+            auto loaded = LoadParticleSystem(genReplayFixturePath, &error);
+            if (!loaded || loaded->getEmitters().size() != 1)
+            {
+                fprintf(stderr, "replay fixture reload: %s\n", error.c_str());
+                return 3;
+            }
+            e                     = loaded->getEmitters()[0];
+            nlohmann::json fields = {{"kind", weather ? "weather" : "guard"},
+                                     {"reloaded", true},
+                                     {"colorTexture", e->colorTexture},
+                                     {"normalTexture", e->normalTexture},
+                                     {"useBursts", e->useBursts},
+                                     {"nBursts", e->nBursts},
+                                     {"nParticlesPerBurst", e->nParticlesPerBurst},
+                                     {"nParticlesPerSecond", e->nParticlesPerSecond},
+                                     {"initialDelay", e->initialDelay},
+                                     {"skipTime", e->skipTime},
+                                     {"burstDelay", e->burstDelay},
+                                     {"lifetime", e->lifetime},
+                                     {"gravity", e->gravity},
+                                     {"isWeatherParticle", e->isWeatherParticle},
+                                     {"weatherCubeSize", e->weatherCubeSize},
+                                     {"weatherCubeDistance", e->weatherCubeDistance},
+                                     {"positionGroup", e->groups[PS::GROUP_POSITION].type},
+                                     {"scale", e->tracks[PS::TRACK_SCALE]->keys.begin()->value},
+                                     {"alpha", e->tracks[PS::TRACK_ALPHA_CHANNEL]->keys.begin()->value}};
+            printf("[replay-fixture] %s\n", fields.dump().c_str());
+            return 0;
+        }
+        // --gen-a11y-fixture <path>: one-shot CLI to produce a
+        // .alo file with a 3-emitter tree (1 root + 1 lifetime child + 1
+        // death child). Used by the a11y specs so every surface driver's
+        // beforeEach can open a deterministic file with enough tree depth to
+        // exercise ArrowRight expand (kbd-arrow-tree-expanded) as well as the
+        // simpler single-row surfaces. Bypasses BridgeDispatcher; uses the
+        // ParticleSystem API directly (addRootEmitter / addLifetimeEmitter /
+        // addDeathEmitter) and saves via SaveParticleSystem.
+        if (!genA11yFixturePath.empty())
+        {
+            auto sys = std::make_unique<ParticleSystem>();
+            // Root emitter
+            ParticleSystem::Emitter* root = sys->addRootEmitter();
+            if (root == nullptr)
+            {
+                fwprintf(stderr, L"gen-a11y-fixture: failed to add root emitter\n");
+                return 2;
+            }
+            // Lifetime child (spawns during root's life)
+            ParticleSystem::Emitter* lifetimeChild = sys->addLifetimeEmitter(root);
+            if (lifetimeChild == nullptr)
+            {
+                fwprintf(stderr, L"gen-a11y-fixture: failed to add lifetime child emitter\n");
+                return 2;
+            }
+            // Death child (spawns on root's death)
+            ParticleSystem::Emitter* deathChild = sys->addDeathEmitter(root);
+            if (deathChild == nullptr)
+            {
+                fwprintf(stderr, L"gen-a11y-fixture: failed to add death child emitter\n");
+                return 2;
+            }
+            std::string err;
+            const bool  ok = SaveParticleSystem(sys.get(), genA11yFixturePath, &err);
+            if (!ok)
+            {
+                fwprintf(stderr, L"gen-a11y-fixture: SaveParticleSystem failed: %hs\n", err.c_str());
+                return 2;
+            }
+            const auto& emitters = sys->getEmitters();
+            fwprintf(stderr,
+                     L"gen-a11y-fixture: wrote %s "
+                     L"(%zu emitters: root[0], lifetime-child[1], death-child[2])\n",
+                     genA11yFixturePath.c_str(), emitters.size());
+            return 0;
+        }
+        // --snap-window <png>: capture the already-running editor's composed window
+        // (PrintWindow PW_RENDERFULLCONTENT on the AloHostMain top-level window) to a
+        // PNG, then exit. No engine/WebView2 is created — it only screenshots an
+        // existing window. Class literal kept in lockstep with kHostWindowClassName
+        // (HostWindow.cpp).
+        //
+        // A bare --snap-window (flag present, no <png> path arg) must error out
+        // rather than silently fall through and boot the full interactive editor.
+        if (snapWindowFlagSeen && snapWindowPath.empty())
+        {
+            fwprintf(stderr, L"--snap-window requires a <png> path\n");
+            return 2;
+        }
+        if (!snapWindowPath.empty())
+        {
+            return host::SnapWindowOneShot(L"AloHostMain", snapWindowPath);
+        }
+        // capture gameRoots so the host can build its
+        // ModManager. createFileManager already discovers them
+        // internally; pass &gameRoots to extract.
+        std::vector<std::wstring> gameRoots;
+        const bool                interactiveSession =
+            IsFullyInteractiveSession(!captureAlo.empty() || !captureRef.empty(),
+                                      !driveScriptPath.empty() || !recordScriptPath.empty() ||
+                                          !replayScenarioPath.empty() || !observeSpecPath.empty(),
+                                      testHost);
+        // Fresh variation per interactive launch; the stepped state preserves srand plus
+        // one discarded draw. Automation keeps the default seed.
+        ParticleRandom::Seed(ParticleRandom::LaunchSeed(interactiveSession, static_cast<std::uint32_t>(time(nullptr))));
+        if (!replayScenarioPath.empty())
+        {
+            std::ifstream     input(std::filesystem::path(replayScenarioPath), std::ios::binary);
+            const std::string text((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+            PreviewScenario   scenario;
+            const std::string error = input.bad() || !input.is_open() ? "scenario file could not be read"
+                                                                      : host::ParsePreviewScenario(text, scenario);
+            if (!error.empty())
+            {
+                fprintf(stderr, "[replay-proof] scenario: %s\n", error.c_str());
+                std::error_code ec;
+                std::filesystem::create_directories(replayOutputDirectory, ec);
+                const auto    out = std::filesystem::path(replayOutputDirectory);
+                std::ofstream log(out / (L"host-replay-proof-" + std::to_wstring(GetCurrentProcessId()) + L".log"));
+                log << "[replay-proof] hook=scenario frame=-1 exit=2 " << error << "\n";
+                const auto    temp = out / L"report.json.tmp";
+                std::ofstream report(temp, std::ios::binary);
+                report << nlohmann::json{{"schemaVersion", 1},
+                                         {"exitCode", 2},
+                                         {"failure", {{"hook", "scenario"}, {"frame", -1}, {"message", error}}}}
+                              .dump(2);
+                report.close();
+                MoveFileExW(temp.c_str(), (out / L"report.json").c_str(),
+                            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+                return 2;
+            }
+            ParticleRandom::Seed(scenario.seed);
+        }
+        bool                      hasObserveContentLayers = false;
+        std::vector<std::wstring> observeContentLayers;
+        if (!observeSpecPath.empty())
+        {
+            std::ifstream     input(std::filesystem::path(observeSpecPath), std::ios::binary);
+            const std::string text((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+            ObservationSpec   spec;
+            std::string       error = input.bad() || !input.is_open() ? "spec file could not be read"
+                                                                      : host::ParseObservationSpec(text, spec);
+            if (error.empty()) error = ValidateObservationSpec(spec);
+            if (!error.empty())
+            {
+                fprintf(stderr, "[observe] spec: %s\n", error.c_str());
+                return 2;
+            }
+            // SetLayerStack quietly skips a missing layer, which would observe
+            // the wrong content, so a missing folder fails the run here. The
+            // probe uses the form FileManager builds its content roots from.
+            for (size_t i = 0; i < spec.contentLayers.size(); ++i)
+            {
+                const std::wstring layer = host::Utf8ToWide(spec.contentLayers[i]);
+                if (layer.empty() || !PathIsDirectoryW((modlayers::CanonicalizeLayerPath(layer) + L"\\").c_str()))
+                {
+                    fprintf(stderr, "[observe] spec: contentLayers[%zu] is not an existing folder\n", i);
+                    return 2;
+                }
+                observeContentLayers.push_back(layer);
+            }
+            hasObserveContentLayers = spec.hasContentLayers;
+            ParticleRandom::Seed(spec.scenario.seed);
+        }
+        FileManager* fileManager = createFileManager(NULL, argv, &gameRoots, interactiveSession);
+        if (fileManager == NULL)
+        {
+            // User cancelled the data-path picker. Exit cleanly with the
+            // same -1 sentinel.
+            return -1;
+        }
+        TextureManager          textureManager(fileManager, kTextureBasePath);
+        ShaderManager           shaderManager(fileManager, "Data\\Art\\Shaders\\");
+        host::HostLaunchOptions launch;
+        launch.useDevUi                = devUi;
+        launch.useTestHost             = testHost;
+        launch.captureAlo              = captureAlo;
+        launch.capturePng              = capturePng;
+        launch.captureFrames           = captureFrames;
+        launch.captureSkydome          = captureSkydome;
+        launch.captureGoldenProfile    = captureGoldenProfile;
+        launch.captureRef              = captureRef;
+        launch.hasAmbient              = captureHasAmbient;
+        launch.ambient[0]              = captureAmbient[0];
+        launch.ambient[1]              = captureAmbient[1];
+        launch.ambient[2]              = captureAmbient[2];
+        launch.hasSun                  = captureHasSun;
+        launch.sun[0]                  = captureSun[0];
+        launch.sun[1]                  = captureSun[1];
+        launch.sun[2]                  = captureSun[2];
+        launch.hasSunIntensity         = captureHasSunI;
+        launch.sunIntensity            = captureSunIntensity;
+        launch.driveScriptPath         = driveScriptPath;
+        launch.recordScriptPath        = recordScriptPath;
+        launch.replayScenarioPath      = replayScenarioPath;
+        launch.replayOutputDirectory   = replayOutputDirectory;
+        launch.observeSpecPath         = observeSpecPath;
+        launch.observeOutputDirectory  = observeOutputDirectory;
+        launch.hasObserveContentLayers = hasObserveContentLayers;
+        launch.observeContentLayers    = observeContentLayers;
+        launch.perfTracePath           = perfTracePath;
+        launch.perfTraceMode           = perfTraceMode;
+        launch.perfArtifactDir         = perfArtifactDir;
+        launch.perfWebViewProfile      = perfWebViewProfile;
+        int hostResult =
+            host::Run(hInstance, SW_SHOWDEFAULT, textureManager, shaderManager, *fileManager, gameRoots, launch);
+        delete fileManager;
 #ifndef NDEBUG
-		FreeConsole();
+        FreeConsole();
 #endif
-		return hostResult;
-	}
+        return hostResult;
+    }
 }

@@ -49,14 +49,45 @@ class IFileManager;
 //              never builds, so they bypass the fieldable gate like heroes do. The picker
 //              keeps role != Excluded.
 //   bucket  -- the fine sub-group for the future collapsible sections.
-enum class ModelFieldKind { None, Land, Space, Galactic, Generic };
-enum class ObjDomain      { Unknown, Ground, Space };
-enum class ObjRole        { Excluded, Unit, Structure, Hero, Prop, Template, Projectile };
-enum class ObjBucket {
+enum class ModelFieldKind
+{
     None,
-    Infantry, Vehicle, Air,                                   // ground units
-    Fighter, Bomber, Corvette, Frigate, Capital, Transport,   // space units
-    Structure, Hero, Other                                    // shared
+    Land,
+    Space,
+    Galactic,
+    Generic
+};
+enum class ObjDomain
+{
+    Unknown,
+    Ground,
+    Space
+};
+enum class ObjRole
+{
+    Excluded,
+    Unit,
+    Structure,
+    Hero,
+    Prop,
+    Template,
+    Projectile
+};
+enum class ObjBucket
+{
+    None,
+    Infantry,
+    Vehicle,
+    Air, // ground units
+    Fighter,
+    Bomber,
+    Corvette,
+    Frigate,
+    Capital,
+    Transport, // space units
+    Structure,
+    Hero,
+    Other // shared
 };
 
 // Why an object counts as "fieldable" (a player can actually field it). Bit flags so a
@@ -64,24 +95,24 @@ enum class ObjBucket {
 enum FieldSource : unsigned
 {
     FS_None           = 0,
-    FS_Buildable      = 1u << 0,   // has Build_Cost_Credits (fallback Required_Star_Base_Level)
-    FS_StructureBuilt = 1u << 1,   // named in a structure's Tactical_Buildable_Objects_* list
-    FS_Spawned        = 1u << 2,   // named in a carrier/structure spawn list (Reserve/Starting_Spawned_Units_Tech_*)
-    FS_Roster         = 1u << 3,   // present in a mod's GameObjectList.lua roster allow-list
+    FS_Buildable      = 1u << 0, // has Build_Cost_Credits (fallback Required_Star_Base_Level)
+    FS_StructureBuilt = 1u << 1, // named in a structure's Tactical_Buildable_Objects_* list
+    FS_Spawned        = 1u << 2, // named in a carrier/structure spawn list (Reserve/Starting_Spawned_Units_Tech_*)
+    FS_Roster         = 1u << 3, // present in a mod's GameObjectList.lua roster allow-list
 };
 
 // The signals gathered per object (own value merged with the Variant_Of parent's), fed
 // to ClassifyObject. Pure data so the classifier is unit-testable in isolation.
 struct ObjectProfile
 {
-    std::string              name;            // object Name= (some junk is only recognizable by name)
-    std::string              tag;             // container element name, exact as-read (classifier lower-cases internally)
-    ModelFieldKind           modelField = ModelFieldKind::None;  // which model field won
-    bool                     dualEnv    = false;                 // both Land AND Space model present
-    std::vector<std::string> maskTokens;      // <CategoryMask> tokens, UPPER-cased (Anti*/All/None kept; classifier ignores)
-    std::vector<std::string> behaviorTokens;  // Behavior + Land/SpaceBehavior tokens, UPPER-cased
+    std::string              name; // object Name= (some junk is only recognizable by name)
+    std::string              tag;  // container element name, exact as-read (classifier lower-cases internally)
+    ModelFieldKind           modelField = ModelFieldKind::None; // which model field won
+    bool                     dualEnv    = false;                // both Land AND Space model present
+    std::vector<std::string> maskTokens; // <CategoryMask> tokens, UPPER-cased (Anti*/All/None kept; classifier ignores)
+    std::vector<std::string> behaviorTokens; // Behavior + Land/SpaceBehavior tokens, UPPER-cased
     bool                     hasMovementClass = false;
-    std::string              affiliation;      // <Affiliation> -- surfaced as the picker's faction filter
+    std::string              affiliation; // <Affiliation> -- surfaced as the picker's faction filter
 };
 
 struct Classification
@@ -89,7 +120,7 @@ struct Classification
     ObjDomain domain   = ObjDomain::Unknown;
     ObjRole   role     = ObjRole::Excluded;
     ObjBucket bucket   = ObjBucket::None;
-    bool      conflict = false;   // model/mask domain disagreement or dual-env: surfaced, not hidden
+    bool      conflict = false; // model/mask domain disagreement or dual-env: surfaced, not hidden
 };
 
 // Pure classifier: profile -> {domain, role, bucket, conflict}. No FileManager / I/O.
@@ -115,59 +146,59 @@ struct HardPointDef
 // What a model .alo holds (projectiles only; see BuildGameObjectCatalog).
 enum class ModelContent
 {
-    Mesh,             // a 0x0400 mesh (may also carry particle proxies)
-    ParticleSystem,   // a particle-system .alo (root 0x0900)
-    ParticleProxies,  // a skeleton whose bones only carry particle proxies (0x0603)
-    Nothing,          // none of these: nothing to show
+    Mesh,            // a 0x0400 mesh (may also carry particle proxies)
+    ParticleSystem,  // a particle-system .alo (root 0x0900)
+    ParticleProxies, // a skeleton whose bones only carry particle proxies (0x0603)
+    Nothing,         // none of these: nothing to show
 };
 
 struct GameObjectRef
 {
-    std::string        name;        // Name= attribute (in-game key; picker label)
-    std::string        modelPath;   // resolved bare ".alo" filename (after Variant_Of inheritance)
-    std::string        tag;         // raw container tag, e.g. "GroundVehicle" (grouping / diagnostics)
-    std::string        sourceFile;  // listed XML it came from (diagnostics)
+    std::string name;       // Name= attribute (in-game key; picker label)
+    std::string modelPath;  // resolved bare ".alo" filename (after Variant_Of inheritance)
+    std::string tag;        // raw container tag, e.g. "GroundVehicle" (grouping / diagnostics)
+    std::string sourceFile; // listed XML it came from (diagnostics)
     // HardPoint Names this object references (its <HardPoints> comma list, with
     // Variant_Of inheritance resolved). Looked up in GameObjectCatalog::hardpoints at
     // select-time to mount attach models + collect the damage bones to hide.
     std::vector<std::string> hardpointNames;
 
     // Profile classification (from ClassifyObject) + the fieldable attribute.
-    ObjDomain domain      = ObjDomain::Unknown;
-    ObjRole   role        = ObjRole::Excluded;
-    ObjBucket bucket      = ObjBucket::None;
-    bool      conflict    = false;
-    bool      dualEnv     = false;        // has both a Land and a Space model (a projectile lists under both)
-    bool      fieldable   = false;        // player can build/spawn it -> hard picker keep-gate
-    unsigned  fieldSource = FS_None;      // FieldSource bits explaining why (diagnostics)
-    std::string affiliation;              // <Affiliation> (raw, may be a comma list) -> picker faction filter
+    ObjDomain   domain      = ObjDomain::Unknown;
+    ObjRole     role        = ObjRole::Excluded;
+    ObjBucket   bucket      = ObjBucket::None;
+    bool        conflict    = false;
+    bool        dualEnv     = false;   // has both a Land and a Space model (a projectile lists under both)
+    bool        fieldable   = false;   // player can build/spawn it -> hard picker keep-gate
+    unsigned    fieldSource = FS_None; // FieldSource bits explaining why (diagnostics)
+    std::string affiliation;           // <Affiliation> (raw, may be a comma list) -> picker faction filter
 
     // <Scale_Factor> uniform render multiplier (Variant_Of-inherited, resolved
     // in BuildGameObjectCatalog phase 4); 1.0 when absent / non-positive / non-finite.
     // The game draws the model at scaleFactor x its native .alo size; the reference-
     // object renderer applies it so an imported unit matches its in-game size.
-    float     scaleFactor = 1.0f;
+    float scaleFactor = 1.0f;
 
     // Projectiles only (Variant_Of-inherited). The game moves a shot projectileSpeed
     // world units each logic frame (raw <Max_Speed>; 0 = absent or unusable) and
     // destroys it once it has flown projectileRange units (<Projectile_Max_Flight_Distance>,
     // default 50 as in the game's constructor). See simulation/ProjectileShot.h.
-    float       projectileSpeed    = 0.0f;
-    float       projectileRange    = 50.0f;
-    std::string projectileCategory;       // raw <Projectile_Category>, e.g. "Laser", "MISSILE"
+    float       projectileSpeed = 0.0f;
+    float       projectileRange = 50.0f;
+    std::string projectileCategory; // raw <Projectile_Category>, e.g. "Laser", "MISSILE"
     // Curved paths (simulation/ProjectileFlight.h); absent tags keep 0 / false.
-    float       projectileTurnRate          = 0.0f;    // <Max_Rate_Of_Turn>, degrees per logic frame
-    float       projectileBombFallAccel     = 0.0f;    // <Projectile_Bomb_Fall_Accel_Rate>
-    float       projectileGrenadeGravity    = 0.0f;    // <Projectile_Grenade_Gravity>
-    float       projectileGrenadeLobMod     = 0.0f;    // <Projectile_Grenade_Gravity_Lob_Mod>
-    bool        projectileGrenadeLobSlower  = false;   // <Projectile_Grenade_Can_Lob_Slower>
-    float       projectileMaxLifetimeSec    = 0.0f;    // <Projectile_Max_Lifetime>
-    float       projectileRocketStraightDistance = 0.0f;   // <Projectile_Rocket_Straight_Distance>, world units
-    float       projectileRocketCurveDistance    = 0.0f;   // <Projectile_Rocket_Curve_Distance>, world units
-    float       projectileRocketCurveOffset      = 0.0f;   // <Projectile_Rocket_Curve_Offset>, world units
-    bool        projectileExplodesAtTarget  = false;   // <Explode_When_Reached_Target_Radius>
-    bool        projectileTargetOnTerrain   = false;   // <Projectile_Target_Point_On_Terrain>
-    ModelContent modelContent = ModelContent::Mesh;   // projectiles: how the model draws
+    float        projectileTurnRate               = 0.0f;  // <Max_Rate_Of_Turn>, degrees per logic frame
+    float        projectileBombFallAccel          = 0.0f;  // <Projectile_Bomb_Fall_Accel_Rate>
+    float        projectileGrenadeGravity         = 0.0f;  // <Projectile_Grenade_Gravity>
+    float        projectileGrenadeLobMod          = 0.0f;  // <Projectile_Grenade_Gravity_Lob_Mod>
+    bool         projectileGrenadeLobSlower       = false; // <Projectile_Grenade_Can_Lob_Slower>
+    float        projectileMaxLifetimeSec         = 0.0f;  // <Projectile_Max_Lifetime>
+    float        projectileRocketStraightDistance = 0.0f;  // <Projectile_Rocket_Straight_Distance>, world units
+    float        projectileRocketCurveDistance    = 0.0f;  // <Projectile_Rocket_Curve_Distance>, world units
+    float        projectileRocketCurveOffset      = 0.0f;  // <Projectile_Rocket_Curve_Offset>, world units
+    bool         projectileExplodesAtTarget       = false; // <Explode_When_Reached_Target_Radius>
+    bool         projectileTargetOnTerrain        = false; // <Projectile_Target_Point_On_Terrain>
+    ModelContent modelContent                     = ModelContent::Mesh; // projectiles: how the model draws
 };
 
 // Picker keep-gate. Units/structures must be fieldable (a player can build/spawn
@@ -191,7 +222,7 @@ inline bool IsPickerListed(const GameObjectRef& r)
 
 struct GameObjectCatalog
 {
-    std::vector<GameObjectRef> objects;  // every object with a resolvable model, sorted by name
+    std::vector<GameObjectRef> objects; // every object with a resolvable model, sorted by name
     // HardPoint table for the whole active content, keyed by lower-cased Name
     // (parsed once per build from HardPointDataFiles.xml -> the listed hardpoint files).
     std::map<std::string, HardPointDef> hardpoints;
@@ -223,7 +254,13 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out);
 // filter (skip 0x402-hidden meshes + the shared AloIsSkinnedVertexFormat /
 // AloIsNonVisibleShader predicates) so a "Renderable" verdict means the renderer
 // will actually show geometry.
-enum class ModelProbeResult { Renderable, SkinnedUnsupported, LoadFailed, NotFound };
+enum class ModelProbeResult
+{
+    Renderable,
+    SkinnedUnsupported,
+    LoadFailed,
+    NotFound
+};
 ModelProbeResult ProbeModelSkinned(IFileManager& fm, const std::string& modelPath);
 
 // Stable display strings for the classification axes (dump / picker).
@@ -236,14 +273,12 @@ const char* ObjBucketName(ObjBucket b);
 // Returns the catalog's CANONICAL casing when present, or "" when the name is
 // absent from this stack (the caller treats "" as "selection clears to None").
 // Empty input -> "". The single existence rule the engine routes through.
-inline std::string ResolveReferenceName(const std::vector<GameObjectRef>& objects,
-                                        const std::string& desired)
+inline std::string ResolveReferenceName(const std::vector<GameObjectRef>& objects, const std::string& desired)
 {
     if (desired.empty()) return std::string();
     for (const GameObjectRef& r : objects)
-        if (_stricmp(r.name.c_str(), desired.c_str()) == 0)
-            return r.name;   // adopt canonical casing
-    return std::string();    // absent -> None
+        if (_stricmp(r.name.c_str(), desired.c_str()) == 0) return r.name; // adopt canonical casing
+    return std::string();                                                  // absent -> None
 }
 
 #endif

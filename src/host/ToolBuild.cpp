@@ -36,8 +36,9 @@ bool CheckEmitter(const json& entry, bool root, int at, std::set<std::string>* n
     if (!entry.is_object()) return Fail(stop, kExitUsage, "spec-malformed", what + " must be an object");
     for (auto it = entry.begin(); it != entry.end(); ++it)
         if (it.key() != "name" && it.key() != "mutations" && (it.key() != "lifeChild" || !root))
-            return Fail(stop, kExitUsage, "spec-malformed", what + " has no key '" + it.key() + "'" +
-                        (it.key() == "lifeChild" ? " (a lifetime child has no children)" : ""));
+            return Fail(stop, kExitUsage, "spec-malformed",
+                        what + " has no key '" + it.key() + "'" +
+                            (it.key() == "lifeChild" ? " (a lifetime child has no children)" : ""));
     if (!entry.contains("name") || !entry["name"].is_string() || entry["name"].get<std::string>().empty())
         return Fail(stop, kExitUsage, "spec-malformed", what + " needs a name");
     const std::string name = entry["name"].get<std::string>();
@@ -48,13 +49,15 @@ bool CheckEmitter(const json& entry, bool root, int at, std::set<std::string>* n
     if (!entry.contains("mutations") || !entry["mutations"].is_array())
         return Fail(stop, kExitUsage, "spec-malformed", what + " needs a mutations array");
     const json& ops = entry["mutations"];
-    if (ops.size() > kMaxMutations) return Fail(stop, kExitUsage, "spec-malformed", what + " has more than 256 mutations");
+    if (ops.size() > kMaxMutations)
+        return Fail(stop, kExitUsage, "spec-malformed", what + " has more than 256 mutations");
     for (size_t i = 0; i < ops.size(); i++)
     {
         if (!CheckOp(ops[i], static_cast<int>(i), stop))
             return Fail(stop, kExitUsage, "spec-malformed", what + ": " + stop->reason, stop->op);
         if (ops[i]["op"] == "rename")
-            return Fail(stop, kExitUsage, "spec-malformed", what + ": an emitter takes its entry's name, not a rename", static_cast<int>(i));
+            return Fail(stop, kExitUsage, "spec-malformed", what + ": an emitter takes its entry's name, not a rename",
+                        static_cast<int>(i));
     }
     return true;
 }
@@ -72,7 +75,7 @@ bool CheckSpec(const json& spec, Stop* stop, int* failedEmitter)
     if (spec["emitters"].size() > kMaxEntries)
         return Fail(stop, kExitUsage, "spec-malformed", "the spec has more than 64 entries");
     std::set<std::string> names;
-    int at = 0;
+    int                   at = 0;
     for (const json& entry : spec["emitters"])
     {
         *failedEmitter = at;
@@ -93,11 +96,11 @@ std::unique_ptr<ParticleSystem> Skeleton(const json& spec, const std::string& na
     for (const json& entry : spec["emitters"])
     {
         Emitter* root = system->addRootEmitter();
-        root->name = entry["name"].get<std::string>();
+        root->name    = entry["name"].get<std::string>();
         entries->push_back(&entry);
         if (!entry.contains("lifeChild")) continue;
         Emitter* child = system->addLifetimeEmitter(root);
-        child->name = entry["lifeChild"]["name"].get<std::string>();
+        child->name    = entry["lifeChild"]["name"].get<std::string>();
         entries->push_back(&entry["lifeChild"]);
     }
     return system;
@@ -120,11 +123,15 @@ json Names(const json& dump)
 
 // Builds and verifies. Fills `report` as it goes; returns false with `stop`,
 // and the emitter it stopped at in `failedEmitter` (-1 when none).
-bool Build(const std::string& specBytes, const std::wstring& out, const BuildHooks& hooks, json& report, Stop* stop,
-           int* failedEmitter)
+bool Build(const std::string&  specBytes,
+           const std::wstring& out,
+           const BuildHooks&   hooks,
+           json&               report,
+           Stop*               stop,
+           int*                failedEmitter)
 {
     // The spec.
-    json spec;
+    json        spec;
     std::string reason, path;
     if (!tool_selector::ParseStrictJson(specBytes, &spec, &reason))
         return Fail(stop, kExitUsage, "spec-malformed", reason);
@@ -133,48 +140,59 @@ bool Build(const std::string& specBytes, const std::wstring& out, const BuildHoo
 
     // 1. K is the skeleton the edits are measured against; W is edited.
     const std::string systemName = DeriveParticleSystemName(out);
-    report["name"] = systemName;
-    std::vector<const json*> entries;
-    std::unique_ptr<ParticleSystem> K = Skeleton(spec, systemName, &entries);
-    std::unique_ptr<ParticleSystem> W = Skeleton(spec, systemName, &entries);
-    const json dumpK = particle_json::ParticleSystemJson(*K);
+    report["name"]               = systemName;
+    std::vector<const json*>        entries;
+    std::unique_ptr<ParticleSystem> K     = Skeleton(spec, systemName, &entries);
+    std::unique_ptr<ParticleSystem> W     = Skeleton(spec, systemName, &entries);
+    const json                      dumpK = particle_json::ParticleSystemJson(*K);
 
     // 2. Apply each emitter's ops, op by op, against its current state.
     std::vector<std::string> requested, footprint;
     for (size_t pos = 0; pos < entries.size(); pos++)
     {
-        Emitter& target = W->getEmitter(pos);
-        const std::string prefix = "emitters[" + std::to_string(pos) + "].";
-        json emitterReport = {{"position", pos}, {"name", target.name}, {"parent", dumpK["emitters"][pos]["parent"]},
-                              {"ops", json::array()}};
-        const json& ops = (*entries[pos])["mutations"];
+        Emitter&          target        = W->getEmitter(pos);
+        const std::string prefix        = "emitters[" + std::to_string(pos) + "].";
+        json              emitterReport = {{"position", pos},
+                                           {"name", target.name},
+                                           {"parent", dumpK["emitters"][pos]["parent"]},
+                                           {"ops", json::array()}};
+        const json&       ops           = (*entries[pos])["mutations"];
         for (size_t i = 0; i < ops.size(); i++)
         {
             const json before = particle_json::EmitterJson(target, nullptr);
-            Touched touched;
+            Touched    touched;
             if (!ApplyOp(*W, target, ops[i], static_cast<int>(i), &touched, stop))
             {
                 *failedEmitter = static_cast<int>(pos);
                 return false;
             }
-            const json after = particle_json::EmitterJson(target, nullptr);
-            json fields = json::array();
-            bool changed = false;
+            const json after   = particle_json::EmitterJson(target, nullptr);
+            json       fields  = json::array();
+            bool       changed = false;
             for (const std::string& p : touched.requested)
             {
                 fields.push_back({{"path", prefix + p}, {"before", *At(before, p)}, {"requested", *At(after, p)}});
                 changed = changed || *At(before, p) != *At(after, p);
             }
             json opFootprint = json::array();
-            for (const std::string& p : touched.footprint) { opFootprint.push_back(prefix + p); Add(footprint, prefix + p); }
+            for (const std::string& p : touched.footprint)
+            {
+                opFootprint.push_back(prefix + p);
+                Add(footprint, prefix + p);
+            }
             for (const std::string& p : touched.requested) Add(requested, prefix + p);
-            emitterReport["ops"].push_back({{"index", i}, {"op", ops[i]["op"]}, {"effect", changed ? "changed" : "unchanged"},
-                                            {"fields", fields}, {"footprint", opFootprint}});
+            emitterReport["ops"].push_back({{"index", i},
+                                            {"op", ops[i]["op"]},
+                                            {"effect", changed ? "changed" : "unchanged"},
+                                            {"fields", fields},
+                                            {"footprint", opFootprint}});
         }
         for (const auto& key : OutOfGrid(target))
-            report["warnings"].push_back({{"code", "atlas-out-of-grid"},
-                {"message", prefix + "tracks[5] has index " + json(static_cast<double>(key.second)).dump() + " at time " +
-                            json(static_cast<double>(key.first)).dump() + ", outside the atlas grid; the engine wraps it"}});
+            report["warnings"].push_back(
+                {{"code", "atlas-out-of-grid"},
+                 {"message", prefix + "tracks[5] has index " + json(static_cast<double>(key.second)).dump() +
+                                 " at time " + json(static_cast<double>(key.first)).dump() +
+                                 ", outside the atlas grid; the engine wraps it"}});
         report["emitters"].push_back(emitterReport);
     }
     report["footprint"] = footprint;
@@ -188,45 +206,57 @@ bool Build(const std::string& specBytes, const std::wstring& out, const BuildHoo
         return Fail(stop, kExitRule, "unsaveable", "the built document would not reload: " + reason);
     for (const std::string& p : requested)
     {
-        const json* was = At(dumpK, p);
+        const json* was   = At(dumpK, p);
         const json* asked = At(dumpW, p);
         const json* saved = At(projected, p);
         if (was && asked && saved && *asked != *was && *saved == *was)
-            return Fail(stop, kExitRule, "value-lost", p + ": the requested " + asked->dump() + " saves as " + saved->dump() +
-                        ", a new emitter's value");
+            return Fail(stop, kExitRule, "value-lost",
+                        p + ": the requested " + asked->dump() + " saves as " + saved->dump() +
+                            ", a new emitter's value");
     }
     std::unique_ptr<ParticleSystem> B = ParseSource(SaveToBytes(*K), &reason);
     if (!B) return Fail(stop, kExitInternal, "internal", "the unedited skeleton does not reload: " + reason);
     const json dumpB = particle_json::ParticleSystemJson(*B);
     {
         json p = projected, b = dumpB;
-        for (const std::string& f : footprint) { Blank(p, f); Blank(b, f); }
+        for (const std::string& f : footprint)
+        {
+            Blank(p, f);
+            Blank(b, f);
+        }
         if (FirstDifference(p, b, "", &path))
-            return Fail(stop, kExitRule, "collateral", "saving the build would also change " + path + ", outside the edits' footprint");
+            return Fail(stop, kExitRule, "collateral",
+                        "saving the build would also change " + path + ", outside the edits' footprint");
     }
 
     // 4. Stage the candidate.
-    const std::string bytesW = SaveToBytes(*W);
+    const std::string  bytesW = SaveToBytes(*W);
     const std::wstring staged = Stage(out, bytesW);
     if (staged.empty()) return Fail(stop, kExitIo, "io", "the candidate could not be staged next to --out");
     struct StagedFile
     {
         std::wstring path;
-        bool keep = false;
-        ~StagedFile() { if (!keep) DeleteFileW(path.c_str()); }
+        bool         keep = false;
+        ~StagedFile()
+        {
+            if (!keep) DeleteFileW(path.c_str());
+        }
     } guard{staged};
     if (hooks.afterStage) hooks.afterStage(staged);
 
     // 5. Verify the staged file.
     std::string stagedBytes;
-    if (!ReadFileBytes(staged, &stagedBytes, &reason)) return Fail(stop, kExitIo, "io", "the staged candidate could not be read: " + reason);
+    if (!ReadFileBytes(staged, &stagedBytes, &reason))
+        return Fail(stop, kExitIo, "io", "the staged candidate could not be read: " + reason);
     report["checks"] = json::object();
-    auto postcheck = [&](int n, bool ok, const std::string& why) {
+    auto postcheck   = [&](int n, bool ok, const std::string& why)
+    {
         report["checks"][std::to_string(n)] = ok;
         if (!ok) Fail(stop, kExitPostcheck, "postcondition", "check " + std::to_string(n) + ": " + why);
         return ok;
     };
-    if (!postcheck(4, Sha256Hex(stagedBytes) == Sha256Hex(bytesW), "the staged file is not the document that was verified"))
+    if (!postcheck(4, Sha256Hex(stagedBytes) == Sha256Hex(bytesW),
+                   "the staged file is not the document that was verified"))
         return false;
     std::unique_ptr<ParticleSystem> C = ParseSource(stagedBytes, &reason);
     if (!postcheck(3, C && SaveToBytes(*C) == stagedBytes,
@@ -235,11 +265,16 @@ bool Build(const std::string& specBytes, const std::wstring& out, const BuildHoo
     const json dumpC = particle_json::ParticleSystemJson(*C);
     {
         std::string why;
-        if (!C->getGraphRepairs().empty()) why = "the loader repaired the candidate: " + C->getGraphRepairs()[0];
-        else if (particle_json::FindInvalidInspectValue(dumpC, &path, &reason)) why = path + " " + reason;
-        else if (dumpC["name"] != systemName) why = "the internal name did not persist";
-        else if (Names(dumpC) != Names(dumpK)) why = "the emitters or their names differ from the spec's";
-        else if (Tree(dumpC) != Tree(dumpK)) why = "the emitter tree differs from the spec's";
+        if (!C->getGraphRepairs().empty())
+            why = "the loader repaired the candidate: " + C->getGraphRepairs()[0];
+        else if (particle_json::FindInvalidInspectValue(dumpC, &path, &reason))
+            why = path + " " + reason;
+        else if (dumpC["name"] != systemName)
+            why = "the internal name did not persist";
+        else if (Names(dumpC) != Names(dumpK))
+            why = "the emitters or their names differ from the spec's";
+        else if (Tree(dumpC) != Tree(dumpK))
+            why = "the emitter tree differs from the spec's";
         else
             for (const json& e : dumpC["emitters"])
                 if (e["linkGroup"] != 0) why = "emitter '" + e["name"].get<std::string>() + "' is in a link group";
@@ -247,7 +282,7 @@ bool Build(const std::string& specBytes, const std::wstring& out, const BuildHoo
     }
     for (const std::string& f : footprint)
     {
-        const json* got = At(dumpC, f);
+        const json* got  = At(dumpC, f);
         const json* want = At(projected, f);
         if (!got || !want || *got != *want)
             return postcheck(1, false, f + " saved as " + Shown(got) + ", projected " + Shown(want));
@@ -255,20 +290,25 @@ bool Build(const std::string& specBytes, const std::wstring& out, const BuildHoo
     postcheck(1, true, "");
     {
         json c = dumpC, b = dumpB;
-        for (const std::string& f : footprint) { Blank(c, f); Blank(b, f); }
+        for (const std::string& f : footprint)
+        {
+            Blank(c, f);
+            Blank(b, f);
+        }
         if (!postcheck(2, !FirstDifference(c, b, "", &path), "the candidate also changed " + path)) return false;
     }
     for (json& emitter : report["emitters"])
         for (json& op : emitter["ops"])
-            for (json& field : op["fields"])
-                field["persisted"] = *At(dumpC, field["path"].get<std::string>());
+            for (json& field : op["fields"]) field["persisted"] = *At(dumpC, field["path"].get<std::string>());
 
     // 6. Commit.
     if (!MoveFileExW(staged.c_str(), out.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
-        return Fail(stop, kExitIo, "io", "the candidate could not replace --out (error " + std::to_string(GetLastError()) + ")");
+        return Fail(stop, kExitIo, "io",
+                    "the candidate could not replace --out (error " + std::to_string(GetLastError()) + ")");
     guard.keep = true;
     std::string written;
-    if (!ReadFileBytes(out, &written, &reason)) return Fail(stop, kExitIo, "io", "--out could not be read back: " + reason);
+    if (!ReadFileBytes(out, &written, &reason))
+        return Fail(stop, kExitIo, "io", "--out could not be read back: " + reason);
     report["candidateHash"] = Sha256Hex(written);
     return true;
 }
@@ -277,18 +317,21 @@ bool Build(const std::string& specBytes, const std::wstring& out, const BuildHoo
 int RunBuild(const std::string& spec, const std::wstring& out, const BuildHooks& hooks, json* report)
 {
     json& r = *report;
-    r = {{"schema", 1}, {"verb", "build"}, {"textureResolution", "unverified"}, {"warnings", json::array()},
-         {"emitters", json::array()}};
-    Stop stop;
-    int failedEmitter = -1;
-    const bool ok = Build(spec, out, hooks, r, &stop, &failedEmitter);
-    r["outcome"] = ok ? "ok" : (stop.code == kExitPostcheck ? "postcondition-failed" : "refused");
-    r["exitCode"] = ok ? kExitOk : stop.code;
+    r       = {{"schema", 1},
+               {"verb", "build"},
+               {"textureResolution", "unverified"},
+               {"warnings", json::array()},
+               {"emitters", json::array()}};
+    Stop       stop;
+    int        failedEmitter = -1;
+    const bool ok            = Build(spec, out, hooks, r, &stop, &failedEmitter);
+    r["outcome"]             = ok ? "ok" : (stop.code == kExitPostcheck ? "postcondition-failed" : "refused");
+    r["exitCode"]            = ok ? kExitOk : stop.code;
     if (!ok)
     {
-        r["refusal"] = {{"category", stop.category}, {"reason", stop.reason}};
+        r["refusal"]            = {{"category", stop.category}, {"reason", stop.reason}};
         r["refusal"]["emitter"] = failedEmitter >= 0 ? json(failedEmitter) : json(nullptr);
-        r["refusal"]["op"] = stop.op >= 0 ? json(stop.op) : json(nullptr);
+        r["refusal"]["op"]      = stop.op >= 0 ? json(stop.op) : json(nullptr);
     }
     return ok ? kExitOk : stop.code;
 }

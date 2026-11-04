@@ -28,17 +28,23 @@
 // Pure and header-only (no WebView2 types) so tests/test_webview_crash_policy.cpp
 // can exercise it directly.
 
-namespace webviewcrash {
+namespace webviewcrash
+{
 
 enum class WebFailure
 {
-    BrowserExited,        // COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED
-    RenderExited,         // ..._RENDER_PROCESS_EXITED (main frame)
-    RenderUnresponsive,   // ..._RENDER_PROCESS_UNRESPONSIVE (main frame)
-    Other,                // iframe renderer, GPU, utility, sandbox helper, ...
+    BrowserExited,      // COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED
+    RenderExited,       // ..._RENDER_PROCESS_EXITED (main frame)
+    RenderUnresponsive, // ..._RENDER_PROCESS_UNRESPONSIVE (main frame)
+    Other,              // iframe renderer, GPU, utility, sandbox helper, ...
 };
 
-enum class WebFailureAction { LogOnly, Reload, MarkDead };
+enum class WebFailureAction
+{
+    LogOnly,
+    Reload,
+    MarkDead
+};
 
 // Reloads allowed per session before the web is declared dead.
 constexpr int kMaxWebReloads = 3;
@@ -65,25 +71,20 @@ constexpr int kWebProcessFailedExitCode = 5;
 // reloadPending — a Reload() was issued and the page hasn't sent app/ready yet.
 // hangReports   — consecutive hang reports, this one included, with no web
 //                 message in between (only read for RenderUnresponsive).
-inline WebFailureAction DecideWebFailure(WebFailure failure, bool interactive,
-                                         int reloadsUsed, bool reloadPending,
-                                         int hangReports)
+inline WebFailureAction DecideWebFailure(
+    WebFailure failure, bool interactive, int reloadsUsed, bool reloadPending, int hangReports)
 {
     switch (failure)
     {
-    case WebFailure::BrowserExited:
-        return WebFailureAction::MarkDead;
-    case WebFailure::RenderExited:
-        if (!interactive) return WebFailureAction::MarkDead;
-        return reloadsUsed < kMaxWebReloads ? WebFailureAction::Reload
-                                            : WebFailureAction::MarkDead;
-    case WebFailure::RenderUnresponsive:
-        if (!interactive || reloadPending) return WebFailureAction::LogOnly;
-        if (hangReports < kHangReportsBeforeReload) return WebFailureAction::LogOnly;
-        return reloadsUsed < kMaxWebReloads ? WebFailureAction::Reload
-                                            : WebFailureAction::MarkDead;
-    default:
-        return WebFailureAction::LogOnly;
+        case WebFailure::BrowserExited: return WebFailureAction::MarkDead;
+        case WebFailure::RenderExited:
+            if (!interactive) return WebFailureAction::MarkDead;
+            return reloadsUsed < kMaxWebReloads ? WebFailureAction::Reload : WebFailureAction::MarkDead;
+        case WebFailure::RenderUnresponsive:
+            if (!interactive || reloadPending) return WebFailureAction::LogOnly;
+            if (hangReports < kHangReportsBeforeReload) return WebFailureAction::LogOnly;
+            return reloadsUsed < kMaxWebReloads ? WebFailureAction::Reload : WebFailureAction::MarkDead;
+        default: return WebFailureAction::LogOnly;
     }
 }
 
@@ -111,7 +112,7 @@ struct DeadWebClosePlan
 
 inline DeadWebClosePlan PlanDeadWebClose(bool dirty, bool interactive)
 {
-    return DeadWebClosePlan{ dirty && interactive, dirty && interactive, interactive };
+    return DeadWebClosePlan{dirty && interactive, dirty && interactive, interactive};
 }
 
 } // namespace webviewcrash
