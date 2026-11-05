@@ -8,6 +8,8 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-04
+
 ### Added
 
 - The Spawner previews land bombing runs: with a bomb matched, "Bombing run" flies a V of three bombers over the target at the bomber's in-game speed, each dropping the bomb on its own marker while it is within attack range, with the bomber stats taken from the unit that drops that bomb
@@ -451,7 +453,8 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 - Deleting an emitter with live particles no longer crashes the editor
 - Overlapping emitters now stack in the same order as the game
 
-[Unreleased]: https://github.com/DrKnickers/particle-editor/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/DrKnickers/particle-editor/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/DrKnickers/particle-editor/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/DrKnickers/particle-editor/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/DrKnickers/particle-editor/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/DrKnickers/particle-editor/compare/v0.3.0...v0.4.0
