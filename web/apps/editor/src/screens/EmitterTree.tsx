@@ -111,6 +111,8 @@ type Props = {
   bridge: Bridge;
 };
 
+type RowEntrance = { rows: FlatRow[]; recording: boolean; ids: ReadonlySet<number> };
+
 // ─── Tree rows ─────────────────────────────
 function flattenTree(tree: EmitterTreeDto | null): FlatRow[] {
   if (tree === null) return [];
@@ -347,24 +349,25 @@ export function EmitterTree({ bridge }: Props) {
   // Sibling reflow is the FLIP glide below; this covers the new row itself,
   // which used to pop in. Track every stableId ever rendered; a row whose id
   // is unseen this render wears .row-fade-in for its mount. Exempt: the
-  // initial mount (ref still null), full-tree rebuilds (undo/redo mints
+  // initial mount (no previous rows), full-tree rebuilds (undo/redo mints
   // FRESH stableIds for EVERY row — fading the whole tree would read as a
   // flash, per the remount note above), and --record runs (frame
   // determinism; CSS side is also killed via [data-recording]).
-  const seenStableIdsRef = useRef<Set<number> | null>(null);
-  const enteringIds = useMemo<ReadonlySet<number>>(() => {
-    const seen = seenStableIdsRef.current;
-    if (seen === null || recording) return new Set();
-    const fresh = flatRows.filter((r) => !seen.has(r.node.stableId));
-    if (fresh.length === 0 || fresh.length === flatRows.length) return new Set();
-    return new Set(fresh.map((r) => r.node.stableId));
-  }, [flatRows, recording]);
-  useEffect(() => {
-    // Replace (not accumulate): the set is "the PREVIOUS render's ids", so it
-    // can't grow unboundedly across a session. A stableId
-    // deleted and re-added later fades in again — correct, it IS an add.
-    seenStableIdsRef.current = new Set(flatRows.map((r) => r.node.stableId));
-  }, [flatRows]);
+  const [entrance, setEntrance] = useState<RowEntrance>((): RowEntrance => ({
+    rows: flatRows,
+    recording,
+    ids: new Set(),
+  }));
+  if (entrance.rows !== flatRows || entrance.recording !== recording) {
+    const seen: Set<number> = new Set(entrance.rows.map((r: FlatRow): number => r.node.stableId));
+    const fresh: FlatRow[] = flatRows.filter((r: FlatRow): boolean => !seen.has(r.node.stableId));
+    const canAnimateEntrance: boolean = !recording && fresh.length > 0 && fresh.length < flatRows.length;
+    const ids: ReadonlySet<number> = canAnimateEntrance
+      ? new Set(fresh.map((r: FlatRow): number => r.node.stableId))
+      : new Set();
+    setEntrance({ rows: flatRows, recording, ids });
+  }
+  const enteringIds: ReadonlySet<number> = entrance.ids;
 
   // Exit ghosts: a DELETED row fades out at its last
   // position (absolute overlay in scroll-content space) while its siblings
@@ -423,6 +426,7 @@ export function EmitterTree({ bridge }: Props) {
         }
         if (removed.length > 0 && removed.length <= 8) {
           const ids = removed.map((g) => g.stableId);
+          // eslint-disable-next-line react-hooks/set-state-in-effect -- Exit ghosts require the removed rows' last measured DOM positions before paint.
           setExitGhosts((gs) => [...gs.filter((g) => !ids.includes(g.stableId)), ...removed]);
           ghostTimersRef.current.add(
             window.setTimeout(() => {

@@ -1,3 +1,4 @@
+// Owns decoded images for imperative canvas painters, not texture fetching or display.
 import { useEffect, useRef, useState } from "react";
 
 export function useDecodedImage(dataUri: string | null) {
@@ -9,6 +10,7 @@ export function useDecodedImage(dataUri: string | null) {
     if (!dataUri) {
       imageRef.current = null;
       imageUriRef.current = null;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Readiness must follow the Image decoder and the image ref consumed by canvas effects.
       setImageReady(false);
       return;
     }

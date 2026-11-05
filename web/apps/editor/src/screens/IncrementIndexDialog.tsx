@@ -7,7 +7,7 @@
 //
 // Driven by the `tree-context` atom; mounts at App level.
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { Modal } from "@/components/Modal";
 import { Spinner } from "@/primitives/Spinner";
@@ -27,12 +27,14 @@ export function IncrementIndexDialog({ bridge }: Props) {
 
   // Reset to defaults each time the dialog opens so a cancel-and-reopen
   // round-trip starts fresh.
-  useEffect(() => {
+  const [previousOpen, setPreviousOpen] = useState<boolean>(open);
+  if (previousOpen !== open) {
+    setPreviousOpen(open);
     if (open) {
       setDelta(1);
       setCount(1);
     }
-  }, [open]);
+  }
 
   const handleOk = () => {
     if (targetId === null) return;

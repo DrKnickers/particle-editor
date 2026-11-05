@@ -9,7 +9,7 @@
 // Labels follow §11.3: the readout is "time since spawn" and a frame number,
 // so it doesn't read as the curve editor's "% lifetime".
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -68,9 +68,8 @@ function OpenTimeline({ bridge }: Props) {
   // when it reaches the value asked for, when play or a failure moves on, or
   // when the seeks drain (a refused seek leaves the frame where it was).
   const [shown, setShown] = useState<number | null>(null);
-  useEffect(() => {
-    if (shown !== null && (frame === shown || playing || status === "stale")) setShown(null);
-  }, [frame, shown, playing, status]);
+  const hasSettledSeek: boolean = frame === shown || playing || status === "stale";
+  if (shown !== null && hasSettledSeek) setShown(null);
 
   return (
     <section

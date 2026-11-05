@@ -1,3 +1,4 @@
+// Owns curve-layer SVG presentation and render diagnostics, not track edits or selection.
 import { memo, useMemo, useRef, type MutableRefObject, type PointerEvent as ReactPointerEvent } from "react";
 import type { TrackDto } from "@particle-editor/bridge-schema";
 import type { ChannelDef } from "./CurveEditor";
@@ -46,7 +47,9 @@ export type CurveDragState = {
 
 function useLayerRenderCount(): number {
   const countRef = useRef(0);
+  // eslint-disable-next-line react-hooks/refs -- Diagnostic counts render attempts, including discarded renders; state would trigger another render.
   countRef.current += 1;
+  // eslint-disable-next-line react-hooks/refs -- Expose the diagnostic render-attempt count without scheduling another render.
   return countRef.current;
 }
 

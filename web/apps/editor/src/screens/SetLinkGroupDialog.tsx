@@ -63,6 +63,7 @@ export function SetLinkGroupDialog({ bridge }: Props) {
     if (!open) return;
     // Capture selection at open.
     const ids = [...useEmitterSelectionStore.getState().ids];
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Snapshot external selection at dialog open before requesting the host's current groups.
     setSelectedIds(ids);
     setMode("new");
     setConflicts([]);
@@ -105,6 +106,7 @@ export function SetLinkGroupDialog({ bridge }: Props) {
   // changes (mode / chosen group / selection).
   useEffect(() => {
     if (!open || selectedIds.length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Clear the asynchronous host conflict preview when there is no membership proposal.
       setConflicts([]);
       return;
     }

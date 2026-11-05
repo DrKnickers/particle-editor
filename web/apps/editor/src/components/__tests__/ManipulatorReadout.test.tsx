@@ -1,6 +1,10 @@
-import { describe, it, expect } from "vitest";
+// Covers readout visibility and measured placement; native gizmo rendering is outside this suite.
+import { describe, it, expect, vi } from "vitest";
 import { render, screen, act } from "@testing-library/react";
 import { ManipulatorReadout } from "../ManipulatorReadout";
+
+const READOUT_WIDTH_PX = 120;
+const READOUT_HEIGHT_PX = 24;
 
 function fakeBridge() {
   const handlers: Record<string, ((e: any) => void)[]> = {};
@@ -26,6 +30,28 @@ function overlay() {
 }
 
 describe("ManipulatorReadout", () => {
+  it("clamps the first drag update using the mounted pill's dimensions", (): void => {
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(READOUT_WIDTH_PX);
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(READOUT_HEIGHT_PX);
+    try {
+      const { bridge, emit }: ReturnType<typeof fakeBridge> = fakeBridge();
+      render(<ManipulatorReadout bridge={bridge} overlayRef={overlay()} />);
+      emit("engine/manipulator/drag", {
+        active: true,
+        kind: "translate",
+        nx: 1,
+        ny: 1,
+        visible: true,
+        labels: ["X"],
+        values: [1],
+        decimals: 1,
+      });
+      expect(screen.getByText(/X 1\.0\s+units\b/)).toHaveStyle({ transform: "translate(676px, 528px)" });
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it("renders a translate value and hides on active:false", () => {
     const { bridge, emit } = fakeBridge();
     render(<ManipulatorReadout bridge={bridge} overlayRef={overlay()} />);

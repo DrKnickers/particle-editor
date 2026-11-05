@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+// Owns the drag readout and its measured placement; the host owns gizmo interaction.
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Bridge, Event } from "@particle-editor/bridge-schema";
 import { useEngineField } from "@/lib/use-engine-snapshot";
 
@@ -11,6 +12,7 @@ type DragActive = Extract<Event, { kind: "engine/manipulator/drag" }>["payload"]
 // on the ring and is hard to read.
 const OFFSET_AXIS = 72;
 const OFFSET_RING = 112;
+const EDGE_PADDING_PX = 4;
 // Sign off the ROUNDED magnitude so a tiny negative (e.g. -0.04 at 1dp) renders
 // "0.0", not "−0.0". U+2212 minus.
 const fmt = (v: number, d: number) => {
@@ -43,21 +45,28 @@ export function ManipulatorReadout({
   // new-file → name "") or locked mid-something (gizmo gone), hide the pill.
   // (Deselect/lock don't route through the host drag-end sites; these are the
   // real DTO signals — there is no `referenceObjectSelected` field.)
-  useEffect(() => {
+  const [previousHideDrag, setPreviousHideDrag] = useState<boolean>(hideDragForReference);
+  if (previousHideDrag !== hideDragForReference) {
+    setPreviousHideDrag(hideDragForReference);
     if (hideDragForReference) setDrag(null);
-  }, [hideDragForReference]);
+  }
+
+  // Measure after the pill mounts so clamping includes its current text dimensions.
+  useLayoutEffect((): void => {
+    const pill: HTMLDivElement | null = pillRef.current;
+    if (!drag?.visible || pill === null) return;
+    const box: DOMRect | undefined = overlayRef.current?.getBoundingClientRect();
+    const width: number = box?.width ?? 0;
+    const height: number = box?.height ?? 0;
+    const clamp = (value: number, max: number): number =>
+      Math.max(EDGE_PADDING_PX, Math.min(value, max - EDGE_PADDING_PX));
+    const offset: number = drag.kind === "rotate" ? OFFSET_RING : OFFSET_AXIS;
+    const left: number = clamp(drag.nx * width + offset, width - pill.offsetWidth);
+    const top: number = clamp(drag.ny * height - offset, height - pill.offsetHeight);
+    pill.style.transform = `translate(${left}px, ${top}px)`;
+  });
 
   if (!drag || !drag.visible) return null;
-
-  const box = overlayRef.current?.getBoundingClientRect();
-  const W = box?.width ?? 0,
-    H = box?.height ?? 0;
-  const pw = pillRef.current?.offsetWidth ?? 0,
-    ph = pillRef.current?.offsetHeight ?? 0;
-  const clamp = (v: number, max: number) => Math.max(4, Math.min(v, max - 4));
-  const offset = drag.kind === "rotate" ? OFFSET_RING : OFFSET_AXIS;
-  const left = clamp(drag.nx * W + offset, W - pw);
-  const top = clamp(drag.ny * H - offset, H - ph);
 
   // Iterate the shorter of the two arrays so a (host-impossible but schema-allowed)
   // labels/values length mismatch can't render "NaN" silently.
@@ -76,7 +85,6 @@ export function ManipulatorReadout({
     <div
       ref={pillRef}
       className="pointer-events-none absolute left-0 top-0 z-10 flex items-center gap-1.5 rounded-sm bg-accent-soft px-2 py-1 text-xs font-medium text-accent tabular-nums"
-      style={{ transform: `translate(${left}px, ${top}px)` }}
       aria-hidden="true"
     >
       {text}

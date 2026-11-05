@@ -1,6 +1,7 @@
+// Exercises posed stack-drag presentation through the hook, without native pointer capture.
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { useStackReorder } from "../use-stack-reorder";
+import { useStackReorder, type StackReorder } from "../use-stack-reorder";
 
 // Minimal consumer of the hook: a flip-keyed <ul> + the portaled chip. Drives the
 // --record `pose` path. jsdom has no layout (getBoundingClientRect → 0), but the pose
@@ -8,7 +9,7 @@ import { useStackReorder } from "../use-stack-reorder";
 // which is exactly the deterministic "drag visual without events" the clip stills need.
 function Harness({ pose }: { pose: { from: number; gap: number } | null }) {
   const order = ["alpha", "bravo", "charlie"];
-  const api = useStackReorder({
+  const { listRef, chipNode }: StackReorder = useStackReorder({
     order,
     labelFor: (p) => p,
     onReorder: () => {},
@@ -17,14 +18,14 @@ function Harness({ pose }: { pose: { from: number; gap: number } | null }) {
   });
   return (
     <>
-      <ul ref={api.listRef}>
+      <ul ref={listRef}>
         {order.map((k) => (
           <li key={k} data-flip-key={k}>
             {k}
           </li>
         ))}
       </ul>
-      {api.chipNode}
+      {chipNode}
     </>
   );
 }

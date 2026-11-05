@@ -389,6 +389,16 @@ type MultiProps = {
 };
 
 // ─── Interactive overlay ─────────────────────────────
+type LayerInputs = Pick<
+  MultiProps,
+  "channels" | "displayRange" | "height" | "timeMax" | "timeMin" | "tracks" | "visibleChannels" | "width"
+>;
+type CachedLayers = {
+  inputs: LayerInputs | null;
+  cache: ReadonlyMap<string, CurveLayerCacheEntry>;
+  layers: CurveLayerModel[];
+};
+
 function MultiChannelCurves({
   tracks,
   channels,
@@ -494,9 +504,18 @@ function MultiChannelCurves({
   // per-channel scaling). The per-channel `range` we keep on each
   // layer is still the channel's OWN engine-allowed range — the
   // drag value-clamp downstream reads it from `focusLayer.range`.
-  const layerCacheRef = useRef<Map<string, CurveLayerCacheEntry>>(new Map());
-  const layers = useMemo<CurveLayerModel[]>(() => {
-    const nextCache = new Map<string, CurveLayerCacheEntry>();
+  const layerInputs: LayerInputs = useMemo(
+    (): LayerInputs => ({ channels, displayRange, height, timeMax, timeMin, tracks, visibleChannels, width }),
+    [channels, displayRange, height, timeMax, timeMin, tracks, visibleChannels, width],
+  );
+  const [cachedLayers, setCachedLayers] = useState<CachedLayers>((): CachedLayers => ({
+    inputs: null,
+    cache: new Map(),
+    layers: [],
+  }));
+  let layers: CurveLayerModel[] = cachedLayers.layers;
+  if (cachedLayers.inputs !== layerInputs) {
+    const nextCache: Map<string, CurveLayerCacheEntry> = new Map();
     const nextLayers: CurveLayerModel[] = [];
     for (const t of tracks ?? []) {
       const channel = channels.find((c) => c.trackName === t.name);
@@ -504,7 +523,7 @@ function MultiChannelCurves({
       if (!(visibleChannels[channel.id] ?? channel.defaultOn)) continue;
       const range = valueRangeForTrack(t);
       const projY = displayRange ?? range;
-      const prev = layerCacheRef.current.get(channel.id);
+      const prev: CurveLayerCacheEntry | undefined = cachedLayers.cache.get(channel.id);
       if (
         prev !== undefined &&
         prev.channel === channel &&
@@ -540,9 +559,9 @@ function MultiChannelCurves({
       });
       nextLayers.push(layer);
     }
-    layerCacheRef.current = nextCache;
-    return nextLayers;
-  }, [channels, displayRange, height, timeMax, timeMin, tracks, visibleChannels, width]);
+    setCachedLayers({ inputs: layerInputs, cache: nextCache, layers: nextLayers });
+    layers = nextLayers;
+  }
 
   // Locate the focus layer (when a focusChannel is set). Even when a
   // focus channel is set but its track isn't in `layers` (e.g. it's
@@ -555,20 +574,19 @@ function MultiChannelCurves({
   const focusReadOnly = focusLayer !== null && focusLayer.track.lockedTo != null;
 
   // ── Drag state. Held in refs so pointer-move handlers don't trigger
-  // a re-render on every pixel; setDragTick flushes a render when we
-  // need the dragged circle to track the cursor.
+  // a re-render on every pixel; snapshots publish the preview once per frame.
   const dragRef = useRef<CurveDragState | null>(null);
-  const [, setDragTick] = useState(0);
+  const [drag, setDrag] = useState<CurveDragState | null>(null);
   const dragFrameRef = useRef<number | null>(null);
   const scheduleDragTick = useCallback(() => {
     if (dragFrameRef.current !== null) return;
     if (typeof requestAnimationFrame !== "function") {
-      setDragTick((n) => n + 1);
+      setDrag(dragRef.current === null ? null : { ...dragRef.current });
       return;
     }
     dragFrameRef.current = requestAnimationFrame(() => {
       dragFrameRef.current = null;
-      setDragTick((n) => n + 1);
+      setDrag(dragRef.current === null ? null : { ...dragRef.current });
     });
   }, []);
   const flushDragTick = useCallback(() => {
@@ -576,7 +594,7 @@ function MultiChannelCurves({
       cancelAnimationFrame(dragFrameRef.current);
     }
     dragFrameRef.current = null;
-    setDragTick((n) => n + 1);
+    setDrag(dragRef.current === null ? null : { ...dragRef.current });
   }, []);
   useEffect(
     () => () => {
@@ -704,6 +722,7 @@ function MultiChannelCurves({
       groupDTime: 0,
       groupDValue: 0,
     };
+    setDrag({ ...dragRef.current });
     const t = event.currentTarget;
     if (typeof t.setPointerCapture === "function") {
       try {
@@ -1067,7 +1086,6 @@ function MultiChannelCurves({
 
   // Build the focus layer's render points, overriding the dragged
   // key's projected position so the circle tracks the cursor.
-  const drag = dragRef.current;
   const focusRenderPoints =
     focusLayer === null
       ? []

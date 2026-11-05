@@ -92,9 +92,7 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
   const feedbackPresence = usePresence(feedbackMessage !== null, PAUSED_EXIT_MS);
   // Keep the last text through the exit fade (message is already null then).
   const [lastFeedback, setLastFeedback] = useState("");
-  useEffect(() => {
-    if (feedbackMessage !== null) setLastFeedback(feedbackMessage);
-  }, [feedbackMessage]);
+  if (feedbackMessage !== null && lastFeedback !== feedbackMessage) setLastFeedback(feedbackMessage);
   useEffect(() => {
     if (feedbackMessage === null) return;
     const t = window.setTimeout(() => useStatusFeedback.getState().clear(feedbackEpoch), STATUS_FEEDBACK_CLEAR_MS);

@@ -25,7 +25,7 @@
 // a rejected request (native hard failure / mock not-implemented) is
 // caught and shown the same way. Only a full import closes the modal.
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { Bridge, EmitterTreeNode } from "@particle-editor/bridge-schema";
 import { Check, ChevronRight, File, Minus } from "lucide-react";
 import { Modal } from "@/components/Modal";
@@ -106,7 +106,9 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
 
   // Reset state whenever the modal opens fresh so a previous session
   // doesn't bleed in (a closed-then-reopened modal should start empty).
-  useEffect(() => {
+  const [previousOpen, setPreviousOpen] = useState<boolean>(open);
+  if (previousOpen !== open) {
+    setPreviousOpen(open);
     if (open) {
       setSourcePath(null);
       setTree(null);
@@ -117,7 +119,7 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
       setImporting(false);
       setActiveId(null);
     }
-  }, [open]);
+  }
 
   // All selectable ids (everything except the synthetic root id 0).
   const allIds = useMemo(() => {

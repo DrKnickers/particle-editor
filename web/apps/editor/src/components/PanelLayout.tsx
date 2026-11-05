@@ -219,7 +219,7 @@ export function PanelLayout({ bridge }: Props) {
   // Capture the dock's open/closed state AT MOUNT so the dock Panel's
   // initial defaultSize matches (mount collapsed when closed); toggles
   // after mount are driven imperatively via dockPanelRef.
-  const dockVisibleAtMount = useRef(dockVisible).current;
+  const [dockVisibleAtMount] = useState<boolean>(dockVisible);
   // [dock-mount fix] Closed at mount → fold the stored dock share into the
   // centre column so the Group's defaultLayout agrees with the dock Panel's
   // "0%" defaultSize (see collapseDockShare). The STORED blob is untouched —
@@ -518,11 +518,10 @@ export function PanelLayout({ bridge }: Props) {
   // pane mounted while the slot animates shut so it slides out instead of
   // popping, then clear it. Open/swap shows the new pane immediately.
   const [displayDock, setDisplayDock] = useState(dock);
+  if (dock !== null && displayDock !== dock) setDisplayDock(dock);
+  // Keep the closing pane mounted until the dock's CSS slide has finished.
   useEffect(() => {
-    if (dock !== null) {
-      setDisplayDock(dock);
-      return;
-    }
+    if (dock !== null) return;
     const t = setTimeout(() => setDisplayDock(null), 260);
     return () => clearTimeout(t);
   }, [dock]);

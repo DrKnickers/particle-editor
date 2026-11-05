@@ -58,7 +58,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { readBooleanPref, writeBooleanPref } from "@/lib/boolean-pref";
 import type { Bridge, InterpolationType, TrackDto, TrackName } from "@particle-editor/bridge-schema";
-import { CurveEditor, type CurveKeyboardNavAction, type CurveMarqueeHandle } from "@/screens/curve-editor/CurveEditor";
+import {
+  CurveEditor,
+  type ChannelDef,
+  type CurveKeyboardNavAction,
+  type CurveMarqueeHandle,
+} from "@/screens/curve-editor/CurveEditor";
 import { computeGroupMoves, valueRangeForTrack } from "@/lib/curve/curve-model";
 import type { SuppressedMove } from "@/lib/curve/use-curve-morph";
 import { isTypingTarget } from "@/lib/viewport-input";
@@ -252,6 +257,7 @@ export function CurveEditorPanel({ bridge }: Props) {
   // inFlightFor matches the pattern from the deleted EmitterPropertyPanel.
   useEffect(() => {
     if (selectedId === null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Tracks and their owner reset together with the guarded host-fetch lifecycle.
       setTracks(null);
       setTracksOwnerId(null);
       inFlightFor.current = null;
@@ -353,6 +359,7 @@ export function CurveEditorPanel({ bridge }: Props) {
   const [textureSize, setTextureSize] = useState<number>(1);
   useEffect(() => {
     if (selectedId === null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Atlas eligibility resets when there is no emitter for the asynchronous host query.
       setTextureSize(1);
       return;
     }
@@ -416,9 +423,7 @@ export function CurveEditorPanel({ bridge }: Props) {
 
   // Read-only mirror: never leave Insert active on a locked focus —
   // covers lock-while-insert AND focus-switch-onto-locked.
-  useEffect(() => {
-    if (focusLocked && mode === "insert") setMode("select");
-  }, [focusLocked, mode]);
+  if (focusLocked && mode === "insert") setMode("select");
 
   // Robustness: after a tree/changed refetch the engine's float32 key
   // times can land an ULP away from the times we optimistically put in
@@ -431,6 +436,7 @@ export function CurveEditorPanel({ bridge }: Props) {
   useEffect(() => {
     if (focusedTrack === null) return;
     const SNAP_EPS = 1e-3;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Reconcile optimistic key times with authoritative float32 host snapshots.
     setSelectedKeyTimes((prev) => {
       if (prev.size === 0) return prev;
       const keyTimes = focusedTrack.keys.map((k) => k.time);
@@ -551,14 +557,14 @@ export function CurveEditorPanel({ bridge }: Props) {
   // focus; if none are visible, leave focus where it is (the
   // placeholder branch covers it via the no-selection state, and
   // re-checking any channel restores focus).
-  useEffect(() => {
-    if (visible[focusChannel]) return;
-    const nextVisible = CHANNELS.find((c) => visible[c.id]);
-    if (nextVisible === undefined) return;
-    setFocusChannel(nextVisible.id);
-    setSelectedKeyTimes(new Set());
-    setOptimisticSelected(null);
-  }, [visible, focusChannel]);
+  if (!visible[focusChannel]) {
+    const nextVisible: ChannelDef | undefined = CHANNELS.find((c: ChannelDef): boolean => visible[c.id]);
+    if (nextVisible !== undefined) {
+      setFocusChannel(nextVisible.id);
+      setSelectedKeyTimes(new Set());
+      setOptimisticSelected(null);
+    }
+  }
 
   // Keep programmatic focus changes (keyboard navigation and --record
   // ui/focus-channel pushes) on-screen. A semantic record cursor resolves the

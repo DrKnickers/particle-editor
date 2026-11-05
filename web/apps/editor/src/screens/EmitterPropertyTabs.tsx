@@ -131,6 +131,7 @@ export function EmitterPropertyTabs({ bridge }: Props) {
 
   // Re-fetch on selection change.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Selection starts a guarded host request and synchronizes its loading and error lifecycle.
     fetchProps(selectedId);
   }, [fetchProps, selectedId, selection]);
 

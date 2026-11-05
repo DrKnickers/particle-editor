@@ -185,8 +185,11 @@ export function AtlasPickerPane({
   const registerHoverPreviewRedraw = useCallback((redraw: (() => void) | null) => {
     hoverPreviewRedrawRef.current = redraw;
   }, []);
-  bridgeRef.current = bridge;
-  stackRef.current = stack;
+  // In-flight assignment and preview callbacks use the latest committed host context.
+  useLayoutEffect((): void => {
+    bridgeRef.current = bridge;
+    stackRef.current = stack;
+  }, [bridge, stack]);
   useEffect(() => {
     emitterIdRef.current = emitterId;
   }, [emitterId]);
@@ -364,6 +367,7 @@ export function AtlasPickerPane({
 
   useEffect(() => {
     if (!eligible || tooLarge || !colorTexture) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Reset both preview modes as their asynchronous texture request lifecycle changes.
       setFlatPrev({ kind: "loading" });
       setRawPrev({ kind: "loading" });
       return;
@@ -486,6 +490,7 @@ export function AtlasPickerPane({
   const rawUri = rawPrev.kind === "ok" ? rawPrev.dataUri : null;
   useEffect(() => {
     if (!blendAlphaGated || !rawUri || side < 2) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Clear decoded canvas results when alpha sampling is unavailable.
       setDeadCells(EMPTY_DEAD_CELLS);
       return;
     }
@@ -569,6 +574,7 @@ export function AtlasPickerPane({
   // only when the emitter/texture/atlas changes.
   useEffect(() => {
     if (focusInGridRef.current) restoreFocusRef.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Reset the canvas keyboard cursor together with imperative hover and focus restoration.
     setFocusIndex(frame === null ? null : resolveFrame(frame, side));
     hoverRef.current = null;
     scheduleHoverPreviewRedraw();
@@ -677,8 +683,11 @@ export function AtlasPickerPane({
   // identity fixed while always invoking the current onCellClick (no stale
   // closure over frame/keyTimes/emitterId).
   const onCellClickRef = useRef(onCellClick);
-  onCellClickRef.current = onCellClick;
-  const stableCellClick = useRef((k: number) => onCellClickRef.current(k)).current;
+  // Keep the memoized grid callback current before browser input can arrive.
+  useLayoutEffect((): void => {
+    onCellClickRef.current = onCellClick;
+  });
+  const stableCellClick = useCallback((k: number): void => onCellClickRef.current(k), []);
 
   const totalCells = side * side;
   const fc = frameCount(textureSize);
@@ -999,7 +1008,8 @@ function PreviewBox({
   const placeholderRef = useRef<HTMLSpanElement | null>(null);
   const dataUri = preview.kind === "ok" ? preview.dataUri : null;
   const { imageRef: imgRef, imageReady: imgReady } = useDecodedImage(dataUri);
-  const displayFrame = hoverFrameRef.current ?? frame;
+  // Hover is painted before the browser draws; render uses only the selected frame.
+  const displayFrame: number | null = frame;
   const placeholderText =
     rawFrame === null
       ? "Hover or select a frame"
@@ -1043,7 +1053,7 @@ function PreviewBox({
 
   // (Re)draw when the image is ready, the keyboard/selection frame changes, or
   // the preview swaps. Hover redraws come through the registered rAF callback.
-  useEffect(() => {
+  useLayoutEffect((): void => {
     paintDisplay();
   }, [paintDisplay]);
 

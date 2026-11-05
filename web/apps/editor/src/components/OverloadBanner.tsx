@@ -136,12 +136,11 @@ export function OverloadBanner({ bridge }: { bridge: Bridge }) {
   // for the 150 ms fade — and the raw `refusal ?? latch` ternary would
   // fall through to the LATCH copy for the whole fade. While visible,
   // track the live choice; while exiting, render what was shown last.
-  // (Render-time ref write is safe: idempotent "last rendered value".)
-  const lastShownRef = useRef<RefusalState | null>(null);
-  if (visible) lastShownRef.current = refusal;
+  const [lastShown, setLastShown] = useState<RefusalState | null>(null);
+  if (visible && lastShown !== refusal) setLastShown(refusal);
   // A null frozen value is valid: it means the latch copy (not a refusal)
   // was on screen when the exit began, so the body renders the latch copy.
-  const shownRefusal = visible ? refusal : lastShownRef.current;
+  const shownRefusal: RefusalState | null = visible ? refusal : lastShown;
   const { mounted, state, onAnimationEnd } = usePresence(visible, SLOW_EXIT_MS);
   if (!mounted) return null;
   return <OverloadBannerBody state={state} onAnimationEnd={onAnimationEnd} refusal={shownRefusal} />;

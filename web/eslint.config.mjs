@@ -1,5 +1,5 @@
 // ESLint for the web workspace: the stock JS and TypeScript recommended rules plus the two
-// classic React hooks rules. Formatting is prettier's job (.prettierrc.json), not ESLint's.
+// classic React hooks rules and reviewed Compiler rules. Formatting belongs to prettier.
 import js from "@eslint/js";
 import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
@@ -10,8 +10,7 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    // Of the React Compiler rules in react-hooks 7, immutability, globals and purity are on.
-    // refs and set-state-in-effect stay off pending review: they flag ~100 existing sites.
+    // Enable reviewed React Compiler rules; imperative integrations document local exceptions.
     plugins: { "react-hooks": reactHooks },
     rules: {
       "react-hooks/rules-of-hooks": "error",
@@ -19,6 +18,8 @@ export default tseslint.config(
       "react-hooks/immutability": "error",
       "react-hooks/globals": "error",
       "react-hooks/purity": "error",
+      "react-hooks/refs": "error",
+      "react-hooks/set-state-in-effect": "error",
       "@typescript-eslint/no-explicit-any": "warn",
       // House conventions: a leading underscore marks a deliberately unused binding,
       // Playwright fixtures that need none are written `({}, testInfo)`, empty case labels

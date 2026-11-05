@@ -290,17 +290,14 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
   // Persist + validate the faction filter. Once the active content's faction
   // set is known, drop a saved faction that isn't present (e.g. after a mod switch)
   // so it can never filter the list to empty; otherwise persist the choice.
+  const resolvedFaction: string | null = ready ? resolveFaction(faction, factions) : faction;
+  if (resolvedFaction !== faction) setFaction(resolvedFaction);
   useEffect(() => {
     // Validate only once the list is READY (not merely "factions non-empty"): a mod
     // whose units carry no affiliation has an empty faction set, and a stale saved
     // faction must still be cleared there (otherwise the list filters to empty with
     // no chip to recover, since the chip row only renders when factions exist).
     if (!ready) return; // still loading -> keep the saved faction untouched
-    const resolved = resolveFaction(faction, factions);
-    if (resolved !== faction) {
-      setFaction(resolved);
-      return;
-    }
     savePickerState({ faction });
   }, [faction, factions, ready]);
 
@@ -378,11 +375,11 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
   }, [sections, collapsed, forceCollapsed, searching, name, known]);
 
   // Keep the active (tabbable) row valid as the visible set changes (search / collapse).
-  useEffect(() => {
-    if (rows.some((r) => r.key === activeKey)) return;
-    const selRow = name !== NONE ? rows.find((r) => r.kind === "leaf" && r.name === name) : undefined;
+  if (!rows.some((r: Row): boolean => r.key === activeKey)) {
+    const selRow: Row | undefined =
+      name !== NONE ? rows.find((r: Row): boolean => r.kind === "leaf" && r.name === name) : undefined;
     setActiveKey(selRow?.key ?? rows[0]?.key ?? "none");
-  }, [rows, activeKey, name]);
+  }
 
   // Force-open the ancestor groups of the active selection so a
   // selection persisted from a prior session (into a group the user had collapsed)
@@ -405,6 +402,7 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
                   ...(obj.dualEnv ? ["Ground", "Space"] : [domainKey]).map((d) => `buc:Projectiles/${d}`),
                 ]
               : [`sec:${domainKey}`, `buc:${domainKey}/${obj.bucket === "None" ? "Other" : obj.bucket}`];
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Reveal ancestors when the host's selected reference object or catalog changes.
     setCollapsed((prev) => {
       if (!keys.some((k) => prev.has(k))) return prev;
       const next = new Set(prev);
@@ -413,7 +411,7 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
     });
   }, [name, objects, ready]);
 
-  const setRowRef = (key: string) => (el: HTMLDivElement | null) => {
+  const setRowRef = (key: string, el: HTMLDivElement | null): void => {
     if (el) itemRefs.current.set(key, el);
     else itemRefs.current.delete(key);
   };
@@ -528,7 +526,7 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
         role="treeitem"
         aria-selected={selected}
         data-testid={`ref-unit:${n}`}
-        ref={setRowRef(rowKey)}
+        ref={(el: HTMLDivElement | null): void => setRowRef(rowKey, el)}
         tabIndex={activeKey === rowKey ? 0 : -1}
         onClick={(e) => {
           e.stopPropagation();
@@ -644,7 +642,7 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
               <div
                 role="treeitem"
                 aria-selected={name === NONE}
-                ref={setRowRef("none")}
+                ref={(el: HTMLDivElement | null): void => setRowRef("none", el)}
                 tabIndex={activeKey === "none" ? 0 : -1}
                 onClick={() => {
                   setActiveKey("none");
@@ -671,7 +669,7 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
                     role="treeitem"
                     aria-label={sec.label}
                     aria-expanded={openSec}
-                    ref={setRowRef(secKey)}
+                    ref={(el: HTMLDivElement | null): void => setRowRef(secKey, el)}
                     tabIndex={activeKey === secKey ? 0 : -1}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -698,7 +696,7 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
                               role="treeitem"
                               aria-label={b.ariaLabel ?? b.label}
                               aria-expanded={openBuc}
-                              ref={setRowRef(bk)}
+                              ref={(el: HTMLDivElement | null): void => setRowRef(bk, el)}
                               tabIndex={activeKey === bk ? 0 : -1}
                               onClick={(e) => {
                                 e.stopPropagation();

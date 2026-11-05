@@ -1,9 +1,10 @@
+// Owns mod-menu interaction and drag presentation; the host owns the active layer stack.
 import { Fragment, useEffect, useState } from "react";
 import * as Menubar from "@radix-ui/react-menubar";
 import { Check, ChevronRight, X, Layers, GripVertical, Search, Plus } from "lucide-react";
 import type { Bridge, LayerRef } from "@particle-editor/bridge-schema";
 import { cn } from "@/lib/utils";
-import { useStackReorder } from "@/lib/use-stack-reorder";
+import { useStackReorder, type StackReorder } from "@/lib/use-stack-reorder";
 import { useFileOpErrorStore } from "@/lib/file-op";
 import { runWhenIdle } from "@/lib/run-after-paint";
 import { moveItemToGap, refreshModStack } from "@/lib/mod-stack";
@@ -154,7 +155,7 @@ export function ModsMenu({ bridge, onMenuValueChange }: ModsMenuProps) {
   };
   // --record only: a posed (frozen) drag for the mod stack, driven by ui/pose-drag.
   const [posedStackDrag, setPosedStackDrag] = useState<{ from: number; gap: number } | null>(null);
-  const menuDrag = useStackReorder({
+  const { listRef, gap, dragIndex, gapHeight, dragging, startDrag, chipNode }: StackReorder = useStackReorder({
     order: stack,
     labelFor,
     onReorder: reorderStack,
@@ -217,7 +218,7 @@ export function ModsMenu({ bridge, onMenuValueChange }: ModsMenuProps) {
       aria-hidden
       role="presentation"
       className="pointer-events-none mx-0.5 rounded bg-accent-soft ring-1 ring-inset ring-accent"
-      style={{ height: `${menuDrag.gapHeight}px` }}
+      style={{ height: `${gapHeight}px` }}
     />
   );
 
@@ -234,16 +235,16 @@ export function ModsMenu({ bridge, onMenuValueChange }: ModsMenuProps) {
             // is live, so a drag that strays past the menu edge can't close it
             // mid-gesture (the designer's #1 risk for in-popover drag).
             onEscapeKeyDown={(e) => {
-              if (menuDrag.dragging) e.preventDefault();
+              if (dragging) e.preventDefault();
             }}
             onPointerDownOutside={(e) => {
-              if (menuDrag.dragging) e.preventDefault();
+              if (dragging) e.preventDefault();
             }}
             onFocusOutside={(e) => {
-              if (menuDrag.dragging) e.preventDefault();
+              if (dragging) e.preventDefault();
             }}
             onInteractOutside={(e) => {
-              if (menuDrag.dragging) e.preventDefault();
+              if (dragging) e.preventDefault();
             }}
           >
             {/* Active load order — the menu IS the editor: drag rows by the grip to
@@ -275,24 +276,20 @@ export function ModsMenu({ bridge, onMenuValueChange }: ModsMenuProps) {
               ) : (
                 <div className="flex gap-1.5">
                   <div className="my-0.5 w-[3px] shrink-0 rounded-[var(--radius-2xs)] bg-gradient-to-b from-accent via-accent-2 to-border-2" />
-                  <ul
-                    ref={menuDrag.listRef}
-                    className="flex min-w-0 flex-1 flex-col gap-[3px]"
-                    aria-label="Active load order"
-                  >
+                  <ul ref={listRef} className="flex min-w-0 flex-1 flex-col gap-[3px]" aria-label="Active load order">
                     {stack.map((p, i) => (
                       <Fragment key={p}>
-                        {menuDrag.gap === i && menuDrag.dragIndex !== null && menuGapSpacer}
+                        {gap === i && dragIndex !== null && menuGapSpacer}
                         <li
                           data-flip-key={p}
                           // Positional (not path) id: the host returns Windows
                           // backslash paths and eqPath doesn't normalize slashes, so a
                           // --record clip targets the row by index (testid:stack-row:<i>).
                           data-testid={`stack-row:${i}`}
-                          onPointerDown={menuDrag.startDrag(i)}
+                          onPointerDown={startDrag(i)}
                           className={cn(
                             "relative flex h-[var(--row-h)] touch-none select-none items-center gap-1.5 rounded-[var(--radius-sm)] border border-border-2 bg-bg-3 pl-1 pr-1 text-xs",
-                            menuDrag.dragIndex === i ? "cursor-grabbing opacity-40 saturate-50" : "cursor-grab",
+                            dragIndex === i ? "cursor-grabbing opacity-40 saturate-50" : "cursor-grab",
                           )}
                         >
                           <span className="flex w-3.5 shrink-0 items-center justify-center text-text-3" aria-hidden>
@@ -318,7 +315,7 @@ export function ModsMenu({ bridge, onMenuValueChange }: ModsMenuProps) {
                         </li>
                       </Fragment>
                     ))}
-                    {menuDrag.gap === stack.length && menuDrag.dragIndex !== null && menuGapSpacer}
+                    {gap === stack.length && dragIndex !== null && menuGapSpacer}
                   </ul>
                 </div>
               )}
@@ -432,7 +429,7 @@ export function ModsMenu({ bridge, onMenuValueChange }: ModsMenuProps) {
           </Menubar.Content>
         </Menubar.Portal>
       </Menubar.Menu>
-      {menuDrag.chipNode}
+      {chipNode}
 
       <LoadOrderDialog
         bridge={bridge}

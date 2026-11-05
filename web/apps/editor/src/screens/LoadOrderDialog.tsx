@@ -23,7 +23,7 @@ import { Modal } from "@/components/Modal";
 import { cn } from "@/lib/utils";
 import { IconButton } from "@/primitives/IconButton";
 import { Button } from "@/primitives/Button";
-import { useStackReorder } from "@/lib/use-stack-reorder";
+import { useStackReorder, type StackReorder } from "@/lib/use-stack-reorder";
 import { moveItemToGap, refreshModStack } from "@/lib/mod-stack";
 import { basename, eqPath } from "@/lib/paths";
 
@@ -71,7 +71,11 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
     });
 
   // Shared drag/glide engine (also powers the Mods dropdown's in-place reorder).
-  const drag = useStackReorder({ order, labelFor, onReorder: reorder });
+  const { listRef, gap, dragIndex, gapHeight, startDrag, chipNode, cancel }: StackReorder = useStackReorder({
+    order,
+    labelFor,
+    onReorder: reorder,
+  });
 
   const load = useCallback(() => {
     const generation = ++loadGeneration.current;
@@ -104,7 +108,8 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
   useEffect(() => {
     // Abort any interrupted drag on open/close (a row can unmount mid-drag if the
     // modal is dismissed before pointerup), then load the catalog + current stack.
-    drag.cancel();
+    cancel();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Opening or switching hosts restarts catalog loading alongside drag cancellation.
     setLoadState({ bridge, status: "loading" });
     setApplyError(null);
     setQuery("");
@@ -180,7 +185,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
       aria-hidden
       role="presentation"
       className="pointer-events-none mx-0.5 rounded bg-accent-soft ring-1 ring-inset ring-accent"
-      style={{ height: `${drag.gapHeight}px` }}
+      style={{ height: `${gapHeight}px` }}
     />
   );
 
@@ -304,16 +309,16 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
                     <div className="text-2xs text-text-3">Base game only — add mods from the left.</div>
                   </div>
                 ) : (
-                  <ul ref={drag.listRef} className="flex flex-col gap-[5px]" aria-label="Load order">
+                  <ul ref={listRef} className="flex flex-col gap-[5px]" aria-label="Load order">
                     {order.map((p, i) => (
                       <Fragment key={p}>
-                        {drag.gap === i && drag.dragIndex !== null && gapSpacer}
+                        {gap === i && dragIndex !== null && gapSpacer}
                         <li
                           data-flip-key={p}
-                          onPointerDown={drag.startDrag(i)}
+                          onPointerDown={startDrag(i)}
                           className={cn(
                             "relative flex h-[var(--row-h)] touch-none select-none items-center gap-[7px] rounded-[var(--radius-sm)] border border-border-2 bg-bg-3 pl-[5px] pr-1 text-xs",
-                            drag.dragIndex === i ? "cursor-grabbing opacity-40 saturate-50" : "cursor-grab",
+                            dragIndex === i ? "cursor-grabbing opacity-40 saturate-50" : "cursor-grab",
                           )}
                         >
                           <span className="flex w-[14px] shrink-0 items-center justify-center text-text-3" aria-hidden>
@@ -359,7 +364,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
                       </Fragment>
                     ))}
                     {/* end gap (insert after the last row) */}
-                    {drag.gap === order.length && drag.dragIndex !== null && gapSpacer}
+                    {gap === order.length && dragIndex !== null && gapSpacer}
                   </ul>
                 )}
 
@@ -388,7 +393,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
         </Modal.OkButton>
       </Modal.Footer>
 
-      {drag.chipNode}
+      {chipNode}
     </Modal>
   );
 }

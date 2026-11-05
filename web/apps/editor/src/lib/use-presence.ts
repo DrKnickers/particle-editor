@@ -22,6 +22,7 @@ export function usePresence(
 } {
   const [mounted, setMounted] = useState(visible);
   const timer = useRef<number | null>(null);
+  if (visible && !mounted) setMounted(true);
 
   useEffect(() => {
     if (visible) {
@@ -30,7 +31,6 @@ export function usePresence(
         window.clearTimeout(timer.current);
         timer.current = null;
       }
-      setMounted(true);
       return;
     }
     // Falling edge: let the exit animation play, then force-unmount.

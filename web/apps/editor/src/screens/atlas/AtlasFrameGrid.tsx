@@ -1,3 +1,4 @@
+// Owns canvas drawing and grid focus; atlas selection and layout come from the parent.
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { FocusEvent, KeyboardEvent, MouseEvent, RefObject } from "react";
 import { fitGridLayout } from "@/lib/atlas/atlas-grid";
@@ -14,7 +15,9 @@ type AtlasGridLayout = ReturnType<typeof fitGridLayout>;
 
 function useRenderCount(): number {
   const count = useRef(0);
+  // eslint-disable-next-line react-hooks/refs -- Diagnostic counts render attempts, including discarded renders; state would trigger another render.
   count.current += 1;
+  // eslint-disable-next-line react-hooks/refs -- Expose the diagnostic render-attempt count without scheduling another render.
   return count.current;
 }
 

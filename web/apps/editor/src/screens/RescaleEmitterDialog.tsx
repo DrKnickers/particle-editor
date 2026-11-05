@@ -7,7 +7,7 @@
 //
 // Driven by the `tree-context` atom.
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { Modal } from "@/components/Modal";
 import { Spinner } from "@/primitives/Spinner";
@@ -17,20 +17,24 @@ type Props = {
   bridge: Bridge;
 };
 
+const DEFAULT_SCALE_PERCENT = 100;
+
 export function RescaleEmitterDialog({ bridge }: Props) {
   const open = useTreeContextStore((s) => s.open === "rescale");
   const targetId = useTreeContextStore((s) => s.targetEmitterId);
   const close = useTreeContextStore((s) => s.close);
 
-  const [durationScale, setDurationScale] = useState(100);
-  const [sizeScale, setSizeScale] = useState(100);
+  const [durationScale, setDurationScale] = useState<number>(DEFAULT_SCALE_PERCENT);
+  const [sizeScale, setSizeScale] = useState<number>(DEFAULT_SCALE_PERCENT);
 
-  useEffect(() => {
+  const [previousOpen, setPreviousOpen] = useState<boolean>(open);
+  if (previousOpen !== open) {
+    setPreviousOpen(open);
     if (open) {
-      setDurationScale(100);
-      setSizeScale(100);
+      setDurationScale(DEFAULT_SCALE_PERCENT);
+      setSizeScale(DEFAULT_SCALE_PERCENT);
     }
-  }, [open]);
+  }
 
   const handleOk = () => {
     if (targetId === null) return;

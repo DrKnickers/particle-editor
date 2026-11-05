@@ -1,3 +1,4 @@
+// Owns the host-session warning and its bridge subscription, not preview recovery.
 import { useEffect, useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
@@ -5,8 +6,13 @@ import type { Bridge } from "@particle-editor/bridge-schema";
 // The host replays after page reload; bridges retain it for layout remounts.
 export function ViewportUnavailableNotice({ bridge }: { bridge: Bridge }) {
   const [reason, setReason] = useState<string | null>(null);
-  useEffect(() => {
+  const [previousBridge, setPreviousBridge] = useState<Bridge>(bridge);
+  if (previousBridge !== bridge) {
+    setPreviousBridge(bridge);
     setReason(null);
+  }
+  // The host replays session failures when this bridge subscription is attached.
+  useEffect(() => {
     return bridge.on("viewport/unavailable", (e) => setReason(e.payload.reason));
   }, [bridge]);
 

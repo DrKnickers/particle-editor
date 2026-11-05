@@ -19,7 +19,7 @@
 //     every keystroke, so typing doesn't spam the bridge.
 //   - density: row height override per call ("tight"=22px, "default"=26px, "loose"=32px).
 
-import { useEffect, useRef, useState, useCallback, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, type KeyboardEvent } from "react";
 import { cn } from "@/lib/utils";
 
 export type SpinnerDensity = "tight" | "default" | "loose";
@@ -157,7 +157,6 @@ export function Spinner({
   // Latest `value` prop, readable from event-handler closures (wheel/scrub/hold)
   // without re-binding them every render.
   const valueRef = useRef(value);
-  valueRef.current = value;
   // Latest `onChange` prop, readable from the scrub/hold document listeners that
   // are bound ONCE at mousedown. Without this, a continuous gesture keeps firing
   // the onChange captured at press time; when the consumer recreates its handler
@@ -165,7 +164,11 @@ export function Spinner({
   // gesture carries a stale closure and diverges after the first tick.
   // The wheel handler already does this via wheelDepsRef.
   const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
+  // Document listeners must observe the latest committed controlled value and handler.
+  useLayoutEffect((): void => {
+    valueRef.current = value;
+    onChangeRef.current = onChange;
+  }, [value, onChange]);
   // Optimistic-echo guard. When the field emits a new value via onChange, the
   // controlled `value` prop can lag before it reflects it — a bridge-backed
   // caller (the reference-object transform) round-trips through the host and
@@ -266,7 +269,10 @@ export function Spinner({
   // the listener doesn't need to be re-bound on every render.
   const wrapRef = useRef<HTMLDivElement>(null);
   const wheelDepsRef = useRef({ value, min, max, step, stepIsWhole, disabled, onChange, fmt });
-  wheelDepsRef.current = { value, min, max, step, stepIsWhole, disabled, onChange, fmt };
+  // The native wheel listener stays attached while its controlled inputs change.
+  useLayoutEffect((): void => {
+    wheelDepsRef.current = { value, min, max, step, stepIsWhole, disabled, onChange, fmt };
+  }, [value, min, max, step, stepIsWhole, disabled, onChange, fmt]);
   useEffect(() => {
     const el = wrapRef.current;
     if (el === null) return;

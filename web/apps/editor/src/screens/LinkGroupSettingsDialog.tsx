@@ -263,6 +263,7 @@ export function LinkGroupSettingsDialog({ bridge }: Props) {
   // through the link-group settings surface) are reflected immediately.
   useEffect(() => {
     if (!open || groupId === null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Loading state belongs to the guarded host exemption request lifecycle.
       setState({ kind: "loading" });
       return;
     }
@@ -293,6 +294,7 @@ export function LinkGroupSettingsDialog({ bridge }: Props) {
   // set changes — `state` is a fresh object on every toggle.
   useEffect(() => {
     if (!open || groupId === null || state.kind !== "loaded") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Discard host conflict previews when there is no loaded exemption proposal.
       setConflicts([]);
       return;
     }

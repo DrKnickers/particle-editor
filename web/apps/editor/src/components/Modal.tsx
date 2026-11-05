@@ -100,6 +100,7 @@ export function Modal({ bridge, open, onOpenChange, title, size = "md", children
 
   useEffect(() => {
     if (!open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Snapshot readiness follows viewport capture and its DOM-dependent fallback, not open alone.
       setSnapshotReady(false);
       return;
     }
@@ -133,6 +134,7 @@ export function Modal({ bridge, open, onOpenChange, title, size = "md", children
     // snapshot, so none is requested (the effect above opened the dialog).
     const el = document.querySelector<HTMLElement>(QUADRANT_VIEWPORT);
     if (!el) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- The portal target is a live viewport DOM node resolved after mount.
     setViewportEl(el);
 
     let cancelled = false;

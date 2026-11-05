@@ -1,3 +1,4 @@
+// Owns property-field presentation and text drafts; callers own committed emitter values.
 import { useCallback, useId, useRef, useState } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
 import { FolderOpen, LayoutGrid } from "lucide-react";
@@ -173,15 +174,15 @@ export function FieldText({
   // Local text state so the user can type freely; commit on blur or
   // Enter to avoid per-keystroke bridge spam.
   const [text, setText] = useState(value);
-  const lastProp = useRef(value);
-  // Whether the user has typed since the last blur/Escape. Gates both the
-  // prop sync (never clobber an in-progress draft) and the blur commit (an
-  // untouched or cancelled field commits nothing).
+  const [lastProp, setLastProp] = useState<string>(value);
+  const [isDirty, setIsDirty] = useState(false);
+  // State protects the draft during prop sync; the ref also cancels blur
+  // synchronously on Escape, before React can render the cleared dirty state.
   const dirtyRef = useRef(false);
   // Sync from prop when external value changes (and we're not editing).
-  if (lastProp.current !== value) {
-    lastProp.current = value;
-    if (!dirtyRef.current) setText(value);
+  if (lastProp !== value) {
+    setLastProp(value);
+    if (!isDirty) setText(value);
   }
   const input = (
     <input
@@ -189,11 +190,13 @@ export function FieldText({
       value={text}
       onChange={(e) => {
         dirtyRef.current = true;
+        setIsDirty(true);
         setText(e.target.value);
       }}
       onBlur={() => {
         if (dirtyRef.current && text !== value) onCommit(text);
         dirtyRef.current = false;
+        setIsDirty(false);
       }}
       onKeyDown={(e) => {
         if (e.key === "Enter") {
@@ -202,6 +205,7 @@ export function FieldText({
           // Clear dirty BEFORE blur: this render's onBlur closure still holds
           // the edited text, so it must see the field as cancelled.
           dirtyRef.current = false;
+          setIsDirty(false);
           setText(value);
           (e.currentTarget as HTMLInputElement).blur();
         }
