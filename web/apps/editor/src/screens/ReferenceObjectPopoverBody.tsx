@@ -374,6 +374,7 @@ export function ReferenceObjectPopoverBody({ bridge }: BodyProps) {
       }
     }
     return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isOpen is a per-render closure over collapsed/forceCollapsed/searching, which are listed
   }, [sections, collapsed, forceCollapsed, searching, name, known]);
 
   // Keep the active (tabbable) row valid as the visible set changes (search / collapse).

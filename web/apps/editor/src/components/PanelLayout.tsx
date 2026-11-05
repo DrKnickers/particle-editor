@@ -511,6 +511,7 @@ export function PanelLayout({ bridge }: Props) {
       useDockAnim.getState().setAnimating(false);
       setDockAnimating(false);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `dock` only tags an opening slide for the atlas gate; a pane swap while open must not re-run (its cleanup would cancel an in-flight slide)
   }, [dockVisible, dockPanelRef, bridge, storedDockSharePct]);
 
   // The content shown in the dock slot LAGS `dock` on close: keep the last

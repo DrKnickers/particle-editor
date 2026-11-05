@@ -143,7 +143,8 @@ export function useStackReorder(opts: {
     // whose identity consumers churn every render (that would loop: setState → re-render →
     // re-fire). The string key re-runs the pose once the stack CONTENT settles — e.g. after
     // refreshModsList() updates the rows — so a pose fired before the refresh isn't stuck on
-    // the stale/out-of-range guard.
+    // the stale/out-of-range guard. getSC/labelFor are read at pose time only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on primitives by design (see above)
   }, [pose?.from, pose?.gap, pose ? order.join("\u0000") : ""]);
 
   const startDrag = (from: number) => (e: React.PointerEvent<HTMLElement>) => {
@@ -356,6 +357,7 @@ export function useStackReorder(opts: {
       el.style.transition = `transform ${durationMs}ms ease`;
       el.style.transform = "";
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `pose` only picks the glide duration; a pose change moves rows via gap/dragIndex, which are listed
   }, [order, gap, dragIndex, recording]);
 
   const chipNode = chip

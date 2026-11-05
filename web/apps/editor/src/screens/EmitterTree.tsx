@@ -241,7 +241,7 @@ export function EmitterTree({ bridge }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [bridge]);
+  }, [bridge, setTree]);
 
   // Initial fetch + tree-changed subscription.
   useEffect(() => {
@@ -306,6 +306,7 @@ export function EmitterTree({ bridge }: Props) {
   // render and the shift-click range computation.
   const flatRows = useMemo(() => flattenTree(tree), [tree]);
   const orderedIds = useMemo(() => flatRows.map((r) => r.node.id), [flatRows]);
+  const { treeScrollRef, marqueeBox, handleScrollPointerDown } = useEmitterMarquee({ orderedIds });
 
   // [glide] FLIP pass: whenever the rendered layout changes — a reorder
   // commit (drag drop, Move Up/Down, delete, paste) OR the make-room gap
@@ -462,7 +463,7 @@ export function EmitterTree({ bridge }: Props) {
       el.style.transition = `transform ${durationMs}ms ease`;
       el.style.transform = "";
     }
-  }, [flatRows, draggingId, indicator, recording]);
+  }, [flatRows, draggingId, indicator, recording, treeScrollRef]);
 
   // Subscribe to menu-driven rename
   // requests. The MenuBar's "Rename Emitter" item writes the target
@@ -900,8 +901,6 @@ export function EmitterTree({ bridge }: Props) {
     },
     [flatRows, bridge],
   );
-
-  const { treeScrollRef, marqueeBox, handleScrollPointerDown } = useEmitterMarquee({ orderedIds });
 
   // ── keyboard handler ─────────────────────────────────
   //

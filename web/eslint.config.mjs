@@ -10,12 +10,15 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    // The React Compiler rules in react-hooks 7 (refs, set-state-in-effect, ...) are left off
-    // until the code is reviewed against them; these two catch real hook bugs today.
+    // Of the React Compiler rules in react-hooks 7, immutability, globals and purity are on.
+    // refs and set-state-in-effect stay off pending review: they flag ~100 existing sites.
     plugins: { "react-hooks": reactHooks },
     rules: {
       "react-hooks/rules-of-hooks": "error",
-      "react-hooks/exhaustive-deps": "warn",
+      "react-hooks/exhaustive-deps": "error",
+      "react-hooks/immutability": "error",
+      "react-hooks/globals": "error",
+      "react-hooks/purity": "error",
       "@typescript-eslint/no-explicit-any": "warn",
       // House conventions: a leading underscore marks a deliberately unused binding,
       // Playwright fixtures that need none are written `({}, testInfo)`, empty case labels

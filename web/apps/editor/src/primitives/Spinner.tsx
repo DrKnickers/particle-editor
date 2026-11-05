@@ -112,7 +112,7 @@ export function Spinner({
   // field can show 2dp yet still nudge by whole units (e.g. angles step
   // 1° but display 45.00).
   const dp = decimals ?? 2;
-  const fmt = (v: number) => v.toFixed(dp);
+  const fmt = useCallback((v: number): string => v.toFixed(dp), [dp]);
   // Wheel/keyboard "is this an integer-grained field?" test, derived from
   // `step` (NOT from `dp`). A whole-number step (≥1) nudges by 1 per wheel
   // notch; a fractional step nudges by 0.1. This matches the legacy

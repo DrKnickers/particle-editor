@@ -88,7 +88,9 @@ describe("AutosaveRecoveryView", () => {
   });
 
   it("null orphan → dialog closed (no buttons)", () => {
-    render(<AutosaveRecoveryView bridge={viewBridge} orphan={null} onChoose={vi.fn()} onDismiss={vi.fn()} />);
+    render(
+      <AutosaveRecoveryView bridge={viewBridge} orphan={null} nowMs={NOW} onChoose={vi.fn()} onDismiss={vi.fn()} />,
+    );
     expect(screen.queryByTestId("autosave-restore-recent")).toBeNull();
   });
 

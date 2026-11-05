@@ -109,7 +109,20 @@ export const AtlasFrameGrid = memo(function AtlasFrameGrid({
       deadCells,
       focusVisible: focused,
     });
-  }, [imageReady, okPreview, cols, cell, side, totalCells, highlight, rovingTarget, deadCells, focused, themeRev]);
+  }, [
+    imageRef,
+    imageReady,
+    okPreview,
+    cols,
+    cell,
+    side,
+    totalCells,
+    highlight,
+    rovingTarget,
+    deadCells,
+    focused,
+    themeRev,
+  ]);
 
   // Hit-test: map a pointer position to a frame index, or null when the point is
   // outside the grid or lands in an inter-cell gap.

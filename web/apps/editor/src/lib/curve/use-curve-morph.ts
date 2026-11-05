@@ -434,10 +434,56 @@ export function useCurveMorph(args: {
     typeof window.matchMedia === "function" &&
     !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+  // ─── rAF loop ────────────────────────────────────────────────────────
+
+  function ensureLoop(): void {
+    if (raf.current) return; // already running
+    const tick = (now: number) => {
+      let any = false;
+      const dims = dimsRef.current;
+      for (const [id, j] of jobs.current) {
+        const p = Math.min(1, (now - j.start) / MORPH_MS);
+        const e = easeOutCubic(p);
+        j.lastE = e;
+        drawJob(j, e, dims, timeMin, timeMax);
+        if (p < 1) {
+          any = true;
+        } else {
+          jobs.current.delete(id);
+        }
+      }
+      if (any) {
+        raf.current = requestAnimationFrame(tick);
+      } else {
+        finish();
+      }
+    };
+    raf.current = requestAnimationFrame(tick);
+    // Note: the fallback deadline is NOT set here. It is set (and refreshed)
+    // in the anyStarted block of the classification effect, so it always
+    // reflects the most-recent (re)start time. ensureLoop() only starts the
+    // rAF; the leak-guard is owned by the caller.
+  }
+
+  function finish(): void {
+    cancelAnimationFrame(raf.current);
+    raf.current = 0;
+    if (fallback.current !== null) {
+      clearTimeout(fallback.current);
+      fallback.current = null;
+    }
+    // Update React state: activeIds = [] when all jobs are done,
+    // or the remaining set if some jobs are still running (shouldn't
+    // happen from finish(), but be defensive).
+    setActiveIds(Array.from(jobs.current.keys()));
+  }
+
   // ─── Classify + start/retarget jobs on every render ──────────────────
   // This effect runs every render (no deps array) so it picks up every
   // tracks-prop change. It is cheap when nothing changed: classify() is
-  // O(n_keys) with an early return on "none".
+  // O(n_keys) with an early return on "none". setActiveIds only fires when a
+  // job starts, so the every-render run cannot loop.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately dep-less: it diffs against `prev` itself
   useEffect(() => {
     const next = new Map<string, { track: TrackDto; vMin: number; vMax: number }>();
     let anyStarted = false;
@@ -557,50 +603,6 @@ export function useCurveMorph(args: {
     // channel-disappearance prune above if the emitter switched.
   });
 
-  // ─── rAF loop ────────────────────────────────────────────────────────
-
-  function ensureLoop(): void {
-    if (raf.current) return; // already running
-    const tick = (now: number) => {
-      let any = false;
-      const dims = dimsRef.current;
-      for (const [id, j] of jobs.current) {
-        const p = Math.min(1, (now - j.start) / MORPH_MS);
-        const e = easeOutCubic(p);
-        j.lastE = e;
-        drawJob(j, e, dims, timeMin, timeMax);
-        if (p < 1) {
-          any = true;
-        } else {
-          jobs.current.delete(id);
-        }
-      }
-      if (any) {
-        raf.current = requestAnimationFrame(tick);
-      } else {
-        finish();
-      }
-    };
-    raf.current = requestAnimationFrame(tick);
-    // Note: the fallback deadline is NOT set here. It is set (and refreshed)
-    // in the anyStarted block of the classification effect, so it always
-    // reflects the most-recent (re)start time. ensureLoop() only starts the
-    // rAF; the leak-guard is owned by the caller.
-  }
-
-  function finish(): void {
-    cancelAnimationFrame(raf.current);
-    raf.current = 0;
-    if (fallback.current !== null) {
-      clearTimeout(fallback.current);
-      fallback.current = null;
-    }
-    // Update React state: activeIds = [] when all jobs are done,
-    // or the remaining set if some jobs are still running (shouldn't
-    // happen from finish(), but be defensive).
-    setActiveIds(Array.from(jobs.current.keys()));
-  }
-
   // Synchronous first frame (no empty-overlay flash).
   // Runs post-commit, pre-paint, whenever activeIds changes (i.e. when a
   // new overlay <g> has just been mounted by React). Draws e≈0 immediately
@@ -614,6 +616,7 @@ export function useCurveMorph(args: {
       const e = easeOutCubic(Math.min(1, (now - j.start) / MORPH_MS));
       drawJob(j, e, { width, height }, timeMin, timeMax);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- first-frame draw for a newly mounted overlay only; resizes are redrawn by the rAF loop
   }, [activeIds]); // drawJob/dims read fresh
 
   // Cleanup on unmount.

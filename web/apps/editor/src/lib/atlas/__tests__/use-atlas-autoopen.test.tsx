@@ -19,7 +19,10 @@ beforeEach(() => {
 // context publish does NOT re-render the component (the self-feedback fix).
 let renders = 0;
 function CountingHost({ atlasEligible }: { atlasEligible: boolean }) {
-  renders += 1;
+  // Counted in an every-commit effect, not the render body: render must stay pure.
+  useEffect(() => {
+    renders += 1;
+  });
   useAtlasAutoOpen({ atlasEligible });
   return null;
 }

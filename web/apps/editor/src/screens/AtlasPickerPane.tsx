@@ -473,6 +473,7 @@ export function AtlasPickerPane({
       live = false;
       cancelInactive();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- blendAlphaGated only orders the two loads (see above)
   }, [colorTexture, eligible, previewInputKey, tooLarge]);
 
   // Dead-cell detection: once the alpha-mode preview (rawPrev) resolves, sample it off an
@@ -565,13 +566,13 @@ export function AtlasPickerPane({
   // On emitter / texture / atlas-size change, reset the keyboard cursor to the
   // (resolved) assigned frame and clear hover. Intentionally NOT keyed on
   // `frame` — the cursor should persist across key-selection changes, resetting
-  // only when the emitter/texture/atlas changes. (This project has no ESLint, so
-  // no exhaustive-deps directive is needed.)
+  // only when the emitter/texture/atlas changes.
   useEffect(() => {
     if (focusInGridRef.current) restoreFocusRef.current = true;
     setFocusIndex(frame === null ? null : resolveFrame(frame, side));
     hoverRef.current = null;
     scheduleHoverPreviewRedraw();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `frame` deliberately omitted (see above)
   }, [emitterId, colorTexture, scheduleHoverPreviewRedraw, side]);
 
   // ── derived display values ────────────────────────────────────────────────
@@ -756,6 +757,7 @@ export function AtlasPickerPane({
     if (!restoreFocusRef.current) return;
     restoreFocusRef.current = false;
     focusCell(rovingTarget);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- focusCell is a per-render closure reading the current layout; it is not a trigger
   }, [rovingTarget, colorTexture, side]);
 
   function moveTo(next: number) {
@@ -775,6 +777,7 @@ export function AtlasPickerPane({
     if (pending === null) return;
     kbFocusPendingRef.current = null;
     focusCell(pending);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- focusCell is a per-render closure reading the current layout; it is not a trigger
   }, [rovingTarget]);
 
   function onGridKeyDown(e: React.KeyboardEvent<HTMLElement>) {
@@ -1028,7 +1031,7 @@ function PreviewBox({
     const img = imgRef.current;
     if (!canvas || !img || !imgReady || !canDraw) return;
     drawHero(canvas, img, nextFrame, side);
-  }, [frame, hoverFrameRef, imgReady, placeholderText, preview.kind, side, total]);
+  }, [frame, hoverFrameRef, imgRef, imgReady, placeholderText, preview.kind, side, total]);
 
   // The parent owns hover as a ref and schedules one redraw per frame. This
   // callback gives that scheduler an imperative, latest-value-wins paint target

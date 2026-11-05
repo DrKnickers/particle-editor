@@ -46,8 +46,9 @@ type ViewProps = {
   bridge: Bridge;
   /** The orphan to offer, or null to keep the dialog closed. */
   orphan: AutosaveOrphan | null;
-  /** Current time for age rendering. Injectable for deterministic tests. */
-  nowMs?: number;
+  /** Reference time for the age text. Passed in (never read during render) so
+   *  rendering stays pure and tests / the demo route are deterministic. */
+  nowMs: number;
   /** A choice button was clicked. */
   onChoose: (choice: RecoverChoice) => void;
   /** Dismissed without choosing (Esc / overlay / X) — "decide later". */
@@ -60,7 +61,6 @@ type ViewProps = {
 /** Pure presentation. Renders the 3-state recovery prompt for the tiers the
  *  orphan carries (both → 3 buttons; single tier → restore + discard). */
 export function AutosaveRecoveryView({ bridge, orphan, nowMs, onChoose, onDismiss, error }: ViewProps) {
-  const now = nowMs ?? Date.now();
   const hasRecent = orphan != null && orphan.recentMtimeMs != null;
   const hasStable = orphan != null && orphan.stableMtimeMs != null;
   const original = orphan == null || orphan.originalFilename === "" ? "Unsaved new file" : orphan.originalFilename;
@@ -90,13 +90,13 @@ export function AutosaveRecoveryView({ bridge, orphan, nowMs, onChoose, onDismis
               {hasRecent && (
                 <li>
                   Most recent autosave —{" "}
-                  <span data-testid="autosave-recent-age">{formatAutosaveAge(orphan.recentMtimeMs!, now)}</span>
+                  <span data-testid="autosave-recent-age">{formatAutosaveAge(orphan.recentMtimeMs!, nowMs)}</span>
                 </li>
               )}
               {hasStable && (
                 <li>
                   Stable backup —{" "}
-                  <span data-testid="autosave-stable-age">{formatAutosaveAge(orphan.stableMtimeMs!, now)}</span>
+                  <span data-testid="autosave-stable-age">{formatAutosaveAge(orphan.stableMtimeMs!, nowMs)}</span>
                 </li>
               )}
             </ul>
@@ -139,13 +139,18 @@ type Props = { bridge: Bridge };
  *  no orphan (the common case, and always so under the mock / --test-host). */
 export function AutosaveRecoveryDialog({ bridge }: Props) {
   const [orphan, setOrphan] = useState<AutosaveOrphan | null>(null);
+  // When the orphan was found: the ages read "as of the prompt" rather than
+  // drifting on each re-render (and render stays free of Date.now()).
+  const [foundAtMs, setFoundAtMs] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     void bridge
       .request({ kind: "autosave/check-recovery", params: {} })
       .then((r) => {
-        if (!cancelled && r.orphan) setOrphan(r.orphan);
+        if (cancelled || !r.orphan) return;
+        setFoundAtMs(Date.now());
+        setOrphan(r.orphan);
       })
       .catch(() => {
         /* best-effort — no recovery prompt on failure */
@@ -186,6 +191,13 @@ export function AutosaveRecoveryDialog({ bridge }: Props) {
   const dismiss = () => setOrphan(null);
 
   return (
-    <AutosaveRecoveryView bridge={bridge} orphan={orphan} onChoose={choose} onDismiss={dismiss} error={recoverError} />
+    <AutosaveRecoveryView
+      bridge={bridge}
+      orphan={orphan}
+      nowMs={foundAtMs}
+      onChoose={choose}
+      onDismiss={dismiss}
+      error={recoverError}
+    />
   );
 }

@@ -45,6 +45,7 @@ export function useEmitterRename({ bridge, restoreFocus }: UseEmitterRenameOptio
     lastEditIdRef.current = null;
     if (document.activeElement !== document.body) return;
     restoreFocus(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs on edit transitions only; restoreFocus is the caller's per-render closure
   }, [editing]);
 
   const beginEdit = useCallback((id: number, currentName: string) => {

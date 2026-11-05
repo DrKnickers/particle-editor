@@ -764,7 +764,7 @@ export function CurveEditorPanel({ bridge }: Props) {
           /* silent */
         });
     },
-    [bridge, selectedId, focusLocked, focusedChannel.trackName],
+    [bridge, selectedId, focusLocked, focusedChannel.trackName, stillScoped],
   );
 
   // Delete — filters border keys + fires bridge call.
@@ -788,7 +788,7 @@ export function CurveEditorPanel({ bridge }: Props) {
       .catch(() => {
         /* silent */
       });
-  }, [bridge, selectedId, focusLocked, focusedChannel.trackName, selectedKeyTimes, borderKeyTimes]);
+  }, [bridge, selectedId, focusLocked, focusedChannel.trackName, selectedKeyTimes, borderKeyTimes, stillScoped]);
 
   const handleInterpolationClick = useCallback(
     (kind: InterpolationType) => {
@@ -1386,7 +1386,7 @@ export function CurveEditorPanel({ bridge }: Props) {
       .catch(() => {
         /* refused paste leaves the selection cleared */
       });
-  }, [bridge, selectedId, focusLocked, focusedChannel.trackName]);
+  }, [bridge, selectedId, focusLocked, focusedChannel.trackName, stillScoped]);
 
   // Window-scoped Ctrl/Cmd + C / X / V. Window-scoped (not panel-focus-
   // scoped) because clicking an SVG key never moves DOM focus into the

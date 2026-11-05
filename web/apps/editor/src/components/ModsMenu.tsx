@@ -174,6 +174,7 @@ export function ModsMenu({ bridge, onMenuValueChange }: ModsMenuProps) {
       cancelled = true;
       cancelModsSeed();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshModsList is a per-render closure over bridge; re-prime only when the bridge changes
   }, [bridge]);
 
   useHostMessage("ui/open-picker", (msg) => {
