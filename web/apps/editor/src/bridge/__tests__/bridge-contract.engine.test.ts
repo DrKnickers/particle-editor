@@ -3,6 +3,7 @@
 // request is exercised end-to-end: request → store mutation → event →
 // follow-up read, keeping the schema and the MockBridge implementation honest.
 
+import type { Request } from "@particle-editor/bridge-schema";
 import { describe, it, expect, beforeEach } from "vitest";
 import { MockBridge } from "../mock";
 import { makeMockBridgeWithListener } from "@/test/mock-bridge";
@@ -125,9 +126,9 @@ describe("MockBridge contract — engine/* and settings/*", () => {
     ["engine/set/paused", { paused: true }, "paused", true],
   ] as const)("%s mutates the snapshot", async (kind, params, field, expected) => {
     const b = new MockBridge();
-    await b.request({ kind, params } as any);
+    await b.request({ kind, params } as Request);
     const s = await b.request({ kind: "engine/state/snapshot", params: {} });
-    expect((s as any)[field]).toEqual(expected);
+    expect(s[field]).toEqual(expected);
   });
 
   it("engine/set/ground-slot-custom-path writes one slot in-place", async () => {

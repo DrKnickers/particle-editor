@@ -1,3 +1,5 @@
+// Tests title-bar rendering and bridge commands; native window management is outside this suite.
+import type { Bridge } from "@particle-editor/bridge-schema";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render as rtlRender, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import * as Tooltip from "@radix-ui/react-tooltip";
@@ -110,8 +112,7 @@ describe("TitleBar", () => {
 
   it("swallows a rejected window command (a real-host failure is not an unhandled rejection)", async () => {
     const request = vi.fn().mockRejectedValue(new Error("host said no"));
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const bridge = { request, on: vi.fn(() => () => {}) } as any;
+    const bridge = { request, on: vi.fn(() => () => {}) } satisfies Bridge;
     render(<TitleBar bridge={bridge} currentFilePath={null} dirty={false} />);
     fireEvent.click(screen.getByLabelText("Minimize"));
     await Promise.resolve(); // flush the .catch — must not throw
@@ -120,8 +121,7 @@ describe("TitleBar", () => {
 
   it("unsubscribes from window/state on unmount", () => {
     const off = vi.fn();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const bridge = { request: vi.fn().mockResolvedValue({ ok: true }), on: vi.fn(() => off) } as any;
+    const bridge = { request: vi.fn().mockResolvedValue({ ok: true }), on: vi.fn(() => off) } satisfies Bridge;
     const { unmount } = render(<TitleBar bridge={bridge} currentFilePath={null} dirty={false} />);
     expect(bridge.on).toHaveBeenCalledWith("window/state", expect.any(Function));
     unmount();

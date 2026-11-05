@@ -36,13 +36,14 @@ if (!Element.prototype.scrollIntoView) {
 // jsdom doesn't implement window.PointerEvent fully. Radix Select uses
 // pointer events for its interaction model. Provide a basic stub.
 if (!globalThis.PointerEvent) {
-  (globalThis as any).PointerEvent = class PointerEvent extends MouseEvent {
+  const PointerEventStub = class PointerEvent extends MouseEvent {
     public pointerId: number;
     constructor(type: string, params: PointerEventInit = {}) {
       super(type, params);
       this.pointerId = params.pointerId ?? 1;
     }
   };
+  globalThis.PointerEvent = PointerEventStub as typeof PointerEvent;
 }
 
 // HTMLElement.prototype.hasPointerCapture / setPointerCapture —
@@ -73,11 +74,11 @@ if (typeof HTMLCanvasElement !== "undefined") {
 // suites assert post-startup state without flushing. Tests that specifically
 // assert the DEFERRAL override these with a controllable queue + flush.
 if (typeof globalThis.requestIdleCallback === "undefined") {
-  (globalThis as any).requestIdleCallback = (cb: (d?: unknown) => void) => {
+  globalThis.requestIdleCallback = (cb: IdleRequestCallback): number => {
     cb({ didTimeout: false, timeRemaining: () => 0 });
     return 0;
   };
-  (globalThis as any).cancelIdleCallback = () => {};
+  globalThis.cancelIdleCallback = (): void => {};
 }
 
 // jsdom in this config doesn't expose window.localStorage. Stub it with

@@ -23,11 +23,11 @@ beforeEach(() => {
   idleQueue = [];
   origRIC = globalThis.requestIdleCallback;
   origCIC = globalThis.cancelIdleCallback;
-  (globalThis as any).requestIdleCallback = (cb: () => void) => {
-    idleQueue.push(cb);
+  globalThis.requestIdleCallback = (cb: IdleRequestCallback): number => {
+    idleQueue.push((): void => cb({ didTimeout: false, timeRemaining: (): number => 0 }));
     return idleQueue.length; // 1-based id
   };
-  (globalThis as any).cancelIdleCallback = (id: number) => {
+  globalThis.cancelIdleCallback = (id: number): void => {
     idleQueue[id - 1] = () => {};
   };
 });

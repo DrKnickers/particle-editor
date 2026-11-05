@@ -1,7 +1,10 @@
+// Tests emitter selection across reorder requests; native tree mutations are supplied by fake responses.
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { moveEmitters, duplicateEmitters, reorderManyEmitters } from "@/lib/tree/emitter-reorder";
 import { useEmitterSelectionStore } from "@/lib/tree/emitter-selection";
-import type { Bridge } from "@particle-editor/bridge-schema";
+import type { Bridge, EmitterTreeNode } from "@particle-editor/bridge-schema";
+
+type ReorderTestNode = Omit<EmitterTreeNode, "spawn" | "children"> & { children: ReorderTestNode[] };
 
 function fakeBridge(responses: Record<string, unknown>) {
   const calls: { kind: string; params: unknown }[] = [];
@@ -59,8 +62,8 @@ describe("duplicateEmitters", () => {
 // ── reorderManyEmitters ──────────────────────────────────────────────────────
 // Returns the same `response` for every request kind (use when only one
 // dispatch is exercised, or when asserting via vi.fn toHaveBeenCalledWith).
-function fakeUniformBridge(response: unknown) {
-  return { request: vi.fn().mockResolvedValue(response) } as any;
+function fakeUniformBridge(response: unknown): Bridge {
+  return { request: vi.fn().mockResolvedValue(response), on: (): (() => void) => (): void => {} };
 }
 
 describe("reorderManyEmitters", () => {
@@ -96,7 +99,7 @@ describe("reorderManyEmitters", () => {
     // ids on the host: Flash becomes id 0 and Smoke embers shifts 1 → 2. The
     // untouched member must FOLLOW its emitter (id 2), not stick on the stale
     // id 1 (which now denotes a different emitter) — and must not be dropped.
-    const node = (id: number, stableId: number, children: any[] = []) => ({
+    const node = (id: number, stableId: number, children: ReorderTestNode[] = []): ReorderTestNode => ({
       id,
       stableId,
       name: `n${stableId}`,
@@ -124,7 +127,8 @@ describe("reorderManyEmitters", () => {
         if (req.kind === "emitters/reorder-many") return Promise.resolve({ ok: true, newIds: [0] });
         return Promise.resolve({});
       }),
-    } as any;
+      on: (): (() => void) => (): void => {},
+    } as Bridge;
 
     useEmitterSelectionStore.getState().setIds([5, 1], 5); // root Flash + child embers
     await reorderManyEmitters(bridge, [5], 0);

@@ -1,26 +1,17 @@
 // Covers readout visibility and measured placement; native gizmo rendering is outside this suite.
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, act } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
+import { makeBridgeStub, type BridgeStub } from "@/test/bridge-stub";
 import { ManipulatorReadout } from "../ManipulatorReadout";
 
 const READOUT_WIDTH_PX = 120;
 const READOUT_HEIGHT_PX = 24;
 
-function fakeBridge() {
-  const handlers: Record<string, ((e: any) => void)[]> = {};
-  return {
-    bridge: {
-      request: () => Promise.resolve({ referenceObjectName: "Cantina", referenceObjectLocked: false }),
-      on: (k: string, h: (e: any) => void) => {
-        (handlers[k] ??= []).push(h);
-        return () => {};
-      },
-    } as any,
-    emit: (kind: string, payload: any) =>
-      act(() => {
-        (handlers[kind] ?? []).forEach((h) => h({ kind, payload }));
-      }),
-  };
+function fakeBridge(): { bridge: BridgeStub; emit: BridgeStub["emit"] } {
+  const bridge: BridgeStub = makeBridgeStub({
+    fallback: { referenceObjectName: "Cantina", referenceObjectLocked: false },
+  });
+  return { bridge, emit: bridge.emit };
 }
 function overlay() {
   const el = document.createElement("div");

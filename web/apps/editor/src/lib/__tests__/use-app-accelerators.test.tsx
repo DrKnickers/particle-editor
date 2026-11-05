@@ -1,5 +1,8 @@
+// Tests accelerator dispatch and subscriptions with a fake bridge; native keyboard input is outside this suite.
+import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render } from "@testing-library/react";
+import { makeBridgeStub, type BridgeStub } from "@/test/bridge-stub";
 import { useAppAccelerators } from "../use-app-accelerators";
 import { useEmitterSelectionStore } from "../tree/emitter-selection";
 import { useFileStateStore } from "../file-state";
@@ -8,36 +11,26 @@ import { useTextureEpoch, __resetPreviewCache } from "../atlas/atlas-preview-cac
 import { __resetRightDockForTests, getRightDockStoreForTests } from "../right-dock";
 import { __resetStatusFeedbackForTests, useStatusFeedback } from "../status-feedback";
 
-// A minimal fake bridge: captures the `accelerator/pressed` +
-// `engine/state/changed` handlers and spies on `request`.
-function makeFakeBridge() {
-  const handlers: Record<string, (e: { payload: unknown }) => void> = {};
-  const request = vi.fn((req: { kind: string }) => {
-    if (req.kind === "engine/state/snapshot") {
-      return Promise.resolve({ ground: false, paused: false, heatDebug: false });
-    }
-    if (req.kind === "file/open") {
-      // Cancelled native picker — keeps runFileOp's error modal + emitters/list
-      // follow-up out of these dispatch-focused tests.
-      return Promise.resolve({ ok: false, error: "user-cancelled" });
-    }
-    return Promise.resolve({});
-  });
-  return {
-    request,
-    on: (kind: string, cb: (e: { payload: unknown }) => void) => {
-      handlers[kind] = cb;
-      return () => {
-        delete handlers[kind];
-      };
+type AcceleratorTestBridge = BridgeStub & {
+  fire(combo: string): void;
+  emitState(state: Partial<EngineStateDto>): void;
+};
+
+function makeFakeBridge(): AcceleratorTestBridge {
+  const bridge: BridgeStub = makeBridgeStub({
+    responses: {
+      "engine/state/snapshot": { ground: false, paused: false, heatDebug: false },
+      "file/open": { ok: false, error: "user-cancelled" },
     },
-    fire: (combo: string) => handlers["accelerator/pressed"]?.({ payload: { combo } }),
-    emitState: (s: unknown) => handlers["engine/state/changed"]?.({ payload: s }),
-  };
+  });
+  return Object.assign(bridge, {
+    fire: (combo: string): void => bridge.emit("accelerator/pressed", { combo }),
+    emitState: (state: Partial<EngineStateDto>): void => bridge.emit("engine/state/changed", state),
+  });
 }
 
-function Harness({ bridge }: { bridge: ReturnType<typeof makeFakeBridge> }) {
-  useAppAccelerators(bridge as any);
+function Harness({ bridge }: { bridge: Bridge }): null {
+  useAppAccelerators(bridge);
   return null;
 }
 
@@ -336,22 +329,14 @@ describe("useAppAccelerators — uncovered dispatch + guard paths", () => {
 
   it("a failed register-accelerators is warned about, not thrown, and events still dispatch", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const handlers: Record<string, (e: { payload: unknown }) => void> = {};
     const request = vi.fn((req: { kind: string }) => {
       if (req.kind === "register-accelerators") return Promise.reject(new Error("host offline"));
       if (req.kind === "engine/state/snapshot") return Promise.reject(new Error("host offline"));
       return Promise.resolve({});
     });
-    const bridge = {
-      request,
-      on: (kind: string, cb: (e: { payload: unknown }) => void) => {
-        handlers[kind] = cb;
-        return () => {
-          delete handlers[kind];
-        };
-      },
-    };
-    render(<Harness bridge={bridge as any} />);
+    const bridge: BridgeStub = makeBridgeStub();
+    bridge.request.mockImplementation(request);
+    render(<Harness bridge={bridge} />);
     await flush();
     expect(warn).toHaveBeenCalledWith(
       "[accel] register-accelerators failed:",
@@ -359,7 +344,7 @@ describe("useAppAccelerators — uncovered dispatch + guard paths", () => {
     );
     // The snapshot rejection is swallowed silently, and the handler still works.
     request.mockClear();
-    handlers["accelerator/pressed"]?.({ payload: { combo: "Ctrl+Del" } });
+    bridge.emit("accelerator/pressed", { combo: "Ctrl+Del" });
     expect(request).toHaveBeenCalledWith({ kind: "engine/action/clear", params: {} });
   });
 

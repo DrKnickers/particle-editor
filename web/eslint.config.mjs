@@ -20,7 +20,7 @@ export default tseslint.config(
       "react-hooks/purity": "error",
       "react-hooks/refs": "error",
       "react-hooks/set-state-in-effect": "error",
-      "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/no-explicit-any": "error",
       // House conventions: a leading underscore marks a deliberately unused binding,
       // Playwright fixtures that need none are written `({}, testInfo)`, empty case labels
       // grouped under a comment share one body, and `declare global { namespace ... }`

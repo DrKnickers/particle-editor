@@ -1,3 +1,4 @@
+// Tests renderer trace messages; native trace collection is outside this suite.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   emitClockCalibration,
@@ -13,13 +14,13 @@ function installLocation(search: string) {
 
 function installPostMessage() {
   const postMessage = vi.fn();
-  (window as any).chrome = { webview: { postMessage } };
+  window.chrome = { webview: { postMessage } };
   return postMessage;
 }
 
 describe("perf-trace", () => {
   afterEach(() => {
-    delete (window as any).chrome;
+    delete window.chrome;
     installLocation("");
   });
 

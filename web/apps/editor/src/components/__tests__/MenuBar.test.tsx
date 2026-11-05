@@ -519,13 +519,11 @@ describe("MenuBar — Mods menu (layer stacking)", () => {
     const idleQ: Array<() => void> = [];
     const origR = globalThis.requestIdleCallback;
     const origC = globalThis.cancelIdleCallback;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (globalThis as any).requestIdleCallback = (cb: () => void) => {
-      idleQ.push(cb);
+    globalThis.requestIdleCallback = (cb: IdleRequestCallback): number => {
+      idleQ.push((): void => cb({ didTimeout: false, timeRemaining: (): number => 0 }));
       return idleQ.length;
     };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (globalThis as any).cancelIdleCallback = (id: number) => {
+    globalThis.cancelIdleCallback = (id: number): void => {
       idleQ[id - 1] = () => {};
     };
     try {
