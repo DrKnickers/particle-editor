@@ -153,6 +153,7 @@
     <ClInclude Include="simulation\ProjectileShot.h" />
     <ClInclude Include="simulation\ProjectileFlight.h" />
     <ClInclude Include="simulation\RocketSpline.h" />
+    <ClInclude Include="simulation\BombingRun.h" />
     <ClInclude Include="effect\CloseDecision.h" />
     <ClInclude Include="rendering\DeferredParticleSystemChange.h" />
     <ClInclude Include="rendering\DeviceRecovery.h" />

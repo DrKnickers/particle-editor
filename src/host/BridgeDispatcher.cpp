@@ -22,6 +22,7 @@
 #include "StringConv.h"                  // host::Utf8ToWide / WideToUtf8 (consolidated)
 #include "simulation/ProjectileShot.h"   // referenceProjectile snapshot field
 #include "simulation/ProjectileFlight.h" // IsProjectilePathEmulated
+#include "simulation/BombingRun.h"       // BombingRunToJson
 #include "PerfTrace.h"
 #include "host/third_party/nlohmann/json.hpp"
 
@@ -315,6 +316,18 @@ const char* RefStatusToString(ReferenceObjectStatus s)
     }
 }
 
+// The bomber a bombing run flies for this bomb (#970), or null when the projectile isn't
+// a bomb. `bomberName` is null when no bomber drops it and the stock stats stand in.
+static json BombingRunToJson(const Engine::ReferenceProjectileInfo& proj)
+{
+    if (ProjectileFlightKindFor(proj.category) != ProjectileFlightKind::Bomb) return nullptr;
+    const BomberStats stats = WithStockBomberFallbacks(proj.bomber);
+    return json{{"bomberName", proj.bomberName.empty() ? json(nullptr) : json(proj.bomberName)},
+                {"speed", BomberSpeedPerSec(stats)},      // world units per second
+                {"attackDistance", stats.attackDistance}, // world units
+                {"rechargeSec", stats.fireRechargeSec}};
+}
+
 // The selected reference projectile's game flight for the spawner pane, or null
 // when the reference object isn't a projectile. `flyable` is false when its
 // <Max_Speed> is absent or unusable (the spawner then flies it as authored).
@@ -331,7 +344,8 @@ static json ReferenceProjectileToJson(const Engine& engine)
                 {"flightSec", flight.flightSec},
                 {"category", proj.category},
                 {"pathEmulated", IsProjectilePathEmulated(proj.category)},
-                {"usesTarget", ProjectileUsesTarget(proj.category)}};
+                {"usesTarget", ProjectileUsesTarget(proj.category)},
+                {"bombingRun", BombingRunToJson(proj)}};
 }
 
 // SkydomeSlotStatus -> wire string for the snapshot DTO. Mirrors

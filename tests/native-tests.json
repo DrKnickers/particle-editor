@@ -78,6 +78,7 @@
     "test_projectile_flight": {},
     "test_projectile_shot": {},
     "test_rocket_spline": {},
+    "test_bombing_run": {},
     "test_bridge_spawner_state": {
       "sources": ["src/simulation/SpawnerDriver.cpp", "src/simulation/ParticleRandom.cpp"],
       "includes": ["src/host"],

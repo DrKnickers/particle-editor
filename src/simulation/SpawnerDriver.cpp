@@ -4,6 +4,7 @@
 #include "SpawnerRandom.h"
 #include "ProjectileShot.h"
 #include <algorithm>
+#include <cassert>
 
 namespace
 {
@@ -88,6 +89,13 @@ ProjectileFlightParams ReferenceFlightParams(const Engine::ReferenceProjectileIn
         return ParticleRandom::Range(lo, hi);
     };
     return p;
+}
+
+bool IsBombingRunInEffect(const SpawnerConfig& cfg, const Engine& engine)
+{
+    Engine::ReferenceProjectileInfo proj;
+    if (!cfg.bombingRun || !cfg.matchProjectile || !engine.GetReferenceProjectile(proj)) return false;
+    return proj.speedPerFrame > 0.0f && ProjectileFlightKindFor(proj.category) == ProjectileFlightKind::Bomb;
 }
 
 bool IsProjectileTargetOutOfReach(const SpawnerConfig& cfg, const Engine* engine)
@@ -196,6 +204,7 @@ SpawnerDriver::SpawnerDriver()
 
 void SpawnerDriver::Reset()
 {
+    m_runActive             = false;
     m_phase                 = Phase::Waiting;
     m_burstRemaining        = 0;
     m_timeUntilNextInstance = 0.0f;
@@ -240,6 +249,7 @@ void SpawnerDriver::SetConfig(const SpawnerConfig& cfg)
         m_timeUntilNextBurst    = m_cfg.intervalSec; // wait one interval before first burst
         m_pendingBursts         = 0;                 // queued manual triggers die with the mode
         m_burstBegun            = false;
+        m_runActive             = false;
     }
     else if (enabledChanged && m_cfg.enabled && m_phase == Phase::Waiting)
     {
@@ -300,6 +310,7 @@ void SpawnerDriver::CancelPending()
 void SpawnerDriver::Tick(float dtSeconds, const ParticleSystem* sys, Engine* engine)
 {
     if (sys == NULL || engine == NULL) return;
+    if (!m_runActive && m_runMarkersShown) HideBombingRunMarkers(*engine);
     // A frozen preview clock reports zero elapsed time on every repaint.
     // Treat that as a true pause; inventing a frame here consumes auto-spawn
     // intervals and begins armed bursts while the scene is stopped.
@@ -318,57 +329,18 @@ void SpawnerDriver::Tick(float dtSeconds, const ParticleSystem* sys, Engine* eng
     }
 
     // Burst firing: emit instances on schedule until the burst is done
-    // or we hit a per-frame / live-instance cap.
+    // or we hit a per-frame / live-instance cap. In bombing-run mode the
+    // burst flies one run instead.
     if (m_phase == Phase::BurstFiring)
     {
+        if (!m_burstBegun && IsBombingRunInEffect(m_cfg, *engine)) BeginBombingRun(*engine);
         m_burstBegun = true; // re-triggers from here on are mid-burst (debounced)
-        m_timeUntilNextInstance -= dtSeconds;
+        if (m_runActive)
+            TickBombingRun(dtSeconds, *sys, *engine);
+        else
+            EmitBurstInstances(dtSeconds, *sys, *engine);
 
-        int           spawnsThisFrame = 0;
-        SpawnerAnchor anchor;
-        while (m_burstRemaining > 0 && m_timeUntilNextInstance <= 0.0f)
-        {
-            if (spawnsThisFrame >= MAX_SPAWNS_PER_FRAME)
-            {
-                // Stutter / huge dt — drop surplus rather than queuing.
-                m_timeUntilNextInstance = m_cfg.spacingSec;
-                break;
-            }
-            if (engine->ActiveSpawnerInstanceCount() >= MAX_ACTIVE_INSTANCES)
-            {
-                // Cap hit — drop this and all remaining instances in
-                // the burst. Resume schedule on next interval.
-                m_burstRemaining = 0;
-                break;
-            }
-
-            D3DXVECTOR3 pos = m_cfg.position + SpawnerRandom::Jitter(m_cfg.jitterPosition);
-            anchor.SetPosition(pos);
-
-            // A shot the game wouldn't fire spawns nothing (the pane says why);
-            // the burst still moves on to its next instance.
-            ShotMotion motion = ComputeShotMotion(m_cfg, pos, *engine);
-            if (motion.fired && !SpawnShotInstance(*sys, *engine, anchor, m_cfg.squiggleFrequency, std::move(motion)))
-            {
-                // [hard-guard] SpawnParticleSystem returns NULL ONLY on a gate
-                // refusal (the estimate × placed-count would blow the cap, so
-                // it cleared the preview). Disable the driver so an auto/interval
-                // spawner doesn't refuse-and-clear every cycle (banner churn) —
-                // the user re-arms deliberately after lightening the effect or
-                // raising the cap.
-                m_cfg.enabled    = false;
-                m_burstRemaining = 0;
-                m_phase          = Phase::Waiting;
-                m_pendingBursts  = 0; // queued bursts would refuse-and-clear again
-                break;
-            }
-
-            m_burstRemaining--;
-            m_timeUntilNextInstance += m_cfg.spacingSec;
-            spawnsThisFrame++;
-        }
-
-        if (m_burstRemaining == 0)
+        if (m_burstRemaining == 0 && !m_runActive)
         {
             m_phase              = Phase::Waiting;
             m_timeUntilNextBurst = m_cfg.intervalSec;
@@ -382,4 +354,141 @@ void SpawnerDriver::Tick(float dtSeconds, const ParticleSystem* sys, Engine* eng
             }
         }
     }
+}
+
+// Emits the current burst's due instances, up to the per-frame and live-instance caps.
+void SpawnerDriver::EmitBurstInstances(float dtSeconds, const ParticleSystem& sys, Engine& engine)
+{
+    m_timeUntilNextInstance -= dtSeconds;
+
+    int           spawnsThisFrame = 0;
+    SpawnerAnchor anchor;
+    while (m_burstRemaining > 0 && m_timeUntilNextInstance <= 0.0f)
+    {
+        if (spawnsThisFrame >= MAX_SPAWNS_PER_FRAME)
+        {
+            // Stutter / huge dt — drop surplus rather than queuing.
+            m_timeUntilNextInstance = m_cfg.spacingSec;
+            break;
+        }
+        if (engine.ActiveSpawnerInstanceCount() >= MAX_ACTIVE_INSTANCES)
+        {
+            // Cap hit — drop this and all remaining instances in
+            // the burst. Resume schedule on next interval.
+            m_burstRemaining = 0;
+            break;
+        }
+
+        D3DXVECTOR3 pos = m_cfg.position + SpawnerRandom::Jitter(m_cfg.jitterPosition);
+        anchor.SetPosition(pos);
+
+        // A shot the game wouldn't fire spawns nothing (the pane says why);
+        // the burst still moves on to its next instance.
+        ShotMotion motion = ComputeShotMotion(m_cfg, pos, engine);
+        if (motion.fired && !SpawnShotInstance(sys, engine, anchor, m_cfg.squiggleFrequency, std::move(motion)))
+        {
+            DisableAfterRefusal();
+            break;
+        }
+
+        m_burstRemaining--;
+        m_timeUntilNextInstance += m_cfg.spacingSec;
+        spawnsThisFrame++;
+    }
+}
+
+// [hard-guard] SpawnParticleSystem returns NULL ONLY on a gate refusal (the
+// estimate × placed-count would blow the cap, so it cleared the preview).
+// Disable the driver so an auto/interval spawner doesn't refuse-and-clear
+// every cycle (banner churn) — the user re-arms deliberately after
+// lightening the effect or raising the cap.
+void SpawnerDriver::DisableAfterRefusal()
+{
+    m_cfg.enabled    = false;
+    m_burstRemaining = 0;
+    m_runActive      = false;
+    m_phase          = Phase::Waiting;
+    m_pendingBursts  = 0; // queued bursts would refuse-and-clear again
+}
+
+// Plans the run this burst flies, from the matched bomb's bomber.
+void SpawnerDriver::BeginBombingRun(const Engine& engine)
+{
+    Engine::ReferenceProjectileInfo proj;
+    if (!engine.GetReferenceProjectile(proj))
+    {
+        assert(!"BeginBombingRun runs only when IsBombingRunInEffect");
+        return;
+    }
+    const float target[3] = {m_cfg.targetPosition.x, m_cfg.targetPosition.y, m_cfg.targetPosition.z};
+    const float aim[3]    = {m_cfg.velocity.x, m_cfg.velocity.y, m_cfg.velocity.z};
+    m_run                 = PlanBombingRun(proj.bomber, target, aim, engine.GetGroundZ());
+    m_runActive           = true;
+    m_runClockSec         = 0.0f;
+    m_runNextDrop         = 0;
+    m_burstRemaining      = 0; // burst size doesn't apply to a run
+}
+
+// Spawns the run's due drops, shows where the bombers are, and ends the run once they
+// have flown past.
+void SpawnerDriver::TickBombingRun(float dtSeconds, const ParticleSystem& sys, Engine& engine)
+{
+    m_runClockSec += dtSeconds;
+    int           spawnsThisFrame = 0;
+    SpawnerAnchor anchor;
+    while (m_runNextDrop < m_run.drops.size() && m_run.drops[m_runNextDrop].timeSec <= m_runClockSec)
+    {
+        // Past the per-frame cap a drop waits for the next frame; it is timestamped, so
+        // nothing is lost after a stutter, only released late.
+        if (spawnsThisFrame >= MAX_SPAWNS_PER_FRAME) break;
+        const BombingRunDrop& drop = m_run.drops[m_runNextDrop++];
+        // Over the live-instance cap a drop is skipped, like a burst's surplus.
+        if (engine.ActiveSpawnerInstanceCount() >= MAX_ACTIVE_INSTANCES) continue;
+
+        // Each bomb leaves along the run heading and falls on its own bomber's marker.
+        SpawnerConfig dropCfg  = m_cfg;
+        dropCfg.velocity       = D3DXVECTOR3(m_run.heading[0], m_run.heading[1], m_run.heading[2]);
+        const float* marker    = m_run.markers[drop.bomberIndex];
+        dropCfg.targetPosition = D3DXVECTOR3(marker[0], marker[1], marker[2]);
+        const D3DXVECTOR3 pos(drop.pos[0], drop.pos[1], drop.pos[2]);
+        anchor.SetPosition(pos);
+        ShotMotion motion = ComputeShotMotion(dropCfg, pos, engine);
+        if (motion.fired && !SpawnShotInstance(sys, engine, anchor, m_cfg.squiggleFrequency, std::move(motion)))
+        {
+            DisableAfterRefusal();
+            HideBombingRunMarkers(engine);
+            return;
+        }
+        spawnsThisFrame++;
+    }
+
+    if (m_runClockSec >= m_run.durationSec && m_runNextDrop >= m_run.drops.size())
+    {
+        m_runActive = false;
+        HideBombingRunMarkers(engine);
+        return;
+    }
+    ShowBombingRunMarkers(engine);
+}
+
+// Hands the engine each bomber's position now and its target marker, for the viewport.
+void SpawnerDriver::ShowBombingRunMarkers(Engine& engine)
+{
+    Engine::BombingRunMarkers markers;
+    for (int bomber = 0; bomber < kBombingRunBomberCount; ++bomber)
+    {
+        float position[3];
+        BomberPositionAt(m_run, bomber, m_runClockSec, position);
+        markers.bomberPositions[bomber] = D3DXVECTOR3(position[0], position[1], position[2]);
+        const float* marker             = m_run.markers[bomber];
+        markers.targetMarkers[bomber]   = D3DXVECTOR3(marker[0], marker[1], marker[2]);
+    }
+    engine.SetBombingRunMarkers(markers);
+    m_runMarkersShown = true;
+}
+
+void SpawnerDriver::HideBombingRunMarkers(Engine& engine)
+{
+    engine.ClearBombingRunMarkers();
+    m_runMarkersShown = false;
 }

@@ -173,6 +173,10 @@ export type SpawnerParamsDto = {
    *  lobs onto it, a cluster bomb launches toward it. World units, clamped like
    *  `position`. Absent = origin. */
   targetPosition?: Vec3;
+  /** Land bombing run (#970): with a bomb matched, each burst flies a V of three
+   *  bombers past `targetPosition`, each dropping the bomb on its own marker. Burst
+   *  size and spacing don't apply; `velocity` sets the run heading. Absent = false. */
+  bombingRun?: boolean;
   /** Host-computed and read-only (spawner/start ignores it): the game wouldn't
    *  fire the reference projectile at `targetPosition` from `position` (a grenade
    *  out of lob range), so the preview doesn't either. */
@@ -278,6 +282,14 @@ export type ReferenceProjectileDto = {
   category: string; // raw <Projectile_Category>
   pathEmulated: boolean; // false for the lightsaber throw (the preview flies it straight)
   usesTarget: boolean; // missiles, rockets, grenades and cluster bombs aim at the spawner's target
+  bombingRun?: BombingRunDto | null; // null unless the projectile is a bomb
+};
+// The bomber a spawner bombing run flies for the selected bomb (#970; simulation/BombingRun.h).
+export type BombingRunDto = {
+  bomberName: string | null; // the <LandBombingUnit> that drops it; null = stock bomber stats
+  speed: number; // world units per second, with the land speed multiplier
+  attackDistance: number; // world units: a bomber drops while its marker is this close
+  rechargeSec: number; // seconds between volleys
 };
 export type ReferenceObjectEntry = {
   name: string;

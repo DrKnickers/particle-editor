@@ -168,12 +168,23 @@ struct RawEntry
     std::string rocketCurveOffsetRaw; // <Projectile_Rocket_Curve_Offset>, world units
     std::string explodesAtTargetRaw;  // <Explode_When_Reached_Target_Radius>
     std::string targetOnTerrainRaw;   // <Projectile_Target_Point_On_Terrain>
+    // land bombing-run units (resolved through Variant_Of in phase 4; <LandBombingUnit> only).
+    std::string projectileTypesRaw; // <Projectile_Types> comma list
+    std::string fireRechargeRaw;    // <Projectile_Fire_Recharge_Seconds>
+    std::string firePulseCountRaw;  // <Projectile_Fire_Pulse_Count>
+    std::string firePulseDelayRaw;  // <Projectile_Fire_Pulse_Delay_Seconds>
+    std::string hoverOffsetRaw;     // <Hover_Offset>, world units
+    std::string attackDistanceRaw;  // <Targeting_Max_Attack_Distance>, world units
     // fieldable reference-graph SOURCE lists (this object references others).
     std::string costRaw;          // <Build_Cost_Credits> (fallback <Required_Star_Base_Level>) -> buildable
     std::string buildMenuRaw;     // <Tactical_Buildable_Objects_Campaign/_Multiplayer> -> names it builds
     std::string spawnRaw;         // <{Starting,Reserve}_Spawned_Units_Tech_0..5> -> squadrons it spawns
     std::string squadronUnitsRaw; // <Squadron_Units> + <Company_Units> -> member units (model-bearing)
 };
+
+// Container tag of the land bombing-run units (LandBombingRunUnits.xml), whose bomber
+// stats the catalog keeps for the spawner's bombing-run mode (#970).
+const char* const kLandBomberTag = "LandBombingUnit";
 
 // Split a comma-separated list into trimmed, non-empty tokens (the <HardPoints>
 // value, e.g. "HP_A, HP_B , HP_C").
@@ -344,6 +355,12 @@ void parseObjectBytes(const std::vector<char>& bytes, const std::string& fileNam
             re.rocketCurveOffsetRaw = trim(WideToAnsi(childData(e, L"Projectile_Rocket_Curve_Offset")));
             re.explodesAtTargetRaw  = trim(WideToAnsi(childData(e, L"Explode_When_Reached_Target_Radius")));
             re.targetOnTerrainRaw   = trim(WideToAnsi(childData(e, L"Projectile_Target_Point_On_Terrain")));
+            re.projectileTypesRaw   = trim(WideToAnsi(childData(e, L"Projectile_Types")));
+            re.fireRechargeRaw      = trim(WideToAnsi(childData(e, L"Projectile_Fire_Recharge_Seconds")));
+            re.firePulseCountRaw    = trim(WideToAnsi(childData(e, L"Projectile_Fire_Pulse_Count")));
+            re.firePulseDelayRaw    = trim(WideToAnsi(childData(e, L"Projectile_Fire_Pulse_Delay_Seconds")));
+            re.hoverOffsetRaw       = trim(WideToAnsi(childData(e, L"Hover_Offset")));
+            re.attackDistanceRaw    = trim(WideToAnsi(childData(e, L"Targeting_Max_Attack_Distance")));
             // fieldable source lists.
             re.costRaw = trim(WideToAnsi(childData(e, L"Build_Cost_Credits")));
             if (re.costRaw.empty()) re.costRaw = trim(WideToAnsi(childData(e, L"Required_Star_Base_Level")));
@@ -1028,6 +1045,24 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out)
             ref.projectileRocketCurveOffset      = nonNegative(&RawEntry::rocketCurveOffsetRaw);
             ref.projectileExplodesAtTarget = IsGameTrue(resolveRaw(kv.first, byName, &RawEntry::explodesAtTargetRaw));
             ref.projectileTargetOnTerrain  = IsGameTrue(resolveRaw(kv.first, byName, &RawEntry::targetOnTerrainRaw));
+        }
+        // Land bombing-run units (#970), inherited like the projectile tags. An absent or
+        // unusable value keeps 0, and the bombing-run planner substitutes the stock stat.
+        if (_stricmp(ref.tag.c_str(), kLandBomberTag) == 0)
+        {
+            auto positive = [&](std::string RawEntry::* field)
+            {
+                const float v = std::strtof(resolveRaw(kv.first, byName, field).c_str(), nullptr);
+                return (std::isfinite(v) && v > 0.0f) ? v : 0.0f;
+            };
+            ref.isLandBomber            = true;
+            ref.bomberProjectileTypes   = splitCsv(resolveRaw(kv.first, byName, &RawEntry::projectileTypesRaw));
+            ref.bomberSpeedPerFrame     = positive(&RawEntry::maxSpeedRaw);
+            ref.bomberFireRechargeSec   = positive(&RawEntry::fireRechargeRaw);
+            ref.bomberFirePulseCount    = (int)positive(&RawEntry::firePulseCountRaw);
+            ref.bomberFirePulseDelaySec = positive(&RawEntry::firePulseDelayRaw);
+            ref.bomberHoverOffset       = positive(&RawEntry::hoverOffsetRaw);
+            ref.bomberAttackDistance    = positive(&RawEntry::attackDistanceRaw);
         }
         // ref.fieldable / fieldSource filled by the fieldable pass below.
         out.objects.push_back(ref);

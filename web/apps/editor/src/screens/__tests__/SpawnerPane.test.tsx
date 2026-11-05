@@ -196,12 +196,13 @@ describe("SpawnerPane — fly like the projectile", () => {
     referenceProjectile: EngineStateDto["referenceProjectile"],
     matchProjectile = false,
     projectileOutOfReach = false,
+    bombingRun = false,
   ) {
     const snapshot: EngineStateDto = {
       ...makeDefaultEngineState(),
       referenceObjectName: referenceProjectile ? "Proj_Laser" : "",
       referenceProjectile,
-      spawner: { ...makeDefaultSpawnerParams(), mode: "manual", matchProjectile, projectileOutOfReach },
+      spawner: { ...makeDefaultSpawnerParams(), mode: "manual", matchProjectile, projectileOutOfReach, bombingRun },
     };
     return {
       request: vi
@@ -222,6 +223,11 @@ describe("SpawnerPane — fly like the projectile", () => {
     usesTarget: false,
   };
   const missile = { ...laser, category: "MISSILE", usesTarget: true };
+  const bomb = {
+    ...laser,
+    category: "BOMB",
+    bombingRun: { bomberName: "Y-Wing_Bombing_Run", speed: 280.8, attackDistance: 500, rechargeSec: 0.2 },
+  };
 
   it("hides the section when the reference object is not a projectile", async () => {
     render(<SpawnerPane bridge={bridgeWith(null)} />);
@@ -267,6 +273,39 @@ describe("SpawnerPane — fly like the projectile", () => {
       const starts = bridge.request.mock.calls.map((c) => c[0]).filter((r) => r.kind === "spawner/start");
       expect(starts.at(-1)?.params.targetPosition).toEqual([300, 0, 0]);
     });
+  });
+
+  it("offers a bombing run only for a matched bomb, and commits it", async () => {
+    const { unmount } = render(<SpawnerPane bridge={bridgeWith(missile, true)} />);
+    await screen.findByLabelText("Fly like the projectile");
+    expect(screen.queryByLabelText("Bombing run")).toBeNull();
+    unmount();
+
+    const bridge = bridgeWith(bomb, true);
+    render(<SpawnerPane bridge={bridge} />);
+    const box = await screen.findByLabelText("Bombing run");
+    expect(screen.getByTestId("spawner-bombing-run").textContent).toContain(
+      "Y-Wing_Bombing_Run: three bombers in a V at 281 units/s, each dropping every 0.20 s within 500 units",
+    );
+    expect(screen.queryByLabelText("Target X")).toBeNull(); // a plain bomb doesn't aim
+    fireEvent.click(box);
+    const start = bridge.request.mock.calls.map((c) => c[0]).find((r) => r.kind === "spawner/start");
+    expect(start?.params.bombingRun).toBe(true);
+  });
+
+  it("names the stock stats when no bomber drops the bomb", async () => {
+    render(
+      <SpawnerPane bridge={bridgeWith({ ...bomb, bombingRun: { ...bomb.bombingRun, bomberName: null } }, true)} />,
+    );
+    expect((await screen.findByTestId("spawner-bombing-run")).textContent).toContain("Stock bomber stats:");
+  });
+
+  it("shows the target and stands down burst size and spacing while flying a run", async () => {
+    render(<SpawnerPane bridge={bridgeWith(bomb, true, false, true)} />);
+    await screen.findByLabelText("Target X");
+    expect(screen.getByTestId("spawner-projectile-target").textContent).toContain("The bombers pass over the target");
+    expect(screen.getByLabelText("Burst size").matches(":disabled")).toBe(true);
+    expect(screen.getByLabelText("Burst spacing").matches(":disabled")).toBe(true);
   });
 
   it("warns when the game wouldn't fire at the target", async () => {

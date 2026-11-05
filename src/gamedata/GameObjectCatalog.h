@@ -199,6 +199,18 @@ struct GameObjectRef
     bool         projectileExplodesAtTarget       = false; // <Explode_When_Reached_Target_Radius>
     bool         projectileTargetOnTerrain        = false; // <Projectile_Target_Point_On_Terrain>
     ModelContent modelContent                     = ModelContent::Mesh; // projectiles: how the model draws
+
+    // Land bombing-run units only (<LandBombingUnit>, Variant_Of-inherited; #970). The
+    // spawner's bombing-run mode flies a V of the bomber whose <Projectile_Types> names the
+    // selected bomb (simulation/BombingRun.h). Absent or unusable values keep 0.
+    bool                     isLandBomber = false;
+    std::vector<std::string> bomberProjectileTypes;          // <Projectile_Types> comma list
+    float                    bomberSpeedPerFrame     = 0.0f; // raw <Max_Speed>, world units per logic frame
+    float                    bomberFireRechargeSec   = 0.0f; // <Projectile_Fire_Recharge_Seconds>
+    int                      bomberFirePulseCount    = 0;    // <Projectile_Fire_Pulse_Count>
+    float                    bomberFirePulseDelaySec = 0.0f; // <Projectile_Fire_Pulse_Delay_Seconds>
+    float                    bomberHoverOffset       = 0.0f; // <Hover_Offset>, world units above the ground
+    float                    bomberAttackDistance    = 0.0f; // <Targeting_Max_Attack_Distance>, world units
 };
 
 // Picker keep-gate. Units/structures must be fieldable (a player can build/spawn
@@ -267,6 +279,20 @@ ModelProbeResult ProbeModelSkinned(IFileManager& fm, const std::string& modelPat
 const char* ObjDomainName(ObjDomain d);
 const char* ObjRoleName(ObjRole r);
 const char* ObjBucketName(ObjBucket b);
+
+// The first land bombing-run unit whose <Projectile_Types> lists `projectileName`
+// (case-insensitively, as the engine resolves Names), or NULL when no bomber drops it.
+inline const GameObjectRef* FindBomberForProjectile(const std::vector<GameObjectRef>& objects,
+                                                    const std::string&                projectileName)
+{
+    for (const GameObjectRef& r : objects)
+    {
+        if (!r.isLandBomber) continue;
+        for (const std::string& type : r.bomberProjectileTypes)
+            if (_stricmp(type.c_str(), projectileName.c_str()) == 0) return &r;
+    }
+    return NULL;
+}
 
 // Resolve a desired reference-object Name against the catalog's objects,
 // case-INSENSITIVELY (the Alamo engine resolves Names case-insensitively).

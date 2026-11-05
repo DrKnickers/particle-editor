@@ -15,6 +15,7 @@
 #include "ReferenceObjectMesh.h"        // imported game-object render core
 #include "ReferenceTransformMemory.h"   // per-object reference-transform memory (pure)
 #include "gamedata/GameObjectCatalog.h" // enumerate game objects by Name
+#include "simulation/BombingRun.h"      // BomberStats, kBombingRunBomberCount
 #include "DeviceRecovery.h"             // D3D9Ex CheckDeviceState + bounded HUNG recovery
 #include "DeferredParticleSystemChange.h"
 #include "RefLock.h"
@@ -807,6 +808,10 @@ public:
         bool  rocketExplodesAtTarget = false; // <Explode_When_Reached_Target_Radius>
         bool  rocketTargetOnTerrain  = false; // <Projectile_Target_Point_On_Terrain>
         bool  inSpace                = false; // the catalog files it under Space
+        // The land bomber that drops this projectile (#970), for the spawner's bombing-run
+        // mode. Empty name and zero stats when no bomber names it (stock stats then apply).
+        std::string bomberName;
+        BomberStats bomber;
     };
     bool GetReferenceProjectile(ReferenceProjectileInfo& out) const
     {
@@ -821,6 +826,19 @@ public:
     // Where match-projectile shots aim (#967); marked in the viewport while the shots
     // fly like a projectile. Set by the spawner bridge with SetReferenceShotMode.
     void SetReferenceShotTarget(const D3DXVECTOR3& target) { m_referenceShotTarget = target; }
+    // A bombing run in flight (#970): each bomber's position and target marker, drawn in
+    // the viewport while the run flies. Set each frame by SpawnerDriver; cleared at the end.
+    struct BombingRunMarkers
+    {
+        D3DXVECTOR3 bomberPositions[kBombingRunBomberCount];
+        D3DXVECTOR3 targetMarkers[kBombingRunBomberCount];
+    };
+    void SetBombingRunMarkers(const BombingRunMarkers& markers)
+    {
+        m_bombingRunMarkers       = markers;
+        m_bombingRunMarkersActive = true;
+    }
+    void ClearBombingRunMarkers() { m_bombingRunMarkersActive = false; }
     // False while the model flies with the shots: nothing rests at the placement, so it
     // draws no resting model, shadow, gizmo or selection box and can't be clicked.
     bool ReferenceRestsInScene() const { return !(m_referenceShotMode && m_referenceIsProjectile); }
@@ -1167,6 +1185,7 @@ private:
     // The spawner's shot target: a screen-sized 3-axis cross, on top, while shots fly
     // like the reference projectile. Editor overlay (fixed-function lines).
     void RenderSpawnerTargetMarker();
+    void DrawSpawnerMarkerCross(const D3DXVECTOR3& center, float sizeToGizmoRatio, D3DCOLOR color);
 
     // Unit grid: the engine's first line-list primitive. RenderUnitGrid
     // draws axis-aligned world lines at m_gridSpacing over a fixed extent, co-planar
@@ -1465,6 +1484,8 @@ private:
     ReferenceProjectileInfo m_referenceProjectile;
     bool                    m_referenceShotMode   = false;                // see SetReferenceShotMode
     D3DXVECTOR3             m_referenceShotTarget = D3DXVECTOR3(0, 0, 0); // see SetReferenceShotTarget
+    BombingRunMarkers       m_bombingRunMarkers;                          // see SetBombingRunMarkers
+    bool                    m_bombingRunMarkersActive = false;
     // Render-only "display" transform eased toward the committed transform above
     // each frame so gizmo/object motion is smooth (incl. under snap). Committed values
     // stay exact (undo / spinners / saved file). See Engine::EaseReferenceDisplay.

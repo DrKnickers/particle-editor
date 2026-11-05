@@ -1365,6 +1365,50 @@ int main(int argc, char** argv)
         CHECK(find(pc, "Proj_No_Model") == nullptr, "projectile without a model is not in the catalog");
     }
 
+    // ---- land bombing-run units: bomber stats and the bomb -> bomber lookup (#970) ----
+    std::printf("[bomber]\n");
+    {
+        MockFM bfm;
+        bfm.files["Data\\XML\\GameObjectFiles.xml"] =
+            "<Game_Object_Files><File>LandBombingRunUnits.xml</File></Game_Object_Files>";
+        bfm.files["Data\\XML\\LandBombingRunUnits.xml"] =
+            "<LandBombingUnits>"
+            "  <LandBombingUnit Name=\"Y-Wing_Bombing_Run\"><Land_Model_Name>rv_ywing.alo</Land_Model_Name>"
+            "    <Max_Speed>6.0</Max_Speed><Projectile_Types> Y_Wing_Bomb , Y_Wing_Spare </Projectile_Types>"
+            "    <Projectile_Fire_Recharge_Seconds>0.20</Projectile_Fire_Recharge_Seconds>"
+            "    <Projectile_Fire_Pulse_Count>2</Projectile_Fire_Pulse_Count>"
+            "    <Projectile_Fire_Pulse_Delay_Seconds>0.1</Projectile_Fire_Pulse_Delay_Seconds>"
+            "    <Hover_Offset>100.0</Hover_Offset>"
+            "    <Targeting_Max_Attack_Distance>500.0</Targeting_Max_Attack_Distance></LandBombingUnit>"
+            "  <LandBombingUnit Name=\"Y-Wing_Fast\"><Variant_Of_Existing_Type>Y-Wing_Bombing_Run"
+            "</Variant_Of_Existing_Type><Max_Speed>9</Max_Speed>"
+            "    <Projectile_Types>Fast_Bomb</Projectile_Types><Hover_Offset>-5</Hover_Offset></LandBombingUnit>"
+            "  <GroundVehicle Name=\"Not_A_Bomber\"><Land_Model_Name>tank.alo</Land_Model_Name>"
+            "    <Projectile_Types>Stray_Bomb</Projectile_Types></GroundVehicle>"
+            "</LandBombingUnits>";
+
+        GameObjectCatalog bc;
+        CHECK(BuildGameObjectCatalog(bfm, bc), "bomber catalog builds");
+        const GameObjectRef* ywing = find(bc, "Y-Wing_Bombing_Run");
+        CHECK(ywing && ywing->isLandBomber && ywing->bomberSpeedPerFrame == 6.0f &&
+                  ywing->bomberFireRechargeSec == 0.2f && ywing->bomberFirePulseCount == 2 &&
+                  ywing->bomberFirePulseDelaySec == 0.1f && ywing->bomberHoverOffset == 100.0f &&
+                  ywing->bomberAttackDistance == 500.0f,
+              "bomber stats parsed");
+        CHECK(ywing && ywing->bomberProjectileTypes.size() == 2 && ywing->bomberProjectileTypes[0] == "Y_Wing_Bomb",
+              "<Projectile_Types> split into trimmed names");
+        const GameObjectRef* fast = find(bc, "Y-Wing_Fast");
+        CHECK(fast && fast->isLandBomber && fast->bomberSpeedPerFrame == 9.0f && fast->bomberFireRechargeSec == 0.2f &&
+                  fast->bomberHoverOffset == 0.0f && fast->bomberAttackDistance == 500.0f,
+              "variant bomber overrides speed, inherits the rest; a negative hover offset -> 0");
+        CHECK(FindBomberForProjectile(bc.objects, "y_wing_bomb") == ywing,
+              "bomb -> the bomber that drops it, case-insensitively");
+        CHECK(FindBomberForProjectile(bc.objects, "Fast_Bomb") == fast, "a variant's own bomb finds the variant");
+        CHECK(FindBomberForProjectile(bc.objects, "Stray_Bomb") == nullptr,
+              "a non-bomber's <Projectile_Types> is ignored");
+        CHECK(FindBomberForProjectile(bc.objects, "Unknown_Bomb") == nullptr, "a bomb no bomber names -> none");
+    }
+
     // ---- aggregate fieldable-token processing budget --------------
     //
     // The exact-work fixture combines a roster-map application, a list resolved

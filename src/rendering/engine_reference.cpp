@@ -706,6 +706,16 @@ void Engine::RebuildReferenceObjectMesh()
                 m_referenceProjectile.rocketExplodesAtTarget = r.projectileExplodesAtTarget;
                 m_referenceProjectile.rocketTargetOnTerrain  = r.projectileTargetOnTerrain;
                 m_referenceProjectile.inSpace                = (r.domain == ObjDomain::Space);
+                if (const GameObjectRef* bomber = FindBomberForProjectile(m_referenceCatalog.objects, r.name))
+                {
+                    m_referenceProjectile.bomberName               = bomber->name;
+                    m_referenceProjectile.bomber.speedPerFrame     = bomber->bomberSpeedPerFrame;
+                    m_referenceProjectile.bomber.fireRechargeSec   = bomber->bomberFireRechargeSec;
+                    m_referenceProjectile.bomber.firePulseCount    = bomber->bomberFirePulseCount;
+                    m_referenceProjectile.bomber.firePulseDelaySec = bomber->bomberFirePulseDelaySec;
+                    m_referenceProjectile.bomber.hoverOffset       = bomber->bomberHoverOffset;
+                    m_referenceProjectile.bomber.attackDistance    = bomber->bomberAttackDistance;
+                }
             }
 #ifndef NDEBUG
             fprintf(stderr, "[refscale] '%s' Scale_Factor=%.3f\n", r.name.c_str(), r.scaleFactor);

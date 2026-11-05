@@ -432,6 +432,7 @@ private:
         cfg.squiggleFrequency  = params.value("squiggleFrequency", 1.0f);
         cfg.matchProjectile    = params.value("matchProjectile", false);
         cfg.targetPosition     = SpawnerJsonToVec3(params.value("targetPosition", nlohmann::json::array()));
+        cfg.bombingRun         = params.value("bombingRun", false);
         return cfg;
     }
 
@@ -458,6 +459,7 @@ private:
             {"squiggleFrequency", m_spawnerConfig.squiggleFrequency},
             {"matchProjectile", m_spawnerConfig.matchProjectile},
             {"targetPosition", vec3(m_spawnerConfig.targetPosition)},
+            {"bombingRun", m_spawnerConfig.bombingRun},
             // Host-computed, read-only: the game wouldn't fire the reference projectile
             // at this target (a grenade out of lob range), so neither does the preview.
             {"projectileOutOfReach", IsProjectileTargetOutOfReach(m_spawnerConfig, m_engine)},

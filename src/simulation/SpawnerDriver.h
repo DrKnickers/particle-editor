@@ -3,6 +3,7 @@
 
 #include "rendering/engine.h"
 #include "ProjectileFlight.h"
+#include "BombingRun.h"
 
 // Programmable particle spawner for the preview viewport. Replaces the
 // "hold Shift, click once" single-instance flow with a configurable
@@ -69,6 +70,10 @@ struct SpawnerConfig
     // Where match-projectile shots aim (#967): a missile homes on it, a grenade lobs onto
     // it, a cluster bomb launches toward it. World units, clamped like `position`.
     D3DXVECTOR3 targetPosition = D3DXVECTOR3(0, 0, 0);
+    // Land bombing run (#970): with a bomb matched, each burst flies a V of three bombers
+    // past the target instead (simulation/BombingRun.h), each dropping the bomb on its own
+    // marker. Burst size and spacing don't apply; `velocity` sets the run heading.
+    bool bombingRun = false;
 };
 
 class SpawnerDriver
@@ -155,7 +160,22 @@ private:
     int  m_pendingBursts;
     bool m_burstBegun; // current burst has entered Tick emission
 
+    // The bombing run the current burst flies, when bombing-run mode is in effect.
+    BombingRunPlan m_run;
+    bool           m_runActive   = false;
+    float          m_runClockSec = 0.0f;
+    size_t         m_runNextDrop = 0; // index into m_run.drops
+    // The engine shows this run's markers; a run that ends without an engine to hand
+    // (Reset, a mode change) leaves them for the next Tick to clear.
+    bool m_runMarkersShown = false;
+
     void StartBurst();
+    void BeginBombingRun(const Engine& engine);
+    void TickBombingRun(float dtSeconds, const ParticleSystem& sys, Engine& engine);
+    void ShowBombingRunMarkers(Engine& engine);
+    void HideBombingRunMarkers(Engine& engine);
+    void EmitBurstInstances(float dtSeconds, const ParticleSystem& sys, Engine& engine);
+    void DisableAfterRefusal();
 };
 
 // Validate / clamp a config in place against the driver's hard caps.
@@ -163,6 +183,10 @@ void ClampSpawnerConfig(SpawnerConfig& cfg);
 
 // The curved-path inputs for the reference projectile, on the preview's ground plane.
 ProjectileFlightParams ReferenceFlightParams(const Engine::ReferenceProjectileInfo& proj, float groundZ);
+
+// True when `cfg` flies bombing runs: the mode is on and the matched reference projectile
+// is a flyable bomb.
+bool IsBombingRunInEffect(const SpawnerConfig& cfg, const Engine& engine);
 
 // True when match-projectile mode can't fire the reference projectile at the target
 // from `cfg.position`: a grenade out of lob range (the game doesn't fire it either).

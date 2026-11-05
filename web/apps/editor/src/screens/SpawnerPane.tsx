@@ -20,7 +20,9 @@
 //      like the projectile" (matchProjectile) takes the game's speed, range
 //      and flight time, so Velocity only aims and the lifetime and path
 //      sections stand down while it is on. Missiles, grenades and cluster
-//      bombs also aim at a Target point (marked in the viewport).
+//      bombs also aim at a Target point (marked in the viewport). A matched
+//      bomb can fly a "Bombing run" instead: each burst is a V of three
+//      bombers passing over the Target, so burst size and spacing stand down.
 //
 // State sync. The panel reads `snapshot.spawner` on mount and listens
 // to `engine/state/changed` for external mutations (devtools pokes,
@@ -164,6 +166,7 @@ export function SpawnerPane({ bridge }: Props) {
     commit(patchSpawner(config, "squiggleAmplitude", patchVec(config.squiggleAmplitude, idx, v)));
   const setSquiggleFreq = (v: number) => commit(patchSpawner(config, "squiggleFrequency", v));
   const setMatchProjectile = (on: boolean) => commit(patchSpawner(config, "matchProjectile", on));
+  const setBombingRun = (on: boolean) => commit(patchSpawner(config, "bombingRun", on));
   const target = config.targetPosition ?? [0, 0, 0];
   const setTargetAxis = (idx: 0 | 1 | 2, v: number) =>
     commit(patchSpawner(config, "targetPosition", patchVec(target, idx, v)));
@@ -175,6 +178,9 @@ export function SpawnerPane({ bridge }: Props) {
   );
   // The host flies shots like the projectile only when it can (C++ SpawnerDriver).
   const matching = config.matchProjectile === true && projectile?.flyable === true;
+  // Only a matched bomb carries bomber stats (projectile.bombingRun), so only it flies runs.
+  const bombingRun = matching ? (projectile?.bombingRun ?? null) : null;
+  const flyingBombingRun = bombingRun !== null && config.bombingRun === true;
 
   const handleTrigger = () => {
     if (getTimelineState().active) return;
@@ -293,7 +299,23 @@ export function SpawnerPane({ bridge }: Props) {
                   In game a {projectile.category} shot doesn't fly straight; the preview flies it straight.
                 </p>
               )}
-              {matching && projectile.usesTarget && (
+              {bombingRun && (
+                <>
+                  <label className="mt-2 flex items-center gap-2 text-xs text-text">
+                    <Checkbox
+                      checked={config.bombingRun === true}
+                      onChange={(e) => setBombingRun(e.target.checked)}
+                      aria-label="Bombing run"
+                    />
+                    <span>Bombing run</span>
+                  </label>
+                  {/* Three bombers: kBombingRunBomberCount in src/simulation/BombingRun.h. */}
+                  <p data-testid="spawner-bombing-run" className="mt-1 text-2xs text-text-3">
+                    {`${bombingRun.bomberName ?? "Stock bomber stats"}: three bombers in a V at ${Math.round(bombingRun.speed)} units/s, each dropping every ${bombingRun.rechargeSec.toFixed(2)} s within ${Math.round(bombingRun.attackDistance)} units of its marker. Velocity sets the heading.`}
+                  </p>
+                </>
+              )}
+              {matching && (projectile.usesTarget || flyingBombingRun) && (
                 <>
                   <ToolPanel.Row label="Target">
                     <div className="grid grid-cols-3 gap-1">
@@ -311,8 +333,9 @@ export function SpawnerPane({ bridge }: Props) {
                     </div>
                   </ToolPanel.Row>
                   <p data-testid="spawner-projectile-target" className="mt-1 text-2xs text-text-3">
-                    Missiles home on the target, rockets curve onto it, grenades lob onto it, cluster bombs launch
-                    toward it.
+                    {flyingBombingRun
+                      ? "The bombers pass over the target, each bombing its own marker beside it."
+                      : "Missiles home on the target, rockets curve onto it, grenades lob onto it, cluster bombs launch toward it."}
                   </p>
                   {config.projectileOutOfReach === true && (
                     <p data-testid="spawner-projectile-out-of-reach" className="mt-1 text-2xs text-warning-fg">
@@ -329,6 +352,7 @@ export function SpawnerPane({ bridge }: Props) {
               <Spinner
                 value={config.burstSize}
                 onChange={setBurstSize}
+                disabled={flyingBombingRun}
                 min={1}
                 max={MAX_BURST_SIZE}
                 step={1}
@@ -340,6 +364,7 @@ export function SpawnerPane({ bridge }: Props) {
               <Spinner
                 value={config.spacingSec}
                 onChange={setSpacingSec}
+                disabled={flyingBombingRun}
                 min={0}
                 max={MAX_SPACING_SEC}
                 step={0.05}

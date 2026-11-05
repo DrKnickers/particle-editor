@@ -10,6 +10,7 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ### Added
 
+- The Spawner previews land bombing runs: with a bomb matched, "Bombing run" flies a V of three bombers over the target at the bomber's in-game speed, each dropping the bomb on its own marker while it is within attack range, with the bomber stats taken from the unit that drops that bomb
 - "Fly like the projectile" flies rockets on their in-game paths: a straight start, then a randomly bent curve onto the Spawner target, so each shot in a burst takes its own line; land rockets keep their launch height above the ground
 - "Fly like the projectile" flies missiles, bombs and grenades on their in-game paths: missiles turn in on a Spawner target point (drawn as a cross in the viewport), bombs drop away along their heading, and grenades lob onto the target, with a warning when it's out of lob range
 - Projectiles drawn by particle effects (a particle-system model, or a skeleton of particle proxies, like turbolaser bolts and pulse cannon blasts) can be the reference object: the effect plays at the placement and restarts when it ends, and with "Fly like the projectile" each shot carries its own effects, which fade when the shot ends; mesh projectiles play their proxy effects too

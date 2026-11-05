@@ -327,6 +327,9 @@
     <ClInclude Include="simulation\RocketSpline.h">
       <Filter>Header Files\simulation</Filter>
     </ClInclude>
+    <ClInclude Include="simulation\BombingRun.h">
+      <Filter>Header Files\simulation</Filter>
+    </ClInclude>
     <ClInclude Include="effect\CloseDecision.h">
       <Filter>Header Files\effect</Filter>
     </ClInclude>
