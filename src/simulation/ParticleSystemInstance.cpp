@@ -134,56 +134,38 @@ int ParticleSystemInstance::Update(TimeF currentTime)
     return nParticles;
 }
 
-// Draw the emitters matching `wantHeat` back-to-front per the authored emitter
-// TREE, not m_emitters spawn order: a parent draws ON TOP OF its children, and
-// siblings/roots order by authored list POSITION. Root-only systems
-// are a no-op ordering (each root's key is just its position). The pure pieces —
-// post-order draw keys over the authored tree, then a heat-filtered stable sort
-// by key — live in EmitterDrawOrder.h (unit-tested, tests/test_emitter_draw_order.cpp);
-// this maps the authored tree + each instance to authored POSITIONS, then draws.
+// Draw the emitters matching `wantHeat` in authored rank order (the game's
+// rule; EmitterDrawOrder.h), not m_emitters spawn order: a child spawns lazily
+// and is appended last, but must still draw before any higher-ranked emitter.
+// The heat-filtered stable sort lives in EmitterDrawOrder.h (unit-tested,
+// tests/test_emitter_draw_order.cpp); this maps each instance to its rank.
 //
-// Ordering keys off POSITION (a node's slot in getEmitters()) — never
-// Emitter::index — is deliberate: index is a mutable mirror the bridge can
-// overwrite (BridgeDispatch_Emitters `emit->index = ...`), and a desynced index
-// could silently collapse a parent's and child's keys and put the child back on
-// top. Position is the true authored order and each Emitter* is a
-// stable identity, so we map both the parent links and every live instance
-// through the same Emitter*->position table.
+// Rank is the source emitter's POSITION in getEmitters(), never Emitter::index:
+// index is a mutable mirror the bridge can overwrite (BridgeDispatch_Emitters
+// `emit->index = ...`), while each Emitter* is a stable identity.
 void ParticleSystemInstance::RenderByRank(IDirect3DDevice9* pDevice, bool wantHeat)
 {
-    // Emitter* -> authored position, over the SMALL authored set (dozens).
     const std::vector<ParticleSystem::Emitter*>&               authored = m_system.getEmitters();
     const size_t                                               n        = authored.size();
     std::unordered_map<const ParticleSystem::Emitter*, size_t> position;
     position.reserve(n * 2 + 1);
     for (size_t r = 0; r < n; ++r) position[authored[r]] = r;
 
-    // Parent link per position, then post-order draw keys (child behind parent).
-    std::vector<size_t> parentPos(n);
-    for (size_t r = 0; r < n; ++r)
-    {
-        const ParticleSystem::Emitter* p  = authored[r]->parent;
-        auto                           it = p ? position.find(p) : position.end();
-        parentPos[r]                      = (it != position.end()) ? it->second : static_cast<size_t>(-1);
-    }
-    const std::vector<size_t> drawKey = ComputeAuthoredDrawKeys(parentPos);
-
     std::vector<EmitterInstance*>        insts;
-    std::vector<std::pair<size_t, bool>> keys;
+    std::vector<std::pair<size_t, bool>> ranks;
     insts.reserve(m_emitters.size());
-    keys.reserve(m_emitters.size());
+    ranks.reserve(m_emitters.size());
     for (auto& emitter : m_emitters)
     {
-        // Map the instance to its source emitter's authored position, then its
-        // draw key. An instance whose source isn't in the authored list (should
-        // never happen — it was spawned from it) falls back to a stable
-        // draw-last key so it deterministically draws on top rather than OOB.
-        auto         it  = position.find(emitter->GetSourceEmitter());
-        const size_t key = (it != position.end()) ? drawKey[it->second] : n;
+        // An instance whose source isn't in the authored list (should never
+        // happen — it was spawned from it) falls back to a stable draw-last rank
+        // so it deterministically draws on top rather than OOB.
+        auto         it   = position.find(emitter->GetSourceEmitter());
+        const size_t rank = (it != position.end()) ? it->second : n;
         insts.push_back(emitter.get());
-        keys.push_back({key, emitter->IsHeatEmitter()});
+        ranks.push_back({rank, emitter->IsHeatEmitter()});
     }
-    for (size_t idx : ComputeEmitterDrawOrder(keys, wantHeat)) insts[idx]->Render(pDevice);
+    for (size_t idx : ComputeEmitterDrawOrder(ranks, wantHeat)) insts[idx]->Render(pDevice);
 }
 
 void ParticleSystemInstance::RenderNormal(IDirect3DDevice9* pDevice)

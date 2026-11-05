@@ -8,6 +8,10 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ## [Unreleased]
 
+### Fixed
+
+- Emitters draw in their list order, as the game does: a child emitter listed after its parent now draws on top of it again, reversing the 0.3.0 change that drew parents over their children
+
 ## [0.5.0] - 2026-11-04
 
 ### Added
