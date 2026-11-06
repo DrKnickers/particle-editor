@@ -1,6 +1,6 @@
-// Verifies the setup bridge's asynchronous browser-mode refusal and read-only status.
-import { describe, expect, it, vi } from "vitest";
-import { MockBridge } from "../mock";
+// Verifies browser setup progress and persisted mock paths without touching the filesystem.
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MockBridge, MOCK_MANAGED_EDITOR_PATH } from "../mock";
 import {
   ENGINE_HOST_SETUP_FINISHED_EVENT,
   ENGINE_HOST_SETUP_PROGRESSED_EVENT,
@@ -10,8 +10,14 @@ import {
 } from "@particle-editor/bridge-schema";
 
 describe("engine host setup bridge", (): void => {
+  beforeEach((): void => {
+    vi.useFakeTimers();
+  });
+  afterEach((): void => {
+    vi.useRealTimers();
+  });
   it("reports no managed Windows installation in browser mode", async (): Promise<void> => {
-    const bridge = new MockBridge();
+    const bridge: MockBridge = new MockBridge();
     expect(await bridge.request({ kind: "engineHost/setup/status", params: {} })).toEqual({
       managedPath: null,
       isRunning: false,
@@ -19,9 +25,9 @@ describe("engine host setup bridge", (): void => {
   });
 
   it.each(["setup", "remove"] as const)(
-    "accepts %s then reports the native requirement",
+    "accepts %s then emits progress and completion",
     async (action: "setup" | "remove"): Promise<void> => {
-      const bridge = new MockBridge();
+      const bridge: MockBridge = new MockBridge();
       const finished: EngineHostSetupFinishedDto[] = [];
       const progressed: ReturnType<typeof vi.fn> = vi.fn();
       bridge.on(ENGINE_HOST_SETUP_PROGRESSED_EVENT, progressed);
@@ -36,10 +42,24 @@ describe("engine host setup bridge", (): void => {
             })
           : await bridge.request({ kind: "engineHost/setup/remove", params: {} });
       expect(response).toEqual({ ok: true });
-      await Promise.resolve();
-      expect(progressed).toHaveBeenCalledOnce();
-      expect(finished).toEqual([{ ok: false, action, error: "Engine host setup requires the Windows editor." }]);
-      expect(await bridge.request({ kind: "engineHost/settings", params: {} })).toEqual({ exePath: null });
+      expect(await bridge.request({ kind: "engineHost/setup/status", params: {} })).toEqual({
+        managedPath: null,
+        isRunning: true,
+      });
+      expect(await bridge.request({ kind: "engineHost/setup/remove", params: {} })).toEqual({
+        ok: false,
+        error: "A setup operation is already running.",
+      });
+      await vi.runAllTimersAsync();
+      expect(progressed).toHaveBeenCalledTimes(3);
+      const exePath: string | null =
+        action === "setup" ? MOCK_MANAGED_EDITOR_PATH : null;
+      expect(finished).toEqual([action === "setup" ? { ok: true, action, exePath } : { ok: true, action }]);
+      expect(await bridge.request({ kind: "engineHost/settings", params: {} })).toEqual({ exePath });
+      expect(await bridge.request({ kind: "engineHost/setup/status", params: {} })).toEqual({
+        managedPath: exePath,
+        isRunning: false,
+      });
     },
   );
 });

@@ -250,8 +250,8 @@ describe("MockBridge contract — engine host settings", (): void => {
     });
     expect(await bridge.request({ kind: "engine/state/snapshot", params: {} })).toEqual(before);
     expect(await bridge.request({ kind: "file/pick-open", params: { filter: "exe" } })).toEqual({
-      ok: false,
-      error: "browser-mode",
+      ok: true,
+      path: "C:\\MapEditor\\EAW Terrain Editor.exe",
     });
   });
   it.each(["", "relative.exe", "C:\\Preview\\editor.txt", "C:editor.exe"])(

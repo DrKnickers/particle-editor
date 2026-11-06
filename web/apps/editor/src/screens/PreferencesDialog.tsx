@@ -1,8 +1,15 @@
 // Preferences owns editable UI drafts; the bridge owns the engine host path and persistence.
-// This dialog never starts the map editor or changes its ini.
+// Setup delegates private map-editor copying and configuration to the native bridge.
 import { useEffect, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
-import type { Bridge, ResponseMap } from "@particle-editor/bridge-schema";
+import {
+  ENGINE_HOST_SETUP_PROGRESSED_EVENT,
+  ENGINE_HOST_SETUP_FINISHED_EVENT,
+  type Bridge,
+  type ResponseMap,
+  type EventOf,
+  type EngineHostSetupProgressDto,
+} from "@particle-editor/bridge-schema";
 import { Modal } from "@/components/Modal";
 import { cn } from "@/lib/utils";
 import { Button } from "@/primitives/Button";
@@ -46,34 +53,155 @@ function SectionCard({ title, children }: { title: string; children: ReactNode }
   );
 }
 
-export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
+export function PreferencesDialog({ bridge, open, onOpenChange }: Props): ReactNode {
   const [engineHostExePath, setEngineHostExePath] = useState<string | null>(null);
   const [engineHostError, setEngineHostError] = useState<string | null>(null);
   const [isEngineHostBusy, setEngineHostBusy] = useState<boolean>(true);
+  const [managedPath, setManagedPath] = useState<string | null>(null);
+  const [isSetupOpen, setSetupOpen] = useState<boolean>(false);
+  const [isSetupRunning, setSetupRunning] = useState<boolean>(false);
+  const [setupAction, setSetupAction] = useState<"setup" | "remove">("setup");
+  const [setupProgress, setSetupProgress] = useState<EngineHostSetupProgressDto | null>(null);
+  const [setupResult, setSetupResult] = useState<string | null>(null);
+  const [setupEditorPath, setSetupEditorPath] = useState<string | null>(null);
+  const [packageManifestPath, setPackageManifestPath] = useState<string | null>(null);
+  const [isRemoveConfirmed, setRemoveConfirmed] = useState<boolean>(false);
   // Reload the native setting on each open so another Preferences session cannot leave a stale path.
+  // Native setup events stay subscribed while either dialog is closed because the worker continues.
   useEffect((): (() => void) => {
     let isCurrent = true;
-    const loadSettings = async (): Promise<void> => {
-      if (!open) return;
+    // A fresh open drops a previous session's error; the reload after a failed setup keeps its error.
+    const loadSettings = async (isFreshOpen: boolean): Promise<void> => {
       setEngineHostBusy(true);
-      setEngineHostError(null);
+      if (isFreshOpen) setEngineHostError(null);
       try {
-        const settings: ResponseMap["engineHost/settings"] = await bridge.request({
-          kind: "engineHost/settings",
-          params: {},
-        });
-        if (isCurrent) setEngineHostExePath(settings.exePath ?? null);
+        const [settings, status]: [ResponseMap["engineHost/settings"], ResponseMap["engineHost/setup/status"]] =
+          await Promise.all([
+            bridge.request({ kind: "engineHost/settings", params: {} }),
+            bridge.request({ kind: "engineHost/setup/status", params: {} }),
+          ]);
+        if (!isCurrent) return;
+        setEngineHostExePath(settings.exePath ?? null);
+        setManagedPath(status.managedPath ?? null);
+        setSetupRunning(status.isRunning ?? false);
       } catch (error: unknown) {
         if (isCurrent) setEngineHostError(String(error));
       } finally {
         if (isCurrent) setEngineHostBusy(false);
       }
     };
-    void loadSettings();
+    const onSetupProgressed = (event: EventOf<typeof ENGINE_HOST_SETUP_PROGRESSED_EVENT>): void => {
+      setSetupProgress(event.payload);
+      setSetupRunning(true);
+    };
+    const onSetupFinished = (event: EventOf<typeof ENGINE_HOST_SETUP_FINISHED_EVENT>): void => {
+      setSetupRunning(false);
+      setSetupProgress(null);
+      setRemoveConfirmed(false);
+      if (event.payload.ok) {
+        setEngineHostError(null);
+        setSetupResult(
+          event.payload.action === "setup" ? `Setup complete: ${event.payload.exePath}` : "Setup removed.",
+        );
+        if (event.payload.action === "setup") setEngineHostExePath(event.payload.exePath);
+      } else {
+        setEngineHostError(event.payload.error);
+        setSetupResult(null);
+      }
+      void loadSettings(false);
+    };
+    const offProgressed: () => void = bridge.on(ENGINE_HOST_SETUP_PROGRESSED_EVENT, onSetupProgressed);
+    const offFinished: () => void = bridge.on(ENGINE_HOST_SETUP_FINISHED_EVENT, onSetupFinished);
+    if (open) void loadSettings(true);
     return (): void => {
       isCurrent = false;
+      offProgressed();
+      offFinished();
     };
   }, [bridge, open]);
+
+  const browseSetupPath = async (filter: "exe" | "json"): Promise<void> => {
+    setEngineHostBusy(true);
+    setEngineHostError(null);
+    try {
+      const picked: ResponseMap["file/pick-open"] = await bridge.request({
+        kind: "file/pick-open",
+        params: { filter },
+      });
+      if (!picked.ok) {
+        // Dismissing the native picker leaves the current selection intact.
+        if (picked.error !== "cancelled") setEngineHostError(picked.error);
+        return;
+      }
+      if (!picked.path) {
+        setEngineHostError("The file picker returned no path.");
+        return;
+      }
+      if (filter === "exe") setSetupEditorPath(picked.path);
+      else setPackageManifestPath(picked.path);
+    } catch (error: unknown) {
+      setEngineHostError(String(error));
+    } finally {
+      setEngineHostBusy(false);
+    }
+  };
+
+  const hasSetupPaths: boolean = Boolean(setupEditorPath && packageManifestPath);
+  const runSetupAction = async (action: "setup" | "remove"): Promise<void> => {
+    if (isSetupRunning || isEngineHostBusy) return;
+    if (action === "setup" && (!setupEditorPath || !packageManifestPath)) return;
+    setSetupAction(action);
+    setSetupRunning(true);
+    setSetupProgress(null);
+    setSetupResult(null);
+    setEngineHostError(null);
+    setRemoveConfirmed(false);
+    try {
+      const accepted: ResponseMap["engineHost/setup/start"] =
+        action === "setup" && setupEditorPath && packageManifestPath
+          ? await bridge.request({
+              kind: "engineHost/setup/start",
+              params: { editorExePath: setupEditorPath, packageManifestPath },
+            })
+          : await bridge.request({ kind: "engineHost/setup/remove", params: {} });
+      if (!accepted.ok) throw new Error(accepted.error);
+    } catch (error: unknown) {
+      setEngineHostError(String(error));
+      setSetupRunning(false);
+    }
+  };
+
+  const isSetupDisabled: boolean = isEngineHostBusy || isSetupRunning;
+  const canStartSetup: boolean = hasSetupPaths && !isSetupDisabled;
+  const setupFeedback: ReactNode = (
+    <>
+      {isSetupRunning && (
+        <div role="status" className="flex flex-col gap-1 text-xs text-text-2">
+          <span>
+            {setupAction === "setup" ? "Setting up" : "Removing setup"}
+            {setupProgress && `: ${setupProgress.stage}`}
+            {setupProgress && setupProgress.total > 0 && ` (${setupProgress.done} of ${setupProgress.total})`}
+          </span>
+          <progress
+            aria-label="Engine preview setup progress"
+            value={setupProgress && setupProgress.total > 0 ? setupProgress.done : undefined}
+            max={setupProgress && setupProgress.total > 0 ? setupProgress.total : undefined}
+            className="h-1.5 w-full accent-accent"
+          />
+        </div>
+      )}
+      {setupResult && (
+        <p role="status" className="break-all text-xs text-text-2">
+          {setupResult}
+        </p>
+      )}
+      {engineHostError && (
+        <p role="alert" className="text-xs text-danger-fg">
+          {engineHostError}
+        </p>
+      )}
+    </>
+  );
 
   const browseEngineHostPath = async (): Promise<void> => {
     setEngineHostBusy(true);
@@ -325,7 +453,7 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
               <div className="flex gap-2">
                 <Button
                   variant="secondary"
-                  disabled={isEngineHostBusy}
+                  disabled={isSetupDisabled}
                   onClick={(): void => {
                     void browseEngineHostPath();
                   }}
@@ -334,19 +462,50 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
                 </Button>
                 <Button
                   variant="secondary"
-                  disabled={isEngineHostBusy || engineHostExePath === null}
+                  disabled={isSetupDisabled || engineHostExePath === null}
                   onClick={(): void => {
                     void clearEngineHostPath();
                   }}
                 >
                   Clear
                 </Button>
+                <Button variant="secondary" disabled={isSetupDisabled} onClick={(): void => setSetupOpen(true)}>
+                  Set up
+                </Button>
               </div>
-              {engineHostError && (
-                <p role="alert" className="text-xs text-danger-fg">
-                  {engineHostError}
-                </p>
+              {managedPath && (
+                <div className="flex flex-col gap-2 border-t border-border pt-2">
+                  <span className="text-xs text-text">Managed setup</span>
+                  <output aria-label="Managed setup path" title={managedPath} className="truncate text-xs text-text-2">
+                    {managedPath}
+                  </output>
+                  {isRemoveConfirmed && (
+                    <p className="text-xs text-text-2">Delete the managed copy? Your game install is never modified.</p>
+                  )}
+                  <div className="flex gap-2">
+                    <Button
+                      variant={isRemoveConfirmed ? "danger" : "secondary"}
+                      disabled={isSetupDisabled}
+                      onClick={(): void => {
+                        if (isRemoveConfirmed) void runSetupAction("remove");
+                        else setRemoveConfirmed(true);
+                      }}
+                    >
+                      {isRemoveConfirmed ? "Confirm remove" : "Remove setup"}
+                    </Button>
+                    {isRemoveConfirmed && (
+                      <Button
+                        variant="secondary"
+                        disabled={isSetupDisabled}
+                        onClick={(): void => setRemoveConfirmed(false)}
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
+                </div>
               )}
+              {!isSetupOpen && setupFeedback}
             </div>
           </SectionCard>
 
@@ -414,6 +573,76 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
       <Modal.Footer>
         <Modal.OkButton onClick={() => onOpenChange(false)}>Close</Modal.OkButton>
       </Modal.Footer>
+      <Modal bridge={bridge} open={isSetupOpen} onOpenChange={setSetupOpen} title="Set up engine preview" size="md">
+        <Modal.Body>
+          <div className="flex flex-col gap-3">
+            <p className="text-xs text-text-2">
+              Makes a private copy of the 64-bit EAW Terrain Editor with the Alamo Preview render host so the live
+              engine view works; your game install is never modified.
+            </p>
+            <div className="flex min-w-0 items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <span id="setup-editor-label" className="text-xs text-text">
+                  Map editor
+                </span>
+                <output
+                  aria-labelledby="setup-editor-label"
+                  title={setupEditorPath ?? undefined}
+                  className="block truncate text-xs text-text-2"
+                >
+                  {setupEditorPath ?? "Choose the 64-bit map editor executable"}
+                </output>
+              </div>
+              <Button
+                variant="secondary"
+                aria-label="Browse map editor"
+                disabled={isSetupDisabled}
+                onClick={(): void => {
+                  void browseSetupPath("exe");
+                }}
+              >
+                Browse
+              </Button>
+            </div>
+            <div className="flex min-w-0 items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <span id="setup-package-label" className="text-xs text-text">
+                  Host package
+                </span>
+                <output
+                  aria-labelledby="setup-package-label"
+                  title={packageManifestPath ?? undefined}
+                  className="block truncate text-xs text-text-2"
+                >
+                  {packageManifestPath ?? "Choose package.json in the extracted Alamo Preview package"}
+                </output>
+              </div>
+              <Button
+                variant="secondary"
+                aria-label="Browse host package"
+                disabled={isSetupDisabled}
+                onClick={(): void => {
+                  void browseSetupPath("json");
+                }}
+              >
+                Browse
+              </Button>
+            </div>
+            {setupFeedback}
+          </div>
+        </Modal.Body>
+        <Modal.Footer>
+          <Modal.CancelButton>Close</Modal.CancelButton>
+          <Modal.OkButton
+            disabled={!canStartSetup}
+            onClick={(): void => {
+              void runSetupAction("setup");
+            }}
+          >
+            Set up
+          </Modal.OkButton>
+        </Modal.Footer>
+      </Modal>
     </Modal>
   );
 }

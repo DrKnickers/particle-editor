@@ -70,6 +70,12 @@ import {
 import { EventHub } from "./event-hub";
 import { ENGINE_HOST_SETUP_PROGRESSED_EVENT, ENGINE_HOST_SETUP_FINISHED_EVENT } from "@particle-editor/bridge-schema";
 
+const MOCK_SETUP_STEP_MS = 150;
+const MOCK_SETUP_STAGES: readonly string[] = ["Checking setup", "Copying game data", "Configuring preview"];
+export const MOCK_MANAGED_EDITOR_PATH = "C:\\ParticleEditor\\EnginePreview\\EAW Terrain Editor.exe";
+const MOCK_PICKED_EDITOR_PATH = "C:\\MapEditor\\EAW Terrain Editor.exe";
+const MOCK_PICKED_PACKAGE_PATH = "C:\\Alamo Preview\\package.json";
+
 /** Returns true for request kinds that should mark the in-memory file
  *  state dirty. Every engine/set/* is mutating. Engine actions are
  *  mutating except for the read-only-ish reload-shaders / reload-textures
@@ -221,6 +227,8 @@ function didMutate(
 // ─── Bridge state and requests ─────────────────────────────
 export class MockBridge implements Bridge, MockDispatchHost {
   private engineHostExePath: string | null = null;
+  private engineHostManagedPath: string | null = null;
+  private isEngineHostSetupRunning = false;
   private events = new EventHub<{ [K in EventKind]: EventOf<K> }>("MockBridge");
   private viewportUnavailable: EventOf<"viewport/unavailable"> | null = null;
 
@@ -462,11 +470,16 @@ export class MockBridge implements Bridge, MockDispatchHost {
       case "autosave/check-recovery":
       case "autosave/recover":
       case "file/new":
-      case "file/pick-open":
       case "file/open":
       case "file/save":
       case "file/save-as":
       case "file/recent/list":
+        return dispatchFile.call(this, req);
+
+      case "file/pick-open":
+        // Synthetic setup inputs let browser users exercise the flow without native pickers.
+        if (req.params.filter === "exe") return { ok: true, path: MOCK_PICKED_EDITOR_PATH };
+        if (req.params.filter === "json") return { ok: true, path: MOCK_PICKED_PACKAGE_PATH };
         return dispatchFile.call(this, req);
 
       case "mods/list":
@@ -501,20 +514,39 @@ export class MockBridge implements Bridge, MockDispatchHost {
         return dispatchSpawnerLighting.call(this, req);
 
       case "engineHost/setup/status":
-        return { managedPath: null, isRunning: false };
+        return { managedPath: this.engineHostManagedPath, isRunning: this.isEngineHostSetupRunning };
       case "engineHost/setup/start":
       case "engineHost/setup/remove": {
         const action: "setup" | "remove" = req.kind === "engineHost/setup/start" ? "setup" : "remove";
-        queueMicrotask((): void => {
-          this.emit({
-            kind: ENGINE_HOST_SETUP_PROGRESSED_EVENT,
-            payload: { stage: "Checking setup", done: 0, total: 1 },
+        if (this.isEngineHostSetupRunning) return { ok: false, error: "A setup operation is already running." };
+        this.isEngineHostSetupRunning = true;
+        MOCK_SETUP_STAGES.forEach((stage: string, index: number): void => {
+          setTimeout((): void => {
+            this.emit({
+              kind: ENGINE_HOST_SETUP_PROGRESSED_EVENT,
+              payload: {
+                stage: action === "remove" ? "Removing managed copy" : stage,
+                done: index,
+                total: MOCK_SETUP_STAGES.length,
+              },
+            });
+          }, MOCK_SETUP_STEP_MS * index);
+        });
+        setTimeout((): void => {
+          if (action === "setup") this.engineHostExePath = MOCK_MANAGED_EDITOR_PATH;
+          // Removal clears the configured editor path only when it points at the managed copy.
+          else if (this.engineHostExePath === this.engineHostManagedPath) this.engineHostExePath = null;
+          this.engineHostManagedPath = action === "setup" ? MOCK_MANAGED_EDITOR_PATH : null;
+          this.isEngineHostSetupRunning = false;
+          this.patchAndBroadcast({
+            enginePreviewAvailable: this.enginePreview.state === "ready" || this.engineHostExePath !== null,
           });
           this.emit({
             kind: ENGINE_HOST_SETUP_FINISHED_EVENT,
-            payload: { ok: false, action, error: "Engine host setup requires the Windows editor." },
+            payload:
+              action === "setup" ? { ok: true, action, exePath: MOCK_MANAGED_EDITOR_PATH } : { ok: true, action },
           });
-        });
+        }, MOCK_SETUP_STEP_MS * MOCK_SETUP_STAGES.length);
         return { ok: true };
       }
       case "engineHost/settings":

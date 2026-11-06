@@ -1,11 +1,54 @@
 // Tests Preferences controls through bridge replies; no native picker or registry is used.
 import { describe, it, expect, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { makeBridgeStub, type BridgeStub } from "@/test/bridge-stub";
 import { PreferencesDialog } from "../PreferencesDialog";
 import { readConfirmDelete } from "@/lib/tree/delete-emitters";
-import type { EngineHostSettingsDto } from "@particle-editor/bridge-schema";
+import {
+  ENGINE_HOST_SETUP_PROGRESSED_EVENT,
+  ENGINE_HOST_SETUP_FINISHED_EVENT,
+  type EngineHostSettingsDto,
+  type EngineHostSetupStatusDto,
+  type Request,
+  type EngineHostSetupAcceptedDto,
+} from "@particle-editor/bridge-schema";
+
+const SETUP_EDITOR_PATH = "C:\\MapEditor\\EAW Terrain Editor.exe";
+const SETUP_PACKAGE_PATH = "C:\\Alamo Preview\\package.json";
+const MANAGED_EDITOR_PATH = "C:\\Managed\\EAW Terrain Editor.exe";
+
+function makeSetupBridge(): { bridge: BridgeStub; settings: EngineHostSettingsDto; status: EngineHostSetupStatusDto } {
+  const settings: EngineHostSettingsDto = { exePath: null };
+  const status: EngineHostSetupStatusDto = { managedPath: null, isRunning: false };
+  const bridge: BridgeStub = makeBridgeStub({
+    responses: {
+      "engineHost/settings": (): EngineHostSettingsDto => ({ ...settings }),
+      "engineHost/setup/status": (): EngineHostSetupStatusDto => ({ ...status }),
+      "engineHost/setup/start": { ok: true },
+      "engineHost/setup/remove": { ok: true },
+      "file/pick-open": (params: { filter?: string }): { ok: true; path: string } => ({
+        ok: true,
+        path: params.filter === "exe" ? SETUP_EDITOR_PATH : SETUP_PACKAGE_PATH,
+      }),
+    },
+  });
+  return { bridge, settings, status };
+}
+
+async function openSetupDialog(): Promise<HTMLElement> {
+  const openButton: HTMLElement = screen.getByRole("button", { name: "Set up" });
+  await waitFor((): void => {
+    expect(openButton).toBeEnabled();
+  });
+  await userEvent.click(openButton);
+  return screen.findByRole("dialog", { name: "Set up engine preview" });
+}
+
+async function chooseSetupPaths(dialog: HTMLElement): Promise<void> {
+  await userEvent.click(within(dialog).getByRole("button", { name: "Browse map editor" }));
+  await userEvent.click(within(dialog).getByRole("button", { name: "Browse host package" }));
+}
 
 function makePrefsBridge(msaaLevels: number[] = [0, 2, 4]) {
   const bridge = makeBridgeStub({
@@ -16,6 +59,131 @@ function makePrefsBridge(msaaLevels: number[] = [0, 2, 4]) {
 
 describe("PreferencesDialog", () => {
   beforeEach(() => localStorage.clear());
+  it("requires both setup paths and sends them with their picker filters", async (): Promise<void> => {
+    const { bridge }: { bridge: BridgeStub } = makeSetupBridge();
+    render(<PreferencesDialog bridge={bridge} open onOpenChange={(): void => {}} />);
+    const dialog: HTMLElement = await openSetupDialog();
+    const startButton: HTMLElement = within(dialog).getByRole("button", { name: "Set up" });
+    expect(startButton).toBeDisabled();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Browse map editor" }));
+    expect(startButton).toBeDisabled();
+    expect(within(dialog).getByLabelText("Map editor")).toHaveAttribute("title", SETUP_EDITOR_PATH);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Browse host package" }));
+    expect(startButton).toBeEnabled();
+    expect(within(dialog).getByLabelText("Host package")).toHaveAttribute("title", SETUP_PACKAGE_PATH);
+    expect(bridge.request).toHaveBeenCalledWith({ kind: "file/pick-open", params: { filter: "exe" } });
+    expect(bridge.request).toHaveBeenCalledWith({ kind: "file/pick-open", params: { filter: "json" } });
+    await userEvent.click(startButton);
+    expect(bridge.request).toHaveBeenCalledWith({
+      kind: "engineHost/setup/start",
+      params: { editorExePath: SETUP_EDITOR_PATH, packageManifestPath: SETUP_PACKAGE_PATH },
+    });
+    expect(startButton).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "Browse map editor" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "Browse host package" })).toBeDisabled();
+  });
+
+  it("renders progress, keeps working after close, and refreshes successful settings", async (): Promise<void> => {
+    const { bridge, settings, status }: ReturnType<typeof makeSetupBridge> = makeSetupBridge();
+    const { unmount }: ReturnType<typeof render> = render(
+      <PreferencesDialog bridge={bridge} open onOpenChange={(): void => {}} />,
+    );
+    const dialog: HTMLElement = await openSetupDialog();
+    await chooseSetupPaths(dialog);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Set up" }));
+    bridge.emit(ENGINE_HOST_SETUP_PROGRESSED_EVENT, { stage: "Checking files", done: 0, total: 0 });
+    expect(within(dialog).getByRole("progressbar")).not.toHaveAttribute("value");
+    bridge.emit(ENGINE_HOST_SETUP_PROGRESSED_EVENT, { stage: "Copying game data", done: 1, total: 4 });
+    expect(within(dialog).getByText("Setting up: Copying game data (1 of 4)")).toBeInTheDocument();
+    expect(within(dialog).getByRole("progressbar")).toHaveAttribute("value", "1");
+    await userEvent.click(within(dialog).getByText("Close"));
+    expect(screen.getByText("Setting up: Copying game data (1 of 4)")).toBeInTheDocument();
+    settings.exePath = MANAGED_EDITOR_PATH;
+    status.managedPath = MANAGED_EDITOR_PATH;
+    bridge.emit(ENGINE_HOST_SETUP_FINISHED_EVENT, { ok: true, action: "setup", exePath: MANAGED_EDITOR_PATH });
+    await waitFor((): void => {
+      expect(screen.getByLabelText("Managed setup path")).toHaveTextContent(MANAGED_EDITOR_PATH);
+    });
+    expect(screen.getByLabelText("Map editor executable")).toHaveTextContent(MANAGED_EDITOR_PATH);
+    expect(screen.getByText(`Setup complete: ${MANAGED_EDITOR_PATH}`)).toBeInTheDocument();
+    expect(
+      bridge.request.mock.calls.filter(([request]: [Request]): boolean => request.kind === "engineHost/settings"),
+    ).toHaveLength(2);
+    expect(
+      bridge.request.mock.calls.filter(([request]: [Request]): boolean => request.kind === "engineHost/setup/status"),
+    ).toHaveLength(2);
+    unmount();
+    expect(bridge.listenerCount(ENGINE_HOST_SETUP_PROGRESSED_EVENT)).toBe(0);
+    expect(bridge.listenerCount(ENGINE_HOST_SETUP_FINISHED_EVENT)).toBe(0);
+  });
+
+  it("shows setup failure and allows retry", async (): Promise<void> => {
+    const { bridge }: { bridge: BridgeStub } = makeSetupBridge();
+    render(<PreferencesDialog bridge={bridge} open onOpenChange={(): void => {}} />);
+    const dialog: HTMLElement = await openSetupDialog();
+    await chooseSetupPaths(dialog);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Set up" }));
+    bridge.emit(ENGINE_HOST_SETUP_FINISHED_EVENT, { ok: false, action: "setup", error: "Not enough disk space" });
+    expect(within(dialog).getByRole("alert")).toHaveTextContent("Not enough disk space");
+    await waitFor((): void => {
+      expect(within(dialog).getByRole("button", { name: "Set up" })).toBeEnabled();
+    });
+    expect(within(dialog).getByRole("button", { name: "Browse host package" })).toBeEnabled();
+  });
+
+  it("shows picker and immediate setup errors without waiting for completion events", async (): Promise<void> => {
+    let hasPickerFailed = true;
+    const bridge: BridgeStub = makeBridgeStub({
+      responses: {
+        "engineHost/settings": { exePath: null },
+        "engineHost/setup/status": { managedPath: null, isRunning: false },
+        "file/pick-open": (params: { filter?: string }): { ok: false; error: string } | { ok: true; path: string } => {
+          if (hasPickerFailed) return { ok: false, error: "Cannot open picker" };
+          return { ok: true, path: params.filter === "exe" ? SETUP_EDITOR_PATH : SETUP_PACKAGE_PATH };
+        },
+        "engineHost/setup/start": (): EngineHostSetupAcceptedDto => ({ ok: false, error: "Preview is still running" }),
+      },
+    });
+    render(<PreferencesDialog bridge={bridge} open onOpenChange={(): void => {}} />);
+    const dialog: HTMLElement = await openSetupDialog();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Browse map editor" }));
+    expect(within(dialog).getByRole("alert")).toHaveTextContent("Cannot open picker");
+    hasPickerFailed = false;
+    await chooseSetupPaths(dialog);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Set up" }));
+    expect(within(dialog).getByRole("alert")).toHaveTextContent("Preview is still running");
+    expect(within(dialog).getByRole("button", { name: "Set up" })).toBeEnabled();
+  });
+
+  it("loads an already running setup and disables conflicting actions", async (): Promise<void> => {
+    const { bridge, status }: ReturnType<typeof makeSetupBridge> = makeSetupBridge();
+    status.isRunning = true;
+    render(<PreferencesDialog bridge={bridge} open onOpenChange={(): void => {}} />);
+    expect(await screen.findByText("Setting up")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Set up" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Browse" })).toBeDisabled();
+  });
+
+  it("requires confirmation before removing the managed copy and refreshes after removal", async (): Promise<void> => {
+    const { bridge, settings, status }: ReturnType<typeof makeSetupBridge> = makeSetupBridge();
+    settings.exePath = MANAGED_EDITOR_PATH;
+    status.managedPath = MANAGED_EDITOR_PATH;
+    render(<PreferencesDialog bridge={bridge} open onOpenChange={(): void => {}} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Remove setup" }));
+    expect(bridge.request).not.toHaveBeenCalledWith({ kind: "engineHost/setup/remove", params: {} });
+    await userEvent.click(screen.getByRole("button", { name: "Confirm remove" }));
+    expect(bridge.request).toHaveBeenCalledWith({ kind: "engineHost/setup/remove", params: {} });
+    bridge.emit(ENGINE_HOST_SETUP_PROGRESSED_EVENT, { stage: "Deleting files", done: 1, total: 4 });
+    expect(screen.getByText("Removing setup: Deleting files (1 of 4)")).toBeInTheDocument();
+    settings.exePath = null;
+    status.managedPath = null;
+    bridge.emit(ENGINE_HOST_SETUP_FINISHED_EVENT, { ok: true, action: "remove" });
+    await waitFor((): void => {
+      expect(screen.queryByRole("button", { name: "Remove setup" })).not.toBeInTheDocument();
+    });
+    expect(screen.getByLabelText("Map editor executable")).toHaveTextContent("Not set");
+    expect(screen.getByText("Setup removed.")).toBeInTheDocument();
+  });
   it("loads, browses and clears the map editor executable", async (): Promise<void> => {
     const path = "C:\\Preview\\EAW Terrain Editor.exe";
     const bridge: BridgeStub = makeBridgeStub({
