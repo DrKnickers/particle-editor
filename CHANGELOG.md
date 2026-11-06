@@ -11,6 +11,9 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 ### Added
 
 - Preview the current effect as an engine-rendered still beside the editor viewport
+- View → Live engine view shows the engine's render of the effect in the viewport, following your orbit, pan, zoom and edits, and framed to match the editor's camera (#988, #989, #990)
+- The live engine view starts the map editor set in Preferences → Engine preview path by itself, hidden: no window or taskbar button appears, the badge shows that it is starting, and the map editor closes when the Particle Editor exits
+- The live engine view's ground matches the editor's ground choice (Dirt, Grass, Sand, Snow, a custom image or a solid colour); a hidden ground or a ground height can't be mirrored, and a note under the live badge says so
 
 ### Fixed
 
