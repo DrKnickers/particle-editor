@@ -4,6 +4,7 @@
 #ifndef HOST_ENGINE_LIVE_SYNC_H
 #define HOST_ENGINE_LIVE_SYNC_H
 
+#include "EngineLiveFraming.h"
 #include "EnginePreviewPipe.h"
 #include "host/third_party/nlohmann/json.hpp"
 #include <array>
@@ -35,12 +36,13 @@ struct LiveCommand
 class EngineLiveSync
 {
 public:
-    // Every input that changes the camera (orbit, pan, zoom, reset, timeline) reaches the engine
-    // through the camera itself, so the dispatcher reports the current orbit once per frame.
-    void NoteCamera(const engine_preview::Orbit& orbit)
+    // Every input that changes the camera (orbit, pan, zoom, reset, timeline, resize) reaches
+    // the engine through the camera itself, so the dispatcher reports it once per frame.
+    void NoteCamera(const engine_preview::Orbit& orbit, double fieldDegrees)
     {
-        if (m_hasSentCamera && IsSameOrbit(orbit, m_sentCamera)) return;
-        m_pendingCamera = orbit;
+        const LiveCamera camera{orbit, fieldDegrees};
+        if (m_hasSentCamera && IsSameCamera(camera, m_sentCamera)) return;
+        m_pendingCamera = camera;
     }
     void NoteViewportSize(int widthPx, int heightPx, std::uint64_t nowMs)
     {
@@ -62,10 +64,17 @@ public:
     {
         return command.command == "camera" && command.args.value("action", "") == "get";
     }
-    void NoteAnchor(const std::array<double, 3>& openingTarget)
+    // A host that can set its field of view reports its limits with the opening camera.
+    void NoteAnchor(const std::array<double, 3>& openingTarget, const std::optional<FieldLimits>& hostFieldLimits)
     {
         m_anchor            = openingTarget;
+        m_hostFieldLimits   = hostFieldLimits;
         m_isAnchorRequested = false;
+    }
+    // A host that cannot set its field keeps the one maps open with.
+    FieldLimits HostFieldLimits() const
+    {
+        return m_hostFieldLimits.value_or(FieldLimits{kHostDefaultFieldDegrees, kHostDefaultFieldDegrees});
     }
     void NoteAnchorFailed() { m_isAnchorRequested = false; }
     // A still pauses the host's clock and moves its camera; put both back for the live view.
@@ -117,13 +126,19 @@ public:
     }
 
 private:
-    static bool IsSameOrbit(const engine_preview::Orbit& a, const engine_preview::Orbit& b)
+    struct LiveCamera
     {
-        const bool isSameAngles   = std::abs(a.pitch - b.pitch) < kCameraAngleEpsilonDegrees &&
-                                    std::abs(a.yaw - b.yaw) < kCameraAngleEpsilonDegrees;
-        const bool isSameDistance = std::abs(a.distance - b.distance) < kCameraUnitsEpsilon;
-        for (size_t axis = 0; axis < a.target.size(); ++axis)
-            if (std::abs(a.target[axis] - b.target[axis]) >= kCameraUnitsEpsilon) return false;
+        engine_preview::Orbit orbit;
+        double                fieldDegrees;
+    };
+    static bool IsSameCamera(const LiveCamera& a, const LiveCamera& b)
+    {
+        const bool isSameAngles   = std::abs(a.orbit.pitch - b.orbit.pitch) < kCameraAngleEpsilonDegrees &&
+                                    std::abs(a.orbit.yaw - b.orbit.yaw) < kCameraAngleEpsilonDegrees &&
+                                    std::abs(a.fieldDegrees - b.fieldDegrees) < kCameraAngleEpsilonDegrees;
+        const bool isSameDistance = std::abs(a.orbit.distance - b.orbit.distance) < kCameraUnitsEpsilon;
+        for (size_t axis = 0; axis < a.orbit.target.size(); ++axis)
+            if (std::abs(a.orbit.target[axis] - b.orbit.target[axis]) >= kCameraUnitsEpsilon) return false;
         return isSameAngles && isSameDistance;
     }
     LiveCommand TakePark()
@@ -140,30 +155,35 @@ private:
     }
     LiveCommand TakeCamera(std::uint64_t nowMs)
     {
-        const engine_preview::Orbit orbit = *m_pendingCamera;
+        const LiveCamera            camera = *m_pendingCamera;
+        const engine_preview::Orbit orbit  = camera.orbit;
         m_pendingCamera.reset();
-        m_sentCamera                    = orbit;
+        m_sentCamera                    = camera;
         m_hasSentCamera                 = true;
         m_awaitedTag                    = ++m_lastTag;
         m_tagSentMs                     = nowMs;
         std::array<double, 3> mapTarget = orbit.target;
         for (size_t axis = 0; axis < mapTarget.size(); ++axis) mapTarget[axis] += (*m_anchor)[axis];
-        return LiveCommand{"camera",
-                           {{"action", "set"},
-                            {"pitch", orbit.pitch},
-                            {"yaw", orbit.yaw},
-                            {"distance", orbit.distance},
-                            {"target", mapTarget},
-                            {"tag", m_lastTag}}};
+        LiveCommand command{"camera",
+                            {{"action", "set"},
+                             {"pitch", orbit.pitch},
+                             {"yaw", orbit.yaw},
+                             {"distance", orbit.distance},
+                             {"target", mapTarget},
+                             {"tag", m_lastTag}}};
+        // An older host refuses an unknown argument, so the field is sent only to one that can set it.
+        if (m_hostFieldLimits) command.args["fov"] = camera.fieldDegrees;
+        return command;
     }
 
-    std::optional<engine_preview::Orbit> m_pendingCamera;
+    std::optional<LiveCamera> m_pendingCamera;
     // The editor reopens a preview map at its saved camera, which looks at the effect, so the
     // host's opening target is where the effect sits on the map. Our camera is relative to the
     // effect; every camera sent is offset by this anchor.
     std::optional<std::array<double, 3>> m_anchor;
+    std::optional<FieldLimits>           m_hostFieldLimits;
     bool                                 m_isAnchorRequested = false;
-    engine_preview::Orbit                m_sentCamera{};
+    LiveCamera                           m_sentCamera{};
     bool                                 m_hasSentCamera = false;
     std::uint64_t                        m_lastTag       = 0;
     std::uint64_t                        m_awaitedTag    = 0;

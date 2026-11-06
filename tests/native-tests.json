@@ -340,6 +340,7 @@
     },
     "test_engine_preview_pipe": {},
     "test_engine_live_frame": {},
+    "test_engine_live_framing": {},
     "test_engine_live_sync": {},
     "test_engine_preview_worker": {
       "sources": ["src/host/EnginePreviewWorker.cpp", "src/host/EngineLiveReader.cpp"],

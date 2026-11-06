@@ -4,7 +4,7 @@
 #include "engine.h"
 #include "host/AlphaCompositor.h"
 #include "host/EngineLiveFrame.h"
-#include <algorithm>
+#include "host/EngineLiveFraming.h"
 #include <cstring>
 
 namespace
@@ -16,7 +16,7 @@ struct LiveFrameVertex
 };
 constexpr DWORD kLiveFrameFvf = D3DFVF_XYZRHW | D3DFVF_TEX1;
 // Pre-transformed D3D9 vertices address pixel centres, so corners shift by half a pixel to
-// map texels 1:1 onto pixels when the frame and the viewport are the same size.
+// line the quad up with the viewport's pixel edges.
 constexpr float kPixelCornerOffset = 0.5f;
 constexpr UINT  kQuadTriangles     = 2;
 
@@ -101,19 +101,16 @@ bool Engine::RenderLiveFrame()
     const float areaY = m_sceneViewportActive ? float(m_sceneViewportY) : 0.0f;
     const float areaW = m_sceneViewportActive ? float(m_sceneViewportW) : float(targetDesc.Width);
     const float areaH = m_sceneViewportActive ? float(m_sceneViewportH) : float(targetDesc.Height);
-    // Letterbox: while the host is still resizing its view to ours, the frame keeps its own
-    // aspect instead of stretching.
-    const float           scale   = (std::min)(areaW / m_liveFrameWidthPx, areaH / m_liveFrameHeightPx);
-    const float           drawW   = m_liveFrameWidthPx * scale;
-    const float           drawH   = m_liveFrameHeightPx * scale;
-    const float           left    = areaX + (areaW - drawW) / 2 - kPixelCornerOffset;
-    const float           top     = areaY + (areaH - drawH) / 2 - kPixelCornerOffset;
-    const LiveFrameVertex quad[4] = {{left, top, 0, 1, 0, 0},
-                                     {left + drawW, top, 0, 1, 1, 0},
-                                     {left, top + drawH, 0, 1, 0, 1},
-                                     {left + drawW, top + drawH, 0, 1, 1, 1}};
+    // The host draws a 4:3 picture stretched to whatever size its window has, so the frame is
+    // shown as 4:3 whatever its pixel size, cropped to cover the viewport without distortion.
+    const host::engine_live::FrameCrop crop    = host::engine_live::CoverCropForViewport(areaW, areaH);
+    const float                        left    = areaX - kPixelCornerOffset;
+    const float                        top     = areaY - kPixelCornerOffset;
+    const LiveFrameVertex              quad[4] = {{left, top, 0, 1, crop.u0, crop.v0},
+                                                  {left + areaW, top, 0, 1, crop.u1, crop.v0},
+                                                  {left, top + areaH, 0, 1, crop.u0, crop.v1},
+                                                  {left + areaW, top + areaH, 0, 1, crop.u1, crop.v1}};
 
-    const bool isOneToOne = drawW == m_liveFrameWidthPx && drawH == m_liveFrameHeightPx;
     m_pDevice->SetVertexShader(NULL);
     m_pDevice->SetPixelShader(NULL);
     m_pDevice->SetFVF(kLiveFrameFvf);
@@ -133,9 +130,8 @@ bool Engine::RenderLiveFrame()
     m_pDevice->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
     m_pDevice->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
     m_pDevice->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
-    const DWORD filter = isOneToOne ? D3DTEXF_POINT : D3DTEXF_LINEAR;
-    m_pDevice->SetSamplerState(0, D3DSAMP_MINFILTER, filter);
-    m_pDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, filter);
+    m_pDevice->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+    m_pDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
     m_pDevice->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
     m_pDevice->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
     m_pDevice->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);

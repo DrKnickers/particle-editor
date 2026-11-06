@@ -249,17 +249,42 @@ inline Orbit OrbitFromLookAt(const std::array<double, 3>& position, const std::a
 // The live view follows every camera our viewport allows, including ones the engine camera cannot
 // take (looking up from below, steeper than kMaxPitchDegrees, farther than kMaxDistanceUnits).
 // Those are clamped to the nearest view the engine can show instead of refused.
-inline Orbit LiveOrbitFromLookAt(const std::array<double, 3>& position, const std::array<double, 3>& target)
+// eyeDistanceScale moves the eye along the view ray, measured from the look-at point, to make
+// up for a field of view the engine cannot match (see engine_live::MatchHostLens).
+inline Orbit LiveOrbitFromLookAt(const std::array<double, 3>& position,
+                                 const std::array<double, 3>& lookAt,
+                                 double                       eyeDistanceScale)
 {
-    for (size_t axis = 0; axis < target.size(); ++axis)
-        if (!std::isfinite(position[axis]) || !std::isfinite(target[axis]) || std::abs(target[axis]) > kMaxTargetUnits)
+    for (size_t axis = 0; axis < lookAt.size(); ++axis)
+        if (!std::isfinite(position[axis]) || !std::isfinite(lookAt[axis]) || std::abs(lookAt[axis]) > kMaxTargetUnits)
             throw Failure("bad-args", "The editor camera has an invalid position or target.");
-    const double x          = position[0] - target[0];
-    const double y          = position[1] - target[1];
-    const double z          = position[2] - target[2];
-    const double horizontal = std::hypot(x, y);
-    const double distance   = std::clamp(std::hypot(horizontal, z), kMinLiveDistanceUnits, kMaxDistanceUnits);
-    const double pitch      = std::clamp(std::atan2(z, horizontal) * kRadiansToDegrees, 0.0, kMaxPitchDegrees);
+    // Scaling about the look-at point keeps the effect there at the scale the lens asked for,
+    // whatever the grounding below does to the target.
+    std::array<double, 3> eye = position;
+    for (size_t axis = 0; axis < eye.size(); ++axis)
+        eye[axis] = lookAt[axis] + (position[axis] - lookAt[axis]) * eyeDistanceScale;
+    // The engine keeps its camera target on the ground (a raised target snaps back within a
+    // second, seen live 2026-11-05), so a target off the ground slides along our view ray to
+    // ground height (z 0, where the effect stands): the same eye and direction, another distance.
+    std::array<double, 3> target         = lookAt;
+    const bool            canReachGround = eye[2] > 0 && eye[2] > lookAt[2];
+    if (canReachGround)
+    {
+        const double groundRayRatio = eye[2] / (eye[2] - lookAt[2]);
+        for (size_t axis = 0; axis < target.size(); ++axis)
+            target[axis] = eye[axis] + (lookAt[axis] - eye[axis]) * groundRayRatio;
+    }
+    const double x                  = eye[0] - target[0];
+    const double y                  = eye[1] - target[1];
+    const double z                  = eye[2] - target[2];
+    const double horizontal         = std::hypot(x, y);
+    const double groundedReachUnits = std::hypot(horizontal, z);
+    // A nearly level ray meets the ground beyond the engine's reach; clamping would show another
+    // view, so the camera is refused and the live view keeps the last one it could show.
+    if (canReachGround && groundedReachUnits > kMaxDistanceUnits)
+        throw Failure("bad-args", "The editor camera looks too nearly level for the engine view.");
+    const double distance = std::clamp(groundedReachUnits, kMinLiveDistanceUnits, kMaxDistanceUnits);
+    const double pitch    = std::clamp(std::atan2(z, horizontal) * kRadiansToDegrees, 0.0, kMaxPitchDegrees);
     // Looking straight down leaves no horizontal direction; any yaw shows the same view.
     const double yaw = horizontal > 0 ? kYawZeroDegrees + kYawSign * std::atan2(x, -y) * kRadiansToDegrees : 0.0;
     return Orbit{pitch, yaw, distance, target};

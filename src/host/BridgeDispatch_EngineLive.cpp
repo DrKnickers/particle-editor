@@ -5,6 +5,7 @@
 #include "BridgeDispatcher.h"
 #include "BridgeDispatchShared.h"
 #include "BridgeRequestContext.h"
+#include "EngineLiveFraming.h"
 #include "HostMessages.h"
 #include "StringConv.h"
 #include <algorithm>
@@ -22,17 +23,9 @@ constexpr double kLiveStartSeconds = engine_preview::kStillBudgetSeconds;
 constexpr double kLiveRefreshSeconds = 60.0;
 // No new frame for this long means the host stopped presenting (minimized, hung or busy).
 constexpr double kLiveStaleSeconds = 2.0;
-constexpr int    kLiveMinEdgePx    = 64;
 // Used only when no scene viewport has been laid out yet.
 constexpr int kLiveFallbackWidthPx  = 1280;
 constexpr int kLiveFallbackHeightPx = 720;
-
-// Larger viewports stream at the host's maximum and are letterboxed up by the engine.
-void ClampToLiveLimits(int& widthPx, int& heightPx)
-{
-    widthPx  = std::clamp(widthPx, kLiveMinEdgePx, static_cast<int>(engine_live::kMaxWidthPx));
-    heightPx = std::clamp(heightPx, kLiveMinEdgePx, static_cast<int>(engine_live::kMaxHeightPx));
-}
 
 bool IsHostGone(const json& payload)
 {
@@ -74,7 +67,7 @@ bool BridgeDispatcher::StartEngineLive(BridgeRequestContext& ctx)
     }
     int x = 0, y = 0, widthPx = kLiveFallbackWidthPx, heightPx = kLiveFallbackHeightPx;
     m_engine->GetSceneViewport(x, y, widthPx, heightPx);
-    ClampToLiveLimits(widthPx, heightPx);
+    const engine_live::ParkSize park = engine_live::ParkSizeForViewport(widthPx, heightPx);
     try
     {
         std::string error;
@@ -97,14 +90,15 @@ bool BridgeDispatcher::StartEngineLive(BridgeRequestContext& ctx)
     job.token         = ++m_engineLiveToken;
     job.pipeName      = m_enginePreviewPipe;
     job.budgetSeconds = kLiveStartSeconds;
-    job.args = {{"width", widthPx}, {"height", heightPx}, {"max_fps", kLiveMaxFps}, {"timeout_s", kLiveStartSeconds}};
+    job.args          = {
+        {"width", park.widthPx}, {"height", park.heightPx}, {"max_fps", kLiveMaxFps}, {"timeout_s", kLiveStartSeconds}};
     if (!m_engineLiveWorker->Enqueue(std::move(job)))
     {
         ctx.SendErr("The live engine view worker is busy or stopping.");
         return false;
     }
     m_engineLiveSync = engine_live::EngineLiveSync{};
-    m_engineLiveSync.NoteParked(widthPx, heightPx);
+    m_engineLiveSync.NoteParked(park.widthPx, park.heightPx);
     m_engineLiveState = EngineLiveState::Starting;
     EmitEngineLiveStateChanged("");
     return true;
@@ -216,7 +210,15 @@ void BridgeDispatcher::FinishEngineLiveCommand(const EnginePreviewWorker::Result
     {
         try
         {
-            m_engineLiveSync.NoteAnchor(result.payload.at("result").at("target").get<std::array<double, 3>>());
+            const json&                             reply = result.payload.at("result");
+            std::optional<engine_live::FieldLimits> fieldLimits;
+            const bool hasFieldLimits = reply.contains("fov_min") && reply["fov_min"].is_number() &&
+                                        reply.contains("fov_max") && reply["fov_max"].is_number();
+            if (hasFieldLimits)
+            {
+                fieldLimits = engine_live::FieldLimits{reply["fov_min"].get<double>(), reply["fov_max"].get<double>()};
+            }
+            m_engineLiveSync.NoteAnchor(reply.at("target").get<std::array<double, 3>>(), fieldLimits);
             return;
         }
         catch (const json::exception& error)
@@ -246,22 +248,30 @@ void BridgeDispatcher::ReportEngineLiveCommandFailure(const EnginePreviewWorker:
 // camera and scene viewport, so reading both each frame needs no hook in each input path.
 void BridgeDispatcher::NoteEngineLiveView(std::uint64_t nowMs)
 {
+    int x = 0, y = 0, widthPx = kLiveFallbackWidthPx, heightPx = kLiveFallbackHeightPx;
+    m_engine->GetSceneViewport(x, y, widthPx, heightPx);
+    // A minimized window lays the viewport out at zero size; the host keeps its last view.
+    if (widthPx <= 0 || heightPx <= 0) return;
+    const engine_live::ParkSize park = engine_live::ParkSizeForViewport(widthPx, heightPx);
+    m_engineLiveSync.NoteViewportSize(park.widthPx, park.heightPx, nowMs);
+
+    const engine_live::FieldLimits limits = m_engineLiveSync.HostFieldLimits();
+    const engine_live::HostLens    lens =
+        engine_live::MatchHostLens(m_engine->GetSceneFovYRadians(), widthPx, heightPx, limits);
     const Engine::Camera& camera = m_engine->GetCamera();
     try
     {
-        m_engineLiveSync.NoteCamera(
-            engine_preview::LiveOrbitFromLookAt({camera.Position.x, camera.Position.y, camera.Position.z},
-                                                {camera.Target.x, camera.Target.y, camera.Target.z}));
+        const engine_preview::Orbit orbit = engine_preview::LiveOrbitFromLookAt(
+            {camera.Position.x, camera.Position.y, camera.Position.z},
+            {camera.Target.x, camera.Target.y, camera.Target.z}, lens.distanceScale);
+        m_engineLiveSync.NoteCamera(orbit, lens.fieldDegrees);
     }
     catch (const engine_preview::Failure&)
     {
-        // A camera the host cannot take (panned past its limits) keeps the last one sent;
+        // A camera the host cannot take (panned past its limits, or looking too nearly level
+        // for its ground-bound target) keeps the last one sent;
         // the user sees the live view stop following, and panning back resumes it.
     }
-    int x = 0, y = 0, widthPx = kLiveFallbackWidthPx, heightPx = kLiveFallbackHeightPx;
-    m_engine->GetSceneViewport(x, y, widthPx, heightPx);
-    ClampToLiveLimits(widthPx, heightPx);
-    m_engineLiveSync.NoteViewportSize(widthPx, heightPx, nowMs);
 }
 
 // One command at a time: the host applies them in order, and a still in flight owns the

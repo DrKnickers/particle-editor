@@ -483,6 +483,8 @@ public:
     // a scene viewport is active; returns false (outs untouched)
     // otherwise.
     bool GetSceneViewport(int& x, int& y, int& w, int& h) const;
+    // The vertical field of view the scene projection uses, after its clamp.
+    float GetSceneFovYRadians() const { return m_sceneFovY; }
 
     const std::wstring& GetGroundSlotCustomPath(int slot) const;
     // Does the slot currently have a loadable texture (either bundled

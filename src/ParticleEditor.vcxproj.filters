@@ -471,6 +471,9 @@
     <ClInclude Include="host\EngineLiveFrame.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="host\EngineLiveFraming.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
     <ClInclude Include="host\EngineLiveReader.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
