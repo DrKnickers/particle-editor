@@ -4,8 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import {
+  DOCUMENT_EDITED_EVENT,
   ENGINE_PREVIEW_STILL_RENDERED_EVENT,
   ENGINE_PREVIEW_STATUS_CHECKED_EVENT,
+  type Request,
 } from "@particle-editor/bridge-schema";
 import { EnginePreviewPanel } from "../EnginePreviewPanel";
 import { useEnginePreview } from "@/lib/engine-preview";
@@ -16,6 +18,10 @@ import { MOCK_PREVIEW_PNG } from "@/bridge/mock-dispatch/dispatch-engine-preview
 const TIMELINE_TIME_SECONDS = 4.5;
 const ENGINE_SECONDS = 2.6;
 const STILL_REQUEST_ID = 2;
+// The panel's DEFAULT_TIME_SECONDS, used when the timeline is closed.
+const PANEL_DEFAULT_TIME_SECONDS = 2;
+// Longer than the panel's AUTO_REFRESH_DEBOUNCE_MS (250 ms).
+const PAST_DEBOUNCE_MS = 400;
 
 beforeEach((): void => {
   useEnginePreview.setState(useEnginePreview.getInitialState(), true);
@@ -58,7 +64,7 @@ describe("EnginePreviewPanel", (): void => {
   });
   it("defaults to two seconds and camera matching off", async (): Promise<void> => {
     await renderPanel();
-    expect(screen.getByRole("spinbutton")).toHaveValue(2);
+    expect(screen.getByRole("spinbutton")).toHaveValue(PANEL_DEFAULT_TIME_SECONDS);
     expect(screen.getByRole("checkbox", { name: "Match editor camera" })).not.toBeChecked();
   });
   it("defaults to the timeline's current time when open", async (): Promise<void> => {
@@ -107,5 +113,54 @@ describe("EnginePreviewPanel", (): void => {
     await waitFor((): void => {
       expect(screen.getByRole("alert")).toHaveTextContent("capture timed out");
     });
+  });
+});
+
+describe("EnginePreviewPanel auto-refresh", (): void => {
+  function stillRequests(bridge: BridgeStub): Request[] {
+    const requests: Request[] = bridge.request.mock.calls.map((call: [Request]): Request => call[0]);
+    return requests.filter((request: Request): boolean => request.kind === "enginePreview/still");
+  }
+  async function waitPastDebounce(): Promise<void> {
+    await act(async (): Promise<void> => {
+      await new Promise((resolve: (value: unknown) => void): void => {
+        setTimeout(resolve, PAST_DEBOUNCE_MS);
+      });
+    });
+  }
+  it("ignores edits while it is off", async (): Promise<void> => {
+    const bridge: BridgeStub = await renderPanel();
+    expect(bridge.listenerCount(DOCUMENT_EDITED_EVENT)).toBe(0);
+    await waitPastDebounce();
+    expect(stillRequests(bridge)).toHaveLength(0);
+  });
+  it("renders one still for a burst of edits once they pause", async (): Promise<void> => {
+    const bridge: BridgeStub = await renderPanel();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Auto-refresh after edits" }));
+    for (const revision of [1, 2, 3]) bridge.emit(DOCUMENT_EDITED_EVENT, { revision });
+    expect(stillRequests(bridge)).toHaveLength(0);
+    await waitPastDebounce();
+    expect(stillRequests(bridge)).toEqual([
+      { kind: "enginePreview/still", params: { timeSeconds: PANEL_DEFAULT_TIME_SECONDS, matchCamera: false } },
+    ]);
+  });
+  it("renders the newest edit after the still in flight finishes", async (): Promise<void> => {
+    const bridge: BridgeStub = await renderPanel();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Auto-refresh after edits" }));
+    bridge.emit(DOCUMENT_EDITED_EVENT, { revision: 1 });
+    await waitPastDebounce();
+    bridge.emit(DOCUMENT_EDITED_EVENT, { revision: 2 });
+    await waitPastDebounce();
+    expect(stillRequests(bridge)).toHaveLength(1);
+    bridge.emit(ENGINE_PREVIEW_STILL_RENDERED_EVENT, {
+      ok: true,
+      requestId: STILL_REQUEST_ID,
+      dataUri: MOCK_PREVIEW_PNG,
+      seconds: ENGINE_SECONDS,
+      width: 1,
+      height: 1,
+    });
+    await waitPastDebounce();
+    expect(stillRequests(bridge)).toHaveLength(2);
   });
 });

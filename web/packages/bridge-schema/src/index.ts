@@ -763,6 +763,9 @@ export interface EnginePreviewPendingDto {
 export const ENGINE_PREVIEW_STATUS_CHECKED_EVENT = "enginePreview/status-checked";
 // Emitted by the native preview worker's drain; the preview panel waits for rendered stills.
 export const ENGINE_PREVIEW_STILL_RENDERED_EVENT = "enginePreview/still-rendered";
+// Emitted by the host on every content change of the open effect; the engine preview panel
+// listens to auto-refresh its still.
+export const DOCUMENT_EDITED_EVENT = "document/edited";
 
 export type Request =
   // File / recents
@@ -1518,6 +1521,10 @@ export type Event =
   // deterministic UIA goldens.
   | { kind: "stats/frozen-changed"; payload: { frozen: boolean } }
   | { kind: "dirty/changed"; payload: { dirty: boolean } }
+  // Every change to the effect's content (edit, undo/redo, new/open), unlike dirty/changed which
+  // fires only on clean/dirty flips. Emitted by BridgeDispatcher::NoteDocumentEdited; the engine
+  // preview panel listens to auto-refresh its still.
+  | { kind: typeof DOCUMENT_EDITED_EVENT; payload: { revision: number } }
   | { kind: "recent/changed"; payload: { paths: string[] } }
   // Async texture preview completion. A matching get-preview refetch after
   // this event is expected to be a synchronous cache hit in the host.

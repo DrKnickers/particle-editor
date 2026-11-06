@@ -933,6 +933,7 @@ bool BridgeRequestContext::RequireEngine(const char* what)
 void BridgeRequestContext::MarkDirty()
 {
     self.SetDirty(true);
+    self.NoteDocumentEdited();
 }
 
 // ---- Promoted DispatchInternal helpers ----
@@ -1402,6 +1403,13 @@ void BridgeDispatcher::SetDirty(bool dirty)
     // via the dedicated dirty/changed event channel + the next
     // snapshot read. Callers that SetDirty(false) (file/new, file/open,
     // file/save success) emit their own state/changed.
+}
+
+void BridgeDispatcher::NoteDocumentEdited()
+{
+    ++m_documentRevision;
+    if (!m_emit) return;
+    m_emit(json{{"type", "evt"}, {"kind", "document/edited"}, {"payload", {{"revision", m_documentRevision}}}});
 }
 
 void BridgeDispatcher::EmitDirtyChanged()

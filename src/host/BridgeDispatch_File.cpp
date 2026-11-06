@@ -231,6 +231,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         {
             EmitEngineStateChanged();
             EmitEmittersTreeChanged();
+            NoteDocumentEdited();
         }
         return true;
     }
@@ -300,6 +301,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         m_currentFilePath.clear();
         ctx.SendOk(json::object());
         SetDirty(false);
+        NoteDocumentEdited();
         EmitEngineStateChanged();
         // Polish round 3: React's EmitterTree subscribes to
         // emitters/tree/changed; without this emit the tree stays on
@@ -532,6 +534,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
         m_recentFiles     = PersistsUserState() ? WriteRecentFile(path) : ReadRecentFiles();
         ctx.SendOk(json{{"ok", true}, {"path", WideToUtf8(path)}});
         SetDirty(false);
+        NoteDocumentEdited();
         EmitRecentChanged();
         // Reset before the state snapshot, then preserve the established
         // state -> tree -> selection event order. Otherwise the immediate

@@ -590,6 +590,10 @@ private:
 
     // Emits a `dirty/changed` event with the current m_dirty value.
     void EmitDirtyChanged();
+    // Bumps m_documentRevision and emits `document/edited`. Called for every change to the
+    // effect's content (edits, undo/redo, new/open); the engine preview panel listens to
+    // re-render its still. Saves do not call it: they change no content.
+    void NoteDocumentEdited();
     // Emits a `recent/changed` event with the current m_recentFiles
     // serialised as a JSON array of strings.
     void EmitRecentChanged();
@@ -831,6 +835,11 @@ private:
     std::wstring              m_currentFilePath;
     bool                      m_dirty = false;
     std::vector<std::wstring> m_recentFiles;
+
+    // Revision sent with `document/edited`. Unlike m_dirty it moves on every edit, not only on
+    // clean/dirty flips; unlike m_documentEdits (the timeline fingerprint's captureUndo count)
+    // it also moves on undo/redo and new/open.
+    std::uint64_t m_documentRevision = 0;
 
     // Serialized "last saved" state for dirty-bit recomputation on
     // undo / redo. Refreshed on file/new + file/open + file/save
