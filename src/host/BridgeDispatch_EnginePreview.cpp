@@ -7,7 +7,7 @@
 #include "HostMessages.h"
 #include "ModulePath.h"
 #include "StringConv.h"
-#include <filesystem>
+#include "SettingsRegistry.h"
 
 namespace host
 {
@@ -32,6 +32,12 @@ bool BridgeDispatcher::IsEnginePreviewReady() const
     return m_enginePreviewStatus.value("state", "absent") == "ready";
 }
 
+bool BridgeDispatcher::CanUseEnginePreview() const
+{
+    // Keep explicit start controls reachable before the configured host has been launched.
+    return m_enginePreviewAllowed && (IsEnginePreviewReady() || !m_engineHostExePath.empty());
+}
+
 bool BridgeDispatcher::WriteEnginePreviewDocumentCopy(std::string& error)
 {
     constexpr UINT kWindowsPathChars          = MAX_PATH + 1;
@@ -45,13 +51,8 @@ bool BridgeDispatcher::WriteEnginePreviewDocumentCopy(std::string& error)
                                   windows, m_currentFilePath, error);
 }
 
-bool BridgeDispatcher::BuildStillJob(BridgeRequestContext& ctx, EnginePreviewWorker::Job& job)
+bool BridgeDispatcher::BuildStillOrLaunchJob(BridgeRequestContext& ctx, EnginePreviewWorker::Job& job)
 {
-    if (!IsEnginePreviewReady())
-    {
-        ctx.SendErr("Check engine preview status before requesting a still.");
-        return false;
-    }
     const json& params      = ctx.params;
     const bool  validTime   = params.contains("timeSeconds") && params["timeSeconds"].is_number();
     const bool  validCamera = params.contains("matchCamera") && params["matchCamera"].is_boolean();
@@ -73,6 +74,15 @@ bool BridgeDispatcher::BuildStillJob(BridgeRequestContext& ctx, EnginePreviewWor
         ctx.SendErr("Open an effect before requesting an engine preview.");
         return false;
     }
+    if (!IsEnginePreviewReady())
+    {
+        job.operation = EnginePreviewWorker::Operation::Launch;
+        job.exePath   = m_engineHostExePath;
+        // Resume the still with its original bridge parameters after host configuration arrives.
+        job.args = params;
+        return true;
+    }
+    job.exePath   = m_engineHostExePath;
     job.operation = EnginePreviewWorker::Operation::Still;
     job.pipeName  = m_enginePreviewPipe;
     job.args      = {{"time_s", timeSeconds},
@@ -105,10 +115,70 @@ bool BridgeDispatcher::BuildStillJob(BridgeRequestContext& ctx, EnginePreviewWor
     return true;
 }
 
+namespace
+{
+bool SaveEngineHostExePath(const std::wstring& path, std::string& error)
+{
+    HKEY settings = OpenSettingsKeyForWrite();
+    if (!settings)
+    {
+        error = "Cannot open the engine host settings for writing.";
+        return false;
+    }
+    LONG saved = ERROR_SUCCESS;
+    if (path.empty())
+        saved = RegDeleteValueW(settings, kRegEngineHostExePath);
+    else
+        saved = RegSetValueExW(settings, kRegEngineHostExePath, 0, REG_SZ, reinterpret_cast<const BYTE*>(path.c_str()),
+                               static_cast<DWORD>((path.size() + 1) * sizeof(wchar_t)));
+    RegCloseKey(settings);
+    if (saved == ERROR_SUCCESS || (path.empty() && saved == ERROR_FILE_NOT_FOUND)) return true;
+    error = "Cannot save the engine host executable path.";
+    return false;
+}
+} // namespace
+
+bool BridgeDispatcher::TryDispatchEngineHostSettings(BridgeRequestContext& ctx)
+{
+    const bool isGet = ctx.kind == "engineHost/settings";
+    if (!isGet && ctx.kind != "engineHost/settings/set") return false;
+    if (isGet)
+    {
+        ctx.SendOk({{"exePath", m_engineHostExePath.empty() ? json(nullptr) : json(WideToUtf8(m_engineHostExePath))}});
+        return true;
+    }
+    const json::const_iterator value = ctx.params.find("exePath");
+    if (value == ctx.params.end() || (!value->is_null() && !value->is_string()))
+    {
+        ctx.SendErr("exePath must be a string or null.");
+        return true;
+    }
+    const std::wstring path = value->is_null() ? L"" : Utf8ToWide(value->get<std::string>());
+    if (!value->is_null())
+    {
+        if (!EngineHostProcess::IsValidExePath(path))
+        {
+            ctx.SendErr("exePath must be an existing absolute .exe path.");
+            return true;
+        }
+    }
+    std::string error;
+    if (PersistsUserState() && !SaveEngineHostExePath(path, error))
+    {
+        ctx.SendErr(error);
+        return true;
+    }
+    m_engineHostExePath = path;
+    EmitEngineStateChanged();
+    ctx.SendOk({{"exePath", path.empty() ? json(nullptr) : json(WideToUtf8(path))}});
+    return true;
+}
+
 bool BridgeDispatcher::TryDispatchEnginePreview(BridgeRequestContext& ctx)
 {
     const std::string& kind = ctx.kind;
-    const bool         recognized =
+    if (TryDispatchEngineHostSettings(ctx)) return true;
+    const bool recognized =
         kind == "enginePreview/status" || kind == "enginePreview/still" || kind == "enginePreview/cancel";
     if (!recognized) return false;
     const ULONGLONG started = GetTickCount64();
@@ -142,11 +212,13 @@ bool BridgeDispatcher::TryDispatchEnginePreview(BridgeRequestContext& ctx)
         return true;
     }
     if (!m_enginePreviewWorker)
-        m_enginePreviewWorker = std::make_unique<EnginePreviewWorker>(m_hostHwnd, WM_APP_ENGINE_PREVIEW_READY);
+        m_enginePreviewWorker =
+            std::make_unique<EnginePreviewWorker>(m_hostHwnd, WM_APP_ENGINE_PREVIEW_READY, &m_engineHostProcess);
     EnginePreviewWorker::Job job;
     job.token = ++m_enginePreviewToken;
     if (kind == "enginePreview/status")
     {
+        job.operation = EnginePreviewWorker::Operation::Status;
         if (ctx.params.contains("pid"))
         {
             const json& pid = ctx.params["pid"];
@@ -163,7 +235,7 @@ bool BridgeDispatcher::TryDispatchEnginePreview(BridgeRequestContext& ctx)
             job.pid = pid.get<std::uint32_t>();
         }
     }
-    if (kind == "enginePreview/still" && !BuildStillJob(ctx, job)) return true;
+    if (kind == "enginePreview/still" && !BuildStillOrLaunchJob(ctx, job)) return true;
     if (!m_enginePreviewWorker->Enqueue(std::move(job)))
     {
         ctx.SendErr("The engine preview worker is busy or stopping.");
@@ -174,6 +246,32 @@ bool BridgeDispatcher::TryDispatchEnginePreview(BridgeRequestContext& ctx)
     return true;
 }
 
+bool BridgeDispatcher::ResumeStillAfterHostLaunch(EnginePreviewWorker::Result& result)
+{
+    m_enginePreviewStatus = result.payload;
+    m_enginePreviewPipe   = result.pipeName;
+    EmitEngineStateChanged();
+    EnginePreviewWorker::Job still;
+    still.token = result.token;
+    const std::string    id;
+    const std::string    kind = "enginePreview/still";
+    BridgeRequestContext context{*this, id, kind, result.args, json::object()};
+    if (IsEnginePreviewReady() && BuildStillOrLaunchJob(context, still))
+    {
+        if (m_enginePreviewWorker->Enqueue(std::move(still)))
+        {
+            m_enginePreviewPending = true;
+            return true;
+        }
+        context.SendErr("The engine preview worker is busy or stopping.");
+    }
+    const std::string error = context.res.value(
+        "error", result.payload.value("error", std::string("The engine host is not ready for preview.")));
+    result.payload   = {{"ok", false}, {"error", error}};
+    result.operation = EnginePreviewWorker::Operation::Still;
+    return false;
+}
+
 void BridgeDispatcher::DrainEnginePreviewResults()
 {
     if (!m_enginePreviewWorker) return;
@@ -181,7 +279,8 @@ void BridgeDispatcher::DrainEnginePreviewResults()
     {
         if (result.token != m_enginePreviewToken) continue;
         m_enginePreviewPending = false;
-        const bool status      = result.operation == EnginePreviewWorker::Operation::Status;
+        if (result.operation == EnginePreviewWorker::Operation::Launch && ResumeStillAfterHostLaunch(result)) continue;
+        const bool status = result.operation == EnginePreviewWorker::Operation::Status;
         if (!status && m_engineLiveState == EngineLiveState::Live) m_engineLiveSync.NoteStillFinished();
         if (status)
         {

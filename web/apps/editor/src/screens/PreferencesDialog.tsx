@@ -1,8 +1,11 @@
+// Preferences owns editable UI drafts; the bridge owns the engine host path and persistence.
+// This dialog never starts the map editor or changes its ini.
 import { useEffect, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
-import type { Bridge } from "@particle-editor/bridge-schema";
+import type { Bridge, ResponseMap } from "@particle-editor/bridge-schema";
 import { Modal } from "@/components/Modal";
 import { cn } from "@/lib/utils";
+import { Button } from "@/primitives/Button";
 import { Checkbox } from "@/primitives/Checkbox";
 import { SegmentedControl } from "@/primitives/SegmentedControl";
 import { NativeSelect } from "@/primitives/Select";
@@ -44,6 +47,71 @@ function SectionCard({ title, children }: { title: string; children: ReactNode }
 }
 
 export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
+  const [engineHostExePath, setEngineHostExePath] = useState<string | null>(null);
+  const [engineHostError, setEngineHostError] = useState<string | null>(null);
+  const [isEngineHostBusy, setEngineHostBusy] = useState<boolean>(true);
+  // Reload the native setting on each open so another Preferences session cannot leave a stale path.
+  useEffect((): (() => void) => {
+    let isCurrent = true;
+    const loadSettings = async (): Promise<void> => {
+      if (!open) return;
+      setEngineHostBusy(true);
+      setEngineHostError(null);
+      try {
+        const settings: ResponseMap["engineHost/settings"] = await bridge.request({
+          kind: "engineHost/settings",
+          params: {},
+        });
+        if (isCurrent) setEngineHostExePath(settings.exePath ?? null);
+      } catch (error: unknown) {
+        if (isCurrent) setEngineHostError(String(error));
+      } finally {
+        if (isCurrent) setEngineHostBusy(false);
+      }
+    };
+    void loadSettings();
+    return (): void => {
+      isCurrent = false;
+    };
+  }, [bridge, open]);
+
+  const browseEngineHostPath = async (): Promise<void> => {
+    setEngineHostBusy(true);
+    setEngineHostError(null);
+    try {
+      const picked: ResponseMap["file/pick-open"] = await bridge.request({
+        kind: "file/pick-open",
+        params: { filter: "exe" },
+      });
+      if (!picked.ok || !picked.path) return;
+      const saved: ResponseMap["engineHost/settings/set"] = await bridge.request({
+        kind: "engineHost/settings/set",
+        params: { exePath: picked.path },
+      });
+      setEngineHostExePath(saved.exePath);
+    } catch (error: unknown) {
+      setEngineHostError(String(error));
+    } finally {
+      setEngineHostBusy(false);
+    }
+  };
+
+  const clearEngineHostPath = async (): Promise<void> => {
+    setEngineHostBusy(true);
+    setEngineHostError(null);
+    try {
+      const saved: ResponseMap["engineHost/settings/set"] = await bridge.request({
+        kind: "engineHost/settings/set",
+        params: { exePath: null },
+      });
+      setEngineHostExePath(saved.exePath);
+    } catch (error: unknown) {
+      setEngineHostError(String(error));
+    } finally {
+      setEngineHostBusy(false);
+    }
+  };
+
   const [mode, setMode] = useState<ThemeMode>(() => readStoredMode());
   const [confirmDelete, setConfirmDelete] = useState<boolean>(() => readConfirmDelete());
   const choose = (m: ThemeMode) => {
@@ -244,6 +312,42 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
                 </span>
               </div>
             )}
+          </SectionCard>
+
+          <SectionCard title="Engine preview">
+            <div className="flex flex-col gap-2 px-3 py-[9px]">
+              <span id="pref-engine-host-label" className="text-xs text-text">
+                Map editor executable
+              </span>
+              <output aria-labelledby="pref-engine-host-label" className="break-all text-xs text-text-2">
+                {engineHostExePath ?? "Not set"}
+              </output>
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  disabled={isEngineHostBusy}
+                  onClick={(): void => {
+                    void browseEngineHostPath();
+                  }}
+                >
+                  Browse
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={isEngineHostBusy || engineHostExePath === null}
+                  onClick={(): void => {
+                    void clearEngineHostPath();
+                  }}
+                >
+                  Clear
+                </Button>
+              </div>
+              {engineHostError && (
+                <p role="alert" className="text-xs text-danger-fg">
+                  {engineHostError}
+                </p>
+              )}
+            </div>
           </SectionCard>
 
           {/* RENDERING */}

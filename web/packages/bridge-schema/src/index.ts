@@ -380,7 +380,7 @@ export type EngineStateDto = {
   bloomCutoff: number; // GetBloomCutoff()
   bloomSize: number; // GetBloomSize()
 
-  // Last interactive engine preview status was ready.
+  // Interactive preview has a ready host or a configured executable for explicit launch.
   enginePreviewAvailable: boolean;
 
   // Leave particles after instance death. Defaults true —
@@ -786,6 +786,8 @@ export interface EngineLiveStatsDto {
   cameraLatencyMs: number | null;
 }
 
+export type EngineHostSettingsDto = { exePath: string | null };
+
 export type Request =
   // File / recents
   // file/new and file/open (default "alo" filter) replace the document. The
@@ -794,7 +796,7 @@ export type Request =
   // (automation and --test-host runs are exempt).
   | { kind: "file/new"; params: { discardUnsaved?: true } }
   | { kind: "file/open"; params: { path?: string; filter?: "alo" | "skydome" | "ground"; discardUnsaved?: true } } // path undef = native picker; filter selects lpstrFilter (default "alo")
-  | { kind: "file/pick-open"; params: { filter?: "alo" | "skydome" | "ground" } } // NON-MUTATING picker: returns the chosen path WITHOUT loading it as the active doc
+  | { kind: "file/pick-open"; params: { filter?: "alo" | "skydome" | "ground" | "exe" } } // NON-MUTATING picker: returns the chosen path WITHOUT loading it as the active doc
   | { kind: "file/save"; params: { path?: string } } // path undef = native picker
   | { kind: "file/save-as"; params: Record<string, never> } // always opens native picker
   | { kind: "file/recent/list"; params: Record<string, never> }
@@ -1274,6 +1276,8 @@ export type Request =
   // reject while no session is open. Free-run pause / step, Clear and the
   // spawner kinds reject while one is open. Every response is the session's
   // state; `timeline/state` pushes it during play and after host-side replays.
+  | { kind: "engineHost/settings"; params: Record<string, never> }
+  | { kind: "engineHost/settings/set"; params: EngineHostSettingsDto }
   | { kind: "enginePreview/status"; params: { pid?: number } }
   | { kind: "enginePreview/still"; params: { timeSeconds: number; matchCamera: boolean } }
   | { kind: "enginePreview/cancel"; params: Record<string, never> }
@@ -1484,6 +1488,8 @@ export interface ResponseMap {
   "spawner/start": Record<string, never>;
   "spawner/trigger": Record<string, never>;
   "spawner/stop": Record<string, never>;
+  "engineHost/settings": EngineHostSettingsDto;
+  "engineHost/settings/set": EngineHostSettingsDto;
   "enginePreview/status": EnginePreviewPendingDto;
   "enginePreview/still": EnginePreviewPendingDto;
   "enginePreview/cancel": Record<string, never>;

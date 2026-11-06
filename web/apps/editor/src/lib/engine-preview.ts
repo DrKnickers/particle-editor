@@ -12,10 +12,13 @@ import {
   type Request,
 } from "@particle-editor/bridge-schema";
 
-// Mirrors src/host/EnginePreviewPipe.h: 3 commands * (kCommandBudgetSeconds + kTransportGraceSeconds), plus 5 seconds margin.
+// Mirrors src/host/EnginePreviewPipe.h: three commands plus transport grace and a 5-second margin.
 const STATUS_TIMEOUT_MS = 65_000;
-// Mirrors src/host/EnginePreviewPipe.h: 1 command * (kStillBudgetSeconds + kTransportGraceSeconds), plus 5 seconds margin.
-const STILL_TIMEOUT_MS = 190_000;
+// Mirrors src/host/EngineHostProcess.h: EngineHostProcess::kLaunchTimeoutMs.
+const LAUNCH_TIMEOUT_MS = 30_000;
+// Includes launch and status preflight, then mirrors src/host/EnginePreviewPipe.h:
+// 1 command * (kStillBudgetSeconds + kTransportGraceSeconds), plus 5 seconds margin.
+const STILL_TIMEOUT_MS = LAUNCH_TIMEOUT_MS + STATUS_TIMEOUT_MS + 190_000;
 type PreviewRequest = Extract<Request, { kind: "enginePreview/status" | "enginePreview/still" }>;
 const MILLISECONDS_PER_SECOND = 1_000;
 

@@ -486,6 +486,12 @@
     <ClInclude Include="host\EnginePreviewCopy.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="host\EngineHostLaunchPolicy.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\EngineHostProcess.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
     <ClInclude Include="host\EnginePreviewWorker.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
@@ -675,6 +681,9 @@
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\BridgeDispatch_SpawnerLighting.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\EngineHostProcess.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\EnginePreviewWorker.cpp">

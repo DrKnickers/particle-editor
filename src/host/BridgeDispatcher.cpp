@@ -752,6 +752,14 @@ BridgeDispatcher::BridgeDispatcher(
     // Test seam (ALO_SETTINGS_LIVE=1): lift the --test-host settings gate so
     // a CDP test can exercise the real registry round-trip.
     m_settingsLive = ReadSettingsLiveEnv();
+    if (PersistsUserState())
+    {
+        if (HKEY settings = OpenSettingsKeyForRead())
+        {
+            m_engineHostExePath = ReadRegSz(settings, kRegEngineHostExePath);
+            RegCloseKey(settings);
+        }
+    }
 
     // Seed the recent-files list from the registry at construction so
     // the first React-side `file/recent/list` request already has data
@@ -1299,7 +1307,7 @@ void BridgeDispatcher::EmitEngineStateChangedNow()
         {"kind", "engine/state/changed"},
         {"payload", BuildEngineStateSnapshot(m_engine, m_currentFilePath, m_dirty, spawnerJson, m_selectedEmitterId,
                                              activeModPath, leaveParticles, canUndo, canRedo,
-                                             !m_emitterClipboard.empty(), IsEnginePreviewReady())},
+                                             !m_emitterClipboard.empty(), CanUseEnginePreview())},
     };
     m_emit(env);
 }

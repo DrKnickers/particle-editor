@@ -3,7 +3,6 @@
 // EngineLiveBadge registers the one subscription that keeps this store current.
 import { create } from "zustand";
 import { type Bridge, type EngineLiveStateDto, type EngineLiveStateName } from "@particle-editor/bridge-schema";
-import { checkEnginePreviewStatus, useEnginePreview } from "@/lib/engine-preview";
 
 export interface EngineLiveStore {
   state: EngineLiveStateName;
@@ -21,15 +20,9 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-// Checks the engine host first when no check has passed yet, so one click starts the view.
+// The explicit start request owns host discovery and launch; passive status checks cannot launch it.
 export async function startEngineLive(bridge: Bridge): Promise<void> {
   useEngineLive.setState({ message: null });
-  if (useEnginePreview.getState().status?.state !== "ready") await checkEnginePreviewStatus(bridge);
-  const preview = useEnginePreview.getState();
-  if (preview.status?.state !== "ready") {
-    useEngineLive.setState({ message: preview.error ?? "The engine host is not ready." });
-    return;
-  }
   try {
     const reply: { state: EngineLiveStateName } = await bridge.request({ kind: "engineLive/start", params: {} });
     useEngineLive.setState({ state: reply.state });

@@ -18,6 +18,8 @@ const MOCK_ROUND_TRIP_SECONDS = 2.6;
 const MOCK_PREVIEW_DELAY_MS = 20;
 // Mirrors kMaxTimeSeconds in src/host/EnginePreviewPipe.h.
 const MAX_TIME_SECONDS = 600;
+// Mirrors EngineHostLaunchPolicy.h; browser mode simulates a configured host becoming ready.
+const PATH_NOT_SET_MESSAGE = "Set the map editor executable in Preferences > Engine preview.";
 type PreviewRequest = Extract<
   Request,
   { kind: "enginePreview/status" | "enginePreview/still" | "enginePreview/cancel" }
@@ -37,6 +39,7 @@ type PreviewHost = MockDispatchHost & { enginePreview: MockEnginePreviewState };
 export function dispatchEnginePreview(
   this: PreviewHost,
   req: PreviewRequest,
+  exePath: string | null,
 ): EnginePreviewPendingDto | Record<string, never> {
   const preview: MockEnginePreviewState = this.enginePreview;
   if (req.kind === "enginePreview/cancel") {
@@ -44,7 +47,7 @@ export function dispatchEnginePreview(
       clearTimeout(preview.pending);
       preview.pending = null;
       if (preview.operation === "status") {
-        this.patchAndBroadcast({ enginePreviewAvailable: false });
+        this.patchAndBroadcast({ enginePreviewAvailable: exePath !== null });
         this.emit({
           kind: ENGINE_PREVIEW_STATUS_CHECKED_EVENT,
           payload: { state: "absent", requestId: preview.nextId - 1, error: "Engine preview cancelled." },
@@ -66,7 +69,7 @@ export function dispatchEnginePreview(
     preview.pending = setTimeout((): void => {
       preview.pending = null;
       preview.operation = null;
-      this.patchAndBroadcast({ enginePreviewAvailable: preview.state === "ready" });
+      this.patchAndBroadcast({ enginePreviewAvailable: preview.state === "ready" || exePath !== null });
       this.emit({
         kind: ENGINE_PREVIEW_STATUS_CHECKED_EVENT,
         payload: {
@@ -83,13 +86,17 @@ export function dispatchEnginePreview(
   const timeSeconds: number = req.params.timeSeconds;
   if (!Number.isFinite(timeSeconds) || timeSeconds < 0 || timeSeconds > MAX_TIME_SECONDS)
     throw new Error("Preview time must be between 0 and 600 seconds.");
-  if (preview.state !== "ready") throw new Error("Check engine preview status before requesting a still.");
   preview.operation = "still";
   preview.pending = setTimeout((): void => {
     preview.pending = null;
     preview.operation = null;
-    if (preview.error) {
-      this.emit({ kind: ENGINE_PREVIEW_STILL_RENDERED_EVENT, payload: { ok: false, requestId, error: preview.error } });
+    if (preview.state === "absent" && exePath !== null && preview.error === null) {
+      preview.state = "ready";
+      this.patchAndBroadcast({ enginePreviewAvailable: true });
+    }
+    const error: string | null = preview.error ?? (preview.state !== "ready" ? PATH_NOT_SET_MESSAGE : null);
+    if (error) {
+      this.emit({ kind: ENGINE_PREVIEW_STILL_RENDERED_EVENT, payload: { ok: false, requestId, error } });
       return;
     }
     this.emit({
@@ -114,14 +121,22 @@ const MOCK_LIVE_FPS = 60;
 
 // The mock has no engine host to stream from: it reports the live view as started, and the
 // viewport keeps showing the mock's own frame.
-export function dispatchEngineLive(this: PreviewHost, req: LiveRequest): { state: EngineLiveStateName } {
+export function dispatchEngineLive(
+  this: PreviewHost,
+  req: LiveRequest,
+  exePath: string | null,
+): { state: EngineLiveStateName } {
   const preview: MockEnginePreviewState = this.enginePreview;
   if (req.kind === "engineLive/stop") {
     preview.live = "off";
     this.emit({ kind: ENGINE_LIVE_STATE_CHANGED_EVENT, payload: { state: "off" } });
     return { state: "off" };
   }
-  if (preview.state !== "ready") throw new Error("Check engine preview status before starting the live engine view.");
+  if (preview.state === "absent" && exePath !== null && preview.error === null) {
+    preview.state = "ready";
+    this.patchAndBroadcast({ enginePreviewAvailable: true });
+  }
+  if (preview.state !== "ready") throw new Error(preview.error ?? PATH_NOT_SET_MESSAGE);
   preview.live = "starting";
   this.emit({ kind: ENGINE_LIVE_STATE_CHANGED_EVENT, payload: { state: "starting" } });
   setTimeout((): void => {

@@ -1,14 +1,13 @@
-// Live engine view: the badge mirrors the host's state events, and one start request checks
-// the engine host first when needed. Streaming and drawing are native and live-checked.
+// Live engine view: the badge mirrors host events; explicit start delegates launch to the host.
+// Streaming and drawing remain native and are not simulated here.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
-import { ENGINE_LIVE_STATE_CHANGED_EVENT, ENGINE_PREVIEW_STATUS_CHECKED_EVENT } from "@particle-editor/bridge-schema";
+import { ENGINE_LIVE_STATE_CHANGED_EVENT } from "@particle-editor/bridge-schema";
 import { EngineLiveBadge } from "../EngineLiveBadge";
 import { startEngineLive, useEngineLive } from "@/lib/engine-live";
 import { useEnginePreview } from "@/lib/engine-preview";
 import { makeBridgeStub, type BridgeStub } from "@/test/bridge-stub";
 
-const STATUS_REQUEST_ID = 1;
 const FALLBACK_MESSAGE = "The engine host closed; showing the editor's own view.";
 const MISSED_UPDATE_MESSAGE = "The engine view missed an update: timeout";
 const LIVE_FPS = 59.6;
@@ -22,7 +21,6 @@ beforeEach((): void => {
 function makeLiveBridge(): BridgeStub {
   return makeBridgeStub({
     responses: {
-      "enginePreview/status": { status: "pending", requestId: STATUS_REQUEST_ID },
       "engineLive/start": { state: "starting" },
       "engineLive/stats": { state: "live", fps: LIVE_FPS, cameraLatencyMs: null },
     },
@@ -72,37 +70,27 @@ describe("EngineLiveBadge while live", (): void => {
 });
 
 describe("startEngineLive", (): void => {
-  it("checks the engine host first, then asks it to start", async (): Promise<void> => {
+  it("asks the host to start even when passive status is absent", async (): Promise<void> => {
     const bridge: BridgeStub = makeLiveBridge();
-    render(<EngineLiveBadge bridge={bridge} />);
-    let started: Promise<void> = Promise.resolve();
-    await act(async (): Promise<void> => {
-      started = startEngineLive(bridge);
-      await Promise.resolve();
-    });
-    bridge.emit(ENGINE_PREVIEW_STATUS_CHECKED_EVENT, { state: "ready", requestId: STATUS_REQUEST_ID });
-    await act(async (): Promise<void> => {
-      await started;
-    });
+    useEnginePreview.setState({ status: { state: "absent", requestId: 1 } });
+    await startEngineLive(bridge);
     expect(bridge.request).toHaveBeenCalledWith({ kind: "engineLive/start", params: {} });
+    expect(bridge.request).toHaveBeenCalledTimes(1);
     expect(useEngineLive.getState().state).toBe("starting");
   });
-  it("reports why it cannot start when the host is not ready", async (): Promise<void> => {
-    const bridge: BridgeStub = makeLiveBridge();
-    let started: Promise<void> = Promise.resolve();
-    await act(async (): Promise<void> => {
-      started = startEngineLive(bridge);
-      await Promise.resolve();
+  it("reports the explicit start refusal", async (): Promise<void> => {
+    const message = "Set the map editor executable in Preferences > Engine preview.";
+    const bridge: BridgeStub = makeBridgeStub({
+      responses: {
+        "engineLive/start": (): never => {
+          throw new Error(message);
+        },
+      },
     });
-    bridge.emit(ENGINE_PREVIEW_STATUS_CHECKED_EVENT, {
-      state: "absent",
-      requestId: STATUS_REQUEST_ID,
-      error: "Start the engine preview host, then retry the status check.",
-    });
-    await act(async (): Promise<void> => {
-      await started;
-    });
-    expect(bridge.request).not.toHaveBeenCalledWith({ kind: "engineLive/start", params: {} });
-    expect(useEngineLive.getState().message).toContain("Start the engine preview host");
+    await startEngineLive(bridge);
+    expect(bridge.request).toHaveBeenCalledWith({ kind: "engineLive/start", params: {} });
+    expect(bridge.request).toHaveBeenCalledTimes(1);
+    expect(useEngineLive.getState().state).toBe("off");
+    expect(useEngineLive.getState().message).toBe(message);
   });
 });

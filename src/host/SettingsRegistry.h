@@ -1,3 +1,4 @@
+// Owns editor registry value names and access; callers decide when persistence is allowed.
 #pragma once
 
 #include <windows.h>
@@ -14,7 +15,8 @@ constexpr const wchar_t* kRegistryKeyPath = L"Software\\AloParticleEditor";
 // Per-mod display names, one REG_SZ per mod path, in a child of the key above.
 constexpr const wchar_t* kRegModNicknamesPath = L"Software\\AloParticleEditor\\ModNicknames";
 // REG_SZ: the game folder the user picked when the startup lookup failed.
-constexpr const wchar_t* kRegGameDataPath = L"GameDataPath";
+constexpr const wchar_t* kRegGameDataPath      = L"GameDataPath";
+constexpr const wchar_t* kRegEngineHostExePath = L"EngineHostExePath";
 
 // Test seam (ALO_SETTINGS_LIVE=1): lifts the --test-host settings gate so a CDP
 // test can exercise the real registry round-trip. The a11y harness never sets

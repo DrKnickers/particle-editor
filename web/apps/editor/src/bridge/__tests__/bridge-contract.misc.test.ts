@@ -6,7 +6,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { MockBridge } from "../mock";
 import { makeMockBridgeWithListener } from "@/test/mock-bridge";
-import type { Event } from "@particle-editor/bridge-schema";
+import {
+  ENGINE_PREVIEW_STATUS_CHECKED_EVENT,
+  type EnginePreviewPendingDto,
+  type EngineStateDto,
+  type Event,
+} from "@particle-editor/bridge-schema";
 import { resetMockState } from "@/test/mock-state";
 import { EXTERNAL_LINKS } from "@/lib/external-links";
 
@@ -208,4 +213,55 @@ describe("textures/get-preview (mock parity)", () => {
       expect(res.srcH).toBeGreaterThan(0);
     }
   });
+});
+
+describe("MockBridge contract — engine host settings", (): void => {
+  it("keeps a configured host absent on status and starts it only on live start", async (): Promise<void> => {
+    vi.useFakeTimers();
+    try {
+      const bridge: MockBridge = new MockBridge();
+      await bridge.request({ kind: "engineHost/settings/set", params: { exePath: "C:\\Preview\\editor.exe" } });
+      const checked: ReturnType<typeof vi.fn> = vi.fn();
+      bridge.on(ENGINE_PREVIEW_STATUS_CHECKED_EVENT, checked);
+      const pending: EnginePreviewPendingDto = await bridge.request({ kind: "enginePreview/status", params: {} });
+      await vi.runAllTimersAsync();
+      expect(checked).toHaveBeenCalledWith(
+        expect.objectContaining({ payload: { state: "absent", requestId: pending.requestId } }),
+      );
+      expect(bridge.enginePreview.state).toBe("absent");
+      expect(await bridge.request({ kind: "engineLive/start", params: {} })).toEqual({ state: "starting" });
+      await vi.runAllTimersAsync();
+      expect(bridge.enginePreview.live).toBe("live");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("round-trips and clears the executable without dirtying the document", async (): Promise<void> => {
+    const bridge: MockBridge = new MockBridge();
+    const path = "C:\\Preview\\EAW Terrain Editor.exe";
+    const before: EngineStateDto = await bridge.request({ kind: "engine/state/snapshot", params: {} });
+    expect(await bridge.request({ kind: "engineHost/settings", params: {} })).toEqual({ exePath: null });
+    expect(await bridge.request({ kind: "engineHost/settings/set", params: { exePath: path } })).toEqual({
+      exePath: path,
+    });
+    expect(await bridge.request({ kind: "engineHost/settings", params: {} })).toEqual({ exePath: path });
+    expect(await bridge.request({ kind: "engineHost/settings/set", params: { exePath: null } })).toEqual({
+      exePath: null,
+    });
+    expect(await bridge.request({ kind: "engine/state/snapshot", params: {} })).toEqual(before);
+    expect(await bridge.request({ kind: "file/pick-open", params: { filter: "exe" } })).toEqual({
+      ok: false,
+      error: "browser-mode",
+    });
+  });
+  it.each(["", "relative.exe", "C:\\Preview\\editor.txt", "C:editor.exe"])(
+    "refuses invalid executable %s",
+    async (exePath: string): Promise<void> => {
+      const bridge: MockBridge = new MockBridge();
+      await expect(bridge.request({ kind: "engineHost/settings/set", params: { exePath } })).rejects.toThrow(
+        "absolute .exe",
+      );
+      expect(await bridge.request({ kind: "engineHost/settings", params: {} })).toEqual({ exePath: null });
+    },
+  );
 });

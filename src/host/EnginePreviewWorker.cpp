@@ -21,6 +21,7 @@ constexpr unsigned char kPngSignature[]        = {137, 80, 78, 71, 13, 10, 26, 1
 std::string JobLogName(const EnginePreviewWorker::Job& job)
 {
     if (job.operation == EnginePreviewWorker::Operation::Status) return "status";
+    if (job.operation == EnginePreviewWorker::Operation::Launch) return "launch";
     if (job.operation == EnginePreviewWorker::Operation::Still) return "still";
     return job.command;
 }
@@ -82,7 +83,8 @@ std::string ReadPng(const nlohmann::json& reply)
 }
 } // namespace
 
-EnginePreviewWorker::EnginePreviewWorker(HWND hwnd, UINT doneMessage) : m_hwnd(hwnd), m_doneMessage(doneMessage)
+EnginePreviewWorker::EnginePreviewWorker(HWND hwnd, UINT doneMessage, EngineHostProcess* hostProcess)
+    : m_hostProcess(hostProcess), m_hwnd(hwnd), m_doneMessage(doneMessage)
 {
     m_worker = std::thread([this]() -> void { WorkerLoop(); });
 }
@@ -186,12 +188,12 @@ DWORD EnginePreviewWorker::Transfer(bool writing, char* buffer, DWORD bytes, ULO
 
 nlohmann::json EnginePreviewWorker::Exchange(const std::string&    command,
                                              const nlohmann::json& args,
-                                             double                budgetSeconds)
+                                             double                budgetSeconds,
+                                             double                graceSeconds)
 {
     const ULONGLONG started = GetTickCount64();
     const ULONGLONG deadline =
-        started +
-        static_cast<ULONGLONG>((budgetSeconds + engine_preview::kTransportGraceSeconds) * kMillisecondsPerSecond);
+        started + static_cast<ULONGLONG>((budgetSeconds + graceSeconds) * kMillisecondsPerSecond);
     try
     {
         const std::int64_t id      = m_nextId;
@@ -274,6 +276,66 @@ void EnginePreviewWorker::RunStatusJob(Result& result)
     }
 }
 
+void EnginePreviewWorker::OpenPipe(const std::wstring& pipeName)
+{
+    std::lock_guard<std::mutex> lock(m_pipeMutex);
+    if (m_cancelled) throw engine_preview::Failure("cancelled", "Engine preview cancelled.");
+    m_pipe = CreateFileW(pipeName.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING,
+                         FILE_FLAG_OVERLAPPED, nullptr);
+    if (m_pipe != INVALID_HANDLE_VALUE) return;
+    const DWORD error = GetLastError();
+    std::string code  = "internal";
+    if (error == ERROR_FILE_NOT_FOUND) code = "absent";
+    if (error == ERROR_PIPE_BUSY) code = "busy";
+    throw engine_preview::Failure(code, "Cannot connect to the engine preview pipe (Windows error " +
+                                            std::to_string(error) + ").");
+}
+
+bool EnginePreviewWorker::TryHostPing(DWORD pid, double budgetSeconds)
+{
+    ClosePipe();
+    try
+    {
+        OpenPipe(engine_preview::PipeNameForPid(pid));
+        Exchange("ping", nlohmann::json::object(), budgetSeconds, 0.0);
+        // The pipe answers seconds before the map editor builds its main frame; live-start then
+        // fails with "main frame not found". A host without the ready field predates it and is
+        // treated as ready.
+        const nlohmann::json status  = Exchange("status", nlohmann::json::object(), budgetSeconds, 0.0);
+        const bool           isReady = !status.contains("ready") || status["ready"] == true;
+        if (!isReady) ClosePipe();
+        return isReady;
+    }
+    catch (const engine_preview::Failure& error)
+    {
+        ClosePipe();
+        const bool isRetryable =
+            error.code == "absent" || error.code == "timeout" || error.code == "disconnected" || error.code == "busy";
+        if (!isRetryable) throw;
+        return false;
+    }
+}
+
+void EnginePreviewWorker::ConnectHost(const Job& job, Result& result)
+{
+    try
+    {
+        result.pipeName = job.pipeName.empty() ? engine_preview::SelectPipe(EnumeratePipes(), job.pid) : job.pipeName;
+        OpenPipe(result.pipeName);
+        return;
+    }
+    catch (const engine_preview::Failure& error)
+    {
+        const bool canLaunch = job.operation == Operation::Launch || job.operation == Operation::Still;
+        if (error.code != "absent" || !canLaunch || job.pid != 0) throw;
+    }
+    if (!m_hostProcess) throw engine_preview::Failure("internal", "The engine host process owner is unavailable.");
+    const DWORD pid = m_hostProcess->EnsureStarted(
+        job.exePath, [this](DWORD hostPid, double budgetSeconds) -> bool
+        { return TryHostPing(hostPid, budgetSeconds); }, m_cancelled);
+    result.pipeName = engine_preview::PipeNameForPid(pid);
+}
+
 EnginePreviewWorker::Result EnginePreviewWorker::RunJob(const Job& job)
 {
     using namespace engine_preview;
@@ -287,20 +349,7 @@ EnginePreviewWorker::Result EnginePreviewWorker::RunJob(const Job& job)
     try
     {
         if (m_cancelled) throw Failure("cancelled", ErrorMessage("cancelled", ""));
-        result.pipeName = job.pipeName.empty() ? SelectPipe(EnumeratePipes(), job.pid) : job.pipeName;
-        {
-            std::lock_guard<std::mutex> lock(m_pipeMutex);
-            if (m_cancelled) throw Failure("cancelled", ErrorMessage("cancelled", ""));
-            m_pipe = CreateFileW(result.pipeName.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING,
-                                 FILE_FLAG_OVERLAPPED, nullptr);
-            if (m_pipe == INVALID_HANDLE_VALUE)
-            {
-                const DWORD       error = GetLastError();
-                const std::string code  = error == ERROR_FILE_NOT_FOUND ? "absent" : "internal";
-                throw Failure(code, ErrorMessage(code, "Cannot connect to the engine preview pipe (error " +
-                                                           std::to_string(error) + ")."));
-            }
-        }
+        ConnectHost(job, result);
         if (job.operation == Operation::Still)
             RunStillJob(job, result);
         else if (job.operation == Operation::Command)
@@ -310,9 +359,14 @@ EnginePreviewWorker::Result EnginePreviewWorker::RunJob(const Job& job)
     }
     catch (const Failure& error)
     {
-        if (job.operation != Operation::Status) result.payload = {{"ok", false}};
-        result.payload["error"] = error.what();
-        result.payload["code"]  = error.code;
+        if (job.operation != Operation::Status && job.operation != Operation::Launch) result.payload = {{"ok", false}};
+        // An absent host is expected during passive UI checks, even with a saved executable.
+        const bool isQuietAbsence = job.operation == Operation::Status && error.code == "absent";
+        if (!isQuietAbsence)
+        {
+            result.payload["error"] = error.what();
+            result.payload["code"]  = error.code;
+        }
     }
     catch (const std::exception& error)
     {

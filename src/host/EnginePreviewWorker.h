@@ -5,6 +5,7 @@
 
 #include <windows.h>
 #include "EnginePreviewPipe.h"
+#include "EngineHostProcess.h"
 #include <atomic>
 #include <condition_variable>
 #include <deque>
@@ -19,6 +20,8 @@ public:
     enum class Operation
     {
         Status,
+        // Connects or starts the host, then returns status; only explicit live/still requests use it.
+        Launch,
         Still,
         // Sends job.command with job.args and returns the host's reply as payload.result.
         Command
@@ -29,6 +32,7 @@ public:
         std::uint64_t  token     = 0;
         std::uint32_t  pid       = 0;
         std::wstring   pipeName;
+        std::wstring   exePath;
         std::string    command;
         nlohmann::json args          = nlohmann::json::object();
         double         budgetSeconds = engine_preview::kStillBudgetSeconds;
@@ -44,7 +48,7 @@ public:
         nlohmann::json payload = nlohmann::json::object();
     };
 
-    EnginePreviewWorker(HWND hwnd, UINT doneMessage);
+    EnginePreviewWorker(HWND hwnd, UINT doneMessage, EngineHostProcess* hostProcess = nullptr);
     ~EnginePreviewWorker();
     EnginePreviewWorker(const EnginePreviewWorker&)            = delete;
     EnginePreviewWorker& operator=(const EnginePreviewWorker&) = delete;
@@ -58,11 +62,18 @@ private:
     void                    WorkerLoop();
     Result                  RunJob(const Job& job);
     void                    RunStatusJob(Result& result);
+    void                    OpenPipe(const std::wstring& pipeName);
+    bool                    TryHostPing(DWORD pid, double budgetSeconds);
+    void                    ConnectHost(const Job& job, Result& result);
     void                    RunStillJob(const Job& job, Result& result);
     void                    RunCommandJob(const Job& job, Result& result);
-    nlohmann::json          Exchange(const std::string& command, const nlohmann::json& args, double budgetSeconds);
+    nlohmann::json          Exchange(const std::string&    command,
+                                     const nlohmann::json& args,
+                                     double                budgetSeconds,
+                                     double                graceSeconds = engine_preview::kTransportGraceSeconds);
     DWORD                   Transfer(bool writing, char* buffer, DWORD bytes, ULONGLONG deadline);
     void                    ClosePipe();
+    EngineHostProcess*      m_hostProcess; // borrowed from the dispatcher, which outlives both workers
     HWND                    m_hwnd;
     UINT                    m_doneMessage;
     std::mutex              m_mutex;

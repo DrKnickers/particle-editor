@@ -382,6 +382,11 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
                 lpstrFilter = L"Texture Files (*.dds;*.tga)\0*.dds;*.tga\0All Files (*.*)\0*.*\0\0";
                 lpstrTitle  = L"Open skydome texture";
             }
+            else if (filterId == "exe")
+            {
+                lpstrFilter = L"Executable Files (*.exe)\0*.exe\0\0";
+                lpstrTitle  = L"Choose engine preview map editor";
+            }
             else if (filterId == "ground")
             {
                 lpstrFilter = L"Texture Files (*.dds;*.tga)\0*.dds;*.tga\0All Files (*.*)\0*.*\0\0";

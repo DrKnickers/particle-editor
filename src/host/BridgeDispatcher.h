@@ -536,11 +536,15 @@ private:
     bool TryDispatchSpawner(BridgeRequestContext& ctx); // + settings
     bool TryDispatchEnginePreview(BridgeRequestContext& ctx);
     bool IsEnginePreviewReady() const;
-    bool BuildStillJob(BridgeRequestContext& ctx, EnginePreviewWorker::Job& job);
+    bool CanUseEnginePreview() const;
+    bool ResumeStillAfterHostLaunch(EnginePreviewWorker::Result& result);
+    bool BuildStillOrLaunchJob(BridgeRequestContext& ctx, EnginePreviewWorker::Job& job);
     // Saves the open effect to the host's preview path under its internal name.
     bool        WriteEnginePreviewDocumentCopy(std::string& error);
     bool        TryDispatchEngineLive(BridgeRequestContext& ctx);
     bool        StartEngineLive(BridgeRequestContext& ctx);
+    bool        TryDispatchEngineHostSettings(BridgeRequestContext& ctx);
+    bool        QueueEngineLiveStream(std::string& error);
     void        StopEngineLive(const std::string& reason);
     void        SendEngineLiveStop();
     void        FinishEngineLiveStart(const EnginePreviewWorker::Result& result);
@@ -783,6 +787,8 @@ private:
     std::uint64_t                        m_enginePreviewToken   = 0;
     nlohmann::json                       m_enginePreviewStatus  = {{"state", "absent"}};
     std::wstring                         m_enginePreviewPipe;
+    EngineHostProcess                    m_engineHostProcess;
+    std::wstring                         m_engineHostExePath;
     std::unique_ptr<EnginePreviewWorker> m_enginePreviewWorker;
     // Live engine view. Its worker holds its own pipe connection so live control never
     // queues behind a still.
@@ -796,7 +802,8 @@ private:
     std::uint64_t                        m_engineLiveToken = 0;
     std::unique_ptr<EnginePreviewWorker> m_engineLiveWorker;
     std::unique_ptr<EngineLiveReader>    m_engineLiveReader;
-    bool                                 m_engineLiveStopPending = false;
+    bool                                 m_engineLiveStopPending     = false;
+    bool                                 m_engineLiveLaunchAttempted = false;
     std::vector<std::uint8_t>            m_engineLivePixels;
     engine_live::EngineLiveSync          m_engineLiveSync;
     bool                                 m_externalLaunchAllowed = false;   // see SetExternalLaunchAllowed

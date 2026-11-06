@@ -219,6 +219,7 @@ function didMutate(
 
 // ─── Bridge state and requests ─────────────────────────────
 export class MockBridge implements Bridge, MockDispatchHost {
+  private engineHostExePath: string | null = null;
   private events = new EventHub<{ [K in EventKind]: EventOf<K> }>("MockBridge");
   private viewportUnavailable: EventOf<"viewport/unavailable"> | null = null;
 
@@ -498,14 +499,30 @@ export class MockBridge implements Bridge, MockDispatchHost {
       case "settings/lighting-force-align/set":
         return dispatchSpawnerLighting.call(this, req);
 
+      case "engineHost/settings":
+        return { exePath: this.engineHostExePath };
+      case "engineHost/settings/set": {
+        const exePath: string | null = req.params.exePath;
+        if (exePath !== null) {
+          // Browser mode cannot check disk existence; native dispatch owns that validation.
+          const isAbsoluteExe: boolean =
+            typeof exePath === "string" &&
+            /^(?:[a-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+[\\/]).+\.exe$/i.test(exePath) &&
+            !exePath.includes("\0");
+          if (!isAbsoluteExe) throw new Error("exePath must be an existing absolute .exe path.");
+        }
+        this.engineHostExePath = exePath;
+        this.patchAndBroadcast({ enginePreviewAvailable: this.enginePreview.state === "ready" || exePath !== null });
+        return { exePath };
+      }
       case "enginePreview/status":
       case "enginePreview/still":
       case "enginePreview/cancel":
-        return dispatchEnginePreview.call(this, req);
+        return dispatchEnginePreview.call(this, req, this.engineHostExePath);
 
       case "engineLive/start":
       case "engineLive/stop":
-        return dispatchEngineLive.call(this, req);
+        return dispatchEngineLive.call(this, req, this.engineHostExePath);
       case "engineLive/stats":
         return readMockEngineLiveStats.call(this);
 

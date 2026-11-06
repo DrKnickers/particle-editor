@@ -113,7 +113,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         const bool canRedo = m_undo ? m_undo->CanRedo() : false;
         ctx.SendOk(BuildEngineStateSnapshot(m_engine, m_currentFilePath, m_dirty, spawnerJson, m_selectedEmitterId,
                                             activeModPath, leaveParticles, canUndo, canRedo,
-                                            !m_emitterClipboard.empty(), IsEnginePreviewReady()));
+                                            !m_emitterClipboard.empty(), CanUseEnginePreview()));
         return true;
     }
 

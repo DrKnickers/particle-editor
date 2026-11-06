@@ -79,6 +79,11 @@ inline std::string ErrorMessage(const std::string& code, const std::string& deta
     return detail.empty() ? message : message + " " + detail;
 }
 
+inline std::wstring PipeNameForPid(std::uint32_t pid)
+{
+    return L"\\\\.\\pipe\\alamo-preview-" + std::to_wstring(pid);
+}
+
 inline std::uint32_t ParsePipePid(const std::wstring& name)
 {
     const std::wstring prefix     = L"alamo-preview-";
@@ -103,8 +108,7 @@ inline std::wstring SelectPipe(const std::vector<std::wstring>& names, std::uint
     for (const std::wstring& name : names)
     {
         const std::uint32_t pid = ParsePipePid(name);
-        if (pid != 0 && (requestedPid == 0 || requestedPid == pid))
-            matches.push_back(L"\\\\.\\pipe\\alamo-preview-" + std::to_wstring(pid));
+        if (pid != 0 && (requestedPid == 0 || requestedPid == pid)) matches.push_back(PipeNameForPid(pid));
     }
     if (matches.empty()) throw Failure("absent", ErrorMessage("absent", ""));
     if (matches.size() != 1)

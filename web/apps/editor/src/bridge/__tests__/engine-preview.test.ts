@@ -41,6 +41,28 @@ describe("engine preview bridge", (): void => {
     },
   );
 
+  it("keeps status absent with a saved executable until a still is requested", async (): Promise<void> => {
+    const bridge: MockBridge = new MockBridge();
+    await bridge.request({ kind: "engineHost/settings/set", params: { exePath: "C:\\Preview\\editor.exe" } });
+    const checked: Mock = vi.fn();
+    const rendered: Mock = vi.fn();
+    bridge.on(ENGINE_PREVIEW_STATUS_CHECKED_EVENT, checked);
+    bridge.on(ENGINE_PREVIEW_STILL_RENDERED_EVENT, rendered);
+    await bridge.request({ kind: "enginePreview/status", params: {} });
+    await vi.runAllTimersAsync();
+    expect(checked).toHaveBeenCalledWith(expect.objectContaining({ payload: { state: "absent", requestId: 1 } }));
+    expect(bridge.enginePreview.state).toBe("absent");
+    expect(bridge.enginePreview.live).toBe("off");
+    expect(useMockEngineState.getState().enginePreviewAvailable).toBe(true);
+    await bridge.request({
+      kind: "enginePreview/still",
+      params: { timeSeconds: DEFAULT_TIME_SECONDS, matchCamera: false },
+    });
+    await vi.runAllTimersAsync();
+    expect(rendered).toHaveBeenCalledWith(expect.objectContaining({ payload: expect.objectContaining({ ok: true }) }));
+    expect(bridge.enginePreview.state).toBe("ready");
+  });
+
   it("delivers a canned still after pending without changing the document", async (): Promise<void> => {
     const bridge: MockBridge = new MockBridge();
     bridge.enginePreview.state = "ready";
@@ -95,14 +117,20 @@ describe("engine preview bridge", (): void => {
     );
   });
 
-  it("rejects unavailable stills and invalid times", async (): Promise<void> => {
+  it("reports unavailable stills and rejects invalid times", async (): Promise<void> => {
     const bridge: MockBridge = new MockBridge();
-    await expect(
-      bridge.request({
-        kind: "enginePreview/still",
-        params: { timeSeconds: DEFAULT_TIME_SECONDS, matchCamera: false },
+    const received: Mock = vi.fn();
+    bridge.on(ENGINE_PREVIEW_STILL_RENDERED_EVENT, received);
+    await bridge.request({
+      kind: "enginePreview/still",
+      params: { timeSeconds: DEFAULT_TIME_SECONDS, matchCamera: false },
+    });
+    await vi.runAllTimersAsync();
+    expect(received).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({ ok: false, error: expect.stringMatching(/Preferences/) }),
       }),
-    ).rejects.toThrow(/status/);
+    );
     bridge.enginePreview.state = "ready";
     await expect(
       bridge.request({

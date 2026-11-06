@@ -1,9 +1,11 @@
+// Tests Preferences controls through bridge replies; no native picker or registry is used.
 import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { makeBridgeStub } from "@/test/bridge-stub";
+import { makeBridgeStub, type BridgeStub } from "@/test/bridge-stub";
 import { PreferencesDialog } from "../PreferencesDialog";
 import { readConfirmDelete } from "@/lib/tree/delete-emitters";
+import type { EngineHostSettingsDto } from "@particle-editor/bridge-schema";
 
 function makePrefsBridge(msaaLevels: number[] = [0, 2, 4]) {
   const bridge = makeBridgeStub({
@@ -14,6 +16,57 @@ function makePrefsBridge(msaaLevels: number[] = [0, 2, 4]) {
 
 describe("PreferencesDialog", () => {
   beforeEach(() => localStorage.clear());
+  it("loads, browses and clears the map editor executable", async (): Promise<void> => {
+    const path = "C:\\Preview\\EAW Terrain Editor.exe";
+    const bridge: BridgeStub = makeBridgeStub({
+      responses: {
+        "engineHost/settings": { exePath: null },
+        "file/pick-open": { ok: true, path },
+        "engineHost/settings/set": (params: EngineHostSettingsDto): EngineHostSettingsDto => ({
+          exePath: params.exePath,
+        }),
+      },
+    });
+    render(<PreferencesDialog bridge={bridge} open onOpenChange={(): void => {}} />);
+    expect(screen.getByText("Engine preview")).toBeInTheDocument();
+    expect(screen.getByLabelText("Map editor executable")).toHaveTextContent("Not set");
+    await waitFor((): void => {
+      expect(screen.getByRole("button", { name: "Browse" })).toBeEnabled();
+    });
+    expect(screen.getByRole("button", { name: "Clear" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Browse" }));
+    expect(bridge.request).toHaveBeenCalledWith({ kind: "file/pick-open", params: { filter: "exe" } });
+    await waitFor((): void => {
+      expect(screen.getByLabelText("Map editor executable")).toHaveTextContent(path);
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Clear" }));
+    await waitFor((): void => {
+      expect(screen.getByLabelText("Map editor executable")).toHaveTextContent("Not set");
+    });
+    expect(bridge.request).toHaveBeenCalledWith({ kind: "engineHost/settings/set", params: { exePath: null } });
+  });
+
+  it("preserves the path on picker cancellation and shows setting failures", async (): Promise<void> => {
+    const path = "C:\\Preview\\editor.exe";
+    const bridge: BridgeStub = makeBridgeStub({
+      responses: {
+        "engineHost/settings": { exePath: path },
+        "file/pick-open": { ok: false, error: "cancelled" },
+        "engineHost/settings/set": (): never => {
+          throw new Error("Cannot save settings");
+        },
+      },
+    });
+    render(<PreferencesDialog bridge={bridge} open onOpenChange={(): void => {}} />);
+    await waitFor((): void => {
+      expect(screen.getByRole("button", { name: "Browse" })).toBeEnabled();
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Browse" }));
+    expect(bridge.request).not.toHaveBeenCalledWith(expect.objectContaining({ kind: "engineHost/settings/set" }));
+    await userEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Cannot save settings");
+    expect(screen.getByLabelText("Map editor executable")).toHaveTextContent(path);
+  });
   it("renders a 3-way theme control", () => {
     render(<PreferencesDialog bridge={makePrefsBridge().bridge} open onOpenChange={() => {}} />);
     expect(screen.getByRole("radio", { name: /dark/i })).toBeInTheDocument();

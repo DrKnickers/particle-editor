@@ -170,6 +170,19 @@ void TestStatus()
     Require(WaitResult(worker).payload["state"] == "ready", "ping/version/config status flow");
 }
 
+void TestStatusWithSavedPath()
+{
+    // A nonexistent explicit pipe isolates this check from any manually running host.
+    // No process owner is supplied: entering the launch path would return an internal error.
+    EnginePreviewWorker      worker(nullptr, 0);
+    EnginePreviewWorker::Job job;
+    job.exePath  = L"C:\\Preview\\MapEditor.exe";
+    job.pipeName = host::engine_preview::PipeNameForPid(GetCurrentProcessId());
+    Require(worker.Enqueue(job), "enqueue passive status with a saved path");
+    const EnginePreviewWorker::Result result = WaitResult(worker);
+    Require(result.payload == json{{"state", "absent"}}, "status stays quietly absent without launching");
+}
+
 void TestFailure(const std::string& code)
 {
     FakeServer server(
@@ -216,6 +229,7 @@ int main()
         }
         TestSuccess(png);
         TestStatus();
+        TestStatusWithSavedPath();
         TestFailure("timeout");
         TestFailure("disconnected");
         TestHung(false, false);

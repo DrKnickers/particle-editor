@@ -54,36 +54,57 @@ void BridgeDispatcher::EmitEngineLiveStateChanged(const std::string& message)
 
 bool BridgeDispatcher::StartEngineLive(BridgeRequestContext& ctx)
 {
-    if (!IsEnginePreviewReady())
-    {
-        ctx.SendErr("Check engine preview status before starting the live engine view.");
-        return false;
-    }
+    m_engineLiveLaunchAttempted = false;
     if (!ctx.RequireEngine("live engine view")) return false;
     if (!m_pParticleSystem || !*m_pParticleSystem)
     {
         ctx.SendErr("Open an effect before starting the live engine view.");
         return false;
     }
+    if (!IsEnginePreviewReady())
+    {
+        if (!m_engineLiveWorker)
+            m_engineLiveWorker =
+                std::make_unique<EnginePreviewWorker>(m_hostHwnd, WM_APP_ENGINE_PREVIEW_READY, &m_engineHostProcess);
+        EnginePreviewWorker::Job job;
+        job.operation = EnginePreviewWorker::Operation::Launch;
+        job.token     = ++m_engineLiveToken;
+        job.exePath   = m_engineHostExePath;
+        if (!m_engineLiveWorker->Enqueue(std::move(job)))
+        {
+            ctx.SendErr("The live engine view worker is busy or stopping.");
+            return false;
+        }
+        m_engineLiveState = EngineLiveState::Starting;
+        EmitEngineLiveStateChanged("Starting map editor...");
+        return true;
+    }
+    std::string error;
+    if (QueueEngineLiveStream(error)) return true;
+    ctx.SendErr(error);
+    return false;
+}
+
+bool BridgeDispatcher::QueueEngineLiveStream(std::string& error)
+{
     int x = 0, y = 0, widthPx = kLiveFallbackWidthPx, heightPx = kLiveFallbackHeightPx;
     m_engine->GetSceneViewport(x, y, widthPx, heightPx);
     const engine_live::ParkSize park = engine_live::ParkSizeForViewport(widthPx, heightPx);
     try
     {
-        std::string error;
         if (!WriteEnginePreviewDocumentCopy(error))
         {
-            ctx.SendErr(error);
             return false;
         }
     }
-    catch (const std::exception& error)
+    catch (const std::exception& exception)
     {
-        ctx.SendErr(error.what());
+        error = exception.what();
         return false;
     }
     if (!m_engineLiveWorker)
-        m_engineLiveWorker = std::make_unique<EnginePreviewWorker>(m_hostHwnd, WM_APP_ENGINE_PREVIEW_READY);
+        m_engineLiveWorker =
+            std::make_unique<EnginePreviewWorker>(m_hostHwnd, WM_APP_ENGINE_PREVIEW_READY, &m_engineHostProcess);
     EnginePreviewWorker::Job job;
     job.operation     = EnginePreviewWorker::Operation::Command;
     job.command       = "live-start";
@@ -94,7 +115,7 @@ bool BridgeDispatcher::StartEngineLive(BridgeRequestContext& ctx)
         {"width", park.widthPx}, {"height", park.heightPx}, {"max_fps", kLiveMaxFps}, {"timeout_s", kLiveStartSeconds}};
     if (!m_engineLiveWorker->Enqueue(std::move(job)))
     {
-        ctx.SendErr("The live engine view worker is busy or stopping.");
+        error = "The live engine view worker is busy or stopping.";
         return false;
     }
     m_engineLiveSync = engine_live::EngineLiveSync{};
@@ -180,6 +201,37 @@ void BridgeDispatcher::DrainEngineLiveResults()
 
 void BridgeDispatcher::FinishEngineLiveStart(const EnginePreviewWorker::Result& result)
 {
+    if (result.operation == EnginePreviewWorker::Operation::Launch)
+    {
+        m_engineLiveLaunchAttempted = true;
+        m_enginePreviewStatus       = result.payload;
+        m_enginePreviewPipe         = result.pipeName;
+        EmitEngineStateChanged();
+        if (!IsEnginePreviewReady())
+        {
+            StopEngineLive(
+                result.payload.value("error", std::string("The engine host is not ready for live preview.")));
+            return;
+        }
+        std::string error;
+        if (!QueueEngineLiveStream(error)) StopEngineLive(error);
+        return;
+    }
+
+    if (IsHostGone(result.payload) && !m_engineLiveLaunchAttempted)
+    {
+        EnginePreviewWorker::Job job;
+        job.operation = EnginePreviewWorker::Operation::Launch;
+        job.token     = m_engineLiveToken;
+        job.exePath   = m_engineHostExePath;
+        if (!m_engineLiveWorker->Enqueue(std::move(job)))
+        {
+            StopEngineLive("The live engine view worker is busy or stopping.");
+            return;
+        }
+        EmitEngineLiveStateChanged("Starting map editor...");
+        return;
+    }
     if (!result.payload.value("ok", false))
     {
         // A start that failed late (a timeout) may already have started the stream.
