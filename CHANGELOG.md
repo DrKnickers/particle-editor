@@ -14,6 +14,7 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 - View → Live engine view shows the engine's render of the effect in the viewport, following your orbit, pan, zoom and edits, and framed to match the editor's camera (#988, #989, #990)
 - The live engine view starts the map editor set in Preferences → Engine preview path by itself, hidden: no window or taskbar button appears, the badge shows that it is starting, and the map editor closes when the Particle Editor exits
 - The live engine view's ground matches the editor's ground choice (Dirt, Grass, Sand, Snow, a custom image or a solid colour); a hidden ground or a ground height can't be mirrored, and a note under the live badge says so
+- Preferences → Engine preview has a Set up button that builds a private copy of your 64-bit EAW Terrain Editor with the Alamo Preview render host, so the live engine view works. Set up checks the editor and the host package against the package's own hashes and never modifies the game install: game data is shared by hard link when the copy is on the same drive, and copied otherwise. Remove setup deletes only what Set up created (#994, #995)
 
 ### Fixed
 

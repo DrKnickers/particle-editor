@@ -1,6 +1,6 @@
 // Live engine view: the host's shared-memory frame layout and the torn-read-safe copy of
 // its newest frame. No handles, threads or D3D; EngineLiveReader maps the section.
-// The layout is alamo-preview's docs/phase3b3-live-spec.md, version 1.
+// The layout is version 1 of the Alamo Preview host's live-frame format.
 #ifndef HOST_ENGINE_LIVE_FRAME_H
 #define HOST_ENGINE_LIVE_FRAME_H
 

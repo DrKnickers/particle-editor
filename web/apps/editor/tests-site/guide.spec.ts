@@ -208,8 +208,12 @@ test("guide pager: first, middle, and final pages expose expected directions", a
   await expect(page.locator(".guide-pager .pager-next")).toHaveAttribute("href", "./particle-authoring-primer.html");
 });
 
-test("unpublished tutorial drafts stay in source but not in the public guide", async ({ page, request }) => {
-  expect(UNPUBLISHED_SLUGS).toEqual(["02-polish-hardpoint-damage-smoke", "04-recolor-and-orient-a-shield-impact"]);
+test("unpublished guide drafts stay in source but not in the public guide", async ({ page, request }) => {
+  expect(UNPUBLISHED_SLUGS).toEqual([
+    "engine-preview",
+    "02-polish-hardpoint-damage-smoke",
+    "04-recolor-and-orient-a-shield-impact",
+  ]);
 
   await page.goto(guidePath("home"));
   for (const slug of UNPUBLISHED_SLUGS) {
