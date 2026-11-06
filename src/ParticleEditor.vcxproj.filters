@@ -474,6 +474,9 @@
     <ClInclude Include="host\EngineLiveReader.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="host\EngineLiveSync.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
     <ClInclude Include="host\EnginePreviewPipe.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>

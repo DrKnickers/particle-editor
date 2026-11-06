@@ -23,16 +23,19 @@ constexpr double kCommandBudgetSeconds  = 15.0;
 constexpr double kTransportGraceSeconds = 5.0;
 constexpr double kMaxPitchDegrees       = 80.0;
 constexpr double kMaxDistanceUnits      = 60000.0;
-constexpr double kMaxTargetUnits        = 1000000.0;
-constexpr double kRadiansToDegrees      = 180.0 / 3.14159265358979323846;
+// The host refuses a zero distance; a camera on its target is moved this far out.
+constexpr double kMinLiveDistanceUnits = 1.0;
+constexpr double kMaxTargetUnits       = 1000000.0;
+constexpr double kRadiansToDegrees     = 180.0 / 3.14159265358979323846;
 // A fixed engine random state makes repeated stills of the same effect identical.
 constexpr unsigned kPreviewRandomState = 1;
 // The host halves each edge: a 4K editor view becomes about 1.5K wide, which is still sharp in the panel
 // and cuts the PNG the worker reads and the data URI the panel decodes to a quarter.
 constexpr int kPreviewCaptureScale = 2;
-// Awaiting live calibration against an asymmetric effect in the engine host.
+// Calibrated live (2026-11-05) by pushing a plume along +X: host yaw 0 looks along +Y as
+// ours does from -Y, and host yaw grows clockwise seen from above, against our atan2.
 constexpr double        kYawZeroDegrees          = 0.0;
-constexpr double        kYawSign                 = 1.0;
+constexpr double        kYawSign                 = -1.0;
 constexpr std::int64_t  kMaxRequestId            = 9007199254740992LL;
 constexpr unsigned      kDecimalRadix            = 10;
 constexpr unsigned char kMaxAsciiCode            = 127;
@@ -240,6 +243,25 @@ inline Orbit OrbitFromLookAt(const std::array<double, 3>& position, const std::a
     if (distance <= 0 || distance > kMaxDistanceUnits || pitch < 0 || pitch > kMaxPitchDegrees)
         throw Failure("bad-args", "The editor camera is outside the engine's pitch or distance limits.");
     const double yaw = kYawZeroDegrees + kYawSign * std::atan2(x, -y) * kRadiansToDegrees;
+    return Orbit{pitch, yaw, distance, target};
+}
+
+// The live view follows every camera our viewport allows, including ones the engine camera cannot
+// take (looking up from below, steeper than kMaxPitchDegrees, farther than kMaxDistanceUnits).
+// Those are clamped to the nearest view the engine can show instead of refused.
+inline Orbit LiveOrbitFromLookAt(const std::array<double, 3>& position, const std::array<double, 3>& target)
+{
+    for (size_t axis = 0; axis < target.size(); ++axis)
+        if (!std::isfinite(position[axis]) || !std::isfinite(target[axis]) || std::abs(target[axis]) > kMaxTargetUnits)
+            throw Failure("bad-args", "The editor camera has an invalid position or target.");
+    const double x          = position[0] - target[0];
+    const double y          = position[1] - target[1];
+    const double z          = position[2] - target[2];
+    const double horizontal = std::hypot(x, y);
+    const double distance   = std::clamp(std::hypot(horizontal, z), kMinLiveDistanceUnits, kMaxDistanceUnits);
+    const double pitch      = std::clamp(std::atan2(z, horizontal) * kRadiansToDegrees, 0.0, kMaxPitchDegrees);
+    // Looking straight down leaves no horizontal direction; any yaw shows the same view.
+    const double yaw = horizontal > 0 ? kYawZeroDegrees + kYawSign * std::atan2(x, -y) * kRadiansToDegrees : 0.0;
     return Orbit{pitch, yaw, distance, target};
 }
 } // namespace host::engine_preview

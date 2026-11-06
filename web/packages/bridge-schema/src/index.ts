@@ -778,6 +778,14 @@ export interface EngineLiveStateDto {
   message?: string;
 }
 
+export interface EngineLiveStatsDto {
+  state: EngineLiveStateName;
+  // Streamed frames drawn per second over the last whole second; 0 unless live.
+  fps: number;
+  // From sending the latest camera to the first frame that shows it; null until one arrives.
+  cameraLatencyMs: number | null;
+}
+
 export type Request =
   // File / recents
   // file/new and file/open (default "alo" filter) replace the document. The
@@ -1271,6 +1279,7 @@ export type Request =
   | { kind: "enginePreview/cancel"; params: Record<string, never> }
   | { kind: "engineLive/start"; params: Record<string, never> }
   | { kind: "engineLive/stop"; params: Record<string, never> }
+  | { kind: "engineLive/stats"; params: Record<string, never> }
   | { kind: "timeline/begin"; params: Record<string, never> }
   | { kind: "timeline/end"; params: Record<string, never> }
   // Clamped to [0, maxFrames]. Previous / next send frame -/+ 1; reset and
@@ -1480,6 +1489,7 @@ export interface ResponseMap {
   "enginePreview/cancel": Record<string, never>;
   "engineLive/start": { state: EngineLiveStateName };
   "engineLive/stop": { state: EngineLiveStateName };
+  "engineLive/stats": EngineLiveStatsDto;
   "timeline/begin": TimelineStateDto;
   "timeline/end": TimelineStateDto;
   "timeline/seek": TimelineStateDto;

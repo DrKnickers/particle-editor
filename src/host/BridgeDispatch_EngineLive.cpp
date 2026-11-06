@@ -1,6 +1,7 @@
-// Live engine view bridge (#949 3b.3): starts and stops the engine host's frame stream and
-// hands each new frame to the engine. The worker owns the pipe; EngineLiveReader owns the
-// shared memory; the engine only draws what it is given.
+// Live engine view bridge (#949 3b.3): starts and stops the engine host's frame stream, hands
+// each new frame to the engine, and forwards the camera, edits and resizes to the host. The
+// worker owns the pipe; EngineLiveReader owns the shared memory; EngineLiveSync picks what to
+// send next; the engine only draws what it is given.
 #include "BridgeDispatcher.h"
 #include "BridgeDispatchShared.h"
 #include "BridgeRequestContext.h"
@@ -17,12 +18,27 @@ namespace
 // The host paces its editor to this rate while streaming; our viewport never shows more.
 constexpr int    kLiveMaxFps       = 60;
 constexpr double kLiveStartSeconds = engine_preview::kStillBudgetSeconds;
+// The host's limit for live-refresh, which reloads the effect and may reopen the map.
+constexpr double kLiveRefreshSeconds = 60.0;
 // No new frame for this long means the host stopped presenting (minimized, hung or busy).
 constexpr double kLiveStaleSeconds = 2.0;
 constexpr int    kLiveMinEdgePx    = 64;
 // Used only when no scene viewport has been laid out yet.
 constexpr int kLiveFallbackWidthPx  = 1280;
 constexpr int kLiveFallbackHeightPx = 720;
+
+// Larger viewports stream at the host's maximum and are letterboxed up by the engine.
+void ClampToLiveLimits(int& widthPx, int& heightPx)
+{
+    widthPx  = std::clamp(widthPx, kLiveMinEdgePx, static_cast<int>(engine_live::kMaxWidthPx));
+    heightPx = std::clamp(heightPx, kLiveMinEdgePx, static_cast<int>(engine_live::kMaxHeightPx));
+}
+
+bool IsHostGone(const json& payload)
+{
+    const std::string code = payload.value("code", "");
+    return code == "absent" || code == "disconnected";
+}
 } // namespace
 
 const char* BridgeDispatcher::EngineLiveStateName() const
@@ -58,9 +74,7 @@ bool BridgeDispatcher::StartEngineLive(BridgeRequestContext& ctx)
     }
     int x = 0, y = 0, widthPx = kLiveFallbackWidthPx, heightPx = kLiveFallbackHeightPx;
     m_engine->GetSceneViewport(x, y, widthPx, heightPx);
-    // Larger viewports stream at the host's maximum and are letterboxed up by the engine.
-    widthPx  = std::clamp(widthPx, kLiveMinEdgePx, static_cast<int>(engine_live::kMaxWidthPx));
-    heightPx = std::clamp(heightPx, kLiveMinEdgePx, static_cast<int>(engine_live::kMaxHeightPx));
+    ClampToLiveLimits(widthPx, heightPx);
     try
     {
         std::string error;
@@ -89,6 +103,8 @@ bool BridgeDispatcher::StartEngineLive(BridgeRequestContext& ctx)
         ctx.SendErr("The live engine view worker is busy or stopping.");
         return false;
     }
+    m_engineLiveSync = engine_live::EngineLiveSync{};
+    m_engineLiveSync.NoteParked(widthPx, heightPx);
     m_engineLiveState = EngineLiveState::Starting;
     EmitEngineLiveStateChanged("");
     return true;
@@ -125,10 +141,18 @@ void BridgeDispatcher::StopEngineLive(const std::string& reason)
 bool BridgeDispatcher::TryDispatchEngineLive(BridgeRequestContext& ctx)
 {
     const std::string& kind = ctx.kind;
-    if (kind != "engineLive/start" && kind != "engineLive/stop") return false;
+    if (kind != "engineLive/start" && kind != "engineLive/stop" && kind != "engineLive/stats") return false;
     if (!m_enginePreviewAllowed)
     {
         ctx.SendErr("the engine preview is not available in this run");
+        return true;
+    }
+    if (kind == "engineLive/stats")
+    {
+        const std::optional<double> latencyMs = m_engineLiveSync.CameraLatencyMs();
+        ctx.SendOk({{"state", EngineLiveStateName()},
+                    {"fps", m_engineLiveState == EngineLiveState::Live ? m_engineLiveSync.FramesPerSecond() : 0.0},
+                    {"cameraLatencyMs", latencyMs ? json(*latencyMs) : json(nullptr)}});
         return true;
     }
     if (kind == "engineLive/stop")
@@ -151,29 +175,132 @@ void BridgeDispatcher::DrainEngineLiveResults()
     if (!m_engineLiveWorker) return;
     for (EnginePreviewWorker::Result& result : m_engineLiveWorker->TakeFinished())
     {
-        const bool isCurrentStart = result.token == m_engineLiveToken && m_engineLiveState == EngineLiveState::Starting;
-        if (!isCurrentStart) continue;
-        if (!result.payload.value("ok", false))
-        {
-            // A start that failed late (a timeout) may already have started the stream.
-            StopEngineLive(result.payload.value("error", std::string("The live engine view did not start.")));
-            continue;
-        }
-        try
-        {
-            const json& reply  = result.payload.at("result");
-            m_engineLiveReader = std::make_unique<EngineLiveReader>(Utf8ToWide(reply.at("section").get<std::string>()),
-                                                                    Utf8ToWide(reply.at("event").get<std::string>()),
-                                                                    engine_preview::ParsePipePid(result.pipeName));
-            m_engineLiveState  = EngineLiveState::Live;
-            EmitEngineLiveStateChanged("");
-        }
-        catch (const std::exception& error)
-        {
-            StopEngineLive(std::string("The live engine view did not start: ") + error.what());
-        }
+        if (result.token != m_engineLiveToken) continue;
+        if (m_engineLiveState == EngineLiveState::Starting)
+            FinishEngineLiveStart(result);
+        else if (m_engineLiveState == EngineLiveState::Live)
+            FinishEngineLiveCommand(result);
     }
     if (m_engineLiveStopPending) SendEngineLiveStop();
+}
+
+void BridgeDispatcher::FinishEngineLiveStart(const EnginePreviewWorker::Result& result)
+{
+    if (!result.payload.value("ok", false))
+    {
+        // A start that failed late (a timeout) may already have started the stream.
+        StopEngineLive(result.payload.value("error", std::string("The live engine view did not start.")));
+        return;
+    }
+    try
+    {
+        const json& reply  = result.payload.at("result");
+        m_engineLiveReader = std::make_unique<EngineLiveReader>(Utf8ToWide(reply.at("section").get<std::string>()),
+                                                                Utf8ToWide(reply.at("event").get<std::string>()),
+                                                                engine_preview::ParsePipePid(result.pipeName));
+        m_engineLiveState  = EngineLiveState::Live;
+        EmitEngineLiveStateChanged("");
+    }
+    catch (const std::exception& error)
+    {
+        StopEngineLive(std::string("The live engine view did not start: ") + error.what());
+    }
+}
+
+void BridgeDispatcher::FinishEngineLiveCommand(const EnginePreviewWorker::Result& result)
+{
+    const bool isAnchorRequest =
+        m_engineLiveSync.IsAnchorRequest(engine_live::LiveCommand{result.command, result.args});
+    const bool isOk = result.payload.value("ok", false);
+    if (isOk && isAnchorRequest)
+    {
+        try
+        {
+            m_engineLiveSync.NoteAnchor(result.payload.at("result").at("target").get<std::array<double, 3>>());
+            return;
+        }
+        catch (const json::exception& error)
+        {
+            OutputDebugStringA((std::string("[live-view] ERROR opening camera reply: ") + error.what() + "\n").c_str());
+        }
+    }
+    if (isAnchorRequest) m_engineLiveSync.NoteAnchorFailed();
+    if (!isOk) ReportEngineLiveCommandFailure(result);
+}
+
+// A refresh, camera or park that fails leaves the stream running on the last state the host
+// accepted, so the view stays live and the failure is shown; a vanished host ends it.
+void BridgeDispatcher::ReportEngineLiveCommandFailure(const EnginePreviewWorker::Result& result)
+{
+    if (IsHostGone(result.payload))
+    {
+        StopEngineLive("The engine host closed; showing the editor's own view.");
+        return;
+    }
+    const std::string error = result.payload.value("error", std::string("unknown error"));
+    OutputDebugStringA(("[live-view] ERROR live command failed: " + error + "\n").c_str());
+    EmitEngineLiveStateChanged("The engine view missed an update: " + error);
+}
+
+// Every way the editor's view changes (orbit, pan, zoom, reset, resize) ends up in the engine's
+// camera and scene viewport, so reading both each frame needs no hook in each input path.
+void BridgeDispatcher::NoteEngineLiveView(std::uint64_t nowMs)
+{
+    const Engine::Camera& camera = m_engine->GetCamera();
+    try
+    {
+        m_engineLiveSync.NoteCamera(
+            engine_preview::LiveOrbitFromLookAt({camera.Position.x, camera.Position.y, camera.Position.z},
+                                                {camera.Target.x, camera.Target.y, camera.Target.z}));
+    }
+    catch (const engine_preview::Failure&)
+    {
+        // A camera the host cannot take (panned past its limits) keeps the last one sent;
+        // the user sees the live view stop following, and panning back resumes it.
+    }
+    int x = 0, y = 0, widthPx = kLiveFallbackWidthPx, heightPx = kLiveFallbackHeightPx;
+    m_engine->GetSceneViewport(x, y, widthPx, heightPx);
+    ClampToLiveLimits(widthPx, heightPx);
+    m_engineLiveSync.NoteViewportSize(widthPx, heightPx, nowMs);
+}
+
+// One command at a time: the host applies them in order, and a still in flight owns the
+// host's clock and camera until it finishes.
+void BridgeDispatcher::SendNextEngineLiveCommand(std::uint64_t nowMs)
+{
+    if (m_enginePreviewPending || !m_engineLiveWorker || m_engineLiveWorker->IsBusy()) return;
+    std::optional<engine_live::LiveCommand> next = m_engineLiveSync.TakeNextCommand(nowMs);
+    if (!next) return;
+    EnginePreviewWorker::Job job;
+    job.operation     = EnginePreviewWorker::Operation::Command;
+    job.command       = next->command;
+    job.args          = std::move(next->args);
+    job.token         = m_engineLiveToken;
+    job.pipeName      = m_enginePreviewPipe;
+    job.budgetSeconds = engine_preview::kCommandBudgetSeconds;
+    if (job.command == engine_live::kRefreshCommand)
+    {
+        std::string error;
+        bool        isWritten = false;
+        try
+        {
+            isWritten = WriteEnginePreviewDocumentCopy(error);
+        }
+        catch (const std::exception& exception)
+        {
+            error = exception.what();
+        }
+        if (!isWritten)
+        {
+            EmitEngineLiveStateChanged("The edit could not be sent to the engine view: " + error);
+            return;
+        }
+        job.args          = {{"timeout_s", kLiveRefreshSeconds}};
+        job.budgetSeconds = kLiveRefreshSeconds;
+    }
+    // IsBusy was false a moment ago, so only a worker that is shutting down refuses here.
+    if (!m_engineLiveWorker->Enqueue(std::move(job)))
+        OutputDebugStringA("[live-view] ERROR live command refused by the worker\n");
 }
 
 void BridgeDispatcher::PumpEngineLiveFrame()
@@ -184,6 +311,7 @@ void BridgeDispatcher::PumpEngineLiveFrame()
         StopEngineLive("The engine host closed; showing the editor's own view.");
         return;
     }
+    const std::uint64_t    nowMs = GetTickCount64();
     engine_live::FrameInfo info;
     if (m_engineLiveReader->TakeNewestFrame(m_engineLivePixels, info))
     {
@@ -191,9 +319,15 @@ void BridgeDispatcher::PumpEngineLiveFrame()
         // Our own scene stays on screen until the first frame has actually been uploaded.
         if (m_engine->UploadLiveFrame(m_engineLivePixels.data(), info.width, info.height, pitchBytes))
             m_engine->SetLiveViewActive(true);
+        m_engineLiveSync.NoteFrameCameraTag(info.cameraTag, nowMs);
+        m_engineLiveSync.NoteFrameShown(nowMs);
+    }
+    else if (m_engineLiveReader->SecondsSinceLastFrame() > kLiveStaleSeconds)
+    {
+        StopEngineLive("The engine host stopped sending frames; showing the editor's own view.");
         return;
     }
-    if (m_engineLiveReader->SecondsSinceLastFrame() > kLiveStaleSeconds)
-        StopEngineLive("The engine host stopped sending frames; showing the editor's own view.");
+    NoteEngineLiveView(nowMs);
+    SendNextEngineLiveCommand(nowMs);
 }
 } // namespace host

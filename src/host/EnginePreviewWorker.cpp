@@ -92,6 +92,12 @@ EnginePreviewWorker::~EnginePreviewWorker()
     Finish();
 }
 
+bool EnginePreviewWorker::IsBusy()
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_busy;
+}
+
 bool EnginePreviewWorker::Enqueue(Job job)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -275,6 +281,8 @@ EnginePreviewWorker::Result EnginePreviewWorker::RunJob(const Job& job)
     Result          result;
     result.operation = job.operation;
     result.token     = job.token;
+    result.command   = job.command;
+    result.args      = job.args;
     result.payload   = {{"state", "absent"}};
     try
     {

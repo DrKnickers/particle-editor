@@ -240,6 +240,7 @@
     <ClInclude Include="host\PerfTrace.h" />
     <ClInclude Include="host\EngineLiveFrame.h" />
     <ClInclude Include="host\EngineLiveReader.h" />
+    <ClInclude Include="host\EngineLiveSync.h" />
     <ClInclude Include="host\EnginePreviewPipe.h" />
     <ClInclude Include="host\EnginePreviewCopy.h" />
     <ClInclude Include="host\EnginePreviewWorker.h" />

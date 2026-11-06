@@ -182,6 +182,7 @@ void BridgeDispatcher::DrainEnginePreviewResults()
         if (result.token != m_enginePreviewToken) continue;
         m_enginePreviewPending = false;
         const bool status      = result.operation == EnginePreviewWorker::Operation::Status;
+        if (!status && m_engineLiveState == EngineLiveState::Live) m_engineLiveSync.NoteStillFinished();
         if (status)
         {
             m_enginePreviewStatus = result.payload;

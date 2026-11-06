@@ -5,6 +5,7 @@ import {
   ENGINE_PREVIEW_STILL_RENDERED_EVENT,
   ENGINE_PREVIEW_STATUS_CHECKED_EVENT,
   type EngineLiveStateName,
+  type EngineLiveStatsDto,
   type EnginePreviewPendingDto,
   type EnginePreviewStatusDto,
   type Request,
@@ -28,6 +29,7 @@ export interface MockEnginePreviewState {
   pending: ReturnType<typeof setTimeout> | null;
   error: string | null;
   operation: "status" | "still" | null;
+  live: EngineLiveStateName;
 }
 
 type PreviewHost = MockDispatchHost & { enginePreview: MockEnginePreviewState };
@@ -107,18 +109,30 @@ export function dispatchEnginePreview(
 
 type LiveRequest = Extract<Request, { kind: "engineLive/start" | "engineLive/stop" }>;
 
+// The mock's pretend stream rate, shown by the viewport badge while live.
+const MOCK_LIVE_FPS = 60;
+
 // The mock has no engine host to stream from: it reports the live view as started, and the
 // viewport keeps showing the mock's own frame.
 export function dispatchEngineLive(this: PreviewHost, req: LiveRequest): { state: EngineLiveStateName } {
+  const preview: MockEnginePreviewState = this.enginePreview;
   if (req.kind === "engineLive/stop") {
+    preview.live = "off";
     this.emit({ kind: ENGINE_LIVE_STATE_CHANGED_EVENT, payload: { state: "off" } });
     return { state: "off" };
   }
-  if (this.enginePreview.state !== "ready")
-    throw new Error("Check engine preview status before starting the live engine view.");
+  if (preview.state !== "ready") throw new Error("Check engine preview status before starting the live engine view.");
+  preview.live = "starting";
   this.emit({ kind: ENGINE_LIVE_STATE_CHANGED_EVENT, payload: { state: "starting" } });
   setTimeout((): void => {
+    if (preview.live !== "starting") return; // stopped before the pretend start finished
+    preview.live = "live";
     this.emit({ kind: ENGINE_LIVE_STATE_CHANGED_EVENT, payload: { state: "live" } });
   }, MOCK_PREVIEW_DELAY_MS);
   return { state: "starting" };
+}
+
+export function readMockEngineLiveStats(this: PreviewHost): EngineLiveStatsDto {
+  const live: EngineLiveStateName = this.enginePreview.live;
+  return { state: live, fps: live === "live" ? MOCK_LIVE_FPS : 0, cameraLatencyMs: null };
 }

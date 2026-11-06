@@ -35,9 +35,12 @@ public:
     };
     struct Result
     {
-        Operation      operation = Operation::Status;
-        std::uint64_t  token     = 0;
-        std::wstring   pipeName;
+        Operation     operation = Operation::Status;
+        std::uint64_t token     = 0;
+        std::wstring  pipeName;
+        // The job's command and args, so a caller can tell which reply this is.
+        std::string    command;
+        nlohmann::json args    = nlohmann::json::object();
         nlohmann::json payload = nlohmann::json::object();
     };
 
@@ -49,6 +52,7 @@ public:
     void                 Cancel();
     void                 Finish();
     std::vector<Result>  TakeFinished();
+    bool                 IsBusy();
 
 private:
     void                    WorkerLoop();

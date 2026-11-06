@@ -121,10 +121,11 @@ void TestOrbit()
         double                pitch;
         double                yaw;
     };
+    // Host yaw grows clockwise seen from above (calibrated live), so a camera at +X is -90.
     const AngleCase cases[] = {{{0, -kDiagonalUnits, 0}, 0, 0},
-                               {{kDiagonalUnits, 0, 0}, 0, 90},
-                               {{0, kDiagonalUnits, 0}, 0, 180},
-                               {{-kDiagonalUnits, 0, 0}, 0, -90},
+                               {{kDiagonalUnits, 0, 0}, 0, -90},
+                               {{0, kDiagonalUnits, 0}, 0, -180},
+                               {{-kDiagonalUnits, 0, 0}, 0, 90},
                                {{0, -kDiagonalUnits, kDiagonalUnits}, 45, 0}};
     for (const AngleCase& expected : cases)
     {

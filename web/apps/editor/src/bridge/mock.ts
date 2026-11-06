@@ -63,6 +63,7 @@ import { dispatchSpawnerLighting } from "./mock-dispatch/dispatch-spawner-lighti
 import { closedTimelineState, dispatchTimeline, TIMELINE_GATED_KINDS } from "./mock-dispatch/dispatch-timeline";
 import {
   dispatchEngineLive,
+  readMockEngineLiveStats,
   dispatchEnginePreview,
   type MockEnginePreviewState,
 } from "./mock-dispatch/dispatch-engine-preview";
@@ -253,7 +254,14 @@ export class MockBridge implements Bridge, MockDispatchHost {
 
   // The timeline session (timeline/* kinds); no simulation behind it.
   timeline: TimelineStateDto = closedTimelineState();
-  enginePreview: MockEnginePreviewState = { state: "absent", nextId: 1, pending: null, operation: null, error: null };
+  enginePreview: MockEnginePreviewState = {
+    state: "absent",
+    nextId: 1,
+    pending: null,
+    operation: null,
+    error: null,
+    live: "off",
+  };
 
   // Ordered content-layer stack (absolute slash-free paths, front = highest
   // precedence; [] = Unmodded). Not part of the engine-state snapshot DTO — surfaced
@@ -498,6 +506,8 @@ export class MockBridge implements Bridge, MockDispatchHost {
       case "engineLive/start":
       case "engineLive/stop":
         return dispatchEngineLive.call(this, req);
+      case "engineLive/stats":
+        return readMockEngineLiveStats.call(this);
 
       case "timeline/begin":
       case "timeline/end":

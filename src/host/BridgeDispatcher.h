@@ -51,6 +51,7 @@
 #include "simulation/ReplayPlayClock.h" // timeline play anchor
 #include "EnginePreviewWorker.h"        // async engine-preview pipe requests
 #include "EngineLiveReader.h"           // live engine view frames from the host
+#include "EngineLiveSync.h"             // which live command to send the host next
 #include "PreviewEncodeWorker.h"        // async texture-preview encode
 #include "ParticleReplayController.h"   // the timeline session's replay
 
@@ -542,6 +543,11 @@ private:
     bool        StartEngineLive(BridgeRequestContext& ctx);
     void        StopEngineLive(const std::string& reason);
     void        SendEngineLiveStop();
+    void        FinishEngineLiveStart(const EnginePreviewWorker::Result& result);
+    void        NoteEngineLiveView(std::uint64_t nowMs);
+    void        SendNextEngineLiveCommand(std::uint64_t nowMs);
+    void        FinishEngineLiveCommand(const EnginePreviewWorker::Result& result);
+    void        ReportEngineLiveCommandFailure(const EnginePreviewWorker::Result& result);
     void        EmitEngineLiveStateChanged(const std::string& message);
     const char* EngineLiveStateName() const;
     bool        TryDispatchTimeline(BridgeRequestContext& ctx); // timeline/*
@@ -792,6 +798,7 @@ private:
     std::unique_ptr<EngineLiveReader>    m_engineLiveReader;
     bool                                 m_engineLiveStopPending = false;
     std::vector<std::uint8_t>            m_engineLivePixels;
+    engine_live::EngineLiveSync          m_engineLiveSync;
     bool                                 m_externalLaunchAllowed = false;   // see SetExternalLaunchAllowed
     ::ModManager*                        m_modManager            = nullptr; // mods/* surface
     InputDispatcher*                     m_input                 = nullptr; // viewport/input

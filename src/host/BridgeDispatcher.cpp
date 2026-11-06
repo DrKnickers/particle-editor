@@ -1408,6 +1408,7 @@ void BridgeDispatcher::SetDirty(bool dirty)
 void BridgeDispatcher::NoteDocumentEdited()
 {
     ++m_documentRevision;
+    if (m_engineLiveState == EngineLiveState::Live) m_engineLiveSync.NoteDocumentEdited(GetTickCount64());
     if (!m_emit) return;
     m_emit(json{{"type", "evt"}, {"kind", "document/edited"}, {"payload", {{"revision", m_documentRevision}}}});
 }
