@@ -1495,6 +1495,10 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             UpdatePacingBudget(hwnd);
             break;
 
+        case WM_APP_ENGINE_HOST_SETUP_READY:
+            if (dispatcher) dispatcher->DrainEngineHostSetupResults();
+            return 0;
+
         case WM_APP_ENGINE_PREVIEW_READY:
             if (dispatcher) dispatcher->DrainEnginePreviewResults();
             if (dispatcher) dispatcher->DrainEngineLiveResults();

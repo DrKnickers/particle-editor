@@ -387,6 +387,11 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
                 lpstrFilter = L"Executable Files (*.exe)\0*.exe\0\0";
                 lpstrTitle  = L"Choose engine preview map editor";
             }
+            else if (filterId == "json")
+            {
+                lpstrFilter = L"Host Package Manifest (package.json)\0package.json\0JSON Files (*.json)\0*.json\0\0";
+                lpstrTitle  = L"Choose engine preview host package";
+            }
             else if (filterId == "ground")
             {
                 lpstrFilter = L"Texture Files (*.dds;*.tga)\0*.dds;*.tga\0All Files (*.*)\0*.*\0\0";

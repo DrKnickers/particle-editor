@@ -12,6 +12,7 @@
 //   WM_APP + 4  WM_APP_PREVIEW_READY
 //   WM_APP + 5  WM_APP_WEB_DEAD
 //   WM_APP + 6  WM_APP_ENGINE_PREVIEW_READY
+//   WM_APP + 7  WM_APP_ENGINE_HOST_SETUP_READY
 
 // Posted when composition setup fails after the async
 // CreateCoreWebView2CompositionController dispatch, or when a live Present1
@@ -48,3 +49,6 @@ static const UINT WM_APP_WEB_DEAD = WM_APP + 5;
 
 // Posted by EnginePreviewWorker; HostWindow drains results into bridge events.
 static const UINT WM_APP_ENGINE_PREVIEW_READY = WM_APP + 6;
+
+// Posted by EngineHostSetup; HostWindow drains setup progress and results on the UI thread.
+static const UINT WM_APP_ENGINE_HOST_SETUP_READY = WM_APP + 7;

@@ -104,6 +104,21 @@ void EngineHostProcess::Launch(const std::wstring& exePath)
     m_pid     = child.dwProcessId;
 }
 
+void EngineHostProcess::StopStarted()
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (!m_process) return;
+    // Ending it loses nothing: its maps, textures and effect are host-managed copies.
+    if (WaitForSingleObject(m_process, 0) == WAIT_TIMEOUT)
+    {
+        if (!TerminateProcess(m_process, 0)) FailLaunch("Cannot stop the map editor");
+        if (WaitForSingleObject(m_process, kStopTimeoutMs) != WAIT_OBJECT_0) FailLaunch("The map editor did not stop");
+    }
+    CloseHandle(m_process);
+    m_process = nullptr;
+    m_pid     = 0;
+}
+
 DWORD EngineHostProcess::EnsureStarted(const std::wstring&      exePath,
                                        const Ping&              ping,
                                        const std::atomic<bool>& cancelled)

@@ -68,6 +68,7 @@ import {
   type MockEnginePreviewState,
 } from "./mock-dispatch/dispatch-engine-preview";
 import { EventHub } from "./event-hub";
+import { ENGINE_HOST_SETUP_PROGRESSED_EVENT, ENGINE_HOST_SETUP_FINISHED_EVENT } from "@particle-editor/bridge-schema";
 
 /** Returns true for request kinds that should mark the in-memory file
  *  state dirty. Every engine/set/* is mutating. Engine actions are
@@ -499,6 +500,23 @@ export class MockBridge implements Bridge, MockDispatchHost {
       case "settings/lighting-force-align/set":
         return dispatchSpawnerLighting.call(this, req);
 
+      case "engineHost/setup/status":
+        return { managedPath: null, isRunning: false };
+      case "engineHost/setup/start":
+      case "engineHost/setup/remove": {
+        const action: "setup" | "remove" = req.kind === "engineHost/setup/start" ? "setup" : "remove";
+        queueMicrotask((): void => {
+          this.emit({
+            kind: ENGINE_HOST_SETUP_PROGRESSED_EVENT,
+            payload: { stage: "Checking setup", done: 0, total: 1 },
+          });
+          this.emit({
+            kind: ENGINE_HOST_SETUP_FINISHED_EVENT,
+            payload: { ok: false, action, error: "Engine host setup requires the Windows editor." },
+          });
+        });
+        return { ok: true };
+      }
       case "engineHost/settings":
         return { exePath: this.engineHostExePath };
       case "engineHost/settings/set": {

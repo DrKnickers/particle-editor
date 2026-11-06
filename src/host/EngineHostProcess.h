@@ -17,9 +17,12 @@ public:
     using Ping                              = std::function<bool(DWORD, double)>;
     static constexpr DWORD kLaunchTimeoutMs = 30000;
     static constexpr DWORD kPollIntervalMs  = 100;
+    static constexpr DWORD kStopTimeoutMs   = 10000;
     static bool            IsValidExePath(const std::wstring& exePath);
     ~EngineHostProcess();
     DWORD EnsureStarted(const std::wstring& exePath, const Ping& ping, const std::atomic<bool>& cancelled);
+    // Ends the map editor this editor started, if any, so setup can change or remove its folder.
+    void StopStarted();
 
 private:
     void       Launch(const std::wstring& exePath);

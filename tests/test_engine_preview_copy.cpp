@@ -79,7 +79,8 @@ void TestDispatcherCopy(const std::filesystem::path& root)
     host::AcceleratorBridge                       accelerators;
     const std::unique_ptr<host::BridgeDispatcher> dispatcher =
         host::EnginePreviewTestAccess::Make(layout, accelerators);
-    for (const std::string& kind : {"enginePreview/status", "enginePreview/still", "enginePreview/cancel"})
+    for (const std::string& kind : {"enginePreview/status", "enginePreview/still", "enginePreview/cancel",
+                                    "engineHost/setup/status", "engineHost/setup/start", "engineHost/setup/remove"})
     {
         const nlohmann::json response =
             host::EnginePreviewTestAccess::Dispatch(*dispatcher, kind, nlohmann::json::object());

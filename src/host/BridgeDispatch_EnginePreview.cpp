@@ -8,6 +8,9 @@
 #include "ModulePath.h"
 #include "StringConv.h"
 #include "SettingsRegistry.h"
+#include "EngineHostSetupPolicy.h"
+#include "gamedata/managers.h"
+#include <filesystem>
 
 namespace host
 {
@@ -20,6 +23,15 @@ void BridgeDispatcher::SetEnginePreviewAllowed(bool allowed)
 
 void BridgeDispatcher::ShutdownEnginePreviewWorker()
 {
+    if (m_engineHostSetup)
+    {
+        // Closing during setup still persists its result, or finishes a failed save's rollback.
+        do
+        {
+            m_engineHostSetup->Finish();
+            DrainEngineHostSetupResults();
+        } while (m_engineHostSetup->IsBusy());
+    }
     if (m_enginePreviewWorker) m_enginePreviewWorker->Finish();
     // Finish cancels the pipe, so this stop rarely reaches the host. That is acceptable: an
     // abandoned host only keeps pacing its editor, and the next live-start takes it over.
@@ -147,6 +159,11 @@ bool BridgeDispatcher::TryDispatchEngineHostSettings(BridgeRequestContext& ctx)
         ctx.SendOk({{"exePath", m_engineHostExePath.empty() ? json(nullptr) : json(WideToUtf8(m_engineHostExePath))}});
         return true;
     }
+    if (m_engineHostSetup && m_engineHostSetup->IsBusy())
+    {
+        ctx.SendErr("Engine host setup is already running.");
+        return true;
+    }
     const json::const_iterator value = ctx.params.find("exePath");
     if (value == ctx.params.end() || (!value->is_null() && !value->is_string()))
     {
@@ -174,9 +191,160 @@ bool BridgeDispatcher::TryDispatchEngineHostSettings(BridgeRequestContext& ctx)
     return true;
 }
 
+bool BridgeDispatcher::TryDispatchEngineHostSetup(BridgeRequestContext& ctx)
+{
+    const bool isStatus     = ctx.kind == "engineHost/setup/status";
+    const bool isStart      = ctx.kind == "engineHost/setup/start";
+    const bool isRemove     = ctx.kind == "engineHost/setup/remove";
+    const bool isRecognized = isStatus || isStart || isRemove;
+    if (!isRecognized) return false;
+    if (!m_enginePreviewAllowed)
+    {
+        ctx.SendErr("the engine preview is not available in this run");
+        return true;
+    }
+    if (isStatus)
+    {
+        try
+        {
+            const std::wstring target = EngineHostSetup::ManagedPath();
+            const bool         isManaged =
+                std::filesystem::exists(std::filesystem::path(target) / engine_host::kSetupJournalName);
+            ctx.SendOk({{"managedPath", isManaged ? json(WideToUtf8(target)) : json(nullptr)},
+                        {"isRunning", EngineHostSetup::IsRunning(target)}});
+        }
+        catch (const std::exception& failure)
+        {
+            ctx.SendErr(failure.what());
+        }
+        return true;
+    }
+    const bool isPreviewActive = m_enginePreviewPending || m_engineLiveState != EngineLiveState::Off;
+    if (isPreviewActive)
+    {
+        ctx.SendErr("Stop the live engine view and wait for preview requests before changing setup.");
+        return true;
+    }
+    try
+    {
+        m_engineHostProcess.StopStarted();
+    }
+    catch (const std::exception& failure)
+    {
+        ctx.SendErr(failure.what());
+        return true;
+    }
+    EngineHostSetup::Job job;
+    job.remove = isRemove;
+    if (isStart)
+    {
+        const json::const_iterator editor         = ctx.params.find("editorExePath");
+        const json::const_iterator manifest       = ctx.params.find("packageManifestPath");
+        const bool                 hasPaths       = editor != ctx.params.end() && manifest != ctx.params.end();
+        const bool                 hasStringPaths = hasPaths && editor->is_string() && manifest->is_string();
+        if (!hasStringPaths)
+        {
+            ctx.SendErr("editorExePath and packageManifestPath must be strings.");
+            return true;
+        }
+        if (!m_fileManager)
+        {
+            ctx.SendErr("Game paths are unavailable for engine preview setup.");
+            return true;
+        }
+        job.editorExePath       = Utf8ToWide(editor->get<std::string>());
+        job.packageManifestPath = Utf8ToWide(manifest->get<std::string>());
+        job.basepaths           = m_fileManager->GetBasepaths();
+        job.contentRoots        = m_fileManager->GetContentRoots();
+    }
+    if (!m_engineHostSetup) m_engineHostSetup = std::make_unique<EngineHostSetup>(m_hostHwnd);
+    std::string error;
+    if (!m_engineHostSetup->Start(std::move(job), error))
+    {
+        ctx.SendErr(error);
+        return true;
+    }
+    ctx.SendOk({{"ok", true}});
+    return true;
+}
+
+bool BridgeDispatcher::ApplyEngineHostSetupResult(json& payload)
+{
+    if (!m_engineHostSetupSaveError.empty())
+    {
+        const std::string rollbackError = payload.value("error", std::string());
+        payload = {{"ok", false},
+                   {"action", "setup"},
+                   {"error", m_engineHostSetupSaveError +
+                                 (rollbackError.empty() ? " Setup was rolled back." : " Rollback: " + rollbackError)}};
+        m_engineHostSetupSaveError.clear();
+        return true;
+    }
+    if (!payload.value("ok", false)) return true;
+    const bool         isSetup = payload.at("action") == "setup";
+    const std::wstring target  = EngineHostSetup::ManagedPath();
+    const bool         clearsPath =
+        !isSetup && engine_host::IsSetupPathWithin(WideToUtf8(m_engineHostExePath), WideToUtf8(target));
+    if (!isSetup && !clearsPath) return true;
+    const std::wstring path = isSetup ? Utf8ToWide(payload.at("exePath").get<std::string>()) : L"";
+    std::string        error;
+    if (PersistsUserState() && !SaveEngineHostExePath(path, error))
+    {
+        if (isSetup)
+        {
+            // Registry failure must not leave a successful-looking installation behind.
+            EngineHostSetup::Job rollback;
+            rollback.remove = true;
+            std::string rollbackError;
+            if (m_engineHostSetup->Start(std::move(rollback), rollbackError))
+            {
+                m_engineHostSetupSaveError = error;
+                return false;
+            }
+            error += " Rollback: " + rollbackError;
+        }
+        payload["ok"]    = false;
+        payload["error"] = error;
+        payload.erase("exePath");
+        return true;
+    }
+    m_engineHostExePath   = path;
+    m_enginePreviewStatus = {{"state", "absent"}};
+    m_enginePreviewPipe.clear();
+    EmitEngineStateChanged();
+    return true;
+}
+
+void BridgeDispatcher::DrainEngineHostSetupResults()
+{
+    if (!m_engineHostSetup) return;
+    for (EngineHostSetup::Event& event : m_engineHostSetup->TakeEvents())
+    {
+        if (event.finished)
+        {
+            // A throw here would escape the window procedure; report it as the setup's failure instead.
+            try
+            {
+                if (!ApplyEngineHostSetupResult(event.payload)) continue;
+            }
+            catch (const std::exception& failure)
+            {
+                event.payload = {
+                    {"ok", false}, {"action", event.payload.value("action", "setup")}, {"error", failure.what()}};
+            }
+        }
+        // The setup worker emits these facts; the later Preferences UI consumes them.
+        if (m_emit)
+            m_emit(json{{"type", "evt"},
+                        {"kind", event.finished ? "engineHost/setup-finished" : "engineHost/setup-progressed"},
+                        {"payload", event.payload}});
+    }
+}
+
 bool BridgeDispatcher::TryDispatchEnginePreview(BridgeRequestContext& ctx)
 {
     const std::string& kind = ctx.kind;
+    if (TryDispatchEngineHostSetup(ctx)) return true;
     if (TryDispatchEngineHostSettings(ctx)) return true;
     const bool recognized =
         kind == "enginePreview/status" || kind == "enginePreview/still" || kind == "enginePreview/cancel";
@@ -204,6 +372,11 @@ bool BridgeDispatcher::TryDispatchEnginePreview(BridgeRequestContext& ctx)
     {
         if (m_enginePreviewWorker) m_enginePreviewWorker->Cancel();
         ctx.SendOk(json::object());
+        return true;
+    }
+    if (m_engineHostSetup && m_engineHostSetup->IsBusy())
+    {
+        ctx.SendErr("Engine host setup is already running.");
         return true;
     }
     if (m_enginePreviewPending)

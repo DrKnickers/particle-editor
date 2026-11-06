@@ -49,6 +49,7 @@
 #include "simulation/MouseCursor.h"     // by-value record-preview anchor (preview/* record kinds)
 #include "simulation/SpawnerDriver.h"   // dispatcher-owned clamped SpawnerConfig
 #include "simulation/ReplayPlayClock.h" // timeline play anchor
+#include "EngineHostSetup.h"            // async private engine-host setup and removal
 #include "EnginePreviewWorker.h"        // async engine-preview pipe requests
 #include "EngineLiveReader.h"           // live engine view frames from the host
 #include "EngineLiveSync.h"             // which live command to send the host next
@@ -172,6 +173,7 @@ public:
     // and result delivery from WM_APP_ENGINE_PREVIEW_READY.
     void SetEnginePreviewAllowed(bool allowed);
     void DrainEnginePreviewResults();
+    void DrainEngineHostSetupResults();
     void ShutdownEnginePreviewWorker();
     // Live engine view (BridgeDispatch_EngineLive.cpp). The render loop calls
     // PumpEngineLiveFrame before Engine::Render to hand over the newest streamed frame.
@@ -540,10 +542,14 @@ private:
     bool ResumeStillAfterHostLaunch(EnginePreviewWorker::Result& result);
     bool BuildStillOrLaunchJob(BridgeRequestContext& ctx, EnginePreviewWorker::Job& job);
     // Saves the open effect to the host's preview path under its internal name.
-    bool        WriteEnginePreviewDocumentCopy(std::string& error);
-    bool        TryDispatchEngineLive(BridgeRequestContext& ctx);
-    bool        StartEngineLive(BridgeRequestContext& ctx);
-    bool        TryDispatchEngineHostSettings(BridgeRequestContext& ctx);
+    bool WriteEnginePreviewDocumentCopy(std::string& error);
+    bool TryDispatchEngineLive(BridgeRequestContext& ctx);
+    bool StartEngineLive(BridgeRequestContext& ctx);
+    bool TryDispatchEngineHostSettings(BridgeRequestContext& ctx);
+    bool TryDispatchEngineHostSetup(BridgeRequestContext& ctx);
+    // Persists or clears the saved map-editor path and rewrites payload on failure; returns false when it
+    // queued a rollback, so the finished event waits for the rollback's own result.
+    bool        ApplyEngineHostSetupResult(nlohmann::json& payload);
     bool        QueueEngineLiveStream(std::string& error);
     void        StopEngineLive(const std::string& reason);
     void        SendEngineLiveStop();
@@ -791,6 +797,8 @@ private:
     nlohmann::json                       m_enginePreviewStatus  = {{"state", "absent"}};
     std::wstring                         m_enginePreviewPipe;
     EngineHostProcess                    m_engineHostProcess;
+    std::unique_ptr<EngineHostSetup>     m_engineHostSetup;
+    std::string                          m_engineHostSetupSaveError;
     std::wstring                         m_engineHostExePath;
     std::unique_ptr<EnginePreviewWorker> m_enginePreviewWorker;
     // Live engine view. Its worker holds its own pipe connection so live control never

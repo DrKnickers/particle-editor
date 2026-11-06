@@ -183,6 +183,11 @@ bool BridgeDispatcher::TryDispatchEngineLive(BridgeRequestContext& ctx)
         ctx.SendOk({{"state", "off"}});
         return true;
     }
+    if (m_engineHostSetup && m_engineHostSetup->IsBusy())
+    {
+        ctx.SendErr("Engine host setup is already running.");
+        return true;
+    }
     if (m_engineLiveState != EngineLiveState::Off)
     {
         ctx.SendOk({{"state", EngineLiveStateName()}});

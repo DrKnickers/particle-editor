@@ -340,6 +340,7 @@
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
     "test_engine_host_launch_policy": {},
+    "test_engine_host_setup_policy": {},
     "test_engine_preview_pipe": {},
     "test_engine_live_frame": {},
     "test_engine_live_framing": {},
@@ -349,9 +350,9 @@
       "libs": ["user32.lib", "gdiplus.lib", "ole32.lib"]
     },
     "test_engine_preview_copy": {
-      "sources": ["src/effect/UndoStack.cpp", "src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp", "src/effect/ParticleSystemIO.cpp", "src/effect/AtomicSave.cpp", "src/host/BridgeDispatch_EnginePreview.cpp", "src/host/EngineHostProcess.cpp", "src/host/EnginePreviewWorker.cpp", "src/host/EngineLiveReader.cpp"],
-      "uses": ["expat", "dxsdk", "webview2"],
-      "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib", "gdiplus.lib"]
+      "sources": ["src/effect/UndoStack.cpp", "src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp", "src/effect/ParticleSystemIO.cpp", "src/effect/AtomicSave.cpp", "src/host/BridgeDispatch_EnginePreview.cpp", "src/host/EngineHostProcess.cpp", "src/host/EnginePreviewWorker.cpp", "src/host/EngineLiveReader.cpp", "src/host/EngineHostSetup.cpp", "src/common/sha256.cpp", "src/gamedata/managers.cpp", "src/gamedata/MegaFiles.cpp", "src/gamedata/AssetCache.cpp", "src/gamedata/AssetLedger.cpp", "src/gamedata/Effect.cpp", "src/gamedata/xml.cpp"],
+      "uses": ["expat-lib", "dxsdk", "webview2"],
+      "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib", "gdiplus.lib", "shell32.lib"]
     },
     "test_undo_aux": {
       "sources": ["src/effect/UndoStack.cpp", "src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp"],

@@ -247,6 +247,8 @@
     <ClInclude Include="host\EnginePreviewCopy.h" />
     <ClInclude Include="host\EngineHostLaunchPolicy.h" />
     <ClInclude Include="host\EngineHostProcess.h" />
+    <ClInclude Include="host\EngineHostSetup.h" />
+    <ClInclude Include="host\EngineHostSetupPolicy.h" />
     <ClInclude Include="host\EnginePreviewWorker.h" />
     <ClInclude Include="host\PreviewEncodeWorker.h" />
     <ClInclude Include="host\IsolatedWebViewProfile.h" />
@@ -327,6 +329,7 @@
     <ClCompile Include="host\BridgeDispatch_Shell.cpp" />
     <ClCompile Include="host\BridgeDispatch_SpawnerLighting.cpp" />
     <ClCompile Include="host\EngineHostProcess.cpp" />
+    <ClCompile Include="host\EngineHostSetup.cpp" />
     <ClCompile Include="host\EnginePreviewWorker.cpp" />
     <ClCompile Include="host\EngineLiveReader.cpp" />
     <ClCompile Include="host\BridgeDispatch_EnginePreview.cpp" />

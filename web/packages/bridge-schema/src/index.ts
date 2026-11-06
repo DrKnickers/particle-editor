@@ -742,6 +742,33 @@ export type TimelineStateDto = {
   revision: number;
 };
 
+export interface EngineHostSetupStartDto {
+  editorExePath: string;
+  packageManifestPath: string;
+}
+
+export interface EngineHostSetupStatusDto {
+  managedPath: string | null;
+  isRunning: boolean;
+}
+
+export interface EngineHostSetupProgressDto {
+  stage: string;
+  done: number;
+  total: number;
+}
+
+export type EngineHostSetupAcceptedDto = { ok: true } | { ok: false; error: string };
+export type EngineHostSetupFinishedDto =
+  | { ok: true; action: "setup"; exePath: string }
+  | { ok: true; action: "remove" }
+  | { ok: false; action: "setup" | "remove"; error: string };
+
+// Emitted by the native setup worker's UI-thread drain; Preferences can display progress.
+export const ENGINE_HOST_SETUP_PROGRESSED_EVENT = "engineHost/setup-progressed";
+// Emitted by the same drain after setup/removal and settings persistence finish.
+export const ENGINE_HOST_SETUP_FINISHED_EVENT = "engineHost/setup-finished";
+
 export interface EnginePreviewStatusDto {
   state: "absent" | "unsupported-build" | "not-configured" | "ready";
   hostVersion?: string;
@@ -798,7 +825,7 @@ export type Request =
   // (automation and --test-host runs are exempt).
   | { kind: "file/new"; params: { discardUnsaved?: true } }
   | { kind: "file/open"; params: { path?: string; filter?: "alo" | "skydome" | "ground"; discardUnsaved?: true } } // path undef = native picker; filter selects lpstrFilter (default "alo")
-  | { kind: "file/pick-open"; params: { filter?: "alo" | "skydome" | "ground" | "exe" } } // NON-MUTATING picker: returns the chosen path WITHOUT loading it as the active doc
+  | { kind: "file/pick-open"; params: { filter?: "alo" | "skydome" | "ground" | "exe" | "json" } } // NON-MUTATING picker: returns the chosen path WITHOUT loading it as the active doc
   | { kind: "file/save"; params: { path?: string } } // path undef = native picker
   | { kind: "file/save-as"; params: Record<string, never> } // always opens native picker
   | { kind: "file/recent/list"; params: Record<string, never> }
@@ -1278,6 +1305,9 @@ export type Request =
   // reject while no session is open. Free-run pause / step, Clear and the
   // spawner kinds reject while one is open. Every response is the session's
   // state; `timeline/state` pushes it during play and after host-side replays.
+  | { kind: "engineHost/setup/status"; params: Record<string, never> }
+  | { kind: "engineHost/setup/start"; params: EngineHostSetupStartDto }
+  | { kind: "engineHost/setup/remove"; params: Record<string, never> }
   | { kind: "engineHost/settings"; params: Record<string, never> }
   | { kind: "engineHost/settings/set"; params: EngineHostSettingsDto }
   | { kind: "enginePreview/status"; params: { pid?: number } }
@@ -1490,6 +1520,9 @@ export interface ResponseMap {
   "spawner/start": Record<string, never>;
   "spawner/trigger": Record<string, never>;
   "spawner/stop": Record<string, never>;
+  "engineHost/setup/status": EngineHostSetupStatusDto;
+  "engineHost/setup/start": EngineHostSetupAcceptedDto;
+  "engineHost/setup/remove": EngineHostSetupAcceptedDto;
   "engineHost/settings": EngineHostSettingsDto;
   "engineHost/settings/set": EngineHostSettingsDto;
   "enginePreview/status": EnginePreviewPendingDto;
@@ -1531,6 +1564,8 @@ export function isRefusal(r: unknown): r is { ok: false; error?: string } {
 // ============================================================================
 
 export type Event =
+  | { kind: typeof ENGINE_HOST_SETUP_PROGRESSED_EVENT; payload: EngineHostSetupProgressDto }
+  | { kind: typeof ENGINE_HOST_SETUP_FINISHED_EVENT; payload: EngineHostSetupFinishedDto }
   | { kind: "enginePreview/status-checked"; payload: EnginePreviewStatusDto }
   | { kind: "enginePreview/still-rendered"; payload: EnginePreviewResultDto }
   | { kind: typeof ENGINE_LIVE_STATE_CHANGED_EVENT; payload: EngineLiveStateDto }

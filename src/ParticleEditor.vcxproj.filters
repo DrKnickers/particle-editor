@@ -495,6 +495,12 @@
     <ClInclude Include="host\EngineHostProcess.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="host\EngineHostSetup.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\EngineHostSetupPolicy.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
     <ClInclude Include="host\EnginePreviewWorker.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
@@ -690,6 +696,9 @@
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\EngineHostProcess.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\EngineHostSetup.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\EnginePreviewWorker.cpp">
