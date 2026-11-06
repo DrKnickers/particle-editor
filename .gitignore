@@ -253,9 +253,8 @@ paket-files/
 .idea/
 *.sln.iml
 
-# Ghidra: project database is rebuildable from binaries + scripts.
-# Hundreds of MB per analyzed exe; never commit. Scripts under
-# tasks/ghidra_scripts/ ARE committed -- they're the reproducer.
+# Local analysis project database: rebuildable from its committed scripts
+# and hundreds of MB per analyzed exe, so never commit it.
 tasks/ghidra_project/
 
 # Test artifacts. tests/*.cpp are checked in (they're the reproducer
@@ -273,8 +272,7 @@ tests/max_verts.txt
 
 # Superpowers brainstorming sessions: per-session HTML mockups
 # rendered into the visual-companion browser. Transient working
-# artifacts; the design spec they fed into IS committed at
-# docs/superpowers/specs/.
+# artifacts; never commit them.
 .superpowers/
 
 # rc.exe preprocessor temp files: extensionless RC<hex> scratch the
