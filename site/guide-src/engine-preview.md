@@ -18,8 +18,6 @@ Setting it up takes a few minutes and is done once. Nothing in your game install
   > The `EAW Terrain Editor.exe` that comes with the game in `GameData` is an older 32-bit build
   > and will not work. Use the one from the mod tools page.
 
-- **The Alamo Preview package.** Download `alamo-preview-<version>.zip` and extract it. The
-  extracted folder holds a file called `package.json`; setup reads the rest from beside it.
 - **Disk space.** Setup makes a private copy of the game's `Data` folder. If the game is on the
   same drive as your Windows user folder, the copy shares the game's files and takes almost no
   space. On a different drive it is a full copy of about 1.5 GB.
@@ -29,9 +27,7 @@ Setting it up takes a few minutes and is done once. Nothing in your game install
 1. Open **Edit → Preferences…** and find the **Engine preview** section.
 2. Click **Set up**.
 3. Next to **Map editor**, click **Browse** and choose the `EAW Terrain Editor.exe` you extracted.
-4. Next to **Host package**, click **Browse** and choose `package.json` in the extracted Alamo
-   Preview folder.
-5. Click **Set up**. A progress bar shows each stage. You can close the dialog; setup keeps
+4. Click **Set up**. A progress bar shows each stage. You can close the dialog; setup keeps
    going and the Preferences section shows *Setting up* until it is done.
 
 When it finishes, the dialog shows *Setup complete* and the path of the new copy, and the **Map
@@ -59,9 +55,10 @@ they are.
 - **"Unsupported map editor. Supported editors: …"** — the chosen `EAW Terrain Editor.exe` is not
   the 64-bit build this version of Alamo Preview supports. Download it again from the mod tools
   page and choose that copy.
-- **"The host package file failed SHA-256 verification"** or **"The host package is missing …"** —
-  a file in the extracted package is damaged or missing. Extract the zip again into an empty
-  folder and choose its `package.json`.
+- **"The bundled engine-host folder is missing or damaged"**, **"The host package file failed SHA-256
+  verification"** or **"The host package is missing …"** —
+  the bundled `engine-host` folder is missing or damaged. Re-extract the Particle Editor release
+  zip into an empty folder.
 - **"Engine preview setup requires a Forces of Corruption root (corruption) in the game
   paths."** — the editor's game paths don't include your Forces of Corruption `corruption`
   folder, so it has not found your install. Fix that first; see

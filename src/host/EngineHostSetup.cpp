@@ -260,8 +260,11 @@ SetupPackage VerifySetupInputsAndSetEditorHash(const EngineHostSetup::Job& job,
                                                const ProgressReporter&     progressed)
 {
     const fs::path manifest(job.packageManifestPath);
-    if (!manifest.is_absolute() || manifest.filename() != L"package.json")
-        throw std::runtime_error("Choose the extracted host package's package.json.");
+    if (!manifest.is_absolute() || manifest.filename() != kPackageManifestName)
+        throw std::runtime_error("Invalid bundled host manifest path.");
+    if (!fs::is_regular_file(manifest))
+        throw std::runtime_error("The bundled engine-host folder is missing or damaged. "
+                                 "Reinstall the Particle Editor from its release zip.");
     const SetupPackage package = ParseSetupPackage(ReadSetupFile(manifest));
     size_t             done    = 0;
     progressed("Verifying host package", 0, package.files.size());

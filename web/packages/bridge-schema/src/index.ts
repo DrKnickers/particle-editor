@@ -744,7 +744,6 @@ export type TimelineStateDto = {
 
 export interface EngineHostSetupStartDto {
   editorExePath: string;
-  packageManifestPath: string;
 }
 
 export interface EngineHostSetupStatusDto {
@@ -825,7 +824,7 @@ export type Request =
   // (automation and --test-host runs are exempt).
   | { kind: "file/new"; params: { discardUnsaved?: true } }
   | { kind: "file/open"; params: { path?: string; filter?: "alo" | "skydome" | "ground"; discardUnsaved?: true } } // path undef = native picker; filter selects lpstrFilter (default "alo")
-  | { kind: "file/pick-open"; params: { filter?: "alo" | "skydome" | "ground" | "exe" | "json" } } // NON-MUTATING picker: returns the chosen path WITHOUT loading it as the active doc
+  | { kind: "file/pick-open"; params: { filter?: "alo" | "skydome" | "ground" | "exe" } } // NON-MUTATING picker: returns the chosen path WITHOUT loading it as the active doc
   | { kind: "file/save"; params: { path?: string } } // path undef = native picker
   | { kind: "file/save-as"; params: Record<string, never> } // always opens native picker
   | { kind: "file/recent/list"; params: Record<string, never> }

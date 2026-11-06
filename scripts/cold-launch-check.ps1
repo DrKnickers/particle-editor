@@ -127,7 +127,7 @@ $zip   = Join-Path $work "ParticleEditor-cold.zip"
 $stage = Join-Path $work "stage"
 Write-Host "[package] $zip"
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root "scripts\package-release.ps1") `
-    -RepoRoot $root -Stage $stage -OutZip $zip
+    -RepoRoot $root -Stage $stage -OutZip $zip -SkipEngineHost
 if ($LASTEXITCODE -ne 0) { Die "package-release.ps1 failed ($LASTEXITCODE)" }
 
 # --- 3. Extract to a spaced path outside the repo -----------------------------

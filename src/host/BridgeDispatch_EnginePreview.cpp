@@ -238,13 +238,16 @@ bool BridgeDispatcher::TryDispatchEngineHostSetup(BridgeRequestContext& ctx)
     job.remove = isRemove;
     if (isStart)
     {
-        const json::const_iterator editor         = ctx.params.find("editorExePath");
-        const json::const_iterator manifest       = ctx.params.find("packageManifestPath");
-        const bool                 hasPaths       = editor != ctx.params.end() && manifest != ctx.params.end();
-        const bool                 hasStringPaths = hasPaths && editor->is_string() && manifest->is_string();
-        if (!hasStringPaths)
+        const json::const_iterator editor = ctx.params.find("editorExePath");
+        if (editor == ctx.params.end() || !editor->is_string())
         {
-            ctx.SendErr("editorExePath and packageManifestPath must be strings.");
+            ctx.SendErr("editorExePath must be a string.");
+            return true;
+        }
+        const std::filesystem::path moduleFolder = host::ModuleDirectory();
+        if (moduleFolder.empty())
+        {
+            ctx.SendErr("Cannot resolve the Particle Editor folder.");
             return true;
         }
         if (!m_fileManager)
@@ -252,10 +255,11 @@ bool BridgeDispatcher::TryDispatchEngineHostSetup(BridgeRequestContext& ctx)
             ctx.SendErr("Game paths are unavailable for engine preview setup.");
             return true;
         }
-        job.editorExePath       = Utf8ToWide(editor->get<std::string>());
-        job.packageManifestPath = Utf8ToWide(manifest->get<std::string>());
-        job.basepaths           = m_fileManager->GetBasepaths();
-        job.contentRoots        = m_fileManager->GetContentRoots();
+        job.editorExePath = Utf8ToWide(editor->get<std::string>());
+        job.packageManifestPath =
+            (moduleFolder / engine_host::kBundledPackageFolder / engine_host::kPackageManifestName).wstring();
+        job.basepaths    = m_fileManager->GetBasepaths();
+        job.contentRoots = m_fileManager->GetContentRoots();
     }
     if (!m_engineHostSetup) m_engineHostSetup = std::make_unique<EngineHostSetup>(m_hostHwnd);
     std::string error;

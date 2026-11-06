@@ -74,7 +74,6 @@ const MOCK_SETUP_STEP_MS = 150;
 const MOCK_SETUP_STAGES: readonly string[] = ["Checking setup", "Copying game data", "Configuring preview"];
 export const MOCK_MANAGED_EDITOR_PATH = "C:\\ParticleEditor\\EnginePreview\\EAW Terrain Editor.exe";
 const MOCK_PICKED_EDITOR_PATH = "C:\\MapEditor\\EAW Terrain Editor.exe";
-const MOCK_PICKED_PACKAGE_PATH = "C:\\Alamo Preview\\package.json";
 
 /** Returns true for request kinds that should mark the in-memory file
  *  state dirty. Every engine/set/* is mutating. Engine actions are
@@ -479,7 +478,6 @@ export class MockBridge implements Bridge, MockDispatchHost {
       case "file/pick-open":
         // Synthetic setup inputs let browser users exercise the flow without native pickers.
         if (req.params.filter === "exe") return { ok: true, path: MOCK_PICKED_EDITOR_PATH };
-        if (req.params.filter === "json") return { ok: true, path: MOCK_PICKED_PACKAGE_PATH };
         return dispatchFile.call(this, req);
 
       case "mods/list":

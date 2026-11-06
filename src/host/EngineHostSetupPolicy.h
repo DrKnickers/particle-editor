@@ -17,6 +17,9 @@ constexpr const wchar_t* kManagedHostRelativePath = L"AloParticleEditor\\EngineH
 constexpr const char*    kSetupJournalName        = ".particle-editor-setup.journal";
 constexpr size_t         kSha256HexChars          = 64;
 constexpr int            kPackageFormat           = 1;
+// The release zip ships the host package in this folder beside ParticleEditor.exe.
+constexpr const wchar_t* kBundledPackageFolder = L"engine-host";
+constexpr const wchar_t* kPackageManifestName  = L"package.json";
 // The Alamo Preview host package layout and the managed copy's fixed names.
 constexpr const char*    kPackageHostDll         = "d3d9.dll";
 constexpr const char*    kPackageMappedBuilds    = "alamo_mapped.txt";

@@ -1,7 +1,18 @@
+// Exercises release staging and package validation with stubs; does not launch the editor.
+import { createHash } from "node:crypto";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, statSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  rmSync,
+  existsSync,
+  statSync,
+  readdirSync,
+} from "node:fs";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -12,9 +23,7 @@ import path from "node:path";
 // `pwsh`, so this runs there; locally it skips only if no PowerShell is found (the live Windows run
 // is the local proof). It must NEVER skip under CI.
 //
-// The release is TWO FILES: ParticleEditor.exe (React UI embedded as RCDATA + statically-linked
-// WebView2 loader) and the vendored d3dx9_43.dll beside it. No web/ folder, no WebView2Loader.dll,
-// no bootstrapper — so the fixture and assertions model exactly that shape.
+// The release contains the exe, vendored D3DX9 runtime and verified engine-host package.
 const SCRIPT = fileURLToPath(new URL("../../../../../scripts/package-release.ps1", import.meta.url));
 
 let RESOLVED;
@@ -30,7 +39,9 @@ const shell = resolveShell();
 const skipOpt = { skip: !shell && !process.env.CI ? "no pwsh/powershell on PATH" : false };
 
 // Build a stub fixture repo. `omit` controls which pieces are missing (for the negative cases).
+/** @param {string} root @param {string[]} omit @returns {void} */
 function buildFixture(root, omit = []) {
+  /** @param {string} rel @param {string} content @returns {void} */
   const file = (rel, content = "stub") => {
     const p = path.join(root, rel);
     mkdirSync(path.dirname(p), { recursive: true });
@@ -44,13 +55,46 @@ function buildFixture(root, omit = []) {
     file("x64/Release/ParticleEditor.exe", exeStub);
   }
   if (!omit.includes("d3dx9")) file("libs/redist/d3dx9_43.dll");
-  // NOTE: there is no stray-file negative control. Staging copies exactly the two named files
-  // into a freshly-cleared dir — a stray in the source can never reach the stage, so "extra
-  // artifact" pollution is impossible by construction (see package-release.ps1's post-stage note).
+  /** @type {Record<string, string>} */
+  const packageContents = { "d3d9.dll": "host stub", "scene/PREVIEW_SOURCE.TED": "scene stub" };
+  /** @type {Record<string, string>} */
+  const hashes = {};
+  for (const [relative, content] of Object.entries(packageContents)) {
+    file(`alamo-preview/${relative}`, content);
+    hashes[relative] = createHash("sha256").update(content).digest("hex");
+  }
+  file("alamo-preview/package.json", JSON.stringify({ format: 1, host_version: "test", editors: [], files: hashes }));
+  file("alamo-preview/unlisted.txt", "must not ship");
 }
 
-// Run the packager against a fresh temp fixture; returns { res, stage, zip }.
-function runCase(t, omit = [], { withZip = true, passRepoRoot = true, useFixtureScript = false, stagePath } = {}) {
+/**
+ * @typedef {{ tmp: string, repo: string }} FixturePaths
+ * @typedef {Object} PackageOptions
+ * @property {boolean} [withZip]
+ * @property {boolean} [passRepoRoot]
+ * @property {boolean} [useFixtureScript]
+ * @property {(paths: FixturePaths) => string} [stagePath]
+ * @property {"package" | "skip" | "neither" | "both"} [engineHostMode]
+ * @property {(packageFolder: string) => void} [mutatePackage]
+ */
+/**
+ * @param {import("node:test").TestContext} t
+ * @param {string[]} omit
+ * @param {PackageOptions} options
+ * @returns {{res: import("node:child_process").SpawnSyncReturns<string>, repo: string, stage: string, zip: string}}
+ */
+function runCase(
+  t,
+  omit = [],
+  {
+    withZip = true,
+    passRepoRoot = true,
+    useFixtureScript = false,
+    stagePath,
+    engineHostMode = "package",
+    mutatePackage,
+  } = {},
+) {
   assert.ok(shell, "PowerShell (pwsh/powershell) is required under CI but was not found");
   const tmp = mkdtempSync(path.join(tmpdir(), "pkgrel-"));
   t.after(() => rmSync(tmp, { recursive: true, force: true }));
@@ -58,12 +102,17 @@ function runCase(t, omit = [], { withZip = true, passRepoRoot = true, useFixture
   const stage = stagePath ? stagePath({ tmp, repo }) : path.join(tmp, "stage");
   const zip = path.join(tmp, "out.zip");
   buildFixture(repo, omit);
+  /** @type {string} */
+  const packageFolder = path.join(repo, "alamo-preview");
+  if (mutatePackage) mutatePackage(packageFolder);
   const script = useFixtureScript ? path.join(repo, "scripts", "package-release.ps1") : SCRIPT;
   if (useFixtureScript) {
     mkdirSync(path.dirname(script), { recursive: true });
     copyFileSync(SCRIPT, script);
   }
   const args = ["-NoProfile", "-File", script, "-Stage", stage];
+  if (engineHostMode === "package" || engineHostMode === "both") args.push("-EngineHostPackage", packageFolder);
+  if (engineHostMode === "skip" || engineHostMode === "both") args.push("-SkipEngineHost");
   if (passRepoRoot) args.push("-RepoRoot", repo);
   if (withZip) args.push("-OutZip", zip);
   const res = spawnSync(shell, args, { encoding: "utf8" });
@@ -73,7 +122,7 @@ function runCase(t, omit = [], { withZip = true, passRepoRoot = true, useFixture
 
 const staged = (stage, ...parts) => existsSync(path.join(stage, ...parts));
 
-test("case 1: full fixture stages the two-file bundle and a verified zip", skipOpt, (t) => {
+test("case 1: full fixture stages the complete bundle and a verified zip", skipOpt, (t) => {
   const { res, stage, zip } = runCase(t, []);
   assert.equal(res.status, 0, `expected success; stderr:\n${res.stderr}`);
   assert.ok(staged(stage, "x64", "Release", "ParticleEditor.exe"), "exe staged");
@@ -87,12 +136,15 @@ test("case 1: full fixture stages the two-file bundle and a verified zip", skipO
   assert.ok(!staged(stage, "x64", "Release", "MicrosoftEdgeWebview2Setup.exe"), "WebView2 bootstrapper NOT staged");
   // The React UI is embedded in the exe as RCDATA — no separate web/ folder ships.
   assert.ok(!staged(stage, "web"), "no web/ folder staged (UI embedded in exe)");
-  // Exit 0 with -OutZip means the script's own zip-entry assertions (exe, d3dx9) all
+  assert.ok(staged(stage, "x64", "Release", "engine-host", "package.json"), "manifest staged");
+  assert.ok(staged(stage, "x64", "Release", "engine-host", "scene", "PREVIEW_SOURCE.TED"), "nested file staged");
+  assert.ok(!staged(stage, "x64", "Release", "engine-host", "unlisted.txt"), "unlisted file excluded");
+  // Exit 0 with -OutZip means the script's own zip-entry assertions (including engine-host) all
   // passed; confirm the archive exists and is non-empty.
   assert.ok(existsSync(zip) && statSync(zip).size > 0, "release zip created + verified");
 });
 
-test("case 1b: stages the two-file bundle WITHOUT -OutZip (post-stage asserts run)", skipOpt, (t) => {
+test("case 1b: stages the complete bundle WITHOUT -OutZip (post-stage asserts run)", skipOpt, (t) => {
   const { res, stage } = runCase(t, [], { withZip: false });
   assert.equal(res.status, 0, `expected success; stderr:\n${res.stderr}`);
   assert.ok(staged(stage, "x64", "Release", "ParticleEditor.exe"), "exe staged");
@@ -138,3 +190,51 @@ for (const c of [
     assert.match(res.stderr, c.rx, `stderr did not match ${c.rx}:\n${res.stderr}`);
   });
 }
+
+for (const [name, engineHostMode] of [
+  ["neither", "neither"],
+  ["both", "both"],
+]) {
+  test(`${name} package switches fail`, skipOpt, (t) => {
+    const { res } = runCase(t, [], { engineHostMode });
+    assert.notEqual(res.status, 0);
+    assert.match(res.stderr, /exactly one of -EngineHostPackage or -SkipEngineHost/);
+  });
+}
+
+test("hash mismatch fails naming the package file", skipOpt, (t) => {
+  const { res } = runCase(t, [], {
+    mutatePackage: (packageFolder) => writeFileSync(path.join(packageFolder, "d3d9.dll"), "damaged"),
+  });
+  assert.notEqual(res.status, 0);
+  assert.match(res.stderr, /SHA-256 mismatch.*d3d9\.dll/s);
+});
+
+test("parent traversal in package files is refused", skipOpt, (t) => {
+  const { res } = runCase(t, [], {
+    mutatePackage: (packageFolder) =>
+      writeFileSync(
+        path.join(packageFolder, "package.json"),
+        JSON.stringify({
+          format: 1,
+          files: { "../outside.dll": "unused" },
+        }),
+      ),
+  });
+  assert.notEqual(res.status, 0);
+  assert.match(res.stderr, /Unsafe engine host package file path.*outside\.dll/s);
+});
+
+test("package source overlap is refused before deletion", skipOpt, (t) => {
+  const { res, repo } = runCase(t, [], { stagePath: ({ repo }) => path.join(repo, "alamo-preview") });
+  assert.notEqual(res.status, 0);
+  assert.match(res.stderr, /Refusing -Stage.*Alamo Preview package/s);
+  assert.ok(existsSync(path.join(repo, "alamo-preview", "package.json")));
+});
+
+test("SkipEngineHost stages exactly two files with a smoke-test warning", skipOpt, (t) => {
+  const { res, stage } = runCase(t, [], { engineHostMode: "skip" });
+  assert.equal(res.status, 0, res.stderr);
+  assert.deepEqual(readdirSync(path.join(stage, "x64", "Release")).sort(), ["ParticleEditor.exe", "d3dx9_43.dll"]);
+  assert.match(res.stdout, /smoke-test layout, not a releasable zip/);
+});

@@ -15,7 +15,6 @@ import {
 } from "@particle-editor/bridge-schema";
 
 const SETUP_EDITOR_PATH = "C:\\MapEditor\\EAW Terrain Editor.exe";
-const SETUP_PACKAGE_PATH = "C:\\Alamo Preview\\package.json";
 const MANAGED_EDITOR_PATH = "C:\\Managed\\EAW Terrain Editor.exe";
 
 function makeSetupBridge(): { bridge: BridgeStub; settings: EngineHostSettingsDto; status: EngineHostSetupStatusDto } {
@@ -27,9 +26,9 @@ function makeSetupBridge(): { bridge: BridgeStub; settings: EngineHostSettingsDt
       "engineHost/setup/status": (): EngineHostSetupStatusDto => ({ ...status }),
       "engineHost/setup/start": { ok: true },
       "engineHost/setup/remove": { ok: true },
-      "file/pick-open": (params: { filter?: string }): { ok: true; path: string } => ({
+      "file/pick-open": (): { ok: true; path: string } => ({
         ok: true,
-        path: params.filter === "exe" ? SETUP_EDITOR_PATH : SETUP_PACKAGE_PATH,
+        path: SETUP_EDITOR_PATH,
       }),
     },
   });
@@ -45,9 +44,8 @@ async function openSetupDialog(): Promise<HTMLElement> {
   return screen.findByRole("dialog", { name: "Set up engine preview" });
 }
 
-async function chooseSetupPaths(dialog: HTMLElement): Promise<void> {
+async function chooseSetupEditor(dialog: HTMLElement): Promise<void> {
   await userEvent.click(within(dialog).getByRole("button", { name: "Browse map editor" }));
-  await userEvent.click(within(dialog).getByRole("button", { name: "Browse host package" }));
 }
 
 function makePrefsBridge(msaaLevels: number[] = [0, 2, 4]) {
@@ -59,28 +57,24 @@ function makePrefsBridge(msaaLevels: number[] = [0, 2, 4]) {
 
 describe("PreferencesDialog", () => {
   beforeEach(() => localStorage.clear());
-  it("requires both setup paths and sends them with their picker filters", async (): Promise<void> => {
+  it("requires only the map editor path and sends it with the exe picker filter", async (): Promise<void> => {
     const { bridge }: { bridge: BridgeStub } = makeSetupBridge();
     render(<PreferencesDialog bridge={bridge} open onOpenChange={(): void => {}} />);
     const dialog: HTMLElement = await openSetupDialog();
     const startButton: HTMLElement = within(dialog).getByRole("button", { name: "Set up" });
     expect(startButton).toBeDisabled();
+    expect(within(dialog).queryByRole("button", { name: "Browse host package" })).not.toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole("button", { name: "Browse map editor" }));
-    expect(startButton).toBeDisabled();
     expect(within(dialog).getByLabelText("Map editor")).toHaveAttribute("title", SETUP_EDITOR_PATH);
-    await userEvent.click(within(dialog).getByRole("button", { name: "Browse host package" }));
     expect(startButton).toBeEnabled();
-    expect(within(dialog).getByLabelText("Host package")).toHaveAttribute("title", SETUP_PACKAGE_PATH);
     expect(bridge.request).toHaveBeenCalledWith({ kind: "file/pick-open", params: { filter: "exe" } });
-    expect(bridge.request).toHaveBeenCalledWith({ kind: "file/pick-open", params: { filter: "json" } });
     await userEvent.click(startButton);
     expect(bridge.request).toHaveBeenCalledWith({
       kind: "engineHost/setup/start",
-      params: { editorExePath: SETUP_EDITOR_PATH, packageManifestPath: SETUP_PACKAGE_PATH },
+      params: { editorExePath: SETUP_EDITOR_PATH },
     });
     expect(startButton).toBeDisabled();
     expect(within(dialog).getByRole("button", { name: "Browse map editor" })).toBeDisabled();
-    expect(within(dialog).getByRole("button", { name: "Browse host package" })).toBeDisabled();
   });
 
   it("renders progress, keeps working after close, and refreshes successful settings", async (): Promise<void> => {
@@ -89,7 +83,7 @@ describe("PreferencesDialog", () => {
       <PreferencesDialog bridge={bridge} open onOpenChange={(): void => {}} />,
     );
     const dialog: HTMLElement = await openSetupDialog();
-    await chooseSetupPaths(dialog);
+    await chooseSetupEditor(dialog);
     await userEvent.click(within(dialog).getByRole("button", { name: "Set up" }));
     bridge.emit(ENGINE_HOST_SETUP_PROGRESSED_EVENT, { stage: "Checking files", done: 0, total: 0 });
     expect(within(dialog).getByRole("progressbar")).not.toHaveAttribute("value");
@@ -121,14 +115,14 @@ describe("PreferencesDialog", () => {
     const { bridge }: { bridge: BridgeStub } = makeSetupBridge();
     render(<PreferencesDialog bridge={bridge} open onOpenChange={(): void => {}} />);
     const dialog: HTMLElement = await openSetupDialog();
-    await chooseSetupPaths(dialog);
+    await chooseSetupEditor(dialog);
     await userEvent.click(within(dialog).getByRole("button", { name: "Set up" }));
     bridge.emit(ENGINE_HOST_SETUP_FINISHED_EVENT, { ok: false, action: "setup", error: "Not enough disk space" });
     expect(within(dialog).getByRole("alert")).toHaveTextContent("Not enough disk space");
     await waitFor((): void => {
       expect(within(dialog).getByRole("button", { name: "Set up" })).toBeEnabled();
     });
-    expect(within(dialog).getByRole("button", { name: "Browse host package" })).toBeEnabled();
+    expect(within(dialog).getByRole("button", { name: "Browse map editor" })).toBeEnabled();
   });
 
   it("shows picker and immediate setup errors without waiting for completion events", async (): Promise<void> => {
@@ -137,9 +131,9 @@ describe("PreferencesDialog", () => {
       responses: {
         "engineHost/settings": { exePath: null },
         "engineHost/setup/status": { managedPath: null, isRunning: false },
-        "file/pick-open": (params: { filter?: string }): { ok: false; error: string } | { ok: true; path: string } => {
+        "file/pick-open": (): { ok: false; error: string } | { ok: true; path: string } => {
           if (hasPickerFailed) return { ok: false, error: "Cannot open picker" };
-          return { ok: true, path: params.filter === "exe" ? SETUP_EDITOR_PATH : SETUP_PACKAGE_PATH };
+          return { ok: true, path: SETUP_EDITOR_PATH };
         },
         "engineHost/setup/start": (): EngineHostSetupAcceptedDto => ({ ok: false, error: "Preview is still running" }),
       },
@@ -149,7 +143,7 @@ describe("PreferencesDialog", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: "Browse map editor" }));
     expect(within(dialog).getByRole("alert")).toHaveTextContent("Cannot open picker");
     hasPickerFailed = false;
-    await chooseSetupPaths(dialog);
+    await chooseSetupEditor(dialog);
     await userEvent.click(within(dialog).getByRole("button", { name: "Set up" }));
     expect(within(dialog).getByRole("alert")).toHaveTextContent("Preview is still running");
     expect(within(dialog).getByRole("button", { name: "Set up" })).toBeEnabled();

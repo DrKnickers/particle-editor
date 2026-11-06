@@ -64,7 +64,6 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props): ReactN
   const [setupProgress, setSetupProgress] = useState<EngineHostSetupProgressDto | null>(null);
   const [setupResult, setSetupResult] = useState<string | null>(null);
   const [setupEditorPath, setSetupEditorPath] = useState<string | null>(null);
-  const [packageManifestPath, setPackageManifestPath] = useState<string | null>(null);
   const [isRemoveConfirmed, setRemoveConfirmed] = useState<boolean>(false);
   // Reload the native setting on each open so another Preferences session cannot leave a stale path.
   // Native setup events stay subscribed while either dialog is closed because the worker continues.
@@ -120,13 +119,13 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props): ReactN
     };
   }, [bridge, open]);
 
-  const browseSetupPath = async (filter: "exe" | "json"): Promise<void> => {
+  const browseSetupPath = async (): Promise<void> => {
     setEngineHostBusy(true);
     setEngineHostError(null);
     try {
       const picked: ResponseMap["file/pick-open"] = await bridge.request({
         kind: "file/pick-open",
-        params: { filter },
+        params: { filter: "exe" },
       });
       if (!picked.ok) {
         // Dismissing the native picker leaves the current selection intact.
@@ -137,8 +136,7 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props): ReactN
         setEngineHostError("The file picker returned no path.");
         return;
       }
-      if (filter === "exe") setSetupEditorPath(picked.path);
-      else setPackageManifestPath(picked.path);
+      setSetupEditorPath(picked.path);
     } catch (error: unknown) {
       setEngineHostError(String(error));
     } finally {
@@ -146,10 +144,10 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props): ReactN
     }
   };
 
-  const hasSetupPaths: boolean = Boolean(setupEditorPath && packageManifestPath);
+  const hasSetupEditorPath: boolean = Boolean(setupEditorPath);
   const runSetupAction = async (action: "setup" | "remove"): Promise<void> => {
     if (isSetupRunning || isEngineHostBusy) return;
-    if (action === "setup" && (!setupEditorPath || !packageManifestPath)) return;
+    if (action === "setup" && !setupEditorPath) return;
     setSetupAction(action);
     setSetupRunning(true);
     setSetupProgress(null);
@@ -158,10 +156,10 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props): ReactN
     setRemoveConfirmed(false);
     try {
       const accepted: ResponseMap["engineHost/setup/start"] =
-        action === "setup" && setupEditorPath && packageManifestPath
+        action === "setup" && setupEditorPath
           ? await bridge.request({
               kind: "engineHost/setup/start",
-              params: { editorExePath: setupEditorPath, packageManifestPath },
+              params: { editorExePath: setupEditorPath },
             })
           : await bridge.request({ kind: "engineHost/setup/remove", params: {} });
       if (!accepted.ok) throw new Error(accepted.error);
@@ -172,7 +170,7 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props): ReactN
   };
 
   const isSetupDisabled: boolean = isEngineHostBusy || isSetupRunning;
-  const canStartSetup: boolean = hasSetupPaths && !isSetupDisabled;
+  const canStartSetup: boolean = hasSetupEditorPath && !isSetupDisabled;
   const setupFeedback: ReactNode = (
     <>
       {isSetupRunning && (
@@ -598,31 +596,7 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props): ReactN
                 aria-label="Browse map editor"
                 disabled={isSetupDisabled}
                 onClick={(): void => {
-                  void browseSetupPath("exe");
-                }}
-              >
-                Browse
-              </Button>
-            </div>
-            <div className="flex min-w-0 items-center gap-2">
-              <div className="min-w-0 flex-1">
-                <span id="setup-package-label" className="text-xs text-text">
-                  Host package
-                </span>
-                <output
-                  aria-labelledby="setup-package-label"
-                  title={packageManifestPath ?? undefined}
-                  className="block truncate text-xs text-text-2"
-                >
-                  {packageManifestPath ?? "Choose package.json in the extracted Alamo Preview package"}
-                </output>
-              </div>
-              <Button
-                variant="secondary"
-                aria-label="Browse host package"
-                disabled={isSetupDisabled}
-                onClick={(): void => {
-                  void browseSetupPath("json");
+                  void browseSetupPath();
                 }}
               >
                 Browse

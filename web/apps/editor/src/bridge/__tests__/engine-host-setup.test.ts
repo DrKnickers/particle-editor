@@ -38,7 +38,7 @@ describe("engine host setup bridge", (): void => {
         action === "setup"
           ? await bridge.request({
               kind: "engineHost/setup/start",
-              params: { editorExePath: "C:\\editor\\editor.exe", packageManifestPath: "C:\\package\\package.json" },
+              params: { editorExePath: "C:\\editor\\editor.exe" },
             })
           : await bridge.request({ kind: "engineHost/setup/remove", params: {} });
       expect(response).toEqual({ ok: true });

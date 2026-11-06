@@ -7,11 +7,12 @@
     runtime file is missing -- so a release archive can never be produced with a broken/incomplete
     bundle.
 
-    THE RELEASE IS TWO FILES. The React UI is compiled INTO the exe as RCDATA (the vcxproj
+    The release contains the exe, D3DX9 runtime and bundled engine-host folder.
+    The React UI is compiled INTO the exe as RCDATA (the vcxproj
     GenerateEmbeddedWebAssets target embeds web/apps/editor/dist; HostWindow.cpp serves it on
     app.local via a WebResourceRequested handler), and the WebView2 loader is statically linked
     (WebView2LoaderPreference=Static). So there is no separate web/ folder and no WebView2Loader.dll
-    to ship -- just the exe and the vendored D3DX9 runtime beside it:
+    to ship. The engine-host folder holds the verified Alamo Preview package:
 
         <STAGE>/
           x64/Release/
@@ -21,6 +22,7 @@
                                     # (OfferWebView2Install in HostWindow.cpp) rather than bundling
                                     # Microsoft's ~2 MB bootstrapper.
             d3dx9_43.dll           # x64 D3DX9 runtime, vendored at libs/redist/
+            engine-host/           # package.json and only its listed files
 
     d3dx9_43.dll is vendored at  libs/redist/d3dx9_43.dll  (x64) and copied from there, so packaging
     is deterministic on any machine or CI runner (a per-machine OS copy is absent on a clean install).
@@ -36,24 +38,42 @@
 .PARAMETER RepoRoot
     Repository root to copy build artifacts from. Defaults to the parent of this script's directory.
 
+.PARAMETER EngineHostPackage
+    Extracted Alamo Preview package folder containing package.json. Every listed file is
+    SHA-256 verified before staging. Required unless -SkipEngineHost is supplied.
+
+.PARAMETER SkipEngineHost
+    Stage only the exe and D3DX9 runtime for smoke tests. Cannot be combined with
+    -EngineHostPackage; this layout is not releasable.
+
 .PARAMETER OutZip
     Optional. When set, after staging the script creates this zip from the staged tree AND asserts the
     zip's entries include every required artifact -- the final "inspect the archive" gate.
 
 .EXAMPLE
-    pwsh scripts/package-release.ps1
+    pwsh scripts/package-release.ps1 -EngineHostPackage ./alamo-preview
 .EXAMPLE
-    powershell -File scripts/package-release.ps1 -OutZip ParticleEditor-v0.3.0.zip
+    powershell -File scripts/package-release.ps1 -EngineHostPackage ./alamo-preview -OutZip ParticleEditor-v0.3.0.zip
 #>
 
 [CmdletBinding()]
 param(
     [string] $Stage    = (Join-Path (Get-Location) 'release-stage'),
     [string] $RepoRoot = '',
-    [string] $OutZip
+    [string] $OutZip,
+    [string] $EngineHostPackage,
+    [switch] $SkipEngineHost
 )
 
 $ErrorActionPreference = 'Stop'
+
+[bool] $hasEngineHostPackage = -not [string]::IsNullOrWhiteSpace($EngineHostPackage)
+if ($hasEngineHostPackage -eq [bool]$SkipEngineHost) {
+    throw "[package-release] Specify exactly one of -EngineHostPackage or -SkipEngineHost (neither or both were supplied)."
+}
+if ($SkipEngineHost) {
+    Write-Warning 'Skipping engine-host: the result is a smoke-test layout, not a releasable zip.'
+}
 
 if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
     $scriptRoot = $PSScriptRoot
@@ -121,6 +141,11 @@ $sourceRoots  = @(
     [pscustomobject]@{ Label = 'vendored D3DX redist'; Path = [System.IO.Path]::Combine($RepoRoot, 'libs', 'redist') }
 )
 
+if ($hasEngineHostPackage) {
+    $EngineHostPackage = [System.IO.Path]::GetFullPath($EngineHostPackage)
+    $sourceRoots += [pscustomobject]@{ Label = 'Alamo Preview package'; Path = $EngineHostPackage }
+}
+
 foreach ($sourceRoot in $sourceRoots) {
     if (Test-PathsOverlap $Stage $sourceRoot.Path) {
         throw "[package-release] Refusing -Stage '$Stage' because it overlaps required source: $($sourceRoot.Label) -> $($sourceRoot.Path). Use a dedicated staging directory."
@@ -129,6 +154,36 @@ foreach ($sourceRoot in $sourceRoots) {
 
 Test-RequiredSource 'ParticleEditor.exe'      $exeSource    'Leaf'
 Test-RequiredSource 'd3dx9_43.dll (vendored)' $d3dxSource   'Leaf'
+# Validate the entire package before clearing the stage or copying any artifacts.
+[string[]] $packageFiles = @()
+if ($hasEngineHostPackage) {
+    [int] $supportedPackageFormat = 1  # must match kPackageFormat in src/host/EngineHostSetupPolicy.h
+    [string] $manifestPath = Join-Path $EngineHostPackage 'package.json'
+    Test-RequiredSource 'engine-host/package.json' $manifestPath 'Leaf'
+    [object] $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    [bool] $hasIntegerFormat = $manifest.format -is [int] -or $manifest.format -is [long]
+    [bool] $hasSupportedFormat = $hasIntegerFormat -and $manifest.format -eq $supportedPackageFormat
+    if (-not $hasSupportedFormat -or $manifest.files -isnot [System.Management.Automation.PSCustomObject]) {
+        throw "[package-release] Engine host package requires format $supportedPackageFormat and a files object."
+    }
+    foreach ($entry in $manifest.files.PSObject.Properties) {
+        [string] $relative = $entry.Name
+        [string[]] $segments = $relative -split '[/\\]'
+        [bool] $hasUnsafeSegment = @($segments | Where-Object { $_ -eq '' -or $_ -eq '..' -or $_ -eq '.' }).Count -gt 0
+        [bool] $isRooted = [System.IO.Path]::IsPathRooted($relative) -or $relative -match ':'
+        if ($isRooted -or $hasUnsafeSegment) {
+            throw "[package-release] Unsafe engine host package file path: $relative"
+        }
+        [string] $source = $EngineHostPackage
+        foreach ($segment in $segments) { $source = Join-Path $source $segment }
+        Test-RequiredSource $relative $source 'Leaf'
+        [string] $actualHash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($entry.Value -isnot [string] -or $actualHash -cne $entry.Value.ToLowerInvariant()) {
+            throw "[package-release] SHA-256 mismatch for engine host package file: $relative"
+        }
+        $packageFiles += $relative
+    }
+}
 # The React UI is EMBEDDED in the exe (RCDATA) and the WebView2 loader is STATICALLY linked
 # (vcxproj WebView2LoaderPreference=Static), so neither a web/ folder nor WebView2Loader.dll ships.
 # The WebView2 RUNTIME is a separate machine component (present on Windows 11, and Windows 10 with
@@ -145,11 +200,25 @@ Copy-Item -LiteralPath $exeSource  -Destination $stageExeDir -Force
 Copy-Item -LiteralPath $d3dxSource -Destination $stageExeDir -Force
 Write-Host "  [ok] ParticleEditor.exe, d3dx9_43.dll -> $stageExeDir"
 
+# Only manifest-listed files are copied; stray package artifacts never ship.
+[string[]] $packageStagedPaths = @()
+if ($hasEngineHostPackage) {
+    foreach ($relative in (@('package.json') + $packageFiles)) {
+        [string] $source = $EngineHostPackage
+        [string] $stagedRelative = [System.IO.Path]::Combine('x64', 'Release', 'engine-host')
+        foreach ($segment in ($relative -split '[/\\]')) {
+            $source = Join-Path $source $segment
+            $stagedRelative = Join-Path $stagedRelative $segment
+        }
+        [string] $destination = Join-Path $Stage $stagedRelative
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destination) | Out-Null
+        Copy-Item -LiteralPath $source -Destination $destination -Force
+        $packageStagedPaths += $stagedRelative
+    }
+}
+
 # --- Post-stage assertions (fail loud) ---------------------------------------
-# The stage is a freshly-cleared dir populated by exactly the two explicit Copy-Item calls above, so
-# "nothing extra shipped" is guaranteed by construction -- there is no directory copy to carry a stray
-# artifact in (the pre-2026-08 shape allowlist guarded a whole-dir copy of web/apps/editor/dist that
-# no longer exists). Present-checks here + the exact zip==stage equality below pin the two-file shape.
+foreach ($relative in $packageStagedPaths) { Assert-Staged $relative }
 Assert-Staged ([System.IO.Path]::Combine('x64', 'Release', 'ParticleEditor.exe'))
 Assert-Staged ([System.IO.Path]::Combine('x64', 'Release', 'd3dx9_43.dll'))
 
@@ -206,11 +275,12 @@ if ($OutZip) {
     }
 
     # Every shipped artifact named explicitly. The UI is embedded and the WebView2 loader is static,
-    # so the release payload is exactly the exe and the vendored d3dx9_43.dll beside it.
+    # so the payload is the exe, the vendored d3dx9_43.dll and the verified engine-host package.
     $requiredEntries = @(
         'x64/Release/ParticleEditor.exe'
         'x64/Release/d3dx9_43.dll'
     )
+    $requiredEntries += @($packageStagedPaths | ForEach-Object { $_ -replace '\\', '/' })
     foreach ($r in $requiredEntries) {
         if ($fileEntries -notcontains $r) { throw "[package-release] Missing zip entry: $r" }
     }
@@ -226,6 +296,6 @@ Get-ChildItem -LiteralPath $Stage -Recurse -File |
 if (-not $OutZip) {
     Write-Host ""
     Write-Host "Next: re-run with -OutZip to create AND self-verify the release archive, e.g.:" -ForegroundColor Cyan
-    Write-Host "  pwsh scripts/package-release.ps1 -OutZip ParticleEditor-vX.Y.Z.zip" -ForegroundColor Cyan
+    Write-Host "  pwsh scripts/package-release.ps1 -EngineHostPackage ./alamo-preview -OutZip ParticleEditor-vX.Y.Z.zip" -ForegroundColor Cyan
     Write-Host "Then attach the zip to the GitHub Release." -ForegroundColor Cyan
 }
