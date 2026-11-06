@@ -11,6 +11,7 @@
 #include "EngineHostSetupPolicy.h"
 #include "gamedata/managers.h"
 #include <filesystem>
+#include <stdexcept>
 
 namespace host
 {
@@ -148,6 +149,13 @@ bool SaveEngineHostExePath(const std::wstring& path, std::string& error)
     error = "Cannot save the engine host executable path.";
     return false;
 }
+
+std::wstring ResolveBundledManifestPath()
+{
+    const std::filesystem::path moduleFolder = host::ModuleDirectory();
+    if (moduleFolder.empty()) throw std::runtime_error("Cannot resolve the Particle Editor folder.");
+    return (moduleFolder / engine_host::kBundledPackageFolder / engine_host::kPackageManifestName).wstring();
+}
 } // namespace
 
 bool BridgeDispatcher::TryDispatchEngineHostSettings(BridgeRequestContext& ctx)
@@ -195,8 +203,9 @@ bool BridgeDispatcher::TryDispatchEngineHostSetup(BridgeRequestContext& ctx)
 {
     const bool isStatus     = ctx.kind == "engineHost/setup/status";
     const bool isStart      = ctx.kind == "engineHost/setup/start";
+    const bool isRefresh    = ctx.kind == "engineHost/setup/refresh";
     const bool isRemove     = ctx.kind == "engineHost/setup/remove";
-    const bool isRecognized = isStatus || isStart || isRemove;
+    const bool isRecognized = isStatus || isStart || isRefresh || isRemove;
     if (!isRecognized) return false;
     if (!m_enginePreviewAllowed)
     {
@@ -210,8 +219,14 @@ bool BridgeDispatcher::TryDispatchEngineHostSetup(BridgeRequestContext& ctx)
             const std::wstring target = EngineHostSetup::ManagedPath();
             const bool         isManaged =
                 std::filesystem::exists(std::filesystem::path(target) / engine_host::kSetupJournalName);
-            ctx.SendOk({{"managedPath", isManaged ? json(WideToUtf8(target)) : json(nullptr)},
-                        {"isRunning", EngineHostSetup::IsRunning(target)}});
+            EngineHostSetup::RefreshStatus refreshStatus;
+            if (isManaged) refreshStatus = EngineHostSetup::CheckRefreshStatus(target, ResolveBundledManifestPath());
+            ctx.SendOk(
+                {{"managedPath", isManaged ? json(WideToUtf8(target)) : json(nullptr)},
+                 {"isRunning", EngineHostSetup::IsRunning(target)},
+                 {"isHostOutOfDate", refreshStatus.isHostOutOfDate},
+                 {"bundledHostVersion",
+                  refreshStatus.bundledHostVersion.empty() ? json(nullptr) : json(refreshStatus.bundledHostVersion)}});
         }
         catch (const std::exception& failure)
         {
@@ -235,7 +250,20 @@ bool BridgeDispatcher::TryDispatchEngineHostSetup(BridgeRequestContext& ctx)
         return true;
     }
     EngineHostSetup::Job job;
-    job.remove = isRemove;
+    if (isRemove) job.mode = EngineHostSetup::Mode::Remove;
+    if (isRefresh) job.mode = EngineHostSetup::Mode::Refresh;
+    if (isStart || isRefresh)
+    {
+        try
+        {
+            job.packageManifestPath = ResolveBundledManifestPath();
+        }
+        catch (const std::exception& failure)
+        {
+            ctx.SendErr(failure.what());
+            return true;
+        }
+    }
     if (isStart)
     {
         const json::const_iterator editor = ctx.params.find("editorExePath");
@@ -244,22 +272,14 @@ bool BridgeDispatcher::TryDispatchEngineHostSetup(BridgeRequestContext& ctx)
             ctx.SendErr("editorExePath must be a string.");
             return true;
         }
-        const std::filesystem::path moduleFolder = host::ModuleDirectory();
-        if (moduleFolder.empty())
-        {
-            ctx.SendErr("Cannot resolve the Particle Editor folder.");
-            return true;
-        }
         if (!m_fileManager)
         {
             ctx.SendErr("Game paths are unavailable for engine preview setup.");
             return true;
         }
         job.editorExePath = Utf8ToWide(editor->get<std::string>());
-        job.packageManifestPath =
-            (moduleFolder / engine_host::kBundledPackageFolder / engine_host::kPackageManifestName).wstring();
-        job.basepaths    = m_fileManager->GetBasepaths();
-        job.contentRoots = m_fileManager->GetContentRoots();
+        job.basepaths     = m_fileManager->GetBasepaths();
+        job.contentRoots  = m_fileManager->GetContentRoots();
     }
     if (!m_engineHostSetup) m_engineHostSetup = std::make_unique<EngineHostSetup>(m_hostHwnd);
     std::string error;
@@ -285,6 +305,8 @@ bool BridgeDispatcher::ApplyEngineHostSetupResult(json& payload)
         return true;
     }
     if (!payload.value("ok", false)) return true;
+    // A refresh keeps the managed copy's path, so there is no saved path to update.
+    if (payload.at("action") == "refresh") return true;
     const bool         isSetup = payload.at("action") == "setup";
     const std::wstring target  = EngineHostSetup::ManagedPath();
     const bool         clearsPath =
@@ -298,7 +320,7 @@ bool BridgeDispatcher::ApplyEngineHostSetupResult(json& payload)
         {
             // Registry failure must not leave a successful-looking installation behind.
             EngineHostSetup::Job rollback;
-            rollback.remove = true;
+            rollback.mode = EngineHostSetup::Mode::Remove;
             std::string rollbackError;
             if (m_engineHostSetup->Start(std::move(rollback), rollbackError))
             {

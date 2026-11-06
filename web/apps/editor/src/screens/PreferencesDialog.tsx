@@ -8,6 +8,7 @@ import {
   type Bridge,
   type ResponseMap,
   type EventOf,
+  type EngineHostSetupAction,
   type EngineHostSetupProgressDto,
 } from "@particle-editor/bridge-schema";
 import { Modal } from "@/components/Modal";
@@ -58,9 +59,11 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props): ReactN
   const [engineHostError, setEngineHostError] = useState<string | null>(null);
   const [isEngineHostBusy, setEngineHostBusy] = useState<boolean>(true);
   const [managedPath, setManagedPath] = useState<string | null>(null);
+  const [isHostOutOfDate, setHostOutOfDate] = useState<boolean>(false);
+  const [bundledHostVersion, setBundledHostVersion] = useState<string | null>(null);
   const [isSetupOpen, setSetupOpen] = useState<boolean>(false);
   const [isSetupRunning, setSetupRunning] = useState<boolean>(false);
-  const [setupAction, setSetupAction] = useState<"setup" | "remove">("setup");
+  const [setupAction, setSetupAction] = useState<EngineHostSetupAction>("setup");
   const [setupProgress, setSetupProgress] = useState<EngineHostSetupProgressDto | null>(null);
   const [setupResult, setSetupResult] = useState<string | null>(null);
   const [setupEditorPath, setSetupEditorPath] = useState<string | null>(null);
@@ -82,6 +85,8 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props): ReactN
         if (!isCurrent) return;
         setEngineHostExePath(settings.exePath ?? null);
         setManagedPath(status.managedPath ?? null);
+        setHostOutOfDate(status.isHostOutOfDate);
+        setBundledHostVersion(status.bundledHostVersion);
         setSetupRunning(status.isRunning ?? false);
       } catch (error: unknown) {
         if (isCurrent) setEngineHostError(String(error));
@@ -99,9 +104,9 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props): ReactN
       setRemoveConfirmed(false);
       if (event.payload.ok) {
         setEngineHostError(null);
-        setSetupResult(
-          event.payload.action === "setup" ? `Setup complete: ${event.payload.exePath}` : "Setup removed.",
-        );
+        if (event.payload.action === "setup") setSetupResult(`Setup complete: ${event.payload.exePath}`);
+        if (event.payload.action === "refresh") setSetupResult("Setup refreshed.");
+        if (event.payload.action === "remove") setSetupResult("Setup removed.");
         if (event.payload.action === "setup") setEngineHostExePath(event.payload.exePath);
       } else {
         setEngineHostError(event.payload.error);
@@ -145,7 +150,7 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props): ReactN
   };
 
   const hasSetupEditorPath: boolean = Boolean(setupEditorPath);
-  const runSetupAction = async (action: "setup" | "remove"): Promise<void> => {
+  const runSetupAction = async (action: EngineHostSetupAction): Promise<void> => {
     if (isSetupRunning || isEngineHostBusy) return;
     if (action === "setup" && !setupEditorPath) return;
     setSetupAction(action);
@@ -155,13 +160,11 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props): ReactN
     setEngineHostError(null);
     setRemoveConfirmed(false);
     try {
-      const accepted: ResponseMap["engineHost/setup/start"] =
-        action === "setup" && setupEditorPath
-          ? await bridge.request({
-              kind: "engineHost/setup/start",
-              params: { editorExePath: setupEditorPath },
-            })
-          : await bridge.request({ kind: "engineHost/setup/remove", params: {} });
+      let accepted: ResponseMap["engineHost/setup/start"];
+      if (action === "setup" && setupEditorPath)
+        accepted = await bridge.request({ kind: "engineHost/setup/start", params: { editorExePath: setupEditorPath } });
+      else if (action === "refresh") accepted = await bridge.request({ kind: "engineHost/setup/refresh", params: {} });
+      else accepted = await bridge.request({ kind: "engineHost/setup/remove", params: {} });
       if (!accepted.ok) throw new Error(accepted.error);
     } catch (error: unknown) {
       setEngineHostError(String(error));
@@ -176,7 +179,7 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props): ReactN
       {isSetupRunning && (
         <div role="status" className="flex flex-col gap-1 text-xs text-text-2">
           <span>
-            {setupAction === "setup" ? "Setting up" : "Removing setup"}
+            {{ setup: "Setting up", refresh: "Refreshing setup", remove: "Removing setup" }[setupAction]}
             {setupProgress && `: ${setupProgress.stage}`}
             {setupProgress && setupProgress.total > 0 && ` (${setupProgress.done} of ${setupProgress.total})`}
           </span>
@@ -477,10 +480,27 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props): ReactN
                   <output aria-label="Managed setup path" title={managedPath} className="truncate text-xs text-text-2">
                     {managedPath}
                   </output>
+                  {isHostOutOfDate && (
+                    <p className="text-xs text-text-2">
+                      This setup's engine host doesn't match the one bundled with this Particle Editor
+                      {bundledHostVersion && ` (version ${bundledHostVersion})`}.
+                    </p>
+                  )}
                   {isRemoveConfirmed && (
                     <p className="text-xs text-text-2">Delete the managed copy? Your game install is never modified.</p>
                   )}
                   <div className="flex gap-2">
+                    {isHostOutOfDate && (
+                      <Button
+                        variant="secondary"
+                        disabled={isSetupDisabled}
+                        onClick={(): void => {
+                          void runSetupAction("refresh");
+                        }}
+                      >
+                        Refresh setup
+                      </Button>
+                    )}
                     <Button
                       variant={isRemoveConfirmed ? "danger" : "secondary"}
                       disabled={isSetupDisabled}

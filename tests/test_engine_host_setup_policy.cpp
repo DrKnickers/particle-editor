@@ -122,6 +122,46 @@ void TestPackages()
     Check(IsSafeSetupRelativePath("folder/.hidden"), "ordinary hidden file is safe");
 }
 
+void TestRefreshedFiles()
+{
+    nlohmann::json    manifest = MakePackage();
+    const std::string editorHash(kSha256HexChars, 'b');
+    manifest["editors"].push_back({{"sha256", editorHash}, {"label", "Second editor"}});
+    manifest["files"]["signatures/" + editorHash + ".txt"] = editorHash;
+    const SetupPackage                    package          = ParseSetupPackage(manifest.dump());
+    const std::vector<RefreshedSetupFile> expected = {{"Data/XML/PREVIEWTEST.XML", kPackageLayerXml},
+                                                      {"scene-source/PREVIEW_A.TED", kPackageSceneMap},
+                                                      {"scene-source/PREVIEW_B.TED", kPackageSceneMap},
+                                                      {"d3d9.dll", kPackageHostDll},
+                                                      {"alamo_mapped.txt", kPackageMappedBuilds},
+                                                      {"alamo_signatures.txt", "signatures/" + editorHash + ".txt"},
+                                                      {"alamo_preview.ini", ""}};
+    const std::vector<RefreshedSetupFile> files    = ListRefreshedSetupFiles(package, editorHash);
+    Check(files.size() == expected.size(), "refresh has exactly the package overrides and generated ini");
+    for (size_t index = 0; index < (std::min)(files.size(), expected.size()); ++index)
+    {
+        Check(files[index].destination == expected[index].destination, "refresh destination order matches setup");
+        Check(files[index].packageSource == expected[index].packageSource,
+              "refresh selects the matching package source");
+    }
+    const std::string                     firstEditorHash(kSha256HexChars, 'a');
+    const std::vector<RefreshedSetupFile> firstFiles = ListRefreshedSetupFiles(package, firstEditorHash);
+    for (const RefreshedSetupFile& file : firstFiles)
+        if (file.destination == "alamo_signatures.txt")
+            Check(file.packageSource == "signatures/" + firstEditorHash + ".txt",
+                  "signature follows the copy's editor hash");
+
+    std::map<std::string, std::string> expectedHashes;
+    for (const RefreshedSetupFile& file : files) expectedHashes[file.destination] = editorHash;
+    std::map<std::string, std::string> installedHashes = expectedHashes;
+    Check(IsSetupCopyCurrent(expectedHashes, installedHashes), "matching installed hashes are current");
+    installedHashes["d3d9.dll"] = firstEditorHash;
+    Check(!IsSetupCopyCurrent(expectedHashes, installedHashes), "one differing hash needs refresh");
+    installedHashes = expectedHashes;
+    installedHashes.erase("scene-source/PREVIEW_A.TED");
+    Check(!IsSetupCopyCurrent(expectedHashes, installedHashes), "one missing installed file needs refresh");
+}
+
 void TestPaths()
 {
     const std::vector<std::string> games        = {"C:/games/corruption", "D:/games/GameData"};
@@ -187,6 +227,7 @@ void TestHostRuntimeOutputs()
 int main()
 {
     TestPackages();
+    TestRefreshedFiles();
     TestPaths();
     TestGeneratedText();
     TestHostRuntimeOutputs();

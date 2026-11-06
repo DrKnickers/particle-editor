@@ -16,15 +16,22 @@ import {
 
 const SETUP_EDITOR_PATH = "C:\\MapEditor\\EAW Terrain Editor.exe";
 const MANAGED_EDITOR_PATH = "C:\\Managed\\EAW Terrain Editor.exe";
+const REFRESH_FILE_COUNT = 7;
 
 function makeSetupBridge(): { bridge: BridgeStub; settings: EngineHostSettingsDto; status: EngineHostSetupStatusDto } {
   const settings: EngineHostSettingsDto = { exePath: null };
-  const status: EngineHostSetupStatusDto = { managedPath: null, isRunning: false };
+  const status: EngineHostSetupStatusDto = {
+    managedPath: null,
+    isRunning: false,
+    isHostOutOfDate: false,
+    bundledHostVersion: "1.0.0",
+  };
   const bridge: BridgeStub = makeBridgeStub({
     responses: {
       "engineHost/settings": (): EngineHostSettingsDto => ({ ...settings }),
       "engineHost/setup/status": (): EngineHostSetupStatusDto => ({ ...status }),
       "engineHost/setup/start": { ok: true },
+      "engineHost/setup/refresh": { ok: true },
       "engineHost/setup/remove": { ok: true },
       "file/pick-open": (): { ok: true; path: string } => ({
         ok: true,
@@ -130,7 +137,12 @@ describe("PreferencesDialog", () => {
     const bridge: BridgeStub = makeBridgeStub({
       responses: {
         "engineHost/settings": { exePath: null },
-        "engineHost/setup/status": { managedPath: null, isRunning: false },
+        "engineHost/setup/status": {
+          managedPath: null,
+          isRunning: false,
+          isHostOutOfDate: false,
+          bundledHostVersion: null,
+        },
         "file/pick-open": (): { ok: false; error: string } | { ok: true; path: string } => {
           if (hasPickerFailed) return { ok: false, error: "Cannot open picker" };
           return { ok: true, path: SETUP_EDITOR_PATH };
@@ -178,6 +190,56 @@ describe("PreferencesDialog", () => {
     expect(screen.getByLabelText("Map editor executable")).toHaveTextContent("Not set");
     expect(screen.getByText("Setup removed.")).toBeInTheDocument();
   });
+  it("hides refresh controls for a current managed setup", async (): Promise<void> => {
+    const { bridge, status }: ReturnType<typeof makeSetupBridge> = makeSetupBridge();
+    status.managedPath = MANAGED_EDITOR_PATH;
+    render(<PreferencesDialog bridge={bridge} open onOpenChange={(): void => {}} />);
+    await screen.findByLabelText("Managed setup path");
+    expect(screen.queryByText(/This setup's engine host doesn't match/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Refresh setup" })).not.toBeInTheDocument();
+  });
+
+  it.each(["1.0.0", null])(
+    "refreshes an outdated setup with bundled version %s",
+    async (version: string | null): Promise<void> => {
+      const { bridge, settings, status }: ReturnType<typeof makeSetupBridge> = makeSetupBridge();
+      settings.exePath = MANAGED_EDITOR_PATH;
+      status.managedPath = MANAGED_EDITOR_PATH;
+      status.isHostOutOfDate = true;
+      status.bundledHostVersion = version;
+      render(<PreferencesDialog bridge={bridge} open onOpenChange={(): void => {}} />);
+      const note = "This setup's engine host doesn't match the one bundled with this Particle Editor";
+      expect(await screen.findByText(`${note}${version ? ` (version ${version})` : ""}.`)).toBeInTheDocument();
+      const refreshButton: HTMLElement = screen.getByRole("button", { name: "Refresh setup" });
+      await waitFor((): void => {
+        expect(refreshButton).toBeEnabled();
+      });
+      await userEvent.click(refreshButton);
+      expect(bridge.request).toHaveBeenCalledWith({ kind: "engineHost/setup/refresh", params: {} });
+      expect(refreshButton).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Remove setup" })).toBeDisabled();
+      bridge.emit(ENGINE_HOST_SETUP_PROGRESSED_EVENT, {
+        stage: "Refreshing engine host",
+        done: 1,
+        total: REFRESH_FILE_COUNT,
+      });
+      expect(
+        screen.getByText(`Refreshing setup: Refreshing engine host (1 of ${REFRESH_FILE_COUNT})`),
+      ).toBeInTheDocument();
+      status.isHostOutOfDate = false;
+      bridge.emit(ENGINE_HOST_SETUP_FINISHED_EVENT, { ok: true, action: "refresh" });
+      expect(await screen.findByText("Setup refreshed.")).toBeInTheDocument();
+      await waitFor((): void => {
+        expect(screen.queryByText(/This setup's engine host doesn't match/)).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Refresh setup" })).not.toBeInTheDocument();
+      });
+      expect(screen.getByLabelText("Map editor executable")).toHaveTextContent(MANAGED_EDITOR_PATH);
+      expect(
+        bridge.request.mock.calls.filter(([request]: [Request]): boolean => request.kind === "engineHost/setup/status"),
+      ).toHaveLength(2);
+    },
+  );
+
   it("loads, browses and clears the map editor executable", async (): Promise<void> => {
     const path = "C:\\Preview\\EAW Terrain Editor.exe";
     const bridge: BridgeStub = makeBridgeStub({

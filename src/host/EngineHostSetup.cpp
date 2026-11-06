@@ -1,4 +1,4 @@
-// Builds and removes the journaled private render host. Game files are read-only inputs;
+// Builds, refreshes and removes the journaled private render host. Game files are read-only inputs;
 // setup-owned overrides are fresh files, never hard links into the game installation.
 #include "EngineHostSetup.h"
 #include "EngineHostSetupPolicy.h"
@@ -15,8 +15,10 @@
 #include <fstream>
 #include <functional>
 #include <iterator>
+#include <map>
 #include <memory>
 #include <stdexcept>
+#include <system_error>
 #include <utility>
 
 namespace host
@@ -25,8 +27,11 @@ namespace
 {
 namespace fs = std::filesystem;
 using namespace engine_host;
-constexpr ULONGLONG kSetupProgressIntervalMs = 100;
-constexpr DWORD     kProcessPathChars        = 32768;
+constexpr ULONGLONG      kSetupProgressIntervalMs = 100;
+constexpr DWORD          kProcessPathChars        = 32768;
+constexpr const wchar_t* kRefreshTempSuffix       = L".particle-editor-refresh";
+constexpr const char*    kIncompleteSetupMessage =
+    "This engine preview setup is incomplete. Remove setup and set up again.";
 
 struct CloseSetupHandle
 {
@@ -41,6 +46,15 @@ using ProgressReporter = std::function<void(const std::string&, size_t, size_t)>
 void RequireWindows(bool succeeded, const std::string& action)
 {
     if (!succeeded) throw std::runtime_error(action + " (Windows error " + std::to_string(GetLastError()) + ").");
+}
+
+void LockSetupJournal(HANDLE journal)
+{
+    // Read sharing alone permits another remover; the byte-range lock excludes other journal readers and refreshes.
+    OVERLAPPED range = {};
+    RequireWindows(LockFileEx(journal, LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY, 0, MAXDWORD, MAXDWORD,
+                              &range) != FALSE,
+                   "Cannot exclusively lock the setup journal");
 }
 
 void RefuseReparseAncestors(fs::path path)
@@ -156,7 +170,8 @@ void RemoveJournaledSetup(const fs::path& target, const ProgressReporter& progre
     SetupHandle journalLock(CreateFileW(journal.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
                                         FILE_ATTRIBUTE_NORMAL, nullptr));
     RequireWindows(journalLock.get() != INVALID_HANDLE_VALUE, "Cannot lock the setup journal for removal");
-    const std::string     contents = ReadSetupFile(journal);
+    const std::string contents = ReadSetupFile(journal);
+    LockSetupJournal(journalLock.get());
     std::vector<fs::path> entries;
     size_t                start = 0;
     while (start < contents.size())
@@ -255,11 +270,8 @@ fs::path FindCorruptionData(const std::vector<std::wstring>& roots)
         "Engine preview setup requires a Forces of Corruption root (corruption) in the game paths.");
 }
 
-SetupPackage VerifySetupInputsAndSetEditorHash(const EngineHostSetup::Job& job,
-                                               std::string&                editorHash,
-                                               const ProgressReporter&     progressed)
+SetupPackage VerifySetupPackage(const fs::path& manifest, const ProgressReporter& progressed)
 {
-    const fs::path manifest(job.packageManifestPath);
     if (!manifest.is_absolute() || manifest.filename() != kPackageManifestName)
         throw std::runtime_error("Invalid bundled host manifest path.");
     if (!fs::is_regular_file(manifest))
@@ -274,12 +286,139 @@ SetupPackage VerifySetupInputsAndSetEditorHash(const EngineHostSetup::Job& job,
             throw std::runtime_error("The host package file failed SHA-256 verification: " + file.first);
         progressed("Verifying host package", ++done, package.files.size());
     }
-    const fs::path editor(job.editorExePath);
+    return package;
+}
+
+SetupPackage VerifySetupInputsAndSetEditorHash(const EngineHostSetup::Job& job,
+                                               std::string&                editorHash,
+                                               const ProgressReporter&     progressed)
+{
+    const SetupPackage package = VerifySetupPackage(fs::path(job.packageManifestPath), progressed);
+    const fs::path     editor(job.editorExePath);
     if (!editor.is_absolute() || FoldSetupText(editor.extension().u8string()) != ".exe")
         throw std::runtime_error("Choose an absolute map editor executable path.");
     editorHash = HashSetupFile(editor);
     FindSetupEditorLabel(package, editorHash); // Throws when the editor build is unsupported.
     return package;
+}
+
+std::string BuildSetupIniBytes(const fs::path& target)
+{
+    // GetPrivateProfileStringW reads Unicode paths only from a UTF-16 BOM ini.
+    const std::wstring ini = L"\ufeff" + Utf8ToWide(BuildSetupIni(target.u8string()));
+    return std::string(reinterpret_cast<const char*>(ini.data()), ini.size() * sizeof(wchar_t));
+}
+
+std::string ReadRefreshedSetupBytes(const RefreshedSetupFile& file,
+                                    const SetupPackage&       package,
+                                    const fs::path&           packageFolder,
+                                    const fs::path&           target)
+{
+    if (file.packageSource.empty()) return BuildSetupIniBytes(target);
+    const std::string bytes = ReadSetupFile(packageFolder / fs::u8path(file.packageSource));
+    // Verify the bytes used for overrides again, so a modified package cannot be installed after verification.
+    if (Sha256Hex(bytes.data(), bytes.size()) != package.files.at(FoldSetupText(file.packageSource)))
+        throw std::runtime_error("The host package changed during setup: " + file.packageSource);
+    return bytes;
+}
+
+bool IsInstalledSetupCurrent(const fs::path& target, const SetupPackage& package, const std::string& editorHash)
+{
+    std::map<std::string, std::string> expectedHashes;
+    std::map<std::string, std::string> installedHashes;
+    for (const RefreshedSetupFile& file : ListRefreshedSetupFiles(package, editorHash))
+    {
+        const fs::path installed = target / fs::u8path(file.destination);
+        if (file.packageSource.empty())
+        {
+            if (!fs::is_regular_file(installed) || ReadSetupFile(installed) != BuildSetupIniBytes(target)) return false;
+            continue;
+        }
+        expectedHashes[file.destination] = package.files.at(FoldSetupText(file.packageSource));
+        if (fs::is_regular_file(installed)) installedHashes[file.destination] = HashSetupFile(installed);
+    }
+    return IsSetupCopyCurrent(expectedHashes, installedHashes);
+}
+
+fs::path StagedRefreshPath(const fs::path& destination)
+{
+    return destination.wstring() + kRefreshTempSuffix;
+}
+
+void StageRefreshedSetupFile(const RefreshedSetupFile& file,
+                             const SetupPackage&       package,
+                             const fs::path&           packageFolder,
+                             const fs::path&           target,
+                             std::vector<fs::path>&    stagedPaths)
+{
+    const fs::path destination = target / fs::u8path(file.destination);
+    RefuseReparseAncestors(destination);
+    if (!fs::is_directory(destination.parent_path())) throw std::runtime_error(kIncompleteSetupMessage);
+    const std::string bytes  = ReadRefreshedSetupBytes(file, package, packageFolder, target);
+    const fs::path    staged = StagedRefreshPath(destination);
+    // A refresh killed after staging leaves this unjournaled file behind; it is ours by its suffix.
+    fs::remove(staged);
+    {
+        const SetupHandle output(
+            CreateFileW(staged.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr));
+        RequireWindows(output.get() != INVALID_HANDLE_VALUE, "Cannot stage " + file.destination);
+        stagedPaths.push_back(staged);
+        WriteSetupBytes(output.get(), bytes);
+    }
+    const bool matches = file.packageSource.empty()
+                             ? ReadSetupFile(staged) == bytes
+                             : HashSetupFile(staged) == package.files.at(FoldSetupText(file.packageSource));
+    if (!matches) throw std::runtime_error("The staged engine host file failed verification: " + file.destination);
+}
+
+void RefreshSetupCopy(const EngineHostSetup::Job& job, const fs::path& target, const ProgressReporter& progressed)
+{
+    RefuseReparseAncestors(target);
+    if (EngineHostSetup::IsRunning(target.wstring()))
+        throw std::runtime_error("Stop the live engine view first; a process is running from the managed folder.");
+    const fs::path journal = target / kSetupJournalName;
+    const fs::path editor  = target / kManagedEditorExeName;
+    if (!fs::is_regular_file(journal) || !fs::is_regular_file(editor))
+        throw std::runtime_error(kIncompleteSetupMessage);
+    RefuseReparseAncestors(journal);
+    // Denying write sharing keeps setup writers and journal deletion out for the entire refresh.
+    const SetupHandle journalLock(CreateFileW(journal.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                                              FILE_ATTRIBUTE_NORMAL, nullptr));
+    RequireWindows(journalLock.get() != INVALID_HANDLE_VALUE, "Cannot lock the setup journal for refresh");
+    LockSetupJournal(journalLock.get());
+    const SetupPackage                    package = VerifySetupPackage(fs::path(job.packageManifestPath), progressed);
+    const std::string                     editorHash = HashSetupFile(editor);
+    const std::vector<RefreshedSetupFile> files      = ListRefreshedSetupFiles(package, editorHash);
+    std::vector<fs::path>                 stagedPaths;
+    try
+    {
+        progressed("Refreshing engine host", 0, files.size());
+        for (const RefreshedSetupFile& file : files)
+            StageRefreshedSetupFile(file, package, fs::path(job.packageManifestPath).parent_path(), target,
+                                    stagedPaths);
+        size_t done = 0;
+        for (const RefreshedSetupFile& file : files)
+        {
+            const fs::path destination = target / fs::u8path(file.destination);
+            const fs::path staged      = StagedRefreshPath(destination);
+            RequireWindows(MoveFileExW(staged.c_str(), destination.c_str(),
+                                       MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != FALSE,
+                           "Cannot refresh " + file.destination);
+            progressed("Refreshing engine host", ++done, files.size());
+        }
+    }
+    catch (const std::exception& failure)
+    {
+        std::string error = failure.what();
+        for (const fs::path& staged : stagedPaths)
+        {
+            std::error_code cleanupError;
+            fs::remove(staged, cleanupError);
+            if (cleanupError)
+                error += " Cannot remove staged file " + staged.u8string() + ": " + cleanupError.message();
+        }
+        throw std::runtime_error(error);
+    }
 }
 
 void CopySetupGameData(SetupWriter&            writer,
@@ -334,28 +473,12 @@ void BuildSetupCopy(const EngineHostSetup::Job& job, const fs::path& target, con
         CopySetupGameData(writer, gameData, target, progressed);
         writer.WriteFresh("Data/XML/GAMEOBJECTFILES.XML", gameObjects);
         const fs::path packageFolder = fs::path(job.packageManifestPath).parent_path();
-        // Verify the bytes used for overrides again, so a modified package cannot be installed after verification.
-        const auto writePackageFile = [&](const std::string& source, const std::string& destination) -> void
-        {
-            const std::string bytes = ReadSetupFile(packageFolder / fs::u8path(source));
-            if (Sha256Hex(bytes.data(), bytes.size()) != package.files.at(FoldSetupText(source)))
-                throw std::runtime_error("The host package changed during setup: " + source);
-            writer.WriteFresh(destination, bytes);
-        };
-        writePackageFile(kPackageLayerXml, "Data/XML/PREVIEWTEST.XML");
         writer.EnsureDirectory(L"Data/Art/Models");
         // WriteEnginePreviewCopy needs a document. Live start writes this reserved path before opening the map.
         writer.Record("Data/Art/Models/P_PREVIEW_TEST.ALO");
-        writePackageFile(kPackageSceneMap, "scene-source/PREVIEW_A.TED");
-        writePackageFile(kPackageSceneMap, "scene-source/PREVIEW_B.TED");
         writer.EnsureDirectory(L"scene");
-        writePackageFile(kPackageHostDll, "d3d9.dll");
-        writePackageFile(kPackageMappedBuilds, "alamo_mapped.txt");
-        writePackageFile(kPackageSignatureFolder + editorHash + ".txt", "alamo_signatures.txt");
-        // GetPrivateProfileStringW reads Unicode paths only from a UTF-16 BOM ini.
-        const std::wstring ini = L"\ufeff" + Utf8ToWide(BuildSetupIni(target.u8string()));
-        writer.WriteFresh("alamo_preview.ini",
-                          std::string(reinterpret_cast<const char*>(ini.data()), ini.size() * sizeof(wchar_t)));
+        for (const RefreshedSetupFile& file : ListRefreshedSetupFiles(package, editorHash))
+            writer.WriteFresh(file.destination, ReadRefreshedSetupBytes(file, package, packageFolder, target));
         progressed("Setup completed", 1, 1);
     }
     catch (const std::exception& failure)
@@ -382,6 +505,28 @@ std::wstring EngineHostSetup::ManagedPath()
     const HRESULT resolved = SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, localAppData);
     if (FAILED(resolved)) throw std::runtime_error("Cannot resolve Local AppData for engine preview setup.");
     return (fs::path(localAppData) / engine_host::kManagedHostRelativePath).wstring();
+}
+
+EngineHostSetup::RefreshStatus EngineHostSetup::CheckRefreshStatus(const std::wstring& target,
+                                                                   const std::wstring& packageManifestPath)
+{
+    const fs::path managed(target);
+    if (!fs::is_regular_file(managed / kSetupJournalName)) return {};
+    const fs::path manifest(packageManifestPath);
+    // Developer builds without a bundled host package have nothing to compare against.
+    if (!fs::is_regular_file(manifest)) return {};
+    const SetupPackage package = ParseSetupPackage(ReadSetupFile(manifest));
+    RefreshStatus      status;
+    status.bundledHostVersion = package.hostVersion;
+    // A missing or unsupported managed editor counts as out of date, so Preferences offers a refresh
+    // whose refusal names the problem.
+    status.isHostOutOfDate = true;
+    const fs::path editor  = managed / kManagedEditorExeName;
+    if (!fs::is_regular_file(editor)) return status;
+    const std::string editorHash = HashSetupFile(editor);
+    if (package.editors.count(editorHash) == 0) return status;
+    status.isHostOutOfDate = !IsInstalledSetupCurrent(managed, package, editorHash);
+    return status;
 }
 
 bool EngineHostSetup::IsRunning(const std::wstring& target)
@@ -458,7 +603,10 @@ void EngineHostSetup::ReportProgress(const std::string& stage, size_t done, size
 
 void EngineHostSetup::Run(const Job& job)
 {
-    nlohmann::json result = {{"ok", false}, {"action", job.remove ? "remove" : "setup"}};
+    std::string action = "setup";
+    if (job.mode == Mode::Refresh) action = "refresh";
+    if (job.mode == Mode::Remove) action = "remove";
+    nlohmann::json result = {{"ok", false}, {"action", action}};
     try
     {
         const fs::path         target(ManagedPath());
@@ -466,12 +614,14 @@ void EngineHostSetup::Run(const Job& job)
         {
             ReportProgress(stage, done, total);
         };
-        if (job.remove)
+        if (job.mode == Mode::Remove)
             RemoveJournaledSetup(target, progressed);
+        else if (job.mode == Mode::Refresh)
+            RefreshSetupCopy(job, target, progressed);
         else
             BuildSetupCopy(job, target, progressed);
         result["ok"] = true;
-        if (!job.remove) result["exePath"] = (target / kManagedEditorExeName).u8string();
+        if (job.mode == Mode::Setup) result["exePath"] = (target / kManagedEditorExeName).u8string();
     }
     catch (const std::exception& error)
     {

@@ -122,6 +122,38 @@ inline std::string FindSetupEditorLabel(const SetupPackage& package, const std::
     throw std::runtime_error("Unsupported map editor. Supported editors: " + supported + ".");
 }
 
+struct RefreshedSetupFile
+{
+    std::string destination;
+    // An empty package source selects the generated UTF-16 ini.
+    std::string packageSource;
+};
+
+inline std::vector<RefreshedSetupFile> ListRefreshedSetupFiles(const SetupPackage& package,
+                                                               const std::string&  editorHash)
+{
+    // Throws for an unsupported editor, so no signature file name is guessed.
+    FindSetupEditorLabel(package, editorHash);
+    return {{"Data/XML/PREVIEWTEST.XML", kPackageLayerXml},
+            {"scene-source/PREVIEW_A.TED", kPackageSceneMap},
+            {"scene-source/PREVIEW_B.TED", kPackageSceneMap},
+            {"d3d9.dll", kPackageHostDll},
+            {"alamo_mapped.txt", kPackageMappedBuilds},
+            {"alamo_signatures.txt", kPackageSignatureFolder + FoldSetupText(editorHash) + ".txt"},
+            {"alamo_preview.ini", ""}};
+}
+
+inline bool IsSetupCopyCurrent(const std::map<std::string, std::string>& expectedHashes,
+                               const std::map<std::string, std::string>& installedHashes)
+{
+    for (const std::pair<const std::string, std::string>& expected : expectedHashes)
+    {
+        const auto installed = installedHashes.find(expected.first);
+        if (installed == installedHashes.end() || installed->second != expected.second) return false;
+    }
+    return true;
+}
+
 inline std::string NormalizeSetupPath(std::string path)
 {
     path = FoldSetupText(path);

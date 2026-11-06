@@ -749,6 +749,8 @@ export interface EngineHostSetupStartDto {
 export interface EngineHostSetupStatusDto {
   managedPath: string | null;
   isRunning: boolean;
+  isHostOutOfDate: boolean;
+  bundledHostVersion: string | null;
 }
 
 export interface EngineHostSetupProgressDto {
@@ -758,14 +760,15 @@ export interface EngineHostSetupProgressDto {
 }
 
 export type EngineHostSetupAcceptedDto = { ok: true } | { ok: false; error: string };
+export type EngineHostSetupAction = "setup" | "refresh" | "remove";
 export type EngineHostSetupFinishedDto =
   | { ok: true; action: "setup"; exePath: string }
-  | { ok: true; action: "remove" }
-  | { ok: false; action: "setup" | "remove"; error: string };
+  | { ok: true; action: "refresh" | "remove" }
+  | { ok: false; action: EngineHostSetupAction; error: string };
 
 // Emitted by the native setup worker's UI-thread drain; Preferences can display progress.
 export const ENGINE_HOST_SETUP_PROGRESSED_EVENT = "engineHost/setup-progressed";
-// Emitted by the same drain after setup/removal and settings persistence finish.
+// Emitted by the same drain after setup/refresh/removal and settings persistence finish.
 export const ENGINE_HOST_SETUP_FINISHED_EVENT = "engineHost/setup-finished";
 
 export interface EnginePreviewStatusDto {
@@ -1306,6 +1309,7 @@ export type Request =
   // state; `timeline/state` pushes it during play and after host-side replays.
   | { kind: "engineHost/setup/status"; params: Record<string, never> }
   | { kind: "engineHost/setup/start"; params: EngineHostSetupStartDto }
+  | { kind: "engineHost/setup/refresh"; params: Record<string, never> }
   | { kind: "engineHost/setup/remove"; params: Record<string, never> }
   | { kind: "engineHost/settings"; params: Record<string, never> }
   | { kind: "engineHost/settings/set"; params: EngineHostSettingsDto }
@@ -1521,6 +1525,7 @@ export interface ResponseMap {
   "spawner/stop": Record<string, never>;
   "engineHost/setup/status": EngineHostSetupStatusDto;
   "engineHost/setup/start": EngineHostSetupAcceptedDto;
+  "engineHost/setup/refresh": EngineHostSetupAcceptedDto;
   "engineHost/setup/remove": EngineHostSetupAcceptedDto;
   "engineHost/settings": EngineHostSettingsDto;
   "engineHost/settings/set": EngineHostSettingsDto;

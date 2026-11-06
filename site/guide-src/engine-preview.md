@@ -34,6 +34,12 @@ When it finishes, the dialog shows *Setup complete* and the path of the new copy
 editor executable** field is filled in for you. The copy lives in your user folder, under
 `%LOCALAPPDATA%\AloParticleEditor\EngineHost`.
 
+## Updating
+
+After installing a newer Particle Editor, **Preferences → Engine preview** may say the
+setup's engine host doesn't match the bundled version. Press **Refresh setup** to update
+the private copy without choosing the map editor again or recopying game data.
+
 ## Use It
 
 With an effect open, choose **View → Live engine view**. The first start takes several seconds

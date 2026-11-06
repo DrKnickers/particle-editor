@@ -40,6 +40,7 @@ import type {
   EmitterTreeDto,
   LightingSettingsDto,
   TimelineStateDto,
+  EngineHostSetupAction,
 } from "@particle-editor/bridge-schema";
 import {
   findEmitterNode,
@@ -228,6 +229,8 @@ export class MockBridge implements Bridge, MockDispatchHost {
   private engineHostExePath: string | null = null;
   private engineHostManagedPath: string | null = null;
   private isEngineHostSetupRunning = false;
+  isEngineHostOutOfDate = false;
+  bundledHostVersion: string | null = "1.0.0";
   private events = new EventHub<{ [K in EventKind]: EventOf<K> }>("MockBridge");
   private viewportUnavailable: EventOf<"viewport/unavailable"> | null = null;
 
@@ -512,10 +515,18 @@ export class MockBridge implements Bridge, MockDispatchHost {
         return dispatchSpawnerLighting.call(this, req);
 
       case "engineHost/setup/status":
-        return { managedPath: this.engineHostManagedPath, isRunning: this.isEngineHostSetupRunning };
+        return {
+          managedPath: this.engineHostManagedPath,
+          isRunning: this.isEngineHostSetupRunning,
+          isHostOutOfDate: this.isEngineHostOutOfDate,
+          bundledHostVersion: this.bundledHostVersion,
+        };
       case "engineHost/setup/start":
+      case "engineHost/setup/refresh":
       case "engineHost/setup/remove": {
-        const action: "setup" | "remove" = req.kind === "engineHost/setup/start" ? "setup" : "remove";
+        let action: EngineHostSetupAction = "setup";
+        if (req.kind === "engineHost/setup/refresh") action = "refresh";
+        if (req.kind === "engineHost/setup/remove") action = "remove";
         if (this.isEngineHostSetupRunning) return { ok: false, error: "A setup operation is already running." };
         this.isEngineHostSetupRunning = true;
         MOCK_SETUP_STAGES.forEach((stage: string, index: number): void => {
@@ -531,10 +542,16 @@ export class MockBridge implements Bridge, MockDispatchHost {
           }, MOCK_SETUP_STEP_MS * index);
         });
         setTimeout((): void => {
-          if (action === "setup") this.engineHostExePath = MOCK_MANAGED_EDITOR_PATH;
+          if (action === "setup") {
+            this.engineHostExePath = MOCK_MANAGED_EDITOR_PATH;
+            this.engineHostManagedPath = MOCK_MANAGED_EDITOR_PATH;
+          }
           // Removal clears the configured editor path only when it points at the managed copy.
-          else if (this.engineHostExePath === this.engineHostManagedPath) this.engineHostExePath = null;
-          this.engineHostManagedPath = action === "setup" ? MOCK_MANAGED_EDITOR_PATH : null;
+          if (action === "remove") {
+            if (this.engineHostExePath === this.engineHostManagedPath) this.engineHostExePath = null;
+            this.engineHostManagedPath = null;
+          }
+          this.isEngineHostOutOfDate = false;
           this.isEngineHostSetupRunning = false;
           this.patchAndBroadcast({
             enginePreviewAvailable: this.enginePreview.state === "ready" || this.engineHostExePath !== null,
