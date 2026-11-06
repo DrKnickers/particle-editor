@@ -49,6 +49,8 @@ import { computeSceneRect, dockSlideTarget } from "@/lib/scene-rect";
 import { useDockAnim } from "@/lib/dock-anim";
 import { emitPerfTrace, makePerfSpanId } from "@/lib/perf-trace";
 import { ViewportSlot } from "./ViewportSlot";
+import { EnginePreviewPanel } from "./EnginePreviewPanel";
+import { checkEnginePreviewStatus } from "@/lib/engine-preview";
 import { TimelinePanel } from "./TimelinePanel";
 import { OverloadBanner } from "./OverloadBanner";
 import { ViewportUnavailableNotice } from "./ViewportUnavailableNotice";
@@ -196,6 +198,10 @@ function usePersistedLayout(key: string, defaults: Layout) {
 type Props = { bridge: Bridge };
 
 export function PanelLayout({ bridge }: Props) {
+  // Discover the optional external host without delaying the editor layout.
+  useEffect((): void => {
+    void checkEnginePreviewStatus(bridge);
+  }, [bridge]);
   // The right-dock slot holds the Spawner OR the Lighting pane (exclusive),
   // or nothing. The outer layout only cares whether the column EXISTS —
   // swapping spawner↔lighting keeps it open and reflows nothing; only the
@@ -633,16 +639,19 @@ export function PanelLayout({ bridge }: Props) {
                 quadrant-viewport, so that testid keeps matching the
                 viewport pixels exactly; opening it shrinks the scene rect. */}
             <div className="flex h-full w-full min-h-0 flex-col">
-              <div data-testid="quadrant-viewport" className="relative min-h-0 w-full flex-1">
-                <ViewportSlot bridge={bridge} />
-                {/* Preview spawn-overload banner (overload guard) — a
+              <div className="flex min-h-0 w-full flex-1">
+                <div data-testid="quadrant-viewport" className="relative min-h-0 min-w-0 flex-1">
+                  <ViewportSlot bridge={bridge} />
+                  {/* Preview spawn-overload banner (overload guard) — a
                     sibling of ViewportSlot inside this `relative`
                     viewport-rect container so `absolute top-center`
                     positioning needs no extra geometry. Registers its
                     own viewport occlusion; see the component
                     header for the full rationale. */}
-                <OverloadBanner bridge={bridge} />
-                <ViewportUnavailableNotice bridge={bridge} />
+                  <OverloadBanner bridge={bridge} />
+                  <ViewportUnavailableNotice bridge={bridge} />
+                </div>
+                <EnginePreviewPanel bridge={bridge} />
               </div>
               <TimelinePanel bridge={bridge} />
             </div>

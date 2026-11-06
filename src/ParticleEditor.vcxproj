@@ -238,6 +238,9 @@
     <ClInclude Include="host\HostMessages.h" />
     <ClInclude Include="host\ModulePath.h" />
     <ClInclude Include="host\PerfTrace.h" />
+    <ClInclude Include="host\EnginePreviewPipe.h" />
+    <ClInclude Include="host\EnginePreviewCopy.h" />
+    <ClInclude Include="host\EnginePreviewWorker.h" />
     <ClInclude Include="host\PreviewEncodeWorker.h" />
     <ClInclude Include="host\IsolatedWebViewProfile.h" />
     <ClInclude Include="host\HostLogRetention.h" />
@@ -314,6 +317,8 @@
     <ClCompile Include="host\BridgeDispatch_LinkGroups.cpp" />
     <ClCompile Include="host\BridgeDispatch_Shell.cpp" />
     <ClCompile Include="host\BridgeDispatch_SpawnerLighting.cpp" />
+    <ClCompile Include="host\EnginePreviewWorker.cpp" />
+    <ClCompile Include="host\BridgeDispatch_EnginePreview.cpp" />
     <ClCompile Include="host\BridgeDispatch_Timeline.cpp" />
     <ClCompile Include="host\CaptureRunner.cpp" />
     <ClCompile Include="host\CaptureTicker.cpp" />

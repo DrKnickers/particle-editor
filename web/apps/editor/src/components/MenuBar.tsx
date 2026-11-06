@@ -8,7 +8,7 @@
 import { useState } from "react";
 import * as Menubar from "@radix-ui/react-menubar";
 import { Check, ChevronRight } from "lucide-react";
-import type { Bridge, EmitterTreeNode } from "@particle-editor/bridge-schema";
+import type { Bridge, EmitterTreeNode, EngineStateDto } from "@particle-editor/bridge-schema";
 import { promptSaveChanges, useFileState } from "@/lib/file-state";
 import { replaceDocument, runFileOp } from "@/lib/file-op";
 import { useEngineField } from "@/lib/use-engine-snapshot";
@@ -26,6 +26,12 @@ import { markEmittersCopied, useEmitterClipboardHasContent } from "@/lib/tree/em
 import { useTreeContextStore } from "@/lib/tree/tree-context";
 import { requestEmitterRename } from "@/lib/tree/tree-action";
 import { toggleDock } from "@/lib/right-dock";
+import {
+  checkEnginePreviewStatus,
+  setEnginePreviewOpen,
+  useEnginePreview,
+  type EnginePreviewStore,
+} from "@/lib/engine-preview";
 import { RESET_CAMERA } from "@/lib/reset-camera";
 import { setTimelinePlaying, stepTimeline, toggleTimeline, useTimeline } from "@/lib/timeline";
 import { Modal } from "@/components/Modal";
@@ -124,6 +130,9 @@ export function MenuBar({
   const paused = useEngineField(bridge, (s) => s.paused) ?? false;
   // While the timeline is open, Pause and Step Forward drive it, and Clear is
   // refused by the host (the session owns the simulation).
+  const enginePreviewAvailable: boolean =
+    useEngineField(bridge, (state: EngineStateDto): boolean => state.enginePreviewAvailable) ?? false;
+  const enginePreviewOpen: boolean = useEnginePreview((state: EnginePreviewStore): boolean => state.isOpen);
   const timelineActive = useTimeline((s) => s.active);
   const timelinePlaying = useTimeline((s) => s.playing);
   const heatDebug = useEngineField(bridge, (s) => s.heatDebug) ?? false;
@@ -279,7 +288,14 @@ export function MenuBar({
 
   return (
     <>
-      <Menubar.Root className="flex items-center gap-0.5" value={menuValue} onValueChange={setMenuValue}>
+      <Menubar.Root
+        className="flex items-center gap-0.5"
+        value={menuValue}
+        onValueChange={(value: string): void => {
+          setMenuValue(value);
+          if (value === "view") void checkEnginePreviewStatus(bridge);
+        }}
+      >
         {/* ─── File ─── */}
         <Menubar.Menu value="file">
           <Menubar.Trigger className={TRIGGER}>File</Menubar.Trigger>
@@ -496,6 +512,12 @@ export function MenuBar({
                 Atlas Frame Picker…
               </Menubar.Item>
               <Menubar.Separator className={SEPARATOR} />
+              {enginePreviewAvailable && (
+                <Menubar.Item className={ITEM} onSelect={(): void => setEnginePreviewOpen(!enginePreviewOpen)}>
+                  <CheckSlot active={enginePreviewOpen} />
+                  Engine preview
+                </Menubar.Item>
+              )}
               <Menubar.Item
                 className={ITEM}
                 data-testid="menu-view-timeline"

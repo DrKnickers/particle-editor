@@ -592,7 +592,8 @@ json BuildEngineStateSnapshot(Engine*             engine,
                               bool                leaveParticles,
                               bool                canUndo,
                               bool                canRedo,
-                              bool                emitterClipboardHasContent)
+                              bool                emitterClipboardHasContent,
+                              bool                enginePreviewAvailable)
 {
     if (!engine) return json::object();
 
@@ -689,6 +690,9 @@ json BuildEngineStateSnapshot(Engine*             engine,
         {"bloomStrength", engine->GetBloomStrength()},
         {"bloomCutoff", engine->GetBloomCutoff()},
         {"bloomSize", engine->GetBloomSize()},
+
+        // Last interactive engine preview status was ready.
+        {"enginePreviewAvailable", enginePreviewAvailable},
 
         // Leave particles after instance death. Read from
         // the active ParticleSystem (passed in by caller); defaults true
@@ -1071,7 +1075,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     if (TryDispatchEngine(ctx) || TryDispatchEmitters(ctx) || TryDispatchEmitterProperties(ctx) ||
         TryDispatchEmitterTracks(ctx) || TryDispatchLinkGroups(ctx) || TryDispatchEmitterClipboard(ctx) ||
         TryDispatchFile(ctx) || TryDispatchAssets(ctx) || TryDispatchShell(ctx) || TryDispatchSpawner(ctx) ||
-        TryDispatchTimeline(ctx))
+        TryDispatchTimeline(ctx) || TryDispatchEnginePreview(ctx))
     {
         return ctx.res;
     }
@@ -1292,9 +1296,9 @@ void BridgeDispatcher::EmitEngineStateChangedNow()
     json       env     = {
         {"type", "evt"},
         {"kind", "engine/state/changed"},
-        {"payload",
-         BuildEngineStateSnapshot(m_engine, m_currentFilePath, m_dirty, spawnerJson, m_selectedEmitterId, activeModPath,
-                                  leaveParticles, canUndo, canRedo, !m_emitterClipboard.empty())},
+        {"payload", BuildEngineStateSnapshot(m_engine, m_currentFilePath, m_dirty, spawnerJson, m_selectedEmitterId,
+                                             activeModPath, leaveParticles, canUndo, canRedo,
+                                             !m_emitterClipboard.empty(), IsEnginePreviewReady())},
     };
     m_emit(env);
 }

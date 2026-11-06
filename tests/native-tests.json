@@ -57,7 +57,7 @@
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
     },
     "test_authoring_parity": {
-      "sources": ["src/host/BridgeDispatch_EmitterTracks.cpp", "src/host/BridgeDispatch_EmitterProperties.cpp", "src/effect/Rescale.cpp", "src/effect/ParticleAuthoring.cpp", "src/simulation/SpawnerDriver.cpp", "src/simulation/ParticleRandom.cpp", "src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp"],
+      "sources": ["src/host/EnginePreviewWorker.cpp", "src/host/BridgeDispatch_EmitterTracks.cpp", "src/host/BridgeDispatch_EmitterProperties.cpp", "src/effect/Rescale.cpp", "src/effect/ParticleAuthoring.cpp", "src/simulation/SpawnerDriver.cpp", "src/simulation/ParticleRandom.cpp", "src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp"],
       "includes": ["src/host"],
       "uses": ["expat", "dxsdk", "webview2"],
       "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
@@ -80,7 +80,7 @@
     "test_rocket_spline": {},
     "test_bombing_run": {},
     "test_bridge_spawner_state": {
-      "sources": ["src/simulation/SpawnerDriver.cpp", "src/simulation/ParticleRandom.cpp"],
+      "sources": ["src/host/EnginePreviewWorker.cpp", "src/simulation/SpawnerDriver.cpp", "src/simulation/ParticleRandom.cpp"],
       "includes": ["src/host"],
       "uses": ["dxsdk"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
@@ -246,7 +246,7 @@
     },
     "test_plane_handle": {},
     "test_preview_encode_worker": {
-      "sources": ["src/palette/PaletteThumbs.cpp", "src/common/utils.cpp", "src/common/files.cpp", "src/host/PerfTrace.cpp"],
+      "sources": ["src/host/EnginePreviewWorker.cpp", "src/palette/PaletteThumbs.cpp", "src/common/utils.cpp", "src/common/files.cpp", "src/host/PerfTrace.cpp"],
       "includes": ["src/host"],
       "uses": ["dxsdk"],
       "libs": ["d3d9.lib", "d3dx9.lib", "gdiplus.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
@@ -337,6 +337,16 @@
       "sources": ["src/common/files.cpp", "src/common/utils.cpp"],
       "uses": ["dxsdk"],
       "libs": ["d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib"]
+    },
+    "test_engine_preview_pipe": {},
+    "test_engine_preview_worker": {
+      "sources": ["src/host/EnginePreviewWorker.cpp"],
+      "libs": ["user32.lib", "gdiplus.lib", "ole32.lib"]
+    },
+    "test_engine_preview_copy": {
+      "sources": ["src/effect/UndoStack.cpp", "src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp", "src/effect/ParticleSystemIO.cpp", "src/effect/AtomicSave.cpp", "src/host/BridgeDispatch_EnginePreview.cpp", "src/host/EnginePreviewWorker.cpp"],
+      "uses": ["expat", "dxsdk", "webview2"],
+      "libs": ["d3d9.lib", "d3dx9.lib", "shlwapi.lib", "ole32.lib", "oleaut32.lib", "advapi32.lib", "user32.lib", "gdiplus.lib"]
     },
     "test_undo_aux": {
       "sources": ["src/effect/UndoStack.cpp", "src/effect/ParticleSystem.cpp", "src/effect/ParticleSystemSerialization.cpp", "src/effect/ChunkReader.cpp", "src/effect/ChunkWriter.cpp", "src/common/crc32.cpp", "src/common/files.cpp", "src/common/utils.cpp", "src/effect/LinkGroup.cpp"],

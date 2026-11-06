@@ -468,6 +468,15 @@
     <ClInclude Include="host\PerfTrace.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="host\EnginePreviewPipe.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\EnginePreviewCopy.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\EnginePreviewWorker.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
     <ClInclude Include="host\PreviewEncodeWorker.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
@@ -651,6 +660,12 @@
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\BridgeDispatch_SpawnerLighting.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\EnginePreviewWorker.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\BridgeDispatch_EnginePreview.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\BridgeDispatch_Timeline.cpp">

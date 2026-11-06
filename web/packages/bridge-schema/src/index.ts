@@ -380,6 +380,9 @@ export type EngineStateDto = {
   bloomCutoff: number; // GetBloomCutoff()
   bloomSize: number; // GetBloomSize()
 
+  // Last interactive engine preview status was ready.
+  enginePreviewAvailable: boolean;
+
   // Leave particles after instance death. Defaults true —
   // matches the ParticleSystem constructor's seed.
   // Read via ParticleSystem::getLeaveParticles(); persisted with the
@@ -738,6 +741,28 @@ export type TimelineStateDto = {
   refused: boolean;
   revision: number;
 };
+
+export interface EnginePreviewStatusDto {
+  state: "absent" | "unsupported-build" | "not-configured" | "ready";
+  hostVersion?: string;
+  internalName?: string;
+  error?: string;
+  requestId: number;
+}
+
+export type EnginePreviewResultDto =
+  | { ok: true; requestId: number; dataUri: string; seconds: number; width: number; height: number }
+  | { ok: false; requestId: number; error: string };
+
+export interface EnginePreviewPendingDto {
+  status: "pending";
+  requestId: number;
+}
+
+// Emitted by the native preview worker's drain; the preview panel waits for status checks.
+export const ENGINE_PREVIEW_STATUS_CHECKED_EVENT = "enginePreview/status-checked";
+// Emitted by the native preview worker's drain; the preview panel waits for rendered stills.
+export const ENGINE_PREVIEW_STILL_RENDERED_EVENT = "enginePreview/still-rendered";
 
 export type Request =
   // File / recents
@@ -1227,6 +1252,9 @@ export type Request =
   // reject while no session is open. Free-run pause / step, Clear and the
   // spawner kinds reject while one is open. Every response is the session's
   // state; `timeline/state` pushes it during play and after host-side replays.
+  | { kind: "enginePreview/status"; params: { pid?: number } }
+  | { kind: "enginePreview/still"; params: { timeSeconds: number; matchCamera: boolean } }
+  | { kind: "enginePreview/cancel"; params: Record<string, never> }
   | { kind: "timeline/begin"; params: Record<string, never> }
   | { kind: "timeline/end"; params: Record<string, never> }
   // Clamped to [0, maxFrames]. Previous / next send frame -/+ 1; reset and
@@ -1431,6 +1459,9 @@ export interface ResponseMap {
   "spawner/start": Record<string, never>;
   "spawner/trigger": Record<string, never>;
   "spawner/stop": Record<string, never>;
+  "enginePreview/status": EnginePreviewPendingDto;
+  "enginePreview/still": EnginePreviewPendingDto;
+  "enginePreview/cancel": Record<string, never>;
   "timeline/begin": TimelineStateDto;
   "timeline/end": TimelineStateDto;
   "timeline/seek": TimelineStateDto;
@@ -1464,6 +1495,8 @@ export function isRefusal(r: unknown): r is { ok: false; error?: string } {
 // ============================================================================
 
 export type Event =
+  | { kind: "enginePreview/status-checked"; payload: EnginePreviewStatusDto }
+  | { kind: "enginePreview/still-rendered"; payload: EnginePreviewResultDto }
   // Persistent host-session failure: replayed on app/ready after page reloads.
   | { kind: "viewport/unavailable"; payload: { reason: string } }
   | { kind: "engine/state/changed"; payload: EngineStateDto }

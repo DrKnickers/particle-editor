@@ -1,3 +1,4 @@
+// Private host notifications; workers post results for UI-thread drains.
 #pragma once
 #include <windows.h>
 
@@ -10,6 +11,7 @@
 //   WM_APP + 3  WM_APP_VIEWPORT_BLUR
 //   WM_APP + 4  WM_APP_PREVIEW_READY
 //   WM_APP + 5  WM_APP_WEB_DEAD
+//   WM_APP + 6  WM_APP_ENGINE_PREVIEW_READY
 
 // Posted when composition setup fails after the async
 // CreateCoreWebView2CompositionController dispatch, or when a live Present1
@@ -43,3 +45,6 @@ static const UINT WM_APP_PREVIEW_READY = WM_APP + 4;
 // the message loop, off the WebView2 callback stack, because an interactive
 // session shows a modal and destroys the window from it.
 static const UINT WM_APP_WEB_DEAD = WM_APP + 5;
+
+// Posted by EnginePreviewWorker; HostWindow drains results into bridge events.
+static const UINT WM_APP_ENGINE_PREVIEW_READY = WM_APP + 6;

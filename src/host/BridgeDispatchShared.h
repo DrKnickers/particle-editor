@@ -1,3 +1,4 @@
+// Shared bridge DTO builders; domain handlers call these on the UI thread.
 #pragma once
 //
 // Declarations for the file-scope helpers that the bridge kind handlers
@@ -88,6 +89,7 @@ nlohmann::json BuildEngineStateSnapshot(Engine*               engine,
                                         bool                  leaveParticles,
                                         bool                  canUndo,
                                         bool                  canRedo,
-                                        bool                  emitterClipboardHasContent);
+                                        bool                  emitterClipboardHasContent,
+                                        bool                  enginePreviewAvailable);
 
 } // namespace host

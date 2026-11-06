@@ -1492,6 +1492,10 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             UpdatePacingBudget(hwnd);
             break;
 
+        case WM_APP_ENGINE_PREVIEW_READY:
+            if (dispatcher) dispatcher->DrainEnginePreviewResults();
+            return 0;
+
         case WM_APP_PREVIEW_READY:
             // Background preview encode finished — cache + notify the web
             // (BridgeDispatcher::DrainPreviewResults emits textures/preview-ready).
@@ -2245,6 +2249,7 @@ int HostWindowImpl::Run(int nCmdShow)
     dispatcher->SetUndoStack(&undoStack);
     dispatcher->SetHostHwnd(hMain);
     dispatcher->SetExternalLaunchAllowed(IsFullyInteractive());
+    dispatcher->SetEnginePreviewAllowed(IsFullyInteractive());
     // The editor's timeline replays through the interactive pin. Capture,
     // drive, record and observe runs own the clock themselves and refuse it;
     // the replay proof opens one for its E12 experiment, which the editor's
@@ -2872,6 +2877,8 @@ int HostWindowImpl::Run(int nCmdShow)
     // Join the preview-encode worker for the same reason — it encodes
     // via GDI+ and must not race process-level GDI+ teardown.
     if (dispatcher) dispatcher->ShutdownPreviewWorker();
+    // Stop pipe I/O before the host window and dispatcher are destroyed.
+    if (dispatcher) dispatcher->ShutdownEnginePreviewWorker();
     // Matching shutdown for the GdiplusStartup above. Safe
     // here because the message pump has drained: no dispatcher
     // handlers (CaptureSnapshotJpegBase64 et al) can run after WM_QUIT.

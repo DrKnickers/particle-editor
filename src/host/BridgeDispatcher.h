@@ -49,6 +49,7 @@
 #include "simulation/MouseCursor.h"     // by-value record-preview anchor (preview/* record kinds)
 #include "simulation/SpawnerDriver.h"   // dispatcher-owned clamped SpawnerConfig
 #include "simulation/ReplayPlayClock.h" // timeline play anchor
+#include "EnginePreviewWorker.h"        // async engine-preview pipe requests
 #include "PreviewEncodeWorker.h"        // async texture-preview encode
 #include "ParticleReplayController.h"   // the timeline session's replay
 
@@ -164,6 +165,12 @@ public:
     bool ServiceTimeline();
     // Leave the session if one is open (app/ready after a page reload).
     void EndTimeline();
+
+    // Interactive engine preview: UI-thread copy, worker-owned transport,
+    // and result delivery from WM_APP_ENGINE_PREVIEW_READY.
+    void SetEnginePreviewAllowed(bool allowed);
+    void DrainEnginePreviewResults();
+    void ShutdownEnginePreviewWorker();
 
     // Async texture-preview pipeline. The get-preview handler serves LRU
     // hits synchronously; a miss decodes on the UI thread (device-bound) and
@@ -404,6 +411,8 @@ private:
     // real emitters/* track handlers through the SpawnerConfigTestTag
     // constructor and records their undo/event/invalidation calls.
     friend struct AuthoringParityTestAccess;
+    // Exercises the real preview handler without constructing a renderer.
+    friend struct EnginePreviewTestAccess;
 
     static D3DXVECTOR3 SpawnerJsonToVec3(const nlohmann::json& value)
     {
@@ -515,10 +524,13 @@ private:
     bool TryDispatchEmitterTracks(BridgeRequestContext& ctx);
     bool TryDispatchLinkGroups(BridgeRequestContext& ctx);
     bool TryDispatchEmitterClipboard(BridgeRequestContext& ctx);
-    bool TryDispatchFile(BridgeRequestContext& ctx);     // + autosave/undo
-    bool TryDispatchAssets(BridgeRequestContext& ctx);   // textures/mods
-    bool TryDispatchShell(BridgeRequestContext& ctx);    // window/layout/viewport/host/app/debug/stats/…
-    bool TryDispatchSpawner(BridgeRequestContext& ctx);  // + settings
+    bool TryDispatchFile(BridgeRequestContext& ctx);    // + autosave/undo
+    bool TryDispatchAssets(BridgeRequestContext& ctx);  // textures/mods
+    bool TryDispatchShell(BridgeRequestContext& ctx);   // window/layout/viewport/host/app/debug/stats/…
+    bool TryDispatchSpawner(BridgeRequestContext& ctx); // + settings
+    bool TryDispatchEnginePreview(BridgeRequestContext& ctx);
+    bool IsEnginePreviewReady() const;
+    bool BuildStillJob(BridgeRequestContext& ctx, EnginePreviewWorker::Job& job);
     bool TryDispatchTimeline(BridgeRequestContext& ctx); // timeline/*
 
     // ---- Timeline session state (BridgeDispatch_Timeline.cpp) ----
@@ -740,12 +752,18 @@ private:
     // spec beforeEach hooks to freeze the StatusBar's volatile
     // FPS / Emitters / Particles / cursor values for deterministic
     // UIA goldens; harmless in non-test mode (default false).
-    bool             m_statsFrozen           = false;
-    UndoStack*       m_undo                  = nullptr;
-    HWND             m_hostHwnd              = nullptr;
-    bool             m_externalLaunchAllowed = false;   // see SetExternalLaunchAllowed
-    ::ModManager*    m_modManager            = nullptr; // mods/* surface
-    InputDispatcher* m_input                 = nullptr; // viewport/input
+    bool                                 m_statsFrozen          = false;
+    UndoStack*                           m_undo                 = nullptr;
+    HWND                                 m_hostHwnd             = nullptr;
+    bool                                 m_enginePreviewAllowed = false;
+    bool                                 m_enginePreviewPending = false;
+    std::uint64_t                        m_enginePreviewToken   = 0;
+    nlohmann::json                       m_enginePreviewStatus  = {{"state", "absent"}};
+    std::wstring                         m_enginePreviewPipe;
+    std::unique_ptr<EnginePreviewWorker> m_enginePreviewWorker;
+    bool                                 m_externalLaunchAllowed = false;   // see SetExternalLaunchAllowed
+    ::ModManager*                        m_modManager            = nullptr; // mods/* surface
+    InputDispatcher*                     m_input                 = nullptr; // viewport/input
 
     // Preview LRU + in-flight dedupe + epoch (see DrainPreviewResults).
     // Key = "<filename>|<0/1 flattenAlpha>" (maxBound is a handler constant).

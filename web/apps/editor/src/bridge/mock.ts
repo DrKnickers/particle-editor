@@ -61,6 +61,7 @@ import { dispatchAssets } from "./mock-dispatch/dispatch-assets";
 import { dispatchShell } from "./mock-dispatch/dispatch-shell";
 import { dispatchSpawnerLighting } from "./mock-dispatch/dispatch-spawner-lighting";
 import { closedTimelineState, dispatchTimeline, TIMELINE_GATED_KINDS } from "./mock-dispatch/dispatch-timeline";
+import { dispatchEnginePreview, type MockEnginePreviewState } from "./mock-dispatch/dispatch-engine-preview";
 import { EventHub } from "./event-hub";
 
 /** Returns true for request kinds that should mark the in-memory file
@@ -248,6 +249,7 @@ export class MockBridge implements Bridge, MockDispatchHost {
 
   // The timeline session (timeline/* kinds); no simulation behind it.
   timeline: TimelineStateDto = closedTimelineState();
+  enginePreview: MockEnginePreviewState = { state: "absent", nextId: 1, pending: null, operation: null, error: null };
 
   // Ordered content-layer stack (absolute slash-free paths, front = highest
   // precedence; [] = Unmodded). Not part of the engine-state snapshot DTO — surfaced
@@ -483,6 +485,11 @@ export class MockBridge implements Bridge, MockDispatchHost {
       case "settings/lighting/set":
       case "settings/lighting-force-align/set":
         return dispatchSpawnerLighting.call(this, req);
+
+      case "enginePreview/status":
+      case "enginePreview/still":
+      case "enginePreview/cancel":
+        return dispatchEnginePreview.call(this, req);
 
       case "timeline/begin":
       case "timeline/end":

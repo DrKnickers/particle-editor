@@ -107,6 +107,7 @@ export function makeDefaultEngineState(): EngineStateDto {
     shadow: [0, 0, 0, 0],
 
     bloom: false,
+    enginePreviewAvailable: false,
     bloomAvailable: true, // mock pretends the shader is loaded
     bloomStrength: 0.0,
     bloomCutoff: 0.9,
