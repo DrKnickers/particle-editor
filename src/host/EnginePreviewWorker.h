@@ -19,7 +19,9 @@ public:
     enum class Operation
     {
         Status,
-        Still
+        Still,
+        // Sends job.command with job.args and returns the host's reply as payload.result.
+        Command
     };
     struct Job
     {
@@ -27,6 +29,7 @@ public:
         std::uint64_t  token     = 0;
         std::uint32_t  pid       = 0;
         std::wstring   pipeName;
+        std::string    command;
         nlohmann::json args          = nlohmann::json::object();
         double         budgetSeconds = engine_preview::kStillBudgetSeconds;
     };
@@ -52,6 +55,7 @@ private:
     Result                  RunJob(const Job& job);
     void                    RunStatusJob(Result& result);
     void                    RunStillJob(const Job& job, Result& result);
+    void                    RunCommandJob(const Job& job, Result& result);
     nlohmann::json          Exchange(const std::string& command, const nlohmann::json& args, double budgetSeconds);
     DWORD                   Transfer(bool writing, char* buffer, DWORD bytes, ULONGLONG deadline);
     void                    ClosePipe();

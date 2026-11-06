@@ -238,6 +238,8 @@
     <ClInclude Include="host\HostMessages.h" />
     <ClInclude Include="host\ModulePath.h" />
     <ClInclude Include="host\PerfTrace.h" />
+    <ClInclude Include="host\EngineLiveFrame.h" />
+    <ClInclude Include="host\EngineLiveReader.h" />
     <ClInclude Include="host\EnginePreviewPipe.h" />
     <ClInclude Include="host\EnginePreviewCopy.h" />
     <ClInclude Include="host\EnginePreviewWorker.h" />
@@ -265,6 +267,7 @@
     <ClCompile Include="simulation\EmitterInstance.cpp" />
     <ClCompile Include="rendering\engine.cpp" />
     <ClCompile Include="rendering\engine_device.cpp" />
+    <ClCompile Include="rendering\engine_live_view.cpp" />
     <ClCompile Include="rendering\engine_environment.cpp" />
     <ClCompile Include="rendering\engine_reference.cpp" />
     <ClCompile Include="rendering\engine_reference_particles.cpp" />
@@ -318,7 +321,9 @@
     <ClCompile Include="host\BridgeDispatch_Shell.cpp" />
     <ClCompile Include="host\BridgeDispatch_SpawnerLighting.cpp" />
     <ClCompile Include="host\EnginePreviewWorker.cpp" />
+    <ClCompile Include="host\EngineLiveReader.cpp" />
     <ClCompile Include="host\BridgeDispatch_EnginePreview.cpp" />
+    <ClCompile Include="host\BridgeDispatch_EngineLive.cpp" />
     <ClCompile Include="host\BridgeDispatch_Timeline.cpp" />
     <ClCompile Include="host\CaptureRunner.cpp" />
     <ClCompile Include="host\CaptureTicker.cpp" />

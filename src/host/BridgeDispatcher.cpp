@@ -1076,7 +1076,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     if (TryDispatchEngine(ctx) || TryDispatchEmitters(ctx) || TryDispatchEmitterProperties(ctx) ||
         TryDispatchEmitterTracks(ctx) || TryDispatchLinkGroups(ctx) || TryDispatchEmitterClipboard(ctx) ||
         TryDispatchFile(ctx) || TryDispatchAssets(ctx) || TryDispatchShell(ctx) || TryDispatchSpawner(ctx) ||
-        TryDispatchTimeline(ctx) || TryDispatchEnginePreview(ctx))
+        TryDispatchTimeline(ctx) || TryDispatchEnginePreview(ctx) || TryDispatchEngineLive(ctx))
     {
         return ctx.res;
     }

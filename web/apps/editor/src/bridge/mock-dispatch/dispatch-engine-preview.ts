@@ -1,8 +1,10 @@
 // Browser-only engine preview fixtures. Owns request timing and cancellation;
 // no file, pipe or renderer work occurs in this mock.
 import {
+  ENGINE_LIVE_STATE_CHANGED_EVENT,
   ENGINE_PREVIEW_STILL_RENDERED_EVENT,
   ENGINE_PREVIEW_STATUS_CHECKED_EVENT,
+  type EngineLiveStateName,
   type EnginePreviewPendingDto,
   type EnginePreviewStatusDto,
   type Request,
@@ -101,4 +103,22 @@ export function dispatchEnginePreview(
     });
   }, MOCK_PREVIEW_DELAY_MS);
   return { status: "pending", requestId };
+}
+
+type LiveRequest = Extract<Request, { kind: "engineLive/start" | "engineLive/stop" }>;
+
+// The mock has no engine host to stream from: it reports the live view as started, and the
+// viewport keeps showing the mock's own frame.
+export function dispatchEngineLive(this: PreviewHost, req: LiveRequest): { state: EngineLiveStateName } {
+  if (req.kind === "engineLive/stop") {
+    this.emit({ kind: ENGINE_LIVE_STATE_CHANGED_EVENT, payload: { state: "off" } });
+    return { state: "off" };
+  }
+  if (this.enginePreview.state !== "ready")
+    throw new Error("Check engine preview status before starting the live engine view.");
+  this.emit({ kind: ENGINE_LIVE_STATE_CHANGED_EVENT, payload: { state: "starting" } });
+  setTimeout((): void => {
+    this.emit({ kind: ENGINE_LIVE_STATE_CHANGED_EVENT, payload: { state: "live" } });
+  }, MOCK_PREVIEW_DELAY_MS);
+  return { state: "starting" };
 }

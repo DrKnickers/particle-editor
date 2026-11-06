@@ -18,6 +18,13 @@ constexpr size_t        kBytesPerMegabyte      = 1024 * 1024;
 constexpr double        kMillisecondsPerSecond = 1000.0;
 constexpr unsigned char kPngSignature[]        = {137, 80, 78, 71, 13, 10, 26, 10};
 
+std::string JobLogName(const EnginePreviewWorker::Job& job)
+{
+    if (job.operation == EnginePreviewWorker::Operation::Status) return "status";
+    if (job.operation == EnginePreviewWorker::Operation::Still) return "still";
+    return job.command;
+}
+
 struct CloseEvent
 {
     void operator()(void* event) const { CloseHandle(event); }
@@ -231,6 +238,13 @@ void EnginePreviewWorker::RunStillJob(const Job& job, Result& result)
                       {"height", still["height"]}};
 }
 
+void EnginePreviewWorker::RunCommandJob(const Job& job, Result& result)
+{
+    const nlohmann::json reply = Exchange(job.command, job.args, job.budgetSeconds);
+    if (m_cancelled) throw engine_preview::Failure("cancelled", engine_preview::ErrorMessage("cancelled", ""));
+    result.payload = {{"ok", true}, {"result", reply}};
+}
+
 void EnginePreviewWorker::RunStatusJob(Result& result)
 {
     using namespace engine_preview;
@@ -281,12 +295,14 @@ EnginePreviewWorker::Result EnginePreviewWorker::RunJob(const Job& job)
         }
         if (job.operation == Operation::Still)
             RunStillJob(job, result);
+        else if (job.operation == Operation::Command)
+            RunCommandJob(job, result);
         else
             RunStatusJob(result);
     }
     catch (const Failure& error)
     {
-        if (job.operation == Operation::Still) result.payload = {{"ok", false}};
+        if (job.operation != Operation::Status) result.payload = {{"ok", false}};
         result.payload["error"] = error.what();
         result.payload["code"]  = error.code;
     }
@@ -299,8 +315,7 @@ EnginePreviewWorker::Result EnginePreviewWorker::RunJob(const Job& job)
     }
     ClosePipe();
     const std::string code = result.payload.value("code", std::string("ok"));
-    const std::string log  = std::string("[engine-preview] ") +
-                             (job.operation == Operation::Status ? "status" : "still") + " code=" + code +
+    const std::string log  = std::string("[engine-preview] ") + JobLogName(job) + " code=" + code +
                              " elapsed_ms=" + std::to_string(GetTickCount64() - started) + "\n";
     OutputDebugStringA(log.c_str());
     return result;

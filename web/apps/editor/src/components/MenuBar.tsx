@@ -32,6 +32,7 @@ import {
   useEnginePreview,
   type EnginePreviewStore,
 } from "@/lib/engine-preview";
+import { startEngineLive, stopEngineLive, useEngineLive, type EngineLiveStore } from "@/lib/engine-live";
 import { RESET_CAMERA } from "@/lib/reset-camera";
 import { setTimelinePlaying, stepTimeline, toggleTimeline, useTimeline } from "@/lib/timeline";
 import { Modal } from "@/components/Modal";
@@ -133,6 +134,7 @@ export function MenuBar({
   const enginePreviewAvailable: boolean =
     useEngineField(bridge, (state: EngineStateDto): boolean => state.enginePreviewAvailable) ?? false;
   const enginePreviewOpen: boolean = useEnginePreview((state: EnginePreviewStore): boolean => state.isOpen);
+  const isEngineLiveOn: boolean = useEngineLive((state: EngineLiveStore): boolean => state.state !== "off");
   const timelineActive = useTimeline((s) => s.active);
   const timelinePlaying = useTimeline((s) => s.playing);
   const heatDebug = useEngineField(bridge, (s) => s.heatDebug) ?? false;
@@ -516,6 +518,15 @@ export function MenuBar({
                 <Menubar.Item className={ITEM} onSelect={(): void => setEnginePreviewOpen(!enginePreviewOpen)}>
                   <CheckSlot active={enginePreviewOpen} />
                   Engine preview
+                </Menubar.Item>
+              )}
+              {enginePreviewAvailable && (
+                <Menubar.Item
+                  className={ITEM}
+                  onSelect={(): void => void (isEngineLiveOn ? stopEngineLive(bridge) : startEngineLive(bridge))}
+                >
+                  <CheckSlot active={isEngineLiveOn} />
+                  Live engine view
                 </Menubar.Item>
               )}
               <Menubar.Item

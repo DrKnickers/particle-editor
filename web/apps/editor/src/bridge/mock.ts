@@ -61,7 +61,11 @@ import { dispatchAssets } from "./mock-dispatch/dispatch-assets";
 import { dispatchShell } from "./mock-dispatch/dispatch-shell";
 import { dispatchSpawnerLighting } from "./mock-dispatch/dispatch-spawner-lighting";
 import { closedTimelineState, dispatchTimeline, TIMELINE_GATED_KINDS } from "./mock-dispatch/dispatch-timeline";
-import { dispatchEnginePreview, type MockEnginePreviewState } from "./mock-dispatch/dispatch-engine-preview";
+import {
+  dispatchEngineLive,
+  dispatchEnginePreview,
+  type MockEnginePreviewState,
+} from "./mock-dispatch/dispatch-engine-preview";
 import { EventHub } from "./event-hub";
 
 /** Returns true for request kinds that should mark the in-memory file
@@ -490,6 +494,10 @@ export class MockBridge implements Bridge, MockDispatchHost {
       case "enginePreview/still":
       case "enginePreview/cancel":
         return dispatchEnginePreview.call(this, req);
+
+      case "engineLive/start":
+      case "engineLive/stop":
+        return dispatchEngineLive.call(this, req);
 
       case "timeline/begin":
       case "timeline/end":

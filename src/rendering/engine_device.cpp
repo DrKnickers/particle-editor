@@ -205,6 +205,7 @@ void Engine::ReleaseDeviceResourcesForReset()
 
     ReleaseBloomTargets();
     ReleaseShadowMaskTargets(); // [soft-shadows] DEFAULT-pool mask RTs
+    ReleaseLiveFrameTexture();
     SAFE_RELEASE(m_pDistortTexture);
     SAFE_RELEASE(m_pSceneTexture);
     SAFE_RELEASE(m_pDepthStencilSurface);

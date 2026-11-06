@@ -27,6 +27,7 @@ bool BridgeRequestContext::RequireEngine(const char*)
     return true;
 }
 void BridgeDispatcher::EmitEngineStateChanged() {}
+void BridgeDispatcher::StopEngineLive(const std::string&) {}
 
 struct EnginePreviewTestAccess
 {

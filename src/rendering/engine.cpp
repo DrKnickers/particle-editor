@@ -1347,6 +1347,7 @@ Engine::~Engine()
     if (m_catalogThread.joinable()) m_catalogThread.join();
 
     ReleaseBloomTargets();
+    ReleaseLiveFrameTexture();
     SAFE_RELEASE(m_pBloomEffect);
     // [soft-shadows] mask RTs + the dedicated blur effect handle
     ReleaseShadowMaskTargets();

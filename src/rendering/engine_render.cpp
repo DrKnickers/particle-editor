@@ -656,6 +656,7 @@ bool Engine::Render()
     // second healthy call is a no-op. During Reset/ResetEx reentrancy it blocks
     // before any render-state or resource call.
     if (!PrepareDeviceForFrame()) return false;
+    if (m_liveViewActive && m_pLiveFrameTexture) return RenderLiveFrame();
 
     // [runtime-MSAA] Apply a pending MSAA level change on the render thread.
     // The setter (SetMsaaLevel) stores the preference and raises this flag;

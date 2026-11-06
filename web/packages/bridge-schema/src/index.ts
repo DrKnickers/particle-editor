@@ -766,6 +766,17 @@ export const ENGINE_PREVIEW_STILL_RENDERED_EVENT = "enginePreview/still-rendered
 // Emitted by the host on every content change of the open effect; the engine preview panel
 // listens to auto-refresh its still.
 export const DOCUMENT_EDITED_EVENT = "document/edited";
+// Emitted by the host when the live engine view starts, goes live or falls back to the
+// editor's own view; the live-view store and viewport badge listen.
+export const ENGINE_LIVE_STATE_CHANGED_EVENT = "engineLive/state-changed";
+
+export type EngineLiveStateName = "off" | "starting" | "live";
+
+export interface EngineLiveStateDto {
+  state: EngineLiveStateName;
+  // Why the view stopped or failed to start; absent on ordinary transitions.
+  message?: string;
+}
 
 export type Request =
   // File / recents
@@ -1258,6 +1269,8 @@ export type Request =
   | { kind: "enginePreview/status"; params: { pid?: number } }
   | { kind: "enginePreview/still"; params: { timeSeconds: number; matchCamera: boolean } }
   | { kind: "enginePreview/cancel"; params: Record<string, never> }
+  | { kind: "engineLive/start"; params: Record<string, never> }
+  | { kind: "engineLive/stop"; params: Record<string, never> }
   | { kind: "timeline/begin"; params: Record<string, never> }
   | { kind: "timeline/end"; params: Record<string, never> }
   // Clamped to [0, maxFrames]. Previous / next send frame -/+ 1; reset and
@@ -1465,6 +1478,8 @@ export interface ResponseMap {
   "enginePreview/status": EnginePreviewPendingDto;
   "enginePreview/still": EnginePreviewPendingDto;
   "enginePreview/cancel": Record<string, never>;
+  "engineLive/start": { state: EngineLiveStateName };
+  "engineLive/stop": { state: EngineLiveStateName };
   "timeline/begin": TimelineStateDto;
   "timeline/end": TimelineStateDto;
   "timeline/seek": TimelineStateDto;
@@ -1500,6 +1515,7 @@ export function isRefusal(r: unknown): r is { ok: false; error?: string } {
 export type Event =
   | { kind: "enginePreview/status-checked"; payload: EnginePreviewStatusDto }
   | { kind: "enginePreview/still-rendered"; payload: EnginePreviewResultDto }
+  | { kind: typeof ENGINE_LIVE_STATE_CHANGED_EVENT; payload: EngineLiveStateDto }
   // Persistent host-session failure: replayed on app/ready after page reloads.
   | { kind: "viewport/unavailable"; payload: { reason: string } }
   | { kind: "engine/state/changed"; payload: EngineStateDto }

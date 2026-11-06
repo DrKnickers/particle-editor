@@ -472,6 +472,13 @@ public:
     // behaves identically to today.
     void SetSceneViewport(int x, int y, int w, int h);
 
+    // Live engine view (#949 3b.3): frames streamed from the engine host replace our scene.
+    // UploadLiveFrame copies BGRX rows into a dynamic texture. While live view is active and a
+    // frame has been uploaded, Render draws only that frame, letterboxed into the scene viewport.
+    bool UploadLiveFrame(const std::uint8_t* bgrxRows, UINT widthPx, UINT heightPx, UINT pitchBytes);
+    void SetLiveViewActive(bool active) { m_liveViewActive = active; }
+    bool IsLiveViewActive() const { return m_liveViewActive; }
+
     // Diagnostic accessor — returns true and populates the outs when
     // a scene viewport is active; returns false (outs untouched)
     // otherwise.
@@ -1042,6 +1049,11 @@ private:
     HRESULT RefreshPresentationParametersAfterReset();
     void    ReacquireDeviceResourcesAfterReset();
     void    SetSceneViewportUnchecked(int x, int y, int w, int h);
+    // Draws the uploaded live frame instead of the scene (engine_live_view.cpp).
+    bool RenderLiveFrame();
+    // The live texture and the state block that restores device state around its draw are
+    // DEFAULT-pool objects: released wherever the device's other DEFAULT resources are.
+    void ReleaseLiveFrameTexture();
 
     D3DMULTISAMPLE_TYPE GetMultiSampleType(DWORD*    MultiSampleQuality,
                                            D3DFORMAT DisplayFormat,
@@ -1335,6 +1347,14 @@ private:
     int   m_sceneViewportH      = 0;
     bool  m_sceneViewportActive = false;
     float m_sceneFovY           = D3DXToRadian(45.0f);
+
+    // Live engine view: the newest streamed frame and its size; see UploadLiveFrame. Unlike the
+    // scene viewport these do not survive Reset: ReleaseLiveFrameTexture drops them.
+    bool                  m_liveViewActive       = false;
+    IDirect3DTexture9*    m_pLiveFrameTexture    = nullptr;
+    IDirect3DStateBlock9* m_pLiveFrameStateBlock = nullptr;
+    UINT                  m_liveFrameWidthPx     = 0;
+    UINT                  m_liveFrameHeightPx    = 0;
 
     // m_sceneFovY: the vertical FoV (radians, POST 120-degree clamp) that SetSceneViewport
     // feeds to the projection; read by ReferenceGizmoHandleLength for screen-uniform gizmo

@@ -468,6 +468,12 @@
     <ClInclude Include="host\PerfTrace.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="host\EngineLiveFrame.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\EngineLiveReader.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
     <ClInclude Include="host\EnginePreviewPipe.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
@@ -537,6 +543,9 @@
       <Filter>Source Files\rendering</Filter>
     </ClCompile>
     <ClCompile Include="rendering\engine_device.cpp">
+      <Filter>Source Files\rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="rendering\engine_live_view.cpp">
       <Filter>Source Files\rendering</Filter>
     </ClCompile>
     <ClCompile Include="rendering\engine_environment.cpp">
@@ -665,7 +674,13 @@
     <ClCompile Include="host\EnginePreviewWorker.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
+    <ClCompile Include="host\EngineLiveReader.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
     <ClCompile Include="host\BridgeDispatch_EnginePreview.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\BridgeDispatch_EngineLive.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\BridgeDispatch_Timeline.cpp">

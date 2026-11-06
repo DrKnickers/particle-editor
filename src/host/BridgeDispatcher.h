@@ -50,6 +50,7 @@
 #include "simulation/SpawnerDriver.h"   // dispatcher-owned clamped SpawnerConfig
 #include "simulation/ReplayPlayClock.h" // timeline play anchor
 #include "EnginePreviewWorker.h"        // async engine-preview pipe requests
+#include "EngineLiveReader.h"           // live engine view frames from the host
 #include "PreviewEncodeWorker.h"        // async texture-preview encode
 #include "ParticleReplayController.h"   // the timeline session's replay
 
@@ -171,6 +172,10 @@ public:
     void SetEnginePreviewAllowed(bool allowed);
     void DrainEnginePreviewResults();
     void ShutdownEnginePreviewWorker();
+    // Live engine view (BridgeDispatch_EngineLive.cpp). The render loop calls
+    // PumpEngineLiveFrame before Engine::Render to hand over the newest streamed frame.
+    void PumpEngineLiveFrame();
+    void DrainEngineLiveResults();
 
     // Async texture-preview pipeline. The get-preview handler serves LRU
     // hits synchronously; a miss decodes on the UI thread (device-bound) and
@@ -531,7 +536,15 @@ private:
     bool TryDispatchEnginePreview(BridgeRequestContext& ctx);
     bool IsEnginePreviewReady() const;
     bool BuildStillJob(BridgeRequestContext& ctx, EnginePreviewWorker::Job& job);
-    bool TryDispatchTimeline(BridgeRequestContext& ctx); // timeline/*
+    // Saves the open effect to the host's preview path under its internal name.
+    bool        WriteEnginePreviewDocumentCopy(std::string& error);
+    bool        TryDispatchEngineLive(BridgeRequestContext& ctx);
+    bool        StartEngineLive(BridgeRequestContext& ctx);
+    void        StopEngineLive(const std::string& reason);
+    void        SendEngineLiveStop();
+    void        EmitEngineLiveStateChanged(const std::string& message);
+    const char* EngineLiveStateName() const;
+    bool        TryDispatchTimeline(BridgeRequestContext& ctx); // timeline/*
 
     // ---- Timeline session state (BridgeDispatch_Timeline.cpp) ----
     // Everything a replay depends on besides the frame number. A slot whose
@@ -765,6 +778,20 @@ private:
     nlohmann::json                       m_enginePreviewStatus  = {{"state", "absent"}};
     std::wstring                         m_enginePreviewPipe;
     std::unique_ptr<EnginePreviewWorker> m_enginePreviewWorker;
+    // Live engine view. Its worker holds its own pipe connection so live control never
+    // queues behind a still.
+    enum class EngineLiveState
+    {
+        Off,
+        Starting,
+        Live
+    };
+    EngineLiveState                      m_engineLiveState = EngineLiveState::Off;
+    std::uint64_t                        m_engineLiveToken = 0;
+    std::unique_ptr<EnginePreviewWorker> m_engineLiveWorker;
+    std::unique_ptr<EngineLiveReader>    m_engineLiveReader;
+    bool                                 m_engineLiveStopPending = false;
+    std::vector<std::uint8_t>            m_engineLivePixels;
     bool                                 m_externalLaunchAllowed = false;   // see SetExternalLaunchAllowed
     ::ModManager*                        m_modManager            = nullptr; // mods/* surface
     InputDispatcher*                     m_input                 = nullptr; // viewport/input

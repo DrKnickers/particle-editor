@@ -21,11 +21,28 @@ void BridgeDispatcher::SetEnginePreviewAllowed(bool allowed)
 void BridgeDispatcher::ShutdownEnginePreviewWorker()
 {
     if (m_enginePreviewWorker) m_enginePreviewWorker->Finish();
+    // Finish cancels the pipe, so this stop rarely reaches the host. That is acceptable: an
+    // abandoned host only keeps pacing its editor, and the next live-start takes it over.
+    StopEngineLive("");
+    if (m_engineLiveWorker) m_engineLiveWorker->Finish();
 }
 
 bool BridgeDispatcher::IsEnginePreviewReady() const
 {
     return m_enginePreviewStatus.value("state", "absent") == "ready";
+}
+
+bool BridgeDispatcher::WriteEnginePreviewDocumentCopy(std::string& error)
+{
+    constexpr UINT kWindowsPathChars          = MAX_PATH + 1;
+    wchar_t        windows[kWindowsPathChars] = {};
+    const UINT     chars                      = GetWindowsDirectoryW(windows, kWindowsPathChars);
+    if (chars == 0 || chars >= kWindowsPathChars)
+        throw engine_preview::Failure("internal", "Cannot resolve the Windows directory.");
+    return WriteEnginePreviewCopy(**m_pParticleSystem,
+                                  Utf8ToWide(m_enginePreviewStatus.at("effectPath").get<std::string>()),
+                                  m_enginePreviewStatus.at("internalName").get<std::string>(), ModuleDirectory(),
+                                  windows, m_currentFilePath, error);
 }
 
 bool BridgeDispatcher::BuildStillJob(BridgeRequestContext& ctx, EnginePreviewWorker::Job& job)
@@ -73,16 +90,8 @@ bool BridgeDispatcher::BuildStillJob(BridgeRequestContext& ctx, EnginePreviewWor
             job.args["camera"] = {
                 {"pitch", orbit.pitch}, {"yaw", orbit.yaw}, {"distance", orbit.distance}, {"target", orbit.target}};
         }
-        constexpr UINT kWindowsPathChars          = MAX_PATH + 1;
-        wchar_t        windows[kWindowsPathChars] = {};
-        const UINT     chars                      = GetWindowsDirectoryW(windows, kWindowsPathChars);
-        if (chars == 0 || chars >= kWindowsPathChars)
-            throw engine_preview::Failure("internal", "Cannot resolve the Windows directory.");
         std::string error;
-        if (!WriteEnginePreviewCopy(**m_pParticleSystem,
-                                    Utf8ToWide(m_enginePreviewStatus.at("effectPath").get<std::string>()),
-                                    m_enginePreviewStatus.at("internalName").get<std::string>(), ModuleDirectory(),
-                                    windows, m_currentFilePath, error))
+        if (!WriteEnginePreviewDocumentCopy(error))
         {
             ctx.SendErr(error);
             return false;

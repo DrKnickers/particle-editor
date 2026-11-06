@@ -908,6 +908,9 @@ bool HostWindowImpl::RenderComposedFrame(bool simulate)
     // [PERF] render-timed region.
     layout.AdvanceSceneAnim(PerfQpcNow());
 
+    // The live engine view swaps the host's newest frame in for our scene.
+    if (dispatcher) dispatcher->PumpEngineLiveFrame();
+
     const LONGLONG perfT1       = PerfQpcNow();
     const bool     rendered     = engine->Render();
     const double   perfRenderUs = PerfUsSince(perfT1);
@@ -1494,6 +1497,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
         case WM_APP_ENGINE_PREVIEW_READY:
             if (dispatcher) dispatcher->DrainEnginePreviewResults();
+            if (dispatcher) dispatcher->DrainEngineLiveResults();
             return 0;
 
         case WM_APP_PREVIEW_READY:

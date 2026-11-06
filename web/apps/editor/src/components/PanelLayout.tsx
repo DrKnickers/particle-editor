@@ -53,6 +53,7 @@ import { EnginePreviewPanel } from "./EnginePreviewPanel";
 import { checkEnginePreviewStatus } from "@/lib/engine-preview";
 import { TimelinePanel } from "./TimelinePanel";
 import { OverloadBanner } from "./OverloadBanner";
+import { EngineLiveBadge } from "./EngineLiveBadge";
 import { ViewportUnavailableNotice } from "./ViewportUnavailableNotice";
 import { CurveEditorPanel } from "@/screens/curve-editor/CurveEditorPanel";
 import { EmitterPropertyTabs } from "@/screens/EmitterPropertyTabs";
@@ -649,6 +650,7 @@ export function PanelLayout({ bridge }: Props) {
                     own viewport occlusion; see the component
                     header for the full rationale. */}
                   <OverloadBanner bridge={bridge} />
+                  <EngineLiveBadge bridge={bridge} />
                   <ViewportUnavailableNotice bridge={bridge} />
                 </div>
                 <EnginePreviewPanel bridge={bridge} />
