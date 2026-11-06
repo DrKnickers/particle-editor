@@ -22,6 +22,7 @@ export function EngineLiveBadge({ bridge }: { bridge: Bridge }): React.JSX.Eleme
   const state = useEngineLive((store: EngineLiveStore) => store.state);
   const message = useEngineLive((store: EngineLiveStore) => store.message);
   const [fps, setFps] = useState<number | null>(null);
+  const [groundNote, setGroundNote] = useState<string>("");
 
   // Mirrors the host's live-view state into the store.
   useEffect(
@@ -39,14 +40,17 @@ export function EngineLiveBadge({ bridge }: { bridge: Bridge }): React.JSX.Eleme
       try {
         const stats: EngineLiveStatsDto = await bridge.request({ kind: "engineLive/stats", params: {} });
         setFps(stats.fps);
+        setGroundNote(stats.groundNote);
       } catch {
         setFps(null);
+        setGroundNote("");
       }
     };
     const timer: ReturnType<typeof setInterval> = setInterval((): void => void pollStats(), STATS_POLL_MS);
     return (): void => {
       clearInterval(timer);
       setFps(null);
+      setGroundNote("");
     };
   }, [bridge, state]);
   // Clears a fallback message after it has been readable for a while.
@@ -69,6 +73,7 @@ export function EngineLiveBadge({ bridge }: { bridge: Bridge }): React.JSX.Eleme
       className="pointer-events-none absolute left-3 top-3 z-10 max-w-[60%] rounded-full bg-panel/90 px-3 py-1 text-xs text-text shadow"
     >
       {label}
+      {state === "live" && groundNote !== "" && <span className="block">{groundNote}</span>}
     </div>
   );
 }

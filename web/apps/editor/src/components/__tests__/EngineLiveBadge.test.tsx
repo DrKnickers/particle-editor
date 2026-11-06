@@ -2,7 +2,7 @@
 // Streaming and drawing remain native and are not simulated here.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
-import { ENGINE_LIVE_STATE_CHANGED_EVENT } from "@particle-editor/bridge-schema";
+import { ENGINE_LIVE_STATE_CHANGED_EVENT, type EngineLiveStatsDto } from "@particle-editor/bridge-schema";
 import { EngineLiveBadge } from "../EngineLiveBadge";
 import { startEngineLive, useEngineLive } from "@/lib/engine-live";
 import { useEnginePreview } from "@/lib/engine-preview";
@@ -12,6 +12,8 @@ const FALLBACK_MESSAGE = "The engine host closed; showing the editor's own view.
 const MISSED_UPDATE_MESSAGE = "The engine view missed an update: timeout";
 const LIVE_FPS = 59.6;
 const STATS_POLL_MS = 1_000;
+const GROUND_NOTE = "Engine view keeps its ground visible at height 0.";
+const MESSAGE_VISIBLE_MS = 6_000;
 
 beforeEach((): void => {
   useEngineLive.setState(useEngineLive.getInitialState(), true);
@@ -22,7 +24,7 @@ function makeLiveBridge(): BridgeStub {
   return makeBridgeStub({
     responses: {
       "engineLive/start": { state: "starting" },
-      "engineLive/stats": { state: "live", fps: LIVE_FPS, cameraLatencyMs: null },
+      "engineLive/stats": { state: "live", fps: LIVE_FPS, cameraLatencyMs: null, groundNote: "" },
     },
   });
 }
@@ -50,6 +52,31 @@ describe("EngineLiveBadge while live", (): void => {
   });
   afterEach((): void => {
     vi.useRealTimers();
+  });
+  it("keeps the ground note after transient messages expire and clears it when defaults return", async (): Promise<void> => {
+    let groundNote: string = GROUND_NOTE;
+    const bridge: BridgeStub = makeBridgeStub({
+      responses: {
+        "engineLive/stats": (): EngineLiveStatsDto => ({
+          state: "live",
+          fps: LIVE_FPS,
+          cameraLatencyMs: null,
+          groundNote,
+        }),
+      },
+    });
+    render(<EngineLiveBadge bridge={bridge} />);
+    bridge.emit(ENGINE_LIVE_STATE_CHANGED_EVENT, { state: "live", message: MISSED_UPDATE_MESSAGE });
+    await act(async (): Promise<void> => {
+      await vi.advanceTimersByTimeAsync(MESSAGE_VISIBLE_MS);
+    });
+    expect(screen.getByRole("status")).toHaveTextContent(GROUND_NOTE);
+    expect(screen.getByRole("status")).not.toHaveTextContent(MISSED_UPDATE_MESSAGE);
+    groundNote = "";
+    await act(async (): Promise<void> => {
+      await vi.advanceTimersByTimeAsync(STATS_POLL_MS);
+    });
+    expect(screen.getByRole("status")).not.toHaveTextContent(GROUND_NOTE);
   });
   it("shows the stream rate once the host reports it", async (): Promise<void> => {
     const bridge: BridgeStub = makeLiveBridge();

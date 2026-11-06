@@ -152,6 +152,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         const int  previousSlot  = m_engine->GetGroundTexture();
         const bool applied       = m_engine->SetGroundTexture(requestedSlot);
         const int  actualSlot    = m_engine->GetGroundTexture();
+        NoteEngineLiveGround();
         ctx.SendOk({{"slot", actualSlot}, {"applied", applied}});
         if (actualSlot != previousSlot) ctx.MarkDirty();
         EmitEngineStateChanged();
@@ -162,6 +163,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         if (!ctx.RequireEngine(kind.c_str())) return true;
         unsigned int rgb = params.value("rgb", 0u);
         m_engine->SetGroundSolidColor(static_cast<COLORREF>(rgb));
+        NoteEngineLiveGround();
         ctx.SendOk(json::object());
         ctx.MarkDirty();
         EmitEngineStateChanged();
@@ -179,6 +181,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
             ctx.SendErr("ground slot path rejected: bad slot, or a network/device path");
             return true;
         }
+        NoteEngineLiveGround();
         ctx.SendOk(json::object());
         ctx.MarkDirty();
         EmitEngineStateChanged();

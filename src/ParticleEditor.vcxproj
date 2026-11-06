@@ -242,6 +242,7 @@
     <ClInclude Include="host\EngineLiveFraming.h" />
     <ClInclude Include="host\EngineLiveReader.h" />
     <ClInclude Include="host\EngineLiveSync.h" />
+    <ClInclude Include="rendering\EngineGroundExport.h" />
     <ClInclude Include="host\EnginePreviewPipe.h" />
     <ClInclude Include="host\EnginePreviewCopy.h" />
     <ClInclude Include="host\EngineHostLaunchPolicy.h" />
@@ -273,6 +274,7 @@
     <ClCompile Include="rendering\engine_device.cpp" />
     <ClCompile Include="rendering\engine_live_view.cpp" />
     <ClCompile Include="rendering\engine_environment.cpp" />
+    <ClCompile Include="rendering\engine_ground_export.cpp" />
     <ClCompile Include="rendering\engine_reference.cpp" />
     <ClCompile Include="rendering\engine_reference_particles.cpp" />
     <ClCompile Include="rendering\engine_shadows.cpp" />

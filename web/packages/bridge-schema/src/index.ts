@@ -784,6 +784,8 @@ export interface EngineLiveStatsDto {
   fps: number;
   // From sending the latest camera to the first frame that shows it; null until one arrives.
   cameraLatencyMs: number | null;
+  // Persistent limitation while ground visibility or height differs; empty when none.
+  groundNote: string;
 }
 
 export type EngineHostSettingsDto = { exePath: string | null };

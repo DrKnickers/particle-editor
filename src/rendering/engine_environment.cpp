@@ -268,6 +268,41 @@ static bool LoadGroundTextureViaFileManager(IDirect3DDevice9*   pDevice,
     return true;
 }
 
+// Full-size, full-mip SCRATCH decode for the ground export; a source without mips gets a chain.
+// D3DFMT_UNKNOWN, not FROM_FILE: the bundled dirt.bmp is palettized, and a P8 texture fails.
+static IDirect3DTexture9* DecodeScratchFromMemory(IDirect3DDevice9* pDevice, const void* data, DWORD size)
+{
+    constexpr UINT     kFullMipChain = 0;
+    IDirect3DTexture9* pTex          = NULL;
+    if (FAILED(D3DXCreateTextureFromFileInMemoryEx(pDevice, data, size, D3DX_DEFAULT_NONPOW2, D3DX_DEFAULT_NONPOW2,
+                                                   kFullMipChain, 0, D3DFMT_UNKNOWN, D3DPOOL_SCRATCH, D3DX_FILTER_NONE,
+                                                   D3DX_DEFAULT, 0, NULL, NULL, &pTex)))
+        return NULL;
+    return pTex;
+}
+
+static IDirect3DTexture9* DecodeScratchFromResource(IDirect3DDevice9* pDevice, UINT resourceId)
+{
+    if (resourceId == 0) return NULL;
+    HMODULE hMod   = GetModuleHandle(NULL);
+    HRSRC   hRes   = FindResource(hMod, MAKEINTRESOURCE(resourceId), RT_RCDATA);
+    HGLOBAL hData  = (hRes != NULL) ? LoadResource(hMod, hRes) : NULL;
+    void*   pData  = (hData != NULL) ? LockResource(hData) : NULL;
+    DWORD   dwSize = (hRes != NULL) ? SizeofResource(hMod, hRes) : 0;
+    return (pData != NULL && dwSize != 0) ? DecodeScratchFromMemory(pDevice, pData, dwSize) : NULL;
+}
+
+static IDirect3DTexture9* DecodeScratchFromFile(IDirect3DDevice9* pDevice, const std::wstring& path)
+{
+    constexpr UINT     kFullMipChain = 0;
+    IDirect3DTexture9* pTex          = NULL;
+    if (FAILED(D3DXCreateTextureFromFileExW(pDevice, path.c_str(), D3DX_DEFAULT_NONPOW2, D3DX_DEFAULT_NONPOW2,
+                                            kFullMipChain, 0, D3DFMT_UNKNOWN, D3DPOOL_SCRATCH, D3DX_FILTER_NONE,
+                                            D3DX_DEFAULT, 0, NULL, NULL, &pTex)))
+        return NULL;
+    return pTex;
+}
+
 // build a 1×1 procedural texture filled with the given COLORREF.
 // Used by the "Solid Color" slot (kGroundSolidColorSlot). One-pixel
 // tile is enough because the ground is sampled with WRAP wrap-mode —
@@ -1272,6 +1307,56 @@ void Engine::CreateGroundFlatNormal()
         *(DWORD*)lr.pBits = D3DCOLOR_ARGB(0, 128, 128, 255);
         m_pGroundFlatNormalTexture->UnlockRect(0);
     }
+}
+
+// The live ground texture is DEFAULT-pool (unlockable under D3D9Ex), so D3DX cannot read it
+// back for the engine host. Re-decode the same source into SCRATCH, in ReloadGroundTexture's
+// order: solid colour, custom path, game leaf, bundled resource, then dirt.
+IDirect3DTexture9* Engine::CreateGroundScratchCopy()
+{
+    if (m_pDevice == NULL) return NULL;
+    IDirect3DTexture9* pScratch = NULL;
+    if (m_groundTextureIndex == kGroundSolidColorSlot)
+    {
+        if (FAILED(m_pDevice->CreateTexture(1, 1, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_SCRATCH, &pScratch, NULL)))
+            return NULL;
+        D3DLOCKED_RECT lr;
+        if (FAILED(pScratch->LockRect(0, &lr, NULL, 0)))
+        {
+            pScratch->Release();
+            return NULL;
+        }
+        *(DWORD*)lr.pBits = D3DCOLOR_ARGB(0xFF, GetRValue(m_groundSolidColor), GetGValue(m_groundSolidColor),
+                                          GetBValue(m_groundSolidColor));
+        pScratch->UnlockRect(0);
+        return pScratch;
+    }
+    const std::wstring& customPath = m_groundSlotCustomPaths[m_groundTextureIndex];
+    if (!customPath.empty()) pScratch = DecodeScratchFromFile(m_pDevice, customPath);
+    const char* leaf = kGroundTextureGameLeaf[m_groundTextureIndex];
+    if (pScratch == NULL && leaf != NULL)
+    {
+        IFile* file = m_fileManager.getFile(std::string("DATA\\ART\\TEXTURES\\") + leaf);
+        if (file == NULL) file = m_fileManager.getFile(leaf);
+        try
+        {
+            if (file != NULL)
+            {
+                const std::vector<unsigned char> bytes = ReadAndReleaseCapped(file, kMaxTextureAssetBytes);
+                pScratch = DecodeScratchFromMemory(m_pDevice, bytes.data(), static_cast<DWORD>(bytes.size()));
+            }
+        }
+        catch (...)
+        {
+            // Same boundary as LoadGroundTextureViaFileManager: an unreadable game texture falls
+            // back to dirt below, which is also what the renderer shows for it.
+            pScratch = NULL;
+        }
+    }
+    if (pScratch == NULL)
+        pScratch = DecodeScratchFromResource(m_pDevice, kGroundTextureResourceIds[m_groundTextureIndex]);
+    if (pScratch == NULL) pScratch = DecodeScratchFromResource(m_pDevice, kGroundTextureResourceIds[0]);
+    return pScratch;
 }
 
 // resolve the active slot's companion `<base>_bc` normal map from the

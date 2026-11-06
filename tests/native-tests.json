@@ -11,6 +11,7 @@
     "shipped parser's no-assert behaviour is exercised too."
   ],
   "tests": {
+    "test_engine_ground_export": {},
     "test_accelerator_bridge": {
       "sources": ["src/host/AcceleratorBridge.cpp"],
       "uses": ["dxsdk"],

@@ -6,11 +6,13 @@ import {
   ENGINE_PREVIEW_STATUS_CHECKED_EVENT,
   type EngineLiveStateName,
   type EngineLiveStatsDto,
+  type EngineStateDto,
   type EnginePreviewPendingDto,
   type EnginePreviewStatusDto,
   type Request,
 } from "@particle-editor/bridge-schema";
 import type { MockDispatchHost } from "./host";
+import { useMockEngineState } from "../mock-state";
 
 export const MOCK_PREVIEW_PNG =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=";
@@ -149,5 +151,12 @@ export function dispatchEngineLive(
 
 export function readMockEngineLiveStats(this: PreviewHost): EngineLiveStatsDto {
   const live: EngineLiveStateName = this.enginePreview.live;
-  return { state: live, fps: live === "live" ? MOCK_LIVE_FPS : 0, cameraLatencyMs: null };
+  const { ground, groundZ }: EngineStateDto = useMockEngineState.getState();
+  const keepsGround: boolean = live === "live" && (!ground || groundZ !== 0);
+  return {
+    state: live,
+    fps: live === "live" ? MOCK_LIVE_FPS : 0,
+    cameraLatencyMs: null,
+    groundNote: keepsGround ? "Engine view keeps its ground visible at height 0." : "",
+  };
 }

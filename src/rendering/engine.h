@@ -1,7 +1,9 @@
+// Owns the editor's renderer and device resources; host commands stay in the bridge.
 #ifndef ENGINE_H
 #define ENGINE_H
 
 #include <string>
+#include <cstdint>
 #include <vector>
 #include <map>
 #include <set>
@@ -671,6 +673,13 @@ public:
     // GetGroundTexture() afterward to re-sync visuals to the
     // actually-loaded slot.
     bool SetGroundTexture(int index);
+    // UI thread only. Writes a new colour/normal DDS pair for the shown ground and deletes the
+    // exports beyond the newest few, except protectedColorPath, which a host command may still read.
+    void ExportGroundForHost(std::wstring& colorPath, std::wstring& normalPath, const std::wstring& protectedColorPath);
+    // Shutdown only: the map editor exits with the editor, so nothing still reads these files.
+    void DeleteGroundHostExports();
+    // Caller releases. A lockable SCRATCH copy of the ground the renderer shows, or NULL.
+    IDirect3DTexture9* CreateGroundScratchCopy();
 
     // the procedural solid-colour ground (slot kGroundSolidColorSlot).
     // SetGroundSolidColor regenerates a 1×1 D3D texture at the new
@@ -1572,10 +1581,12 @@ private:
         m_hGroundLightSpecular, m_hGroundEyeObjPos, m_hGroundBaseTex, m_hGroundNormalTex;
 
     // Resources
-    IDirect3DTexture9* m_pGroundTexture;
-    IDirect3DTexture9* m_pSceneTexture;
-    IDirect3DSurface9* m_pDepthStencilSurface;
-    IDirect3DTexture9* m_pDistortTexture;
+    IDirect3DTexture9*                                 m_pGroundTexture;
+    std::vector<std::pair<std::wstring, std::wstring>> m_groundHostExports;
+    std::uint64_t                                      m_groundHostExportCounter = 0;
+    IDirect3DTexture9*                                 m_pSceneTexture;
+    IDirect3DSurface9*                                 m_pDepthStencilSurface;
+    IDirect3DTexture9*                                 m_pDistortTexture;
     // True while the distort RT verifiably holds the neutral normal
     // (129,128,255) — lets Render skip the heat clear+scan on zero-heat
     // frames. Re-armed false wherever the RT is (re)created so a fresh

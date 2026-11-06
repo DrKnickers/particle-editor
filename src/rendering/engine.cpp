@@ -1346,6 +1346,7 @@ Engine::~Engine()
     // build returns; at most the cost of one catalog parse, only at shutdown.)
     if (m_catalogThread.joinable()) m_catalogThread.join();
 
+    DeleteGroundHostExports();
     ReleaseBloomTargets();
     ReleaseLiveFrameTexture();
     SAFE_RELEASE(m_pBloomEffect);

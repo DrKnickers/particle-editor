@@ -549,6 +549,9 @@ private:
     void        SendEngineLiveStop();
     void        FinishEngineLiveStart(const EnginePreviewWorker::Result& result);
     void        NoteEngineLiveView(std::uint64_t nowMs);
+    void        NoteEngineLiveGround();
+    std::string EngineLiveGroundKey() const;
+    std::string EngineLiveGroundNote() const;
     void        SendNextEngineLiveCommand(std::uint64_t nowMs);
     void        FinishEngineLiveCommand(const EnginePreviewWorker::Result& result);
     void        ReportEngineLiveCommandFailure(const EnginePreviewWorker::Result& result);
@@ -806,9 +809,11 @@ private:
     bool                                 m_engineLiveLaunchAttempted = false;
     std::vector<std::uint8_t>            m_engineLivePixels;
     engine_live::EngineLiveSync          m_engineLiveSync;
-    bool                                 m_externalLaunchAllowed = false;   // see SetExternalLaunchAllowed
-    ::ModManager*                        m_modManager            = nullptr; // mods/* surface
-    InputDispatcher*                     m_input                 = nullptr; // viewport/input
+    std::wstring                         m_engineLiveGroundColorInFlight;
+    std::uint64_t                        m_engineLiveGroundGraceUntilMs = 0;
+    bool                                 m_externalLaunchAllowed        = false;   // see SetExternalLaunchAllowed
+    ::ModManager*                        m_modManager                   = nullptr; // mods/* surface
+    InputDispatcher*                     m_input                        = nullptr; // viewport/input
 
     // Preview LRU + in-flight dedupe + epoch (see DrainPreviewResults).
     // Key = "<filename>|<0/1 flattenAlpha>" (maxBound is a handler constant).

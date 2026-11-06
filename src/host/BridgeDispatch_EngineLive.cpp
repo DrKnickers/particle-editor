@@ -21,8 +21,12 @@ constexpr int    kLiveMaxFps       = 60;
 constexpr double kLiveStartSeconds = engine_preview::kStillBudgetSeconds;
 // The host's limit for live-refresh, which reloads the effect and may reopen the map.
 constexpr double kLiveRefreshSeconds = 60.0;
+// The host's limit for scene --action ground, which writes the ground's maps and reopens one.
+constexpr double kLiveGroundSeconds = 60.0;
 // No new frame for this long means the host stopped presenting (minimized, hung or busy).
 constexpr double kLiveStaleSeconds = 2.0;
+// The reopened map presents again a moment after the ground reply; frames may pause until then.
+constexpr std::uint64_t kLiveGroundGraceMs = 2000;
 // Used only when no scene viewport has been laid out yet.
 constexpr int kLiveFallbackWidthPx  = 1280;
 constexpr int kLiveFallbackHeightPx = 720;
@@ -119,6 +123,8 @@ bool BridgeDispatcher::QueueEngineLiveStream(std::string& error)
         return false;
     }
     m_engineLiveSync = engine_live::EngineLiveSync{};
+    m_engineLiveGroundColorInFlight.clear();
+    m_engineLiveGroundGraceUntilMs = 0;
     m_engineLiveSync.NoteParked(park.widthPx, park.heightPx);
     m_engineLiveState = EngineLiveState::Starting;
     EmitEngineLiveStateChanged("");
@@ -167,7 +173,8 @@ bool BridgeDispatcher::TryDispatchEngineLive(BridgeRequestContext& ctx)
         const std::optional<double> latencyMs = m_engineLiveSync.CameraLatencyMs();
         ctx.SendOk({{"state", EngineLiveStateName()},
                     {"fps", m_engineLiveState == EngineLiveState::Live ? m_engineLiveSync.FramesPerSecond() : 0.0},
-                    {"cameraLatencyMs", latencyMs ? json(*latencyMs) : json(nullptr)}});
+                    {"cameraLatencyMs", latencyMs ? json(*latencyMs) : json(nullptr)},
+                    {"groundNote", EngineLiveGroundNote()}});
         return true;
     }
     if (kind == "engineLive/stop")
@@ -258,6 +265,18 @@ void BridgeDispatcher::FinishEngineLiveCommand(const EnginePreviewWorker::Result
     const bool isAnchorRequest =
         m_engineLiveSync.IsAnchorRequest(engine_live::LiveCommand{result.command, result.args});
     const bool isOk = result.payload.value("ok", false);
+    if (result.command == "scene")
+    {
+        m_engineLiveGroundColorInFlight.clear();
+        m_engineLiveGroundGraceUntilMs = GetTickCount64() + kLiveGroundGraceMs;
+        if (!isOk && result.payload.value("code", "") == "unsupported")
+        {
+            m_engineLiveSync.NoteGroundUnsupported();
+            EmitEngineLiveStateChanged("Ground mirroring unavailable; the engine view keeps its ground.");
+            return;
+        }
+        m_engineLiveSync.NoteGroundFinished(isOk);
+    }
     if (isOk && isAnchorRequest)
     {
         try
@@ -271,6 +290,7 @@ void BridgeDispatcher::FinishEngineLiveCommand(const EnginePreviewWorker::Result
                 fieldLimits = engine_live::FieldLimits{reply["fov_min"].get<double>(), reply["fov_max"].get<double>()};
             }
             m_engineLiveSync.NoteAnchor(reply.at("target").get<std::array<double, 3>>(), fieldLimits);
+            NoteEngineLiveGround();
             return;
         }
         catch (const json::exception& error)
@@ -280,6 +300,42 @@ void BridgeDispatcher::FinishEngineLiveCommand(const EnginePreviewWorker::Result
     }
     if (isAnchorRequest) m_engineLiveSync.NoteAnchorFailed();
     if (!isOk) ReportEngineLiveCommandFailure(result);
+}
+
+std::string BridgeDispatcher::EngineLiveGroundNote() const
+{
+    if (m_engineLiveState != EngineLiveState::Live || !m_engine) return "";
+    if (!m_engine->GetGround() || m_engine->GetGroundZ() != 0.0f)
+        return "Engine view keeps its ground visible at height 0.";
+    return "";
+}
+
+// Names what the ground shows, so a pick that changes nothing is not exported or sent again.
+// A changed mod stack or an image edited on disk under the same path is not detected.
+std::string BridgeDispatcher::EngineLiveGroundKey() const
+{
+    const int   slot = m_engine->GetGroundTexture();
+    std::string key  = std::to_string(slot) + "|" + WideToUtf8(m_engine->GetGroundSlotCustomPath(slot));
+    if (slot == Engine::kGroundSolidColorSlot) key += "|" + std::to_string(m_engine->GetGroundSolidColor());
+    return key;
+}
+
+void BridgeDispatcher::NoteEngineLiveGround()
+{
+    if (m_engineLiveState != EngineLiveState::Live || !m_engineLiveSync.IsGroundAvailable()) return;
+    const std::string groundKey = EngineLiveGroundKey();
+    if (m_engineLiveSync.IsGroundCurrent(groundKey)) return;
+    try
+    {
+        std::wstring colorPath;
+        std::wstring normalPath;
+        m_engine->ExportGroundForHost(colorPath, normalPath, m_engineLiveGroundColorInFlight);
+        m_engineLiveSync.NoteGround(groundKey, WideToUtf8(colorPath), WideToUtf8(normalPath));
+    }
+    catch (const std::exception& error)
+    {
+        EmitEngineLiveStateChanged(std::string("The ground could not be sent to the engine view: ") + error.what());
+    }
 }
 
 // A refresh, camera or park that fails leaves the stream running on the last state the host
@@ -340,6 +396,12 @@ void BridgeDispatcher::SendNextEngineLiveCommand(std::uint64_t nowMs)
     job.token         = m_engineLiveToken;
     job.pipeName      = m_enginePreviewPipe;
     job.budgetSeconds = engine_preview::kCommandBudgetSeconds;
+    if (job.command == "scene")
+    {
+        job.args["timeout_s"]           = kLiveGroundSeconds;
+        job.budgetSeconds               = kLiveGroundSeconds;
+        m_engineLiveGroundColorInFlight = Utf8ToWide(job.args.at("color").get<std::string>());
+    }
     if (job.command == engine_live::kRefreshCommand)
     {
         std::string error;
@@ -361,8 +423,16 @@ void BridgeDispatcher::SendNextEngineLiveCommand(std::uint64_t nowMs)
         job.budgetSeconds = kLiveRefreshSeconds;
     }
     // IsBusy was false a moment ago, so only a worker that is shutting down refuses here.
+    const bool isGround = job.command == "scene";
     if (!m_engineLiveWorker->Enqueue(std::move(job)))
+    {
+        if (isGround)
+        {
+            m_engineLiveGroundColorInFlight.clear();
+            m_engineLiveSync.NoteGroundFinished(false);
+        }
         OutputDebugStringA("[live-view] ERROR live command refused by the worker\n");
+    }
 }
 
 void BridgeDispatcher::PumpEngineLiveFrame()
@@ -373,7 +443,8 @@ void BridgeDispatcher::PumpEngineLiveFrame()
         StopEngineLive("The engine host closed; showing the editor's own view.");
         return;
     }
-    const std::uint64_t    nowMs = GetTickCount64();
+    const std::uint64_t nowMs      = GetTickCount64();
+    const bool canCheckStaleFrames = m_engineLiveGroundColorInFlight.empty() && nowMs >= m_engineLiveGroundGraceUntilMs;
     engine_live::FrameInfo info;
     if (m_engineLiveReader->TakeNewestFrame(m_engineLivePixels, info))
     {
@@ -384,7 +455,8 @@ void BridgeDispatcher::PumpEngineLiveFrame()
         m_engineLiveSync.NoteFrameCameraTag(info.cameraTag, nowMs);
         m_engineLiveSync.NoteFrameShown(nowMs);
     }
-    else if (m_engineLiveReader->SecondsSinceLastFrame() > kLiveStaleSeconds)
+    // Reopening the map can pause presentation longer than the ordinary stale-frame limit.
+    else if (canCheckStaleFrames && m_engineLiveReader->SecondsSinceLastFrame() > kLiveStaleSeconds)
     {
         StopEngineLive("The engine host stopped sending frames; showing the editor's own view.");
         return;

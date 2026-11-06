@@ -53,6 +53,72 @@ EngineLiveSync MakeAnchoredSync()
     return sync;
 }
 
+void TestGroundWaitsForOtherWorkAndCoalesces()
+{
+    EngineLiveSync sync;
+    sync.NoteGround("dirt", "old.dds", "old_B.dds");
+    sync.NoteGround("grass", "new.dds", "new_B.dds");
+    sync.NoteViewportSize(kWidthPx, kHeightPx, kStartMs);
+    sync.NoteDocumentEdited(kStartMs);
+    sync.NoteStillFinished();
+    sync.NoteCamera(MakeOrbit(kFarUnits), kHostDefaultFieldDegrees);
+    const std::uint64_t dueMs = kStartMs + kRefreshDebounceMs;
+    Check(sync.TakeNextCommand(dueMs)->command == "window", "park precedes ground");
+    Check(sync.TakeNextCommand(dueMs)->command == "live-refresh", "refresh precedes ground");
+    Check(sync.TakeNextCommand(dueMs)->command == "clock", "resume precedes ground");
+    const std::optional<LiveCommand> anchor = sync.TakeNextCommand(dueMs);
+    Check(anchor && sync.IsAnchorRequest(*anchor), "anchor precedes ground");
+    Check(!sync.TakeNextCommand(dueMs), "ground waits for the anchor reply");
+    sync.NoteAnchor({0.0, 0.0, 0.0}, std::nullopt);
+    Check(sync.TakeNextCommand(dueMs)->command == "camera", "camera precedes ground");
+    const std::optional<LiveCommand> ground = sync.TakeNextCommand(dueMs);
+    Check(ground && ground->command == "scene" && ground->args["action"] == "ground", "ground uses scene");
+    Check(ground && ground->args["color"] == "new.dds" && ground->args["normal"] == "new_B.dds",
+          "only the newest ground pair is sent");
+    sync.NoteGroundFinished(true);
+    Check(sync.IsGroundCurrent("grass") && !sync.IsGroundCurrent("snow"), "the applied ground is current");
+    sync.NoteGround("grass", "grass-again.dds", "grass-again_B.dds");
+    Check(!sync.TakeNextCommand(dueMs), "an applied ground is not resent under a new export path");
+}
+
+void TestGroundWaitsForDebounceAndRetriesOnlyOnChange()
+{
+    EngineLiveSync sync = MakeAnchoredSync();
+    sync.NoteGround("sand", "color.dds", "");
+    sync.NoteDocumentEdited(kStartMs);
+    Check(!sync.TakeNextCommand(kStartMs), "ground does not delay an edit waiting for debounce");
+    sync.TakeNextCommand(kStartMs + kRefreshDebounceMs);
+    const std::optional<LiveCommand> ground = sync.TakeNextCommand(kStartMs + kRefreshDebounceMs);
+    Check(ground && !ground->args.contains("normal"), "missing companion uses the host's flat normal");
+    sync.NoteGroundFinished(false);
+    Check(!sync.TakeNextCommand(kStartMs), "a failed ground has no retry loop");
+    Check(!sync.IsGroundCurrent("sand"), "a failed ground is not current");
+    sync.NoteGround("sand", "color.dds", "");
+    Check(sync.TakeNextCommand(kStartMs).has_value(), "a later change retries a failed ground");
+    sync.NoteGround("snow", "later.dds", "");
+    sync.NoteGroundUnsupported();
+    sync.NoteGround("dirt", "ignored.dds", "");
+    Check(!sync.IsGroundAvailable() && !sync.TakeNextCommand(kStartMs), "unsupported disables this session");
+    sync.NoteCamera(MakeOrbit(kNearUnits), kHostDefaultFieldDegrees);
+    Check(sync.TakeNextCommand(kStartMs)->command == "camera", "unsupported ground keeps the live camera");
+}
+
+void TestGroundChangedDuringACommandKeepsTheLatest()
+{
+    EngineLiveSync sync = MakeAnchoredSync();
+    sync.NoteGround("dirt", "first.dds", "");
+    sync.TakeNextCommand(kStartMs);
+    sync.NoteGround("grass", "second.dds", "");
+    sync.NoteGround("snow", "third.dds", "");
+    Check(sync.IsGroundCurrent("snow"), "the queued ground is current");
+    sync.NoteGroundFinished(true);
+    const std::optional<LiveCommand> latest = sync.TakeNextCommand(kStartMs);
+    Check(latest && latest->args["color"] == "third.dds", "edits during ground apply keep only the latest");
+    sync.NoteGroundFinished(true);
+    sync.NoteGround("snow", "third-again.dds", "");
+    Check(!sync.TakeNextCommand(kStartMs), "the completed latest ground is not resent");
+}
+
 void TestCameraIsRelativeToTheOpeningTarget()
 {
     EngineLiveSync sync;
@@ -210,6 +276,9 @@ void TestLiveOrbitClampsInsteadOfRefusing()
 
 int main()
 {
+    TestGroundWaitsForOtherWorkAndCoalesces();
+    TestGroundWaitsForDebounceAndRetriesOnlyOnChange();
+    TestGroundChangedDuringACommandKeepsTheLatest();
     TestCameraIsRelativeToTheOpeningTarget();
     TestFailedAnchorIsAskedAgain();
     TestCameraKeepsOnlyTheNewest();

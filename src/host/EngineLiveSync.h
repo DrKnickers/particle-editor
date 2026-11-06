@@ -36,6 +36,33 @@ struct LiveCommand
 class EngineLiveSync
 {
 public:
+    // groundKey names what the ground shows (slot, image, colour); each export has a fresh path,
+    // so the key, not the path, decides whether a ground is already shown.
+    void NoteGround(const std::string& groundKey, const std::string& colorPath, const std::string& normalPath)
+    {
+        if (!m_isGroundAvailable) return;
+        m_pendingGround = LiveGround{groundKey, LiveCommand{"scene", {{"action", "ground"}, {"color", colorPath}}}};
+        if (!normalPath.empty()) m_pendingGround->command.args["normal"] = normalPath;
+    }
+    // True when the newest ground queued, in flight or applied already shows groundKey.
+    bool IsGroundCurrent(const std::string& groundKey) const
+    {
+        if (m_pendingGround) return m_pendingGround->key == groundKey;
+        if (m_sentGround) return m_sentGround->key == groundKey;
+        return m_appliedGround && m_appliedGround->key == groundKey;
+    }
+    void NoteGroundFinished(bool isApplied)
+    {
+        if (isApplied) m_appliedGround = m_sentGround;
+        m_sentGround.reset();
+    }
+    void NoteGroundUnsupported()
+    {
+        m_isGroundAvailable = false;
+        m_pendingGround.reset();
+        m_sentGround.reset();
+    }
+    bool IsGroundAvailable() const { return m_isGroundAvailable; }
     // Every input that changes the camera (orbit, pan, zoom, reset, timeline, resize) reaches
     // the engine through the camera itself, so the dispatcher reports it once per frame.
     void NoteCamera(const engine_preview::Orbit& orbit, double fieldDegrees)
@@ -106,7 +133,7 @@ public:
 
     // The next command to send, removed from the pending set. Order: re-park first (frames are
     // letterboxed until it lands), then the refresh an edit asked for, then the clock, then the
-    // anchor (once), then the camera, which also runs whenever nothing else waits.
+    // anchor (once), then the camera, then ground only when no other work waits.
     std::optional<LiveCommand> TakeNextCommand(std::uint64_t nowMs)
     {
         if (m_parkDueMs && nowMs >= *m_parkDueMs) return TakePark();
@@ -122,10 +149,28 @@ public:
         }
         if (!m_anchor) return TakeAnchorRequest();
         if (m_pendingCamera) return TakeCamera(nowMs);
+        if (m_parkDueMs || m_refreshDueMs) return std::nullopt;
+        if (m_pendingGround)
+        {
+            const LiveGround ground = *m_pendingGround;
+            m_pendingGround.reset();
+            if (m_appliedGround && ground.key == m_appliedGround->key) return std::nullopt;
+            m_sentGround = ground;
+            return ground.command;
+        }
         return std::nullopt;
     }
 
 private:
+    struct LiveGround
+    {
+        std::string key;
+        LiveCommand command;
+    };
+    std::optional<LiveGround> m_pendingGround;
+    std::optional<LiveGround> m_sentGround;
+    std::optional<LiveGround> m_appliedGround;
+    bool                      m_isGroundAvailable = true;
     struct LiveCamera
     {
         engine_preview::Orbit orbit;

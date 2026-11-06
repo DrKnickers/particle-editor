@@ -477,6 +477,9 @@
     <ClInclude Include="host\EngineLiveReader.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="rendering\EngineGroundExport.h">
+      <Filter>Header Files\rendering</Filter>
+    </ClInclude>
     <ClInclude Include="host\EngineLiveSync.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
@@ -558,6 +561,9 @@
       <Filter>Source Files\rendering</Filter>
     </ClCompile>
     <ClCompile Include="rendering\engine_live_view.cpp">
+      <Filter>Source Files\rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="rendering\engine_ground_export.cpp">
       <Filter>Source Files\rendering</Filter>
     </ClCompile>
     <ClCompile Include="rendering\engine_environment.cpp">
