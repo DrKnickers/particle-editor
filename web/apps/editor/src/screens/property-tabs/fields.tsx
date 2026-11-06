@@ -165,8 +165,8 @@ export function FieldText({
   onCommit: (value: string) => void;
   /** When true, render just the <input> (no .form-row wrapper, no
    *  label span). Caller owns the outer row container and the label.
-   *  Used by the Name row, which needs the design source's custom
-   *  60px 1fr grid template. */
+   *  Used by the Name row, which needs its own 60px 1fr grid
+   *  template. */
   wide?: boolean;
   /** Optional data-testid on the <input> (record-cursor / a11y drivers). */
   testId?: string;

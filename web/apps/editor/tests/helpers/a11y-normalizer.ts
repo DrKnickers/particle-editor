@@ -60,7 +60,7 @@ export function normalize(node: UIANode, allowlist: Allowlist): UIANode {
   // Strip wrapper visuals: if a child's AutomationId, ControlType, OR
   // ClassName matches alwaysStripWrappers, replace it with its
   // children. ClassName match is what catches the Chromium/WebView2
-  // chrome wrappers (Chrome_WidgetWin_1 etc.) — see the a11y probe findings.
+  // chrome wrappers (Chrome_WidgetWin_1 etc.) that UIA reports around the page.
   const wrappers = new Set(allowlist.alwaysStripWrappers);
   children = children.flatMap((c) => {
     const isWrapper =

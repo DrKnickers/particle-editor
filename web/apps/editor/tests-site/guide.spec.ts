@@ -85,9 +85,10 @@ const GUIDE_MEDIA = new Map([
   [
     "05-build-an-explosion",
     {
-      // §4 shows BOTH fireball constructions: -index is Option A (flipbook), -layered is Option B
-      // (layered additive). §9 ends by showing the finished explosion BOTH ways: -final-preview
-      // (flipbook) then -final-preview-layered (layered).
+      // The fireball tutorial shows BOTH constructions: -index is Option A
+      // (flipbook), -layered is Option B (layered additive). The explosion
+      // tutorial ends with BOTH: -final-preview (flipbook) then
+      // -final-preview-layered (layered).
       clips: [
         "tutorial-05-opening-result.mp4",
         "tutorial-05-flash-burst.mp4",

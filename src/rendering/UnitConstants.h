@@ -21,7 +21,7 @@
 constexpr float EDITOR_UNITS_PER_GAME_UNIT = 1.0f;
 
 // Time base. The game simulates in fixed logic frames, 30 per game second, in
-// every game mode (decompiled FrameSynchronizerClass::Init: LogicalFPS = 30).
+// every game mode.
 // Per-frame XML quantities convert with it: a projectile moves <Max_Speed>
 // world units each logic frame, so 30 x Max_Speed units/s. Particle fields in
 // the .alo are already per second (units/s, units/s^2, seconds) and need no

@@ -1,7 +1,7 @@
-// [vfx-loop] Before/after comparison of two observation bundles (design §13).
+// [vfx-loop] Before/after comparison of two observation bundles.
 //
 // The metrics here enforce the task's explicit budgets and flag drift. None of
-// them ranks one effect over the other (§13.3): that judgment is the human's,
+// them ranks one effect over the other: that judgment is the human's,
 // so no output carries a score, a winner, or a preference.
 //
 //   comparison/
@@ -10,7 +10,7 @@
 //     selected-frame-pairs/      frame-NNNNN.baseline.png / .candidate.png
 //     metrics.json               budgets (task + technical) and drift flags
 //     telemetry-delta.json       whole-effect and per-emitter series and lifecycle shifts
-//     random-schedule-note.json  where the two random schedules diverge (§9.8)
+//     random-schedule-note.json  where the two random schedules diverge
 //     review.json                the frame pairs and the technical gate, for a human
 import * as fs from "node:fs";
 import { join, resolve } from "node:path";
@@ -28,13 +28,13 @@ export const METRICS = ["peakParticles", "finalFrame", "firstActive", "lastActiv
   "runtimeGuardRefusals", "hardGuardRefusals", "indexCapRefusals"];
 
 // Always checked: a candidate that trips a guard the baseline did not is a
-// technical regression (§25 "no technical regression"), whatever the task says.
+// technical regression, whatever the task says.
 export const TECHNICAL_BUDGETS = ["runtimeGuardRefusals", "hardGuardRefusals", "indexCapRefusals"]
   .map((metric) => ({ id: `no-new-${metric}`, metric, maxDelta: 0 }));
 
-// Everything §13.1 requires to match, as the capture records it. The source
-// path and hash differ on purpose; the camera, environment, wind and gravity
-// are fields of the fixed observation profile.
+// Fields that must match for two observations to be comparable, as the capture
+// records them. The source path and hash differ on purpose; the camera,
+// environment, wind and gravity are fields of the fixed observation profile.
 export const ALIGNED = ["tool", "spec (except scenario.aloPath)", "random", "profile", "geometry", "render",
   "content stack", "assets both runs loaded"];
 
@@ -142,7 +142,7 @@ export function randomSchedule(baselineCapture, candidateCapture, baselineSample
     candidateDrawsAtEnd: candidateSamples.at(-1)?.rngDrawCount ?? null,
     note: first === null
       ? `The random schedules match over the ${compared} frames both runs simulated.`
-      : `The random schedule diverges at frame ${first}. From there the shared seed gives no particle-for-particle correspondence (design §9.8): compare the runs as two samples, not as matched particles.` };
+      : `The random schedule diverges at frame ${first}. From there the shared seed gives no particle-for-particle correspondence: compare the runs as two samples, not as matched particles.` };
 }
 
 // Pair by frame number over both runs' selected frames. A frame one run never
@@ -222,7 +222,7 @@ export async function writeComparison(baselineDir, candidateDir, outDir, { budge
   };
   const baseline = read(baselineDir, "baseline"), candidate = read(candidateDir, "candidate");
   const differences = alignmentDiff(baseline.capture, candidate.capture);
-  if (differences.length) throw fail(`observations are misaligned (§13.1); nothing compared: ${differences.map((d) =>
+  if (differences.length) throw fail(`observations are misaligned; nothing compared: ${differences.map((d) =>
     `${d.path}: ${JSON.stringify(d.baseline)} vs ${JSON.stringify(d.candidate)}`).join("; ")}`, 7);
   if (io.existsSync(outDir) && io.readdirSync(outDir).length) throw fail(`comparison directory must be absent or empty: ${outDir}`, 13);
   const pairDir = join(outDir, "selected-frame-pairs");
@@ -275,13 +275,13 @@ export async function writeComparison(baselineDir, candidateDir, outDir, { budge
   const schedule = randomSchedule(baseline.capture, candidate.capture, baseline.samples, candidate.samples);
   const technicalGate = { pass: checked.every((v) => v.pass), failed: checked.filter((v) => !v.pass).map((v) => v.id) };
   const metrics = { schemaVersion: 1,
-    boundary: "Budgets and drift flags only (design §13.3). No value here ranks the two effects; the human decides which to keep.",
+    boundary: "Budgets and drift flags only. No value here ranks the two effects; the human decides which to keep.",
     budgets: checked, budgetsPass: technicalGate.pass,
     drift: { lifecycleStatus: { baseline: before.status, candidate: after.status, changed: before.status !== after.status },
       identicalSelectedFrames: identical, firstImageDivergence: images.find((p) => !identical.includes(p.frame))?.frame ?? null,
       firstRandomDivergence: schedule.firstDivergentFrame } };
   const review = { schemaVersion: 1,
-    advisory: "Evidence for a human decision. Nothing here ranks the two effects (design §13.3); the human decides which to keep.",
+    advisory: "Evidence for a human decision. Nothing here ranks the two effects; the human decides which to keep.",
     alignment: { aligned: true, compared: ALIGNED }, technicalGate, clip, pairs, decision: null };
   io.writeFileSync(join(outDir, "metrics.json"), serialise(metrics));
   io.writeFileSync(join(outDir, "telemetry-delta.json"), serialise(telemetryDelta(baseline.samples, candidate.samples, before, after,

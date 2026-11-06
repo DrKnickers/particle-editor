@@ -91,7 +91,7 @@ inline bool IsAllowedBridgeKind(const std::string& kind)
     // v1 allowlist: render-state setters + file open + emitter list/select.
     // Everything else (save/save-as/browse/quit/mods/debug/emitter-mutations)
     // is rejected — several open modal native dialogs that would deadlock an
-    // unattended run on the single UI thread (spec section 4.6).
+    // unattended run on the single UI thread.
     if (kind == "engine/set/background") return true;
     if (kind == "engine/set/bloom") return true;
     if (kind == "engine/set/bloom-strength") return true;
@@ -606,7 +606,7 @@ inline bool ParseScript(const std::string& json, Script& out, std::string& err)
                     step.target.y = c["target"][1].get<double>();
                     step.target.z = c["target"][2].get<double>();
                 }
-                // NOTE: "fit" is intentionally ignored in v1 (descoped -- spec section 1).
+                // NOTE: "fit" is intentionally ignored in v1 (left out of scope).
             }
             else if (s.contains("select-emitter"))
             {

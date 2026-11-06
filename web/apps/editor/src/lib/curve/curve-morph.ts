@@ -122,7 +122,7 @@ export function resampleOntoGrid(xsOld: Float64Array, ysOld: Float64Array, xsNew
 }
 
 /** Shape-change classification between consecutive TrackDto snapshots.
- *  NOTE (spec refinement): lockedTo is deliberately IGNORED — it is
+ *  NOTE: lockedTo is deliberately IGNORED — it is
  *  styling, not shape; a re-mirror always arrives as key deltas.
  *    "none"       identical keys + interpolation
  *    "moved"      same count & times (EPS), >=1 value differs

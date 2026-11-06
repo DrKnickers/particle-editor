@@ -1,4 +1,4 @@
-// Test for the rocket's spline (src/simulation/RocketSpline.h, the game's SplineClass).
+// Test for the rocket's spline (src/simulation/RocketSpline.h, the game's rocket spline).
 //
 // Checks the natural cubic against its defining conditions (through every control
 // point, matching slopes at the joins, no curvature at the ends), the arc lengths

@@ -103,7 +103,7 @@ bool HostWindowImpl::SetupRecordArm(RecordSession& rec)
         //      auto-detection reverts our value to the monitor DPI. Pinned for
         //      EVERY record run — scale:1 included — so a non-100% monitor
         //      can't skew authored coordinates/CSS layout (record output must
-        //      be display-independent; wiki-media pipeline spec §1.7. This
+        //      be display-independent. This
         //      changes scale:1 behavior on non-100% displays: determinism
         //      wins). The batch preflight asserts the log line below.
         if (webController)

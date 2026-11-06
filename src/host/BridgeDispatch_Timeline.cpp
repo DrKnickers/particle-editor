@@ -1,5 +1,5 @@
 // Bridge request handlers for the timeline/* kinds, and the interactive
-// timeline session they drive (design section 11). BridgeDispatcher::
+// timeline session they drive. BridgeDispatcher::
 // DispatchInternal routes requests here via TryDispatchTimeline; the host's
 // paced idle slot calls ServiceTimeline once per frame.
 //

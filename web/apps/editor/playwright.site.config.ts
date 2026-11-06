@@ -1,4 +1,4 @@
-// Playwright config for the landing-page smoke (spec §7). Serves the static repo-root
+// Playwright config for the landing-page smoke. Serves the static repo-root
 // site/ via a dependency-free node server (NOT Vite — the site has no toolchain).
 // Separate from playwright.web.config.ts (testDir ./tests-web) so neither picks up the
 // other's specs. webServer cwd is this package (web/apps/editor), so the command path is

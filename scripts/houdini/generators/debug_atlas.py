@@ -1,4 +1,4 @@
-# [houdini] debug-atlas: the aesthetics-free frame-order oracle (plan §3.4).
+# [houdini] debug-atlas: the aesthetics-free frame-order oracle.
 #
 # Writes grid*grid frames, each one flat colour that encodes its own index:
 # red = (i % grid) / (grid - 1), green = (i // grid) / (grid - 1), blue = 0.5.

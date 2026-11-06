@@ -52,8 +52,7 @@ describe("engine host setup bridge", (): void => {
       });
       await vi.runAllTimersAsync();
       expect(progressed).toHaveBeenCalledTimes(3);
-      const exePath: string | null =
-        action === "setup" ? MOCK_MANAGED_EDITOR_PATH : null;
+      const exePath: string | null = action === "setup" ? MOCK_MANAGED_EDITOR_PATH : null;
       expect(finished).toEqual([action === "setup" ? { ok: true, action, exePath } : { ok: true, action }]);
       expect(await bridge.request({ kind: "engineHost/settings", params: {} })).toEqual({ exePath });
       expect(await bridge.request({ kind: "engineHost/setup/status", params: {} })).toEqual({

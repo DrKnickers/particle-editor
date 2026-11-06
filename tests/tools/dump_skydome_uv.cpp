@@ -1,6 +1,6 @@
 // dump_skydome_uv.cpp -- characterize a skydome .alo's geometry + AUTHORED UVs
-// to decide whether its longitude seam needs a wholesale UV remap (the skydome seam investigation's
-// SphericalReUV, which throws away authored UVs) or just a targeted de-wrap of
+// to decide whether its longitude seam needs a wholesale UV remap (a spherical
+// re-UV, SphericalReUV, which throws away authored UVs) or just a targeted de-wrap of
 // the closure-bridge triangles. Pure: AloModel + ChunkReader + files; no engine,
 // no D3D, no GPU -> deterministic, fast, CI-able.
 //

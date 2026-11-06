@@ -5,32 +5,29 @@
 // shots keep ProjectileShot.h, the rocket's curve math lives in RocketSpline.h, and
 // the lightsaber throw is not emulated.
 //
-// Decompiled (StarWarsI.exe debug build, ProjectileBehaviorClass::Service): every
-// logic frame (GAME_LOGIC_FPS) a shot runs the service for its <Projectile_Category>:
-//   - MISSILE  (Service_As_Missile_Path_Projectile): turns toward its target by at most
+// The game's per-frame projectile step: every logic frame (GAME_LOGIC_FPS),
+// a shot follows the path for its <Projectile_Category>:
+//   - MISSILE: turns toward its target by at most
 //     <Max_Rate_Of_Turn> degrees per frame on yaw and on pitch separately
-//     (GameObjectClass::Turn_To_Face; a projectile skips the land/space speed
+//     (a projectile skips the land/space speed
 //     multiplier), then moves Speed along its new facing.
-//   - BOMB, CLUSTER_BOMB (Service_As_Bomb_Path_Projectile): moves Speed along its
+//   - BOMB, CLUSTER_BOMB: moves Speed along its
 //     launch facing, then drops BombFallRate, which grows by
 //     <Projectile_Bomb_Fall_Accel_Rate> every frame. The facing never changes.
-//   - GRENADE (Service_As_Grenade_Path_Projectile): a closed-form lob,
+//   - GRENADE: a closed-form lob,
 //     pos(t) = P0 + t * (dir * v + t/2 * (0, 0, -Gravity * Lob_Mod)), t in frames,
 //     facing the next position. The launch pitch and speed come from
-//     WeaponBehaviorClass::Can_Grenade_Projectile_Lob_Hit_Target; with no solution the
-//     game doesn't fire.
-//   - ROCKET, MPTL_ROCKET (Service_As_Rocket_Path_Projectile): on its first frame it
-//     builds a spline (Calculate_Rocket_Path_Space / _Land): a straight start along its
+//     the game's lob calculation; with no solution the game doesn't fire.
+//   - ROCKET, MPTL_ROCKET: on its first frame it builds a spline: a straight start along its
 //     launch facing, then points every <Projectile_Rocket_Curve_Distance> x 1.1 toward the
 //     target, each pushed aside by a random offset of up to <Projectile_Rocket_Curve_Offset>
-//     (Construct_Rocket_Path_Segment, Add_Random_Offset), and an overshoot past the
-//     target. On land the points stay above the ground (Adjust_Height). Every frame it
-//     moves Speed further along the spline and turns toward the new point at
+//     and an overshoot past the target. On land the points stay above the ground. Every frame
+//     it moves Speed further along the spline and turns toward the new point at
 //     <Max_Rate_Of_Turn>; past the spline's end it detonates.
 // A shot dies once it has travelled Speed per frame for <Projectile_Max_Flight_Distance>
-// plus the launch-to-target height difference (WeaponBehaviorClass::Fire_Projectile),
+// plus the launch-to-target height difference,
 // or, for a grenade with a <Projectile_Max_Lifetime>, once that many seconds pass
-// (Advance_Projectile_Position). Collisions also end it; the preview models the ground
+// during flight. Collisions also end it; the preview models the ground
 // plane and reaching the target point.
 //
 // Floats only and no engine includes, so the unit test can link it bare.
@@ -72,7 +69,7 @@ struct ProjectileFlightParams
     bool  rocketExplodesAtTarget = false; // <Explode_When_Reached_Target_Radius>
     bool  rocketTargetOnTerrain  = false; // <Projectile_Target_Point_On_Terrain>
     bool  inSpace                = false; // space rockets skip the land path's ground rules
-    // A uniform draw in [lo, hi): the game's SyncRandom.Get_Float, for rocket offsets.
+    // A uniform draw in [lo, hi): the game's synchronized random stream, for rocket offsets.
     // Required for rockets; a test passes a fixed sequence.
     std::function<float(float lo, float hi)> randomInRange;
 };
@@ -85,20 +82,22 @@ struct FlightSample
 };
 
 // Safety bound on a computed path: 30 game seconds. Every stock curved shot ends sooner.
-constexpr int   kMaxFlightFrames          = 900;
-constexpr float kDegreesPerRadian         = 57.295776f; // the game's own constant
-constexpr float kRadiansPerDegree         = 0.017453292f;
-constexpr float kLobSlowerSpeedRatio      = 0.8f;    // Can_Grenade_Projectile_Lob_Hit_Target
-constexpr float kLobMinHorizontalDistance = 0.0001f; // Calc_Lobbed_Projectile_Initial_Angle
+constexpr int   kMaxFlightFrames  = 900;
+constexpr float kDegreesPerRadian = 57.295776f; // the game's own constant
+constexpr float kRadiansPerDegree = 0.017453292f;
+// Fixed values that match the game's projectile code; change them only to follow the game.
+constexpr float kLobSlowerSpeedRatio      = 0.8f;    // speed x this per retry when a lob can fire slower
+constexpr float kLobMinHorizontalDistance = 0.0001f; // stands in for zero so the lob angle stays finite
 
-// Rocket path constants (Calculate_Rocket_Path_Space / _Land, Construct_Rocket_Path_Segment).
+// Rocket path constants shared by the land and space paths. Like the lob values above,
+// they match the game; change them only to follow it.
 constexpr float kRocketCurveDistanceScale       = 1.1f;  // control-point spacing x Curve_Distance
 constexpr float kRocketStraightOffsetScale      = 0.1f;  // offset x Curve_Offset on the straight start
 constexpr float kRocketTargetOffsetScale        = 1.0f;  // ... on the way to the target
 constexpr float kRocketOvershootOffsetScale     = 0.3f;  // ... past the target
-constexpr float kRocketRateOfDescent            = 0.3f;  // Adjust_Height's RATE_OF_DESCENT
-constexpr float kRocketEvalSpacing              = 10.0f; // SplineClass::Evaluate(10)
-constexpr float kRocketLandOvershootEvalSpacing = 20.0f; // Evaluate(0x14) before the land overshoot
+constexpr float kRocketRateOfDescent            = 0.3f;  // a point keeps >= 70% of the previous point's height
+constexpr float kRocketEvalSpacing              = 10.0f; // world units of arc between spline samples
+constexpr float kRocketLandOvershootEvalSpacing = 20.0f; // ... before the land overshoot is measured
 constexpr float kRocketOffsetPlaneBias          = 1.0f;  // added to each axis of the segment midpoint
 
 inline std::string ToUpperAscii(const std::string& text)
@@ -148,7 +147,7 @@ struct GameFacing
     float yawDeg   = 0.0f;
 };
 
-// FacingClass::FacingClass(from, to), literally. The pitch test compares X and Z
+// Facing from the launch point to the target. The pitch test compares X and Z
 // (not X and Y) in the game too.
 inline GameFacing GameFacingFromTo(const float from[3], const float to[3])
 {
@@ -167,7 +166,7 @@ inline GameFacing GameFacingFromTo(const float from[3], const float to[3])
     return f;
 }
 
-// Rotate_Z(yaw) then Rotate_Y(pitch) applied to +X, as every path service builds it.
+// Yaw about Z then pitch about Y applied to +X, as in every projectile path.
 inline void GameFacingDirection(const GameFacing& f, float dir[3])
 {
     const float pitch = f.pitchDeg * kRadiansPerDegree;
@@ -177,7 +176,7 @@ inline void GameFacingDirection(const GameFacing& f, float dir[3])
     dir[2]            = -std::sin(pitch);
 }
 
-// FacingClass::Clamp_180: an angle difference folded into [-180, 180].
+// Wrapped angle: an angle difference folded into [-180, 180].
 inline float GameClamp180(float deg)
 {
     while (deg > 180.0f) deg -= 360.0f;
@@ -185,7 +184,7 @@ inline float GameClamp180(float deg)
     return deg;
 }
 
-// GameObjectClass::Turn_To_Face: each axis steps toward `desired` by at most `rateDeg`.
+// Per-frame turning: each axis steps toward `desired` by at most `rateDeg`.
 inline GameFacing GameTurnToFace(const GameFacing& current, const GameFacing& desired, float rateDeg)
 {
     auto step = [rateDeg](float delta)
@@ -201,7 +200,7 @@ inline GameFacing GameTurnToFace(const GameFacing& current, const GameFacing& de
     return turned;
 }
 
-// WeaponBehaviorClass::Calc_Lobbed_Projectile_Initial_Angle: the high-lob launch angle
+// Grenade launch: the high-lob launch angle
 // (radians above horizontal) that lands `horizontalDistance` away and `heightDelta`
 // higher at `speed`, under `gravity`. False when the speed can't reach.
 inline bool GameLobAngle(float horizontalDistance, float heightDelta, float speed, float gravity, float& angleRad)
@@ -218,7 +217,7 @@ inline bool GameLobAngle(float horizontalDistance, float heightDelta, float spee
     return true;
 }
 
-// Can_Grenade_Projectile_Lob_Hit_Target: tries <Max_Speed>, then (when the grenade can
+// Grenade speed selection: tries <Max_Speed>, then (when the grenade can
 // lob slower) 0.8x that speed while a lob still reaches, keeping the slowest that does.
 inline bool GameGrenadeLob(const ProjectileFlightParams& p,
                            const float                   launch[3],
@@ -312,7 +311,7 @@ inline bool SampleFlightPath(
 
 namespace RocketPathDetail
 {
-constexpr float kTwoPi = 6.2831855f; // Add_Random_Offset's angle range
+constexpr float kTwoPi = 6.2831855f; // random-offset angle range
 
 inline void Cross(const float a[3], const float b[3], float out[3])
 {
@@ -330,7 +329,7 @@ inline void Normalize(float v[3])
         for (int i = 0; i < 3; i++) v[i] /= length;
 }
 
-// Add_Random_Offset: a random direction in the plane of `u` and `v`, a random length
+// Rocket offset: a random direction in the plane of `u` and `v`, a random length
 // up to `maxOffset`. The angle is drawn first, then the length.
 inline void AddRandomOffset(
     float point[3], float maxOffset, const float u[3], const float v[3], const ProjectileFlightParams& p)
@@ -340,7 +339,7 @@ inline void AddRandomOffset(
     for (int i = 0; i < 3; i++) point[i] += (u[i] * std::cos(angle) + v[i] * std::sin(angle)) * length;
 }
 
-// Adjust_Height: at least the launch's clearance above the ground, and no lower than
+// Rocket ground clearance: at least the launch's clearance above the ground, and no lower than
 // (1 - RATE_OF_DESCENT) times the previous point's height.
 inline void AdjustHeight(float point[3], const float previous[3], float clearance, float groundZ)
 {
@@ -350,7 +349,7 @@ inline void AdjustHeight(float point[3], const float previous[3], float clearanc
     point[2]                      = (z < lowestDescent) ? lowestDescent : z;
 }
 
-// Construct_Rocket_Path_Segment's alignment and flags.
+// Rocket path segment alignment and flags.
 struct SegmentRules
 {
     float offsetScale    = 1.0f;  // times <Projectile_Rocket_Curve_Offset>
@@ -373,7 +372,7 @@ inline SegmentRules    LandToTarget(bool targetOnTerrain)
             /*isFinalSegment=*/true};
 }
 
-// Construct_Rocket_Path_Segment: control points every Curve_Distance x 1.1 from
+// Rocket segment: control points every Curve_Distance x 1.1 from
 // `start` to `end`, each pushed aside in the plane across the segment. Space leaves
 // the end point exact; land keeps the points above the ground. The preview's ground
 // has no edge, so the game's map-bounds test never drops a point here.
@@ -451,7 +450,7 @@ inline float FlatDistance(const float a[3], const float b[3])
 // A spline with too few points keeps its previous curve, so a path trimmed to two
 // points still flies its untrimmed curve, capped by the flight distance; one that
 // never evaluated has no length, and ComputeRocketFlight then reports no flight.
-// Calculate_Rocket_Path_Space. Returns the distance along the path at which a rocket
+// Space rocket path. Returns the distance along the path at which a rocket
 // with <Explode_When_Reached_Target_Radius> stops: its flight distance.
 inline float BuildSpaceRocketPath(RocketSpline&                 spline,
                                   const ProjectileFlightParams& p,
@@ -490,7 +489,7 @@ inline float BuildSpaceRocketPath(RocketSpline&                 spline,
     return p.range;
 }
 
-// Calculate_Rocket_Path_Land. Returns the distance along the path at which a rocket
+// Land rocket path. Returns the distance along the path at which a rocket
 // with <Explode_When_Reached_Target_Radius> stops: the length up to its target.
 inline float BuildLandRocketPath(RocketSpline&                 spline,
                                  const ProjectileFlightParams& p,
@@ -613,7 +612,7 @@ inline bool ComputeProjectileFlight(ProjectileFlightKind          kind,
     GameFacing  facing    = GameFacingFromTo(origin, aimIsZero ? plusX : aim);
     if (kind == ProjectileFlightKind::Rocket) return ComputeRocketFlight(p, launch, facing, target, out);
 
-    // Fire_Projectile adds the launch-to-target height difference to the flight distance.
+    // The game adds the launch-to-target height difference to the flight distance.
     const float maxTravel = p.range + std::fabs(target[2] - launch[2]);
     float       pos[3]    = {launch[0], launch[1], launch[2]};
     float       dir[3];
@@ -626,7 +625,7 @@ inline bool ComputeProjectileFlight(ProjectileFlightKind          kind,
         facing.pitchDeg = -(lobAngle * kDegreesPerRadian);
         GameFacingDirection(facing, dir);
         const float gravity = p.grenadeGravity * p.grenadeLobMod;
-        const bool  ageEnds = p.maxLifetimeSec > 0.0f; // Advance_Projectile_Position
+        const bool  ageEnds = p.maxLifetimeSec > 0.0f;
         Push(out, pos, dir);
         float travelled = 0.0f;
         for (int frame = 1; frame < kMaxFlightFrames; frame++)

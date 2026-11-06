@@ -6,7 +6,7 @@
 //
 // With --exe it first runs `--tool index` (roots and layers as the tool takes
 // them; layers highest first) and keeps its records beside the catalog. Local
-// only: it reads the records and writes the catalog, nothing else (§24.3).
+// only: it reads the records and writes the catalog, nothing else.
 import * as fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";

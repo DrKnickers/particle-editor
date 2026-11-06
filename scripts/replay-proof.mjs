@@ -300,7 +300,7 @@ export function checkReport(report, definition, scenario) {
       // a deterministic lane failure. An incorrectly claimed acceptance is.
       if (found.length !== 1) acceptanceBlockers.push(`E10 missing measurement frame ${f}, render=${intermediate}`);
     }
-    // Acceptance uses the destination-only seek (plan amendment, 2026-10-05);
+    // Acceptance uses the destination-only seek;
     // rendered-intermediate seeks pace to the display refresh and are informational.
     const latency = timings.find((t) => t.frame === 300 && t.renderIntermediate === false);
     if (definition.latencyRequired && (!latency || latency.medianMs > 250))

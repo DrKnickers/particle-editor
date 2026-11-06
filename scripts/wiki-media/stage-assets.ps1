@@ -1,4 +1,4 @@
-﻿# stage-assets.ps1 - build the wiki-media tutorial fixture tree (pipeline spec section 6).
+﻿# stage-assets.ps1 - build the wiki-media tutorial fixture tree.
 #
 # Creates <focMods>\ParticleTutorial\Data\Art\Models, copies the two vanilla source
 # effects in as loose overrides, then runs the builder timelines (record runs whose
@@ -113,8 +113,8 @@ if (-not $SkipBuilders) {
         # from-scratch build-t5-explosion.timeline.json is RETIRED: it produced a toy
         # soft-dot explosion unrelated to the guide's example files.
         # All open t5-example-flipbook.alo EXCEPT build-t5-fire-layered, which opens the
-        # PLAIN t5-example.alo — §4 Option B is the layered fireball, and only the plain
-        # example has the Fire + Fire Details pair.
+        # PLAIN t5-example.alo — the layered fireball needs the Fire + Fire Details
+        # pair, which only the plain example has.
         'build-t5-flash-shockwave.timeline.json',
         'build-t5-smoke-fire.timeline.json',
         'build-t5-fire-only.timeline.json',

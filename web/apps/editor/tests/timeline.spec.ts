@@ -1,4 +1,4 @@
-// The interactive timeline on the real exe (design section 11).
+// The interactive timeline on the real exe.
 //
 // The replay proof's E12 checks that timeline seeks are bit-identical to the
 // proof's replays, but the proof drives the controller synchronously: it has

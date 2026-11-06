@@ -134,7 +134,7 @@ public:
     // headless run never opens a window nobody asked for. Off until set.
     void SetExternalLaunchAllowed(bool allowed) { m_externalLaunchAllowed = allowed; }
 
-    // ---- Interactive timeline (design section 11; BridgeDispatch_Timeline.cpp) ----
+    // ---- Interactive timeline (BridgeDispatch_Timeline.cpp) ----
     //
     // While a timeline session is open, a ParticleReplayController is the
     // only thing that advances the simulation: the frame on screen is always

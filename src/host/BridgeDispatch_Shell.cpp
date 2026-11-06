@@ -56,8 +56,8 @@ bool BridgeDispatcher::TryDispatchShell(BridgeRequestContext& ctx)
     // WS_EX_LAYERED + ULW_ALPHA hit-test semantics).
     //
     // Engine code is unchanged — camera frustum still uses the full
-    // popup backbuffer aspect (popup-rect aspect per the T4c
-    // questionnaire). This message is alpha-mask-only; it does NOT
+    // popup backbuffer aspect (the popup rect's aspect, by choice).
+    // This message is alpha-mask-only; it does NOT
     // trigger Engine::Reset. Splitter drag can fire this per frame
     // without stacking expensive D3D9 device resets.
     //

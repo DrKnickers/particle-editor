@@ -1,4 +1,4 @@
-// [vfx-loop] The four-seed review (design §18.1 "run several variations").
+// [vfx-loop] The four-seed review.
 //
 // The source and the final candidate are observed under each of four variation
 // seeds and compared seed by seed, so a budget such as "do not increase peak

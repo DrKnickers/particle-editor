@@ -1,7 +1,7 @@
 // Test for the curved projectile paths (src/simulation/ProjectileFlight.h, #967).
 //
-// Each path is checked against its own literal re-run of the decompiled per-frame
-// service (ProjectileBehaviorClass::Service_As_*_Path_Projectile), written here
+// Each path is checked against its own literal re-run of the game's per-frame
+// projectile step, written here
 // independently of the header, plus the facing math, the lob solver and the ends.
 
 #include "simulation/ProjectileFlight.h"
@@ -35,7 +35,7 @@ static double Dist(const float a[3], const float b[3])
 }
 
 // Reference missile loop: yaw/pitch in degrees, each axis stepped toward the target
-// by at most `rate` (Turn_To_Face), then a move of `speed` along the new facing.
+// by at most `rate`, then a move of `speed` along the new facing.
 static std::vector<FlightSample> ReferenceMissile(
     const float launch[3], float yaw0, float pitch0, const float target[3], float speed, float rate, float range)
 {
@@ -142,7 +142,7 @@ int main()
         w.yawDeg = 350.0f;
         GameFacing t;
         t.yawDeg = 10.0f;
-        CHECK(Near(GameTurnToFace(w, t, 3.0f).yawDeg, 353.0f, 1e-4), "turning wraps through 0 (Clamp_180)");
+        CHECK(Near(GameTurnToFace(w, t, 3.0f).yawDeg, 353.0f, 1e-4), "turning wraps through 0");
         CHECK(Near(GameTurnToFace(w, t, 30.0f).yawDeg, 370.0f, 1e-4), "a big enough rate lands on the target heading");
     }
 
@@ -156,7 +156,7 @@ int main()
         std::vector<FlightSample> path;
         CHECK(ComputeProjectileFlight(ProjectileFlightKind::Missile, p, launch, aim, target, path), "missile flies");
         const std::vector<FlightSample> ref = ReferenceMissile(launch, 90.0f, 0.0f, target, 7.0f, 3.0f, 2200.0f);
-        CHECK(SamePath(path, ref, 1e-2), "path = the decompiled turn-then-move loop, frame by frame");
+        CHECK(SamePath(path, ref, 1e-2), "path = the game's turn-then-move loop, frame by frame");
         CHECK(path.size() > 2 && Near(path[0].facing[1], 1.0, 1e-5), "launches along the aim (+Y)");
         CHECK(path.size() > 2 && Near(path[1].facing[1], std::sin(87.0 * 3.14159265 / 180.0), 1e-4),
               "first frame turns 3 degrees toward the target");
@@ -378,7 +378,7 @@ int main()
 
         float previous[3] = {0, 0, 100}, point[3] = {5, 0, 10};
         RocketPathDetail::AdjustHeight(point, previous, 40.0f, 0.0f);
-        CHECK(point[2] == 70.0f, "Adjust_Height: no lower than 0.7 x the previous point's height");
+        CHECK(point[2] == 70.0f, "ground clearance: no lower than 0.7 x the previous point's height");
 
         p.rocketCurveDistance = 0.0f;
         CHECK(!ComputeProjectileFlight(ProjectileFlightKind::Rocket, p, high, aimX, target, path),

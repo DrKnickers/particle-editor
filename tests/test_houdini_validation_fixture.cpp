@@ -1,6 +1,6 @@
 // Pins effect/HoudiniValidationFixture.h: the one-emitter .alo that shows one
 // generated texture, written by --gen-houdini-validation-fixture (and, lifted
-// off the ground, by --gen-houdini-review-fixture). The Phase 8
+// off the ground, by --gen-houdini-review-fixture). The Houdini
 // validators read a texture through this fixture, so a drift here (a second
 // particle, a tint, a misnumbered flipbook key) would make them observe the
 // fixture instead of the texture. Section C round-trips it through the real

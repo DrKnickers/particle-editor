@@ -39,7 +39,7 @@ const MODES: { value: ThemeMode; label: string }[] = [
   { value: "system", label: "System" },
 ];
 
-// ── Design-handoff section card (2026-06-19 modal redesign) ──────────────
+// ── Section card ─────────────────────────────────────────────────────────
 // A grouped settings panel: a `bg` card with a `bg-2` uppercase header bar —
 // real hierarchy instead of a hairline top-border. Rows live inside.
 function SectionCard({ title, children }: { title: string; children: ReactNode }) {

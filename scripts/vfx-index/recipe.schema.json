@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "A registered VFX recipe (design §20.6)",
+  "title": "A registered VFX recipe",
   "description": "A reviewed, reusable piece of an existing effect. recipes.mjs implements exactly this shape, plus the per-type emitter counts and the catalog checks this schema cannot express.",
   "type": "object",
   "additionalProperties": false,

@@ -82,8 +82,8 @@ ProjectileFlightParams ReferenceFlightParams(const Engine::ReferenceProjectileIn
     p.rocketExplodesAtTarget = proj.rocketExplodesAtTarget;
     p.rocketTargetOnTerrain  = proj.rocketTargetOnTerrain;
     p.inSpace                = proj.inSpace;
-    // The preview's own random stream stands in for the game's SyncRandom, so each shot
-    // bends differently, like the game's, without matching any one game shot.
+    // The preview's random stream stands in for the game's synchronized stream,
+    // so each shot bends differently without matching any one game shot.
     p.randomInRange = [](float lo, float hi)
     {
         return ParticleRandom::Range(lo, hi);

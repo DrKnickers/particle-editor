@@ -1,4 +1,4 @@
-// [houdini] Editor validation (plan §3.6): does the editor load the
+// [houdini] Editor validation: does the editor load the
 // generated texture, and only from the generated root?
 //   node scripts/houdini/validate.mjs --entry <cache entry> --out <empty dir> [--exe <ParticleEditor.exe>]
 //

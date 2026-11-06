@@ -197,7 +197,7 @@ bool BridgeDispatcher::TryDispatchEmitterProperties(BridgeRequestContext& ctx)
         // applied/skipped: the helpers classify each consumed key (type-ok →
         // applied, wrong type → skipped + fallback); the post-walk below adds
         // unconsumed keys (unknown field names) to skipped. The --record guard
-        // (ClipRunner, pipeline spec §1.5) aborts on non-empty skipped so a
+        // in ClipRunner aborts on non-empty skipped so a
         // typo'd tutorial patch can't record a silent no-op as success. Live UI
         // callers ignore these extra response fields.
         json appliedArr = json::array();

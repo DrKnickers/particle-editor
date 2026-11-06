@@ -1,5 +1,5 @@
 // [houdini] Output profiles: pack the frames into one texture, encode it for
-// its blend mode, and check the result (plan §3.4, §3.5). No aesthetics.
+// its blend mode, and check the result. No aesthetics.
 //
 // Layout: the texture is grid x cell texels on a side. Frame i sits in column
 // i % grid, row i / grid from the top-left, inset by PAD texels, so every cell
@@ -139,7 +139,7 @@ export function checkFrames(stats, layout) {
   return errors;
 }
 
-// The validators (§3.5) over the written texture. `image` is decodeTga()'s
+// The validators over the written texture. `image` is decodeTga()'s
 // result; `bytes` is its file size, or null when a DDS made from it is
 // published instead (validateDds holds that one to the limit).
 export function validateTexture(image, bytes, { blend, layout }) {

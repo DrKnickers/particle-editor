@@ -31,7 +31,7 @@ template <typename T> void relptr(T*& p)
 }
 
 // ASCII lower-case for case-insensitive bone-name matching (hardpoint XML is
-// all-caps; the .alo stores mixed/inconsistent case -- see the s50 investigation).
+// all-caps; the .alo stores mixed/inconsistent case).
 std::string toLower(std::string s)
 {
     for (char& c : s) c = (char)std::tolower((unsigned char)c);

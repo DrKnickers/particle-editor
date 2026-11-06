@@ -1,5 +1,5 @@
 // [houdini] The Job Object launcher and the machine lock, run for real with
-// system tools standing in for hython (plan §5 "Lock", risk 5).
+// system tools standing in for hython.
 //
 // The tree is cmd -> ping, and ping holds an output file that cmd opened for
 // it. Windows refuses to delete a file a live process holds, so "the file can

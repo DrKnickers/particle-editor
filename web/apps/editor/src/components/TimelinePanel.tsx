@@ -1,12 +1,12 @@
 // TimelinePanel — the interactive timeline's row under the viewport
-// (design section 11; the session and its store are in lib/timeline.ts).
+// (the session and its store are in lib/timeline.ts).
 //
 // Rendered only while a session is open, so the default layout is unchanged.
 // Opened and closed from the toolbar's timeline toggle and View → Timeline;
 // the X here closes it too. Every control goes through the host, which
 // replays the frame: nothing here advances the simulation itself.
 //
-// Labels follow §11.3: the readout is "time since spawn" and a frame number,
+// The readout is "time since spawn" and a frame number,
 // so it doesn't read as the curve editor's "% lifetime".
 
 import { useState } from "react";

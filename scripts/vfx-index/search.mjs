@@ -1,5 +1,5 @@
 // [vfx-index] Search the catalog by filename, emitter, effect, blend and observed
-// use (design §20, §25 acceptance). Every given facet must match; matches rank
+// use. Every given facet must match; matches rank
 // by how much of an asset's usage supports them, so a texture most smoke
 // emitters use outranks one a single emitter happens to share.
 //

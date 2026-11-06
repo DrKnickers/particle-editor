@@ -1,4 +1,4 @@
-# [houdini] The only hython entry point (plan §3.1, §3.3).
+# [houdini] The only hython entry point.
 #
 # generate.mjs launches `hython run_generator.py` inside a kill-on-close Job
 # Object with the working directory set to the stage, and sends one JSON job

@@ -23,7 +23,7 @@ function setup(t) {
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const source = join(root, "p_effect.alo");
   fs.writeFileSync(source, SOURCE);
-  const task = structuredClone(readJson(join(fixtures, "task-18-2.json")));
+  const task = structuredClone(readJson(join(fixtures, "task-example.json")));
   task.observation.output.strideInterval = 2;
   return { root, source, task, out: join(root, "task") };
 }
@@ -233,7 +233,7 @@ test("misaligned observations are blocked by tooling", async (t) => {
     { outcome: OUTCOME.tooling, exitCode: EXIT.misaligned, step: "round-01-compare", message: /geometry\.crop/ });
 });
 
-test("the outcome table (plan §7.1 G)", () => {
+test("the outcome table", () => {
   assert.equal(decideOutcome({ accepted: false, stop: "author-finished", fourSeedPass: false }), OUTCOME.technical);
   assert.equal(decideOutcome({ accepted: true, stop: "author-finished", fourSeedPass: false }), OUTCOME.technical);
   for (const stop of ["max-rounds", "two-rejections", "author-flagged"])
@@ -255,7 +255,7 @@ test("a non-empty task root is refused", async (t) => {
 });
 
 test("task validation names each problem", () => {
-  const task = readJson(join(fixtures, "task-18-2.json"));
+  const task = readJson(join(fixtures, "task-example.json"));
   assert.deepEqual(checkTask(task), []);
   const seed = task.observation.scenario.seed;
   assert.match(checkTask({ ...task, budgets: [{ id: "x", metric: "prettiness", maxDelta: 0 }] }).join(), /metric must be one of/);
@@ -279,8 +279,8 @@ test("variation seeds: the task's own first, then a fixed derivation, or the lis
   assert.deepEqual(variationSeeds(7, [7, 8, 9, 10]), [7, 8, 9, 10]);
 });
 
-test("the canned §18.2 patch set is well formed and edits three unlinked roots", () => {
-  const set = readJson(join(fixtures, "canned-18-2.patch.json"));
+test("the canned patch set is well formed and edits three unlinked roots", () => {
+  const set = readJson(join(fixtures, "canned-example.patch.json"));
   const hash = set.requests[0].selector.sourceDocumentHash;
   assert.deepEqual(checkPatchSet(set, hash), []);
   assert.deepEqual(set.requests.map((r) => r.selector.rolePath.at(-1).name), ["Fire", "Smoke", "Smoke Slow"]);

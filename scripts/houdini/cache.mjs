@@ -1,5 +1,4 @@
-// [houdini] The keyed cache and its provenance (plan §3.1 steps 2, 9-10;
-// spec §21.6).
+// [houdini] The keyed cache and its provenance.
 //
 // The key hashes everything that can change an output: the whole registry
 // entry (which pins the builder and its modules by hash), every file of the
@@ -93,7 +92,7 @@ export function checkManifest(text, count, dir, io = fs) {
   return manifest;
 }
 
-// Spec §21.6. "contentHash" is the texture's SHA-256, the identity its name
+// "contentHash" is the texture's SHA-256, the identity its name
 // carries; "usedBy" starts empty and validation starts "not-run".
 export function buildProvenance({ id, entry, key, params, seed, tier, build, hoiiotool, threads, manifestSha256, texture,
   texconv = null, cellSpan = null, cellSteps = null }) {

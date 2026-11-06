@@ -99,8 +99,8 @@ test("engine/set/ground-z mutates state and fires engine/state/changed", async (
   expect(result.event!.groundZ).toBeCloseTo(17.5, 5);
 });
 
-test("setter burst: coalesced state events still deliver the final value (B1)", async () => {
-  // Perf-plan B1 contract: EmitEngineStateChanged live-coalesces bursts
+test("setter burst: coalesced state events still deliver the final value", async () => {
+  // Contract: EmitEngineStateChanged live-coalesces bursts
   // (leading edge immediate, follow-ups pending, trailing flush from the
   // idle branch / next dispatch). Invariants a regression would break:
   //   1. every response in a rapid setter burst still resolves;

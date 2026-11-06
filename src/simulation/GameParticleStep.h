@@ -3,7 +3,7 @@
 // Game-style particle stepping for the analytic preview.
 //
 // The game moves a particle once per rendered frame with semi-implicit Euler
-// (decompiled alParticles::UpdateParticlePosition): velocity += a * dt first,
+// using velocity += a * dt first,
 // then position += velocity * dt. After n steps of a fixed dt that lands at
 //
 //   p(t) = p0 + v0 * t + 0.5 * a * t^2 + 0.5 * a * dt * t        (t = n * dt)
@@ -18,8 +18,8 @@
 //
 // Not covered by the shift:
 //   - GROUND_BOUNCE particles: the game routes terrain-colliding particles
-//     through a separate path (UpdateCollidableParticlePosition) that has not
-//     been decompiled, so they keep the exact parabola.
+//     through a separate path whose stepping has not been verified against the
+//     game, so they keep the exact parabola.
 //   - Inward acceleration: the game re-aims it along the particle's current
 //     offset from the emitter every step; the editor fixes the direction at
 //     spawn, which no closed form can follow.

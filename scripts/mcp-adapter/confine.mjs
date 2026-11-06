@@ -1,4 +1,4 @@
-// [mcp-adapter] Path confinement (design §24.1). Every path a tool takes is
+// [mcp-adapter] Path confinement. Every path a tool takes is
 // relative to the configured task root, and must stay inside it both as
 // written and once links and junctions are resolved.
 //

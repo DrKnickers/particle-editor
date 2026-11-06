@@ -1,11 +1,11 @@
-// [mcp-adapter] Particle Editor as a local MCP server over stdio (design
-// §4.6, Phase 11). A thin shell over ParticleEditor.exe and the repo's own
+// [mcp-adapter] Particle Editor as a local MCP server over stdio.
+// A thin shell over ParticleEditor.exe and the repo's own
 // scripts: it confines paths to one task root and passes their JSON through.
 //
 //   node scripts/mcp-adapter/server.mjs --exe <ParticleEditor.exe> --root <task folder>
 //        [--game-root <dir>]...
 //
-// The exe and the root are fixed at launch, never by a tool call (§24.2).
+// The exe and the root are fixed at launch, never by a tool call.
 // --game-root is passed to observe, as `scripts/observe.mjs` takes it. stdout
 // carries protocol messages only; the log goes to stderr.
 import * as fs from "node:fs";

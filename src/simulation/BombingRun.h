@@ -1,7 +1,6 @@
 #pragma once
 
-// A land bombing run as the game flies one (#970; decompiled StarWarsI.exe debug build,
-// BombingRunManagerClass and LandBomberLocomotorBehaviorClass): a V of three bombers
+// A land bombing run as the game flies one (#970): a V of three bombers
 // on a straight line through the target, each dropping on its own marker while that
 // marker is within attack range. Owns the run's geometry and drop schedule only;
 // SpawnerDriver spawns the drops as shots. The preview has no map, so the run starts
@@ -38,8 +37,8 @@ constexpr float kStockBomberAttackDistance    = 500.0f; // world units
 constexpr float kLandSpeedMultiplier = 1.56f;
 
 constexpr int kBombingRunBomberCount = 3;
-// Wingmen sit 70 world units behind the leader and 70 to either side, in run-heading space
-// (Get_Bomber_Path); bomber 0 is the leader.
+// Wingmen sit 70 world units behind the leader and 70 to either side, in run-heading space;
+// bomber 0 is the leader.
 constexpr float kWingmanBackOffset = 70.0f;
 constexpr float kWingmanSideOffset = 70.0f;
 // The run starts this long, at bomber speed, before the bombers come within attack range

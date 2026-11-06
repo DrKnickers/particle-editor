@@ -1,5 +1,5 @@
-// Chain-investigation v3 — author the in-game depth-3 test .alo with the
-// editor's OWN data model instead of ad-hoc byte patches (the v2 trap).
+// Chain test — author the in-game depth-3 test .alo with the editor's OWN
+// data model instead of ad-hoc byte patches.
 //
 // Loads vanilla P_S_ASSAULTCONC.ALO (6 emitters, all roots, no links),
 // rewires it via the editor's validated reparentEmitter:

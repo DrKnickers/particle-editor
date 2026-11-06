@@ -1,6 +1,6 @@
 // [mcp-adapter] The tools. Each checks its arguments, confines its paths to the
 // task root, runs one stable command, and returns that command's JSON
-// unchanged (design §4.6). There is no format, render or safety-policy logic
+// unchanged. There is no format, render or safety-policy logic
 // here: the exe and the repo scripts own all of it.
 import * as fs from "node:fs";
 import { mkdtempSync, rmSync } from "node:fs";

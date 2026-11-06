@@ -11,7 +11,7 @@
 //   spacer
 // Group 6 (environment):        Ground dropdown · Background dropdown
 //
-// Stop and Restart removed per design chat. The three viewport toggles
+// Stop and Restart were removed. The three viewport toggles
 // (ground / bloom / leave-particles) live here as lucide icon buttons —
 // they replaced the floating ViewportPill. Undo/Redo also appear in the
 // Edit menu; Reload Shaders/Textures lives in the menubar only.

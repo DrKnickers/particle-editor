@@ -1,5 +1,5 @@
-// `ParticleEditor.exe --tool` end to end: inspect (Phase 4B PR 1), validate
-// (PR 2), patch (PR 3) and build. Drives the built exe (NEEDS_EXE:
+// `ParticleEditor.exe --tool` end to end: inspect, validate,
+// patch and build. Drives the built exe (NEEDS_EXE:
 // run-native-unit-tests passes its path as argv[1]) on fixtures this test
 // writes, and checks exit codes, the output, the path-alias refusals and that
 // nothing else is left on disk. Every run has a deadline: a tool run that

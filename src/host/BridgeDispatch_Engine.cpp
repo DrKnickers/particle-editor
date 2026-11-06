@@ -594,7 +594,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
 
     // -------- engine/set/estimated-load (hard-guard) -----------------
     // Web-computed estimate of alive particles per placed instance
-    // (chain-load.ts owns the formula — see the hard-guard spec). Cached
+    // (chain-load.ts owns the formula). Cached
     // and reapplied on SetEngine like the guard config.
     if (kind == "engine/set/estimated-load")
     {

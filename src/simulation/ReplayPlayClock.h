@@ -1,6 +1,6 @@
 #pragma once
 
-// Interactive timeline play clock (design section 11).
+// Interactive timeline play clock.
 //
 // While the timeline plays, the host's paced idle slot asks which replay frame
 // is due. Replay frames are a fixed 1/60 s apart, so this only paces playback:

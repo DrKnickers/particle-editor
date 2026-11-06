@@ -10,7 +10,7 @@
 // Window-free authoring rules for emitter tracks: the legality the bridge
 // track handlers (src/host/BridgeDispatch_EmitterTracks.cpp) apply today,
 // in one place, so the editor and the planned `--tool patch` verbs apply the
-// same rules (agentic-VFX design §14). Pure over the data model: nothing here
+// same rules. Pure over the data model: nothing here
 // touches undo, dirty state, selection, engine invalidation, events or the
 // wire. Those stay with the caller (the "adapter").
 //
@@ -195,14 +195,14 @@ EditResult ClassifyAtlasIndex(const ParticleSystem::Emitter& emitter, float inde
 
 // ---- Link groups ------------------------------------------------------------
 
-// The --tool verbs refuse to edit a linked emitter (design §14.3). The bridge
+// The --tool verbs refuse to edit a linked emitter. The bridge
 // does not use this: the editor keeps its linked-edit behavior.
 inline bool HasLinkGroupMembership(const ParticleSystem::Emitter& emitter)
 {
     return emitter.linkGroup != 0;
 }
 
-// ---- Tool-only rules (Phase 4B decision 6) ----------------------------------
+// ---- Tool-only rules ----------------------------------
 //
 // The --tool verbs apply these; the bridge handlers do not (yet), so the
 // editor keeps its current behavior. Field names are `--tool inspect` paths

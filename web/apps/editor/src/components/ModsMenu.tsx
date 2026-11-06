@@ -16,7 +16,7 @@ import { Tip } from "@/primitives/Tip";
 
 const MODS_MENU_VALUE = "mods";
 
-// Small inline glyphs from the Mods-menu design (kept inline to avoid lucide
+// Small inline glyphs for the Mods menu (kept inline to avoid lucide
 // name churn): a refresh arc, an expand-to-modal arrow, a filled "top wins"
 // triangle.
 const RefreshIcon = () => (

@@ -17,8 +17,8 @@
 //   - DXGI Present1 stall (e.g. swapchain config incompatible with
 //     DComp resulting in CPU blocking on Present).
 //
-// The original spec said "FPS > 80 at 1080p AND > 60 at
-// 3440×1440." Both resolutions require the test harness to drive the
+// The full target is FPS > 80 at 1080p AND > 60 at
+// 3440×1440. Both resolutions require the test harness to drive the
 // host window to those specific sizes — we don't currently have a
 // `host/window-rect` bridge for setting outer-window size from a
 // spec. The single-resolution gate at the user's current window size

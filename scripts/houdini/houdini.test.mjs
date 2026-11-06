@@ -1,5 +1,5 @@
 // [houdini] The child environment is exactly the allowlist, and the binaries
-// are the pinned constants (plan §5 "Spawn environment").
+// are the pinned constants.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";

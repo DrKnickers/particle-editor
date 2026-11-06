@@ -24,7 +24,7 @@
 // locked to `track`, which the edit changes too. It is required, and must
 // list them exactly, when there are any.
 //
-// Outcomes the editor would adjust silently are refused (owner decision 7):
+// Outcomes the editor would adjust silently are refused:
 // a set or add whose key is not found, a border key whose time would move, an
 // add the dedup would nudge, and a value that differs from the current one
 // but saves as it. Setting a field to its current value is `unchanged`.
@@ -46,7 +46,7 @@ struct PatchHooks
 
 // Runs a patch of `source` (its bytes and their SHA-256) with `request`'s
 // bytes, writing the candidate to `out` on success. `inputPath` names the
-// source for the internal-name warning. Fills `report` (§3.6) whatever the
+// source for the internal-name warning. Fills `report` whatever the
 // outcome and returns the exit code (ToolIO.h).
 int RunPatch(const std::string&  source,
              const std::string&  sourceHash,

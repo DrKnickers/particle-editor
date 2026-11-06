@@ -303,7 +303,7 @@ inline bool IsAllowedRecordKind(const std::string& kind)
     // linkGroups/set-membership {ids, groupId} sets (groupId) or clears (groupId:
     // null) a link group for a batch of emitters. In-memory + dialog-free. A BUILDER
     // needs this to hand a clip a clean starting state: the Tutorial-5 example ships
-    // its four Debris already in a link group, so the §6 clip — which teaches
+    // its four Debris already in a link group, so the clip — which teaches
     // CREATING the group via the UI (multi-select -> Set Link Group) — must start
     // from an UNLINKED Debris, which only an explicit unlink can produce.
     //
@@ -352,7 +352,7 @@ inline bool IsAllowedRecordKind(const std::string& kind)
     if (kind == "ui/pose-drag") return true;            // pose a frozen reorder drag (chip+gap) for a clip still
     if (kind == "ui/set-picker-search") return true;    // drive a picker's search box (the cursor can't type)
     if (kind == "ui/picker-collapse") return true;      // force-collapse picker sections (e.g. Heroes) under a search
-    // Wiki-media tutorial kinds (pipeline spec §1). Each is guarded, not trusted:
+    // Wiki-media tutorial kinds. Each is guarded, not trusted:
     // file/save is dialog-free ONLY with an explicit params.path, and record
     // additionally confines the target under the timeline's `saveRoot`
     // (ClipRunner::Preflight, SavePathConfine.h) — a pathless save would pop

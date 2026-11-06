@@ -525,7 +525,7 @@ test("serve: closing stdin stops the call that is running", async () => {
   assert.equal(outcome, "stopped");
 });
 
-// ---- thinness (design §4.6) --------------------------------------------------------
+// ---- thinness --------------------------------------------------------
 
 test("the adapter imports only Node built-ins and its own modules, and starts processes only in run.mjs", () => {
   const sources = fs.readdirSync(here).filter((f) => f.endsWith(".mjs") && !f.endsWith(".test.mjs") && f !== "smoke.mjs");

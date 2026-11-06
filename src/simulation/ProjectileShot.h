@@ -2,8 +2,8 @@
 
 // How the game flies a projectile, for the spawner's "match projectile" mode.
 //
-// Decompiled (ProjectileBehaviorClass, StarWarsI.exe debug build):
-//   - Init sets Speed = the raw <Max_Speed>; no game-speed, mode or combat
+// The game's per-frame projectile rules:
+//   - At launch, Speed = the raw <Max_Speed>; no game-speed, mode or combat
 //     modifier applies to a projectile.
 //   - Every logic frame (30 per game second, GAME_LOGIC_FPS) a direct-path shot
 //     moves position += facing * Speed and adds Speed to DistanceTravelled.
@@ -95,10 +95,10 @@ inline void ProjectileShotBasis(const float dir[3], float x[3], float y[3], floa
 }
 
 // World axes of a shot's MODEL. The game draws every object's model turned +90
-// degrees about its local Z after the facing rotations (decompiled
-// GameObjectClass::Update_Transform: Rotate_Z(yaw), Rotate_Y(pitch), Rotate_X(roll),
-// then Rotate_Z(90)), so the model's -Y axis points along the flight. A laser bolt is
-// modelled along Y for that reason. Rows as in ProjectileShotBasis.
+// degrees about its local Z after the facing rotations (yaw about Z, pitch about Y,
+// roll about X, then another 90 degrees about Z), so the model's -Y axis points
+// along the flight. A laser bolt is modelled along Y for that reason.
+// Rows as in ProjectileShotBasis.
 inline void ProjectileShotModelAxes(const float dir[3], float mx[3], float my[3], float mz[3])
 {
     float x[3], y[3], z[3];

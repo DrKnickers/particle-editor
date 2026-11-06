@@ -1,8 +1,8 @@
 #pragma once
 
-// The game's SplineClass as a rocket's path uses it (decompiled, StarWarsI.exe debug
-// build): a natural cubic per axis over the control-point index, each segment's arc
-// length by recursive chord bisection, and the point a given distance along the curve.
+// The game's rocket spline: a natural cubic per axis over the control-point index,
+// each segment's arc length by recursive chord bisection, and the point a given
+// distance along the curve.
 // Owns the curve math only; ProjectileFlight.h builds a rocket's control points and
 // flies it. Floats only and no engine includes, so the unit test can link it bare.
 
@@ -19,15 +19,15 @@ struct SplineCubic
 class RocketSpline
 {
 public:
-    // SplineClass::Evaluate needs at least this many control points; with fewer it
+    // Spline evaluation needs at least this many control points; with fewer it
     // returns false and keeps whatever it computed before.
     static constexpr int kMinEvaluatedControlPoints = 3;
-    // Evaluate's sample count per segment: ceil(arc length / spacing), clamped here.
+    // Spline sample count per segment: ceil(arc length / spacing), clamped here.
     static constexpr int kMaxEvaluatedPointsPerSegment = 100;
-    // splinearc stops bisecting once chord and half-chords agree this closely.
+    // Arc-length bisection stops once chord and half-chords agree this closely.
     static constexpr float kArcTolerance = 1e-6f;
-    // Not in the game: float rounding ends splinearc's recursion long before this on
-    // real curves, but a NaN control point would recurse forever.
+    // Not in the game: float rounding ends arc-length recursion long before this
+    // on real curves, but a NaN control point would recurse forever.
     static constexpr int kMaxArcBisections = 32;
 
     void AddControlPoint(const float p[3]) { m_controlPoints.push_back({p[0], p[1], p[2]}); }
@@ -36,14 +36,14 @@ public:
 
     const float* ControlPoint(int index) const { return m_controlPoints[index].v; }
 
-    // Remove_Control_Point from the end down to `firstIndex`, inclusive.
+    // Remove control points from the end down to `firstIndex`, inclusive.
     void RemoveControlPointsFrom(int firstIndex)
     {
         if (firstIndex < (int)m_controlPoints.size()) m_controlPoints.resize(firstIndex < 0 ? 0 : firstIndex);
     }
 
-    // SplineClass::Evaluate(spacing, false): fits the cubics, measures each segment and
-    // samples it about every `spacing` units of arc. It rebuilds the cached curve that
+    // Spline evaluation fits the cubics, measures each segment and samples it
+    // about every `spacing` units of arc. It rebuilds the cached curve that
     // Length, PointFromLength and LastEvaluatedStep read, so call it again after
     // changing control points.
     bool Evaluate(float spacing)
@@ -81,8 +81,8 @@ public:
 
     float Length() const { return m_length; }
 
-    // The last evaluated point minus the one before it (Get_Evaluated_Data(n - 1) and
-    // (n - 2)). False with fewer than two evaluated points.
+    // The last evaluated point minus the one before it (indices n - 1 and n - 2).
+    // False with fewer than two evaluated points.
     bool LastEvaluatedStep(float step[3]) const
     {
         const size_t n = m_evaluatedPoints.size();
@@ -91,7 +91,7 @@ public:
         return true;
     }
 
-    // SplineClass::Get_Point_From_Length: the segment holding `distance`, entered at a
+    // Distance lookup: the segment holding `distance`, entered at a
     // parameter LINEAR in the distance, (distance - segment start) / segment length.
     // So equal steps along the path are only roughly equal in space. False past the end.
     bool PointFromLength(float distance, float out[3], int& segment) const
@@ -124,7 +124,7 @@ private:
         float v[3];
     };
 
-    // SplineClass::calcNaturalCubic: the tridiagonal solve for a natural cubic through
+    // Cubic fitting: the tridiagonal solve for a natural cubic through
     // the control points, parameterised by index (every segment spans u = 0..1).
     void FitNaturalCubic(int axis)
     {
@@ -161,7 +161,7 @@ private:
 
     float SegmentArcLength(int segment, float u0, float u1) const { return SplineArc(segment, u0, u1, 0); }
 
-    // SplineClass::splinearc: the chord, or the two half-chords once they agree with it.
+    // Arc length: the chord, or the two half-chords once they agree with it.
     float SplineArc(int segment, float u0, float u1, int depth) const
     {
         float p0[3], p1[3], mid[3];

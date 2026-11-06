@@ -1,8 +1,8 @@
 // Authoring-parity oracle for the emitters/* track handlers
-// (src/host/BridgeDispatch_EmitterTracks.cpp) — Phase 4A PR 2.
+// (src/host/BridgeDispatch_EmitterTracks.cpp).
 //
-// Phase 4A moves those handlers onto the shared rules in
-// src/effect/ParticleAuthoring (PR 3). Document state alone cannot catch the
+// The handlers use the shared rules in
+// src/effect/ParticleAuthoring. Document state alone cannot catch the
 // ways that refactor can go wrong, so every edit here records the handler's
 // full behavioral fingerprint:
 //   - the wire response (verbatim JSON, or a thrown exception);
@@ -21,9 +21,10 @@
 // fixtures (a synthetic system with locked, unlocked and linked emitters, and
 // two shipped .alo files), each edit on a fresh load, plus one cumulative
 // sequence. The result must match tests/fixtures/authoring-parity/baseline.golden.txt
-// line for line; the baseline was recorded from the handlers before PR 3.
+// line for line; the baseline was recorded from the handlers before the
+// shared-rule refactor.
 //
-// It also holds the --tool boundary table (Phase 4B PR 3): where the tool's
+// It also holds the --tool boundary table: where the tool's
 // rules and the bridge differ on set-properties, rename and rescale, each
 // difference must be an expected one (see "Tool boundary table" below).
 //
@@ -511,8 +512,8 @@ static std::vector<Request> Sequence()
     };
 }
 
-// Inputs added after the PR 3 review, each on a fresh load of the synthetic
-// fixture, recorded (like everything above) from the handlers before PR 3:
+// Inputs added after the shared-rule review, each on a fresh load of the synthetic
+// fixture, recorded (like everything above) before the shared-rule refactor:
 // a non-string lockTo, non-finite values, mixed-batch error precedence in
 // both orders, -0.0, and the 1000-collision dedup cap (a 1002-key paste onto
 // one time: the last key lands on an occupied time).
@@ -607,14 +608,14 @@ static std::string Record(host::BridgeDispatcher& d, size_t n, const std::string
 }
 
 // ===========================================================================
-// Tool boundary table (Phase 4B PR 3, plan risk 3)
+// Tool boundary table
 // ===========================================================================
 //
-// The --tool verbs apply ParticleAuthoring's tool-only rules (owner decision
-// 6); the bridge keeps its own. For each boundary input, the table records
+// The --tool verbs apply ParticleAuthoring's tool-only rules; the bridge
+// keeps its own. For each boundary input, the table records
 // what each side does and must match the expected class:
 //   same            both apply, and the documents serialize to the same bytes
-//   tool-stricter   the tool refuses; the bridge applies (listed: decision 6)
+//   tool-stricter   the tool refuses; the bridge applies
 //   bridge-narrower the tool applies; the bridge skips the value
 //   both-refuse     the tool refuses and the bridge skips
 // Any row where both apply but the bytes differ fails. set-properties runs

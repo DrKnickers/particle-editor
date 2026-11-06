@@ -11,8 +11,7 @@
 // `ok:false`.
 //
 // This test doesn't (and can't, without GPU pixel inspection) verify
-// that the rendered output is crisp; that's a manual smoke-test gate
-// noted in the dispatch handoff.
+// that the rendered output is crisp; that stays a manual smoke test.
 
 import { test, expect, type Page } from "./helpers/cdp";
 

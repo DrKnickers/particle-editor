@@ -1,4 +1,4 @@
-# [houdini] Job Object launcher (plan decision 8).
+# [houdini] Job Object launcher.
 #
 # hython starts Mantra or husk children of its own. Killing hython alone would
 # orphan them, so every Houdini process runs inside a Job Object with

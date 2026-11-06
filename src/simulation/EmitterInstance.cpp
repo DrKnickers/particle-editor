@@ -26,7 +26,7 @@ static bool NormDiagEnabled()
     return s_diag != 0;
 }
 
-// [norm-dbg] one-shot diagnostic logger for the shaded-smoke s1 normal investigation.
+// [norm-dbg] one-shot diagnostic logger for shaded-smoke normals.
 static void NormDbg(const char* fmt, ...)
 {
     if (!NormDiagEnabled()) return;
@@ -386,7 +386,7 @@ bool EmitterInstance::SpawnParticle(TimeF currentTime)
 
     // Match the game's per-frame stepping (see GameParticleStep.h). Bounce particles
     // keep the exact parabola: the game routes them through a collision path that
-    // has not been decompiled.
+    // has not been verified against the game.
     particle.m_positionSpeedShift = D3DXVECTOR3(0, 0, 0);
     if (m_emitter.groundBehavior != ParticleSystem::GROUND_BOUNCE)
     {

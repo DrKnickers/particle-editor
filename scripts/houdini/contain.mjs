@@ -1,4 +1,4 @@
-// [houdini] Process containment and the machine lock (plan decision 8).
+// [houdini] Process containment and the machine lock.
 //
 // runContained drives launcher.ps1, which holds the Job Object. The launcher's
 // stdin is the kill switch: ending it (deadline, quota) or losing it (this

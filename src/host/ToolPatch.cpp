@@ -1,5 +1,4 @@
-// `--tool patch`. See ToolPatch.h for the request and the plan (§3.5) for the
-// verification model.
+// `--tool patch`. See ToolPatch.h for the request and verification contract.
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -65,7 +64,7 @@ std::vector<json> Ancestry(const json& dump, size_t pos)
     return chain;
 }
 
-// Steps 1-6 of §3.5. Fills `report` as it goes; returns false with `stop`.
+// Verification steps 1-6. Fills `report` as it goes; returns false with `stop`.
 bool Patch(const std::string&  source,
            const std::string&  sourceHash,
            const std::string&  requestBytes,

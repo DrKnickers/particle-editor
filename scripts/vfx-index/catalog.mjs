@@ -1,14 +1,14 @@
-// [vfx-index] The asset catalog (design §20): `--tool index` records folded into
+// [vfx-index] The asset catalog: `--tool index` records folded into
 // one asset per stack-aware identity, with the usage evidence a search ranks by.
 //
-// Identity is the triple (canonical name, content hash, content-stack hash)
-// (§20.3). The native tool resolves and hashes every texture through the
+// Identity is the triple (canonical name, content hash, content-stack hash).
+// The native tool resolves and hashes every texture through the
 // editor's own chain; nothing here resolves a path. One catalog covers one
 // content stack, so the stack hash is the same for every asset in it.
 //
-// Usage only, no vision (§20.1, §20.5): observed uses are counts of what the
+// Usage only, no vision: observed uses are counts of what the
 // effects do with an asset; suggested uses are read off that distribution.
-// Atlas interpretations are counted, never collapsed to one (§20.4).
+// Atlas interpretations are counted, never collapsed to one.
 
 // ParticleSystem::BLEND_* in order (src/effect/ParticleSystem.h).
 export const BLEND_NAMES = ["none", "additive", "transparent", "inverse", "depth-additive", "depth-transparent",

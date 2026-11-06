@@ -1,6 +1,6 @@
-// T0 (§4 plan): dump the flipbook example's Fire emitter — every property and
+// T0: dump the flipbook example's Fire emitter — every property and
 // every track key — and DIFF it against a freshly-constructed default emitter,
-// to pin the EXACT build target for the §4 build clip. Read-only, dev-box only.
+// to pin the EXACT build target for the fireball build clip. Read-only, dev-box only.
 //   usage: dump_fire_emitter.exe <path-to-flipbook.alo>
 #include <windows.h>
 #include "effect/ParticleSystem.h"

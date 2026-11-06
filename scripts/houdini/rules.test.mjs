@@ -1,5 +1,5 @@
 // [houdini] Input rules: every class of hostile or malformed input is refused
-// with exit 2 (plan §5 "Input rejection").
+// with exit 2.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";

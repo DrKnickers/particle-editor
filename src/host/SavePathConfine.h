@@ -4,8 +4,8 @@
 // Confinement check for record-mode file/save targets: the target path must
 // resolve UNDER the timeline-declared saveRoot. Deliberately header-only and
 // free of WebView2/D3D9/editor includes so the standalone unit test
-// (tests/test_clip_save_confinement.cpp) can build it device-free, per the
-// wiki-media pipeline spec §1.3.
+// (tests/test_clip_save_confinement.cpp) can build it device-free for the
+// wiki-media pipeline.
 //
 // Resolution model (Windows):
 //  - saveRoot must EXIST (it is the stage tree) and is resolved to its FINAL

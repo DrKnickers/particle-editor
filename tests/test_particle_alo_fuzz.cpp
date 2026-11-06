@@ -1,6 +1,6 @@
 // Chunk-reader hardening + malformed-input fuzz for the PARTICLE .alo parser
 // (ChunkReader + ParticleSystem(IFile*)), the counterpart of test_alo_fuzz
-// (which covers only the static-mesh decoder). Audit 2026-09-30 H2.
+// (which covers only the static-mesh decoder).
 //
 // Four parts, all on byte images synthesized in-test (no game data):
 //

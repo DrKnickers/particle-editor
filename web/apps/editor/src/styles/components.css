@@ -1,5 +1,4 @@
-/* Particle Editor 2026 design component classes.
-   Lifted from the design bundle's styles.css. Token references
+/* Particle Editor 2026 design component classes. Token references
    (var(--bg-2), var(--border-2), etc.) resolve via tokens.css. */
 
 #root { height: 100vh; }

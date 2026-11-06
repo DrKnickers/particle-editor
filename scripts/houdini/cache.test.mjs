@@ -1,5 +1,4 @@
-// [houdini] The cache key, the frame manifest, provenance and eviction
-// (plan §5 "Cache key", "Provenance", "Quotas").
+// [houdini] The cache key, the frame manifest, provenance and eviction.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync, existsSync } from "node:fs";
@@ -118,9 +117,9 @@ const provenance = (overrides = {}) => buildProvenance({ id: "thing", entry: ENT
   seed: 7, tier: "preview", build: "19.5.435", hoiiotool: "OpenImageIO 2.3.14", threads: 4, manifestSha256: "m".repeat(64),
   texture: TEXTURE, ...overrides });
 
-test("provenance carries every spec §21.6 field and nothing about the machine", () => {
+test("provenance carries every required field and nothing about the machine", () => {
   const record = provenance();
-  // §21.6: generator ID, version, HDA version, seed, parameters, output profile,
+  // Provenance: generator ID, version, HDA version, seed, parameters, output profile,
   // content hash, Particle Editor validation, game verification, effects using it.
   for (const field of ["generatorId", "generatorVersion", "hdaVersion", "seed", "parameters", "outputProfile",
     "contentHash", "particleEditorValidation", "gameVerification", "usedBy"])

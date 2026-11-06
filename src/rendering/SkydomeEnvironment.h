@@ -8,7 +8,7 @@
 // future map colour-grade feature, which extends MapEnvironment with per-map
 // colour-grade params (the reuse contract) rather than adding a second locator.
 //
-// Confirmed data model (vanilla FoC source; scope doc section 0): a skydome is
+// Confirmed data model (vanilla FoC data): a skydome is
 // an `.alo` GameObject listed in {Land,Space}{Primary,Secondary}Skydomes.xml.
 // The XML carries only a Name + a model path + scale / sort hints; textures and
 // cloud-scroll params live inside the `.alo` material (decoded by AloModel).

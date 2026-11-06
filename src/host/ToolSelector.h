@@ -1,8 +1,8 @@
 #ifndef TOOL_SELECTOR_H
 #define TOOL_SELECTOR_H
 
-// `--tool patch` request parsing and selector resolution (Phase 4B plan
-// section 3.4). Pure: it reads JSON text and an `inspect` dump, and touches no
+// `--tool patch` request parsing and selector resolution.
+// Pure: it reads JSON text and an `inspect` dump, and touches no
 // file, window or device.
 //
 // A selector names one emitter by the path of spawn slots that reaches it,

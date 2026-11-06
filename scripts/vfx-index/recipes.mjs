@@ -1,4 +1,4 @@
-// [vfx-index] The recipe registry (design §20.6): curated, reviewed recipes,
+// [vfx-index] The recipe registry: curated, reviewed recipes,
 // registered by hand in v1 (no automatic mining). validateRecipe implements
 // exactly recipe.schema.json, plus what the schema cannot say: each type's
 // emitter count, and, given the catalog, that the source effect, its emitters

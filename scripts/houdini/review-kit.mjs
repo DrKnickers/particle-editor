@@ -1,4 +1,4 @@
-// [houdini] The in-game review kit (plan §3.7): a throwaway mod that shows one
+// [houdini] The in-game review kit: a throwaway mod that shows one
 // generated texture in Forces of Corruption.
 //   node scripts/houdini/review-kit.mjs --entry <cache entry> [--exe <ParticleEditor.exe>]
 //   node scripts/houdini/review-kit.mjs --record <kit> --status passed|failed --notes <text>

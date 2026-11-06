@@ -23,9 +23,8 @@
 //
 // Note on the API rename: Playwright deprecated `page.accessibility
 // .snapshot()` (JSON tree) in 1.42 and removed it by 1.60. The
-// replacement is `locator.ariaSnapshot()` (YAML string). The plan
-// (written before the API change) assumed the old JSON shape; the
-// pivot to YAML strings is documented in the commit message.
+// replacement is `locator.ariaSnapshot()` (YAML string), so these
+// snapshots are YAML strings, not the old JSON tree.
 
 import type { Locator, Page } from "@playwright/test";
 

@@ -1,4 +1,4 @@
-// Member coverage for `--tool inspect` (benchmark plan section 3.2, check 2).
+// Member coverage for `--tool inspect`.
 // The data members declared in ParticleSystem::Emitter (a class), Emitter::Group
 // and LinkExemptFlags, minus the documented non-persisted ones, must equal the
 // mapped set in tests/fixtures/persisted-members.json. A new member -- padding or

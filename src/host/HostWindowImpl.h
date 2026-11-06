@@ -772,7 +772,7 @@ struct HostWindowImpl
     //          unconditional pre-tick RenderD3D9)
     //   frame ≈ dispatch + ack + barrier + png + other(in-Tick, un-hooked)
     // The ack-wait loop's inner RenderD3D9 calls count as ACK time (they run
-    // inside the ack hook), per the plan's segment definitions.
+    // inside the ack hook).
     struct RecordTiming
     {
         std::vector<double> dispatch, ack, barrier, png, frame; // per-frame ms

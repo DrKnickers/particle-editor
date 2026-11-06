@@ -238,7 +238,7 @@ int main()
         CHECK(Near(msg["keys"][1]["target"]["y"].get<double>(), 20.25));
     }
     // Record allowlist: linkGroups/set-membership is permitted (a builder needs it to
-    // unlink for the §6 link-group-creation clip's clean start); engine/set/paused stays denied.
+    // unlink for the link-group-creation clip's clean start); engine/set/paused stays denied.
     {
         CHECK(IsAllowedRecordKind("linkGroups/set-membership") == true);
         CHECK(IsAllowedRecordKind("emitters/delete") == true);

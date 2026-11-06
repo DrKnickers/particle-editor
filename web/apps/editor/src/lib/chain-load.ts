@@ -3,7 +3,7 @@ import type { EmitterTreeNode, SpawnParamsDto } from "@particle-editor/bridge-sc
 // Soft chain warning. Advisory only — nothing in the editor blocks
 // on this.
 
-// Vanilla effects run tens-to-hundreds alive; the v1 chain-test bomb was
+// Vanilla effects run tens-to-hundreds alive; a runaway chain test reached
 // millions. 10k flags genuinely explosive chains without nagging
 // legitimate dense effects.
 export const CHAIN_WARN_THRESHOLD = 10_000;
@@ -78,7 +78,7 @@ export function estimateChainLoad(
   root: EmitterTreeNode,
   // Configurable guard cap when the overload guard is enabled; the
   // advisory default otherwise. The glyph means "will be gated" whenever
-  // a cap is passed — see the consistency spec (Decisions).
+  // a cap is passed.
   threshold: number = CHAIN_WARN_THRESHOLD,
 ): Map<number, ChainWarning> {
   const out = new Map<number, ChainWarning>();

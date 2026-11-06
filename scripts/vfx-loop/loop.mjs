@@ -1,9 +1,9 @@
-// [vfx-loop] The Phase 5 loop coordinator (design §18.1): observe a source
+// [vfx-loop] The loop coordinator: observe a source
 // effect, then play the author's rounds. Each round applies a bounded patch set
 // through the exe's --tool verbs, observes the candidate under the same
 // scenario, and compares it with the source (compare.mjs). The last accepted
 // candidate goes through the four-seed review (four-seed.mjs), the run ends in
-// one §18.5 outcome, and the human promotion package is written (package.mjs).
+// one outcome, and the human promotion package is written (package.mjs).
 //
 //   node scripts/vfx-loop/loop.mjs --task <task.json> --source <effect.alo>
 //     --patch <round-1.json> [--patch <round-2.json> ...] --out <task-root>
@@ -26,7 +26,7 @@ const serialise = (value) => JSON.stringify(value, null, 2) + "\n";
 const fail = (message, exitCode = 1) => Object.assign(new Error(message), { exitCode });
 const pad = (n) => String(n).padStart(2, "0");
 
-// The §18.5 outcomes (design), in the order the mapping checks them.
+// Run outcomes, in the order decideOutcome checks them.
 export const OUTCOME = { tooling: "BLOCKED_BY_TOOLING", asset: "BLOCKED_BY_ASSET", technical: "FAILED_TECHNICAL_GATE",
   judgment: "NEEDS_HUMAN_JUDGMENT", pass: "PASS_FOR_HUMAN_REVIEW" };
 
@@ -39,7 +39,7 @@ export const EXIT = { ok: 0, tooling: 1, input: 2, asset: 3, misaligned: 7, io: 
 // A hard stop: the run ends here with this outcome, whatever the rounds did.
 const blocked = (outcome, message, exitCode) => Object.assign(fail(message, exitCode), { outcome });
 
-// §18.3. The loop carries findings into the task root for the human; it acts
+// The loop carries findings into the task root for the human; it acts
 // only on the requests.
 const FINDING_KEYS = ["id", "severity", "category", "claim", "evidence", "suspectedEmitter", "suggestedChange", "confidence"];
 export const MAX_ROUNDS = 3;
@@ -112,7 +112,7 @@ export function checkPatchSet(set, inputHash) {
     if (!Array.isArray(set.findings)) problems.push("patch set: findings must be an array");
     else for (const [i, finding] of set.findings.entries())
       for (const key of FINDING_KEYS) if (!object(finding) || !(key in finding))
-        problems.push(`patch set: findings[${i}] is missing ${key} (§18.3)`);
+        problems.push(`patch set: findings[${i}] is missing ${key}`);
   }
   if (set.needsHumanJudgment != null && (typeof set.needsHumanJudgment !== "string" || !set.needsHumanJudgment.trim()))
     problems.push("patch set: needsHumanJudgment must be a non-empty reason");
@@ -133,7 +133,7 @@ export function taskPath(root, name, io = fs) {
   return path;
 }
 
-// The §18.5 mapping for a run that reached its stop conditions (plan §7.1 G).
+// Picks the single OUTCOME for a run that reached its stop conditions.
 export function decideOutcome({ accepted, stop, fourSeedPass }) {
   if (!accepted) return OUTCOME.technical;
   if (!fourSeedPass) return OUTCOME.technical;
@@ -283,7 +283,7 @@ export async function runLoop({ task, source, patchSets, out, exe = join(repoRoo
       return entry;
     };
 
-    // Rounds (plan §7.1 E): each builds on the last accepted candidate; two
+    // Rounds: each builds on the last accepted candidate; two
     // consecutive rejections, maxRounds, or the author's flag stop the run.
     let input = copy, inputHash = sourceHash, last = null, rejectedInRow = 0, stop = null;
     for (const [i, patchSet] of patchSets.slice(0, maxRounds).entries()) {

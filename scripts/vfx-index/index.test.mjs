@@ -106,7 +106,7 @@ test("the catalog refuses what is not an index document, or one the tool could n
   assert.throws(() => buildCatalog(recordsDoc([], { unverifiable: "short read: X" })), { exitCode: 3 });
 });
 
-// ---- search: the acceptance requests (§25) ---------------------------------
+// ---- search: the acceptance requests ---------------------------------
 
 // Each request ranks at least two candidates; the expected ones come first, in order.
 const ACCEPTANCE = [
@@ -367,7 +367,7 @@ test("search and register-recipe CLIs", () => {
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-// ---- local only (§24.3) ---------------------------------------------------------
+// ---- local only ---------------------------------------------------------
 
 test("no network: the index scripts name no network module or API and make no connection", () => {
   const NETWORK = /(["'])(node:)?(https?|http2|net|tls|dns|dgram|undici)\1|\bfetch\b|WebSocket|XMLHttpRequest|EventSource/;

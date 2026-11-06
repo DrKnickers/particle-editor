@@ -441,7 +441,7 @@ struct ReplayProofRunner::Impl
         return !exitCode;
     }
 
-    // E12: design 9.7 on the editor's timeline. Seeks go through the
+    // E12: replay proof on the editor's timeline. Seeks go through the
     // timeline/* kinds and every replay is built from the session's own hooks
     // (the interactive pin, which leaves the view alone) wrapped in this
     // runner's checks, so each frame must equal E1's.
@@ -861,7 +861,7 @@ struct ReplayProofRunner::Impl
         if (timedRequired)
         {
             accepted = false;
-            // Owner decision 2026-10-05: a seek simulates intermediate frames and
+            // A seek simulates intermediate frames and
             // presents only the destination. Presenting each intermediate frame
             // waits one display refresh while the display is live (E8 shows the
             // results are identical), so the rendered-intermediate timings are

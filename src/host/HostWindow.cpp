@@ -1108,7 +1108,7 @@ bool HostWindowImpl::RenderComposedFrame(bool simulate)
 // so the reveal still works. Resolve the monitor from the PROPOSED rect (rgrc[0]),
 // not the HWND: during a cross-monitor maximize the window's current position still
 // resolves to the old monitor, so MonitorFromWindow would inset the wrong monitor's
-// taskbar edge. (pre-PR Win32 review.)
+// taskbar edge.
 static void InsetForAutoHideTaskbar(RECT& client)
 {
     APPBARDATA state = {sizeof(state)};
@@ -1300,7 +1300,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
         case WM_TIMER: return OnMainTimer(hwnd, wp);
 
-        // ---- Frameless custom title bar (pre-PR Win32 review recipe) ----
+        // ---- Frameless custom title bar ----
         // The WebView is a COMPOSITION controller (no child HWND), so the host owns
         // ALL hit-testing: the web title bar's `app-region: drag` becomes HTCAPTION
         // only because WM_NCHITTEST translates it (via GetNonClientRegionAtPoint).
@@ -1519,8 +1519,8 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // — React's ResizeObserver will fire AFTER the sizemove loop
         // exits, sending a fresh layout/viewport-rect, but in the
         // meantime the popup at least stays anchored to roughly the
-        // right place via owner-client translation. (An earlier design
-        // note rejected HIDING the popup during sizemove — that exposes
+        // right place via owner-client translation. (HIDING the popup
+        // during sizemove was rejected — that exposes
         // the bare WebView2 transparent region, which paints white. The
         // resize-settle handlers below don't hide anything; they only defer the
         // per-tick engine reset.)

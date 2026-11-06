@@ -60,8 +60,8 @@ static const unsigned long kMaxAloEmitters = 65536u;
 // single-parent and breaks cycles but never bounded depth. The graph is walked
 // RECURSIVELY by BuildEmitterTreeNode (the bridge tree serializer, run on every
 // open) and by deleteEmitter, so a deep-but-valid chain overflows the stack on a
-// file the loader accepts. Real systems nest in the single digits — the in-game
-// chain investigation used depth 3, and the engine dies of particle
+// file the loader accepts. Real systems nest in the single digits — an in-game
+// chain test used depth 3, and the engine dies of particle
 // multiplication long before anything approaching this cap — so 256 is generous
 // by two orders of magnitude while keeping the worst-case recursion far inside a
 // 1 MiB thread stack.

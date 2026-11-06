@@ -15,7 +15,7 @@
 //      interpolation, scalar predicates, batch error precedence, link groups.
 //  (c) NEW RULES: full-track replacement (checked against a real save and
 //      reload) and the advisory atlas-index classifier.
-//  (d) TOOL-ONLY RULES (Phase 4B decision 6): set-property (every accepted
+//  (d) TOOL-ONLY RULES: set-property (every accepted
 //      edge value checked against a real save and reload), rename, texture
 //      names, rescale preconditions, the key-count cap and the lock matrix.
 //

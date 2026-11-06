@@ -1,6 +1,6 @@
 // Vitest: TimelinePanel — hidden while the session is closed; each control
 // sends the timeline kind and params the host expects; the readout uses the
-// §11.3 labels; a stale, empty or refused session says so inline.
+// time-since-spawn and frame labels; a stale, empty or refused session says so inline.
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
@@ -53,7 +53,7 @@ describe("TimelinePanel", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("shows the readout with the §11.3 labels and the seed in a disclosure", () => {
+  it("shows the readout with the time-since-spawn and frame labels and the seed in a disclosure", () => {
     act(() => useTimelineStore.getState().apply(open()));
     renderPanel(makeBridge());
     expect(screen.getByRole("region", { name: "Timeline" })).toBeInTheDocument();

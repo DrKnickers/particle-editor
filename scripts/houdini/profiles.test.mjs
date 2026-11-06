@@ -1,6 +1,6 @@
 // [houdini] Output profiles: the layout, the hoiiotool argument lists, the
-// frame stats and each validator, one damaged property at a time (plan §3.4,
-// §3.5). The real hoiiotool runs in the `houdini` lane.
+// frame stats and each validator, one damaged property at a time.
+// The real hoiiotool runs in the `houdini` lane.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

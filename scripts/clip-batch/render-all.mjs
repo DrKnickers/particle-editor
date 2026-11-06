@@ -10,10 +10,8 @@
 // ComputeUserDataFolder). Windows must not be MINIMIZED while recording
 // (PrintWindow reads the DWM composition surface); overlap is fine.
 //
-// The clip table below is the EXECUTABLE transcription of the recipes in
-// the maintainer-only clip README (tasks/clips/) — the README stays the human
-// authority for the *why* of every crop/trim/crossfade value.
-// `--dry-run` prints the exact commands so the two can be diffed.
+// The clip table below is the EXECUTABLE form of each clip's recipe.
+// `--dry-run` prints the exact commands so they can be reviewed.
 //
 // Failure classification (no auto-retry in v1 — exit 3 is NOT reliably
 // transient: it also covers bad open paths / preflight key misses / press-
@@ -32,9 +30,9 @@ const lockPath = join(repoRoot, "clips", ".render-all.lock");
 const localAppData = process.env.LOCALAPPDATA || "";
 
 // ---------------------------------------------------------------------------
-// Clip table — transcribed from the clip README (encode + gate blocks).
+// Clip table — encode and gate settings per clip.
 // partialScan runs for EVERY clip (capture-race dropout guard the sampled
-// SSIM/seam gates can't see — README "Capture-clean gate"); its --start is
+// SSIM/seam gates can't see); its --start is
 // the clip's encode trim (frames before the trim never ship) and its crop is
 // the clip's content region (default = the 1280x960 viewport region).
 // ---------------------------------------------------------------------------
@@ -64,7 +62,7 @@ const CLIPS = [
              "--poster", "site/media-local/interface-overhaul-poster.jpg", "--poster-frame", "60"],
     gates: [
       // The toolbar/panel chrome must round-trip exactly. The live particle lifecycle is
-      // crossfade-owned and requires the README's full-frame visual seam oracle.
+      // crossfade-owned and needs a full-frame visual seam check instead.
       ["scripts/clip-verify/seam-match.mjs", "--frames", "clips/interface-overhaul",
        "--start", "0", "--crop", "1264:150:8:0"],
     ],
@@ -143,7 +141,7 @@ const CLIPS = [
 ];
 
 // Child-log signatures that fail a clip even when frames look plausible
-// (multi-instance GPU/DComp contention -> empty/frozen viewport; plan risk 12).
+// (multi-instance GPU/DComp contention -> empty/frozen viewport).
 // Verbatim substrings of the host's actual log lines (HostWindow.cpp,
 // the [COMP-engine-*] family) — review-corrected: the original guesses
 // ("AttachEngineVisual failed") matched nothing.
@@ -153,7 +151,7 @@ const LOG_FAIL_SIGNATURES = [
   "composition mode continues without engine pixels",
 ];
 
-// exit-code + log-signature -> failure class (plan §3 "Failure handling").
+// exit-code + log-signature -> failure class.
 function classifyFailure(exitCode, logText) {
   if (exitCode === "timeout") return "hung(parent-timeout)";
   if (/record: ack timeout/.test(logText)) return "ack-timeout";
@@ -237,7 +235,7 @@ function newestWebSource() {
 function preflight(clips, allowStale) {
   const fail = (msg) => { console.error(`[clip-batch] PREFLIGHT FAIL: ${msg}`); process.exit(2); };
 
-  // 1. Exe + web bundle exist and are fresh (the README stale-exe trap:
+  // 1. Exe + web bundle exist and are fresh (the stale-exe trap:
   //    an exe older than the `scale` feature silently renders f04 at 1x).
   if (!existsSync(exePath)) fail(`missing ${exePath} — build x64 Release first`);
   if (!existsSync(distIndex)) fail(`missing ${distIndex} — build the web bundle first`);
@@ -315,7 +313,7 @@ const liveChildren = new Set();
 function runRecord(clip) {
   return new Promise((res) => {
     const budgetMs = clip.frameCount * 3000 + 60000;   // parent-side: the editor's own
-    // watchdog can't fire while Tick() blocks inside a dispatch/capture (plan risk 14).
+    // watchdog can't fire while Tick() blocks inside a dispatch/capture.
     const child = spawn(exePath, ["--record", clip.timeline], { cwd: repoRoot, stdio: "ignore" });
     liveChildren.add(child);
     clip.recordPid = child.pid;
@@ -376,11 +374,11 @@ async function runClip(clip) {
     log(`${clip.name}: WARN no child log at host-record-${clip.recordPid}.log — compositor-signature check skipped`);
   const sigHit = LOG_FAIL_SIGNATURES.find((s) => logText.includes(s));
   if (sigHit) {
-    result.failure = `record:compositor(${sigHit})`;   // plan risk 12
+    result.failure = `record:compositor(${sigHit})`;
     return result;
   }
 
-  // gates: always partial-scan first, then the clip's README gates
+  // gates: always partial-scan first, then the clip's own gates
   const t1 = Date.now();
   for (const gate of [partialScanCmd(clip), ...clip.gates]) {
     const g = runNode(gate);
@@ -405,7 +403,7 @@ async function runClip(clip) {
 }
 
 // ---------------------------------------------------------------------------
-// Pool (inline bounded limiter — deliberately not a module, plan "Out" list)
+// Pool (inline bounded limiter — deliberately not a module)
 // ---------------------------------------------------------------------------
 async function runPool(items, jobs, fn) {
   const results = new Array(items.length);
@@ -424,7 +422,7 @@ async function runPool(items, jobs, fn) {
 // ---------------------------------------------------------------------------
 // Cleanup (Ctrl+C / fatal): kill child trees, drop known .tmp dirs, unlock.
 // The editor only self-cleans the SAME clip's .tmp on its next run, so a
-// canceled batch of large clips would strand GBs otherwise (plan risk 11).
+// canceled batch of large clips would strand GBs otherwise.
 // ---------------------------------------------------------------------------
 function cleanup(clips) {
   for (const child of liveChildren) {

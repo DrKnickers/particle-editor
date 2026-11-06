@@ -1,4 +1,4 @@
-// [houdini] The opt-in `houdini` gate lane (plan §5 "Houdini lane"):
+// [houdini] The opt-in `houdini` gate lane:
 //   node scripts/run-all-tests.mjs --lane houdini
 //
 // Runs debug-atlas through the real wrapper, launcher, Job Object and Houdini
@@ -191,8 +191,8 @@ function profileEncodes(dir) {
   }
   // Straight colour survives at every partial alpha: the writer divides once.
   // It divides the 8-bit premultiplied value, so colour is good to one
-  // premultiplied step, 255 / alpha (alpha 21: 10/21 reads 121 for 128). The
-  // plan's first recipe divided twice and read 255 for 128.
+  // premultiplied step, 255 / alpha (alpha 21: 10/21 reads 121 for 128).
+  // Dividing twice would read 255 for 128.
   const image = decodeTga(readFileSync(join(dir, "transparent.tga")));
   const drift = [];
   for (let x = PAD; x < PAD + size; x += 4) {

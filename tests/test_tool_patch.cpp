@@ -1,11 +1,11 @@
-// Unit test for `--tool patch` (src/host/ToolPatch.cpp, Phase 4B PR 3),
+// Unit test for `--tool patch` (src/host/ToolPatch.cpp),
 // run in-process through RunPatch so the staging seam can inject a failure.
 //
 //   - every op succeeds on a fixture, and the candidate holds what the report
 //     says persisted;
 //   - each refusal category reaches its exit code: a malformed request (2),
 //     an invalid or repaired source (3), a selector refusal (4), a rule
-//     refusal (5, including owner decision 7's adjusted outcomes, a linked
+//     refusal (5, including silently adjusted outcomes, a linked
 //     target, a value lost to the save, collateral re-locking and a
 //     non-finite result) and a postcondition failure (6);
 //   - nothing reaches --out unless every check passed: a bad last op and an
@@ -337,7 +337,7 @@ static void TestLocks()
 
 static void TestDecision7()
 {
-    printf("adjusted outcomes (decision 7)\n");
+    printf("adjusted outcomes\n");
     Refused(Request("Smoke", {Op("setTrackKey", {{"track", 4}, {"time", 33}, {"value", 1}})}), 5, "rule",
             "a key that is not found");
     Refused(Request("Smoke", {Op("setTrackKey", {{"track", 4}, {"time", 0}, {"newTime", 10}, {"value", 1}})}), 5,

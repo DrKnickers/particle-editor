@@ -1,4 +1,4 @@
-// React re-render audit (perf follow-up loose end A).
+// React re-render audit.
 //
 // Drives the live mock app (vite dev, MockBridge) under a set of scripted
 // interactions and reads per-component React <Profiler> commit counts from the
@@ -261,7 +261,7 @@ test("react re-render audit: per-component commit counts under scripted interact
   }
 
   // StatusBar's synthetic cursor storm: ~1 commit per emit (30), each in a distinct
-  // frame — mechanically backing §9's "not batched" claim (soundness-2).
+  // frame — verifying that updates are not batched (soundness-2).
   const cur = results["statusbar-cursor-x30"]["StatusBar"];
   expect(cur?.commits ?? 0, "cursor storm re-rendered StatusBar ~30×").toBeGreaterThanOrEqual(25);
   expect(

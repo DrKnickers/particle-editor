@@ -1298,7 +1298,7 @@ export type Request =
   | { kind: "autosave/check-recovery"; params: Record<string, never> }
   | { kind: "autosave/recover"; params: { choice: "recent" | "stable" | "discard" } }
 
-  // Interactive timeline (design section 11). While a session is open the
+  // Interactive timeline. While a session is open the
   // host's replay controller is the only thing that advances the simulation,
   // and the frame on screen is the deterministic replay of the in-memory
   // document to `frame`. `begin` and `end` are idempotent; the other kinds

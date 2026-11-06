@@ -1,4 +1,4 @@
-// [houdini] Run one registered generator (plan §3.1).
+// [houdini] Run one registered generator.
 //
 //   node scripts/houdini/generate.mjs --generator debug-atlas --seed 7 --tier preview
 //        [--params p.json] [--out <root>] [--generators-root <root>]

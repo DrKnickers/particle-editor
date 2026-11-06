@@ -1,4 +1,4 @@
-// [mcp-adapter] The one place the adapter starts a process (design §24.2): a
+// [mcp-adapter] The one place the adapter starts a process: a
 // deadline, a cap on what it may print, cancellation, and the whole process
 // tree killed on any of them (observe.mjs starts the exe and ffmpeg).
 import { spawn, spawnSync } from "node:child_process";

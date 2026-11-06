@@ -170,7 +170,7 @@ static bool loadAloFile(const char* path, AloModel& out)
 }
 
 // [M2] Compare the named mesh's vertices between TWO .alo files (e.g. author copy
-// vs the MEG-extracted shipped asset) — provenance check for export-1:1 / result 2.
+// vs the MEG-extracted shipped asset) — checks an export is 1:1 with the shipped mesh.
 static int compareAloMode(const AloModel& a, const char* meshName, const char* otherAlo)
 {
     AloModel b;

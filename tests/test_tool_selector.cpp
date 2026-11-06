@@ -1,9 +1,9 @@
 // Unit test for `--tool patch` request parsing and selector resolution
-// (src/host/ToolSelector.h, Phase 4B plan section 3.4).
+// (src/host/ToolSelector.h).
 //
 // Selectors resolve against the real `inspect` dump of a built particle
 // system, so the parent and spawn-slot encodings are the ones the tool reads.
-// Every refusal row of the plan's section 5 has a case: a changed hash, no
+// Every refusal the selector can return has a case: a changed hash, no
 // match, more than one match, a banned positional key, an expected mismatch,
 // an unknown or empty `expected`; plus the duplicate-root tree that only
 // `expected` can resolve.

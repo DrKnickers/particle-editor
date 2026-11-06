@@ -26,14 +26,14 @@ async function pair(t, candidateOptions = {}, baselineOptions = {}) {
   return { root, baseline, candidate, out: join(root, "comparison") };
 }
 
-// No metric may rank the effects (§13.3): no output carries a key that reads as one.
+// No metric may rank the effects: no output carries a key that reads as one.
 function rankingKeys(value, path = "") {
   if (!value || typeof value !== "object") return [];
   return Object.entries(value).flatMap(([key, child]) =>
     [...(/score|better|worse|winner|prefer|rank|best|quality/i.test(key) ? [`${path}${key}`] : []), ...rankingKeys(child, `${path}${key}.`)]);
 }
 
-test("an aligned pair writes every §13.2 output, pairs each frame, and ranks nothing", async (t) => {
+test("an aligned pair writes every output, pairs each frame, and ranks nothing", async (t) => {
   const { baseline, candidate, out } = await pair(t, { tint: (frame) => frame + 50 });
   const calls = [];
   const { metrics, review } = await writeComparison(baseline, candidate, out, { budgets: PEAK, run: fakeFfmpeg(calls) });
@@ -190,7 +190,7 @@ test("per-emitter telemetry attributes a change the whole-effect totals hide", (
   assert.match(telemetryDelta(before, after, life, life, emitters(2), renamed).note, /different emitters/);
 });
 
-test("random schedule divergence names the first differing frame (§9.8)", () => {
+test("random schedule divergence names the first differing frame", () => {
   const samples = (draws) => draws.map((rngDrawCount, frame) => ({ frame, rngDrawCount, rngState: rngDrawCount }));
   const capture = { random: { algorithm: "legacy-msvc", algorithmVersion: 1, seed: 7 } };
   const note = randomSchedule(capture, capture, samples([1, 2, 3, 4]), samples([1, 2, 5, 6, 7]));

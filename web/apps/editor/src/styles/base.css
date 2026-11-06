@@ -15,8 +15,8 @@
 }
 
 /* box-sizing reset — Tailwind v4 preflight already applies this, so the
-   rule is a no-op in normal use. Kept verbatim from the design source
-   for parity in case preflight is ever disabled. */
+   rule is a no-op in normal use. Kept in case preflight is ever
+   disabled. */
 * { box-sizing: border-box; }
 
 /* html sizing — height: 100% so the workspace fills the viewport. body

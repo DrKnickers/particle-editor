@@ -12,7 +12,7 @@
 // It is applied LEFTMOST in the row-vector (v*M) product -- i.e. FIRST, to model
 // space, about the object origin -- so the model grows in place and the scale
 // rides through hardpoint mounts (composed sub.placement * boneMatrix * objectWorld)
-// and the skinned palette unchanged. See the design spec.
+// and the skinned palette unchanged.
 inline D3DXMATRIX ReferenceObjectWorldMatrix(const D3DXVECTOR3& pos, const D3DXVECTOR3& rotDeg, float scaleFactor)
 {
     const float deg2rad = D3DX_PI / 180.0f;

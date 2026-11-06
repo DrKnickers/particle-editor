@@ -1,4 +1,4 @@
-// timeline.ts — the web side of the interactive timeline (design section 11).
+// timeline.ts — the web side of the interactive timeline.
 //
 // The host owns the session (src/host/BridgeDispatch_Timeline.cpp): while it
 // is open, the frame on screen is the deterministic replay of the document to

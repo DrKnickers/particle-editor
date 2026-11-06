@@ -73,8 +73,8 @@ export async function seedCanonicalUiState(page: Page): Promise<void> {
 
 // Note: EmitterPropertyTabs.tsx already exposes
 // `data-testid="emitter-property-tabs"` on its Tabs.Root (used by
-// existing vitest + Playwright property-tabs specs). The plan
-// asked for a new `property-tabs` testid, but adding a duplicate
+// existing vitest + Playwright property-tabs specs). A new
+// `property-tabs` testid would duplicate it, and adding one
 // would require either wrapping Tabs.Root in an otherwise-pointless
 // div or renaming the existing testid (scope creep — 5+ active
 // callers). Reusing the existing testid here is the surgical fix.

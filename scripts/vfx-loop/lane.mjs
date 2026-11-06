@@ -1,4 +1,4 @@
-// [vfx-loop] The vfx-loop gate lane: the canned §18.2 loop end to end on the
+// [vfx-loop] The vfx-loop gate lane: the canned loop end to end on the
 // Release exe, ffmpeg and the game install, against the guide's example effect:
 // one round, the four-seed review, the outcome and the promotion package.
 // The unit tests cover the logic with fakes; this proves the real chain holds.
@@ -66,7 +66,7 @@ export async function runLane({ exe = join(repoRoot, "x64/Release/ParticleEditor
   fs.copyFileSync(FIXTURE, source);
   const original = fs.readFileSync(FIXTURE);
   const readJson = (path) => JSON.parse(fs.readFileSync(path, "utf8"));
-  const summary = await runLoop({ task: readJson(here("task-18-2.json")), source, patchSets: [readJson(here("canned-18-2.patch.json"))],
+  const summary = await runLoop({ task: readJson(here("task-example.json")), source, patchSets: [readJson(here("canned-example.patch.json"))],
     out, exe, roots, run, say });
   const errors = [];
   const require = (ok, message) => { if (!ok) errors.push(message); };

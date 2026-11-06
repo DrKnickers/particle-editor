@@ -95,4 +95,4 @@ test("ColorButton: clicking the swatch opens the color picker popover", async ()
 
 // (The former TexturePalette / RandomParam sections were demo scaffolding for
 // primitives that never gained a production consumer; both primitives and
-// their gallery sections were deleted — see the ponytail review.)
+// their gallery sections were deleted.)

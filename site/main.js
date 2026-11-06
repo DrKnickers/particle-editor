@@ -1,4 +1,4 @@
-// Particle Editor landing — page-owned motion. See the spec §5 + the plan's motion model.
+// Particle Editor landing — page-owned motion.
 const params = new URLSearchParams(location.search);
 // Default to the site's own media/ directory (populated from the site-media release by the
 // Pages workflow). NEVER the release download URL: those responses carry

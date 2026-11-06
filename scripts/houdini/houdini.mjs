@@ -1,7 +1,6 @@
-// [houdini] The pinned Houdini build and the environment its children get
-// (plan decision 1, §3.3).
+// [houdini] The pinned Houdini build and the environment its children get.
 //
-// The binary paths are constants, not configuration: §24.2 forbids running an
+// The binary paths are constants, not configuration: the adapter must not run an
 // executable a caller names. SideFX does not Authenticode-sign these binaries,
 // so each one is pinned by its SHA-256 instead of a signature, and a Houdini
 // upgrade is a deliberate edit here that also changes every cache key.

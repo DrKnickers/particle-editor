@@ -13,7 +13,7 @@
 //   IsKeyboardFocusable, IsEnabled, IsOffscreen, children.
 //
 // ClassName is what the normalizer keys off for wrapper stripping
-// (Chrome_WidgetWin_1, BrowserRootView, etc. per probe findings).
+// (Chrome_WidgetWin_1, BrowserRootView, etc., as UIA reports them).
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>

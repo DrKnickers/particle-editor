@@ -1,5 +1,5 @@
 // [houdini] run_generator.py re-checks every job inside hython. Its rules use
-// no Houdini, so a plain Python runs them here (plan §3.3 "Builder").
+// no Houdini, so a plain Python runs them here.
 //
 // -B keeps bytecode out of the shared interpreter (the public-history suite
 // pins its closure), and -I keeps the environment and user site out.

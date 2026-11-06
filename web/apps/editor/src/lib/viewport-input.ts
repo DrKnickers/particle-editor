@@ -53,7 +53,7 @@ export function quantiseWheelDelta(domDeltaY: number): number {
 
 // Convert a DOM client-coords (CSS pixels) point relative to the
 // viewport canvas to popup-client physical pixels. The popup spans
-// the full main client per T4c.4, so popup-client-x == main-client-x
+// the full main client, so popup-client-x == main-client-x
 // at the same DPR — we just multiply by devicePixelRatio at event
 // time (no caching: DPR can change mid-session per the
 // `matchMedia('(resolution)')` listener in ViewportSlot).

@@ -7,8 +7,8 @@ const USAGE = "usage: node gen-timeline.mjs <beats.json> [--out <timeline.json>]
 // Beats -> --record timeline generator. The verbose parts of a timeline are the
 // MECHANICAL parts — char-by-char typing patches, activate click triples, stepped
 // value walks, cursor approach/dwell keys — so this expands a compact beats spec
-// into the full JSON with the interaction-honest conventions (clip-author skill
-// reference.md §4/§4c/§4d) emitted by construction: real activate clicks where
+// into the full JSON with the interaction-honest conventions
+// emitted by construction: real activate clicks where
 // they're safe, hover + scripted steps where a press would wedge (curve keys,
 // spinners). Lint the output (scripts/clip-verify/timeline-lint.mjs) before
 // rendering; the committed .json timeline stays the source of truth.
@@ -24,7 +24,7 @@ const USAGE = "usage: node gen-timeline.mjs <beats.json> [--out <timeline.json>]
 //   "tweens":  [ ... ],                  // raw tween entries copied verbatim
 //   "beats": [
 //     { "at", "do": "click",  "ref"|"point":{x,y} }                                  // real activate click (safe targets only)
-//     { "at", "do": "drag",   "from":{ref|point}, "to":{ref|point}, "travelMs"?:600 } // §4b reorder drag: grab a row, move pressed, drop
+//     { "at", "do": "drag",   "from":{ref|point}, "to":{ref|point}, "travelMs"?:600 } // reorder drag: grab a row, move pressed, drop
 //     { "at", "do": "type",   "ref", "field"?:"name", "text", "charMs"?:90, "id"? }  // focus-click + char-by-char patches
 //     { "at", "do": "step",   "field", "values":[...], "stepMs"?:400, "hover"?, "id"? }        // set-properties walk, cursor hovers
 //     { "at", "do": "step-key","track","keyTime","values":[...], "stepMs"?:400, "hover"? }     // set-track-key walk, cursor hovers
@@ -81,7 +81,7 @@ export function generateTimeline(spec) {
         break;
       }
       case "drag": {
-        // A real §4b reorder gesture: pointerdown on the grabbed row, move while
+        // A real reorder gesture: pointerdown on the grabbed row, move while
         // pressed (past the 4px threshold -> chip + gap), release at the drop.
         // Grab by testid ref; drop on a ref for a row-relative gap or a point for
         // a deterministic edge gap. NO activate — a press is either a drag or an

@@ -30,7 +30,7 @@ export function colorrefToRgb(c: number): { r: number; g: number; b: number } {
  *  it the DARK scrim. Set near mid-grey (0x808080 ≈ 0.216) so the pill flips on
  *  neutral backgrounds — dark/neutral scenes get a light chip (pops on the dark
  *  render), bright scenes a dark chip. Single threshold, theme-independent
- *  (2026-06-24 live-review decision: "always flip by backdrop"). One number to
+ *  (always flip by backdrop). One number to
  *  tune. e.g. neutral grey 0x6E6E6E (0.156) → light; mid-grey 0x808080 → dark. */
 export const PILL_DARK_THRESHOLD = 0.2;
 

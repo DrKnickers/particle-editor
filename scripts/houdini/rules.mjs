@@ -1,4 +1,4 @@
-// [houdini] Input rules (plan §3.3). Everything a caller supplies is checked
+// [houdini] Input rules. Everything a caller supplies is checked
 // here before any process starts; run_generator.py checks the job again.
 //
 // Ids are looked up with Object.hasOwn, so "__proto__" and "constructor" are
@@ -233,7 +233,7 @@ function outside(path, what, bases, io) {
   }
 }
 
-// The generated root: a plain root (decision 5, §24.1) outside the repo and
+// The generated root: a plain root outside the repo and
 // every game install. It may not exist yet. `repoRoot` may list several roots:
 // a worktree and the checkout it belongs to. `sourceRoots` are the generators
 // root and its repository, already real paths: --out may sit neither inside one

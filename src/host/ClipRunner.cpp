@@ -51,7 +51,7 @@ bool ClipRunner::DispatchKind(const std::string& kind, const nlohmann::json& par
         m_exitCode = 3;
         return false;
     }
-    // Per-kind payload validation (wiki-media pipeline spec §1.4): these kinds
+    // Per-kind payload validation: these kinds
     // report refusals/skips inside a TOP-LEVEL-OK envelope, which
     // ClassifyResponse can't see. A refused add or a skipped property patch
     // recorded as success would silently produce a wrong clip — abort loud.
@@ -94,7 +94,7 @@ bool ClipRunner::DispatchKind(const std::string& kind, const nlohmann::json& par
     return true;
 }
 
-// file/save confinement (spec §1.3): every save event needs an explicit path
+// file/save confinement: every save event needs an explicit path
 // (the dialog fallback would hang an unattended run) resolving under the
 // timeline's saveRoot. Runs in preflight so a mis-authored save aborts before
 // any frame is captured.

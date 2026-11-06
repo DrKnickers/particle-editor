@@ -1,5 +1,4 @@
-// status-feedback.ts — one-slot transient action feedback for the StatusBar
-// (design follow-ups, F4).
+// status-feedback.ts — one-slot transient action feedback for the StatusBar.
 //
 // A single latest-wins message ("Deleted "Sparks" — Ctrl+Z to undo") that the
 // StatusBar renders in its OWN polite live region and fades after ~2.5s. No

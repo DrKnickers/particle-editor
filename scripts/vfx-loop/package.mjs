@@ -1,4 +1,4 @@
-// [vfx-loop] The human promotion package (design §25, plan §7.1 H): one folder
+// [vfx-loop] The human promotion package: one folder
 // holding the facts a person needs to approve or reject the candidate.
 //
 //   package/package.json   the facts, machine-readable
@@ -10,7 +10,7 @@ import { join } from "node:path";
 
 const serialise = (value) => JSON.stringify(value, null, 2) + "\n";
 
-const ADVISORY = "Evidence for a human decision. No metric ranks the two effects (design §13.3); the loop checked only " +
+const ADVISORY = "Evidence for a human decision. No metric ranks the two effects; the loop checked only " +
   "explicit budgets and technical gates. Nothing has been promoted: the source is untouched.";
 const LIMITATION = "Budgets are whole-effect: per-emitter shifts are reported in the telemetry delta but never budgeted, " +
   "so a change one emitter's timing hides from the whole effect (a shortened tail another emitter outlives) passes every budget.";
