@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Live Engine View — Particle Editor guide</title>
+  <!-- Dark before any CSS: color-scheme makes the browser's default canvas dark, and the
+       inline rules cover the frames before styles.css arrives — kills the white flash on
+       navigation / view transitions. The @view-transition opt-in and the dark backstop across
+       the WHOLE view-transition pseudo chain are inlined (not just in styles.css) so a slow
+       styles.css can't skip the transition or leave its overlay unstyled (white gap). The
+       timed new-page fade-in refinement stays in styles.css. -->
+  <meta name="color-scheme" content="dark">
+  <style>
+    html{background-color:#0b0d12}
+    @view-transition{navigation:auto}
+    ::view-transition,
+    ::view-transition-group(root),
+    ::view-transition-image-pair(root),
+    ::view-transition-new(root){background-color:#0b0d12}
+    ::view-transition-old(root){display:none}
+    .topbar{view-transition-name:topbar}
+    ::view-transition-old(topbar){display:none}
+    ::view-transition-new(topbar){animation:none}
+    .motion-toggle{view-transition-name:motion-toggle}
+  </style>
+  <!-- Inline (timing-safe): when a cross-document view transition runs, mark the root so CSS
+       suppresses the entrance fade-up — the transition's new-page fade-in IS the entrance, and re-hiding content
+       mid-transition caused the appear→vanish→fade glitch + compositor churn. -->
+  <script>addEventListener("pagereveal",(e)=>{if(e.viewTransition)document.documentElement.dataset.vt="1"});</script>
+  <!-- Hold this page's first paint (and the incoming view-transition snapshot of it) until the
+       main content is parsed, so the transition never captures a partially-rendered frame. -->
+  <link rel="expect" href="#guide-main" blocking="render">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <!-- Fonts: self-hosted (site/fonts/) and preloaded so text paints in the real faces —
+       no third-party render-blocking request, no fallback-font swap shifting the nav.
+       Font preloads always need the crossorigin attribute, even same-origin. -->
+  <link rel="preload" href="../fonts/schibsted-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="../fonts/ibm-plex-mono-latin-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="../guide.css">
+</head>
+<body class="guide">
+  <header class="topbar">
+    <a class="wordmark" href="../index.html"><img class="wordmark-icon" src="../favicon.svg" alt="" aria-hidden="true">Particle Editor</a>
+    <nav class="topnav" aria-label="Primary">
+      <a class="btn-primary nav-download" href="https://github.com/DrKnickers/particle-editor/releases/latest" aria-label="Download for Windows">
+        <span class="nav-download-icon" aria-hidden="true">↓</span><span class="nav-download-label">Download</span>
+      </a>
+      <a class="nav-source" href="./home.html">Guide</a>
+      <a class="nav-source" href="https://github.com/DrKnickers/particle-editor">Source</a>
+      <!-- Invisible placeholder matching the landing page's Pause toggle: keeps the nav
+           geometry identical across pages so buttons don't shift during the cross-page
+           transition. visibility:hidden preserves layout but removes it from tab order
+           and assistive tech. -->
+      <button type="button" class="motion-toggle" style="visibility:hidden" tabindex="-1" aria-hidden="true">Pause</button>
+    </nav>
+  </header>
+  <div class="guide-layout">
+    <main class="guide-main" id="guide-main">
+      <article class="guide-article">
+<p class="guide-kicker">Start Here <span class="kicker-count">· 4 of 7</span></p>
+<h1 id="live-engine-view">Live Engine View</h1>
+<p>The editor's own viewport is a close match to the game, but it is not the game's renderer. The <strong>live engine view</strong> shows your effect drawn by Petroglyph's engine itself, and updates a moment after each edit. It runs your own copy of the <em>EAW Terrain Editor</em> (the official map editor) in the background as a render host, with a small add-on called <strong>Alamo Preview</strong>.</p>
+<p>Setting it up takes a few minutes and is done once. The Particle Editor's setup never changes your game install.</p>
+<h2 id="what-you-need">What You Need</h2>
+<ul>
+<li><strong>Windows</strong> and <em>Star Wars: Empire at War — Forces of Corruption</em>, with the editor already finding your game install (see <a href="./setup.html">Setup</a>).</li>
+<li><strong>The 64-bit EAW Terrain Editor.</strong> It needs files that only Petroglyph's map editor installer provides. From Petroglyph's <a href="https://www.petroglyphgames.com/eawmodtool/">mod tools page</a>:
+<ol>
+<li>Download and run <code>FOCMapEditor.msi</code>. When it asks for a folder, choose the game's <em>Forces of Corruption</em> folder: on Steam, <code>Star Wars Empire at War\corruption</code>. It adds the map editor tools there.</li>
+<li>Download <code>EAW_Terrain_Editor_b.zip</code> and extract its <code>EAW Terrain Editor.exe</code> into that same folder, replacing the one the installer added.</li>
+</ol>If setup says the map editor's folder is missing a file, the editor isn't in the folder where the installer put its tools. &gt; The <code>EAW Terrain Editor.exe</code> that comes with the game in <code>GameData</code> is an older 32-bit build &gt; and will not work. Use the one from the mod tools page.</li>
+<li><strong>Disk space.</strong> Setup makes a private copy of the game's <code>Data</code> folder. If the game is on the same drive as your Windows user folder, the copy shares the game's files and takes almost no space. On a different drive it is a full copy of about 1.5 GB.</li>
+</ul>
+<h2 id="set-it-up">Set It Up</h2>
+<ol>
+<li>Open <strong>Edit → Preferences…</strong> and find the <strong>Engine preview</strong> section.</li>
+<li>Click <strong>Set up</strong>.</li>
+<li>Next to <strong>Map editor</strong>, click <strong>Browse</strong> and choose the <code>EAW Terrain Editor.exe</code> you extracted.</li>
+<li>Click <strong>Set up</strong>. A progress bar shows each stage. You can close the dialog; setup keeps going and the Preferences section shows <em>Setting up</em> until it is done. Press <strong>Cancel</strong> to stop setup and remove its partial copy. Closing the Particle Editor also cancels setup.</li>
+</ol>
+<p>When it finishes, the dialog shows <em>Setup complete</em> and the path of the new copy, and the <strong>Map editor executable</strong> field is filled in for you. The copy lives in your user folder, under <code>%LOCALAPPDATA%\AloParticleEditor\EngineHost</code>. If your Windows user folder has non-English characters, the copy goes under <code>%ProgramData%\AloParticleEditor\EngineHost</code> instead, in a private folder for your Windows account.</p>
+<h2 id="updating">Updating</h2>
+<p>After installing a newer Particle Editor, <strong>Preferences → Engine preview</strong> may say the setup's engine host doesn't match the bundled version. Press <strong>Refresh setup</strong> to update the private copy without choosing the map editor again or recopying game data.</p>
+<h2 id="use-it">Use It</h2>
+<p>With an effect open, choose <strong>View → Live engine view</strong>. The first start takes several seconds while the map editor loads; a badge on the viewport shows <em>Starting engine view…</em>, then the frame rate once frames arrive. From then on, each edit appears in the engine view shortly after you make it, and the engine view follows the editor's camera and ground texture. Choose <strong>View → Live engine view</strong> again to turn it off.</p>
+<h3 id="what-it-doesn-t-mirror">What It Doesn't Mirror</h3>
+<ul>
+<li><strong>Hiding the ground.</strong> The engine view always draws its ground, even when the editor's ground is hidden.</li>
+<li><strong>Ground height.</strong> The engine's ground stays at its own height, so an effect that sits on or below the editor's raised or lowered ground can look cut off differently.</li>
+</ul>
+<h2 id="remove-it">Remove It</h2>
+<p>In <strong>Edit → Preferences… → Engine preview</strong>, click <strong>Remove setup</strong> (it appears once setup has run), then <strong>Confirm remove</strong>. This deletes only the files setup created, and clears the map editor path if it points to that copy. If the copy shares files with your game install, removing it only removes the copy's names for them; your game files stay as they are.</p>
+<h2 id="if-something-goes-wrong">If Something Goes Wrong</h2>
+<ul>
+<li><strong>&quot;This EAW Terrain Editor build isn't supported&quot;</strong> — the chosen <code>EAW Terrain Editor.exe</code> is not the 64-bit build this version of Alamo Preview supports. Download it again from the mod tools page and choose that copy.</li>
+<li><strong>&quot;The bundled engine-host folder is missing or damaged&quot;</strong>, <strong>&quot;The host package file failed SHA-256 verification&quot;</strong> or <strong>&quot;The host package is missing …&quot;</strong> — the bundled <code>engine-host</code> folder is missing or damaged. Re-extract the Particle Editor release zip into an empty folder. A damaged package can also show a manifest parsing error in Preferences; <strong>Remove setup</strong> still works.</li>
+<li><strong>&quot;Engine preview setup requires a Forces of Corruption root (corruption) in the game paths.&quot;</strong> — the editor's game paths don't include your Forces of Corruption <code>corruption</code> folder, so it has not found your install. Fix that first; see <a href="./setup.html">Setup</a>.</li>
+<li><strong>&quot;The managed engine host folder is not empty. Remove its previous setup first.&quot;</strong> — an earlier setup is still there. Click <strong>Remove setup</strong> and try again.</li>
+<li><strong>&quot;This setup didn't finish. Remove setup and set up again.&quot;</strong> — setup was interrupted. Click <strong>Remove setup</strong>, then set up again; Refresh setup is unavailable for an incomplete copy.</li>
+<li><strong>A map editor is running from the setup folder.</strong> The Particle Editor closes its own map editor when you press <strong>Set up</strong>, <strong>Refresh setup</strong> or <strong>Remove setup</strong>. If a map editor you started yourself is running from the setup folder, close it (Task Manager, <strong>EAW Terrain Editor</strong>) and try again.</li>
+<li><strong>The engine view stops and the badge says it closed.</strong> The editor falls back to its own view. Turn the live engine view on again; if it keeps closing, remove the setup and set it up again.</li>
+</ul>
+      </article>
+      <nav class="guide-pager" aria-label="Guide pages">
+        <a class="pager-prev" href="./setup.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Setup</span></a>
+        <a class="pager-next" href="./basic-controls.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Basic Editor Controls</span></a>
+      </nav>
+    </main>
+    <aside class="guide-sidebar" aria-label="Guide navigation">
+      <p class="side-title">Guide</p>
+    <div class="side-group">
+      <p class="side-label">Start Here</p>
+      <ul>
+      <li><a href="./home.html">Guide Home</a></li>
+      <li><a href="./coming-from-the-old-glyphx-editor.html">Coming from the Old GlyphX Editor?</a></li>
+      <li><a href="./setup.html">Setup</a></li>
+      <li><a href="./engine-preview.html" class="active" aria-current="page">Live Engine View</a></li>
+      <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
+      <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
+      <li><a href="./curve-editor-basics.html">Curve Editor Basics</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Tutorials</p>
+      <ul>
+      <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
+      <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
+      <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">2. Build a Laser Shot and Muzzle Flash</a></li>
+      <li><a href="./05-build-an-explosion.html">3. Build an Explosion</a></li>
+      <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Reference</p>
+      <ul>
+      <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
+      <li><a href="./generation-types.html">Particle Generation Types</a></li>
+      <li><a href="./blend-modes.html">Blend Modes</a></li>
+      <li><a href="./motion-and-physics.html">Motion and Physics</a></li>
+      <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
+      <li><a href="./file-structure.html">File Structure</a></li>
+      <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
+      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
+      <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
+      </ul>
+    </div>
+    </aside>
+    <nav class="toc" aria-label="On this page">
+      <p class="toc-label">On this page</p>
+      <ul>
+      <li class="lvl-2"><a href="#what-you-need">What You Need</a></li>
+      <li class="lvl-2"><a href="#set-it-up">Set It Up</a></li>
+      <li class="lvl-2"><a href="#updating">Updating</a></li>
+      <li class="lvl-2"><a href="#use-it">Use It</a></li>
+      <li class="lvl-3"><a href="#what-it-doesn-t-mirror">What It Doesn't Mirror</a></li>
+      <li class="lvl-2"><a href="#remove-it">Remove It</a></li>
+      <li class="lvl-2"><a href="#if-something-goes-wrong">If Something Goes Wrong</a></li>
+      </ul>
+    </nav>
+  </div>
+  <!-- Resolve tutorial clips/stills against the media release (data-clip/data-poster →
+       MEDIA_BASE); plays clips when scrolled into view, honoring reduced motion. Pages with
+       no media are a no-op. Mirrors the landing's main.js minus its motion toggle. -->
+  <script type="module" src="../guide-media.js"></script>
+  <footer class="guide-footer">
+    <p class="footer-legal">Particle Editor is an independent, unofficial tool — not affiliated with or endorsed by Lucasfilm, Disney, Petroglyph Games, or any third-party mod or its authors. <em>Star Wars: Empire at War</em> and <em>Forces of Corruption</em> are trademarks of their respective owners.</p>
+  </footer>
+</body>
+</html>

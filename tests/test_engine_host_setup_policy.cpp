@@ -229,6 +229,12 @@ void TestPaths()
     for (const char* path : {"XML/GAMEOBJECTFILES.XML", "xml/previewtest.xml", "Art/Models/P_PREVIEW_TEST.ALO"})
         Check(IsSetupOwnedGameFile(path), "setup override excluded from game links and copies");
     Check(!IsSetupOwnedGameFile("Art/Models/other.alo"), "ordinary game asset copied");
+    Check(FindEditorLibraryRefusal({"EAW Terrain Editor.exe", "perceptionfunctionr.DLL", "MSS64.dll", "bink2w64.dll"})
+              .empty(),
+          "editor libraries match without case");
+    const std::string libraryRefusal = FindEditorLibraryRefusal({"EAW Terrain Editor.exe", "mss64.dll"});
+    Check(libraryRefusal.find("missing PerceptionFunctionR.dll, bink2w64.dll.") != std::string::npos,
+          "refusal names every missing editor library");
     Check(ShouldLinkGameFile(1, 1), "same volume links");
     Check(!ShouldLinkGameFile(1, 2), "different volume copies");
 }
@@ -260,6 +266,8 @@ void TestHostRuntimeOutputs()
     Check(IsHostRuntimeOutput("Data/Art/Textures/W_PRVCLD00.dds"), "cloud texture is a runtime output");
     Check(IsHostRuntimeOutput("scene/71968"), "pid scene folder is a runtime output");
     Check(IsHostRuntimeOutput("scene/71968/PRVGND_START_A.TED"), "scene map is a runtime output");
+    Check(IsHostRuntimeOutput("_GraphicsInit.txt"), "map editor startup log is a runtime output");
+    Check(!IsHostRuntimeOutput("Data/_notes.txt"), "a nested underscore text file is not an editor log");
     Check(!IsHostRuntimeOutput("scene"), "scene folder itself is journaled, not runtime");
     Check(!IsHostRuntimeOutput("scene/notapid/PRVGND_A.TED"), "non-pid scene folder is not runtime");
     Check(!IsHostRuntimeOutput("Data/Art/Textures/W_TEMPGRND00.DDS"), "game texture is not runtime");

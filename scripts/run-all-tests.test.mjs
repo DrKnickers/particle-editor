@@ -648,17 +648,24 @@ test("vfx-loop passes only by running, and a failed run cannot skip", () => {
   assert.equal(vfxLoopLane({ runLoopLane: () => ({ code: 1 }) }, true).status, "FAIL");
 });
 
-test("houdini is the opt-in lane: --list marks it, and only --lane selects it", () => {
+test("opt-in lanes are marked in --list and selected only with --lane", () => {
   const r = runScript("--list");
   assert.equal(r.status, 0);
   assert.match(r.stdout, /vfx-loop\r?\nhoudini \(opt-in\)\r?\n/);
-  assert.equal(r.stdout.match(/opt-in/g).length, 1, "houdini is the only opt-in lane");
+  assert.match(r.stdout, /engine-preview-e2e \(opt-in\)/);
+  const expectedOptInCount = 2;
+  assert.equal(r.stdout.match(/opt-in/g).length, expectedOptInCount);
   const names = (only) => selectLanes(only).map((l) => l.name);
   assert.ok(!names([]).includes("houdini"), "the default gate never runs houdini");
   assert.deepEqual(names([]), names([]).filter((n) => n !== "houdini"));
   assert.ok(names([]).includes("vfx-loop"));
   assert.deepEqual(names(["houdini"]), ["houdini"]);
   assert.deepEqual(names(["scripts", "houdini"]), ["scripts", "houdini"]);
+  assert.ok(!names([]).includes("engine-preview-e2e"));
+  assert.deepEqual(names(["engine-preview-e2e"]), ["engine-preview-e2e"]);
+  assert.deepEqual(selectLanes(["engine-preview-e2e"])[0].deps, ["msbuild-release"]);
+  assert.deepEqual(lanesForChanges([], ["engine-preview-e2e"]).lanes,
+    ["web-build", "msbuild-release", "engine-preview-e2e"]);
 });
 
 function houdiniLane(overrides = {}, allowMissing = false) {

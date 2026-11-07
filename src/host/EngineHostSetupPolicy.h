@@ -244,6 +244,26 @@ inline bool ShouldCopyEditorEntry(const std::string& name)
     return folded.substr(dot) == ".dll" || (folded.front() == '_' && folded.substr(dot) == ".txt");
 }
 
+// The supported map editor loads these from its own folder. Petroglyph's map editor installer adds
+// PerceptionFunctionR.dll to the game folder, which already holds the other two.
+constexpr const char* kEditorRequiredLibraries[] = {"PerceptionFunctionR.dll", "mss64.dll", "bink2w64.dll"};
+
+inline std::string FindEditorLibraryRefusal(const std::vector<std::string>& editorFolderNames)
+{
+    std::string missing;
+    for (const char* library : kEditorRequiredLibraries)
+    {
+        const bool isPresent =
+            std::any_of(editorFolderNames.begin(), editorFolderNames.end(),
+                        [&](const std::string& name) -> bool { return FoldSetupText(name) == FoldSetupText(library); });
+        if (!isPresent) missing += (missing.empty() ? "" : ", ") + std::string(library);
+    }
+    if (missing.empty()) return "";
+    return "The map editor's folder is missing " + missing +
+           ". Install Petroglyph's map editor tools into the game folder, put the supported editor in the same "
+           "folder, and choose it there.";
+}
+
 inline std::string InsertPreviewGameObjectFile(const std::string& xml)
 {
     const std::string folded  = FoldSetupText(xml);
@@ -274,8 +294,8 @@ inline bool ShouldLinkGameFile(std::uint32_t targetVolumeSerial, std::uint32_t g
     return targetVolumeSerial == gameVolumeSerial;
 }
 
-// Names the files and per-process scene folders the host writes inside the managed copy at
-// runtime (its log, content-addressed ground textures, and scene maps), which removal deletes too.
+// Names the files and per-process scene folders the host and map editor write inside the managed
+// copy at runtime (logs, content-addressed ground textures, and scene maps), which removal deletes too.
 inline bool IsHostRuntimeOutput(const std::string& relative)
 {
     std::string path = NormalizeSetupPath(relative);
@@ -289,6 +309,9 @@ inline bool IsHostRuntimeOutput(const std::string& relative)
         return path.size() >= suffix.size() && path.compare(path.size() - suffix.size(), suffix.size(), suffix) == 0;
     };
     if (path == "alamo_preview.log" || path == "data/art/textures/w_prvcld00.dds") return true;
+    // The map editor writes startup logs such as _GraphicsInit.txt beside its exe.
+    const bool isEditorLog = hasPrefix("_") && hasSuffix(".txt") && path.find('/') == std::string::npos;
+    if (isEditorLog) return true;
     const bool isGroundTexture = hasPrefix("data/art/textures/w_prvgnd_") && hasSuffix(".dds");
     if (isGroundTexture) return true;
     if (!hasPrefix("scene/")) return false;

@@ -24,6 +24,7 @@ look missing or behave differently.
 | Page | What It Teaches | Time |
 |---|---|---|
 | [Setup](setup) | Create a small tutorial mod folder, extract shipped particles, and launch the game with the mod. | ~15 min |
+| [Live Engine View](engine-preview) | Optional: see the effect rendered by the game engine itself, next to the editor's viewport. | ~10 min |
 | [Basic Editor Controls](basic-controls) | The viewport controls that nothing on screen announces: Shift to preview, camera movement, selection. | ~5 min |
 | [Particle Authoring Primer](particle-authoring-primer) | Learn the basic ideas behind emitters, tracks, blend modes, and particle lifetime. | ~10 min |
 | [Curve Editor Basics](curve-editor-basics) | Tracks, keys, the value spinners, and interpolation — the mechanics every tutorial uses. | ~5 min |

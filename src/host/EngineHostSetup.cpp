@@ -391,6 +391,12 @@ SetupPackage VerifySetupInputsAndSetEditorHash(const EngineHostSetup::Job& job,
         throw std::runtime_error("Choose an absolute map editor executable path.");
     editorHash = HashSetupFile(editor);
     FindSetupEditorLabel(package, editorHash); // Throws when the editor build is unsupported.
+    // Without its DLLs the copied editor would only fail later, when the live view starts.
+    std::vector<std::string> editorFolderNames;
+    for (const fs::directory_entry& entry : fs::directory_iterator(editor.parent_path()))
+        editorFolderNames.push_back(entry.path().filename().u8string());
+    const std::string refusal = FindEditorLibraryRefusal(editorFolderNames);
+    if (!refusal.empty()) throw std::runtime_error(refusal);
     return package;
 }
 

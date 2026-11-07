@@ -21,11 +21,13 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 ### Changed
 
 - Engine preview setup says where to download the supported 64-bit EAW Terrain Editor when the chosen build is unsupported
+- Engine preview setup checks that the map editor's folder has the DLLs it needs, which Petroglyph's map editor installer puts in the game folder, and names any that are missing before copying anything
 
 ### Fixed
 
 - Engine preview setup keeps Preferences usable with an idle map editor, identifies interrupted setups, removes files left by an interrupted refresh, keeps Remove setup available with a damaged package, and supports Cancel and cancellation on exit
 - Engine preview works with Windows user folders containing non-English characters and refuses to overwrite files in configured game folders
+- Remove setup also deletes the startup logs the map editor writes, so the engine preview's private folder no longer stays behind
 - Emitters draw in their list order, as the game does: a child emitter listed after its parent now draws on top of it again, reversing the 0.3.0 change that drew parents over their children
 
 ## [0.5.0] - 2026-11-04

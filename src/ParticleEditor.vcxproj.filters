@@ -480,6 +480,9 @@
     <ClInclude Include="rendering\EngineGroundExport.h">
       <Filter>Header Files\rendering</Filter>
     </ClInclude>
+    <ClInclude Include="rendering\EngineGroundExportCleanup.h">
+      <Filter>Header Files\rendering</Filter>
+    </ClInclude>
     <ClInclude Include="host\EngineLiveSync.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>

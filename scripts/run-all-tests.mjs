@@ -38,6 +38,8 @@
 //                     (scripts/vfx-loop/lane.mjs; pinned results)
 //
 // Opt-in lanes run only when named with --lane, and --list marks them:
+//   engine-preview-e2e Set up, draw a live engine frame, stop, Refresh and Remove;
+//                     restores registry values and checks source-install hashes.
 //   houdini           debug-atlas through the pinned Houdini build, the Job
 //                     Object launcher and the machine lock, plus kill and
 //                     lock-busy runs, the profile encodes, the editor
@@ -75,6 +77,7 @@
 
 import { spawnSync } from "node:child_process";
 import { resolveReplayGameRoots } from "./replay-proof.mjs";
+import { probePrerequisites as probeEnginePreviewPrerequisites } from "./engine-preview-e2e.mjs";
 import { HOUDINI_BUILD, PINNED as HOUDINI_PINNED } from "./houdini/houdini.mjs";
 import { existsSync, statSync, writeFileSync, readFileSync, unlinkSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
@@ -577,6 +580,26 @@ export function prereq(lane, ok, what, hint, allowMissing = ALLOW_MISSING) {
   return fail(`missing prereq: ${what}`);
 }
 
+/**
+ * @param {{probe?: typeof probeEnginePreviewPrerequisites, checkPrereq?: typeof prereq, runLane?: () => number}} options
+ * @returns {{status: string, note?: string}}
+ */
+export function runEnginePreviewE2eLane({
+  probe = probeEnginePreviewPrerequisites, checkPrereq = prereq,
+  runLane = () => runExe(process.execPath, [join(repoRoot, "scripts", "engine-preview-e2e.mjs")]),
+} = {}) {
+  /** @type {ReturnType<typeof probeEnginePreviewPrerequisites>} */
+  const prerequisites = probe();
+  for (const { what, hint } of prerequisites.missing) {
+    /** @type {{status: string, note?: string} | null} */
+    const result = checkPrereq("engine-preview-e2e", false, what, hint);
+    if (result) return result;
+  }
+  /** @type {number} */
+  const code = runLane();
+  return code === 0 ? pass : fail(`engine preview e2e exit ${code}`);
+}
+
 // The --tool verbs run before any window, device or game data, so this lane
 // needs only a fresh Release exe: no render desktop, no game install.
 export function runToolSmokeLane({
@@ -1040,6 +1063,12 @@ const LANES = [
     optIn: true,
     deps: ["msbuild-release"],
     run: () => runHoudiniLane(),
+  },
+  {
+    name: "engine-preview-e2e",
+    optIn: true,
+    deps: ["msbuild-release"],
+    run: () => runEnginePreviewE2eLane(),
   },
 ];
 

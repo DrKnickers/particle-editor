@@ -5,15 +5,24 @@ The editor's own viewport is a close match to the game, but it is not the game's
 after each edit. It runs your own copy of the *EAW Terrain Editor* (the official map editor) in
 the background as a render host, with a small add-on called **Alamo Preview**.
 
-Setting it up takes a few minutes and is done once. Nothing in your game install is changed.
+Setting it up takes a few minutes and is done once. The Particle Editor's setup never changes
+your game install.
 
 ## What You Need
 
 - **Windows** and *Star Wars: Empire at War — Forces of Corruption*, with the editor already
   finding your game install (see [Setup](setup)).
-- **The 64-bit EAW Terrain Editor.** Download `EAW_Terrain_Editor_b.zip` from Petroglyph's
-  [mod tools page](https://www.petroglyphgames.com/eawmodtool/) and extract it to a folder of
-  your choice, for example `C:\Games\EAW Terrain Editor\`.
+- **The 64-bit EAW Terrain Editor.** It needs files that only Petroglyph's map editor
+  installer provides. From Petroglyph's
+  [mod tools page](https://www.petroglyphgames.com/eawmodtool/):
+  1. Download and run `FOCMapEditor.msi`. When it asks for a folder, choose the game's
+     *Forces of Corruption* folder: on Steam, `Star Wars Empire at War\corruption`. It adds the
+     map editor tools there.
+  2. Download `EAW_Terrain_Editor_b.zip` and extract its `EAW Terrain Editor.exe` into that same
+     folder, replacing the one the installer added.
+
+  If setup says the map editor's folder is missing a file, the editor isn't in the folder where
+  the installer put its tools.
 
   > The `EAW Terrain Editor.exe` that comes with the game in `GameData` is an older 32-bit build
   > and will not work. Use the one from the mod tools page.
@@ -48,8 +57,15 @@ the private copy without choosing the map editor again or recopying game data.
 With an effect open, choose **View → Live engine view**. The first start takes several seconds
 while the map editor loads; a badge on the viewport shows *Starting engine view…*, then the frame
 rate once frames arrive. From then on, each edit appears in the engine view shortly after you make
-it, and the engine view follows the editor's camera and ground. Choose **View → Live engine view**
-again to turn it off.
+it, and the engine view follows the editor's camera and ground texture. Choose **View → Live
+engine view** again to turn it off.
+
+### What It Doesn't Mirror
+
+- **Hiding the ground.** The engine view always draws its ground, even when the editor's ground
+  is hidden.
+- **Ground height.** The engine's ground stays at its own height, so an effect that sits on or
+  below the editor's raised or lowered ground can look cut off differently.
 
 ## Remove It
 

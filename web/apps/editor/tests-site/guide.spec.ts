@@ -202,19 +202,18 @@ test("guide pager: first, middle, and final pages expose expected directions", a
   await expect(page.locator(".guide-pager .pager-prev")).toHaveAttribute("href", "./concepts-before-you-build.html");
   await expect(page.locator(".guide-pager .pager-next")).toHaveAttribute("href", "./05-build-an-explosion.html");
 
-  // basic-controls now lives mid-"Start Here" (setup → basic-controls → primer). Assert its
-  // pager wiring so a regression that drops the newly-promoted page from reading order is caught.
-  await page.goto("/guide/basic-controls.html");
+  // "Start Here" reads setup → engine-preview → basic-controls → primer. Assert the pager
+  // wiring so a regression that drops a promoted page from reading order is caught.
+  await page.goto("/guide/engine-preview.html");
   await expect(page.locator(".guide-pager .pager-prev")).toHaveAttribute("href", "./setup.html");
+  await expect(page.locator(".guide-pager .pager-next")).toHaveAttribute("href", "./basic-controls.html");
+  await page.goto("/guide/basic-controls.html");
+  await expect(page.locator(".guide-pager .pager-prev")).toHaveAttribute("href", "./engine-preview.html");
   await expect(page.locator(".guide-pager .pager-next")).toHaveAttribute("href", "./particle-authoring-primer.html");
 });
 
 test("unpublished guide drafts stay in source but not in the public guide", async ({ page, request }) => {
-  expect(UNPUBLISHED_SLUGS).toEqual([
-    "engine-preview",
-    "02-polish-hardpoint-damage-smoke",
-    "04-recolor-and-orient-a-shield-impact",
-  ]);
+  expect(UNPUBLISHED_SLUGS).toEqual(["02-polish-hardpoint-damage-smoke", "04-recolor-and-orient-a-shield-impact"]);
 
   await page.goto(guidePath("home"));
   for (const slug of UNPUBLISHED_SLUGS) {

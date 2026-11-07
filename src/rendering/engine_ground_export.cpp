@@ -2,6 +2,7 @@
 // Owns only its export files; never changes textures, shaders or rendering state.
 #include "engine.h"
 #include "EngineGroundExport.h"
+#include "EngineGroundExportCleanup.h"
 #include "common/ResourceLimits.h"
 #include <chrono>
 #include <filesystem>
@@ -23,20 +24,6 @@ void RemoveGroundExport(const std::wstring& path)
     if (error) OutputDebugStringA("[live-view] ERROR cannot remove an old ground export\n");
 }
 
-void RemoveAbandonedGroundExports(const std::filesystem::path& folder)
-{
-    const std::filesystem::file_time_type cutoff =
-        std::filesystem::file_time_type::clock::now() - kAbandonedGroundExportAgeHours;
-    // Best effort: a folder that cannot be listed only means old exports stay a while longer.
-    std::error_code listError;
-    for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(folder, listError))
-    {
-        std::error_code                       timeError;
-        const std::filesystem::file_time_type writtenAt = entry.last_write_time(timeError);
-        if (!timeError && writtenAt < cutoff) RemoveGroundExport(entry.path().wstring());
-    }
-}
-
 std::filesystem::path CreateGroundExportStem(std::uint64_t& exportCounter)
 {
     wchar_t localAppData[MAX_PATH] = {};
@@ -45,7 +32,11 @@ std::filesystem::path CreateGroundExportStem(std::uint64_t& exportCounter)
         throw std::runtime_error("Cannot find the ground export folder.");
     const std::filesystem::path folder = std::filesystem::path(localAppData) / L"AloParticleEditor" / L"engine-ground";
     std::filesystem::create_directories(folder);
-    RemoveAbandonedGroundExports(folder);
+    const std::filesystem::file_time_type cutoff =
+        std::filesystem::file_time_type::clock::now() - kAbandonedGroundExportAgeHours;
+    // Best effort: cleanup failure leaves old exports for the next attempt.
+    const std::error_code cleanupError = engine_ground::RemoveAbandonedGroundExports(folder, cutoff);
+    if (cleanupError) OutputDebugStringA("[live-view] ERROR cannot clean abandoned ground exports\n");
     const std::wstring prefix = std::to_wstring(GetCurrentProcessId()) + L"-" + std::to_wstring(GetTickCount64());
     // Separate processes and same-tick edits get distinct names.
     while (true)
