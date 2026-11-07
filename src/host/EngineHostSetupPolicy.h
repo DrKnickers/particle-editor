@@ -15,8 +15,11 @@ namespace host::engine_host
 {
 constexpr const wchar_t* kManagedHostRelativePath = L"AloParticleEditor\\EngineHost";
 constexpr const char*    kSetupJournalName        = ".particle-editor-setup.journal";
-constexpr size_t         kSha256HexChars          = 64;
-constexpr int            kPackageFormat           = 1;
+// A non-path record cannot be confused with a file that removal owns.
+constexpr const char* kSetupCompletionRecord = ":setup-complete\n";
+constexpr const char* kRefreshTempSuffix     = ".particle-editor-refresh";
+constexpr size_t      kSha256HexChars        = 64;
+constexpr int         kPackageFormat         = 1;
 // The release zip ships the host package in this folder beside ParticleEditor.exe.
 constexpr const wchar_t* kBundledPackageFolder = L"engine-host";
 constexpr const wchar_t* kPackageManifestName  = L"package.json";
@@ -35,6 +38,19 @@ struct SetupPackage
     std::map<std::string, std::string> editors;
     std::map<std::string, std::string> files;
 };
+
+inline bool IsSetupJournalComplete(const std::string& contents)
+{
+    const std::string completion = kSetupCompletionRecord;
+    if (contents.size() < completion.size()) return false;
+    const size_t start = contents.size() - completion.size();
+    return (start == 0 || contents[start - 1] == '\n') && contents.compare(start, completion.size(), completion) == 0;
+}
+
+inline std::string BuildStagedRefreshPath(const std::string& destination)
+{
+    return destination + kRefreshTempSuffix;
+}
 
 inline std::string FoldSetupText(std::string text)
 {

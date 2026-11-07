@@ -748,7 +748,10 @@ export interface EngineHostSetupStartDto {
 
 export interface EngineHostSetupStatusDto {
   managedPath: string | null;
-  isRunning: boolean;
+  setupAction: EngineHostSetupAction | null;
+  isHostRunning: boolean;
+  isSetupComplete: boolean;
+  packageError: string | null;
   isHostOutOfDate: boolean;
   bundledHostVersion: string | null;
 }
@@ -1311,6 +1314,7 @@ export type Request =
   | { kind: "engineHost/setup/start"; params: EngineHostSetupStartDto }
   | { kind: "engineHost/setup/refresh"; params: Record<string, never> }
   | { kind: "engineHost/setup/remove"; params: Record<string, never> }
+  | { kind: "engineHost/setup/cancel"; params: Record<string, never> }
   | { kind: "engineHost/settings"; params: Record<string, never> }
   | { kind: "engineHost/settings/set"; params: EngineHostSettingsDto }
   | { kind: "enginePreview/status"; params: { pid?: number } }
@@ -1527,6 +1531,7 @@ export interface ResponseMap {
   "engineHost/setup/start": EngineHostSetupAcceptedDto;
   "engineHost/setup/refresh": EngineHostSetupAcceptedDto;
   "engineHost/setup/remove": EngineHostSetupAcceptedDto;
+  "engineHost/setup/cancel": EngineHostSetupAcceptedDto;
   "engineHost/settings": EngineHostSettingsDto;
   "engineHost/settings/set": EngineHostSettingsDto;
   "enginePreview/status": EnginePreviewPendingDto;

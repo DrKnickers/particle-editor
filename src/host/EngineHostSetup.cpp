@@ -27,11 +27,14 @@ namespace
 {
 namespace fs = std::filesystem;
 using namespace engine_host;
-constexpr ULONGLONG      kSetupProgressIntervalMs = 100;
-constexpr DWORD          kProcessPathChars        = 32768;
-constexpr const wchar_t* kRefreshTempSuffix       = L".particle-editor-refresh";
-constexpr const char*    kIncompleteSetupMessage =
-    "This engine preview setup is incomplete. Remove setup and set up again.";
+constexpr ULONGLONG   kSetupProgressIntervalMs = 100;
+constexpr DWORD       kProcessPathChars        = 32768;
+constexpr const char* kIncompleteSetupMessage  = "This setup didn't finish. Remove setup and set up again.";
+
+fs::path StagedRefreshPath(const fs::path& destination)
+{
+    return fs::u8path(BuildStagedRefreshPath(destination.u8string()));
+}
 
 struct CloseSetupHandle
 {
@@ -42,6 +45,11 @@ struct CloseSetupHandle
 };
 using SetupHandle      = std::unique_ptr<void, CloseSetupHandle>;
 using ProgressReporter = std::function<void(const std::string&, size_t, size_t)>;
+
+void ThrowIfSetupCancelled(const std::atomic<bool>& cancelRequested)
+{
+    if (cancelRequested.load()) throw std::runtime_error("Setup was cancelled.");
+}
 
 void RequireWindows(bool succeeded, const std::string& action)
 {
@@ -180,12 +188,16 @@ void RemoveJournaledSetup(const fs::path& target, const ProgressReporter& progre
         // A crash during append cannot have created the unflushed final entry.
         if (end == std::string::npos) break;
         const std::string relative = contents.substr(start, end - start);
+        start                      = end + 1;
+        if (relative + '\n' == kSetupCompletionRecord) continue;
         if (!IsSafeSetupRelativePath(relative) || FoldSetupText(relative) == kSetupJournalName)
             throw std::runtime_error("The setup journal contains an unsafe path.");
         const fs::path path = target / fs::u8path(relative);
         RefuseReparseAncestors(path);
+        const fs::path staged = StagedRefreshPath(path);
+        RefuseReparseAncestors(staged);
         entries.push_back(path);
-        start = end + 1;
+        entries.push_back(staged);
     }
     RemoveHostRuntimeOutputs(target);
     size_t done = 0;
@@ -225,6 +237,8 @@ public:
         if (!IsSafeSetupRelativePath(relative)) throw std::runtime_error("Unsafe setup output path.");
         WriteSetupBytes(m_journal.get(), relative + '\n');
     }
+
+    void RecordCompletion() { WriteSetupBytes(m_journal.get(), kSetupCompletionRecord); }
 
     void EnsureDirectory(const fs::path& relative)
     {
@@ -270,7 +284,9 @@ fs::path FindCorruptionData(const std::vector<std::wstring>& roots)
         "Engine preview setup requires a Forces of Corruption root (corruption) in the game paths.");
 }
 
-SetupPackage VerifySetupPackage(const fs::path& manifest, const ProgressReporter& progressed)
+SetupPackage VerifySetupPackage(const fs::path&          manifest,
+                                const ProgressReporter&  progressed,
+                                const std::atomic<bool>& cancelRequested)
 {
     if (!manifest.is_absolute() || manifest.filename() != kPackageManifestName)
         throw std::runtime_error("Invalid bundled host manifest path.");
@@ -282,6 +298,7 @@ SetupPackage VerifySetupPackage(const fs::path& manifest, const ProgressReporter
     progressed("Verifying host package", 0, package.files.size());
     for (const std::pair<const std::string, std::string>& file : package.files)
     {
+        ThrowIfSetupCancelled(cancelRequested);
         if (HashSetupFile(manifest.parent_path() / fs::u8path(file.first)) != file.second)
             throw std::runtime_error("The host package file failed SHA-256 verification: " + file.first);
         progressed("Verifying host package", ++done, package.files.size());
@@ -291,10 +308,12 @@ SetupPackage VerifySetupPackage(const fs::path& manifest, const ProgressReporter
 
 SetupPackage VerifySetupInputsAndSetEditorHash(const EngineHostSetup::Job& job,
                                                std::string&                editorHash,
-                                               const ProgressReporter&     progressed)
+                                               const ProgressReporter&     progressed,
+                                               const std::atomic<bool>&    cancelRequested)
 {
-    const SetupPackage package = VerifySetupPackage(fs::path(job.packageManifestPath), progressed);
-    const fs::path     editor(job.editorExePath);
+    const SetupPackage package = VerifySetupPackage(fs::path(job.packageManifestPath), progressed, cancelRequested);
+    ThrowIfSetupCancelled(cancelRequested);
+    const fs::path editor(job.editorExePath);
     if (!editor.is_absolute() || FoldSetupText(editor.extension().u8string()) != ".exe")
         throw std::runtime_error("Choose an absolute map editor executable path.");
     editorHash = HashSetupFile(editor);
@@ -340,11 +359,6 @@ bool IsInstalledSetupCurrent(const fs::path& target, const SetupPackage& package
     return IsSetupCopyCurrent(expectedHashes, installedHashes);
 }
 
-fs::path StagedRefreshPath(const fs::path& destination)
-{
-    return destination.wstring() + kRefreshTempSuffix;
-}
-
 void StageRefreshedSetupFile(const RefreshedSetupFile& file,
                              const SetupPackage&       package,
                              const fs::path&           packageFolder,
@@ -385,10 +399,13 @@ void RefreshSetupCopy(const EngineHostSetup::Job& job, const fs::path& target, c
     const SetupHandle journalLock(CreateFileW(journal.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
                                               FILE_ATTRIBUTE_NORMAL, nullptr));
     RequireWindows(journalLock.get() != INVALID_HANDLE_VALUE, "Cannot lock the setup journal for refresh");
+    if (!IsSetupJournalComplete(ReadSetupFile(journal))) throw std::runtime_error(kIncompleteSetupMessage);
     LockSetupJournal(journalLock.get());
-    const SetupPackage                    package = VerifySetupPackage(fs::path(job.packageManifestPath), progressed);
-    const std::string                     editorHash = HashSetupFile(editor);
-    const std::vector<RefreshedSetupFile> files      = ListRefreshedSetupFiles(package, editorHash);
+    // Refresh is not cancellable (it takes about a second); the package check still needs a flag.
+    const std::atomic<bool> cancelRequested{false};
+    const SetupPackage package    = VerifySetupPackage(fs::path(job.packageManifestPath), progressed, cancelRequested);
+    const std::string  editorHash = HashSetupFile(editor);
+    const std::vector<RefreshedSetupFile> files = ListRefreshedSetupFiles(package, editorHash);
     std::vector<fs::path>                 stagedPaths;
     try
     {
@@ -421,10 +438,11 @@ void RefreshSetupCopy(const EngineHostSetup::Job& job, const fs::path& target, c
     }
 }
 
-void CopySetupGameData(SetupWriter&            writer,
-                       const fs::path&         gameData,
-                       const fs::path&         target,
-                       const ProgressReporter& progressed)
+void CopySetupGameData(SetupWriter&             writer,
+                       const fs::path&          gameData,
+                       const fs::path&          target,
+                       const ProgressReporter&  progressed,
+                       const std::atomic<bool>& cancelRequested)
 {
     RefuseReparseAncestors(gameData);
     const bool link = ShouldLinkGameFile(SetupVolumeSerial(target), SetupVolumeSerial(gameData));
@@ -432,24 +450,31 @@ void CopySetupGameData(SetupWriter&            writer,
     std::vector<fs::path> files;
     for (const fs::directory_entry& entry : fs::recursive_directory_iterator(gameData))
     {
+        ThrowIfSetupCancelled(cancelRequested);
         RefuseReparseAncestors(entry.path());
         if (entry.is_regular_file()) files.push_back(entry.path());
     }
     size_t done = 0;
     for (const fs::path& source : files)
     {
+        ThrowIfSetupCancelled(cancelRequested);
         const fs::path relative = source.lexically_relative(gameData);
         if (!IsSetupOwnedGameFile(relative.generic_u8string())) writer.Copy(source, fs::path(L"Data") / relative, link);
         progressed(link ? "Linking game data" : "Copying game data", ++done, files.size());
     }
 }
 
-void BuildSetupCopy(const EngineHostSetup::Job& job, const fs::path& target, const ProgressReporter& progressed)
+void BuildSetupCopy(const EngineHostSetup::Job& job,
+                    const fs::path&             target,
+                    const ProgressReporter&     progressed,
+                    const std::atomic<bool>&    cancelRequested)
 {
+    ThrowIfSetupCancelled(cancelRequested);
     ValidateSetupTarget(target, job);
     const fs::path     gameData = FindCorruptionData(job.basepaths);
     std::string        editorHash;
-    const SetupPackage package = VerifySetupInputsAndSetEditorHash(job, editorHash, progressed);
+    const SetupPackage package = VerifySetupInputsAndSetEditorHash(job, editorHash, progressed, cancelRequested);
+    ThrowIfSetupCancelled(cancelRequested);
     if (fs::exists(target) && !fs::is_empty(target))
         throw std::runtime_error("The managed engine host folder is not empty. Remove its previous setup first.");
     if (EngineHostSetup::IsRunning(target.wstring()))
@@ -462,15 +487,20 @@ void BuildSetupCopy(const EngineHostSetup::Job& job, const fs::path& target, con
     bool                             ownsJournal = false;
     try
     {
+        ThrowIfSetupCancelled(cancelRequested);
         SetupWriter writer(target);
         ownsJournal = true;
         writer.Copy(fs::path(job.editorExePath), kManagedEditorExeName, false);
         if (HashSetupFile(target / kManagedEditorExeName) != editorHash)
             throw std::runtime_error("The map editor changed during setup.");
         for (const fs::directory_entry& entry : fs::directory_iterator(fs::path(job.editorExePath).parent_path()))
+        {
+            ThrowIfSetupCancelled(cancelRequested);
             if (entry.is_regular_file() && ShouldCopyEditorEntry(entry.path().filename().u8string()))
                 writer.Copy(entry.path(), entry.path().filename(), false);
-        CopySetupGameData(writer, gameData, target, progressed);
+        }
+        CopySetupGameData(writer, gameData, target, progressed, cancelRequested);
+        ThrowIfSetupCancelled(cancelRequested);
         writer.WriteFresh("Data/XML/GAMEOBJECTFILES.XML", gameObjects);
         const fs::path packageFolder = fs::path(job.packageManifestPath).parent_path();
         writer.EnsureDirectory(L"Data/Art/Models");
@@ -478,7 +508,12 @@ void BuildSetupCopy(const EngineHostSetup::Job& job, const fs::path& target, con
         writer.Record("Data/Art/Models/P_PREVIEW_TEST.ALO");
         writer.EnsureDirectory(L"scene");
         for (const RefreshedSetupFile& file : ListRefreshedSetupFiles(package, editorHash))
+        {
+            ThrowIfSetupCancelled(cancelRequested);
             writer.WriteFresh(file.destination, ReadRefreshedSetupBytes(file, package, packageFolder, target));
+        }
+        ThrowIfSetupCancelled(cancelRequested);
+        writer.RecordCompletion();
         progressed("Setup completed", 1, 1);
     }
     catch (const std::exception& failure)
@@ -507,14 +542,21 @@ std::wstring EngineHostSetup::ManagedPath()
     return (fs::path(localAppData) / engine_host::kManagedHostRelativePath).wstring();
 }
 
+bool EngineHostSetup::IsSetupComplete(const std::wstring& target)
+{
+    const fs::path journal = fs::path(target) / kSetupJournalName;
+    return fs::is_regular_file(journal) && IsSetupJournalComplete(ReadSetupFile(journal));
+}
+
 EngineHostSetup::RefreshStatus EngineHostSetup::CheckRefreshStatus(const std::wstring& target,
                                                                    const std::wstring& packageManifestPath)
 {
     const fs::path managed(target);
     if (!fs::is_regular_file(managed / kSetupJournalName)) return {};
     const fs::path manifest(packageManifestPath);
-    // Developer builds without a bundled host package have nothing to compare against.
-    if (!fs::is_regular_file(manifest)) return {};
+    if (!fs::is_regular_file(manifest))
+        throw std::runtime_error("The bundled engine-host folder is missing or damaged. "
+                                 "Re-extract the Particle Editor release zip.");
     const SetupPackage package = ParseSetupPackage(ReadSetupFile(manifest));
     RefreshStatus      status;
     status.bundledHostVersion = package.hostVersion;
@@ -561,6 +603,12 @@ bool EngineHostSetup::IsBusy() const
     return m_busy;
 }
 
+std::optional<EngineHostSetup::Mode> EngineHostSetup::ActiveMode() const
+{
+    if (!IsBusy()) return std::nullopt;
+    return m_mode;
+}
+
 bool EngineHostSetup::Start(Job job, std::string& error)
 {
     if (m_busy.exchange(true))
@@ -569,6 +617,8 @@ bool EngineHostSetup::Start(Job job, std::string& error)
         return false;
     }
     Finish();
+    m_mode            = job.mode;
+    m_cancelRequested = false;
     try
     {
         m_worker = std::thread([this, job = std::move(job)]() -> void { Run(job); });
@@ -619,7 +669,7 @@ void EngineHostSetup::Run(const Job& job)
         else if (job.mode == Mode::Refresh)
             RefreshSetupCopy(job, target, progressed);
         else
-            BuildSetupCopy(job, target, progressed);
+            BuildSetupCopy(job, target, progressed, m_cancelRequested);
         result["ok"] = true;
         if (job.mode == Mode::Setup) result["exePath"] = (target / kManagedEditorExeName).u8string();
     }

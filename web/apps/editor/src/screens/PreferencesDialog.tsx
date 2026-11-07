@@ -59,10 +59,14 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props): ReactN
   const [engineHostError, setEngineHostError] = useState<string | null>(null);
   const [isEngineHostBusy, setEngineHostBusy] = useState<boolean>(true);
   const [managedPath, setManagedPath] = useState<string | null>(null);
+  const [isHostRunning, setHostRunning] = useState<boolean>(false);
+  const [isSetupComplete, setSetupComplete] = useState<boolean>(false);
+  const [packageError, setPackageError] = useState<string | null>(null);
   const [isHostOutOfDate, setHostOutOfDate] = useState<boolean>(false);
   const [bundledHostVersion, setBundledHostVersion] = useState<string | null>(null);
   const [isSetupOpen, setSetupOpen] = useState<boolean>(false);
   const [isSetupRunning, setSetupRunning] = useState<boolean>(false);
+  const [isCancelRequested, setCancelRequested] = useState<boolean>(false);
   const [setupAction, setSetupAction] = useState<EngineHostSetupAction>("setup");
   const [setupProgress, setSetupProgress] = useState<EngineHostSetupProgressDto | null>(null);
   const [setupResult, setSetupResult] = useState<string | null>(null);
@@ -85,9 +89,14 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props): ReactN
         if (!isCurrent) return;
         setEngineHostExePath(settings.exePath ?? null);
         setManagedPath(status.managedPath ?? null);
+        setHostRunning(status.isHostRunning);
+        setSetupComplete(status.isSetupComplete);
+        setPackageError(status.packageError);
         setHostOutOfDate(status.isHostOutOfDate);
         setBundledHostVersion(status.bundledHostVersion);
-        setSetupRunning(status.isRunning ?? false);
+        const activeAction: EngineHostSetupAction | null = status.setupAction ?? null;
+        setSetupRunning(activeAction !== null);
+        if (activeAction !== null) setSetupAction(activeAction);
       } catch (error: unknown) {
         if (isCurrent) setEngineHostError(String(error));
       } finally {
@@ -100,6 +109,7 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props): ReactN
     };
     const onSetupFinished = (event: EventOf<typeof ENGINE_HOST_SETUP_FINISHED_EVENT>): void => {
       setSetupRunning(false);
+      setCancelRequested(false);
       setSetupProgress(null);
       setRemoveConfirmed(false);
       if (event.payload.ok) {
@@ -155,6 +165,7 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props): ReactN
     if (action === "setup" && !setupEditorPath) return;
     setSetupAction(action);
     setSetupRunning(true);
+    setCancelRequested(false);
     setSetupProgress(null);
     setSetupResult(null);
     setEngineHostError(null);
@@ -172,8 +183,23 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props): ReactN
     }
   };
 
+  const cancelSetup = async (): Promise<void> => {
+    setCancelRequested(true);
+    try {
+      const accepted: ResponseMap["engineHost/setup/cancel"] = await bridge.request({
+        kind: "engineHost/setup/cancel",
+        params: {},
+      });
+      if (!accepted.ok) throw new Error(accepted.error);
+    } catch (error: unknown) {
+      setEngineHostError(String(error));
+      setCancelRequested(false);
+    }
+  };
+
   const isSetupDisabled: boolean = isEngineHostBusy || isSetupRunning;
   const canStartSetup: boolean = hasSetupEditorPath && !isSetupDisabled;
+  const canRefreshSetup: boolean = isSetupComplete && isHostOutOfDate && packageError === null;
   const setupFeedback: ReactNode = (
     <>
       {isSetupRunning && (
@@ -189,6 +215,17 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props): ReactN
             max={setupProgress && setupProgress.total > 0 ? setupProgress.total : undefined}
             className="h-1.5 w-full accent-accent"
           />
+          {setupAction === "setup" && (
+            <Button
+              variant="secondary"
+              disabled={isCancelRequested}
+              onClick={(): void => {
+                void cancelSetup();
+              }}
+            >
+              Cancel
+            </Button>
+          )}
         </div>
       )}
       {setupResult && (
@@ -199,6 +236,11 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props): ReactN
       {engineHostError && (
         <p role="alert" className="text-xs text-danger-fg">
           {engineHostError}
+        </p>
+      )}
+      {packageError && (
+        <p role="alert" className="text-xs text-danger-fg">
+          {packageError}
         </p>
       )}
     </>
@@ -474,13 +516,22 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props): ReactN
                   Set up
                 </Button>
               </div>
+              {isHostRunning && (
+                <p className="text-xs text-text-2">
+                  A map editor is running from this setup. Set up, Refresh setup and Remove setup close the Particle
+                  Editor's own map editor first.
+                </p>
+              )}
               {managedPath && (
                 <div className="flex flex-col gap-2 border-t border-border pt-2">
                   <span className="text-xs text-text">Managed setup</span>
                   <output aria-label="Managed setup path" title={managedPath} className="truncate text-xs text-text-2">
                     {managedPath}
                   </output>
-                  {isHostOutOfDate && (
+                  {!isSetupComplete && !isSetupRunning && (
+                    <p className="text-xs text-danger-fg">This setup didn't finish. Remove setup and set up again.</p>
+                  )}
+                  {canRefreshSetup && (
                     <p className="text-xs text-text-2">
                       This setup's engine host doesn't match the one bundled with this Particle Editor
                       {bundledHostVersion && ` (version ${bundledHostVersion})`}.
@@ -490,7 +541,7 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props): ReactN
                     <p className="text-xs text-text-2">Delete the managed copy? Your game install is never modified.</p>
                   )}
                   <div className="flex gap-2">
-                    {isHostOutOfDate && (
+                    {canRefreshSetup && (
                       <Button
                         variant="secondary"
                         disabled={isSetupDisabled}

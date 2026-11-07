@@ -163,6 +163,31 @@ void TestRefreshedFiles()
     Check(!IsSetupCopyCurrent(expectedHashes, installedHashes), "one missing installed file needs refresh");
 }
 
+void TestSetupCompletion()
+{
+    const std::string journal = "Data\nData/config.meg\nalamo_preview.ini\n";
+    Check(IsSetupJournalComplete(journal + kSetupCompletionRecord), "final flushed completion record completes setup");
+    Check(!IsSetupJournalComplete(journal), "journaled paths alone do not complete setup");
+    Check(!IsSetupJournalComplete(""), "empty journal is incomplete");
+    std::string truncated = journal + kSetupCompletionRecord;
+    truncated.pop_back();
+    Check(!IsSetupJournalComplete(truncated), "truncated completion record is incomplete");
+    Check(!IsSetupJournalComplete(journal + kSetupCompletionRecord + "other\n"), "completion must be the final record");
+    Check(!IsSetupJournalComplete("filename" + std::string(kSetupCompletionRecord)), "completion is a whole record");
+}
+
+void TestStagedRefreshPaths()
+{
+    Check(BuildStagedRefreshPath("C:/Managed/Data/XML/PREVIEWTEST.XML") ==
+              "C:/Managed/Data/XML/PREVIEWTEST.XML.particle-editor-refresh",
+          "refresh staging is an exact sibling of a nested journaled path");
+    Check(BuildStagedRefreshPath("C:/Managed/alamo_preview.ini") ==
+              "C:/Managed/alamo_preview.ini.particle-editor-refresh",
+          "refresh staging preserves the original file extension");
+    Check(BuildStagedRefreshPath("C:/Managed/d3d9.dll") != "C:/Managed/other.dll.particle-editor-refresh",
+          "staged cleanup does not select unrelated siblings");
+}
+
 void TestPaths()
 {
     const std::vector<std::string> games        = {"C:/games/corruption", "D:/games/GameData"};
@@ -229,6 +254,8 @@ int main()
 {
     TestPackages();
     TestRefreshedFiles();
+    TestSetupCompletion();
+    TestStagedRefreshPaths();
     TestPaths();
     TestGeneratedText();
     TestHostRuntimeOutputs();

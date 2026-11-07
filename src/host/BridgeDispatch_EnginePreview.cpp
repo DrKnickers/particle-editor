@@ -26,7 +26,8 @@ void BridgeDispatcher::ShutdownEnginePreviewWorker()
 {
     if (m_engineHostSetup)
     {
-        // Closing during setup still persists its result, or finishes a failed save's rollback.
+        m_engineHostSetup->RequestCancel();
+        // Drain cancellation rollback too, so shutdown cannot leave this worker's partial copy behind.
         do
         {
             m_engineHostSetup->Finish();
@@ -205,7 +206,8 @@ bool BridgeDispatcher::TryDispatchEngineHostSetup(BridgeRequestContext& ctx)
     const bool isStart      = ctx.kind == "engineHost/setup/start";
     const bool isRefresh    = ctx.kind == "engineHost/setup/refresh";
     const bool isRemove     = ctx.kind == "engineHost/setup/remove";
-    const bool isRecognized = isStatus || isStart || isRefresh || isRemove;
+    const bool isCancel     = ctx.kind == "engineHost/setup/cancel";
+    const bool isRecognized = isStatus || isStart || isRefresh || isRemove || isCancel;
     if (!isRecognized) return false;
     if (!m_enginePreviewAllowed)
     {
@@ -220,10 +222,29 @@ bool BridgeDispatcher::TryDispatchEngineHostSetup(BridgeRequestContext& ctx)
             const bool         isManaged =
                 std::filesystem::exists(std::filesystem::path(target) / engine_host::kSetupJournalName);
             EngineHostSetup::RefreshStatus refreshStatus;
-            if (isManaged) refreshStatus = EngineHostSetup::CheckRefreshStatus(target, ResolveBundledManifestPath());
+            json                           packageError = nullptr;
+            try
+            {
+                if (isManaged)
+                    refreshStatus = EngineHostSetup::CheckRefreshStatus(target, ResolveBundledManifestPath());
+            }
+            catch (const std::exception& failure)
+            {
+                // A damaged release package must not hide the managed path or prevent removal.
+                packageError = failure.what();
+            }
+            json                                       setupAction = nullptr;
+            const std::optional<EngineHostSetup::Mode> mode =
+                m_engineHostSetup ? m_engineHostSetup->ActiveMode() : std::nullopt;
+            if (mode == EngineHostSetup::Mode::Setup) setupAction = "setup";
+            if (mode == EngineHostSetup::Mode::Refresh) setupAction = "refresh";
+            if (mode == EngineHostSetup::Mode::Remove) setupAction = "remove";
             ctx.SendOk(
                 {{"managedPath", isManaged ? json(WideToUtf8(target)) : json(nullptr)},
-                 {"isRunning", EngineHostSetup::IsRunning(target)},
+                 {"setupAction", setupAction},
+                 {"isHostRunning", EngineHostSetup::IsRunning(target)},
+                 {"isSetupComplete", isManaged && EngineHostSetup::IsSetupComplete(target)},
+                 {"packageError", packageError},
                  {"isHostOutOfDate", refreshStatus.isHostOutOfDate},
                  {"bundledHostVersion",
                   refreshStatus.bundledHostVersion.empty() ? json(nullptr) : json(refreshStatus.bundledHostVersion)}});
@@ -232,6 +253,12 @@ bool BridgeDispatcher::TryDispatchEngineHostSetup(BridgeRequestContext& ctx)
         {
             ctx.SendErr(failure.what());
         }
+        return true;
+    }
+    if (isCancel)
+    {
+        if (m_engineHostSetup) m_engineHostSetup->RequestCancel();
+        ctx.SendOk({{"ok", true}});
         return true;
     }
     const bool isPreviewActive = m_enginePreviewPending || m_engineLiveState != EngineLiveState::Off;

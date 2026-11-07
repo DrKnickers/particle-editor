@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cstddef>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -42,16 +43,28 @@ public:
     };
 
     explicit EngineHostSetup(HWND hwnd);
-    ~EngineHostSetup() { Finish(); }
+    ~EngineHostSetup()
+    {
+        RequestCancel();
+        Finish();
+    }
     bool Start(Job job, std::string& error);
     void Finish()
     {
         if (m_worker.joinable()) m_worker.join();
     }
-    bool                 IsBusy() const;
+    bool                IsBusy() const;
+    std::optional<Mode> ActiveMode() const;
+    // Only Setup copies long enough to be worth cancelling; Refresh and Remove take about a second.
+    // Inline so the header-only destructor links in tests that do not compile EngineHostSetup.cpp.
+    void RequestCancel()
+    {
+        if (m_busy && m_mode == Mode::Setup) m_cancelRequested = true;
+    }
     std::vector<Event>   TakeEvents();
     static std::wstring  ManagedPath();
     static bool          IsRunning(const std::wstring& target);
+    static bool          IsSetupComplete(const std::wstring& target);
     static RefreshStatus CheckRefreshStatus(const std::wstring& target, const std::wstring& packageManifestPath);
 
 private:
@@ -59,8 +72,11 @@ private:
     void ReportProgress(const std::string& stage, size_t done, size_t total);
     void Publish(Event event);
 
-    HWND               m_hwnd;
-    std::atomic<bool>  m_busy{false};
+    HWND              m_hwnd;
+    std::atomic<bool> m_busy{false};
+    std::atomic<bool> m_cancelRequested{false};
+    // Start, status and cancel are dispatched on the UI thread; the worker reads its captured Job.
+    Mode               m_mode = Mode::Setup;
     std::thread        m_worker;
     std::mutex         m_mutex;
     std::vector<Event> m_events;

@@ -20,7 +20,10 @@ describe("engine host setup bridge", (): void => {
     const bridge: MockBridge = new MockBridge();
     expect(await bridge.request({ kind: "engineHost/setup/status", params: {} })).toEqual({
       managedPath: null,
-      isRunning: false,
+      setupAction: null,
+      isHostRunning: false,
+      isSetupComplete: false,
+      packageError: null,
       isHostOutOfDate: false,
       bundledHostVersion: "1.0.0",
     });
@@ -46,7 +49,10 @@ describe("engine host setup bridge", (): void => {
       expect(response).toEqual({ ok: true });
       expect(await bridge.request({ kind: "engineHost/setup/status", params: {} })).toEqual({
         managedPath: null,
-        isRunning: true,
+        setupAction: action,
+        isHostRunning: false,
+        isSetupComplete: false,
+        packageError: null,
         isHostOutOfDate: false,
         bundledHostVersion: "1.0.0",
       });
@@ -61,7 +67,10 @@ describe("engine host setup bridge", (): void => {
       expect(await bridge.request({ kind: "engineHost/settings", params: {} })).toEqual({ exePath });
       expect(await bridge.request({ kind: "engineHost/setup/status", params: {} })).toEqual({
         managedPath: exePath,
-        isRunning: false,
+        setupAction: null,
+        isHostRunning: false,
+        isSetupComplete: action === "setup",
+        packageError: null,
         isHostOutOfDate: false,
         bundledHostVersion: "1.0.0",
       });
@@ -97,9 +106,59 @@ describe("engine host setup bridge", (): void => {
     expect(await bridge.request({ kind: "engineHost/settings", params: {} })).toEqual({ exePath: customEditorPath });
     expect(await bridge.request({ kind: "engineHost/setup/status", params: {} })).toEqual({
       managedPath: MOCK_MANAGED_EDITOR_PATH,
-      isRunning: false,
+      setupAction: null,
+      isHostRunning: false,
+      isSetupComplete: true,
+      packageError: null,
       isHostOutOfDate: false,
       bundledHostVersion: "1.0.0",
     });
   });
+
+  it("cancels setup without publishing a managed copy and permits a retry", async (): Promise<void> => {
+    const bridge: MockBridge = new MockBridge();
+    const finished: ReturnType<typeof vi.fn> = vi.fn();
+    const progressed: ReturnType<typeof vi.fn> = vi.fn();
+    bridge.on(ENGINE_HOST_SETUP_FINISHED_EVENT, finished);
+    bridge.on(ENGINE_HOST_SETUP_PROGRESSED_EVENT, progressed);
+    await bridge.request({ kind: "engineHost/setup/start", params: { editorExePath: "C:\\editor\\editor.exe" } });
+    expect(await bridge.request({ kind: "engineHost/setup/cancel", params: {} })).toEqual({ ok: true });
+    await vi.runAllTimersAsync();
+    expect(progressed).not.toHaveBeenCalled();
+    expect(finished).toHaveBeenCalledWith({
+      kind: ENGINE_HOST_SETUP_FINISHED_EVENT,
+      payload: { ok: false, action: "setup", error: "Setup was cancelled." },
+    });
+    expect(await bridge.request({ kind: "engineHost/setup/status", params: {} })).toMatchObject({
+      managedPath: null,
+      setupAction: null,
+      isSetupComplete: false,
+    });
+    expect(await bridge.request({ kind: "engineHost/settings", params: {} })).toEqual({ exePath: null });
+    expect(
+      await bridge.request({ kind: "engineHost/setup/start", params: { editorExePath: "C:\\editor\\editor.exe" } }),
+    ).toEqual({ ok: true });
+    await vi.runAllTimersAsync();
+    expect(await bridge.request({ kind: "engineHost/setup/status", params: {} })).toMatchObject({
+      isSetupComplete: true,
+    });
+  });
+
+  it.each(["refresh", "remove"] as const)(
+    "ignores cancel during %s",
+    async (action: "refresh" | "remove"): Promise<void> => {
+      const bridge: MockBridge = new MockBridge();
+      await bridge.request({ kind: "engineHost/setup/start", params: { editorExePath: "C:\\editor\\editor.exe" } });
+      await vi.runAllTimersAsync();
+      const finished: ReturnType<typeof vi.fn> = vi.fn();
+      bridge.on(ENGINE_HOST_SETUP_FINISHED_EVENT, finished);
+      await bridge.request({
+        kind: action === "refresh" ? "engineHost/setup/refresh" : "engineHost/setup/remove",
+        params: {},
+      });
+      await bridge.request({ kind: "engineHost/setup/cancel", params: {} });
+      await vi.runAllTimersAsync();
+      expect(finished).toHaveBeenCalledWith({ kind: ENGINE_HOST_SETUP_FINISHED_EVENT, payload: { ok: true, action } });
+    },
+  );
 });

@@ -12,6 +12,7 @@ import {
   type EngineHostSetupStatusDto,
   type Request,
   type EngineHostSetupAcceptedDto,
+  type EngineHostSetupAction,
 } from "@particle-editor/bridge-schema";
 
 const SETUP_EDITOR_PATH = "C:\\MapEditor\\EAW Terrain Editor.exe";
@@ -22,7 +23,10 @@ function makeSetupBridge(): { bridge: BridgeStub; settings: EngineHostSettingsDt
   const settings: EngineHostSettingsDto = { exePath: null };
   const status: EngineHostSetupStatusDto = {
     managedPath: null,
-    isRunning: false,
+    setupAction: null,
+    isHostRunning: false,
+    isSetupComplete: true,
+    packageError: null,
     isHostOutOfDate: false,
     bundledHostVersion: "1.0.0",
   };
@@ -33,6 +37,7 @@ function makeSetupBridge(): { bridge: BridgeStub; settings: EngineHostSettingsDt
       "engineHost/setup/start": { ok: true },
       "engineHost/setup/refresh": { ok: true },
       "engineHost/setup/remove": { ok: true },
+      "engineHost/setup/cancel": { ok: true },
       "file/pick-open": (): { ok: true; path: string } => ({
         ok: true,
         path: SETUP_EDITOR_PATH,
@@ -139,7 +144,10 @@ describe("PreferencesDialog", () => {
         "engineHost/settings": { exePath: null },
         "engineHost/setup/status": {
           managedPath: null,
-          isRunning: false,
+          setupAction: null,
+          isHostRunning: false,
+          isSetupComplete: false,
+          packageError: null,
           isHostOutOfDate: false,
           bundledHostVersion: null,
         },
@@ -161,13 +169,85 @@ describe("PreferencesDialog", () => {
     expect(within(dialog).getByRole("button", { name: "Set up" })).toBeEnabled();
   });
 
-  it("loads an already running setup and disables conflicting actions", async (): Promise<void> => {
-    const { bridge, status }: ReturnType<typeof makeSetupBridge> = makeSetupBridge();
-    status.isRunning = true;
+  it.each([
+    ["setup", "Setting up"],
+    ["refresh", "Refreshing setup"],
+    ["remove", "Removing setup"],
+  ] as const)(
+    "restores the active %s action and disables conflicting controls",
+    async (action: EngineHostSetupAction, label: string): Promise<void> => {
+      const { bridge, status }: ReturnType<typeof makeSetupBridge> = makeSetupBridge();
+      status.setupAction = action;
+      render(<PreferencesDialog bridge={bridge} open onOpenChange={(): void => {}} />);
+      expect(await screen.findByText(label)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Set up" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Browse" })).toBeDisabled();
+      expect(screen.queryByRole("button", { name: "Cancel" }) !== null).toBe(action === "setup");
+    },
+  );
+
+  it("leaves controls enabled when only an idle managed host is running", async (): Promise<void> => {
+    const { bridge, settings, status }: ReturnType<typeof makeSetupBridge> = makeSetupBridge();
+    settings.exePath = MANAGED_EDITOR_PATH;
+    status.managedPath = MANAGED_EDITOR_PATH;
+    status.isHostRunning = true;
+    status.isHostOutOfDate = true;
     render(<PreferencesDialog bridge={bridge} open onOpenChange={(): void => {}} />);
-    expect(await screen.findByText("Setting up")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Set up" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Browse" })).toBeDisabled();
+    expect(await screen.findByText(/A map editor is running from this setup/)).toBeInTheDocument();
+    for (const name of ["Browse", "Clear", "Set up", "Refresh setup", "Remove setup"]) {
+      expect(screen.getByRole("button", { name })).toBeEnabled();
+    }
+    const dialog: HTMLElement = await openSetupDialog();
+    await chooseSetupEditor(dialog);
+    expect(within(dialog).getByRole("button", { name: "Set up" })).toBeEnabled();
+  });
+
+  it("offers removal without refresh for an incomplete setup", async (): Promise<void> => {
+    const { bridge, status }: ReturnType<typeof makeSetupBridge> = makeSetupBridge();
+    status.managedPath = MANAGED_EDITOR_PATH;
+    status.isSetupComplete = false;
+    status.isHostOutOfDate = true;
+    render(<PreferencesDialog bridge={bridge} open onOpenChange={(): void => {}} />);
+    expect(await screen.findByText("This setup didn't finish. Remove setup and set up again.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Refresh setup" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Remove setup" }));
+    await userEvent.click(screen.getByRole("button", { name: "Confirm remove" }));
+    expect(bridge.request).toHaveBeenCalledWith({ kind: "engineHost/setup/remove", params: {} });
+  });
+
+  it("shows a damaged package error and keeps removal available", async (): Promise<void> => {
+    const { bridge, status }: ReturnType<typeof makeSetupBridge> = makeSetupBridge();
+    status.managedPath = MANAGED_EDITOR_PATH;
+    status.packageError = "The bundled engine-host folder is missing or damaged.";
+    render(<PreferencesDialog bridge={bridge} open onOpenChange={(): void => {}} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(status.packageError);
+    expect(screen.getByLabelText("Managed setup path")).toHaveTextContent(MANAGED_EDITOR_PATH);
+    expect(screen.queryByRole("button", { name: "Refresh setup" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Remove setup" }));
+    await userEvent.click(screen.getByRole("button", { name: "Confirm remove" }));
+    expect(bridge.request).toHaveBeenCalledWith({ kind: "engineHost/setup/remove", params: {} });
+  });
+
+  it("cancels setup once and waits for rollback before enabling retry", async (): Promise<void> => {
+    const { bridge }: ReturnType<typeof makeSetupBridge> = makeSetupBridge();
+    render(<PreferencesDialog bridge={bridge} open onOpenChange={(): void => {}} />);
+    const dialog: HTMLElement = await openSetupDialog();
+    await chooseSetupEditor(dialog);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Set up" }));
+    const cancelButton: HTMLElement = within(dialog).getByRole("button", { name: "Cancel" });
+    await userEvent.click(cancelButton);
+    expect(cancelButton).toBeDisabled();
+    await userEvent.click(cancelButton);
+    expect(
+      bridge.request.mock.calls.filter(([request]: [Request]): boolean => request.kind === "engineHost/setup/cancel"),
+    ).toHaveLength(1);
+    expect(within(dialog).getByRole("button", { name: "Set up" })).toBeDisabled();
+    bridge.emit(ENGINE_HOST_SETUP_FINISHED_EVENT, { ok: false, action: "setup", error: "Setup was cancelled." });
+    await waitFor((): void => {
+      expect(within(dialog).getByRole("button", { name: "Set up" })).toBeEnabled();
+    });
+    expect(within(dialog).getByRole("alert")).toHaveTextContent("Setup was cancelled.");
+    expect(within(dialog).queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
   });
 
   it("requires confirmation before removing the managed copy and refreshes after removal", async (): Promise<void> => {

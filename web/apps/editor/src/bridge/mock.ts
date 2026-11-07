@@ -228,7 +228,9 @@ function didMutate(
 export class MockBridge implements Bridge, MockDispatchHost {
   private engineHostExePath: string | null = null;
   private engineHostManagedPath: string | null = null;
-  private isEngineHostSetupRunning = false;
+  private engineHostSetupAction: EngineHostSetupAction | null = null;
+  private isEngineHostSetupComplete = false;
+  private isEngineHostSetupCancelled = false;
   isEngineHostOutOfDate = false;
   bundledHostVersion: string | null = "1.0.0";
   private events = new EventHub<{ [K in EventKind]: EventOf<K> }>("MockBridge");
@@ -517,20 +519,30 @@ export class MockBridge implements Bridge, MockDispatchHost {
       case "engineHost/setup/status":
         return {
           managedPath: this.engineHostManagedPath,
-          isRunning: this.isEngineHostSetupRunning,
+          setupAction: this.engineHostSetupAction,
+          isHostRunning: false,
+          isSetupComplete: this.isEngineHostSetupComplete,
+          packageError: null,
           isHostOutOfDate: this.isEngineHostOutOfDate,
           bundledHostVersion: this.bundledHostVersion,
         };
+      case "engineHost/setup/cancel":
+        if (this.engineHostSetupAction === "setup") this.isEngineHostSetupCancelled = true;
+        return { ok: true };
       case "engineHost/setup/start":
       case "engineHost/setup/refresh":
       case "engineHost/setup/remove": {
         let action: EngineHostSetupAction = "setup";
         if (req.kind === "engineHost/setup/refresh") action = "refresh";
         if (req.kind === "engineHost/setup/remove") action = "remove";
-        if (this.isEngineHostSetupRunning) return { ok: false, error: "A setup operation is already running." };
-        this.isEngineHostSetupRunning = true;
+        if (this.engineHostSetupAction !== null) return { ok: false, error: "A setup operation is already running." };
+        if (action === "refresh" && !this.isEngineHostSetupComplete)
+          return { ok: false, error: "This setup didn't finish. Remove setup and set up again." };
+        this.engineHostSetupAction = action;
+        this.isEngineHostSetupCancelled = false;
         MOCK_SETUP_STAGES.forEach((stage: string, index: number): void => {
           setTimeout((): void => {
+            if (this.isEngineHostSetupCancelled) return;
             this.emit({
               kind: ENGINE_HOST_SETUP_PROGRESSED_EVENT,
               payload: {
@@ -542,17 +554,26 @@ export class MockBridge implements Bridge, MockDispatchHost {
           }, MOCK_SETUP_STEP_MS * index);
         });
         setTimeout((): void => {
+          this.engineHostSetupAction = null;
+          if (this.isEngineHostSetupCancelled) {
+            this.emit({
+              kind: ENGINE_HOST_SETUP_FINISHED_EVENT,
+              payload: { ok: false, action, error: "Setup was cancelled." },
+            });
+            return;
+          }
           if (action === "setup") {
             this.engineHostExePath = MOCK_MANAGED_EDITOR_PATH;
             this.engineHostManagedPath = MOCK_MANAGED_EDITOR_PATH;
+            this.isEngineHostSetupComplete = true;
           }
           // Removal clears the configured editor path only when it points at the managed copy.
           if (action === "remove") {
             if (this.engineHostExePath === this.engineHostManagedPath) this.engineHostExePath = null;
             this.engineHostManagedPath = null;
+            this.isEngineHostSetupComplete = false;
           }
           this.isEngineHostOutOfDate = false;
-          this.isEngineHostSetupRunning = false;
           this.patchAndBroadcast({
             enginePreviewAvailable: this.enginePreview.state === "ready" || this.engineHostExePath !== null,
           });

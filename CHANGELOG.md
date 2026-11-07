@@ -19,6 +19,7 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ### Fixed
 
+- Engine preview setup keeps Preferences usable with an idle map editor, identifies interrupted setups, removes files left by an interrupted refresh, keeps Remove setup available with a damaged package, and supports Cancel and cancellation on exit
 - Emitters draw in their list order, as the game does: a child emitter listed after its parent now draws on top of it again, reversing the 0.3.0 change that drew parents over their children
 
 ## [0.5.0] - 2026-11-04
