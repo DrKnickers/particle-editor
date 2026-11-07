@@ -116,10 +116,10 @@ inline std::string FindSetupEditorLabel(const SetupPackage& package, const std::
 {
     const auto editor = package.editors.find(FoldSetupText(hash));
     if (editor != package.editors.end()) return editor->second;
-    std::string supported;
-    for (const std::pair<const std::string, std::string>& entry : package.editors)
-        supported += (supported.empty() ? "" : ", ") + entry.second;
-    throw std::runtime_error("Unsupported map editor. Supported editors: " + supported + ".");
+    // Package labels are internal build IDs, so the refusal names where to get a supported build instead.
+    throw std::runtime_error("This EAW Terrain Editor build isn't supported. Download the 64-bit EAW Terrain "
+                             "Editor from Petroglyph's mod tools page and choose that copy; the engine preview "
+                             "guide links to it.");
 }
 
 struct RefreshedSetupFile

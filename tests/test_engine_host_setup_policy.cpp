@@ -55,8 +55,9 @@ void TestPackages()
     }
     catch (const std::exception& error)
     {
-        Check(std::string(error.what()).find("64-bit FoC editor") != std::string::npos,
-              "refusal names supported labels");
+        const std::string refusal = error.what();
+        Check(refusal.find("mod tools page") != std::string::npos, "refusal says where to get a supported build");
+        Check(refusal.find("64-bit FoC editor") == std::string::npos, "refusal hides internal package labels");
     }
     CheckRefused([]() -> void { ParseSetupPackage("{"); }, "malformed JSON refuses");
     CheckRefused([]() -> void { ParseSetupPackage("[]"); }, "non-object manifest refuses");

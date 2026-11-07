@@ -58,7 +58,7 @@ they are.
 
 ## If Something Goes Wrong
 
-- **"Unsupported map editor. Supported editors: …"** — the chosen `EAW Terrain Editor.exe` is not
+- **"This EAW Terrain Editor build isn't supported"** — the chosen `EAW Terrain Editor.exe` is not
   the 64-bit build this version of Alamo Preview supports. Download it again from the mod tools
   page and choose that copy.
 - **"The bundled engine-host folder is missing or damaged"**, **"The host package file failed SHA-256
