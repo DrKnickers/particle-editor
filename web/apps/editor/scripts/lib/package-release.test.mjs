@@ -12,6 +12,7 @@ import {
   existsSync,
   statSync,
   readdirSync,
+  readFileSync,
 } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
@@ -25,6 +26,7 @@ import path from "node:path";
 //
 // The release contains the exe, vendored D3DX9 runtime and verified engine-host package.
 const SCRIPT = fileURLToPath(new URL("../../../../../scripts/package-release.ps1", import.meta.url));
+const EDITOR_SHA256 = "a".repeat(64);
 
 let RESOLVED;
 function resolveShell() {
@@ -55,15 +57,33 @@ function buildFixture(root, omit = []) {
     file("x64/Release/ParticleEditor.exe", exeStub);
   }
   if (!omit.includes("d3dx9")) file("libs/redist/d3dx9_43.dll");
+  if (!omit.includes("license")) file("LICENSE", "editor license");
+  if (!omit.includes("notices")) file("THIRD-PARTY-NOTICES.md", "third-party notices");
+  if (!omit.includes("licenses")) file("licenses/Expat.txt", "Expat license");
   /** @type {Record<string, string>} */
-  const packageContents = { "d3d9.dll": "host stub", "scene/PREVIEW_SOURCE.TED": "scene stub" };
+  const packageContents = {
+    "d3d9.dll": "host stub",
+    "alamo_mapped.txt": "mapped builds stub",
+    "scene/PREVIEW_SOURCE.TED": "scene stub",
+    "layer/PREVIEWTEST.XML": "layer stub",
+    "README.txt": "readme stub",
+    [`signatures/${EDITOR_SHA256}.txt`]: "signature stub",
+  };
   /** @type {Record<string, string>} */
   const hashes = {};
   for (const [relative, content] of Object.entries(packageContents)) {
     file(`alamo-preview/${relative}`, content);
     hashes[relative] = createHash("sha256").update(content).digest("hex");
   }
-  file("alamo-preview/package.json", JSON.stringify({ format: 1, host_version: "test", editors: [], files: hashes }));
+  file(
+    "alamo-preview/package.json",
+    JSON.stringify({
+      format: 1,
+      host_version: "test",
+      editors: [{ sha256: EDITOR_SHA256, label: "test editor" }],
+      files: hashes,
+    }),
+  );
   file("alamo-preview/unlisted.txt", "must not ship");
 }
 
@@ -127,6 +147,9 @@ test("case 1: full fixture stages the complete bundle and a verified zip", skipO
   assert.equal(res.status, 0, `expected success; stderr:\n${res.stderr}`);
   assert.ok(staged(stage, "x64", "Release", "ParticleEditor.exe"), "exe staged");
   assert.ok(staged(stage, "x64", "Release", "d3dx9_43.dll"), "d3dx9 staged");
+  assert.equal(readFileSync(path.join(stage, "LICENSE"), "utf8"), "editor license");
+  assert.equal(readFileSync(path.join(stage, "THIRD-PARTY-NOTICES.md"), "utf8"), "third-party notices");
+  assert.equal(readFileSync(path.join(stage, "licenses", "Expat.txt"), "utf8"), "Expat license");
   // The WebView2 loader is statically linked into the exe (no WebView2Loader.dll)
   // and the runtime bootstrapper is no longer bundled, so NEITHER may be staged.
   assert.ok(
@@ -176,6 +199,9 @@ test("case 1d: refuses -Stage paths that overlap required sources before deletin
 for (const c of [
   { name: "case 2: missing exe", omit: ["exe"], rx: /Missing required source.*ParticleEditor\.exe/s },
   { name: "case 4: missing vendored d3dx9", omit: ["d3dx9"], rx: /Missing required source.*d3dx9_43\.dll/s },
+  { name: "missing editor license", omit: ["license"], rx: /Missing required source.*LICENSE/s },
+  { name: "missing third-party notices", omit: ["notices"], rx: /Missing required source.*THIRD-PARTY-NOTICES/s },
+  { name: "missing licenses folder", omit: ["licenses"], rx: /Missing required source.*licenses/s },
   // The reviewer's scenario: an exe that staged fine but carries no embedded bundle
   // (a stale folder-mapping build) — must be rejected, not shipped as an unusable release.
   {
@@ -212,18 +238,44 @@ test("hash mismatch fails naming the package file", skipOpt, (t) => {
 
 test("parent traversal in package files is refused", skipOpt, (t) => {
   const { res } = runCase(t, [], {
-    mutatePackage: (packageFolder) =>
-      writeFileSync(
-        path.join(packageFolder, "package.json"),
-        JSON.stringify({
-          format: 1,
-          files: { "../outside.dll": "unused" },
-        }),
-      ),
+    mutatePackage: (packageFolder) => {
+      /** @type {Record<string, unknown> & { files: Record<string, string> }} */
+      const manifest = JSON.parse(readFileSync(path.join(packageFolder, "package.json"), "utf8"));
+      manifest.files["../outside.dll"] = EDITOR_SHA256;
+      writeFileSync(path.join(packageFolder, "package.json"), JSON.stringify(manifest));
+    },
   });
   assert.notEqual(res.status, 0);
   assert.match(res.stderr, /Unsafe engine host package file path.*outside\.dll/s);
 });
+
+for (const field of ["host_version", "editors", "layer/PREVIEWTEST.XML", "files", `signatures/${EDITOR_SHA256}.txt`]) {
+  test(`package missing ${field} is rejected before clearing the stage`, skipOpt, (t) => {
+    const { res, stage } = runCase(t, [], {
+      stagePath: ({ tmp }) => {
+        /** @type {string} */
+        const stage = path.join(tmp, "stage");
+        mkdirSync(stage);
+        writeFileSync(path.join(stage, "preserved.txt"), "previous stage");
+        return stage;
+      },
+      mutatePackage: (packageFolder) => {
+        /** @type {Record<string, unknown> & { files: Record<string, string> }} */
+        const manifest = JSON.parse(readFileSync(path.join(packageFolder, "package.json"), "utf8"));
+        if (field.includes("/")) delete manifest.files[field];
+        else if (field === "files") manifest.files = {};
+        else delete manifest[field];
+        writeFileSync(path.join(packageFolder, "package.json"), JSON.stringify(manifest));
+      },
+    });
+    assert.notEqual(res.status, 0);
+    assert.match(
+      res.stderr,
+      /host_version|supported editors|missing (layer\/PREVIEWTEST\.XML|d3d9\.dll|signatures\/)/s,
+    );
+    assert.ok(existsSync(path.join(stage, "preserved.txt")), "invalid package leaves previous stage intact");
+  });
+}
 
 test("package source overlap is refused before deletion", skipOpt, (t) => {
   const { res, repo } = runCase(t, [], { stagePath: ({ repo }) => path.join(repo, "alamo-preview") });

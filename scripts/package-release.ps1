@@ -15,6 +15,9 @@
     to ship. The engine-host folder holds the verified Alamo Preview package:
 
         <STAGE>/
+          LICENSE
+          THIRD-PARTY-NOTICES.md
+          licenses/                # full third-party license texts
           x64/Release/
             ParticleEditor.exe     # self-contained UI (embedded bundle) + static WebView2 loader.
                                     # The WebView2 RUNTIME is a separate machine component; when it
@@ -136,9 +139,15 @@ Write-Host ""
 # --- Resolve + validate source artifacts -------------------------------------
 $exeSource    = [System.IO.Path]::Combine($RepoRoot, 'x64', 'Release', 'ParticleEditor.exe')
 $d3dxSource   = [System.IO.Path]::Combine($RepoRoot, 'libs', 'redist', 'd3dx9_43.dll')
+[string] $licenseSource = Join-Path $RepoRoot 'LICENSE'
+[string] $noticesSource = Join-Path $RepoRoot 'THIRD-PARTY-NOTICES.md'
+[string] $licensesSource = Join-Path $RepoRoot 'licenses'
 $sourceRoots  = @(
     [pscustomobject]@{ Label = 'native release output'; Path = [System.IO.Path]::Combine($RepoRoot, 'x64', 'Release') }
     [pscustomobject]@{ Label = 'vendored D3DX redist'; Path = [System.IO.Path]::Combine($RepoRoot, 'libs', 'redist') }
+    [pscustomobject]@{ Label = 'third-party licenses'; Path = $licensesSource }
+    [pscustomobject]@{ Label = 'editor license'; Path = $licenseSource }
+    [pscustomobject]@{ Label = 'third-party notices'; Path = $noticesSource }
 )
 
 if ($hasEngineHostPackage) {
@@ -154,10 +163,22 @@ foreach ($sourceRoot in $sourceRoots) {
 
 Test-RequiredSource 'ParticleEditor.exe'      $exeSource    'Leaf'
 Test-RequiredSource 'd3dx9_43.dll (vendored)' $d3dxSource   'Leaf'
+Test-RequiredSource 'LICENSE' $licenseSource 'Leaf'
+Test-RequiredSource 'THIRD-PARTY-NOTICES.md' $noticesSource 'Leaf'
+Test-RequiredSource 'licenses' $licensesSource 'Container'
+[string[]] $noticeStagedPaths = @('LICENSE', 'THIRD-PARTY-NOTICES.md')
+foreach ($license in (Get-ChildItem -LiteralPath $licensesSource -Recurse -File)) {
+    $noticeStagedPaths += Join-Path 'licenses' $license.FullName.Substring($licensesSource.Length + 1)
+}
 # Validate the entire package before clearing the stage or copying any artifacts.
 [string[]] $packageFiles = @()
 if ($hasEngineHostPackage) {
-    [int] $supportedPackageFormat = 1  # must match kPackageFormat in src/host/EngineHostSetupPolicy.h
+    # Mirror ParseSetupPackage and the kPackage* constants in src/host/EngineHostSetupPolicy.h.
+    [int] $supportedPackageFormat = 1
+    [string] $sha256Pattern = '^[0-9a-fA-F]{64}$'
+    [string[]] $requiredPackageFiles = @(
+        'd3d9.dll', 'alamo_mapped.txt', 'scene/PREVIEW_SOURCE.TED', 'layer/PREVIEWTEST.XML', 'README.txt'
+    )
     [string] $manifestPath = Join-Path $EngineHostPackage 'package.json'
     Test-RequiredSource 'engine-host/package.json' $manifestPath 'Leaf'
     [object] $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
@@ -166,14 +187,42 @@ if ($hasEngineHostPackage) {
     if (-not $hasSupportedFormat -or $manifest.files -isnot [System.Management.Automation.PSCustomObject]) {
         throw "[package-release] Engine host package requires format $supportedPackageFormat and a files object."
     }
+    if ($manifest.host_version -isnot [string] -or $manifest.host_version.Length -eq 0) {
+        throw '[package-release] Engine host package requires a non-empty host_version.'
+    }
+    if ($manifest.editors -isnot [array] -or $manifest.editors.Count -eq 0) {
+        throw '[package-release] Engine host package requires supported editors.'
+    }
+    [hashtable] $editorHashes = @{}
+    foreach ($editor in $manifest.editors) {
+        [bool] $hasValidHash = $editor.sha256 -is [string] -and $editor.sha256 -cmatch $sha256Pattern
+        [bool] $hasValidLabel = $editor.label -is [string] -and $editor.label.Length -gt 0
+        if (-not $hasValidHash -or -not $hasValidLabel) {
+            throw '[package-release] Invalid supported editor hash or label.'
+        }
+        if ($editorHashes.ContainsKey($editor.sha256)) {
+            throw '[package-release] Duplicate supported editor hash.'
+        }
+        $editorHashes[$editor.sha256] = $true
+        $requiredPackageFiles += 'signatures/' + $editor.sha256.ToLowerInvariant() + '.txt'
+    }
+    [hashtable] $listedPaths = @{}
     foreach ($entry in $manifest.files.PSObject.Properties) {
         [string] $relative = $entry.Name
         [string[]] $segments = $relative -split '[/\\]'
-        [bool] $hasUnsafeSegment = @($segments | Where-Object { $_ -eq '' -or $_ -eq '..' -or $_ -eq '.' }).Count -gt 0
+        [bool] $hasUnsafeSegment = @($segments | Where-Object {
+            $_ -eq '' -or $_ -match '[. ]$' -or $_ -match '^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)'
+        }).Count -gt 0
         [bool] $isRooted = [System.IO.Path]::IsPathRooted($relative) -or $relative -match ':'
-        if ($isRooted -or $hasUnsafeSegment) {
+        [bool] $hasUnsafeCharacters = $relative -match '[\\:*?"<>|\x00-\x1f\x7f]'
+        [bool] $hasUnsafePath = $isRooted -or $hasUnsafeSegment -or $hasUnsafeCharacters
+        if ($hasUnsafePath) {
             throw "[package-release] Unsafe engine host package file path: $relative"
         }
+        if ($listedPaths.ContainsKey($relative)) {
+            throw "[package-release] Duplicate package file path: $relative"
+        }
+        $listedPaths[$relative] = $true
         [string] $source = $EngineHostPackage
         foreach ($segment in $segments) { $source = Join-Path $source $segment }
         Test-RequiredSource $relative $source 'Leaf'
@@ -182,6 +231,11 @@ if ($hasEngineHostPackage) {
             throw "[package-release] SHA-256 mismatch for engine host package file: $relative"
         }
         $packageFiles += $relative
+    }
+    foreach ($relative in $requiredPackageFiles) {
+        if (-not $listedPaths.ContainsKey($relative)) {
+            throw "[package-release] Engine host package is missing $relative."
+        }
     }
 }
 # The React UI is EMBEDDED in the exe (RCDATA) and the WebView2 loader is STATICALLY linked
@@ -198,6 +252,9 @@ New-Item -ItemType Directory -Force -Path $stageExeDir  | Out-Null
 # --- Copy native artifacts ----------------------------------------------------
 Copy-Item -LiteralPath $exeSource  -Destination $stageExeDir -Force
 Copy-Item -LiteralPath $d3dxSource -Destination $stageExeDir -Force
+Copy-Item -LiteralPath $licenseSource -Destination $Stage -Force
+Copy-Item -LiteralPath $noticesSource -Destination $Stage -Force
+Copy-Item -LiteralPath $licensesSource -Destination $Stage -Recurse -Force
 Write-Host "  [ok] ParticleEditor.exe, d3dx9_43.dll -> $stageExeDir"
 
 # Only manifest-listed files are copied; stray package artifacts never ship.
@@ -219,6 +276,7 @@ if ($hasEngineHostPackage) {
 
 # --- Post-stage assertions (fail loud) ---------------------------------------
 foreach ($relative in $packageStagedPaths) { Assert-Staged $relative }
+foreach ($relative in $noticeStagedPaths) { Assert-Staged $relative }
 Assert-Staged ([System.IO.Path]::Combine('x64', 'Release', 'ParticleEditor.exe'))
 Assert-Staged ([System.IO.Path]::Combine('x64', 'Release', 'd3dx9_43.dll'))
 
@@ -281,6 +339,7 @@ if ($OutZip) {
         'x64/Release/d3dx9_43.dll'
     )
     $requiredEntries += @($packageStagedPaths | ForEach-Object { $_ -replace '\\', '/' })
+    $requiredEntries += @($noticeStagedPaths | ForEach-Object { $_ -replace '\\', '/' })
     foreach ($r in $requiredEntries) {
         if ($fileEntries -notcontains $r) { throw "[package-release] Missing zip entry: $r" }
     }

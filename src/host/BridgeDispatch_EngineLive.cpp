@@ -1,4 +1,4 @@
-// Live engine view bridge (#949 3b.3): starts and stops the engine host's frame stream, hands
+// Live engine view bridge: starts and stops the engine host's frame stream, hands
 // each new frame to the engine, and forwards the camera, edits and resizes to the host. The
 // worker owns the pipe; EngineLiveReader owns the shared memory; EngineLiveSync picks what to
 // send next; the engine only draws what it is given.

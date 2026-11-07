@@ -213,7 +213,7 @@ void TestPaths()
     {
         return FindSetupTargetRefusal(target, games, "C:/editor", "C:/Windows", repositories);
     };
-    Check(refusal("C:/Users/test/EngineHost").empty(), "private folder allowed");
+    Check(refusal("E:/private/EngineHost").empty(), "private folder allowed");
     for (const char* target :
          {"C:/games/corruption", "c:\\GAMES\\corruption\\Data", "D:/games/GameData/host", "C:/editor/host",
           "C:/Windows/host", "C:/work/nested/host", "C:/safe/../Windows/host", ""})

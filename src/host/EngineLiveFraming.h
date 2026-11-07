@@ -1,4 +1,4 @@
-// Live engine view framing (#949 3b.3): the window-free math that lines the engine host's
+// Live engine view framing: the window-free math that lines the engine host's
 // picture up with the editor's own. The host always renders a 4:3 projection stretched to its
 // window (measured live 2026-11-05), so it is parked at 4:3, shown cropped to cover the
 // viewport, and given a field of view (and, past its limits, a distance) that matches ours.

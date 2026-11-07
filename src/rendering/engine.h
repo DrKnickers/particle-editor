@@ -474,7 +474,7 @@ public:
     // behaves identically to today.
     void SetSceneViewport(int x, int y, int w, int h);
 
-    // Live engine view (#949 3b.3): frames streamed from the engine host replace our scene.
+    // Live engine view: frames streamed from the engine host replace our scene.
     // UploadLiveFrame copies BGRX rows into a dynamic texture. While live view is active and a
     // frame has been uploaded, Render draws only that frame, letterboxed into the scene viewport.
     bool UploadLiveFrame(const std::uint8_t* bgrxRows, UINT widthPx, UINT heightPx, UINT pitchBytes);

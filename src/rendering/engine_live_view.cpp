@@ -1,4 +1,4 @@
-// Live engine view (#949 3b.3): uploads the frame the engine host streams and draws it over
+// Live engine view: uploads the frame the engine host streams and draws it over
 // the scene viewport in place of our own scene. It only shows external pixels with fixed-
 // function texturing; no game shader is involved, so rendering parity is unaffected.
 #include "engine.h"
