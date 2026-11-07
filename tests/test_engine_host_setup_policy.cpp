@@ -27,6 +27,23 @@ void CheckRefused(const std::function<void()>& action, const char* message)
     Check(false, message);
 }
 
+void TestManagedPaths()
+{
+    const std::wstring local          = L"C:\\Users\\Preview User\\AppData\\Local\\AloParticleEditor\\EngineHost";
+    const std::wstring shared         = L"C:\\ProgramData\\AloParticleEditor\\EngineHost\\S-1-5-21-1000";
+    const std::wstring nonAsciiLocal  = L"C:\\Users\\Ren\u00e9\\AppData\\Local\\AloParticleEditor\\EngineHost";
+    const std::wstring nonAsciiShared = L"C:\\Donn\u00e9es\\AloParticleEditor\\EngineHost\\S-1-5-21-1000";
+    Check(ChooseManagedHostPath(local, shared) == local, "ASCII Local AppData has priority");
+    Check(ChooseManagedHostPath(nonAsciiLocal, shared) == shared, "non-ASCII profile falls back to ProgramData");
+    Check(ChooseManagedHostPath(nonAsciiLocal, nonAsciiShared).empty(), "two non-ASCII candidates refuse");
+    Check(ChooseManagedHostPath(local, nonAsciiShared) == local,
+          "unused non-ASCII fallback does not reject Local AppData");
+    Check(ChooseManagedHostPath(L"", shared) == shared, "empty candidate is not a usable path");
+    Check(ChooseManagedHostPath(local + L"\n", shared) == shared, "ASCII control characters fall back");
+    Check(ChooseManagedHostPath(local + L"\x7f", shared) == shared, "DEL is not printable ASCII");
+    Check(ChooseManagedHostPath(L"", L"").empty(), "missing candidates refuse");
+}
+
 nlohmann::json MakePackage()
 {
     const std::string hash(kSha256HexChars, 'a');
@@ -252,6 +269,7 @@ void TestHostRuntimeOutputs()
 
 int main()
 {
+    TestManagedPaths();
     TestPackages();
     TestRefreshedFiles();
     TestSetupCompletion();

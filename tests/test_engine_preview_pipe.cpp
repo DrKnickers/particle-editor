@@ -93,12 +93,13 @@ void TestPipes()
 void TestPaths()
 {
     // Synthetic drive roots keep the policy fixture independent of any machine layout.
-    const std::string root    = std::string(1, 'Q') + ":\\";
-    const std::string install = root + "editor";
-    const std::string windows = root + "windows";
-    const auto        check   = [&](const std::string& path, const std::string& name = "effect") -> std::string
+    const std::string              root    = std::string(1, 'Q') + ":\\";
+    const std::string              install = root + "editor";
+    const std::string              windows = root + "windows";
+    const std::vector<std::string> games   = {root + "game", root + "other-game/"};
+    const auto check = [&](const std::string& path, const std::string& name = "effect") -> std::string
     {
-        return CheckPreviewPath(path, name, install, windows);
+        return CheckPreviewPath(path, name, install, windows, games);
     };
     Check(check(root + "preview\\Effect.ALO").empty(), "absolute ASCII alo with matching name accepted");
     Check(check(root + "editor-other\\effect.alo").empty(), "protected root comparison respects separator boundary");
@@ -107,7 +108,14 @@ void TestPaths()
              root + "WINDOWS\\effect.alo", root + "preview\\..\\effect.alo", root + "preview\\effect.alo:stream",
              root + "preview.\\effect.alo", root + "preview\\effect.alo ", root + "preview\\eff\xC3\xA9" + "ct.alo"})
         Check(!check(path).empty(), "unsafe preview path refused");
-    Check(!CheckPreviewPath(root + "effect.alo", "effect", "", windows).empty(), "unknown install root fails closed");
+    Check(!CheckPreviewPath(root + "effect.alo", "effect", "", windows, games).empty(),
+          "unknown install root fails closed");
+    const std::string gameRefusal = "The preview copy must be outside the game folders.";
+    Check(check(root + "game\\Data\\effect.alo") == gameRefusal, "game destination refused");
+    Check(check(root + "GAME\\Data\\effect.alo") == gameRefusal, "game root comparison ignores case");
+    Check(check(root + "game/Data/effect.alo") == gameRefusal, "forward-slash destination refused");
+    Check(check(root + "other-game\\Data\\effect.alo") == gameRefusal, "forward-slash game root refused");
+    Check(check(root + "game-other\\effect.alo").empty(), "game root comparison respects separator boundary");
     Check(!check(root + "preview\\con.alo", "con").empty(), "Windows device name refused");
     Check(!check(root + "preview:stream\\effect.alo").empty(), "parent alternate stream refused");
     Check(!check(root + "preview\\effect.alo\\").empty(), "a trailing separator cannot name a file");

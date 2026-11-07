@@ -33,7 +33,9 @@ Setting it up takes a few minutes and is done once. Nothing in your game install
 
 When it finishes, the dialog shows *Setup complete* and the path of the new copy, and the **Map
 editor executable** field is filled in for you. The copy lives in your user folder, under
-`%LOCALAPPDATA%\AloParticleEditor\EngineHost`.
+`%LOCALAPPDATA%\AloParticleEditor\EngineHost`. If your Windows user folder has
+non-English characters, the copy goes under `%ProgramData%\AloParticleEditor\EngineHost`
+instead, in a private folder for your Windows account.
 
 ## Updating
 

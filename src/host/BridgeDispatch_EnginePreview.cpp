@@ -59,10 +59,12 @@ bool BridgeDispatcher::WriteEnginePreviewDocumentCopy(std::string& error)
     const UINT     chars                      = GetWindowsDirectoryW(windows, kWindowsPathChars);
     if (chars == 0 || chars >= kWindowsPathChars)
         throw engine_preview::Failure("internal", "Cannot resolve the Windows directory.");
+    // Without the game roots the copy could overwrite a game file, so refuse rather than skip the check.
+    if (!m_fileManager) throw engine_preview::Failure("internal", "Game paths are unavailable for engine preview.");
     return WriteEnginePreviewCopy(**m_pParticleSystem,
                                   Utf8ToWide(m_enginePreviewStatus.at("effectPath").get<std::string>()),
                                   m_enginePreviewStatus.at("internalName").get<std::string>(), ModuleDirectory(),
-                                  windows, m_currentFilePath, error);
+                                  windows, m_currentFilePath, m_fileManager->GetBasepaths(), error);
 }
 
 bool BridgeDispatcher::BuildStillOrLaunchJob(BridgeRequestContext& ctx, EnginePreviewWorker::Job& job)

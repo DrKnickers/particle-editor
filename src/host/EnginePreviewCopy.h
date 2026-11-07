@@ -10,19 +10,23 @@
 #include "effect/UndoStack.h"
 #include <filesystem>
 #include <memory>
+#include <vector>
 
 namespace host
 {
-inline bool WriteEnginePreviewCopy(const ParticleSystem& document,
-                                   const std::wstring&   path,
-                                   const std::string&    internalName,
-                                   const std::wstring&   installDirectory,
-                                   const std::wstring&   windowsDirectory,
-                                   const std::wstring&   documentPath,
-                                   std::string&          error)
+inline bool WriteEnginePreviewCopy(const ParticleSystem&            document,
+                                   const std::wstring&              path,
+                                   const std::string&               internalName,
+                                   const std::wstring&              installDirectory,
+                                   const std::wstring&              windowsDirectory,
+                                   const std::wstring&              documentPath,
+                                   const std::vector<std::wstring>& gameRoots,
+                                   std::string&                     error)
 {
+    std::vector<std::string> gameRootsUtf8;
+    for (const std::wstring& root : gameRoots) gameRootsUtf8.push_back(WideToUtf8(root));
     error = engine_preview::CheckPreviewPath(WideToUtf8(path), internalName, WideToUtf8(installDirectory),
-                                             WideToUtf8(windowsDirectory));
+                                             WideToUtf8(windowsDirectory), gameRootsUtf8);
     if (!error.empty()) return false;
     const std::filesystem::path destination(path);
     const std::wstring          parent  = clip::ResolveFinalDirPath(destination.parent_path().wstring());
@@ -33,9 +37,18 @@ inline bool WriteEnginePreviewCopy(const ParticleSystem& document,
         error = "The preview directories must exist and be resolvable.";
         return false;
     }
+    // Resolve both sides so junctions and short names cannot hide a game destination. A root that
+    // no longer exists (a stale mod path, an unplugged drive) cannot contain the existing parent,
+    // so it is skipped rather than blocking every preview.
+    std::vector<std::string> resolvedGameRoots;
+    for (const std::wstring& root : gameRoots)
+    {
+        const std::wstring resolvedRoot = clip::ResolveFinalDirPath(root);
+        if (!resolvedRoot.empty()) resolvedGameRoots.push_back(WideToUtf8(resolvedRoot));
+    }
     const std::wstring resolved = (std::filesystem::path(parent) / destination.filename()).wstring();
-    error =
-        engine_preview::CheckPreviewPath(WideToUtf8(resolved), internalName, WideToUtf8(install), WideToUtf8(windows));
+    error = engine_preview::CheckPreviewPath(WideToUtf8(resolved), internalName, WideToUtf8(install),
+                                             WideToUtf8(windows), resolvedGameRoots);
     if (!error.empty()) return false;
     if (!documentPath.empty())
     {

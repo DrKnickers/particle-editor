@@ -32,6 +32,23 @@ constexpr const char*    kPackageReadme          = "README.txt";
 constexpr const char*    kPackageSignatureFolder = "signatures/";
 constexpr const wchar_t* kManagedEditorExeName   = L"EAW Terrain Editor.exe";
 
+inline bool IsPrintableAsciiSetupPath(const std::wstring& path)
+{
+    constexpr wchar_t kFirstPrintableCharacter = L' ';
+    constexpr wchar_t kLastPrintableCharacter  = L'~';
+    return !path.empty() &&
+           std::all_of(path.begin(), path.end(), [=](wchar_t character) -> bool
+                       { return character >= kFirstPrintableCharacter && character <= kLastPrintableCharacter; });
+}
+
+inline std::wstring ChooseManagedHostPath(const std::wstring& localAppDataPath, const std::wstring& programDataPath)
+{
+    // The engine opens these paths through narrow APIs, even though setup writes a Unicode ini.
+    if (IsPrintableAsciiSetupPath(localAppDataPath)) return localAppDataPath;
+    if (IsPrintableAsciiSetupPath(programDataPath)) return programDataPath;
+    return L"";
+}
+
 struct SetupPackage
 {
     std::string                        hostVersion;

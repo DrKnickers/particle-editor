@@ -8,6 +8,8 @@
 #include "common/sha256.h"
 #include "gamedata/GameRoots.h"
 #include "gamedata/managers.h"
+#include <aclapi.h>
+#include <sddl.h>
 #include <shlobj.h>
 #include <tlhelp32.h>
 #include <algorithm>
@@ -54,6 +56,78 @@ void ThrowIfSetupCancelled(const std::atomic<bool>& cancelRequested)
 void RequireWindows(bool succeeded, const std::string& action)
 {
     if (!succeeded) throw std::runtime_error(action + " (Windows error " + std::to_string(GetLastError()) + ").");
+}
+
+std::wstring ReadCurrentUserSid()
+{
+    HANDLE rawToken = nullptr;
+    RequireWindows(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &rawToken) != FALSE,
+                   "Cannot open the current user token");
+    const SetupHandle token(rawToken);
+    DWORD             requiredBytes = 0;
+    const BOOL        sized         = GetTokenInformation(token.get(), TokenUser, nullptr, 0, &requiredBytes);
+    if (sized || GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+        throw std::runtime_error("Cannot determine the current user token size.");
+    std::vector<BYTE> tokenBytes(requiredBytes);
+    RequireWindows(GetTokenInformation(token.get(), TokenUser, tokenBytes.data(), requiredBytes, &requiredBytes) !=
+                       FALSE,
+                   "Cannot read the current user token");
+    const TOKEN_USER* user   = reinterpret_cast<const TOKEN_USER*>(tokenBytes.data());
+    wchar_t*          rawSid = nullptr;
+    RequireWindows(ConvertSidToStringSidW(user->User.Sid, &rawSid) != FALSE, "Cannot convert the current user SID");
+    std::unique_ptr<void, decltype(&LocalFree)> sidMemory(rawSid, LocalFree);
+    const std::wstring                          sid(rawSid);
+    RequireWindows(LocalFree(sidMemory.get()) == nullptr, "Cannot free the current user SID string");
+    sidMemory.release();
+    return sid;
+}
+
+void RefuseForeignOwnedFolder(const fs::path& folder, const std::wstring& ownerSid)
+{
+    PSID                 owner         = nullptr;
+    PSECURITY_DESCRIPTOR rawDescriptor = nullptr;
+    const DWORD read = GetNamedSecurityInfoW(folder.c_str(), SE_FILE_OBJECT, OWNER_SECURITY_INFORMATION, &owner,
+                                             nullptr, nullptr, nullptr, &rawDescriptor);
+    if (read != ERROR_SUCCESS) throw std::runtime_error("Cannot read the setup target owner.");
+    const std::unique_ptr<void, decltype(&LocalFree)> descriptor(rawDescriptor, LocalFree);
+    wchar_t*                                          rawOwnerSid = nullptr;
+    RequireWindows(ConvertSidToStringSidW(owner, &rawOwnerSid) != FALSE, "Cannot convert the setup target owner");
+    const std::unique_ptr<wchar_t, decltype(&LocalFree)> ownerText(rawOwnerSid, LocalFree);
+    if (ownerSid != ownerText.get())
+        throw std::runtime_error(
+            "The engine preview setup folder belongs to another user. Delete it and set up again.");
+}
+
+void CreatePrivateSetupTarget(const fs::path& target)
+{
+    const std::wstring sid = ReadCurrentUserSid();
+    // A protected, inheritable DACL keeps ProgramData copies private regardless of parent permissions.
+    const std::wstring   dacl          = L"D:P(A;OICI;FA;;;" + sid + L")(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)";
+    PSECURITY_DESCRIPTOR rawDescriptor = nullptr;
+    RequireWindows(ConvertStringSecurityDescriptorToSecurityDescriptorW(dacl.c_str(), SDDL_REVISION_1, &rawDescriptor,
+                                                                        nullptr) != FALSE,
+                   "Cannot build private setup permissions");
+    std::unique_ptr<void, decltype(&LocalFree)> descriptor(rawDescriptor, LocalFree);
+    SECURITY_ATTRIBUTES                         security = {sizeof(SECURITY_ATTRIBUTES), descriptor.get(), FALSE};
+    if (!CreateDirectoryW(target.c_str(), &security))
+    {
+        RequireWindows(GetLastError() == ERROR_ALREADY_EXISTS, "Cannot create setup target");
+        // Any user can pre-create folders under ProgramData, and an owner can always rewrite the DACL,
+        // so an existing folder is reused only when this user owns it.
+        RefuseForeignOwnedFolder(target, sid);
+        // An empty folder left by an earlier attempt must get the same explicit protection.
+        BOOL daclPresent   = FALSE;
+        BOOL daclDefaulted = FALSE;
+        PACL privateDacl   = nullptr;
+        RequireWindows(GetSecurityDescriptorDacl(descriptor.get(), &daclPresent, &privateDacl, &daclDefaulted) != FALSE,
+                       "Cannot read private setup permissions");
+        const DWORD applied = SetNamedSecurityInfoW(const_cast<wchar_t*>(target.c_str()), SE_FILE_OBJECT,
+                                                    DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+                                                    nullptr, nullptr, privateDacl, nullptr);
+        if (applied != ERROR_SUCCESS) throw std::runtime_error("Cannot protect setup target permissions.");
+    }
+    RequireWindows(LocalFree(descriptor.get()) == nullptr, "Cannot free private setup permissions");
+    descriptor.release();
 }
 
 void LockSetupJournal(HANDLE journal)
@@ -220,8 +294,7 @@ public:
     {
         fs::create_directories(target.parent_path());
         const bool createdTarget = !fs::exists(target);
-        if (createdTarget)
-            RequireWindows(CreateDirectoryW(target.c_str(), nullptr) != FALSE, "Cannot create setup target");
+        CreatePrivateSetupTarget(target);
         m_journal.reset(CreateFileW((target / kSetupJournalName).c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
                                     CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr));
         if (m_journal.get() == INVALID_HANDLE_VALUE)
@@ -539,7 +612,19 @@ std::wstring EngineHostSetup::ManagedPath()
     wchar_t       localAppData[MAX_PATH] = {};
     const HRESULT resolved = SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, localAppData);
     if (FAILED(resolved)) throw std::runtime_error("Cannot resolve Local AppData for engine preview setup.");
-    return (fs::path(localAppData) / engine_host::kManagedHostRelativePath).wstring();
+    const std::wstring localPath = (fs::path(localAppData) / kManagedHostRelativePath).wstring();
+    if (IsPrintableAsciiSetupPath(localPath)) return localPath;
+    wchar_t*      rawProgramData = nullptr;
+    const HRESULT sharedResolved = SHGetKnownFolderPath(FOLDERID_ProgramData, 0, nullptr, &rawProgramData);
+    const std::unique_ptr<wchar_t, decltype(&CoTaskMemFree)> programData(rawProgramData, CoTaskMemFree);
+    if (FAILED(sharedResolved)) throw std::runtime_error("Cannot resolve ProgramData for engine preview setup.");
+    const std::wstring sharedPath =
+        (fs::path(programData.get()) / kManagedHostRelativePath / ReadCurrentUserSid()).wstring();
+    const std::wstring chosen = ChooseManagedHostPath(localPath, sharedPath);
+    if (chosen.empty())
+        throw std::runtime_error("The engine preview needs a folder whose path uses only plain ASCII characters, "
+                                 "and none was found.");
+    return chosen;
 }
 
 bool EngineHostSetup::IsSetupComplete(const std::wstring& target)

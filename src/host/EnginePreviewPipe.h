@@ -179,10 +179,11 @@ inline bool IsWithin(const std::string& path, const std::string& root)
            (path.size() > root.size() && path.compare(0, root.size(), root) == 0 && path[root.size()] == '\\');
 }
 
-inline std::string CheckPreviewPath(const std::string& path,
-                                    const std::string& internalName,
-                                    const std::string& installDirectory,
-                                    const std::string& windowsDirectory)
+inline std::string CheckPreviewPath(const std::string&              path,
+                                    const std::string&              internalName,
+                                    const std::string&              installDirectory,
+                                    const std::string&              windowsDirectory,
+                                    const std::vector<std::string>& gameRoots)
 {
     for (unsigned char letter : path)
         if (letter < kFirstPrintableAsciiCode || letter > kMaxAsciiCode)
@@ -222,6 +223,9 @@ inline std::string CheckPreviewPath(const std::string& path,
     if (install.empty() || windows.empty()) return "Cannot resolve protected preview directories.";
     if (IsWithin(folded, install) || IsWithin(folded, windows))
         return "The preview copy must be outside the editor install and Windows directories.";
+    for (const std::string& root : gameRoots)
+        if (!root.empty() && IsWithin(folded, FoldPath(root)))
+            return "The preview copy must be outside the game folders.";
     return "";
 }
 
